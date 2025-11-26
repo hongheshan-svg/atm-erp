@@ -1,0 +1,61 @@
+# Core Django
+Django==4.2.9
+djangorestframework==3.14.0
+djangorestframework-simplejwt==5.3.1
+
+# Database
+psycopg2-binary==2.9.9
+
+# CORS handling
+django-cors-headers==4.3.1
+
+# API Documentation
+drf-spectacular==0.27.0
+
+# Data processing
+pandas==2.1.4
+numpy==1.26.3
+
+# Async tasks
+celery==5.3.4
+redis==5.0.1
+django-redis==5.4.0
+
+# Excel import/export
+openpyxl==3.1.2
+xlsxwriter==3.1.9
+
+# PDF generation
+reportlab==4.0.7
+
+# Barcode/QR code generation
+python-barcode==0.15.1
+qrcode==7.4.2
+Pillow==10.1.0
+
+# WebSocket support
+channels==4.0.0
+channels-redis==4.1.0
+daphne==4.0.0
+
+# Elasticsearch (compatible versions for ES 7.x)
+elasticsearch==7.17.9
+elasticsearch-dsl==7.4.1
+django-elasticsearch-dsl==7.3
+django-elasticsearch-dsl-drf==0.22.5
+
+# Environment variables
+python-decouple==3.8
+
+# Image handling (for future use)
+Pillow==10.1.0
+
+# Date utilities
+python-dateutil==2.8.2
+
+# Timezone
+pytz==2023.3
+
+# Development
+django-extensions==3.2.3
+
