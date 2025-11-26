@@ -36,9 +36,9 @@
         </el-form-item>
         <el-form-item label="数据范围">
           <el-select v-model="form.data_scope" placeholder="选择数据范围">
-            <el-option label="全部数据" value="all" />
-            <el-option label="部门数据" value="department" />
-            <el-option label="仅本人" value="self" />
+            <el-option label="全部数据" value="ALL" />
+            <el-option label="部门数据" value="DEPARTMENT" />
+            <el-option label="仅本人" value="SELF" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -66,7 +66,7 @@ const form = reactive({
   id: null,
   name: '',
   description: '',
-  data_scope: 'department'
+  data_scope: 'DEPARTMENT'
 })
 
 const rules = {
@@ -88,8 +88,8 @@ const getDataScopeLabel = (scope) => {
 const loadRoles = async () => {
   loading.value = true
   try {
-    const { data } = await request.get('/auth/roles/')
-    roles.value = data.results || data
+    const response = await request.get('/auth/roles/')
+    roles.value = response.results || response || []
   } catch (error) {
     ElMessage.error('加载角色失败')
   } finally {
@@ -100,7 +100,7 @@ const loadRoles = async () => {
 const handleAdd = () => {
   dialogTitle.value = '新增角色'
   isEdit.value = false
-  Object.assign(form, { id: null, name: '', description: '', data_scope: 'department' })
+  Object.assign(form, { id: null, name: '', description: '', data_scope: 'DEPARTMENT' })
   dialogVisible.value = true
 }
 

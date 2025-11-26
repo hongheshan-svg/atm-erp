@@ -192,10 +192,10 @@ const getProgress状态 = (percent) => {
 
 const loadProjects = async () => {
   try {
-    const { data } = await request.get('/projects/projects/', {
+    const response = await request.get('/projects/projects/', {
       params: { status: 'ACTIVE' }
     })
-    projects.value = data.results || data
+    projects.value = response.results || response || []
   } catch (error) {
     ElMessage.error('加载项目列表失败')
     console.error(error)
@@ -215,7 +215,7 @@ const loadProjectTasks = async () => {
     const tasksRes = await request.get('/projects/tasks/', {
       params: { project: selectedProject.value }
     })
-    taskList.value = tasksRes.data.results || tasksRes.data
+    taskList.value = tasksRes.response.results || tasksRes.data
     
     // Ensure tasks have dates
     taskList.value = taskList.value.map(task => ({

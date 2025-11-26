@@ -167,6 +167,8 @@ const uploadDescription = ref('')
 const pendingFiles = ref([])
 
 const categoryOptions = [
+  { value: 'DRAWING', label: '图纸' },
+  { value: 'SPECIFICATION', label: '规格书' },
   { value: 'CONTRACT', label: '合同文件' },
   { value: 'INVOICE', label: '发票' },
   { value: 'RECEIPT', label: '收据' },

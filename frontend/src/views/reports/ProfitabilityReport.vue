@@ -13,8 +13,11 @@
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="searchForm.status" placeholder="选择状态" clearable>
-            <el-option label="启用" value="active" />
-            <el-option label="已完成" value="completed" />
+            <el-option label="规划中" value="PLANNING" />
+            <el-option label="进行中" value="ACTIVE" />
+            <el-option label="暂停" value="PAUSED" />
+            <el-option label="已完成" value="COMPLETED" />
+            <el-option label="已取消" value="CANCELLED" />
             <el-option label="全部" value="" />
           </el-select>
         </el-form-item>
@@ -25,9 +28,10 @@
       </el-form>
 
       <el-table :data="reportData" v-loading="loading" stripe border show-summary>
-        <el-table-column prop="code" label="项目编号" width="150" />
-        <el-table-column prop="name" label="项目名称" />
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column prop="code" label="项目编号" width="120" />
+        <el-table-column prop="name" label="项目名称" min-width="150" />
+        <el-table-column prop="manager" label="项目经理" width="100" />
+        <el-table-column prop="status" label="状态" width="90">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.status)">{{ getStatusLabel(row.status) }}</el-tag>
           </template>
@@ -87,7 +91,7 @@ const projects = ref([])
 
 const searchForm = reactive({
   project: null,
-  status: 'active'
+  status: ''
 })
 
 const formatCurrency = (value) => {
@@ -99,11 +103,11 @@ const formatCurrency = (value) => {
 
 const getStatusLabel = (status) => {
   const labels = {
-    'DRAFT': '草稿',
+    'PLANNING': '规划中',
     'ACTIVE': '进行中',
     'PAUSED': '暂停',
     'COMPLETED': '已完成',
-    'ARCHIVED': '已归档'
+    'CANCELLED': '已取消'
   }
   return labels[status] || status
 }
@@ -130,9 +134,8 @@ const loadReport = async () => {
       }
     })
     const res = await request.get('/reports/profitability/', { params })
-    // 后端可能返回数组或 {data: [...]} 或 {results: [...]}
-    const data = Array.isArray(res) ? res : (res.data || res.results || [])
-    reportData.value = Array.isArray(data) ? data : (data.results || data || [])
+    // 后端可能返回数组或 {results: [...]}
+    reportData.value = res.results || res || []
   } catch (error) {
     console.error('加载利润报表失败:', error)
     ElMessage.error('加载利润报表失败')
@@ -144,8 +147,8 @@ const loadReport = async () => {
 
 const loadProjects = async () => {
   try {
-    const { data } = await request.get('/projects/projects/')
-    projects.value = data.results || data
+    const response = await request.get('/projects/projects/')
+    projects.value = response.results || response || []
   } catch (error) {
     console.error('加载项目失败:', error)
   }

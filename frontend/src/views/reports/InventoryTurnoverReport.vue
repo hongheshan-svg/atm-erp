@@ -147,9 +147,9 @@ const loadReport = async () => {
     }
     Object.keys(params).forEach(k => { if (params[k] === null) delete params[k] })
     
-    const { data } = await request.get('/reports/inventory-turnover/', { params })
-    reportData.value = data.items || []
-    Object.assign(summary, data.summary || {})
+    const response = await request.get('/reports/inventory-turnover/', { params })
+    reportData.value = response.results || response.items || response || []
+    Object.assign(summary, response.summary || {})
     
     await nextTick()
     renderChart()
@@ -162,8 +162,8 @@ const loadReport = async () => {
 
 const loadWarehouses = async () => {
   try {
-    const { data } = await request.get('/masterdata/warehouses/', { params: { page_size: 100 } })
-    warehouses.value = data.results || data
+    const response = await request.get('/masterdata/warehouses/', { params: { page_size: 100 } })
+    warehouses.value = response.results || response || []
   } catch (error) {
     console.error('加载仓库失败:', error)
   }
@@ -171,8 +171,8 @@ const loadWarehouses = async () => {
 
 const loadCategories = async () => {
   try {
-    const { data } = await request.get('/masterdata/categories/', { params: { page_size: 100 } })
-    categories.value = data.results || data
+    const response = await request.get('/masterdata/categories/', { params: { page_size: 100 } })
+    categories.value = response.results || response || []
   } catch (error) {
     console.error('加载分类失败:', error)
   }

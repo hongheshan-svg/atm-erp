@@ -132,4 +132,19 @@ class User(AbstractUser, SoftDeleteModel):
             return False
         permissions = self.role.permissions.get('permissions', [])
         return permission_code in permissions
+    
+    def soft_delete(self):
+        """Soft delete user and free up username/email for reuse."""
+        from django.utils import timezone
+        import uuid
+        
+        # 添加删除标记到用户名和邮箱，避免唯一约束冲突
+        deleted_suffix = f"_deleted_{uuid.uuid4().hex[:8]}"
+        self.username = f"{self.username}{deleted_suffix}"
+        self.email = f"{self.email}{deleted_suffix}"
+        self.employee_id = f"{self.employee_id}{deleted_suffix}"
+        self.is_active = False
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.save()
 

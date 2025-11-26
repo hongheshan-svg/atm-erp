@@ -218,9 +218,9 @@ const loadQuotations = async () => {
       }
     })
 
-    const { data } = await request.get('/sales/quotations/', { params })
-    quotations.value = data.results || []
-    pagination.total = data.count || 0
+    const response = await request.get('/sales/quotations/', { params })
+    quotations.value = response.results || []
+    pagination.total = response.count || 0
   } catch (error) {
     console.error('加载报价失败:', error)
     ElMessage.error('加载报价失败')
@@ -231,10 +231,10 @@ const loadQuotations = async () => {
 
 const loadCustomers = async () => {
   try {
-    const { data } = await request.get('/masterdata/customers/', {
+    const response = await request.get('/masterdata/customers/', {
       params: { page_size: 100 }
     })
-    customers.value = data.results || data
+    customers.value = response.results || response || []
   } catch (error) {
     console.error('加载客户失败:', error)
   }
@@ -254,7 +254,7 @@ const handleCreate = () => {
 
 const handleView = async (row) => {
   try {
-    const { data } = await request.get(`/sales/quotations/${row.id}/`)
+    const response = await request.get(`/sales/quotations/${row.id}/`)
     currentQuotation.value = data
     dialogTitle.value = `报价详情 - ${data.quote_no}`
     detailVisible.value = true
@@ -295,7 +295,7 @@ const handleConvertToOrder = async (row) => {
       type: 'info'
     })
 
-    const { data } = await request.post(`/sales/quotations/${row.id}/convert_to_order/`)
+    const response = await request.post(`/sales/quotations/${row.id}/convert_to_order/`)
     ElMessage.success('转换成功')
     router.push(`/sales/orders/${data.id}`)
   } catch (error) {

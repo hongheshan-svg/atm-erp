@@ -25,8 +25,8 @@ service.interceptors.request.use(
 // Response interceptor
 service.interceptors.response.use(
   response => {
-    // 直接返回响应数据
-    return response
+    // 直接返回响应数据的 data 部分
+    return response.data
   },
   async error => {
     if (error.response) {

@@ -71,8 +71,8 @@ const loadStock = async () => {
   loading.value = true
   try {
     const params = { ...searchForm }
-    const { data } = await request.get('/inventory/stocks/', { params })
-    stocks.value = data.results || data
+    const response = await request.get('/inventory/stocks/', { params })
+    stocks.value = response.results || response || []
   } catch (error) {
     ElMessage.error('加载库存失败')
   } finally {
@@ -82,8 +82,8 @@ const loadStock = async () => {
 
 const loadWarehouses = async () => {
   try {
-    const { data } = await request.get('/masterdata/warehouses/')
-    warehouses.value = data.results || data
+    const response = await request.get('/masterdata/warehouses/')
+    warehouses.value = response.results || response || []
   } catch (error) {
     console.error('加载仓库失败:', error)
   }

@@ -296,9 +296,9 @@ const loadData = async () => {
       page_size: pagination.pageSize,
       ...searchForm
     }
-    const { data } = await request.get('/finance/shared-expenses/', { params })
-    expenses.value = data.results || []
-    pagination.total = data.count || 0
+    const response = await request.get('/finance/shared-expenses/', { params })
+    expenses.value = response.results || []
+    pagination.total = response.count || 0
   } catch (error) {
     console.error('加载数据失败:', error)
   } finally {
@@ -308,8 +308,8 @@ const loadData = async () => {
 
 const loadProjects = async () => {
   try {
-    const { data } = await request.get('/projects/', { params: { is_deleted: false, page_size: 100 } })
-    projects.value = data.results || data || []
+    const response = await request.get('/projects/', { params: { is_deleted: false, page_size: 100 } })
+    projects.value = response.results || response || [] || []
   } catch (error) {
     console.error('加载项目失败:', error)
   }
@@ -373,7 +373,7 @@ const handleSubmit = async () => {
 
 const handleView = async (expense) => {
   try {
-    const { data } = await request.get(`/finance/shared-expenses/${expense.id}/`)
+    const response = await request.get(`/finance/shared-expenses/${expense.id}/`)
     currentExpense.value = data
     detailDialogVisible.value = true
   } catch (error) {
@@ -409,7 +409,7 @@ const handlePreviewAllocation = async () => {
       payload.custom_ratios = customRatios.value
     }
     
-    const { data } = await request.post(
+    const response = await request.post(
       `/finance/shared-expenses/${currentExpense.value.id}/calculate_allocation/`,
       payload
     )

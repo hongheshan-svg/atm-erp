@@ -47,6 +47,9 @@ django-elasticsearch-dsl-drf==0.22.5
 # Environment variables
 python-decouple==3.8
 
+# HTTP requests
+requests==2.31.0
+
 # Image handling (for future use)
 Pillow==10.1.0
 

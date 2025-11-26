@@ -431,6 +431,65 @@ class Payment(BaseModel):
             self.ap.save()
 
 
+class Invoice(BaseModel):
+    """
+    Invoice records for tax management.
+    """
+    INVOICE_TYPE_CHOICES = [
+        ('INPUT', '进项发票'),
+        ('OUTPUT', '销项发票'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('REGISTERED', '已登记'),
+        ('CERTIFIED', '已认证'),
+        ('VOID', '已作废'),
+    ]
+    
+    REFERENCE_TYPE_CHOICES = [
+        ('SALES_ORDER', '销售订单'),
+        ('PURCHASE_ORDER', '采购订单'),
+        ('EXPENSE', '费用报销'),
+    ]
+    
+    invoice_type = models.CharField(max_length=10, choices=INVOICE_TYPE_CHOICES, verbose_name='发票类型')
+    invoice_no = models.CharField(max_length=50, unique=True, verbose_name='发票号')
+    invoice_date = models.DateField(verbose_name='开票日期')
+    party_name = models.CharField(max_length=200, verbose_name='对方单位')
+    tax_number = models.CharField(max_length=50, blank=True, verbose_name='税号')
+    
+    amount_before_tax = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='金额（不含税）')
+    tax_amount = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='税额')
+    total_amount = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='价税合计')
+    
+    reference_type = models.CharField(
+        max_length=20,
+        choices=REFERENCE_TYPE_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name='关联单据类型'
+    )
+    reference_id = models.IntegerField(null=True, blank=True, verbose_name='关联单据ID')
+    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='REGISTERED', verbose_name='状态')
+    notes = models.TextField(blank=True, verbose_name='备注')
+    
+    class Meta:
+        db_table = 'invoice'
+        verbose_name = '发票'
+        verbose_name_plural = verbose_name
+        ordering = ['-invoice_date', '-id']
+    
+    def __str__(self):
+        return f"{self.invoice_no}"
+    
+    def save(self, *args, **kwargs):
+        # Calculate total_amount if not set
+        if self.amount_before_tax and self.tax_amount:
+            self.total_amount = self.amount_before_tax + self.tax_amount
+        super().save(*args, **kwargs)
+
+
 class SharedExpense(BaseModel):
     """
     Shared/Public expense for allocation across multiple projects.

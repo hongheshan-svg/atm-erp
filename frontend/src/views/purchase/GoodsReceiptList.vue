@@ -110,9 +110,9 @@ const loadReceipts = async () => {
   try {
     const params = { page: pagination.page, page_size: pagination.pageSize, ...searchForm }
     Object.keys(params).forEach(k => { if (params[k] === '' || params[k] === null) delete params[k] })
-    const { data } = await request.get('/purchase/receipts/', { params })
-    receipts.value = data.results || []
-    pagination.total = data.count || 0
+    const response = await request.get('/purchase/receipts/', { params })
+    receipts.value = response.results || []
+    pagination.total = response.count || 0
   } catch (error) {
     ElMessage.error('加载收货单失败')
   } finally {
@@ -130,7 +130,7 @@ const resetSearch = () => {
 
 const handleView = async (row) => {
   try {
-    const { data } = await request.get(`/purchase/receipts/${row.id}/`)
+    const response = await request.get(`/purchase/receipts/${row.id}/`)
     current.value = data
     detailVisible.value = true
   } catch (error) {

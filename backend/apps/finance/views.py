@@ -11,13 +11,13 @@ from django.db.models import Q, Sum, F, Count
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin, DataScopeMixin
 from apps.projects.models import Project
 from .models import (
-    Currency, ExchangeRateHistory, Expense, 
+    Currency, ExchangeRateHistory, Expense, Invoice,
     AccountReceivable, AccountPayable, Payment,
     SharedExpense, SharedExpenseAllocation
 )
 from .serializers import (
     CurrencySerializer, ExchangeRateHistorySerializer,
-    ExpenseSerializer, AccountReceivableSerializer,
+    ExpenseSerializer, InvoiceSerializer, AccountReceivableSerializer,
     AccountPayableSerializer, PaymentSerializer,
     SharedExpenseSerializer, SharedExpenseAllocationSerializer
 )
@@ -295,127 +295,57 @@ class AccountPayableViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, 
         return Response(serializer.data)
 
 
-class InvoiceViewSet(viewsets.ViewSet):
+class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
-    ViewSet for Invoice management (virtual, combining AR and AP invoice data).
+    ViewSet for Invoice management.
     """
-    
-    def list(self, request):
-        """List all invoices from AR and AP."""
-        invoices = []
-        
-        # Get invoices from AR (销项发票)
-        ars = AccountReceivable.objects.filter(
-            invoice_no__isnull=False,
-            is_deleted=False
-        ).select_related('customer')
-        
-        for ar in ars:
-            invoices.append({
-                'id': f'AR-{ar.id}',
-                'invoice_no': ar.invoice_no,
-                'invoice_type': 'OUTPUT',
-                'invoice_date': ar.invoice_date,
-                'party_name': ar.customer.name if ar.customer else '',
-                'tax_number': '',
-                'amount_before_tax': float(ar.amount_due * 0.87),  # 假设13%税率
-                'tax_amount': float(ar.amount_due * 0.13),
-                'total_amount': float(ar.amount_due),
-                'reference_type': 'SALES_ORDER',
-                'reference_id': ar.sales_order_id if hasattr(ar, 'sales_order_id') else None,
-                'is_certified': True,
-                'notes': '',
-                'created_at': ar.created_at,
-            })
-        
-        # Get invoices from AP (进项发票)
-        aps = AccountPayable.objects.filter(
-            invoice_no__isnull=False,
-            is_deleted=False
-        ).select_related('supplier')
-        
-        for ap in aps:
-            invoices.append({
-                'id': f'AP-{ap.id}',
-                'invoice_no': ap.invoice_no,
-                'invoice_type': 'INPUT',
-                'invoice_date': ap.invoice_date,
-                'party_name': ap.supplier.name if ap.supplier else '',
-                'tax_number': '',
-                'amount_before_tax': float(ap.amount_due * 0.87),
-                'tax_amount': float(ap.amount_due * 0.13),
-                'total_amount': float(ap.amount_due),
-                'reference_type': 'PURCHASE_ORDER',
-                'reference_id': ap.po_id if hasattr(ap, 'po_id') else None,
-                'is_certified': True,
-                'notes': '',
-                'created_at': ap.created_at,
-            })
-        
-        # Sort by date
-        invoices.sort(key=lambda x: x['invoice_date'] or '', reverse=True)
-        
-        # Pagination
-        page = int(request.query_params.get('page', 1))
-        page_size = int(request.query_params.get('page_size', 20))
-        start = (page - 1) * page_size
-        end = start + page_size
-        
-        return Response({
-            'count': len(invoices),
-            'results': invoices[start:end]
-        })
-    
-    def retrieve(self, request, pk=None):
-        """Get invoice detail."""
-        if pk.startswith('AR-'):
-            ar_id = pk[3:]
-            try:
-                ar = AccountReceivable.objects.get(id=ar_id)
-                return Response({
-                    'id': pk,
-                    'invoice_no': ar.invoice_no,
-                    'invoice_type': 'OUTPUT',
-                    'invoice_date': ar.invoice_date,
-                    'party_name': ar.customer.name if ar.customer else '',
-                    'tax_number': '',
-                    'amount_before_tax': float(ar.amount_due * 0.87),
-                    'tax_amount': float(ar.amount_due * 0.13),
-                    'total_amount': float(ar.amount_due),
-                    'is_certified': True,
-                    'notes': '',
-                })
-            except AccountReceivable.DoesNotExist:
-                return Response({'error': '发票不存在'}, status=404)
-        elif pk.startswith('AP-'):
-            ap_id = pk[3:]
-            try:
-                ap = AccountPayable.objects.get(id=ap_id)
-                return Response({
-                    'id': pk,
-                    'invoice_no': ap.invoice_no,
-                    'invoice_type': 'INPUT',
-                    'invoice_date': ap.invoice_date,
-                    'party_name': ap.supplier.name if ap.supplier else '',
-                    'tax_number': '',
-                    'amount_before_tax': float(ap.amount_due * 0.87),
-                    'tax_amount': float(ap.amount_due * 0.13),
-                    'total_amount': float(ap.amount_due),
-                    'is_certified': True,
-                    'notes': '',
-                })
-            except AccountPayable.DoesNotExist:
-                return Response({'error': '发票不存在'}, status=404)
-        return Response({'error': '无效的发票ID'}, status=400)
-    
-    def create(self, request):
-        """Create invoice - placeholder."""
-        return Response({'message': '发票创建功能暂未实现，请在应收/应付账款中管理发票'}, status=501)
+    queryset = Invoice.objects.all()
+    serializer_class = InvoiceSerializer
+    filterset_fields = ['invoice_type', 'status', 'reference_type', 'is_deleted']
+    search_fields = ['invoice_no', 'party_name']
+    ordering_fields = ['invoice_date', 'total_amount', 'created_at']
     
     @action(detail=True, methods=['post'])
     def certify(self, request, pk=None):
-        """Certify invoice - placeholder."""
-        return Response({'message': '发票已认证'})
+        """Certify input invoice."""
+        invoice = self.get_object()
+        
+        if invoice.invoice_type != 'INPUT':
+            return Response(
+                {'error': '只有进项发票需要认证'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if invoice.status == 'CERTIFIED':
+            return Response(
+                {'error': '发票已认证'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if invoice.status == 'VOID':
+            return Response(
+                {'error': '已作废的发票无法认证'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        invoice.status = 'CERTIFIED'
+        invoice.save()
+        return Response(InvoiceSerializer(invoice).data)
+    
+    @action(detail=True, methods=['post'])
+    def void(self, request, pk=None):
+        """Void invoice."""
+        invoice = self.get_object()
+        
+        if invoice.status == 'VOID':
+            return Response(
+                {'error': '发票已作废'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        invoice.status = 'VOID'
+        invoice.save()
+        return Response(InvoiceSerializer(invoice).data)
 
 
 class SharedExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):

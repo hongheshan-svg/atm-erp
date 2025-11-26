@@ -11,12 +11,12 @@
       <el-table :data="customers" v-loading="loading" stripe border>
         <el-table-column prop="code" label="编码" width="120" />
         <el-table-column prop="name" label="客户名称" />
-        <el-table-column prop="contact" label="联系人" />
+        <el-table-column prop="contact_person" label="联系人" />
         <el-table-column prop="phone" label="电话" />
         <el-table-column prop="email" label="邮箱" />
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'active' ? 'success' : 'info'">{{ row.status }}</el-tag>
+            <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ row.status === 'ACTIVE' ? '激活' : '停用' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="250" fixed="right">
@@ -39,7 +39,7 @@
           <el-input v-model="form.name" />
         </el-form-item>
         <el-form-item label="联系人">
-          <el-input v-model="form.contact" />
+          <el-input v-model="form.contact_person" />
         </el-form-item>
         <el-form-item label="电话">
           <el-input v-model="form.phone" />
@@ -52,8 +52,8 @@
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="form.status">
-            <el-option label="启用" value="active" />
-            <el-option label="禁用" value="inactive" />
+            <el-option label="激活" value="ACTIVE" />
+            <el-option label="停用" value="INACTIVE" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -94,18 +94,18 @@ const form = reactive({
   id: null,
   code: '',
   name: '',
-  contact: '',
+  contact_person: '',
   phone: '',
   email: '',
   address: '',
-  status: 'active'
+  status: 'ACTIVE'
 })
 
 const loadCustomers = async () => {
   loading.value = true
   try {
-    const { data } = await request.get('/masterdata/customers/')
-    customers.value = data.results || data
+    const response = await request.get('/masterdata/customers/')
+    customers.value = response.results || response || []
   } catch (error) {
     ElMessage.error('加载客户失败')
   } finally {
@@ -116,7 +116,7 @@ const loadCustomers = async () => {
 const handleAdd = () => {
   dialogTitle.value = '新增客户'
   isEdit.value = false
-  Object.assign(form, { id: null, code: '', name: '', contact: '', phone: '', email: '', address: '', status: 'active' })
+  Object.assign(form, { id: null, code: '', name: '', contact_person: '', phone: '', email: '', address: '', status: 'ACTIVE' })
   dialogVisible.value = true
 }
 
@@ -130,7 +130,7 @@ const handleEdit = (row) => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除该客户吗？', '警告', { type: 'warning' })
-    await request.delete(`/api/masterdata/customers/${row.id}/`)
+    await request.delete(`/masterdata/customers/${row.id}/`)
     ElMessage.success('删除客户成功')
     loadCustomers()
   } catch (error) {

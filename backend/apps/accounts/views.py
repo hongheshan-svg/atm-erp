@@ -35,7 +35,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     permission_classes = []  # 登录接口不需要认证
 
 
-class DepartmentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class DepartmentViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     """
     ViewSet for Department management.
     """
@@ -63,7 +63,7 @@ class DepartmentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         return Response(tree_data)
 
 
-class RoleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class RoleViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     """
     ViewSet for Role management.
     """
@@ -74,7 +74,7 @@ class RoleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     ordering_fields = ['sort_order', 'code', 'created_at']
 
 
-class UserViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class UserViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     """
     ViewSet for User management.
     """

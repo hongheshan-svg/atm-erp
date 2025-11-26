@@ -33,7 +33,6 @@
         <el-table-column prop="id" label="编号" width="80" />
         <el-table-column prop="username" label="用户名" />
         <el-table-column prop="email" label="邮箱" />
-        <el-table-column prop="employee_id" label="员工编号" />
         <el-table-column prop="department_info.name" label="部门" />
         <el-table-column prop="role_info.name" label="角色" />
         <el-table-column prop="is_active" label="状态" width="100">
@@ -79,16 +78,13 @@
           <el-input v-model="form.email" placeholder="请输入邮箱" />
         </el-form-item>
         <el-form-item label="密码" prop="password" v-if="!isEdit">
-          <el-input v-model="form.password" type="password" placeholder="请输入密码" />
+          <el-input v-model="form.password" type="password" placeholder="请输入密码" show-password />
         </el-form-item>
-        <el-form-item label="员工编号">
-          <el-input v-model="form.employee_id" placeholder="请输入员工编号" />
+        <el-form-item label="确认密码" prop="password_confirm" v-if="!isEdit">
+          <el-input v-model="form.password_confirm" type="password" placeholder="请再次输入密码" show-password />
         </el-form-item>
-        <el-form-item label="名">
-          <el-input v-model="form.first_name" placeholder="请输入名" />
-        </el-form-item>
-        <el-form-item label="姓">
-          <el-input v-model="form.last_name" placeholder="请输入姓" />
+        <el-form-item label="姓名">
+          <el-input v-model="form.full_name" placeholder="请输入姓名" />
         </el-form-item>
         <el-form-item label="电话">
           <el-input v-model="form.phone" placeholder="请输入电话" />
@@ -156,14 +152,21 @@ const form = reactive({
   username: '',
   email: '',
   password: '',
-  employee_id: '',
-  first_name: '',
-  last_name: '',
+  password_confirm: '',
+  full_name: '',
   phone: '',
   department: null,
   role: null,
   is_active: true
 })
+
+const validatePasswordConfirm = (rule, value, callback) => {
+  if (!isEdit.value && value !== form.password) {
+    callback(new Error('两次输入的密码不一致'))
+  } else {
+    callback()
+  }
+}
 
 const rules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
@@ -171,7 +174,14 @@ const rules = {
     { required: true, message: '请输入邮箱', trigger: 'blur' },
     { type: 'email', message: '请输入有效的邮箱', trigger: 'blur' }
   ],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 6, message: '密码长度至少6位', trigger: 'blur' }
+  ],
+  password_confirm: [
+    { required: true, message: '请确认密码', trigger: 'blur' },
+    { validator: validatePasswordConfirm, trigger: 'blur' }
+  ]
 }
 
 const loadUsers = async () => {
@@ -231,7 +241,18 @@ const handleAdd = () => {
 const handleEdit = (row) => {
   dialogTitle.value = '编辑用户'
   isEdit.value = true
-  Object.assign(form, row)
+  // 合并姓名
+  const fullName = [row.last_name, row.first_name].filter(Boolean).join('')
+  Object.assign(form, {
+    id: row.id,
+    username: row.username,
+    email: row.email,
+    full_name: fullName,
+    phone: row.phone || '',
+    department: row.department,
+    role: row.role,
+    is_active: row.is_active
+  })
   dialogVisible.value = true
 }
 
@@ -253,11 +274,37 @@ const handleDelete = async (row) => {
 const handleSubmit = async () => {
   try {
     await formRef.value.validate()
+    // 拆分姓名：第一个字为姓，其余为名
+    const fullName = form.full_name || ''
+    const lastName = fullName.length > 0 ? fullName.charAt(0) : ''
+    const firstName = fullName.length > 1 ? fullName.slice(1) : ''
+    
     if (isEdit.value) {
-      await request.put(`/auth/users/${form.id}/`, form)
+      const updateData = {
+        email: form.email,
+        first_name: firstName,
+        last_name: lastName,
+        phone: form.phone,
+        department: form.department,
+        role: form.role,
+        is_active: form.is_active
+      }
+      await request.put(`/auth/users/${form.id}/`, updateData)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/auth/users/', form)
+      const createData = {
+        username: form.username,
+        email: form.email,
+        password: form.password,
+        password_confirm: form.password_confirm,
+        first_name: firstName,
+        last_name: lastName,
+        phone: form.phone,
+        department: form.department,
+        role: form.role,
+        is_active: form.is_active
+      }
+      await request.post('/auth/users/', createData)
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false
@@ -274,9 +321,8 @@ const resetForm = () => {
     username: '',
     email: '',
     password: '',
-    employee_id: '',
-    first_name: '',
-    last_name: '',
+    password_confirm: '',
+    full_name: '',
     phone: '',
     department: null,
     role: null,

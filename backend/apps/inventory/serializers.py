@@ -2,6 +2,7 @@
 Serializers for inventory app.
 """
 from rest_framework import serializers
+from django.db import transaction
 from .models import Stock, StockMove, StockAdjustment, StockAdjustmentLine
 
 
@@ -68,14 +69,75 @@ class StockAdjustmentSerializer(serializers.ModelSerializer):
     """StockAdjustment serializer."""
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
     lines = StockAdjustmentLineSerializer(many=True, read_only=True)
+    cost_impact = serializers.SerializerMethodField()
     
     class Meta:
         model = StockAdjustment
         fields = [
             'id', 'adjustment_no', 'warehouse', 'warehouse_name', 'adjustment_date',
-            'reason', 'status', 'status_display', 'notes', 'lines',
-            'is_deleted', 'created_at', 'updated_at'
+            'reason', 'status', 'status_display', 'notes', 'lines', 'cost_impact',
+            'created_by_name', 'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['adjustment_no', 'created_at', 'updated_at']
+    
+    def get_cost_impact(self, obj):
+        return sum(line.cost_impact or 0 for line in obj.lines.all())
+    
+    def create(self, validated_data):
+        """Create adjustment with lines."""
+        lines_data = self.initial_data.get('lines', [])
+        
+        with transaction.atomic():
+            adjustment = StockAdjustment.objects.create(**validated_data)
+            
+            for line_data in lines_data:
+                if line_data.get('item'):
+                    qty_system = float(line_data.get('qty_system', 0))
+                    qty_actual = float(line_data.get('qty_actual', 0))
+                    qty_diff = qty_actual - qty_system
+                    
+                    StockAdjustmentLine.objects.create(
+                        adjustment=adjustment,
+                        item_id=line_data['item'],
+                        qty_system=qty_system,
+                        qty_actual=qty_actual,
+                        qty_diff=qty_diff,
+                        notes=line_data.get('notes', ''),
+                        created_by=adjustment.created_by
+                    )
+        
+        return adjustment
+    
+    def update(self, instance, validated_data):
+        """Update adjustment with lines."""
+        lines_data = self.initial_data.get('lines', [])
+        
+        with transaction.atomic():
+            # Update adjustment fields
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            instance.save()
+            
+            # Delete old lines and create new ones
+            instance.lines.all().delete()
+            
+            for line_data in lines_data:
+                if line_data.get('item'):
+                    qty_system = float(line_data.get('qty_system', 0))
+                    qty_actual = float(line_data.get('qty_actual', 0))
+                    qty_diff = qty_actual - qty_system
+                    
+                    StockAdjustmentLine.objects.create(
+                        adjustment=instance,
+                        item_id=line_data['item'],
+                        qty_system=qty_system,
+                        qty_actual=qty_actual,
+                        qty_diff=qty_diff,
+                        notes=line_data.get('notes', ''),
+                        created_by=instance.created_by
+                    )
+        
+        return instance
 

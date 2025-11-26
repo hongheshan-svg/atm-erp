@@ -11,8 +11,12 @@
       <el-table :data="warehouses" v-loading="loading" stripe border>
         <el-table-column prop="code" label="编码" width="120" />
         <el-table-column prop="name" label="仓库名称" />
-        <el-table-column prop="location" label="位置" />
-        <el-table-column prop="warehouse_type" label="类型" width="120" />
+        <el-table-column prop="address" label="地址" />
+        <el-table-column prop="warehouse_type" label="类型" width="120">
+          <template #default="{ row }">
+            {{ getTypeLabel(row.warehouse_type) }}
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
@@ -30,14 +34,15 @@
         <el-form-item label="名称">
           <el-input v-model="form.name" />
         </el-form-item>
-        <el-form-item label="位置">
-          <el-input v-model="form.location" />
+        <el-form-item label="地址">
+          <el-input v-model="form.address" type="textarea" />
         </el-form-item>
         <el-form-item label="类型">
           <el-select v-model="form.warehouse_type">
-            <el-option label="主仓" value="main" />
-            <el-option label="中转仓" value="transit" />
-            <el-option label="虚拟仓" value="virtual" />
+            <el-option label="主仓库" value="MAIN" />
+            <el-option label="分仓库" value="BRANCH" />
+            <el-option label="中转仓" value="TRANSIT" />
+            <el-option label="虚拟仓" value="VIRTUAL" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -65,15 +70,20 @@ const form = reactive({
   id: null,
   code: '',
   name: '',
-  location: '',
-  warehouse_type: 'main'
+  address: '',
+  warehouse_type: 'MAIN'
 })
+
+const getTypeLabel = (type) => {
+  const labels = { 'MAIN': '主仓库', 'BRANCH': '分仓库', 'TRANSIT': '中转仓', 'VIRTUAL': '虚拟仓' }
+  return labels[type] || type
+}
 
 const loadWarehouses = async () => {
   loading.value = true
   try {
-    const { data } = await request.get('/masterdata/warehouses/')
-    warehouses.value = data.results || data
+    const response = await request.get('/masterdata/warehouses/')
+    warehouses.value = response.results || response || []
   } catch (error) {
     ElMessage.error('加载仓库失败')
   } finally {
@@ -84,7 +94,7 @@ const loadWarehouses = async () => {
 const handleAdd = () => {
   dialogTitle.value = '新增仓库'
   isEdit.value = false
-  Object.assign(form, { id: null, code: '', name: '', location: '', warehouse_type: 'main' })
+  Object.assign(form, { id: null, code: '', name: '', address: '', warehouse_type: 'MAIN' })
   dialogVisible.value = true
 }
 
@@ -98,7 +108,7 @@ const handleEdit = (row) => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除该仓库吗？', '警告', { type: 'warning' })
-    await request.delete(`/api/masterdata/warehouses/${row.id}/`)
+    await request.delete(`/masterdata/warehouses/${row.id}/`)
     ElMessage.success('删除仓库成功')
     loadWarehouses()
   } catch (error) {
@@ -109,7 +119,7 @@ const handleDelete = async (row) => {
 const handleSubmit = async () => {
   try {
     if (isEdit.value) {
-      await request.put(`/api/masterdata/warehouses/${form.id}/`, form)
+      await request.put(`/masterdata/warehouses/${form.id}/`, form)
       ElMessage.success('更新仓库成功')
     } else {
       await request.post('/masterdata/warehouses/', form)

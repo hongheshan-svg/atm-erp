@@ -119,8 +119,8 @@ const rules = {
 
 const loadWarehouses = async () => {
   try {
-    const { data } = await request.get('/masterdata/warehouses/', { params: { page_size: 100 } })
-    warehouses.value = data.results || data
+    const response = await request.get('/masterdata/warehouses/', { params: { page_size: 100 } })
+    warehouses.value = response.results || response || []
   } catch (error) {
     console.error('加载仓库失败:', error)
   }
@@ -129,10 +129,10 @@ const loadWarehouses = async () => {
 const loadFromStock = async () => {
   if (!form.from_warehouse) return
   try {
-    const { data } = await request.get('/inventory/stocks/', {
+    const response = await request.get('/inventory/stocks/', {
       params: { warehouse: form.from_warehouse, page_size: 500 }
     })
-    fromStock.value = (data.results || data).filter(s => (s.qty_available || 0) > 0)
+    fromStock.value = (response.results || response || []).filter(s => (s.qty_available || 0) > 0)
   } catch (error) {
     ElMessage.error('加载库存失败')
   }
@@ -141,10 +141,10 @@ const loadFromStock = async () => {
 const loadHistory = async () => {
   loadingHistory.value = true
   try {
-    const { data } = await request.get('/inventory/moves/', {
+    const response = await request.get('/inventory/moves/', {
       params: { move_type: 'TRANSFER', page_size: 50 }
     })
-    history.value = data.results || []
+    history.value = response.results || []
   } catch (error) {
     console.error('加载调拨历史失败:', error)
   } finally {

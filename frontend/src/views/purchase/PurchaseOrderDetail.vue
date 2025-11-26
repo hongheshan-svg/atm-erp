@@ -144,7 +144,7 @@ const getStatusLabel = (s) => ({ 'DRAFT': '草稿', 'CONFIRMED': '已确认', 'P
 const loadOrderDetail = async () => {
   loading.value = true
   try {
-    const { data } = await request.get(`/purchase/orders/${route.params.id}/`)
+    const response = await request.get(`/purchase/orders/${route.params.id}/`)
     order.value = data
     const { data: r } = await request.get(`/purchase/receipts/`, { params: { purchase_order: route.params.id } })
     receipts.value = r.results || r
@@ -157,8 +157,8 @@ const loadOrderDetail = async () => {
 
 const loadWarehouses = async () => {
   try {
-    const { data } = await request.get('/masterdata/warehouses/', { params: { page_size: 100 } })
-    warehouses.value = data.results || data
+    const response = await request.get('/masterdata/warehouses/', { params: { page_size: 100 } })
+    warehouses.value = response.results || response || []
   } catch (error) {
     console.error('加载仓库失败:', error)
   }

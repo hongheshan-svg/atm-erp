@@ -339,8 +339,8 @@ const getQualityTagType = (status) => {
 
 const loadItems = async () => {
   try {
-    const { data } = await request.get('/masterdata/items/', { params: { page_size: 500 } })
-    items.value = data.results || data || []
+    const response = await request.get('/masterdata/items/', { params: { page_size: 500 } })
+    items.value = response.results || response || [] || []
   } catch (error) {
     console.error('加载物料失败:', error)
   }
@@ -348,8 +348,8 @@ const loadItems = async () => {
 
 const loadWarehouses = async () => {
   try {
-    const { data } = await request.get('/masterdata/warehouses/', { params: { is_active: true } })
-    warehouses.value = data.results || data || []
+    const response = await request.get('/masterdata/warehouses/', { params: { is_active: true } })
+    warehouses.value = response.results || response || [] || []
   } catch (error) {
     console.error('加载仓库失败:', error)
   }
@@ -372,11 +372,11 @@ const loadBatches = async () => {
       url = '/inventory/batches/expired/'
     }
     
-    const { data } = await request.get(url, { params })
+    const response = await request.get(url, { params })
     
     if (viewMode.value === 'all') {
-      batches.value = data.results || []
-      pagination.total = data.count || 0
+      batches.value = response.results || []
+      pagination.total = response.count || 0
     } else {
       batches.value = data || []
       pagination.total = data.length || 0
@@ -453,7 +453,7 @@ const handleView = async (batch) => {
   
   // Load move history
   try {
-    const { data } = await request.get('/inventory/batch-moves/by_batch/', { params: { batch_id: batch.id } })
+    const response = await request.get('/inventory/batch-moves/by_batch/', { params: { batch_id: batch.id } })
     batchMoves.value = data || []
   } catch (error) {
     console.error('加载移动历史失败:', error)

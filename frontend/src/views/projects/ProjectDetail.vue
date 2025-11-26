@@ -82,7 +82,7 @@ const get状态Type = (status) => {
 
 const loadProject = async () => {
   try {
-    const { data } = await request.get(`/projects/projects/${route.params.id}/`)
+    const response = await request.get(`/projects/projects/${route.params.id}/`)
     project.value = data
   } catch (error) {
     ElMessage.error('加载项目失败')

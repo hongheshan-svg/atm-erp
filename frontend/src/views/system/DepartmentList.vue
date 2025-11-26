@@ -11,7 +11,6 @@
       <el-table :data="departments" v-loading="loading" stripe border row-key="id">
         <el-table-column prop="id" label="编号" width="80" />
         <el-table-column prop="name" label="部门名称" />
-        <el-table-column prop="code" label="编码" />
         <el-table-column prop="manager_name" label="负责人" />
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
@@ -27,9 +26,6 @@
         <el-form-item label="部门名称" prop="name">
           <el-input v-model="form.name" placeholder="请输入部门名称" />
         </el-form-item>
-        <el-form-item label="部门编码" prop="code">
-          <el-input v-model="form.code" placeholder="请输入部门编码" />
-        </el-form-item>
         <el-form-item label="上级部门">
           <el-select v-model="form.parent" placeholder="选择上级部门" clearable>
             <el-option
@@ -39,6 +35,19 @@
               :value="dept.id"
             />
           </el-select>
+        </el-form-item>
+        <el-form-item label="负责人">
+          <el-select v-model="form.manager" placeholder="选择负责人" clearable filterable>
+            <el-option
+              v-for="user in users"
+              :key="user.id"
+              :label="user.username"
+              :value="user.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="form.description" type="textarea" placeholder="请输入部门描述" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -56,6 +65,7 @@ import request from '@/utils/request'
 
 const loading = ref(false)
 const departments = ref([])
+const users = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增部门')
 const isEdit = ref(false)
@@ -64,20 +74,20 @@ const formRef = ref(null)
 const form = reactive({
   id: null,
   name: '',
-  code: '',
-  parent: null
+  parent: null,
+  manager: null,
+  description: ''
 })
 
 const rules = {
-  name: [{ required: true, message: '请输入部门名称', trigger: 'blur' }],
-  code: [{ required: true, message: '请输入部门编码', trigger: 'blur' }]
+  name: [{ required: true, message: '请输入部门名称', trigger: 'blur' }]
 }
 
 const loadDepartments = async () => {
   loading.value = true
   try {
-    const { data } = await request.get('/auth/departments/')
-    departments.value = data.results || data
+    const response = await request.get('/auth/departments/')
+    departments.value = response.results || response || []
   } catch (error) {
     ElMessage.error('加载部门失败')
   } finally {
@@ -85,17 +95,32 @@ const loadDepartments = async () => {
   }
 }
 
+const loadUsers = async () => {
+  try {
+    const response = await request.get('/auth/users/')
+    users.value = response.results || response || []
+  } catch (error) {
+    console.error('加载用户失败:', error)
+  }
+}
+
 const handleAdd = () => {
   dialogTitle.value = '新增部门'
   isEdit.value = false
-  Object.assign(form, { id: null, name: '', code: '', parent: null })
+  Object.assign(form, { id: null, name: '', parent: null, manager: null, description: '' })
   dialogVisible.value = true
 }
 
 const handleEdit = (row) => {
   dialogTitle.value = '编辑部门'
   isEdit.value = true
-  Object.assign(form, row)
+  Object.assign(form, {
+    id: row.id,
+    name: row.name,
+    parent: row.parent,
+    manager: row.manager,
+    description: row.description || ''
+  })
   dialogVisible.value = true
 }
 
@@ -133,6 +158,7 @@ const handleSubmit = async () => {
 
 onMounted(() => {
   loadDepartments()
+  loadUsers()
 })
 </script>
 

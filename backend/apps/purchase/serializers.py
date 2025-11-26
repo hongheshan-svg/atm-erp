@@ -2,6 +2,8 @@
 Serializers for purchase app.
 """
 from rest_framework import serializers
+from django.db import transaction
+from django.db.models import Sum
 from .models import (
     PurchaseRequest, PurchaseRequestLine,
     PurchaseOrder, PurchaseOrderLine,
@@ -25,6 +27,16 @@ class PurchaseRequestLineSerializer(serializers.ModelSerializer):
             'notes', 'is_deleted'
         ]
         read_only_fields = ['line_amount']
+
+
+class PurchaseRequestLineCreateSerializer(serializers.ModelSerializer):
+    """PurchaseRequestLine serializer for create/update."""
+    class Meta:
+        model = PurchaseRequestLine
+        fields = ['id', 'item', 'qty', 'estimated_price', 'project', 'notes']
+        extra_kwargs = {
+            'id': {'required': False}
+        }
 
 
 class PurchaseRequestSerializer(serializers.ModelSerializer):
@@ -53,6 +65,68 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
             obj.total_amount,
             exclude_pr_id=obj.id if obj.status in ['APPROVED', 'CONVERTED'] else None
         )
+    
+    def create(self, validated_data):
+        """Create PR with lines."""
+        lines_data = self.initial_data.get('lines', [])
+        
+        with transaction.atomic():
+            pr = PurchaseRequest.objects.create(**validated_data)
+            
+            total_amount = 0
+            for line_data in lines_data:
+                if line_data.get('item') and line_data.get('qty'):
+                    qty = line_data['qty']
+                    estimated_price = line_data.get('estimated_price', 0)
+                    line = PurchaseRequestLine.objects.create(
+                        pr=pr,
+                        item_id=line_data['item'],
+                        qty=qty,
+                        estimated_price=estimated_price,
+                        project_id=line_data.get('project'),
+                        notes=line_data.get('notes', ''),
+                        created_by=pr.created_by
+                    )
+                    total_amount += qty * estimated_price
+            
+            pr.total_amount = total_amount
+            pr.save()
+        
+        return pr
+    
+    def update(self, instance, validated_data):
+        """Update PR with lines."""
+        lines_data = self.initial_data.get('lines', [])
+        
+        with transaction.atomic():
+            # Update PR fields
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            instance.save()
+            
+            # Delete old lines and create new ones
+            instance.lines.all().delete()
+            
+            total_amount = 0
+            for line_data in lines_data:
+                if line_data.get('item') and line_data.get('qty'):
+                    qty = line_data['qty']
+                    estimated_price = line_data.get('estimated_price', 0)
+                    PurchaseRequestLine.objects.create(
+                        pr=instance,
+                        item_id=line_data['item'],
+                        qty=qty,
+                        estimated_price=estimated_price,
+                        project_id=line_data.get('project'),
+                        notes=line_data.get('notes', ''),
+                        created_by=instance.created_by
+                    )
+                    total_amount += qty * estimated_price
+            
+            instance.total_amount = total_amount
+            instance.save()
+        
+        return instance
 
 
 class PurchaseOrderLineSerializer(serializers.ModelSerializer):
@@ -90,6 +164,62 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             'payment_terms', 'notes', 'lines', 'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['order_no', 'order_date', 'created_at', 'updated_at']
+    
+    def create(self, validated_data):
+        """Create PO with lines."""
+        lines_data = self.initial_data.get('lines', [])
+        
+        with transaction.atomic():
+            po = PurchaseOrder.objects.create(**validated_data)
+            
+            for line_data in lines_data:
+                if line_data.get('item') and line_data.get('qty'):
+                    PurchaseOrderLine.objects.create(
+                        po=po,
+                        item_id=line_data['item'],
+                        qty=line_data['qty'],
+                        unit_price=line_data.get('unit_price', 0),
+                        notes=line_data.get('notes', ''),
+                        created_by=po.created_by
+                    )
+            
+            # Update total amount
+            total = po.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
+            po.total_amount = total
+            po.save()
+        
+        return po
+    
+    def update(self, instance, validated_data):
+        """Update PO with lines."""
+        lines_data = self.initial_data.get('lines', [])
+        
+        with transaction.atomic():
+            # Update PO fields
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            instance.save()
+            
+            # Delete old lines and create new ones
+            instance.lines.all().delete()
+            
+            for line_data in lines_data:
+                if line_data.get('item') and line_data.get('qty'):
+                    PurchaseOrderLine.objects.create(
+                        po=instance,
+                        item_id=line_data['item'],
+                        qty=line_data['qty'],
+                        unit_price=line_data.get('unit_price', 0),
+                        notes=line_data.get('notes', ''),
+                        created_by=instance.created_by
+                    )
+            
+            # Update total amount
+            total = instance.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
+            instance.total_amount = total
+            instance.save()
+        
+        return instance
 
 
 class GoodsReceiptLineSerializer(serializers.ModelSerializer):
@@ -123,4 +253,52 @@ class GoodsReceiptSerializer(serializers.ModelSerializer):
             'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['receipt_no', 'created_at', 'updated_at']
+    
+    def create(self, validated_data):
+        """Create GoodsReceipt with lines."""
+        lines_data = self.initial_data.get('lines', [])
+        
+        with transaction.atomic():
+            receipt = GoodsReceipt.objects.create(**validated_data)
+            
+            for line_data in lines_data:
+                if line_data.get('item') and line_data.get('qty'):
+                    GoodsReceiptLine.objects.create(
+                        receipt=receipt,
+                        po_line_id=line_data.get('po_line'),
+                        item_id=line_data['item'],
+                        qty=line_data['qty'],
+                        quality_status=line_data.get('quality_status', 'PENDING'),
+                        notes=line_data.get('notes', ''),
+                        created_by=receipt.created_by
+                    )
+        
+        return receipt
+    
+    def update(self, instance, validated_data):
+        """Update GoodsReceipt with lines."""
+        lines_data = self.initial_data.get('lines', [])
+        
+        with transaction.atomic():
+            # Update receipt fields
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            instance.save()
+            
+            # Delete old lines and create new ones
+            instance.lines.all().delete()
+            
+            for line_data in lines_data:
+                if line_data.get('item') and line_data.get('qty'):
+                    GoodsReceiptLine.objects.create(
+                        receipt=instance,
+                        po_line_id=line_data.get('po_line'),
+                        item_id=line_data['item'],
+                        qty=line_data['qty'],
+                        quality_status=line_data.get('quality_status', 'PENDING'),
+                        notes=line_data.get('notes', ''),
+                        created_by=instance.created_by
+                    )
+        
+        return instance
 

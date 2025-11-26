@@ -21,9 +21,10 @@
         <el-form-item label="分类">
           <el-select v-model="searchForm.category" placeholder="选择分类" clearable style="width: 120px;">
             <el-option label="差旅费" value="TRAVEL" />
-            <el-option label="招待费" value="ENTERTAINMENT" />
-            <el-option label="办公费" value="OFFICE" />
-            <el-option label="交通费" value="TRANSPORT" />
+            <el-option label="餐饮费" value="MEAL" />
+            <el-option label="办公用品" value="OFFICE" />
+            <el-option label="通讯费" value="COMMUNICATION" />
+            <el-option label="培训费" value="TRAINING" />
             <el-option label="其他" value="OTHER" />
           </el-select>
         </el-form-item>
@@ -97,9 +98,10 @@
             <el-form-item label="费用分类" prop="category">
               <el-select v-model="form.category" placeholder="选择分类" style="width: 100%;">
                 <el-option label="差旅费" value="TRAVEL" />
-                <el-option label="招待费" value="ENTERTAINMENT" />
-                <el-option label="办公费" value="OFFICE" />
-                <el-option label="交通费" value="TRANSPORT" />
+                <el-option label="餐饮费" value="MEAL" />
+                <el-option label="办公用品" value="OFFICE" />
+                <el-option label="通讯费" value="COMMUNICATION" />
+                <el-option label="培训费" value="TRAINING" />
                 <el-option label="其他" value="OTHER" />
               </el-select>
             </el-form-item>
@@ -132,6 +134,42 @@
         </el-form-item>
         <el-form-item label="费用说明" prop="description">
           <el-input v-model="form.description" type="textarea" :rows="3" placeholder="请详细描述费用用途" />
+        </el-form-item>
+        
+        <!-- 附件上传 -->
+        <el-form-item label="报销凭证">
+          <!-- 编辑时使用完整附件组件 -->
+          <AttachmentUpload
+            v-if="isEdit && form.id"
+            ref="attachmentRef"
+            related-model="Expense"
+            :related-id="form.id"
+            title="报销凭证"
+            accept=".pdf,.jpg,.jpeg,.png,.gif"
+          />
+          <!-- 新增时使用简化的文件选择 -->
+          <div v-else class="temp-upload">
+            <el-upload
+              ref="tempUploadRef"
+              :auto-upload="false"
+              :file-list="tempFiles"
+              :on-change="handleTempFileChange"
+              :on-remove="handleTempFileRemove"
+              multiple
+              accept=".pdf,.jpg,.jpeg,.png,.gif"
+              list-type="picture"
+            >
+              <el-button type="primary">
+                <el-icon><Upload /></el-icon>
+                上传发票/行程单
+              </el-button>
+              <template #tip>
+                <div class="el-upload__tip">
+                  支持发票、行程单、收据等凭证（PDF/图片），单个文件不超过10MB
+                </div>
+              </template>
+            </el-upload>
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -183,9 +221,13 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Upload } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
+
+const attachmentRef = ref(null)
+const tempUploadRef = ref(null)
+const tempFiles = ref([])
 
 const loading = ref(false)
 const saving = ref(false)
@@ -254,9 +296,10 @@ const getStatusLabel = (status) => {
 const getCategoryLabel = (category) => {
   const labels = { 
     TRAVEL: '差旅费', 
-    ENTERTAINMENT: '招待费', 
-    OFFICE: '办公费', 
-    TRANSPORT: '交通费',
+    MEAL: '餐饮费', 
+    OFFICE: '办公用品', 
+    COMMUNICATION: '通讯费',
+    TRAINING: '培训费',
     OTHER: '其他' 
   }
   return labels[category] || category
@@ -309,9 +352,45 @@ const resetSearch = () => {
   loadExpenses()
 }
 
+const handleTempFileChange = (file, fileList) => {
+  if (file.size > 10 * 1024 * 1024) {
+    ElMessage.warning(`文件 "${file.name}" 超过10MB限制`)
+    fileList.pop()
+    return
+  }
+  tempFiles.value = fileList
+}
+
+const handleTempFileRemove = (file, fileList) => {
+  tempFiles.value = fileList
+}
+
+const uploadTempFiles = async (expenseId) => {
+  if (!tempFiles.value.length) return
+  
+  const formData = new FormData()
+  formData.append('related_model', 'Expense')
+  formData.append('related_id', expenseId)
+  formData.append('category', 'INVOICE')
+  
+  for (const file of tempFiles.value) {
+    formData.append('files', file.raw)
+  }
+  
+  try {
+    await request.post('/core/attachments/batch_upload/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  } catch (error) {
+    console.error('附件上传失败:', error)
+    ElMessage.warning('报销已保存，但部分附件上传失败')
+  }
+}
+
 const handleAdd = () => {
   dialogTitle.value = '提交报销'
   isEdit.value = false
+  tempFiles.value = []
   Object.assign(form, {
     id: null,
     category: 'TRAVEL',
@@ -375,11 +454,16 @@ const handleSave = async () => {
       await request.put(`/finance/expenses/${form.id}/`, payload)
       ElMessage.success('更新费用报销成功')
     } else {
-      await request.post('/finance/expenses/', payload)
+      const response = await request.post('/finance/expenses/', payload)
+      // 上传附件
+      if (tempFiles.value.length && response.id) {
+        await uploadTempFiles(response.id)
+      }
       ElMessage.success('创建费用报销成功')
     }
     
     dialogVisible.value = false
+    tempFiles.value = []
     loadExpenses()
   } catch (error) {
     if (error !== 'cancel') {
@@ -463,5 +547,15 @@ onMounted(() => {
 
 .attachment-tip {
   margin-top: 20px;
+}
+
+.temp-upload {
+  width: 100%;
+}
+
+.temp-upload .el-upload__tip {
+  color: #909399;
+  font-size: 12px;
+  margin-top: 5px;
 }
 </style>

@@ -9,7 +9,15 @@ from .models import User, Role, Department
 class DepartmentSerializer(serializers.ModelSerializer):
     """Department serializer."""
     parent_name = serializers.CharField(source='parent.name', read_only=True)
-    manager_name = serializers.CharField(source='manager.get_full_name', read_only=True)
+    manager_name = serializers.SerializerMethodField()
+    
+    def get_manager_name(self, obj):
+        if obj.manager:
+            # 中文姓名：姓在前，名在后
+            if obj.manager.last_name or obj.manager.first_name:
+                return f"{obj.manager.last_name}{obj.manager.first_name}"
+            return obj.manager.username
+        return ''
     
     class Meta:
         model = Department
@@ -17,7 +25,13 @@ class DepartmentSerializer(serializers.ModelSerializer):
             'id', 'code', 'name', 'parent', 'parent_name', 'manager', 'manager_name',
             'description', 'sort_order', 'is_deleted', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['created_at', 'updated_at']
+        read_only_fields = ['code', 'created_at', 'updated_at']
+    
+    def create(self, validated_data):
+        import uuid
+        # 自动生成部门编码
+        validated_data['code'] = f"DEPT{uuid.uuid4().hex[:6].upper()}"
+        return super().create(validated_data)
 
 
 class RoleSerializer(serializers.ModelSerializer):
@@ -31,10 +45,16 @@ class RoleSerializer(serializers.ModelSerializer):
             'is_active', 'sort_order', 'user_count', 'is_deleted',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['created_at', 'updated_at']
+        read_only_fields = ['code', 'created_at', 'updated_at']
     
     def get_user_count(self, obj):
         return obj.users.filter(is_deleted=False, is_active=True).count()
+    
+    def create(self, validated_data):
+        import uuid
+        # 自动生成角色编码
+        validated_data['code'] = f"ROLE{uuid.uuid4().hex[:6].upper()}"
+        return super().create(validated_data)
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -58,7 +78,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 class UserCreateSerializer(serializers.ModelSerializer):
     """User serializer for creation."""
-    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
+    password = serializers.CharField(write_only=True, required=True, min_length=6)
     password_confirm = serializers.CharField(write_only=True, required=True)
     
     class Meta:
@@ -68,14 +88,27 @@ class UserCreateSerializer(serializers.ModelSerializer):
             'first_name', 'last_name', 'phone', 'gender', 'birth_date',
             'department', 'role', 'position', 'hire_date', 'is_active', 'is_staff'
         ]
+        extra_kwargs = {
+            'employee_id': {'required': False, 'allow_blank': True},
+            'email': {'required': True},
+            'first_name': {'required': False, 'allow_blank': True},
+            'last_name': {'required': False, 'allow_blank': True},
+            'phone': {'required': False, 'allow_blank': True},
+        }
     
     def validate(self, attrs):
         if attrs['password'] != attrs['password_confirm']:
-            raise serializers.ValidationError({"password": "两次密码不一致"})
+            raise serializers.ValidationError({"password_confirm": "两次密码不一致"})
         return attrs
     
     def create(self, validated_data):
         validated_data.pop('password_confirm')
+        # 如果 employee_id 为空，自动生成一个
+        if not validated_data.get('employee_id'):
+            import uuid
+            validated_data['employee_id'] = f"EMP{uuid.uuid4().hex[:8].upper()}"
+        # 移除空字符串字段（但保留 employee_id）
+        validated_data = {k: v for k, v in validated_data.items() if v not in [None, ''] or k == 'employee_id'}
         user = User.objects.create_user(**validated_data)
         return user
 

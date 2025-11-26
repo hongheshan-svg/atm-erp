@@ -237,8 +237,8 @@ const loadCashFlowForecast = async () => {
 
 const loadNotifications = async () => {
   try {
-    const { data } = await request.get('/core/notifications/')
-    notifications.value = (data.results || data).slice(0, 5)
+    const response = await request.get('/core/notifications/')
+    notifications.value = (response.results || response || []).slice(0, 5)
   } catch (error) {
     console.error('Failed to load notifications', error)
     // 使用模拟数据

@@ -153,10 +153,10 @@ const getPriceColor = (price) => {
 const searchItems = async (query) => {
   if (!query) return
   try {
-    const { data } = await request.get('/masterdata/items/', {
+    const response = await request.get('/masterdata/items/', {
       params: { search: query, page_size: 20 }
     })
-    itemOptions.value = data.results || data
+    itemOptions.value = response.results || response || []
   } catch (error) {
     console.error('搜索物料失败:', error)
   }
@@ -164,8 +164,8 @@ const searchItems = async (query) => {
 
 const loadSuppliers = async () => {
   try {
-    const { data } = await request.get('/masterdata/suppliers/', { params: { page_size: 100 } })
-    suppliers.value = data.results || data
+    const response = await request.get('/masterdata/suppliers/', { params: { page_size: 100 } })
+    suppliers.value = response.results || response || []
   } catch (error) {
     console.error('加载供应商失败:', error)
   }
@@ -182,11 +182,10 @@ const loadReport = async () => {
     }
     Object.keys(params).forEach(k => { if (params[k] === null) delete params[k] })
     
-    const res = await request.get('/reports/purchase-price-trend/', { params })
-    const data = res.data || res
+    const response = await request.get('/reports/purchase-price-trend/', { params })
     
     // 后端返回的是 results 数组，每个元素包含物料的价格趋势数据
-    const results = data.results || []
+    const results = response.results || response || []
     
     // 将后端返回的数据格式转换为前端需要的格式
     const items = []
@@ -202,7 +201,7 @@ const loadReport = async () => {
             item_name: item.item_name,
             qty: trend.qty,
             unit_price: trend.price,
-            price_change: item.price_change_pct,
+            price_change: item.price_change_pct || 0,
             total_amount: trend.price * trend.qty
           })
         })

@@ -187,7 +187,7 @@ const formatCurrency = (value) => {
 
 const loadInventoryMetrics = async () => {
   try {
-    const { data } = await request.get('/analytics/dashboard/')
+    const response = await request.get('/analytics/dashboard/')
     metrics.inventory_value = data.inventory?.inventory_value || 0
     metrics.total_items = data.inventory?.total_items || 0
     metrics.low_stock_items = data.inventory?.low_stock_items || 0
@@ -199,7 +199,7 @@ const loadInventoryMetrics = async () => {
 
 const loadTurnoverData = async () => {
   try {
-    const { data } = await request.get('/analytics/inventory_turnover/', {
+    const response = await request.get('/analytics/inventory_turnover/', {
       params: { days: turnoverDays.value }
     })
     metrics.turnover_rate = data.turnover_rate || 0
@@ -214,7 +214,7 @@ const loadTurnoverData = async () => {
 const loadSlowMovingItems = async () => {
   loading.value = true
   try {
-    const { data } = await request.get('/analytics/slow_moving_items/', {
+    const response = await request.get('/analytics/slow_moving_items/', {
       params: { days: slowMovingDays.value }
     })
     slowMovingItems.value = data || []
@@ -228,11 +228,11 @@ const loadSlowMovingItems = async () => {
 
 const loadWarehouseDistribution = async () => {
   try {
-    const { data } = await request.get('/inventory/stocks/')
+    const response = await request.get('/inventory/stocks/')
     
     // Group by warehouse
     const warehouseValues = {}
-    data.results.forEach(stock => {
+    response.results.forEach(stock => {
       const warehouse = stock.warehouse_name || 'Unknown'
       const value = (stock.qty_on_hand || 0) * (stock.unit_cost || 0)
       warehouseValues[warehouse] = (warehouseValues[warehouse] || 0) + value

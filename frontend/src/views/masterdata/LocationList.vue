@@ -221,8 +221,8 @@ const getTypeTagType = (type) => {
 
 const loadWarehouses = async () => {
   try {
-    const { data } = await request.get('/masterdata/warehouses/', { params: { is_active: true } })
-    warehouses.value = data.results || data || []
+    const response = await request.get('/masterdata/warehouses/', { params: { is_active: true } })
+    warehouses.value = response.results || response || [] || []
   } catch (error) {
     console.error('加载仓库失败:', error)
   }
@@ -232,7 +232,7 @@ const loadLocations = async () => {
   if (!selectedWarehouse.value) return
   
   try {
-    const { data } = await request.get(`/masterdata/warehouses/${selectedWarehouse.value}/location_tree/`)
+    const response = await request.get(`/masterdata/warehouses/${selectedWarehouse.value}/location_tree/`)
     locationTree.value = data || []
     selectedLocation.value = null
     childLocations.value = []

@@ -18,10 +18,12 @@ def project_profitability(request):
     """
     Get profitability analysis for a single project or all projects.
     Query params:
-        - project_id: specific project (optional)
+        - project_id or project: specific project (optional)
+        - status: filter by project status (optional)
         - format: json or excel (default: json)
     """
-    project_id = request.query_params.get('project_id')
+    project_id = request.query_params.get('project_id') or request.query_params.get('project')
+    status = request.query_params.get('status')
     output_format = request.query_params.get('format', 'json')
     
     if project_id:
@@ -45,7 +47,7 @@ def project_profitability(request):
     
     else:
         # All projects analysis
-        df = CostCalculationService.calculate_all_projects_profit()
+        df = CostCalculationService.calculate_all_projects_profit(status=status)
         
         if output_format == 'excel':
             output = BytesIO()

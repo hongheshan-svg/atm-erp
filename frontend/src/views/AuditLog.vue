@@ -221,9 +221,9 @@ const loadAuditLogs = async () => {
       params.end_date = new Date(filters.end_date).toISOString()
     }
 
-    const { data } = await request.get('/core/audit-logs/', { params })
-    auditLogs.value = data.results || data
-    pagination.total = data.count || auditLogs.value.length
+    const response = await request.get('/core/audit-logs/', { params })
+    auditLogs.value = response.results || response || []
+    pagination.total = response.count || auditLogs.value.length
   } catch (error) {
     ElMessage.error('加载审计日志失败')
     console.error(error)

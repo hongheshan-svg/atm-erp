@@ -553,7 +553,7 @@ const handleConfirmImport = async () => {
     formData.append('project', selectedProject.value)
     formData.append('update_existing', importOptions.updateExisting.toString())
     
-    const { data } = await request.post('/projects/bom/import_excel/', formData, {
+    const response = await request.post('/projects/bom/import_excel/', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     
@@ -586,7 +586,7 @@ const handleConfirmCopy = async () => {
   
   copying.value = true
   try {
-    const { data } = await request.get('/projects/bom/copy_from_project/', {
+    const response = await request.get('/projects/bom/copy_from_project/', {
       params: {
         source_project: copySourceProject.value,
         target_project: selectedProject.value

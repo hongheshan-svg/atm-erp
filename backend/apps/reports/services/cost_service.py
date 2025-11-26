@@ -135,17 +135,20 @@ class CostCalculationService:
         return result
     
     @classmethod
-    def calculate_all_projects_profit(cls):
+    def calculate_all_projects_profit(cls, status=None):
         """
-        Calculate profitability for all active projects.
+        Calculate profitability for projects.
+        Args:
+            status: filter by project status (optional)
         Returns: pandas DataFrame
         """
         from apps.projects.models import Project
         
-        active_projects = Project.objects.filter(
-            status__in=['ACTIVE', 'COMPLETED'],
-            is_deleted=False
-        ).values('id', 'code', 'name', 'status')
+        queryset = Project.objects.filter(is_deleted=False)
+        if status:
+            queryset = queryset.filter(status=status)
+        
+        active_projects = queryset.values('id', 'code', 'name', 'status', 'manager__username')
         
         results = []
         for project in active_projects:
@@ -153,7 +156,8 @@ class CostCalculationService:
             profit_data.update({
                 'code': project['code'],
                 'name': project['name'],
-                'status': project['status']
+                'status': project['status'],
+                'manager': project['manager__username'] or ''
             })
             results.append(profit_data)
         
@@ -162,7 +166,7 @@ class CostCalculationService:
         if not df.empty:
             # Reorder columns for better readability
             columns_order = [
-                'code', 'name', 'status', 'revenue', 'material_cost',
+                'code', 'name', 'manager', 'status', 'revenue', 'material_cost',
                 'labor_cost', 'expense_cost', 'total_cost', 'profit', 'margin_percent'
             ]
             df = df[columns_order]

@@ -161,9 +161,9 @@ const loadARList = async () => {
   try {
     const params = { page: pagination.page, page_size: pagination.pageSize, ...searchForm }
     Object.keys(params).forEach(k => { if (params[k] === null) delete params[k] })
-    const { data } = await request.get('/finance/receivables/', { params })
-    arList.value = data.results || []
-    pagination.total = data.count || 0
+    const response = await request.get('/finance/receivables/', { params })
+    arList.value = response.results || []
+    pagination.total = response.count || 0
   } catch (error) {
     ElMessage.error('加载应收账款失败')
   } finally {
@@ -173,8 +173,8 @@ const loadARList = async () => {
 
 const loadCustomers = async () => {
   try {
-    const { data } = await request.get('/masterdata/customers/', { params: { page_size: 100 } })
-    customers.value = data.results || data
+    const response = await request.get('/masterdata/customers/', { params: { page_size: 100 } })
+    customers.value = response.results || response || []
   } catch (error) {
     console.error('加载客户失败:', error)
   }

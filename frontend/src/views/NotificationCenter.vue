@@ -181,9 +181,9 @@ const loadNotifications = async () => {
       params.is_read = true
     }
 
-    const { data } = await request.get('/core/notifications/', { params })
-    notifications.value = data.results || data
-    pagination.total = data.count || notifications.value.length
+    const response = await request.get('/core/notifications/', { params })
+    notifications.value = response.results || response || []
+    pagination.total = response.count || notifications.value.length
     
     // Get unread count
     await loadUnreadCount()
@@ -197,8 +197,8 @@ const loadNotifications = async () => {
 
 const loadUnreadCount = async () => {
   try {
-    const { data } = await request.get('/core/notifications/unread_count/')
-    unreadCount.value = data.count
+    const response = await request.get('/core/notifications/unread_count/')
+    unreadCount.value = response.count
   } catch (error) {
     console.error('获取未读数量失败', error)
   }
@@ -206,7 +206,7 @@ const loadUnreadCount = async () => {
 
 const markAsRead = async (id) => {
   try {
-    await request.post(`/api/core/notifications/${id}/mark_read/`)
+    await request.post(`/core/notifications/${id}/mark_read/`)
     ElMessage.success('已标记为已读')
     loadNotifications()
   } catch (error) {

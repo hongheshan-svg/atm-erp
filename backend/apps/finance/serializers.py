@@ -3,7 +3,7 @@ Serializers for finance app.
 """
 from rest_framework import serializers
 from .models import (
-    Currency, ExchangeRateHistory, Expense, 
+    Currency, ExchangeRateHistory, Expense, Invoice,
     AccountReceivable, AccountPayable, Payment,
     SharedExpense, SharedExpenseAllocation
 )
@@ -112,6 +112,25 @@ class PaymentSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['payment_no', 'created_at', 'updated_at']
+
+
+class InvoiceSerializer(serializers.ModelSerializer):
+    """Invoice serializer."""
+    invoice_type_display = serializers.CharField(source='get_invoice_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    reference_type_display = serializers.CharField(source='get_reference_type_display', read_only=True)
+    created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
+    
+    class Meta:
+        model = Invoice
+        fields = [
+            'id', 'invoice_type', 'invoice_type_display', 'invoice_no', 'invoice_date',
+            'party_name', 'tax_number', 'amount_before_tax', 'tax_amount', 'total_amount',
+            'reference_type', 'reference_type_display', 'reference_id',
+            'status', 'status_display', 'notes', 'created_by_name',
+            'is_deleted', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['total_amount', 'created_at', 'updated_at']
 
 
 class SharedExpenseAllocationSerializer(serializers.ModelSerializer):

@@ -187,12 +187,10 @@ const loadReport = async () => {
       params.supplier = searchForm.supplier
     }
     
-    const res = await request.get('/reports/aging/', { params })
-    const data = res.data || res
-    reportData.value = data.results || []
+    const response = await request.get('/reports/aging/', { params })
     
     // 映射后端的 summary 字段到前端期望的格式
-    const summary = data.summary || {}
+    const summary = response.summary || {}
     Object.assign(agingSummary, {
       current: summary.current || 0,
       days_1_30: summary['30_60'] || 0,  // 后端用 30_60 表示 1-30天后的逾期
@@ -201,9 +199,10 @@ const loadReport = async () => {
     })
     
     // 映射后端字段到前端显示字段
-    reportData.value = reportData.value.map(item => ({
+    const results = response.results || response || []
+    reportData.value = results.map(item => ({
       ...item,
-      overdue_days: item.days_overdue
+      overdue_days: item.days_overdue || 0
     }))
     
     await nextTick()
@@ -217,8 +216,8 @@ const loadReport = async () => {
 
 const loadCustomers = async () => {
   try {
-    const { data } = await request.get('/masterdata/customers/', { params: { page_size: 100 } })
-    customers.value = data.results || data
+    const response = await request.get('/masterdata/customers/', { params: { page_size: 100 } })
+    customers.value = response.results || response || []
   } catch (error) {
     console.error('加载客户失败:', error)
   }
@@ -226,8 +225,8 @@ const loadCustomers = async () => {
 
 const loadSuppliers = async () => {
   try {
-    const { data } = await request.get('/masterdata/suppliers/', { params: { page_size: 100 } })
-    suppliers.value = data.results || data
+    const response = await request.get('/masterdata/suppliers/', { params: { page_size: 100 } })
+    suppliers.value = response.results || response || []
   } catch (error) {
     console.error('加载供应商失败:', error)
   }

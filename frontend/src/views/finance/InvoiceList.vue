@@ -220,9 +220,9 @@ const loadInvoices = async () => {
   try {
     const params = { page: pagination.page, page_size: pagination.pageSize, ...searchForm }
     Object.keys(params).forEach(k => { if (params[k] === '' || params[k] === null) delete params[k] })
-    const { data } = await request.get('/finance/invoices/', { params })
-    invoices.value = data.results || []
-    pagination.total = data.count || 0
+    const response = await request.get('/finance/invoices/', { params })
+    invoices.value = response.results || []
+    pagination.total = response.count || 0
   } catch (error) {
     ElMessage.error('加载发票失败')
   } finally {
@@ -247,7 +247,7 @@ const handleCreate = () => {
 
 const handleView = async (row) => {
   try {
-    const { data } = await request.get(`/finance/invoices/${row.id}/`)
+    const response = await request.get(`/finance/invoices/${row.id}/`)
     currentInvoice.value = data
     detailVisible.value = true
   } catch (error) {

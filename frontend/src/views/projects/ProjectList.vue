@@ -15,7 +15,7 @@
         <el-table-column prop="manager_name" label="负责人" />
         <el-table-column prop="status" label="状态" width="120">
           <template #default="{ row }">
-            <el-tag :type="get状态Type(row.status)">{{ row.status }}</el-tag>
+            <el-tag :type="getStatusType(row.status)">{{ getStatusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="start_date" label="开始日期" width="120" />
@@ -56,10 +56,12 @@
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="form.status">
-            <el-option label="草稿" value="draft" />
-            <el-option label="启用" value="active" />
-            <el-option label="暂停" value="paused" />
-            <el-option label="已完成" value="completed" />
+            <el-option label="草稿" value="DRAFT" />
+            <el-option label="规划中" value="PLANNING" />
+            <el-option label="进行中" value="ACTIVE" />
+            <el-option label="暂停" value="PAUSED" />
+            <el-option label="已完成" value="COMPLETED" />
+            <el-option label="已取消" value="CANCELLED" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -107,25 +109,40 @@ const form = reactive({
   start_date: '',
   end_date: '',
   budget_total: 0,
-  status: 'draft'
+  status: 'DRAFT'
 })
 
-const get状态Type = (status) => {
+const getStatusType = (status) => {
   const types = {
-    draft: 'info',
-    active: 'success',
-    paused: 'warning',
-    completed: '',
-    archived: 'info'
+    DRAFT: 'info',
+    PLANNING: 'info',
+    ACTIVE: 'success',
+    PAUSED: 'warning',
+    COMPLETED: '',
+    CANCELLED: 'danger',
+    ARCHIVED: 'info'
   }
   return types[status] || ''
+}
+
+const getStatusLabel = (status) => {
+  const labels = {
+    DRAFT: '草稿',
+    PLANNING: '规划中',
+    ACTIVE: '进行中',
+    PAUSED: '暂停',
+    COMPLETED: '已完成',
+    CANCELLED: '已取消',
+    ARCHIVED: '已归档'
+  }
+  return labels[status] || status
 }
 
 const loadProjects = async () => {
   loading.value = true
   try {
-    const { data } = await request.get('/projects/projects/')
-    projects.value = data.results || data
+    const response = await request.get('/projects/projects/')
+    projects.value = response.results || response || []
   } catch (error) {
     ElMessage.error('加载项目失败')
   } finally {
@@ -135,8 +152,8 @@ const loadProjects = async () => {
 
 const loadCustomers = async () => {
   try {
-    const { data } = await request.get('/masterdata/customers/')
-    customers.value = data.results || data
+    const response = await request.get('/masterdata/customers/')
+    customers.value = response.results || response || []
   } catch (error) {
     console.error('Failed to load customers')
   }
@@ -149,7 +166,7 @@ const handleView = (row) => {
 const handleAdd = () => {
   dialogTitle.value = '创建项目'
   isEdit.value = false
-  Object.assign(form, { id: null, code: '', name: '', customer: null, start_date: '', end_date: '', budget_total: 0, status: 'draft' })
+  Object.assign(form, { id: null, code: '', name: '', customer: null, start_date: '', end_date: '', budget_total: 0, status: 'DRAFT' })
   dialogVisible.value = true
 }
 
@@ -163,7 +180,7 @@ const handleEdit = (row) => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除该项目吗？', '警告', { type: 'warning' })
-    await request.delete(`/api/projects/projects/${row.id}/`)
+    await request.delete(`/projects/projects/${row.id}/`)
     ElMessage.success('删除项目成功')
     loadProjects()
   } catch (error) {

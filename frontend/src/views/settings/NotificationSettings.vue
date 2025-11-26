@@ -128,6 +128,34 @@
       <el-divider content-position="left">配置指南</el-divider>
       
       <el-collapse accordion>
+        <el-collapse-item title="邮件配置说明" name="email">
+          <div class="config-guide">
+            <h4>SMTP 邮件服务配置</h4>
+            <ol>
+              <li>选择邮件服务提供商（如 QQ邮箱、163邮箱、阿里企业邮箱等）</li>
+              <li>在邮箱设置中开启 SMTP 服务，获取授权码</li>
+              <li>设置环境变量：
+                <pre># 基础配置
+EMAIL_HOST=smtp.qq.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=your-email@qq.com
+EMAIL_HOST_PASSWORD=your-authorization-code
+DEFAULT_FROM_EMAIL=ERP系统 &lt;your-email@qq.com&gt;</pre>
+              </li>
+            </ol>
+            <h4>常用邮箱 SMTP 配置</h4>
+            <table class="config-table">
+              <tr><th>邮箱</th><th>SMTP服务器</th><th>端口</th><th>加密</th></tr>
+              <tr><td>QQ邮箱</td><td>smtp.qq.com</td><td>587</td><td>TLS</td></tr>
+              <tr><td>163邮箱</td><td>smtp.163.com</td><td>465</td><td>SSL</td></tr>
+              <tr><td>阿里企业邮</td><td>smtp.qiye.aliyun.com</td><td>465</td><td>SSL</td></tr>
+              <tr><td>腾讯企业邮</td><td>smtp.exmail.qq.com</td><td>465</td><td>SSL</td></tr>
+            </table>
+            <p class="tip">注意：授权码不是邮箱登录密码，需要在邮箱设置中单独生成。</p>
+          </div>
+        </el-collapse-item>
+        
         <el-collapse-item title="钉钉配置说明" name="dingtalk">
           <div class="config-guide">
             <h4>群机器人 Webhook</h4>
@@ -203,9 +231,9 @@ const broadcastForm = reactive({
 const refreshStatus = async () => {
   loading.value = true
   try {
-    const { data } = await request.get('/core/notification-channels/status/')
-    channelStatus.value = data.channels || {}
-    enabledChannels.value = data.enabled || []
+    const response = await request.get('/core/notification-channels/status/')
+    channelStatus.value = response.channels || {}
+    enabledChannels.value = response.enabled || []
   } catch (error) {
     console.error('获取状态失败:', error)
   } finally {
@@ -216,13 +244,13 @@ const refreshStatus = async () => {
 const testDingTalk = async () => {
   testing.dingtalk = true
   try {
-    const { data } = await request.post('/core/notification-channels/test_dingtalk/', {
+    const response = await request.post('/core/notification-channels/test_dingtalk/', {
       title: 'ERP系统测试',
       content: '这是一条钉钉测试消息，用于验证通知配置是否正确。\n\n发送时间: ' + new Date().toLocaleString()
     })
-    ElMessage.success(data.message || '发送成功')
+    ElMessage.success(response.message || '发送成功')
   } catch (error) {
-    ElMessage.error(error.response?.data?.message || '发送失败')
+    ElMessage.error('发送失败')
   } finally {
     testing.dingtalk = false
   }
@@ -231,13 +259,13 @@ const testDingTalk = async () => {
 const testWeChatWork = async () => {
   testing.wechat_work = true
   try {
-    const { data } = await request.post('/core/notification-channels/test_wechat_work/', {
+    const response = await request.post('/core/notification-channels/test_wechat_work/', {
       title: 'ERP系统测试',
       content: '这是一条企业微信测试消息，用于验证通知配置是否正确。\n\n发送时间: ' + new Date().toLocaleString()
     })
-    ElMessage.success(data.message || '发送成功')
+    ElMessage.success(response.message || '发送成功')
   } catch (error) {
-    ElMessage.error(error.response?.data?.message || '发送失败')
+    ElMessage.error('发送失败')
   } finally {
     testing.wechat_work = false
   }
@@ -251,13 +279,13 @@ const sendBroadcast = async () => {
   
   testing.broadcast = true
   try {
-    const { data } = await request.post('/core/notification-channels/broadcast/', {
+    const response = await request.post('/core/notification-channels/broadcast/', {
       title: broadcastForm.title,
       content: broadcastForm.content
     })
     
-    const successCount = Object.values(data.results || {}).filter(v => v).length
-    const totalCount = Object.keys(data.results || {}).length
+    const successCount = Object.values(response.results || {}).filter(v => v).length
+    const totalCount = Object.keys(response.results || {}).length
     
     if (successCount > 0) {
       ElMessage.success(`广播完成: ${successCount}/${totalCount} 个渠道成功`)
@@ -350,6 +378,31 @@ onMounted(() => {
   border-radius: 4px;
   overflow-x: auto;
   font-size: 12px;
+}
+
+.config-guide .config-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0;
+  font-size: 13px;
+}
+
+.config-guide .config-table th,
+.config-guide .config-table td {
+  border: 1px solid #eee;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.config-guide .config-table th {
+  background: #f5f5f5;
+  font-weight: 500;
+}
+
+.config-guide .tip {
+  color: #e6a23c;
+  font-size: 13px;
+  margin-top: 10px;
 }
 </style>
 

@@ -231,7 +231,7 @@ const getDeliveryStatusLabel = (status) => {
 const loadOrderDetail = async () => {
   loading.value = true
   try {
-    const { data } = await request.get(`/sales/orders/${route.params.id}/`)
+    const response = await request.get(`/sales/orders/${route.params.id}/`)
     order.value = data
     
     // 加载关联的发货单
@@ -249,10 +249,10 @@ const loadOrderDetail = async () => {
 
 const loadWarehouses = async () => {
   try {
-    const { data } = await request.get('/masterdata/warehouses/', {
+    const response = await request.get('/masterdata/warehouses/', {
       params: { page_size: 100 }
     })
-    warehouses.value = data.results || data
+    warehouses.value = response.results || response || []
   } catch (error) {
     console.error('加载仓库失败:', error)
   }

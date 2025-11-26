@@ -182,9 +182,9 @@ const loadDeliveryOrders = async () => {
       }
     })
 
-    const { data } = await request.get('/sales/deliveries/', { params })
-    deliveryOrders.value = data.results || []
-    pagination.total = data.count || 0
+    const response = await request.get('/sales/deliveries/', { params })
+    deliveryOrders.value = response.results || []
+    pagination.total = response.count || 0
   } catch (error) {
     console.error('加载发货单失败:', error)
     ElMessage.error('加载发货单失败')
@@ -195,10 +195,10 @@ const loadDeliveryOrders = async () => {
 
 const loadWarehouses = async () => {
   try {
-    const { data } = await request.get('/masterdata/warehouses/', {
+    const response = await request.get('/masterdata/warehouses/', {
       params: { page_size: 100 }
     })
-    warehouses.value = data.results || data
+    warehouses.value = response.results || response || []
   } catch (error) {
     console.error('加载仓库失败:', error)
   }
@@ -215,7 +215,7 @@ const resetSearch = () => {
 
 const handleView = async (row) => {
   try {
-    const { data } = await request.get(`/sales/deliveries/${row.id}/`)
+    const response = await request.get(`/sales/deliveries/${row.id}/`)
     currentDelivery.value = data
     detailVisible.value = true
   } catch (error) {

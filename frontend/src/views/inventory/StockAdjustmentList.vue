@@ -122,11 +122,11 @@ const rules = {
 const loadAdjustments = async () => {
   loading.value = true
   try {
-    const { data } = await request.get('/inventory/adjustments/', {
+    const response = await request.get('/inventory/adjustments/', {
       params: { page: pagination.page, page_size: pagination.pageSize }
     })
-    adjustments.value = data.results || []
-    pagination.total = data.count || 0
+    adjustments.value = response.results || []
+    pagination.total = response.count || 0
   } catch (error) {
     ElMessage.error('加载盘点记录失败')
   } finally {
@@ -136,8 +136,8 @@ const loadAdjustments = async () => {
 
 const loadWarehouses = async () => {
   try {
-    const { data } = await request.get('/masterdata/warehouses/', { params: { page_size: 100 } })
-    warehouses.value = data.results || data
+    const response = await request.get('/masterdata/warehouses/', { params: { page_size: 100 } })
+    warehouses.value = response.results || response || []
   } catch (error) {
     console.error('加载仓库失败:', error)
   }
@@ -146,10 +146,10 @@ const loadWarehouses = async () => {
 const loadStockForAdjustment = async () => {
   if (!adjustmentForm.warehouse) return
   try {
-    const { data } = await request.get('/inventory/stocks/', {
+    const response = await request.get('/inventory/stocks/', {
       params: { warehouse: adjustmentForm.warehouse, page_size: 500 }
     })
-    adjustmentForm.lines = (data.results || data).map(s => ({
+    adjustmentForm.lines = (response.results || response || []).map(s => ({
       item: s.item,
       item_sku: s.item_sku,
       item_name: s.item_name,
@@ -177,7 +177,7 @@ const handleCreate = () => {
 
 const handleView = async (row) => {
   try {
-    const { data } = await request.get(`/inventory/adjustments/${row.id}/`)
+    const response = await request.get(`/inventory/adjustments/${row.id}/`)
     ElMessage.info('查看盘点详情功能待完善')
     console.log(data)
   } catch (error) {

@@ -161,9 +161,9 @@ const loadAPList = async () => {
   try {
     const params = { page: pagination.page, page_size: pagination.pageSize, ...searchForm }
     Object.keys(params).forEach(k => { if (params[k] === null) delete params[k] })
-    const { data } = await request.get('/finance/payables/', { params })
-    apList.value = data.results || []
-    pagination.total = data.count || 0
+    const response = await request.get('/finance/payables/', { params })
+    apList.value = response.results || []
+    pagination.total = response.count || 0
   } catch (error) {
     ElMessage.error('加载应付账款失败')
   } finally {
@@ -173,8 +173,8 @@ const loadAPList = async () => {
 
 const loadSuppliers = async () => {
   try {
-    const { data } = await request.get('/masterdata/suppliers/', { params: { page_size: 100 } })
-    suppliers.value = data.results || data
+    const response = await request.get('/masterdata/suppliers/', { params: { page_size: 100 } })
+    suppliers.value = response.results || response || []
   } catch (error) {
     console.error('加载供应商失败:', error)
   }

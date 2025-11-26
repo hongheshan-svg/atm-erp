@@ -151,8 +151,8 @@ const getAlertLabel = (row) => {
 const loadStocks = async () => {
   loading.value = true
   try {
-    const { data } = await request.get('/inventory/stocks/', { params: { page_size: 1000 } })
-    allStocks.value = data.results || data || []
+    const response = await request.get('/inventory/stocks/', { params: { page_size: 1000 } })
+    allStocks.value = response.results || response || [] || []
     calculateStats()
   } catch (error) {
     console.error('加载库存失败:', error)

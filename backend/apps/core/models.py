@@ -22,6 +22,13 @@ class SoftDeleteModel(models.Model):
 
     class Meta:
         abstract = True
+    
+    def soft_delete(self):
+        """Soft delete the instance by setting is_deleted to True."""
+        from django.utils import timezone
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.save(update_fields=['is_deleted', 'deleted_at'])
 
 
 class BaseModel(TimeStampedModel, SoftDeleteModel):

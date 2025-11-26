@@ -19,10 +19,11 @@
         <el-form-item label="项目状态">
           <el-select v-model="searchForm.status" placeholder="选择状态" clearable>
             <el-option label="草稿" value="DRAFT" />
+            <el-option label="规划中" value="PLANNING" />
             <el-option label="进行中" value="ACTIVE" />
             <el-option label="暂停" value="PAUSED" />
             <el-option label="已完成" value="COMPLETED" />
-            <el-option label="已归档" value="ARCHIVED" />
+            <el-option label="已取消" value="CANCELLED" />
           </el-select>
         </el-form-item>
         <el-form-item label="项目经理">
@@ -243,9 +244,11 @@ const budgetComparison = ref([])
 const getStatusLabel = (status) => {
   const labels = {
     'DRAFT': '草稿',
+    'PLANNING': '规划中',
     'ACTIVE': '进行中',
     'PAUSED': '暂停',
     'COMPLETED': '已完成',
+    'CANCELLED': '已取消',
     'ARCHIVED': '已归档'
   }
   return labels[status] || status
@@ -254,9 +257,11 @@ const getStatusLabel = (status) => {
 const getStatusType = (status) => {
   const types = {
     'DRAFT': 'info',
+    'PLANNING': 'info',
     'ACTIVE': 'success',
     'PAUSED': 'warning',
     'COMPLETED': 'primary',
+    'CANCELLED': 'danger',
     'ARCHIVED': ''
   }
   return types[status] || ''
