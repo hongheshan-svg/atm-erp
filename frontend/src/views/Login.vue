@@ -46,6 +46,10 @@
         </el-form-item>
       </el-form>
     </div>
+    
+    <div class="login-footer">
+      Copyright © {{ new Date().getFullYear() }} 深圳市奥特迈智能装备有限公司 版权所有
+    </div>
   </div>
 </template>
 
@@ -151,6 +155,17 @@ const handleLogin = async () => {
 
 .login-button {
   width: 100%;
+}
+
+.login-footer {
+  position: absolute;
+  bottom: 20px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: #909399;
+  font-size: 12px;
+  z-index: 1;
 }
 </style>
 

@@ -163,6 +163,10 @@
           </transition>
         </router-view>
       </el-main>
+      
+      <el-footer class="footer">
+        <span>Copyright © {{ new Date().getFullYear() }} 深圳市奥特迈智能装备有限公司 版权所有</span>
+      </el-footer>
     </el-container>
   </el-container>
 </template>
@@ -323,6 +327,17 @@ onMounted(async () => {
   background-color: #f0f2f5;
   padding: 20px;
   overflow-y: auto;
+}
+
+.footer {
+  height: 40px;
+  background-color: #fff;
+  border-top: 1px solid #e6e6e6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #909399;
+  font-size: 12px;
 }
 
 .fade-enter-active,
