@@ -110,12 +110,22 @@ class UserViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     def change_password(self, request):
         """Change password for current user."""
         serializer = ChangePasswordSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            # 返回详细错误信息
+            errors = serializer.errors
+            error_msg = []
+            for field, msgs in errors.items():
+                for msg in msgs:
+                    error_msg.append(str(msg))
+            return Response(
+                {'detail': '; '.join(error_msg) if error_msg else '验证失败'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         user = request.user
         if not user.check_password(serializer.validated_data['old_password']):
             return Response(
-                {'old_password': '原密码不正确'},
+                {'detail': '当前密码错误'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         

@@ -103,15 +103,29 @@ const handleLogin = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #f0f2f5;
+  position: relative;
+}
+
+.login-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(135deg, #304156 0%, #409eff 100%);
+  clip-path: polygon(0 0, 100% 0, 100% 70%, 0 100%);
 }
 
 .login-box {
   width: 420px;
   padding: 40px;
-  background: white;
-  border-radius: 10px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  position: relative;
+  z-index: 1;
 }
 
 .login-header {
@@ -120,14 +134,15 @@ const handleLogin = async () => {
 }
 
 .login-header h1 {
-  font-size: 28px;
-  color: #333;
+  font-size: 26px;
+  color: #303133;
   margin-bottom: 10px;
+  font-weight: 600;
 }
 
 .login-header p {
-  color: #666;
-  font-size: 14px;
+  color: #909399;
+  font-size: 13px;
 }
 
 .login-form {

@@ -318,6 +318,19 @@ const routes = [
         component: () => import('@/views/NotificationCenter.vue'),
         meta: { title: '通知中心', icon: 'Bell' }
       },
+      // User Profile
+      {
+        path: 'profile',
+        name: 'Profile',
+        component: () => import('@/views/Profile.vue'),
+        meta: { title: '个人中心', icon: 'User' }
+      },
+      {
+        path: 'change-password',
+        name: 'ChangePassword',
+        component: () => import('@/views/ChangePassword.vue'),
+        meta: { title: '修改密码', icon: 'Lock' }
+      },
     ]
   }
 ]

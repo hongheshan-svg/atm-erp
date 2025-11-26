@@ -48,7 +48,7 @@
           </div>
           <div class="kpi-content">
             <div class="kpi-value">{{ formatCurrency(kpis.financial.net_cash_position) }}</div>
-            <div class="kpi-label">净现金头寸</div>
+            <div class="kpi-label">资金净额</div>
             <div class="kpi-detail">应收 - 应付</div>
           </div>
         </el-card>
