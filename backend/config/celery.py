@@ -41,4 +41,23 @@ app.conf.beat_schedule = {
         'task': 'apps.reports.tasks.calculate_all_project_costs',
         'schedule': crontab(hour=2, minute=0),
     },
+    
+    # Webhook delivery processing - Every minute
+    'process-webhook-deliveries': {
+        'task': 'apps.core.tasks.process_webhook_deliveries',
+        'schedule': crontab(minute='*'),
+    },
+    
+    # Password expiry check - Daily at 7 AM
+    'check-password-expiry-daily': {
+        'task': 'apps.core.tasks.check_password_expiry',
+        'schedule': crontab(hour=7, minute=0),
+    },
+    
+    # Log cleanup - Weekly on Sunday at 3 AM
+    'cleanup-old-logs-weekly': {
+        'task': 'apps.core.tasks.cleanup_old_logs',
+        'schedule': crontab(hour=3, minute=0, day_of_week=0),
+        'kwargs': {'days': 90},
+    },
 }

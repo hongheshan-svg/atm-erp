@@ -1,0 +1,112 @@
+<!--项目详情页面-->
+<view class="container">
+  <!-- 项目头部 -->
+  <view class="project-header">
+    <view class="header-top">
+      <text class="project-code">{{project.code}}</text>
+      <text class="project-status tag {{statusClass}}">{{project.status_display}}</text>
+    </view>
+    <view class="project-name">{{project.name}}</view>
+    <view class="project-date">{{project.start_date}} ~ {{project.end_date}}</view>
+  </view>
+
+  <!-- 统计卡片 -->
+  <view class="stats-card">
+    <view class="stat-item">
+      <text class="stat-num">{{taskStats.completed}}/{{taskStats.total}}</text>
+      <text class="stat-label">任务完成</text>
+    </view>
+    <view class="stat-item">
+      <text class="stat-num">{{memberStats.count}}</text>
+      <text class="stat-label">项目成员</text>
+    </view>
+    <view class="stat-item">
+      <text class="stat-num">{{bomStats.count}}</text>
+      <text class="stat-label">BOM物料</text>
+    </view>
+  </view>
+
+  <!-- 基本信息 -->
+  <view class="card">
+    <view class="card-title">基本信息</view>
+    <view class="info-list">
+      <view class="info-item">
+        <text class="info-label">客户</text>
+        <text class="info-value">{{project.customer_name}}</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">项目经理</text>
+        <text class="info-value">{{project.manager_name}}</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">总预算</text>
+        <text class="info-value amount">¥{{budgetDisplay}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 预算使用情况 -->
+  <view class="card">
+    <view class="card-title">预算使用</view>
+    
+    <view class="budget-item">
+      <view class="budget-header">
+        <text class="budget-name">材料预算</text>
+        <text class="budget-amount">¥{{materialBudget}} / ¥{{project.budget_material_display}}</text>
+      </view>
+      <view class="progress-bar">
+        <view class="progress-fill" style="width: {{materialPercent}}%; background: {{materialPercent > 100 ? '#ff4d4f' : '#1890ff'}}"></view>
+      </view>
+    </view>
+
+    <view class="budget-item">
+      <view class="budget-header">
+        <text class="budget-name">人工预算</text>
+        <text class="budget-amount">¥{{laborBudget}} / ¥{{project.budget_labor_display}}</text>
+      </view>
+      <view class="progress-bar">
+        <view class="progress-fill" style="width: {{laborPercent}}%; background: {{laborPercent > 100 ? '#ff4d4f' : '#52c41a'}}"></view>
+      </view>
+    </view>
+
+    <view class="budget-item">
+      <view class="budget-header">
+        <text class="budget-name">费用预算</text>
+        <text class="budget-amount">¥{{expenseBudget}} / ¥{{project.budget_expense_display}}</text>
+      </view>
+      <view class="progress-bar">
+        <view class="progress-fill" style="width: {{expensePercent}}%; background: {{expensePercent > 100 ? '#ff4d4f' : '#faad14'}}"></view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 任务进度 -->
+  <view class="card">
+    <view class="card-title">任务进度</view>
+    <view class="task-progress">
+      <view class="progress-circle">
+        <text class="progress-value">{{taskStats.progress}}%</text>
+      </view>
+      <view class="progress-detail">
+        <view class="detail-item">
+          <text class="detail-dot todo"></text>
+          <text>待办: {{taskStats.todo || 0}}</text>
+        </view>
+        <view class="detail-item">
+          <text class="detail-dot doing"></text>
+          <text>进行中: {{taskStats.doing || 0}}</text>
+        </view>
+        <view class="detail-item">
+          <text class="detail-dot done"></text>
+          <text>已完成: {{taskStats.completed || 0}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 项目描述 -->
+  <view wx:if="{{project.description}}" class="card">
+    <view class="card-title">项目描述</view>
+    <view class="description">{{project.description}}</view>
+  </view>
+</view>

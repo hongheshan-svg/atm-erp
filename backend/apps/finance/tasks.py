@@ -19,7 +19,8 @@ def check_overdue_receivables():
     """
     from .models import AccountReceivable
     from apps.accounts.models import User
-    from apps.core.models import Notification
+    from apps.core.models import SystemNotification
+    from apps.core.notification_service import NotificationService
     
     today = timezone.now().date()
     
@@ -39,6 +40,7 @@ def check_overdue_receivables():
     # Build alert message
     message_lines = ["以下应收账款已逾期:\n"]
     total_overdue = Decimal('0')
+    overdue_items = []
     
     for ar in overdue_ar:
         remaining = ar.amount_due - ar.amount_paid
@@ -49,6 +51,12 @@ def check_overdue_receivables():
             f"- {ar.ar_no} | 客户: {ar.customer.name} | "
             f"应收: ¥{remaining:,.2f} | 逾期: {days_overdue}天"
         )
+        overdue_items.append({
+            'ar_no': ar.ar_no,
+            'customer': ar.customer.name,
+            'amount': float(remaining),
+            'days_overdue': days_overdue
+        })
     
     message_lines.append(f"\n逾期总额: ¥{total_overdue:,.2f}")
     message = "\n".join(message_lines)
@@ -63,12 +71,11 @@ def check_overdue_receivables():
     
     # Create in-app notifications
     for user_id in recipients:
-        Notification.objects.create(
+        SystemNotification.objects.create(
             user_id=user_id,
             title='应收账款逾期提醒',
-            content=message,
-            notification_type='WARNING',
-            link='/finance/ar'
+            message=message,
+            type='WARNING'
         )
     
     # Send email to admins
@@ -88,6 +95,20 @@ def check_overdue_receivables():
             )
         except Exception:
             pass
+    
+    # Send to DingTalk/WeChat Work
+    try:
+        title = "💰 应收账款逾期提醒"
+        markdown_content = f"### {title}\n\n"
+        markdown_content += f"共 **{len(overdue_items)}** 笔应收账款已逾期，总额 **¥{total_overdue:,.2f}**\n\n"
+        for item in overdue_items[:5]:
+            markdown_content += f"- {item['ar_no']} | {item['customer']} | ¥{item['amount']:,.2f} | 逾期{item['days_overdue']}天\n"
+        if len(overdue_items) > 5:
+            markdown_content += f"\n... 还有 {len(overdue_items) - 5} 笔\n"
+        
+        NotificationService.send_custom_notification(title, markdown_content)
+    except Exception:
+        pass
     
     return f"Sent overdue AR alert for {overdue_ar.count()} items, total: ¥{total_overdue:,.2f}"
 

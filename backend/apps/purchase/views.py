@@ -8,6 +8,7 @@ from django.db import transaction
 from django.db.models import Sum
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin, DataScopeMixin
 from apps.projects.models import Project
+from apps.inventory.cost_methods import CostingMethodFactory, FIFOCostingService
 from .models import (
     PurchaseRequest, PurchaseRequestLine,
     PurchaseOrder, PurchaseOrderLine,
@@ -87,7 +88,7 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin,
     
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
-        """Submit PR for approval with budget validation."""
+        """Submit PR for approval with budget validation and workflow."""
         pr = self.get_object()
         if pr.status != 'DRAFT':
             return Response(
@@ -96,23 +97,59 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin,
             )
         
         # Budget validation
+        budget_warning = None
         if pr.project:
             budget_result = BudgetValidationService.validate_purchase_request(
                 pr.project, pr.total_amount
             )
             if not budget_result['valid']:
-                # Allow submission but include warning
+                budget_warning = budget_result['message']
+        
+        # Try to start workflow
+        try:
+            from apps.core.workflow.services import WorkflowService
+            
+            instance, error = WorkflowService.start_workflow(
+                business_type='PURCHASE_REQUEST',
+                business_id=pr.id,
+                business_no=pr.request_no,
+                submitter=request.user,
+                amount=pr.total_amount
+            )
+            
+            if instance:
                 pr.status = 'SUBMITTED'
                 pr.save()
-                return Response({
+                response_data = {
                     **PurchaseRequestSerializer(pr).data,
-                    'budget_warning': budget_result['message'],
-                    'over_budget': True
-                })
-        
-        pr.status = 'SUBMITTED'
-        pr.save()
-        return Response(PurchaseRequestSerializer(pr).data)
+                    'workflow_started': True,
+                    'workflow_id': instance.id
+                }
+                if budget_warning:
+                    response_data['budget_warning'] = budget_warning
+                    response_data['over_budget'] = True
+                return Response(response_data)
+            else:
+                # No workflow configured, just submit
+                pr.status = 'SUBMITTED'
+                pr.save()
+                response_data = {
+                    **PurchaseRequestSerializer(pr).data,
+                    'workflow_started': False,
+                    'message': error or '未配置审批流程，已直接提交'
+                }
+                if budget_warning:
+                    response_data['budget_warning'] = budget_warning
+                return Response(response_data)
+                
+        except Exception as e:
+            # Workflow module not available, fallback to simple submit
+            pr.status = 'SUBMITTED'
+            pr.save()
+            response_data = PurchaseRequestSerializer(pr).data
+            if budget_warning:
+                response_data['budget_warning'] = budget_warning
+            return Response(response_data)
     
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
@@ -258,7 +295,7 @@ class GoodsReceiptViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, vi
     
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
-        """Confirm goods receipt and create stock moves."""
+        """Confirm goods receipt and create stock moves with FIFO support."""
         receipt = self.get_object()
         if receipt.status != 'DRAFT':
             return Response(
@@ -268,6 +305,9 @@ class GoodsReceiptViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, vi
         
         with transaction.atomic():
             from apps.inventory.models import StockMove
+            from django.conf import settings
+            
+            costing_method = getattr(settings, 'INVENTORY_COSTING_METHOD', 'WEIGHTED_AVG')
             
             for line in receipt.lines.filter(is_deleted=False):
                 # Create stock move for receipt
@@ -283,6 +323,17 @@ class GoodsReceiptViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, vi
                     status='COMPLETED',
                     created_by=request.user
                 )
+                
+                # If using FIFO, also create inventory lot
+                if costing_method == 'FIFO':
+                    FIFOCostingService.record_purchase(
+                        warehouse=receipt.warehouse,
+                        item=line.item,
+                        qty=line.qty,
+                        unit_cost=line.po_line.unit_price,
+                        reference_type='GoodsReceipt',
+                        reference_id=receipt.id
+                    )
                 
                 # Update received qty on PO line
                 line.po_line.received_qty += line.qty

@@ -4,7 +4,13 @@
       <template #header>
         <div class="card-header">
           <span>项目管理</span>
-          <el-button type="primary" @click="handleAdd">创建项目</el-button>
+          <div class="header-actions">
+            <el-button type="success" @click="handleExport">
+              <el-icon><Download /></el-icon>
+              导出Excel
+            </el-button>
+            <el-button type="primary" @click="handleAdd">创建项目</el-button>
+          </div>
         </div>
       </template>
 
@@ -86,9 +92,11 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Download } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
+import { exportProjects } from '@/api/export'
 
 const router = useRouter()
 const loading = ref(false)
@@ -209,6 +217,16 @@ const handleViewAttachments = (row) => {
   attachmentDialogVisible.value = true
 }
 
+const handleExport = async () => {
+  try {
+    ElMessage.info('正在导出...')
+    await exportProjects()
+    ElMessage.success('导出成功')
+  } catch (error) {
+    ElMessage.error('导出失败')
+  }
+}
+
 onMounted(() => {
   loadProjects()
   loadCustomers()
@@ -220,6 +238,10 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+.header-actions {
+  display: flex;
+  gap: 10px;
 }
 </style>
 

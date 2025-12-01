@@ -1,8 +1,8 @@
 <template>
   <div class="dashboard">
     <el-row :gutter="20">
-      <!-- Financial KPIs -->
-      <el-col :span="6">
+      <!-- Financial KPIs - Responsive -->
+      <el-col :xs="24" :sm="12" :md="6">
         <el-card shadow="hover" class="kpi-card">
           <div class="kpi-icon revenue">
             <el-icon><Money /></el-icon>
@@ -15,7 +15,7 @@
         </el-card>
       </el-col>
 
-      <el-col :span="6">
+      <el-col :xs="24" :sm="12" :md="6">
         <el-card shadow="hover" class="kpi-card">
           <div class="kpi-icon projects">
             <el-icon><Document /></el-icon>
@@ -28,7 +28,7 @@
         </el-card>
       </el-col>
 
-      <el-col :span="6">
+      <el-col :xs="24" :sm="12" :md="6">
         <el-card shadow="hover" class="kpi-card">
           <div class="kpi-icon inventory">
             <el-icon><Box /></el-icon>
@@ -41,7 +41,7 @@
         </el-card>
       </el-col>
 
-      <el-col :span="6">
+      <el-col :xs="24" :sm="12" :md="6">
         <el-card shadow="hover" class="kpi-card">
           <div class="kpi-icon cash">
             <el-icon><Wallet /></el-icon>
@@ -55,9 +55,9 @@
       </el-col>
     </el-row>
 
-    <!-- Charts Row -->
+    <!-- Charts Row - Responsive -->
     <el-row :gutter="20" style="margin-top: 20px;">
-      <el-col :span="12">
+      <el-col :xs="24" :md="12">
         <el-card shadow="hover">
           <template #header>
             <span>现金流预测（30天）</span>
@@ -66,7 +66,7 @@
         </el-card>
       </el-col>
 
-      <el-col :span="12">
+      <el-col :xs="24" :md="12">
         <el-card shadow="hover">
           <template #header>
             <span>项目完成状态</span>
@@ -393,6 +393,7 @@ onMounted(async () => {
   font-size: 30px;
   color: white;
   margin-right: 20px;
+  flex-shrink: 0;
 }
 
 .kpi-icon.revenue {
@@ -413,12 +414,16 @@ onMounted(async () => {
 
 .kpi-content {
   flex: 1;
+  min-width: 0;
 }
 
 .kpi-value {
   font-size: 24px;
   font-weight: bold;
   color: #303133;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .kpi-label {
@@ -431,5 +436,44 @@ onMounted(async () => {
   font-size: 12px;
   color: #C0C4CC;
   margin-top: 5px;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+  .dashboard {
+    padding: 10px;
+  }
+  
+  .kpi-card {
+    padding: 15px;
+  }
+  
+  .kpi-icon {
+    width: 50px;
+    height: 50px;
+    font-size: 24px;
+    margin-right: 15px;
+  }
+  
+  .kpi-value {
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .kpi-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+    margin-right: 10px;
+  }
+  
+  .kpi-value {
+    font-size: 18px;
+  }
+  
+  .kpi-label {
+    font-size: 12px;
+  }
 }
 </style>

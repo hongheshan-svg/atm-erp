@@ -1,0 +1,5 @@
+{
+  "navigationBarTitleText": "项目列表",
+  "enablePullDownRefresh": true,
+  "onReachBottomDistance": 100
+}

@@ -18,6 +18,16 @@
           <span>仪表盘</span>
         </el-menu-item>
         
+        <el-sub-menu index="workflow">
+          <template #title>
+            <el-icon><Checked /></el-icon>
+            <span>审批中心</span>
+          </template>
+          <el-menu-item index="/workflow/tasks">待办审批</el-menu-item>
+          <el-menu-item index="/workflow/my-submissions">我的提交</el-menu-item>
+          <el-menu-item index="/workflow/config">流程配置</el-menu-item>
+        </el-sub-menu>
+
         <el-sub-menu index="system">
           <template #title>
             <el-icon><Setting /></el-icon>
@@ -29,6 +39,9 @@
           <el-menu-item index="/notification-settings">通知设置</el-menu-item>
           <el-menu-item index="/system/audit-log">审计日志</el-menu-item>
           <el-menu-item index="/system/notifications">通知中心</el-menu-item>
+          <el-menu-item index="/system/login-logs">登录日志</el-menu-item>
+          <el-menu-item index="/system/webhooks">Webhook管理</el-menu-item>
+          <el-menu-item index="/system/dashboard-config">仪表盘配置</el-menu-item>
         </el-sub-menu>
         
         <el-sub-menu index="masterdata">
@@ -177,7 +190,7 @@ import { useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import {
   DataAnalysis, Setting, Document, Management, ShoppingCart,
-  Sell, Goods, Money, TrendCharts, Fold, Expand, UserFilled, DataLine
+  Sell, Goods, Money, TrendCharts, Fold, Expand, UserFilled, DataLine, Checked
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 

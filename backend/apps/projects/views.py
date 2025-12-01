@@ -480,6 +480,170 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             'errors': error_rows
         })
     
+    @action(detail=False, methods=['post'])
+    def generate_purchase_request(self, request):
+        """
+        Generate purchase request from BOM items.
+        PRD requirement: BOM清单推送到采购模块
+        """
+        from apps.purchase.models import PurchaseRequest, PurchaseRequestLine
+        from django.db import transaction
+        
+        project_id = request.data.get('project')
+        item_ids = request.data.get('item_ids', [])  # Optional: specific items
+        required_date = request.data.get('required_date')
+        
+        if not project_id:
+            return Response(
+                {'error': '请提供项目ID'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            project = Project.objects.get(id=project_id)
+        except Project.DoesNotExist:
+            return Response(
+                {'error': '项目不存在'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get BOM items to convert
+        bom_queryset = ProjectBOM.objects.filter(
+            project=project,
+            is_deleted=False
+        ).select_related('item')
+        
+        if item_ids:
+            bom_queryset = bom_queryset.filter(item_id__in=item_ids)
+        
+        # Filter items that need to be purchased (planned > actual)
+        bom_items = []
+        for bom in bom_queryset:
+            needed_qty = bom.planned_qty - bom.actual_qty
+            if needed_qty > 0:
+                bom_items.append({
+                    'bom': bom,
+                    'needed_qty': needed_qty
+                })
+        
+        if not bom_items:
+            return Response(
+                {'error': '没有需要采购的物料（计划数量已满足）'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        with transaction.atomic():
+            # Create purchase request
+            pr = PurchaseRequest.objects.create(
+                project=project,
+                requestor=request.user,
+                required_date=required_date or project.end_date,
+                notes=f'从项目 {project.code} BOM自动生成',
+                created_by=request.user
+            )
+            
+            total_amount = 0
+            for item_data in bom_items:
+                bom = item_data['bom']
+                needed_qty = item_data['needed_qty']
+                estimated_price = bom.item.standard_cost
+                line_amount = needed_qty * estimated_price
+                
+                PurchaseRequestLine.objects.create(
+                    pr=pr,
+                    item=bom.item,
+                    qty=needed_qty,
+                    estimated_price=estimated_price,
+                    project=project,
+                    notes=f'BOM计划: {bom.planned_qty}, 已用: {bom.actual_qty}',
+                    created_by=request.user
+                )
+                total_amount += line_amount
+            
+            pr.total_amount = total_amount
+            pr.save()
+        
+        from apps.purchase.serializers import PurchaseRequestSerializer
+        return Response({
+            'message': f'已生成采购申请 {pr.request_no}，包含 {len(bom_items)} 项物料',
+            'purchase_request': PurchaseRequestSerializer(pr).data
+        }, status=status.HTTP_201_CREATED)
+    
+    @action(detail=False, methods=['get'])
+    def shortage_analysis(self, request):
+        """
+        Analyze BOM shortage - items that need to be purchased.
+        """
+        from apps.inventory.models import Stock
+        
+        project_id = request.query_params.get('project')
+        
+        if not project_id:
+            return Response(
+                {'error': '请提供项目ID'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            project = Project.objects.get(id=project_id)
+        except Project.DoesNotExist:
+            return Response(
+                {'error': '项目不存在'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        bom_items = ProjectBOM.objects.filter(
+            project=project,
+            is_deleted=False
+        ).select_related('item')
+        
+        shortage_list = []
+        for bom in bom_items:
+            needed_qty = bom.planned_qty - bom.actual_qty
+            if needed_qty <= 0:
+                continue
+            
+            # Get current stock
+            stock = Stock.objects.filter(item=bom.item).aggregate(
+                total_on_hand=Sum('qty_on_hand'),
+                total_available=Sum('qty_on_hand') - Sum('qty_reserved')
+            )
+            
+            total_on_hand = stock['total_on_hand'] or 0
+            total_available = stock['total_available'] or 0
+            
+            shortage = needed_qty - total_available
+            
+            shortage_list.append({
+                'item_id': bom.item.id,
+                'item_sku': bom.item.sku,
+                'item_name': bom.item.name,
+                'unit': bom.item.get_unit_display(),
+                'planned_qty': float(bom.planned_qty),
+                'actual_qty': float(bom.actual_qty),
+                'needed_qty': float(needed_qty),
+                'stock_on_hand': float(total_on_hand),
+                'stock_available': float(total_available),
+                'shortage': float(max(0, shortage)),
+                'can_fulfill': shortage <= 0,
+                'estimated_cost': float(shortage * bom.item.standard_cost) if shortage > 0 else 0
+            })
+        
+        # Summary
+        total_shortage_cost = sum(item['estimated_cost'] for item in shortage_list)
+        items_with_shortage = [item for item in shortage_list if item['shortage'] > 0]
+        
+        return Response({
+            'project_code': project.code,
+            'project_name': project.name,
+            'summary': {
+                'total_bom_items': len(shortage_list),
+                'items_with_shortage': len(items_with_shortage),
+                'total_shortage_cost': total_shortage_cost
+            },
+            'items': shortage_list
+        })
+    
     @action(detail=False, methods=['get'])
     def copy_from_project(self, request):
         """Copy BOM from another project."""

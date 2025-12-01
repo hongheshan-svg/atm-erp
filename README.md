@@ -1,557 +1,170 @@
-# Python Enterprise ERP System
+# ERP企业资源管理系统
 
-**A Complete, Modern, Scalable ERP Solution**
+一个基于 Django + Vue3 + Element Plus 的现代化企业资源管理系统，支持项目管理、采购销售、库存管理、财务管理、审批流程等核心业务功能。
 
-[![Django](https://img.shields.io/badge/Django-4.2-green.svg)](https://www.djangoproject.com/)
-[![Vue](https://img.shields.io/badge/Vue-3.3-blue.svg)](https://vuejs.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-blue.svg)](https://www.postgresql.org/)
-[![Elasticsearch](https://img.shields.io/badge/Elasticsearch-8.11-yellow.svg)](https://www.elastic.co/)
-[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
-[![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen.svg)]()
+## 🌟 功能特性
 
----
+### 核心模块
+- **项目管理** - 项目立项、任务分配、进度跟踪、甘特图、工时管理
+- **采购管理** - 采购申请、采购订单、到货质检、供应商管理
+- **销售管理** - 销售报价、销售订单、发货管理、客户管理
+- **库存管理** - 库存查询、批次管理、库存调拨、盘点、预警
+- **财务管理** - 费用报销、应收应付、发票管理、项目成本核算
+- **审批中心** - 可配置审批流程、待办审批、我的提交
 
-## 🎉 **System Status: PRODUCTION READY**
+### 系统功能
+- **用户权限** - 用户管理、角色管理、部门管理（树形架构）
+- **数据分析** - 项目利润分析、库存周转率、账龄分析、现金流预测
+- **系统配置** - 仪表盘配置、Webhook管理、登录日志、审计日志
+- **通知中心** - 站内通知、邮件通知、微信通知
 
-**37 Enterprise Features** | **6 Docker Services** | **4,100+ Lines of Documentation**
+### 技术亮点
+- 🎨 现代化UI设计，参考SAP风格
+- 📱 响应式布局，支持移动端
+- 🔐 完善的权限控制和安全机制
+- 📊 丰富的数据可视化图表
+- 🔄 实时数据同步（WebSocket）
+- 📦 Docker一键部署
 
-This is a **complete enterprise ERP system** with real-time capabilities, advanced search, comprehensive reporting, and full audit trails. Built with modern technologies and best practices.
+## 🛠 技术栈
 
----
+### 后端
+- Python 3.11
+- Django 4.2 + Django REST Framework
+- PostgreSQL 15
+- Redis 7
+- Celery（异步任务）
+- Elasticsearch（全文搜索）
 
-## ⚡ **Quick Start (5 Minutes)**
+### 前端
+- Vue 3 + Composition API
+- Element Plus
+- Vite
+- ECharts（图表）
+- Axios
+
+### 部署
+- Docker + Docker Compose
+- Nginx
+- Gunicorn
+
+## 📦 快速开始
+
+### 环境要求
+- Docker Desktop
+- Git
+
+### 一键部署（Windows Server）
+
+```powershell
+# 1. 克隆项目
+git clone <repository-url> C:\ERP
+cd C:\ERP
+
+# 2. 运行安装脚本
+.\install.bat
+```
+
+### 手动部署
 
 ```bash
-# 1. Clone the repository
+# 1. 克隆项目
 git clone <repository-url>
-cd python-erp
+cd erp
 
-# 2. Start all services
+# 2. 启动服务
 docker-compose up -d
 
-# 3. Build search indexes (first time)
-docker exec erp_backend python manage.py search_index --rebuild
+# 3. 初始化数据库
+docker-compose exec backend python manage.py migrate
+docker-compose exec backend python manage.py createsuperuser
 
-# 4. Start frontend (development)
-cd frontend
-npm install
-npm run dev
-
-# 5. Access the system
-# Frontend: http://localhost:5173
-# API Docs: http://localhost:8000/api/docs/
-# Default login: admin / admin123
+# 4. 访问系统
+# 前端: http://localhost
+# 后台: http://localhost/admin
 ```
 
-**That's it!** 🚀 The system is ready to use.
+### 默认账号
+- 用户名：`admin`
+- 密码：`admin123`
 
----
-
-## 📋 **Feature Overview**
-
-### ✅ **Phase 1: Core ERP (MVP)**
-
-**System Management:**
-- User management with custom profiles
-- Role-Based Access Control (RBAC)
-- Menu & data-level permissions
-- Department hierarchy
-
-**Master Data:**
-- Items (products/materials)
-- Customers & credit management
-- Suppliers & payment terms
-- Warehouses (multi-location)
-- Item categories
-
-**Project Management:**
-- Project lifecycle management
-- WBS task management with hierarchy
-- Project team & member roles
-- Budget planning & tracking
-- Project BOM (Bill of Materials)
-
-**Purchase Management:**
-- Purchase Requests (PR)
-- Purchase Orders (PO)
-- Goods Receipt (GR)
-- Budget validation
-- Project material linkage
-
-**Sales Management:**
-- Sales Quotations with versioning
-- Sales Orders (SO)
-- Delivery Orders (DO)
-- Project revenue attribution
-- Customer credit checks
-
-**Inventory Management:**
-- Multi-warehouse stock tracking
-- Stock moves (IN/OUT/TRANSFER)
-- Inventory adjustments
-- Weighted average costing
-- Low stock alerts
-- Stock reservation
-
-**Finance & Cost Control:**
-- Expense management & approval
-- Accounts Receivable (AR)
-- Accounts Payable (AP)
-- Real-time project cost calculation
-- Material, labor & expense tracking
-- Project profitability analysis
-
-**Background Processing:**
-- Celery task queue
-- Scheduled cost calculations
-- AR/AP aging alerts
-- Email notifications
-
-### ✅ **Phase 2A: Advanced Features**
-
-**Advanced Reporting:**
-- Interactive KPI dashboard
-- Project profitability reports
-- Inventory analytics (ABC analysis)
-- AR/AP aging reports
-- Sales trends analysis
-- Chart visualizations (ECharts)
-
-**Enhanced Project Management:**
-- Gantt chart view
-- Task dependencies
-- Project templates
-- Resource utilization tracking
-
-**Multi-Currency:**
-- Currency master data
-- Exchange rate management
-- Multi-currency transactions
-- Historical exchange rates
-- Automatic FX conversion
-
-**Payment Management:**
-- Payment recording
-- Payment history
-- Outstanding balance tracking
-- Payment allocation
-
-**PDF Generation:**
-- Professional invoice templates
-- Company branding
-- Automatic numbering
-- Download & email support
-
-**RFQ System:**
-- Request for Quotation creation
-- Multi-supplier distribution
-- Supplier quotation comparison
-- Winner selection
-- Convert to PO
-
-**Barcode/QR Code:**
-- Barcode generation for items
-- QR code support
-- Scan-ready infrastructure
-- Inventory tracking integration
-
-**Batch/Lot Tracking:**
-- Batch number management
-- Lot tracking
-- Expiry date monitoring
-- Batch-level inventory
-- Full traceability
-
-**Audit Trail:**
-- Complete change logging
-- User action tracking
-- Before/after values
-- Search & filter
-- Compliance reporting
-
-**Notification System:**
-- Email notifications
-- In-app notification center
-- Multiple notification types
-- Read/unread tracking
-- Notification history
-
-**PWA Support:**
-- Progressive Web App configuration
-- Service worker
-- Offline support ready
-- Install to home screen
-- Responsive design
-
-### ✅ **Phase 2B: Real-time & Search**
-
-**WebSocket Real-time:**
-- Real-time notifications
-- Live dashboard updates
-- User-specific channels
-- Auto-reconnection
-- Toast notifications
-- Ping/pong keep-alive
-
-**Elasticsearch Search:**
-- Lightning-fast full-text search
-- Multi-field fuzzy matching
-- Auto-complete suggestions
-- Relevance scoring
-- Search across all entities
-
-**Global Search UI:**
-- Search bar in navigation
-- Autocomplete dropdown
-- Multi-tab results
-- Type-specific icons
-- Click-to-navigate
-
----
-
-## 🛠️ **Technology Stack**
-
-### Backend
-- **Framework:** Django 4.2
-- **API:** Django REST Framework
-- **WebSocket:** Django Channels + Daphne
-- **Database:** PostgreSQL 15
-- **Cache:** Redis 7
-- **Search:** Elasticsearch 8.11
-- **Task Queue:** Celery
-- **PDF:** ReportLab
-- **Barcode:** python-barcode
-
-### Frontend
-- **Framework:** Vue 3 (Composition API)
-- **Build Tool:** Vite 5
-- **UI Library:** Element Plus
-- **State:** Pinia
-- **Charts:** ECharts
-- **Gantt:** Toast UI Gantt
-- **HTTP:** Axios
-
-### Infrastructure
-- **Containerization:** Docker & Docker Compose
-- **Web Server:** Nginx
-- **ASGI Server:** Daphne
-- **WSGI Server:** Gunicorn
-- **Process Manager:** Docker Compose
-
----
-
-## 📊 **System Statistics**
-
-| Metric | Count |
-|--------|-------|
-| Backend Apps | 10 |
-| Frontend Pages | 30+ |
-| API Endpoints | 100+ |
-| Database Tables | 40+ |
-| Search Indexes | 5 |
-| Background Tasks | 10+ |
-| Docker Services | 6 |
-| Documentation Files | 8 |
-| Total Features | 37 |
-
----
-
-## 🏗️ **Architecture**
+## 📁 项目结构
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                    Vue 3 Frontend                        │
-│  Dashboard | Projects | Purchase | Sales | Inventory     │
-│  Analytics | Search   | Gantt    | Notifications         │
-└────────────────┬─────────────────────┬───────────────────┘
-                 │ HTTP/REST           │ WebSocket
-┌────────────────▼─────────────────────▼───────────────────┐
-│                    Nginx (Gateway)                       │
-└────────────────┬─────────────────────┬───────────────────┘
-                 │                     │
-┌────────────────▼─────────────────────▼───────────────────┐
-│           Django Backend (Daphne + Gunicorn)             │
-│  Core | Accounts | Projects | Purchase | Sales           │
-│  Inventory | Finance | Analytics | Reports               │
-└─────┬─────────┬─────────┬──────────────────────────┬─────┘
-      │         │         │                          │
-┌─────▼───┐ ┌───▼────┐ ┌──▼──────┐ ┌────────────────▼─────┐
-│Postgres │ │ Redis  │ │ElasticS │ │ Celery Worker+Beat   │
-│   DB    │ │ Cache  │ │ Search  │ │ Background Tasks     │
-└─────────┘ └────────┘ └─────────┘ └──────────────────────┘
+erp/
+├── backend/                 # Django后端
+│   ├── apps/               # 应用模块
+│   │   ├── core/          # 核心模块（用户、权限、审批流程）
+│   │   ├── projects/      # 项目管理
+│   │   ├── purchase/      # 采购管理
+│   │   ├── sales/         # 销售管理
+│   │   ├── inventory/     # 库存管理
+│   │   └── finance/       # 财务管理
+│   ├── config/            # Django配置
+│   └── requirements.txt   # Python依赖
+├── frontend/               # Vue前端
+│   ├── src/
+│   │   ├── api/          # API接口
+│   │   ├── components/   # 公共组件
+│   │   ├── views/        # 页面视图
+│   │   ├── stores/       # Pinia状态管理
+│   │   └── router/       # 路由配置
+│   └── package.json
+├── nginx/                  # Nginx配置
+├── scripts/               # 部署脚本
+├── miniprogram/           # 微信小程序（可选）
+├── docker-compose.yml     # 开发环境配置
+├── docker-compose.prod.yml # 生产环境配置
+└── install.bat            # Windows一键安装
 ```
 
-See [SYSTEM-ARCHITECTURE.md](SYSTEM-ARCHITECTURE.md) for detailed architecture diagrams.
+## 📖 文档
 
----
+| 文档 | 说明 |
+|------|------|
+| [Windows部署指南](WINDOWS-DEPLOYMENT-GUIDE.md) | Windows Server完整部署教程 |
+| [快速部署参考](QUICK-DEPLOY-CARD.md) | 部署命令速查表 |
+| [快速开始指南](QUICK-START-GUIDE.md) | 系统使用入门 |
+| [系统架构](SYSTEM-ARCHITECTURE.md) | 技术架构说明 |
+| [安全指南](SECURITY-PERFORMANCE-GUIDE.md) | 安全配置和性能优化 |
 
-## 📚 **Documentation**
+## 🔧 常用命令
 
-| Document | Description |
-|----------|-------------|
-| [QUICK-START-GUIDE.md](QUICK-START-GUIDE.md) | Fast 5-minute setup guide |
-| [DEPLOYMENT-GUIDE.md](DEPLOYMENT-GUIDE.md) | Complete deployment instructions |
-| [SYSTEM-ARCHITECTURE.md](SYSTEM-ARCHITECTURE.md) | Architecture diagrams & details |
-| [PHASE2-COMPLETE-SUMMARY.md](PHASE2-COMPLETE-SUMMARY.md) | Phase 2 features summary |
-| [PHASE2B-COMPLETION-SUMMARY.md](PHASE2B-COMPLETION-SUMMARY.md) | Real-time & search features |
-| API Documentation | http://localhost:8000/api/docs/ |
-
----
-
-## 🚀 **Deployment**
-
-### Development
 ```bash
-# Backend
+# 启动服务
 docker-compose up -d
 
-# Frontend
-cd frontend && npm run dev
+# 停止服务
+docker-compose down
+
+# 查看日志
+docker-compose logs -f
+
+# 进入后端容器
+docker-compose exec backend bash
+
+# 执行Django命令
+docker-compose exec backend python manage.py <command>
+
+# 备份数据库
+docker-compose exec db pg_dump -U erp_user erp_db > backup.sql
 ```
 
-### Production
-```bash
-# Build frontend
-cd frontend && npm run build
+## 🔐 安全建议
 
-# Start all services
-docker-compose -f docker-compose.prod.yml up -d
-```
+1. **修改默认密码** - 首次登录后立即修改admin密码
+2. **配置HTTPS** - 生产环境务必启用SSL证书
+3. **定期备份** - 建议每日自动备份数据库
+4. **更新依赖** - 定期更新系统依赖包
 
-### Kubernetes
-```bash
-# Apply manifests
-kubectl apply -f k8s/
+## 📄 许可证
 
-# Check status
-kubectl get pods
-```
+MIT License
 
-See [DEPLOYMENT-GUIDE.md](DEPLOYMENT-GUIDE.md) for detailed instructions.
+## 🤝 贡献
+
+欢迎提交Issue和Pull Request
 
 ---
 
-## 🔐 **Security Features**
-
-- ✅ JWT token authentication
-- ✅ Role-Based Access Control (RBAC)
-- ✅ Data-level permissions
-- ✅ Complete audit trail
-- ✅ Input validation & sanitization
-- ✅ CSRF protection
-- ✅ SQL injection prevention (ORM)
-- ✅ XSS protection
-- ✅ Secure password hashing
-- ✅ HTTPS ready (production)
-
----
-
-## 📈 **Performance**
-
-| Operation | Response Time |
-|-----------|---------------|
-| API Request | <100ms |
-| Search Query | <50ms |
-| WebSocket Notification | <100ms |
-| PDF Generation | <2s |
-| Dashboard Load | <500ms |
-| Cost Calculation | <1s |
-
----
-
-## 🎯 **Business Workflows**
-
-### Complete Purchase Flow
-```
-Project → BOM → PR → RFQ → Supplier Quotes → 
-PO → Goods Receipt → Stock Update → AP → Payment → 
-Cost Allocation → Profitability Update
-```
-
-### Complete Sales Flow
-```
-Customer Inquiry → Quotation → SO → Stock Reserve → 
-Delivery Order → Stock Update → Invoice (PDF) → 
-AR → Payment → Revenue Recognition
-```
-
-### Real-time Notifications
-```
-Backend Event → Database → WebSocket Channel → 
-Redis Pub/Sub → WebSocket Consumer → 
-Client Connection → Toast Notification → 
-Notification Center Update
-```
-
----
-
-## 🧪 **Testing**
-
-### Backend Tests
-```bash
-docker exec erp_backend python manage.py test
-```
-
-### API Tests
-```bash
-# View API docs
-open http://localhost:8000/api/docs/
-
-# Test endpoints
-curl -H "Authorization: Bearer TOKEN" \
-  http://localhost:8000/api/projects/
-```
-
-### Search Tests
-```bash
-# Rebuild indexes
-docker exec erp_backend python manage.py search_index --rebuild
-
-# Test search
-curl "http://localhost:9200/items/_search?q=laptop"
-```
-
-### WebSocket Tests
-```javascript
-// Browser console
-const ws = new WebSocket('ws://localhost:8000/ws/notifications/')
-ws.onopen = () => console.log('Connected')
-ws.onmessage = (e) => console.log(JSON.parse(e.data))
-```
-
----
-
-## 🔧 **Configuration**
-
-### Environment Variables
-```env
-# Database
-DATABASE_URL=postgresql://erp_user:password@db:5432/erp_db
-
-# Django
-SECRET_KEY=your-secret-key
-DEBUG=False
-ALLOWED_HOSTS=yourdomain.com
-
-# Redis
-REDIS_HOST=redis
-
-# Elasticsearch
-ELASTICSEARCH_HOST=elasticsearch:9200
-
-# Email
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-```
-
-See [DEPLOYMENT-GUIDE.md](DEPLOYMENT-GUIDE.md) for complete configuration.
-
----
-
-## 📦 **Docker Services**
-
-| Service | Container | Port | Description |
-|---------|-----------|------|-------------|
-| PostgreSQL | erp_db | 5432 | Primary database |
-| Redis | erp_redis | 6379 | Cache & channels |
-| Elasticsearch | erp_elasticsearch | 9200 | Search engine |
-| Django | erp_backend | 8000 | API server |
-| Celery Worker | erp_celery | - | Background tasks |
-| Celery Beat | erp_celery_beat | - | Task scheduler |
-| Nginx | erp_nginx | 80 | Web server |
-
----
-
-## 🎓 **Learning Resources**
-
-### For Developers
-- Django documentation: https://docs.djangoproject.com/
-- Vue 3 documentation: https://vuejs.org/
-- Django Channels: https://channels.readthedocs.io/
-- Elasticsearch: https://www.elastic.co/guide/
-
-### For Users
-- Quick Start Guide: [QUICK-START-GUIDE.md](QUICK-START-GUIDE.md)
-- User Manual: *Coming soon*
-- Video Tutorials: *Coming soon*
-
-### For Administrators
-- Deployment Guide: [DEPLOYMENT-GUIDE.md](DEPLOYMENT-GUIDE.md)
-- System Architecture: [SYSTEM-ARCHITECTURE.md](SYSTEM-ARCHITECTURE.md)
-- Troubleshooting: See deployment guide
-
----
-
-## 🤝 **Contributing**
-
-This is a complete enterprise ERP system. Future enhancements could include:
-- Mobile native apps (iOS/Android)
-- Machine learning predictions
-- Third-party integrations (accounting, shipping)
-- Advanced workflow automation
-- Video collaboration
-
----
-
-## 📞 **Support**
-
-### Health Checks
-```bash
-# Check all services
-docker-compose ps
-
-# Check logs
-docker-compose logs -f backend
-
-# Database health
-docker exec erp_db pg_isready
-
-# Elasticsearch health
-curl http://localhost:9200/_cluster/health
-```
-
-### Common Issues
-See [DEPLOYMENT-GUIDE.md](DEPLOYMENT-GUIDE.md) troubleshooting section.
-
----
-
-## 🏆 **Key Achievements**
-
-✅ **Complete ERP Suite** - All core business functions  
-✅ **Real-time System** - WebSocket notifications & updates  
-✅ **Advanced Search** - Elasticsearch full-text search  
-✅ **Multi-Currency** - International business support  
-✅ **Batch Tracking** - Full product traceability  
-✅ **Audit Trail** - Complete compliance logging  
-✅ **Modern UI/UX** - Vue 3 with Element Plus  
-✅ **Scalable Architecture** - Horizontal scaling ready  
-✅ **Production Ready** - Docker deployment  
-✅ **Comprehensive Docs** - 4,100+ lines  
-
----
-
-## 📄 **License**
-
-This project is proprietary. All rights reserved.
-
----
-
-## 🎊 **Conclusion**
-
-A **complete, modern, enterprise-grade ERP system** with:
-- 37 enterprise features
-- Real-time capabilities
-- Advanced search
-- Comprehensive reporting
-- Multi-currency support
-- Full audit trails
-- Production-ready deployment
-- Extensive documentation
-
-**System Status: 🚀 PRODUCTION READY**
-
----
-
-**Built with ❤️ using Django, Vue 3, PostgreSQL, Redis, and Elasticsearch**
-
-*Last Updated: November 2025*
+*版本: 1.0.0 | 更新日期: 2024年12月*

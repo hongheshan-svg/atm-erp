@@ -1,0 +1,163 @@
+/**
+ * 项目列表样式
+ */
+.search-bar {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  padding: 20rpx 30rpx;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.search-input {
+  flex: 1;
+  height: 72rpx;
+  background: #f5f5f5;
+  border-radius: 36rpx;
+  padding: 0 30rpx;
+  font-size: 28rpx;
+}
+
+.search-icon {
+  font-size: 40rpx;
+  margin-left: 20rpx;
+}
+
+.filter-bar {
+  white-space: nowrap;
+  background: #fff;
+  padding: 20rpx 30rpx;
+  border-bottom: 1rpx solid #eee;
+}
+
+.filter-item {
+  display: inline-block;
+  padding: 12rpx 30rpx;
+  margin-right: 20rpx;
+  background: #f5f5f5;
+  border-radius: 30rpx;
+  font-size: 26rpx;
+  color: #666;
+}
+
+.filter-item.active {
+  background: #1890ff;
+  color: #fff;
+}
+
+/* 项目卡片 */
+.project-item {
+  background: #fff;
+  margin: 20rpx;
+  border-radius: 16rpx;
+  padding: 30rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
+}
+
+.project-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.project-code {
+  font-size: 26rpx;
+  color: #1890ff;
+  font-weight: 500;
+}
+
+.project-name {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 20rpx;
+}
+
+.project-info {
+  margin-bottom: 20rpx;
+}
+
+.info-row {
+  display: flex;
+  font-size: 26rpx;
+  margin-bottom: 10rpx;
+}
+
+.info-label {
+  color: #999;
+  width: 120rpx;
+}
+
+.info-value {
+  color: #666;
+}
+
+.project-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 20rpx;
+  border-top: 1rpx solid #f0f0f0;
+  margin-bottom: 20rpx;
+}
+
+.budget-info {
+  font-size: 26rpx;
+}
+
+.budget-label {
+  color: #999;
+}
+
+.budget-value {
+  color: #ff4d4f;
+  font-weight: bold;
+}
+
+.date-info {
+  font-size: 24rpx;
+  color: #999;
+}
+
+/* 进度条 */
+.progress-section {
+  margin-top: 10rpx;
+}
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 24rpx;
+  color: #999;
+  margin-bottom: 10rpx;
+}
+
+.progress-bar {
+  height: 12rpx;
+  background: #f0f0f0;
+  border-radius: 6rpx;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #1890ff, #52c41a);
+  border-radius: 6rpx;
+  transition: width 0.3s;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 100rpx 0;
+  color: #999;
+}
+
+.empty-icon {
+  font-size: 80rpx;
+  margin-bottom: 20rpx;
+}

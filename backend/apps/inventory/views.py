@@ -6,12 +6,14 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db import transaction
 from django.db.models import Sum, F
+from django.conf import settings
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from .models import Stock, StockMove, StockAdjustment, StockAdjustmentLine
 from .serializers import (
     StockSerializer, StockMoveSerializer,
     StockAdjustmentSerializer, StockAdjustmentLineSerializer
 )
+from .cost_methods import FIFOCostingService, CostingMethodFactory
 
 
 class StockViewSet(viewsets.ReadOnlyModelViewSet):
@@ -62,6 +64,102 @@ class StockViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({
             'total_value': float(total_value),
             'items': valuation_data
+        })
+    
+    @action(detail=False, methods=['get'])
+    def fifo_cost(self, request):
+        """
+        Get FIFO cost calculation for a specific item and quantity.
+        Query params: warehouse, item, qty
+        """
+        warehouse_id = request.query_params.get('warehouse')
+        item_id = request.query_params.get('item')
+        qty = request.query_params.get('qty')
+        
+        if not all([warehouse_id, item_id, qty]):
+            return Response(
+                {'error': '请提供 warehouse, item, qty 参数'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            from apps.masterdata.models import Warehouse, Item
+            warehouse = Warehouse.objects.get(id=warehouse_id)
+            item = Item.objects.get(id=item_id)
+            qty = float(qty)
+        except (Warehouse.DoesNotExist, Item.DoesNotExist, ValueError):
+            return Response(
+                {'error': '无效的参数'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        total_cost, avg_cost, details = FIFOCostingService.get_fifo_cost(
+            warehouse, item, qty
+        )
+        
+        return Response({
+            'warehouse': warehouse.name,
+            'item_sku': item.sku,
+            'item_name': item.name,
+            'requested_qty': qty,
+            'total_cost': float(total_cost),
+            'average_unit_cost': float(avg_cost),
+            'lot_details': details
+        })
+    
+    @action(detail=False, methods=['get'])
+    def fifo_lots(self, request):
+        """
+        Get FIFO inventory lots.
+        Query params: warehouse (optional), item (optional)
+        """
+        warehouse_id = request.query_params.get('warehouse')
+        item_id = request.query_params.get('item')
+        
+        warehouse = None
+        item = None
+        
+        if warehouse_id:
+            from apps.masterdata.models import Warehouse
+            try:
+                warehouse = Warehouse.objects.get(id=warehouse_id)
+            except Warehouse.DoesNotExist:
+                pass
+        
+        if item_id:
+            from apps.masterdata.models import Item
+            try:
+                item = Item.objects.get(id=item_id)
+            except Item.DoesNotExist:
+                pass
+        
+        lots = FIFOCostingService.get_lot_inventory(warehouse, item)
+        
+        data = []
+        for lot in lots:
+            data.append({
+                'id': lot.id,
+                'lot_no': lot.lot_no,
+                'warehouse': lot.warehouse.name,
+                'item_sku': lot.item.sku,
+                'item_name': lot.item.name,
+                'initial_qty': float(lot.initial_qty),
+                'remaining_qty': float(lot.remaining_qty),
+                'consumed_qty': float(lot.consumed_qty),
+                'unit_cost': float(lot.unit_cost),
+                'total_value': float(lot.total_value),
+                'receipt_date': lot.receipt_date.isoformat(),
+            })
+        
+        return Response(data)
+    
+    @action(detail=False, methods=['get'])
+    def costing_method(self, request):
+        """Get current inventory costing method."""
+        method = getattr(settings, 'INVENTORY_COSTING_METHOD', 'WEIGHTED_AVG')
+        return Response({
+            'method': method,
+            'description': 'FIFO (先进先出)' if method == 'FIFO' else '加权平均法'
         })
 
 

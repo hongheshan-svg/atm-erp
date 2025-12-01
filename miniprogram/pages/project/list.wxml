@@ -1,0 +1,74 @@
+<!--项目列表页面-->
+<view class="container">
+  <!-- 搜索栏 -->
+  <view class="search-bar">
+    <input 
+      class="search-input" 
+      placeholder="搜索项目名称/编号" 
+      value="{{keyword}}"
+      bindinput="onSearchInput"
+      bindconfirm="doSearch"
+    />
+    <text class="search-icon" bindtap="doSearch">🔍</text>
+  </view>
+
+  <!-- 状态筛选 -->
+  <scroll-view class="filter-bar" scroll-x>
+    <view 
+      wx:for="{{statusList}}" 
+      wx:key="value" 
+      class="filter-item {{currentStatus === item.value ? 'active' : ''}}"
+      bindtap="filterByStatus"
+      data-status="{{item.value}}"
+    >
+      {{item.label}}
+    </view>
+  </scroll-view>
+
+  <!-- 项目列表 -->
+  <view wx:if="{{projects.length === 0 && !loading}}" class="empty">
+    <text class="empty-icon">📁</text>
+    <text>暂无项目</text>
+  </view>
+
+  <view wx:for="{{projects}}" wx:key="id" class="project-item" bindtap="goToDetail" data-id="{{item.id}}">
+    <view class="project-header">
+      <text class="project-code">{{item.code}}</text>
+      <text class="project-status tag {{item.statusClass}}">{{item.status_display}}</text>
+    </view>
+    <view class="project-name">{{item.name}}</view>
+    <view class="project-info">
+      <view class="info-row">
+        <text class="info-label">客户:</text>
+        <text class="info-value">{{item.customer_name}}</text>
+      </view>
+      <view class="info-row">
+        <text class="info-label">负责人:</text>
+        <text class="info-value">{{item.manager_name}}</text>
+      </view>
+    </view>
+    <view class="project-footer">
+      <view class="budget-info">
+        <text class="budget-label">预算:</text>
+        <text class="budget-value">¥{{item.budget_display}}</text>
+      </view>
+      <view class="date-info">
+        {{item.start_date}} ~ {{item.end_date}}
+      </view>
+    </view>
+    <!-- 进度条 -->
+    <view class="progress-section">
+      <view class="progress-label">
+        <text>任务进度</text>
+        <text>{{item.task_progress || 0}}%</text>
+      </view>
+      <view class="progress-bar">
+        <view class="progress-fill" style="width: {{item.task_progress || 0}}%"></view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 加载状态 -->
+  <view wx:if="{{loading}}" class="load-more">加载中...</view>
+  <view wx:elif="{{noMore && projects.length > 0}}" class="load-more">没有更多了</view>
+</view>

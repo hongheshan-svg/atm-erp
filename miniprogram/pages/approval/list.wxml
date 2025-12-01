@@ -1,0 +1,73 @@
+<!--审批列表页面-->
+<view class="container">
+  <!-- Tab切换 -->
+  <view class="tabs">
+    <view class="tab {{currentTab === 'pending' ? 'active' : ''}}" bindtap="switchTab" data-tab="pending">
+      待我审批
+      <text wx:if="{{pendingCount > 0}}" class="badge">{{pendingCount}}</text>
+    </view>
+    <view class="tab {{currentTab === 'submitted' ? 'active' : ''}}" bindtap="switchTab" data-tab="submitted">
+      我提交的
+    </view>
+  </view>
+
+  <!-- 待审批列表 -->
+  <view wx:if="{{currentTab === 'pending'}}">
+    <view wx:if="{{pendingList.length === 0}}" class="empty">
+      <text class="empty-icon">📭</text>
+      <text>暂无待审批事项</text>
+    </view>
+    
+    <view wx:for="{{pendingList}}" wx:key="id" class="approval-item" bindtap="goToDetail" data-id="{{item.id}}" data-type="task">
+      <view class="item-header">
+        <text class="item-type tag tag-info">{{item.business_type_display}}</text>
+        <text class="item-status tag tag-warning">待审批</text>
+      </view>
+      <view class="item-body">
+        <view class="item-no">{{item.business_no}}</view>
+        <view class="item-amount amount">¥{{item.amount_display}}</view>
+      </view>
+      <view class="item-footer">
+        <text>提交人: {{item.submitter_name}}</text>
+        <text>{{item.created_at_display}}</text>
+      </view>
+      <view class="item-step">
+        <text class="step-label">当前步骤:</text>
+        <text class="step-name">{{item.step_name}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 我提交的列表 -->
+  <view wx:if="{{currentTab === 'submitted'}}">
+    <view wx:if="{{submittedList.length === 0}}" class="empty">
+      <text class="empty-icon">📝</text>
+      <text>暂无提交记录</text>
+    </view>
+    
+    <view wx:for="{{submittedList}}" wx:key="id" class="approval-item" bindtap="goToDetail" data-id="{{item.id}}" data-type="instance">
+      <view class="item-header">
+        <text class="item-type tag tag-info">{{item.business_type_display}}</text>
+        <text class="item-status tag {{item.status === 'APPROVED' ? 'tag-success' : item.status === 'REJECTED' ? 'tag-danger' : 'tag-warning'}}">
+          {{item.status_display}}
+        </text>
+      </view>
+      <view class="item-body">
+        <view class="item-no">{{item.business_no}}</view>
+        <view class="item-amount amount">¥{{item.amount_display}}</view>
+      </view>
+      <view class="item-footer">
+        <text>提交时间: {{item.submit_time_display}}</text>
+        <text>进度: {{item.current_step}}/{{item.total_steps}}</text>
+      </view>
+      <!-- 进度条 -->
+      <view class="progress-bar">
+        <view class="progress-fill" style="width: {{item.progress}}%"></view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 加载更多 -->
+  <view wx:if="{{loading}}" class="load-more">加载中...</view>
+  <view wx:elif="{{noMore}}" class="load-more">没有更多了</view>
+</view>

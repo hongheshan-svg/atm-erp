@@ -102,7 +102,7 @@ class ExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewset
     
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
-        """Submit expense for approval."""
+        """Submit expense for approval with workflow."""
         expense = self.get_object()
         if expense.status != 'DRAFT':
             return Response(
@@ -110,9 +110,41 @@ class ExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewset
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        expense.status = 'SUBMITTED'
-        expense.save()
-        return Response(ExpenseSerializer(expense).data)
+        # Try to start workflow
+        try:
+            from apps.core.workflow.services import WorkflowService
+            
+            instance, error = WorkflowService.start_workflow(
+                business_type='EXPENSE',
+                business_id=expense.id,
+                business_no=expense.expense_no,
+                submitter=request.user,
+                amount=expense.amount
+            )
+            
+            if instance:
+                expense.status = 'SUBMITTED'
+                expense.save()
+                return Response({
+                    **ExpenseSerializer(expense).data,
+                    'workflow_started': True,
+                    'workflow_id': instance.id
+                })
+            else:
+                # No workflow configured, just submit
+                expense.status = 'SUBMITTED'
+                expense.save()
+                return Response({
+                    **ExpenseSerializer(expense).data,
+                    'workflow_started': False,
+                    'message': error or '未配置审批流程，已直接提交'
+                })
+                
+        except Exception as e:
+            # Workflow module not available, fallback to simple submit
+            expense.status = 'SUBMITTED'
+            expense.save()
+            return Response(ExpenseSerializer(expense).data)
     
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):

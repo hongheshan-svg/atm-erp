@@ -1,0 +1,90 @@
+<!--审批详情页面-->
+<view class="container">
+  <!-- 状态头部 -->
+  <view class="status-header {{statusClass}}">
+    <text class="status-icon">{{statusIcon}}</text>
+    <text class="status-text">{{detail.status_display || '待审批'}}</text>
+  </view>
+
+  <!-- 基本信息 -->
+  <view class="card">
+    <view class="card-title">基本信息</view>
+    <view class="info-list">
+      <view class="info-item">
+        <text class="info-label">单据编号</text>
+        <text class="info-value">{{detail.business_no}}</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">业务类型</text>
+        <text class="info-value">{{detail.business_type_display}}</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">金额</text>
+        <text class="info-value amount">¥{{amountDisplay}}</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">提交人</text>
+        <text class="info-value">{{detail.submitter_name}}</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">提交时间</text>
+        <text class="info-value">{{submitTimeDisplay}}</text>
+      </view>
+      <view wx:if="{{detail.step_name}}" class="info-item">
+        <text class="info-label">当前步骤</text>
+        <text class="info-value highlight">{{detail.step_name}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 审批流程 -->
+  <view class="card">
+    <view class="card-title">审批流程</view>
+    <view class="timeline">
+      <view wx:for="{{tasks}}" wx:key="id" class="timeline-item">
+        <view class="timeline-dot {{item.status === 'APPROVED' ? 'done' : item.status === 'REJECTED' ? 'rejected' : item.status === 'PENDING' ? 'current' : ''}}"></view>
+        <view class="timeline-content">
+          <view class="timeline-header">
+            <text class="timeline-title">{{item.step_name}}</text>
+            <text class="timeline-status tag {{item.status === 'APPROVED' ? 'tag-success' : item.status === 'REJECTED' ? 'tag-danger' : 'tag-warning'}}">
+              {{item.status_display}}
+            </text>
+          </view>
+          <view class="timeline-body">
+            <text>审批人: {{item.assignee_name}}</text>
+            <text wx:if="{{item.action_time}}">处理时间: {{item.action_time_display}}</text>
+            <text wx:if="{{item.comment}}" class="timeline-comment">意见: {{item.comment}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 审批操作 (仅待审批时显示) -->
+  <view wx:if="{{canApprove}}" class="action-section">
+    <view class="comment-input">
+      <textarea 
+        class="textarea" 
+        placeholder="请输入审批意见（拒绝时必填）" 
+        value="{{comment}}"
+        bindinput="onCommentInput"
+        maxlength="500"
+      ></textarea>
+    </view>
+    <view class="action-buttons">
+      <button class="btn btn-danger" bindtap="handleReject" loading="{{rejecting}}">
+        拒绝
+      </button>
+      <button class="btn btn-success" bindtap="handleApprove" loading="{{approving}}">
+        通过
+      </button>
+    </view>
+  </view>
+
+  <!-- 撤回操作 (仅提交人且审批中时显示) -->
+  <view wx:if="{{canWithdraw}}" class="action-section">
+    <button class="btn btn-default full-width" bindtap="handleWithdraw" loading="{{withdrawing}}">
+      撤回申请
+    </button>
+  </view>
+</view>

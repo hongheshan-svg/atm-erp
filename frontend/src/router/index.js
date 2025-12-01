@@ -305,6 +305,25 @@ const routes = [
         component: () => import('@/views/analytics/InventoryAnalytics.vue'),
         meta: { title: '库存分析', icon: 'PieChart' }
       },
+      // Workflow
+      {
+        path: 'workflow/tasks',
+        name: 'WorkflowTasks',
+        component: () => import('@/views/workflow/TaskList.vue'),
+        meta: { title: '待办审批', icon: 'Checked' }
+      },
+      {
+        path: 'workflow/my-submissions',
+        name: 'MySubmissions',
+        component: () => import('@/views/workflow/MySubmissions.vue'),
+        meta: { title: '我的提交', icon: 'Document' }
+      },
+      {
+        path: 'workflow/config',
+        name: 'WorkflowConfig',
+        component: () => import('@/views/workflow/WorkflowConfig.vue'),
+        meta: { title: '流程配置', icon: 'Setting' }
+      },
       // System
       {
         path: 'system/audit-log',
@@ -317,6 +336,24 @@ const routes = [
         name: 'NotificationCenter',
         component: () => import('@/views/NotificationCenter.vue'),
         meta: { title: '通知中心', icon: 'Bell' }
+      },
+      {
+        path: 'system/login-logs',
+        name: 'LoginLogs',
+        component: () => import('@/views/system/LoginLogs.vue'),
+        meta: { title: '登录日志', icon: 'Key' }
+      },
+      {
+        path: 'system/webhooks',
+        name: 'WebhookList',
+        component: () => import('@/views/system/WebhookList.vue'),
+        meta: { title: 'Webhook管理', icon: 'Connection' }
+      },
+      {
+        path: 'system/dashboard-config',
+        name: 'DashboardConfig',
+        component: () => import('@/views/system/DashboardConfig.vue'),
+        meta: { title: '仪表盘配置', icon: 'DataBoard' }
       },
       // User Profile
       {

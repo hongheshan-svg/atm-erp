@@ -1,0 +1,193 @@
+/**
+ * 数据看板样式
+ */
+.header {
+  background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+  padding: 40rpx 30rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.title {
+  font-size: 40rpx;
+  font-weight: bold;
+  color: #fff;
+}
+
+.date {
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* 财务网格 */
+.finance-grid {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 20rpx;
+}
+
+.finance-item {
+  width: 50%;
+  padding: 20rpx 0;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.finance-label {
+  display: block;
+  font-size: 26rpx;
+  color: #999;
+  margin-bottom: 10rpx;
+}
+
+.finance-value {
+  display: block;
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.finance-value.income {
+  color: #52c41a;
+}
+
+.finance-value.expense {
+  color: #ff4d4f;
+}
+
+/* 项目统计 */
+.project-stats {
+  margin-top: 20rpx;
+}
+
+.stat-row {
+  display: flex;
+  margin-bottom: 20rpx;
+}
+
+.stat-row:last-child {
+  margin-bottom: 0;
+}
+
+.stat-box {
+  flex: 1;
+  background: #f5f5f5;
+  border-radius: 12rpx;
+  padding: 24rpx;
+  text-align: center;
+  margin-right: 20rpx;
+}
+
+.stat-box:last-child {
+  margin-right: 0;
+}
+
+.stat-box.full {
+  flex: none;
+  width: 100%;
+  margin-right: 0;
+}
+
+.stat-num {
+  display: block;
+  font-size: 48rpx;
+  font-weight: bold;
+}
+
+.stat-num.primary {
+  color: #1890ff;
+}
+
+.stat-num.success {
+  color: #52c41a;
+}
+
+.stat-label {
+  display: block;
+  font-size: 24rpx;
+  color: #999;
+  margin-top: 8rpx;
+}
+
+.progress-bar.large {
+  height: 20rpx;
+  margin: 16rpx 0;
+}
+
+.stat-percent {
+  font-size: 28rpx;
+  color: #1890ff;
+  font-weight: bold;
+}
+
+/* 库存统计 */
+.inventory-stats {
+  margin-top: 20rpx;
+}
+
+.inventory-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.inventory-item:last-child {
+  border-bottom: none;
+}
+
+.inventory-item.warning {
+  background: #fff7e6;
+  margin: 0 -30rpx;
+  padding: 20rpx 30rpx;
+}
+
+.inventory-label {
+  color: #666;
+}
+
+.inventory-value {
+  font-weight: bold;
+  color: #333;
+}
+
+/* 现金流 */
+.cashflow {
+  margin-top: 20rpx;
+}
+
+.cashflow-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.cashflow-item:last-child {
+  border-bottom: none;
+}
+
+.cashflow-item.highlight {
+  background: #f6ffed;
+  margin: 0 -30rpx;
+  padding: 20rpx 30rpx;
+  border-radius: 8rpx;
+}
+
+.cashflow-label {
+  color: #666;
+}
+
+.cashflow-value {
+  font-weight: bold;
+  font-size: 32rpx;
+}
+
+.cashflow-value.income {
+  color: #52c41a;
+}
+
+.cashflow-value.expense {
+  color: #ff4d4f;
+}

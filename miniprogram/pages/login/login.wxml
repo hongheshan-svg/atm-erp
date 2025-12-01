@@ -1,0 +1,42 @@
+<!--登录页面-->
+<view class="login-container">
+  <view class="logo-section">
+    <image class="logo" src="/images/logo.png" mode="aspectFit"></image>
+    <text class="title">ERP移动审批</text>
+    <text class="subtitle">随时随地，高效办公</text>
+  </view>
+
+  <view class="form-section">
+    <view class="input-group">
+      <text class="input-icon">👤</text>
+      <input 
+        class="input" 
+        placeholder="请输入用户名" 
+        value="{{username}}"
+        bindinput="onUsernameInput"
+      />
+    </view>
+    
+    <view class="input-group">
+      <text class="input-icon">🔒</text>
+      <input 
+        class="input" 
+        placeholder="请输入密码" 
+        password="{{!showPassword}}"
+        value="{{password}}"
+        bindinput="onPasswordInput"
+      />
+      <text class="toggle-pwd" bindtap="togglePassword">
+        {{showPassword ? '🙈' : '👁️'}}
+      </text>
+    </view>
+
+    <button class="login-btn" bindtap="handleLogin" loading="{{loading}}">
+      登录
+    </button>
+
+    <view class="tips">
+      <text>使用ERP系统账号登录</text>
+    </view>
+  </view>
+</view>

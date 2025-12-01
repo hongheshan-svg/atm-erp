@@ -1,0 +1,192 @@
+/**
+ * 首页样式
+ */
+.container {
+  padding-bottom: 30rpx;
+}
+
+.header {
+  background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+  padding: 40rpx 30rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+}
+
+.avatar {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  color: #fff;
+  font-size: 36rpx;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 20rpx;
+}
+
+.user-detail {
+  display: flex;
+  flex-direction: column;
+}
+
+.name {
+  color: #fff;
+  font-size: 32rpx;
+  font-weight: bold;
+}
+
+.dept {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 24rpx;
+  margin-top: 6rpx;
+}
+
+.date {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 26rpx;
+}
+
+/* 统计卡片 */
+.stats-card {
+  display: flex;
+  background: #fff;
+  margin: -30rpx 20rpx 20rpx;
+  border-radius: 16rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.1);
+  position: relative;
+  z-index: 10;
+}
+
+.stat-item {
+  flex: 1;
+  text-align: center;
+  padding: 30rpx 0;
+  border-right: 1rpx solid #eee;
+}
+
+.stat-item:last-child {
+  border-right: none;
+}
+
+.stat-num {
+  display: block;
+  font-size: 48rpx;
+  font-weight: bold;
+  color: #1890ff;
+}
+
+.stat-label {
+  display: block;
+  font-size: 24rpx;
+  color: #999;
+  margin-top: 10rpx;
+}
+
+/* 卡片 */
+.card {
+  background: #fff;
+  margin: 20rpx;
+  border-radius: 16rpx;
+  padding: 30rpx;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20rpx;
+}
+
+.card-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.card-more {
+  font-size: 26rpx;
+  color: #1890ff;
+}
+
+/* 快捷入口 */
+.quick-entry {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 20rpx;
+}
+
+.entry-item {
+  width: 25%;
+  text-align: center;
+  padding: 20rpx 0;
+}
+
+.entry-icon {
+  display: block;
+  font-size: 48rpx;
+  margin-bottom: 10rpx;
+}
+
+.entry-text {
+  font-size: 24rpx;
+  color: #666;
+}
+
+/* 待办事项 */
+.todo-item {
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.todo-item:last-child {
+  border-bottom: none;
+}
+
+.todo-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.todo-time {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.todo-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12rpx;
+}
+
+.todo-no {
+  font-size: 30rpx;
+  font-weight: 500;
+}
+
+.todo-amount {
+  font-size: 32rpx;
+}
+
+.todo-footer {
+  display: flex;
+  justify-content: space-between;
+  font-size: 24rpx;
+  color: #999;
+}
+
+.empty {
+  text-align: center;
+  padding: 60rpx 0;
+  color: #999;
+}

@@ -1,0 +1,96 @@
+<!--数据看板页面-->
+<view class="container">
+  <view class="header">
+    <text class="title">数据看板</text>
+    <text class="date">{{today}}</text>
+  </view>
+
+  <!-- 财务概览 -->
+  <view class="card">
+    <view class="card-title">💰 财务概览</view>
+    <view class="finance-grid">
+      <view class="finance-item">
+        <text class="finance-label">本月收入</text>
+        <text class="finance-value income">¥{{financial.revenue}}</text>
+      </view>
+      <view class="finance-item">
+        <text class="finance-label">本月支出</text>
+        <text class="finance-value expense">¥{{financial.purchases}}</text>
+      </view>
+      <view class="finance-item">
+        <text class="finance-label">应收账款</text>
+        <text class="finance-value">¥{{financial.receivables}}</text>
+      </view>
+      <view class="finance-item">
+        <text class="finance-label">应付账款</text>
+        <text class="finance-value">¥{{financial.payables}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 项目统计 -->
+  <view class="card">
+    <view class="card-title">📁 项目统计</view>
+    <view class="project-stats">
+      <view class="stat-row">
+        <view class="stat-box">
+          <text class="stat-num primary">{{projects.active_projects}}</text>
+          <text class="stat-label">进行中</text>
+        </view>
+        <view class="stat-box">
+          <text class="stat-num success">{{projects.completed_tasks}}</text>
+          <text class="stat-label">已完成任务</text>
+        </view>
+      </view>
+      <view class="stat-row">
+        <view class="stat-box full">
+          <text class="stat-label">任务完成率</text>
+          <view class="progress-bar large">
+            <view class="progress-fill" style="width: {{projects.task_completion_rate}}%"></view>
+          </view>
+          <text class="stat-percent">{{projects.task_completion_rate}}%</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 库存概览 -->
+  <view class="card">
+    <view class="card-title">📦 库存概览</view>
+    <view class="inventory-stats">
+      <view class="inventory-item">
+        <text class="inventory-label">库存总值</text>
+        <text class="inventory-value">¥{{inventory.inventory_value}}</text>
+      </view>
+      <view class="inventory-item warning" wx:if="{{inventory.low_stock_items > 0}}">
+        <text class="inventory-label">⚠️ 库存预警</text>
+        <text class="inventory-value">{{inventory.low_stock_items}} 项</text>
+      </view>
+      <view class="inventory-item">
+        <text class="inventory-label">近7天出入库</text>
+        <text class="inventory-value">{{inventory.recent_movements}} 次</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 现金流预测 -->
+  <view class="card">
+    <view class="card-title">📈 30天现金流预测</view>
+    <view class="cashflow">
+      <view class="cashflow-item">
+        <text class="cashflow-label">预计收入</text>
+        <text class="cashflow-value income">+¥{{cashflow.expected_inflows}}</text>
+      </view>
+      <view class="cashflow-item">
+        <text class="cashflow-label">预计支出</text>
+        <text class="cashflow-value expense">-¥{{cashflow.expected_outflows}}</text>
+      </view>
+      <view class="cashflow-item highlight">
+        <text class="cashflow-label">净现金流</text>
+        <text class="cashflow-value {{cashflow.net_cash_flow >= 0 ? 'income' : 'expense'}}">
+          {{cashflow.net_cash_flow >= 0 ? '+' : ''}}¥{{cashflow.net_cash_flow}}
+        </text>
+      </view>
+    </view>
+  </view>
+</view>

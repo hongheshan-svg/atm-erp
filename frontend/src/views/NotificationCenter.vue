@@ -91,18 +91,20 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
 import { 
   Refresh, Check, InfoFilled, WarningFilled, 
   CircleCheckFilled, CircleCloseFilled 
 } from '@element-plus/icons-vue'
 import request from '@/utils/request'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElNotification } from 'element-plus'
 
 const loading = ref(false)
 const notifications = ref([])
 const activeTab = ref('all')
 const unreadCount = ref(0)
+const wsConnection = ref(null)
+const wsConnected = ref(false)
 
 const pagination = reactive({
   page: 1,
@@ -251,8 +253,65 @@ const handleCurrentChange = (page) => {
   loadNotifications()
 }
 
+// WebSocket connection for real-time notifications
+const connectWebSocket = () => {
+  const token = localStorage.getItem('access_token')
+  if (!token) return
+  
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const wsUrl = `${wsProtocol}//${window.location.host}/ws/notifications/?token=${token}`
+  
+  try {
+    wsConnection.value = new WebSocket(wsUrl)
+    
+    wsConnection.value.onopen = () => {
+      wsConnected.value = true
+      console.log('WebSocket connected')
+    }
+    
+    wsConnection.value.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      if (data.type === 'notification') {
+        // Show desktop notification
+        ElNotification({
+          title: data.data.title,
+          message: data.data.message,
+          type: getNotificationType(data.data.type),
+          duration: 5000
+        })
+        // Refresh list
+        loadNotifications()
+      }
+    }
+    
+    wsConnection.value.onclose = () => {
+      wsConnected.value = false
+      // Reconnect after 5 seconds
+      setTimeout(connectWebSocket, 5000)
+    }
+    
+    wsConnection.value.onerror = (error) => {
+      console.error('WebSocket error:', error)
+    }
+  } catch (error) {
+    console.error('WebSocket connection failed:', error)
+  }
+}
+
+const disconnectWebSocket = () => {
+  if (wsConnection.value) {
+    wsConnection.value.close()
+    wsConnection.value = null
+  }
+}
+
 onMounted(() => {
   loadNotifications()
+  connectWebSocket()
+})
+
+onUnmounted(() => {
+  disconnectWebSocket()
 })
 </script>
 

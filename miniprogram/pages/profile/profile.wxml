@@ -1,0 +1,74 @@
+<!--个人中心页面-->
+<view class="container">
+  <!-- 用户信息卡片 -->
+  <view class="user-card">
+    <view class="avatar">{{userInfo.username[0] || 'U'}}</view>
+    <view class="user-info">
+      <text class="name">{{userInfo.first_name || userInfo.username}}</text>
+      <text class="position">{{userInfo.position || '员工'}}</text>
+      <text class="dept">{{userInfo.department_name || '未设置部门'}}</text>
+    </view>
+  </view>
+
+  <!-- 工作统计 -->
+  <view class="card">
+    <view class="card-title">📊 我的工作</view>
+    <view class="work-stats">
+      <view class="work-item" bindtap="goToApproval">
+        <text class="work-num">{{pendingCount}}</text>
+        <text class="work-label">待审批</text>
+      </view>
+      <view class="work-item" bindtap="goToMySubmit">
+        <text class="work-num">{{submittedCount}}</text>
+        <text class="work-label">我提交的</text>
+      </view>
+      <view class="work-item" bindtap="goToProject">
+        <text class="work-num">{{myProjectCount}}</text>
+        <text class="work-label">参与项目</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 功能菜单 -->
+  <view class="card menu-card">
+    <view class="menu-item" bindtap="goToApproval">
+      <text class="menu-icon">📋</text>
+      <text class="menu-text">审批中心</text>
+      <text class="menu-arrow">></text>
+    </view>
+    <view class="menu-item" bindtap="goToProject">
+      <text class="menu-icon">📁</text>
+      <text class="menu-text">项目列表</text>
+      <text class="menu-arrow">></text>
+    </view>
+    <view class="menu-item" bindtap="goToDashboard">
+      <text class="menu-icon">📊</text>
+      <text class="menu-text">数据看板</text>
+      <text class="menu-arrow">></text>
+    </view>
+  </view>
+
+  <!-- 设置菜单 -->
+  <view class="card menu-card">
+    <view class="menu-item" bindtap="showAbout">
+      <text class="menu-icon">ℹ️</text>
+      <text class="menu-text">关于</text>
+      <text class="menu-arrow">></text>
+    </view>
+    <view class="menu-item" bindtap="clearCache">
+      <text class="menu-icon">🗑️</text>
+      <text class="menu-text">清除缓存</text>
+      <text class="menu-arrow">></text>
+    </view>
+  </view>
+
+  <!-- 退出登录 -->
+  <view class="logout-section">
+    <button class="logout-btn" bindtap="handleLogout">退出登录</button>
+  </view>
+
+  <!-- 版本信息 -->
+  <view class="version">
+    <text>ERP移动端 v1.0.0</text>
+  </view>
+</view>
