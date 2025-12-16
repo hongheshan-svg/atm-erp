@@ -54,6 +54,17 @@
 - Docker Desktop
 - Git
 
+### 一键部署（Ubuntu Server）
+
+```bash
+# 1. 克隆项目
+sudo git clone <repository-url> /opt/erp
+cd /opt/erp
+
+# 2. 运行安装脚本
+sudo bash install.sh
+```
+
 ### 一键部署（Windows Server）
 
 ```powershell
@@ -122,6 +133,7 @@ erp/
 
 | 文档 | 说明 |
 |------|------|
+| [Ubuntu部署指南](UBUNTU-DEPLOYMENT-GUIDE.md) | Ubuntu Server完整部署教程 |
 | [Windows部署指南](WINDOWS-DEPLOYMENT-GUIDE.md) | Windows Server完整部署教程 |
 | [快速部署参考](QUICK-DEPLOY-CARD.md) | 部署命令速查表 |
 | [快速开始指南](QUICK-START-GUIDE.md) | 系统使用入门 |
