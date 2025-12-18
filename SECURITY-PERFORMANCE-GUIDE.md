@@ -178,34 +178,43 @@ def my_view(request):
 
 ```bash
 # 复制生产环境配置
-cp backend/.env.prod.example backend/.env.prod
+cp backend/.env.prod.example backend/.env
 
 # 编辑配置文件
-nano backend/.env.prod
+nano backend/.env
 
-# 启动生产环境
-docker-compose -f docker-compose.prod.yml up -d
+# 重启服务
+sudo systemctl restart erp-backend erp-celery
 ```
 
-### 2. SSL证书自动续期
+### 2. SSL证书配置
 
-docker-compose.prod.yml已包含certbot服务，自动每12小时检查证书续期。
+使用Let's Encrypt获取免费SSL证书：
+```bash
+sudo apt install certbot python3-certbot-nginx
+sudo certbot --nginx -d your-domain.com
+```
+
+证书会自动续期（certbot自动配置cron任务）。
 
 ### 3. 日志监控
 
 日志位置：
-- Nginx: `./logs/nginx/`
-- Django: `./logs/`
-- 安全日志: `./logs/security.log`
+- Nginx: `/var/log/nginx/`
+- Django: `/var/log/erp/`
+- 系统服务: `journalctl -u erp-backend`
 
 ### 4. 备份策略
 
 ```bash
 # 数据库备份
-docker exec erp_db pg_dump -U erp_user erp_db > backup.sql
+sudo -u postgres pg_dump erp_db > backup_$(date +%Y%m%d).sql
 
 # Redis备份
-docker exec erp_redis redis-cli BGSAVE
+redis-cli BGSAVE
+
+# 使用管理脚本备份
+sudo /opt/erp/scripts/manage-native.sh backup
 ```
 
 ## 五、安全最佳实践

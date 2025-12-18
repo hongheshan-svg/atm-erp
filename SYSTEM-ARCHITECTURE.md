@@ -429,41 +429,35 @@ Node.js 18+
     └── Native WebSocket API
 ```
 
-### Infrastructure Stack
+### Infrastructure Stack (Ubuntu Native)
 ```
-Docker Compose
-├── PostgreSQL 15 Alpine
-│   ├── Volume: postgres_data
-│   └── Health Check: pg_isready
+Ubuntu Server
+├── PostgreSQL 15
+│   ├── Port: 5432
+│   └── Systemd Service: postgresql
 │
-├── Redis 7 Alpine
+├── Redis 7
 │   ├── Port: 6379
-│   └── Health Check: redis-cli ping
-│
-├── Elasticsearch 8.11
-│   ├── Single-node mode
-│   ├── Volume: elasticsearch_data
-│   ├── Java Heap: 512MB
-│   └── Health Check: cluster health
+│   └── Systemd Service: redis-server
 │
 ├── Django Backend
-│   ├── Daphne + Gunicorn
+│   ├── Gunicorn (WSGI)
 │   ├── Port: 8000
-│   └── Depends on: db, redis, elasticsearch
+│   └── Systemd Service: erp-backend
 │
 ├── Celery Worker
 │   ├── Concurrency: auto
-│   └── Depends on: db, redis
+│   └── Systemd Service: erp-celery
 │
 ├── Celery Beat
 │   ├── Scheduler daemon
-│   └── Depends on: db, redis
+│   └── Systemd Service: erp-celery-beat
 │
-└── Nginx Alpine
+└── Nginx
     ├── Port: 80, 443
     ├── Serves: Frontend static files
     ├── Proxy: Backend API
-    └── Proxy: WebSocket connections
+    └── Systemd Service: nginx
 ```
 
 ---
@@ -472,9 +466,9 @@ Docker Compose
 
 ### Option 1: Single Server (Development/Small)
 ```
-Single Docker Host
-├── All containers on one machine
-├── Requirements: 4GB RAM, 2 CPU, 20GB disk
+Single Ubuntu Server
+├── All services on one machine
+├── Requirements: 4GB RAM, 2 CPU, 40GB disk
 └── Suitable for: <100 users, dev/test
 ```
 

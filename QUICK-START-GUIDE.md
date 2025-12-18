@@ -1,437 +1,327 @@
-# 🚀 Python ERP System - Quick Start Guide
+# 🚀 ERP系统 - 快速入门指南
 
-## ⚡ **5-Minute Setup**
+## ⚡ **快速开始**
 
-### 1. Start the System
+### 1. 部署系统
 ```bash
-cd /Users/zhengshan/Documents/toolsource/python-erp
+# 上传项目到Ubuntu服务器
+scp erp-system.tar.gz user@server:/tmp/
 
-# Start backend services (Database, Redis, Django, Celery)
-docker-compose up -d
+# 登录服务器
+ssh user@server
 
-# Start frontend (in a new terminal)
-cd frontend
-npm run dev
+# 解压并安装
+cd /tmp
+tar -xzvf erp-system.tar.gz
+cd erp-system
+sudo bash install.sh
 ```
 
-### 2. Access the System
-- **Frontend:** http://localhost:5173
-- **Backend API:** http://localhost:8000/api/
-- **API Documentation:** http://localhost:8000/api/docs/
+### 2. 访问系统
+- **前端界面:** http://服务器IP
+- **后台管理:** http://服务器IP/admin
+- **API接口:** http://服务器IP/api/
 
-### 3. Login
-- **Username:** `admin`
-- **Password:** `admin123`
-
----
-
-## 🎯 **Key Features to Try**
-
-### 📊 **1. Executive Dashboard**
-**Path:** Dashboard (first page after login)
-
-**What You'll See:**
-- Total Revenue, Active Projects, Inventory Value, Cash Position
-- Cash flow forecast chart (30 days)
-- Project completion pie chart
-- Recent system alerts
-
-**Try:** Refresh to see real-time KPI updates
+### 3. 登录
+- **用户名:** `admin`
+- **密码:** `admin123`
 
 ---
 
-### 📈 **2. Project Analytics**
-**Path:** Analytics → Project Analytics
+## 🎯 **核心功能**
 
-**Features:**
-- Project status distribution chart
-- Profit margin analysis
-- Cost structure breakdown (material/labor/expense)
-- Top 10 projects performance table
+### 📊 **1. 管理仪表盘**
+**路径:** 登录后首页
 
-**Try:** Sort by profit margin to see most profitable projects
-
----
-
-### 📦 **3. Inventory Analytics**
-**Path:** Analytics → Inventory Analytics
-
-**Features:**
-- Inventory value by warehouse
-- Turnover rate calculation
-- Slow-moving items list
-- ABC analysis
-
-**Try:** View 90-day slow-moving items
+**功能:**
+- 总收入、活跃项目、库存价值、现金头寸
+- 现金流预测图表（30天）
+- 项目完成率饼图
+- 系统告警提醒
 
 ---
 
-### 📋 **4. Project Gantt Chart**
-**Path:** Projects → Project Gantt
+### 📈 **2. 项目分析**
+**路径:** 分析 → 项目分析
 
-**Features:**
-- Visual project timeline
-- Color-coded task status
-- Task progress tracking
-- Interactive bars
-
-**Try:** Select an active project from dropdown
+**功能:**
+- 项目状态分布图
+- 利润率分析
+- 成本结构分解（材料/人工/费用）
+- Top 10项目绩效表
 
 ---
 
-### 💰 **5. Multi-Currency Finance**
-**Path:** Finance → Currencies
+### 📦 **3. 库存分析**
+**路径:** 分析 → 库存分析
 
-**Features:**
-- Add/edit currencies
-- Update exchange rates
-- View rate history
-- Set base currency
-
-**Try:** Add USD, EUR, CNY with exchange rates
+**功能:**
+- 各仓库库存价值
+- 周转率计算
+- 滞销品清单
+- ABC分析
 
 ---
 
-### 📄 **6. Generate PDF Invoice**
-**Path:** Sales → Sales Orders → Select Order → Actions
+### 📋 **4. 项目甘特图**
+**路径:** 项目 → 项目甘特图
 
-**Features:**
-- Professional PDF invoice
-- Company branding
-- Line items with totals
-- Downloadable PDF
-
-**Try:** Select any confirmed sales order and click "Generate Invoice"
+**功能:**
+- 可视化项目时间线
+- 任务状态颜色标识
+- 任务进度跟踪
+- 交互式操作
 
 ---
 
-### 🔍 **7. Barcode/QR Code Generation**
-**Path:** Master Data → Items → Select Item → Actions
+### 💰 **5. 多币种财务**
+**路径:** 财务 → 币种管理
 
-**Features:**
-- Generate barcode (CODE128)
-- Generate QR code (JSON data)
-- Downloadable PNG images
-- Ready for printing/scanning
-
-**Try:** Select any item and click "Generate Barcode"
+**功能:**
+- 添加/编辑币种
+- 更新汇率
+- 查看汇率历史
+- 设置基础币种
 
 ---
 
-### 📦 **8. Batch Tracking**
-**Path:** Inventory → Batches
+### 📄 **6. PDF发票生成**
+**路径:** 销售 → 销售订单 → 选择订单 → 操作
 
-**Features:**
-- Create batches with expiry dates
-- View expiring items (alert threshold)
-- Track batch movements
-- Quality status management
-- FEFO (First Expiry, First Out)
-
-**Try:** 
-1. Create a batch with expiry date
-2. View "Expiring Soon" (30 days)
-3. Adjust batch quantity
+**功能:**
+- 专业PDF发票
+- 公司品牌标识
+- 明细项目与合计
+- 可下载PDF
 
 ---
 
-### 📬 **9. RFQ System**
-**Path:** Purchase → RFQs
+### 🔍 **7. 条码/二维码生成**
+**路径:** 主数据 → 物料 → 选择物料 → 操作
 
-**Features:**
-- Create request for quotation
-- Send to multiple suppliers
-- Receive and compare quotes
-- Accept best quote
-- Convert to purchase order
-
-**Try:** 
-1. Create new RFQ
-2. Add line items
-3. Send to suppliers
-4. (Suppliers respond)
-5. Compare quotes
-6. Accept and convert to PO
+**功能:**
+- 生成条形码（CODE128）
+- 生成二维码（JSON数据）
+- 可下载PNG图片
+- 支持打印/扫描
 
 ---
 
-### 🔔 **10. Notification Center**
-**Path:** Bell Icon (top right)
+### 📦 **8. 批次追踪**
+**路径:** 库存 → 批次管理
 
-**Features:**
-- System notifications
-- Unread count badge
-- Mark as read/unread
-- Filter by type (All/Unread/Read)
-- Time-based display
-
-**Try:** Check for system alerts (stock levels, overdue payments)
+**功能:**
+- 创建带有效期的批次
+- 查看即将过期物料
+- 跟踪批次移动
+- 质量状态管理
+- FEFO（先过期先出）
 
 ---
 
-### 🔍 **11. Audit Log Viewer**
-**Path:** System → Audit Log
+### 📬 **9. 询价系统（RFQ）**
+**路径:** 采购 → 询价单
 
-**Features:**
-- Complete system change history
-- Filter by user, action, date
-- View detailed changes (JSON)
-- IP address tracking
-- Action badges (CREATE, UPDATE, DELETE)
-
-**Try:**
-1. Filter by today's date
-2. Find your login action
-3. View change details
+**功能:**
+- 创建询价请求
+- 发送给多个供应商
+- 接收并比较报价
+- 接受最优报价
+- 转换为采购订单
 
 ---
 
-## 🛠️ **Common Tasks**
+### 🔔 **10. 通知中心**
+**路径:** 右上角铃铛图标
 
-### Create a New Project
-1. Projects → Create Project
-2. Fill in: Name, Customer, Manager, Dates, Budget
-3. Add project members
-4. Add BOM (Bill of Materials)
-5. Create tasks (WBS structure)
-6. View in Gantt chart
-
-### Purchase Flow
-1. **Purchase Request** → Create PR with items
-2. **Convert to PO** → Select supplier
-3. **Goods Receipt** → Receive items
-4. **Stock Move** → Auto-created (items in warehouse)
-
-### Sales Flow
-1. **Quotation** → Create and send to customer
-2. **Convert to SO** → Customer accepts
-3. **Delivery Order** → Ship items
-4. **Invoice** → Generate PDF
-5. **AR** → Auto-created
-
-### Inventory Management
-1. **Stock Query** → Check availability
-2. **Stock Adjustment** → Physical count
-3. **Stock Transfer** → Between warehouses
-4. **Batch Tracking** → Expiry management
+**功能:**
+- 系统通知
+- 未读数量徽章
+- 标记已读/未读
+- 按类型筛选
 
 ---
 
-## 📱 **Mobile Access (PWA)**
+### 🔍 **11. 审计日志**
+**路径:** 系统 → 审计日志
 
-### Install as App
-**On Mobile (iOS/Safari):**
-1. Open http://localhost:5173 in Safari
-2. Tap Share button
-3. Tap "Add to Home Screen"
-4. App icon appears on home screen
-
-**On Mobile (Android/Chrome):**
-1. Open http://localhost:5173 in Chrome
-2. Tap "..." menu
-3. Tap "Install App" or "Add to Home Screen"
-
-**On Desktop (Chrome):**
-1. Open http://localhost:5173
-2. Click install icon in address bar (+ icon)
-3. App installs like native app
-
-### Offline Mode
-- PWA caches pages for offline access
-- Service worker handles network failures
-- Works without internet connection
+**功能:**
+- 完整系统变更历史
+- 按用户、操作、日期筛选
+- 查看详细变更（JSON）
+- IP地址追踪
 
 ---
 
-## 🔧 **System Management**
+## 🛠️ **常用操作**
 
-### Check Service Status
+### 创建新项目
+1. 项目 → 创建项目
+2. 填写：名称、客户、经理、日期、预算
+3. 添加项目成员
+4. 添加BOM（物料清单）
+5. 创建任务（WBS结构）
+6. 在甘特图中查看
+
+### 采购流程
+1. **采购申请** → 创建PR并添加物料
+2. **转换为PO** → 选择供应商
+3. **收货** → 接收物料
+4. **库存移动** → 自动创建（物料入库）
+
+### 销售流程
+1. **报价单** → 创建并发送给客户
+2. **转换为SO** → 客户接受
+3. **发货单** → 发运物料
+4. **发票** → 生成PDF
+5. **应收账款** → 自动创建
+
+### 库存管理
+1. **库存查询** → 检查可用量
+2. **库存调整** → 盘点
+3. **库存调拨** → 仓库间转移
+4. **批次追踪** → 有效期管理
+
+---
+
+## 🔧 **系统管理**
+
+### 查看服务状态
 ```bash
-docker-compose ps
+# 使用管理脚本（推荐）
+sudo /opt/erp/scripts/manage-native.sh
+
+# 或使用systemctl
+sudo systemctl status erp-backend
+sudo systemctl status erp-celery
+sudo systemctl status nginx
+sudo systemctl status postgresql
+sudo systemctl status redis-server
 ```
 
-**Expected Services:**
-- ✅ erp_backend (healthy)
-- ✅ erp_db (healthy)
-- ✅ erp_redis (healthy)
-- ✅ erp_celery (up)
-- ✅ erp_celery_beat (up)
-
-### View Logs
+### 查看日志
 ```bash
-# Backend logs
-docker-compose logs -f backend
+# 应用日志
+sudo tail -f /var/log/erp/gunicorn-error.log
 
-# Celery worker logs
-docker-compose logs -f celery
+# Nginx日志
+sudo tail -f /var/log/nginx/error.log
 
-# All logs
-docker-compose logs -f
+# 系统服务日志
+sudo journalctl -u erp-backend -f
 ```
 
-### Restart Services
+### 重启服务
 ```bash
-# Restart all
-docker-compose restart
+# 重启所有服务
+sudo systemctl restart erp-backend erp-celery nginx
 
-# Restart specific service
-docker-compose restart backend
+# 重启特定服务
+sudo systemctl restart erp-backend
 ```
 
-### Stop System
+### 停止系统
 ```bash
-# Stop all containers
-docker-compose down
-
-# Stop and remove volumes (WARNING: deletes data)
-docker-compose down -v
+# 停止应用服务
+sudo systemctl stop erp-backend erp-celery erp-celery-beat
 ```
 
 ---
 
-## 📊 **API Exploration**
+## 💾 **数据备份**
 
-### Swagger UI
-Visit: http://localhost:8000/api/docs/
-
-**Features:**
-- Interactive API documentation
-- Try API calls directly
-- View request/response schemas
-- Test authentication
-
-### Example API Calls
-
-**Get Dashboard KPIs:**
 ```bash
-curl -H "Authorization: Bearer YOUR_TOKEN" \
-  http://localhost:8000/api/analytics/analytics/dashboard/
-```
+# 数据库备份
+sudo -u postgres pg_dump erp_db > backup_$(date +%Y%m%d).sql
 
-**Create Item:**
-```bash
-curl -X POST http://localhost:8000/api/masterdata/items/ \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"sku":"ITEM001","name":"Test Item","unit":"PCS"}'
+# 恢复数据库
+sudo -u postgres psql erp_db < backup.sql
+
+# 使用管理脚本备份
+sudo /opt/erp/scripts/manage-native.sh backup
 ```
 
 ---
 
-## 🎓 **Learning Path**
+## 🆘 **故障排除**
 
-### Day 1: Basics
-1. ✅ Login and explore dashboard
-2. ✅ Create master data (items, customers, suppliers)
-3. ✅ Check inventory
-
-### Day 2: Operations
-1. ✅ Create project with tasks
-2. ✅ Generate purchase request
-3. ✅ Create sales order
-4. ✅ Process goods receipt
-
-### Day 3: Advanced
-1. ✅ Use RFQ system
-2. ✅ Setup multi-currency
-3. ✅ Generate reports
-4. ✅ Track batches
-
-### Day 4: Management
-1. ✅ View project Gantt chart
-2. ✅ Analyze project profitability
-3. ✅ Check inventory analytics
-4. ✅ Review audit logs
-
-### Day 5: Automation
-1. ✅ Configure notifications
-2. ✅ Set up scheduled tasks
-3. ✅ Generate barcodes
-4. ✅ Install PWA
-
----
-
-## 🆘 **Troubleshooting**
-
-### Frontend Not Loading
+### 前端无法加载
 ```bash
-cd frontend
-npm install
-npm run dev
+# 检查Nginx状态
+sudo systemctl status nginx
+sudo nginx -t
+
+# 检查前端文件
+ls -la /var/www/erp/
 ```
 
-### Backend Error
+### 后端错误
 ```bash
-docker-compose restart backend
-docker-compose logs backend
+# 检查后端服务
+sudo systemctl status erp-backend
+sudo tail -f /var/log/erp/gunicorn-error.log
 ```
 
-### Database Connection Error
+### 数据库连接错误
 ```bash
-docker-compose restart db
-# Check database is healthy
-docker-compose ps
+# 检查PostgreSQL
+sudo systemctl status postgresql
+sudo -u postgres psql -c "\l"
 ```
 
-### Port Already in Use
+### 502 Bad Gateway
 ```bash
-# Stop conflicting services
-# Change ports in docker-compose.yml if needed
+# 重启后端服务
+sudo systemctl restart erp-backend
 ```
 
 ---
 
-## 📚 **Documentation**
+## 📚 **文档**
 
-- **Phase 1 Plan:** `README.md`
-- **Phase 2 Plan:** `PHASE2-PLAN.md`
-- **Implementation Summary:** `PHASE2-IMPLEMENTATION-SUMMARY.md`
-- **Final Summary:** `PHASE2-FINAL-SUMMARY.md`
-- **This Guide:** `QUICK-START-GUIDE.md`
-- **API Docs:** http://localhost:8000/api/docs/
+- **部署指南:** `UBUNTU-NATIVE-DEPLOYMENT.md`
+- **快速部署参考:** `QUICK-DEPLOY-CARD.md`
+- **系统架构:** `SYSTEM-ARCHITECTURE.md`
+- **安全指南:** `SECURITY-PERFORMANCE-GUIDE.md`
 
 ---
 
-## 🌟 **Key Shortcuts**
+## 🌟 **快捷操作**
 
-| Page | Shortcut |
-|------|----------|
-| Dashboard | Click logo (top left) |
-| Create Item | Master Data → Items → + New |
-| Check Stock | Inventory → Stocks |
-| New Project | Projects → + Create |
-| Notifications | Bell icon (top right) |
-| Audit Log | System menu |
-| Logout | User avatar (top right) |
-
----
-
-## ✨ **Pro Tips**
-
-1. **Use Search Everywhere** - Most pages have search boxes
-2. **Export to Excel** - Many tables have export buttons
-3. **Check Notifications Daily** - System alerts are important
-4. **Review Audit Log** - Track all changes
-5. **Mobile First** - Install PWA for on-the-go access
-6. **Bookmark API Docs** - Useful for integration
-7. **Schedule Reports** - Use Celery for automation
-8. **Monitor Dashboard** - Real-time business pulse
+| 页面 | 操作 |
+|------|------|
+| 仪表盘 | 点击左上角Logo |
+| 创建物料 | 主数据 → 物料 → + 新建 |
+| 查看库存 | 库存 → 库存查询 |
+| 新建项目 | 项目 → + 创建 |
+| 通知 | 右上角铃铛图标 |
+| 审计日志 | 系统菜单 |
+| 退出 | 右上角用户头像 |
 
 ---
 
-## 🎉 **You're Ready!**
+## ✨ **使用技巧**
 
-The system is fully operational with:
-- ✅ 16 major features
-- ✅ 35+ API endpoints
-- ✅ 22 frontend pages
-- ✅ Real-time analytics
-- ✅ Automated workflows
-- ✅ Complete traceability
-
-**Start exploring and enjoy the power of a modern ERP system! 🚀**
+1. **善用搜索** - 大多数页面都有搜索框
+2. **导出Excel** - 很多表格有导出按钮
+3. **每日检查通知** - 系统告警很重要
+4. **查看审计日志** - 追踪所有变更
+5. **定期备份** - 使用管理脚本备份数据
 
 ---
 
-**Need Help?** Check the documentation or API docs at http://localhost:8000/api/docs/
+## 🎉 **开始使用！**
 
+系统已完整部署，包含：
+- ✅ 16个主要功能模块
+- ✅ 35+ API接口
+- ✅ 22个前端页面
+- ✅ 实时数据分析
+- ✅ 自动化工作流
+- ✅ 完整审计追踪
+
+**开始探索现代化ERP系统的强大功能吧！🚀**
+
+---
+
+*版本: 1.0.0 | 更新日期: 2024年12月*

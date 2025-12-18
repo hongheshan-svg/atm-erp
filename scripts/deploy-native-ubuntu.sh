@@ -146,6 +146,10 @@ copy_project() {
     # 复制文件
     cp -r "$SOURCE_DIR/backend" "$APP_DIR/"
     cp -r "$SOURCE_DIR/frontend" "$APP_DIR/"
+    cp -r "$SOURCE_DIR/scripts" "$APP_DIR/"
+    
+    # 设置脚本执行权限
+    chmod +x $APP_DIR/scripts/*.sh 2>/dev/null || true
     
     # 设置权限
     chown -R $APP_USER:$APP_USER $APP_DIR

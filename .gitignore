@@ -68,9 +68,6 @@ logs/
 # Uploads
 uploads/
 
-# Docker
-docker-compose.override.yml
-
 # Celery
 celerybeat-schedule
 celerybeat.pid

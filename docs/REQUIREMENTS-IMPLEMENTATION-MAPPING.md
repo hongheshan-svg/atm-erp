@@ -67,14 +67,14 @@
 > PostgreSQL，适合复杂查询和报表统计
 
 **实际实现：**
-- ✅ PostgreSQL 15 Alpine
+- ✅ PostgreSQL 15
 - ✅ 40+ 数据表
 - ✅ 复杂关联查询支持
 - ✅ JSON字段支持
-- ✅ Docker容器化部署
+- ✅ Ubuntu原生部署
 
 **实现文件：**
-- `docker-compose.yml` (PostgreSQL服务)
+- `scripts/deploy-native-ubuntu.sh` (PostgreSQL配置)
 - `backend/apps/*/models.py` (40+表定义)
 
 ---
@@ -93,7 +93,7 @@
 **实现文件：**
 - `backend/config/celery.py`
 - `backend/apps/*/tasks.py`
-- `docker-compose.yml` (Celery服务)
+- `scripts/deploy-native-ubuntu.sh` (Celery服务配置)
 
 ---
 

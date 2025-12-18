@@ -17,7 +17,7 @@ NC='\033[0m'
 
 echo -e "${CYAN}"
 echo "╔═══════════════════════════════════════════════════════╗"
-echo "║     ERP系统打包工具                                   ║"
+echo "║     ERP系统打包工具（Ubuntu原生部署版）               ║"
 echo "╚═══════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
@@ -44,16 +44,11 @@ cp -r scripts "$TEMP_DIR/"
 cp -r docs "$TEMP_DIR/" 2>/dev/null || mkdir -p "$TEMP_DIR/docs"
 
 # 复制配置文件
-cp docker-compose.yml "$TEMP_DIR/"
-cp docker-compose.prod.yml "$TEMP_DIR/"
-cp docker-compose.windows.yml "$TEMP_DIR/"
-cp .dockerignore "$TEMP_DIR/"
 cp .gitignore "$TEMP_DIR/"
 
 # 复制文档
 cp README.md "$TEMP_DIR/"
-cp UBUNTU-DEPLOYMENT-GUIDE.md "$TEMP_DIR/" 2>/dev/null || true
-cp WINDOWS-DEPLOYMENT-GUIDE.md "$TEMP_DIR/" 2>/dev/null || true
+cp UBUNTU-NATIVE-DEPLOYMENT.md "$TEMP_DIR/" 2>/dev/null || true
 cp QUICK-DEPLOY-CARD.md "$TEMP_DIR/" 2>/dev/null || true
 cp QUICK-START-GUIDE.md "$TEMP_DIR/" 2>/dev/null || true
 cp SYSTEM-ARCHITECTURE.md "$TEMP_DIR/" 2>/dev/null || true
@@ -61,7 +56,9 @@ cp SECURITY-PERFORMANCE-GUIDE.md "$TEMP_DIR/" 2>/dev/null || true
 
 # 复制安装脚本
 cp install.sh "$TEMP_DIR/"
-cp install.bat "$TEMP_DIR/"
+
+# 复制小程序（可选）
+cp -r miniprogram "$TEMP_DIR/" 2>/dev/null || true
 
 # 创建必要的空目录
 mkdir -p "$TEMP_DIR/logs"
@@ -101,18 +98,22 @@ chmod +x "$TEMP_DIR/install.sh"
 chmod +x "$TEMP_DIR/scripts/"*.sh 2>/dev/null || true
 
 # 创建版本文件
-echo "$VERSION" > "$TEMP_DIR/VERSION"
-echo "Build Date: $(date)" >> "$TEMP_DIR/VERSION"
+cat > "$TEMP_DIR/VERSION" << EOF
+版本: $VERSION
+构建日期: $(date '+%Y-%m-%d %H:%M:%S')
+部署方式: Ubuntu原生部署（无Docker）
+支持系统: Ubuntu 20.04/22.04/24.04 LTS
+EOF
 
 # 打包
 echo -e "${CYAN}[i] 创建压缩包...${NC}"
 
 cd /tmp
 
-# 创建tar.gz包（Linux）
+# 创建tar.gz包
 tar -czvf "${PACKAGE_NAME}.tar.gz" "$PACKAGE_NAME"
 
-# 创建zip包（Windows）
+# 创建zip包（可选）
 if command -v zip &> /dev/null; then
     zip -r "${PACKAGE_NAME}.zip" "$PACKAGE_NAME"
 fi
@@ -135,7 +136,13 @@ ls -lh "$PROJECT_DIR/${PACKAGE_NAME}"* 2>/dev/null
 
 echo
 echo -e "${CYAN}部署说明:${NC}"
-echo "1. 将压缩包上传到服务器"
-echo "2. 解压: tar -xzvf ${PACKAGE_NAME}.tar.gz"
-echo "3. 进入目录: cd ${PACKAGE_NAME}"
-echo "4. 运行安装: sudo bash install.sh"
+echo "1. 将压缩包上传到Ubuntu服务器"
+echo "   scp ${PACKAGE_NAME}.tar.gz user@server:/tmp/"
+echo ""
+echo "2. 登录服务器并解压"
+echo "   ssh user@server"
+echo "   cd /tmp && tar -xzvf ${PACKAGE_NAME}.tar.gz"
+echo ""
+echo "3. 运行一键安装"
+echo "   cd ${PACKAGE_NAME}"
+echo "   sudo bash install.sh"
