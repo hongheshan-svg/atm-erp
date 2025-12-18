@@ -49,18 +49,46 @@ check_root() {
     fi
 }
 
+# 显示部署方式选择
+show_deploy_options() {
+    echo
+    echo -e "${CYAN}请选择部署方式:${NC}"
+    echo "  [1] Docker部署（推荐，需要安装Docker）"
+    echo "  [2] 原生部署（直接安装到系统，无需Docker）"
+    echo
+    read -p "请选择 [1/2]: " DEPLOY_MODE
+}
+
 # 主函数
 main() {
     detect_os
     check_root
     
+    # 检查命令行参数
+    if [ "$1" = "--native" ] || [ "$1" = "-n" ]; then
+        DEPLOY_MODE=2
+    elif [ "$1" = "--docker" ] || [ "$1" = "-d" ]; then
+        DEPLOY_MODE=1
+    else
+        show_deploy_options
+    fi
+    
     case "$OS" in
         ubuntu|debian)
-            echo -e "${GREEN}[✓] 使用 Ubuntu/Debian 部署脚本${NC}"
-            bash "$SCRIPT_DIR/scripts/deploy-ubuntu.sh"
+            if [ "$DEPLOY_MODE" = "2" ]; then
+                echo -e "${GREEN}[✓] 使用原生部署方式${NC}"
+                bash "$SCRIPT_DIR/scripts/deploy-native-ubuntu.sh"
+            else
+                echo -e "${GREEN}[✓] 使用Docker部署方式${NC}"
+                bash "$SCRIPT_DIR/scripts/deploy-ubuntu.sh"
+            fi
             ;;
         centos|rhel|fedora|rocky|almalinux)
-            echo -e "${YELLOW}[!] CentOS/RHEL 系统，尝试使用通用部署脚本${NC}"
+            echo -e "${YELLOW}[!] CentOS/RHEL 系统${NC}"
+            if [ "$DEPLOY_MODE" = "2" ]; then
+                echo -e "${RED}[✗] 原生部署暂不支持此系统，请使用Docker部署${NC}"
+                exit 1
+            fi
             bash "$SCRIPT_DIR/scripts/deploy-ubuntu.sh"
             ;;
         *)
