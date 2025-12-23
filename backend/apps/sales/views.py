@@ -134,14 +134,14 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, view
         so.status = 'CONFIRMED'
         so.save()
         
-        # Auto-create AR
+        # Auto-create AR - 使用含税金额
         from apps.finance.models import AccountReceivable
         AccountReceivable.objects.create(
             customer=so.customer,
             so=so,
             project=so.project,
             invoice_date=so.order_date,
-            amount_due=so.total_amount,
+            amount_due=so.total_with_tax or so.total_amount,  # 优先使用含税金额
             due_date=request.data.get('due_date', so.delivery_date),
             created_by=request.user
         )

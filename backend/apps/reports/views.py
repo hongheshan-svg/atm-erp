@@ -128,16 +128,16 @@ def dashboard_summary(request):
         completed=Count('id', filter=Q(status='COMPLETED'))
     )
     
-    # Sales stats
+    # Sales stats - 使用含税金额
     sales_stats = SalesOrder.objects.filter(is_deleted=False).aggregate(
         total_orders=Count('id'),
-        total_amount=Sum('total_amount', filter=Q(status__in=['CONFIRMED', 'PARTIAL', 'COMPLETED']))
+        total_amount=Sum('total_with_tax', filter=Q(status__in=['CONFIRMED', 'PARTIAL', 'COMPLETED']))
     )
     
-    # Purchase stats
+    # Purchase stats - 使用含税金额
     purchase_stats = PurchaseOrder.objects.filter(is_deleted=False).aggregate(
         total_orders=Count('id'),
-        total_amount=Sum('total_amount', filter=Q(status__in=['CONFIRMED', 'PARTIAL', 'COMPLETED']))
+        total_amount=Sum('total_with_tax', filter=Q(status__in=['CONFIRMED', 'PARTIAL', 'COMPLETED']))
     )
     
     # Inventory stats

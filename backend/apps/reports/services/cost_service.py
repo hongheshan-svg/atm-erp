@@ -75,17 +75,23 @@ class CostCalculationService:
     def calculate_project_revenue(cls, project_id):
         """
         Calculate revenue from sales orders linked to project.
+        使用含税金额计算收入。
         Returns: Decimal
         """
         from apps.sales.models import SalesOrder
         
+        # 优先使用含税金额，如果没有则回退到不含税金额
         result = SalesOrder.objects.filter(
             project_id=project_id,
             status__in=['CONFIRMED', 'PARTIAL', 'COMPLETED'],
             is_deleted=False
-        ).aggregate(total=Sum('total_amount'))
+        ).aggregate(
+            total_with_tax=Sum('total_with_tax'),
+            total_amount=Sum('total_amount')
+        )
         
-        return result['total'] or Decimal('0')
+        # 如果有含税金额就用含税金额，否则用不含税金额
+        return result['total_with_tax'] or result['total_amount'] or Decimal('0')
     
     @classmethod
     def calculate_project_profit(cls, project_id):

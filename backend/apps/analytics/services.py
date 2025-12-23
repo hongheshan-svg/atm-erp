@@ -22,21 +22,21 @@ class DashboardKPIService:
         if not end_date:
             end_date = datetime.now()
         
-        # Revenue metrics
+        # Revenue metrics - 使用含税金额
         sales_data = SalesOrder.objects.filter(
             order_date__range=[start_date, end_date],
             status__in=['CONFIRMED', 'COMPLETED']
         ).aggregate(
-            total_revenue=Sum('total_amount'),
+            total_revenue=Sum('total_with_tax'),
             order_count=Count('id'),
-            avg_order_value=Avg('total_amount')
+            avg_order_value=Avg('total_with_tax')
         )
         
-        # Purchase metrics
+        # Purchase metrics - 使用含税金额
         purchase_data = PurchaseOrder.objects.filter(
             order_date__range=[start_date, end_date]
         ).aggregate(
-            total_purchases=Sum('total_amount'),
+            total_purchases=Sum('total_with_tax'),
             po_count=Count('id')
         )
         
