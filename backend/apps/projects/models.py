@@ -12,9 +12,11 @@ class Project(BaseModel):
     """
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
+        ('PLANNING', '规划中'),
         ('ACTIVE', '进行中'),
         ('PAUSED', '暂停'),
         ('COMPLETED', '已完成'),
+        ('CANCELLED', '已取消'),
         ('ARCHIVED', '已归档'),
     ]
     

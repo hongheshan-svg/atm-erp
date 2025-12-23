@@ -266,18 +266,42 @@ const handleDelete = async (row) => {
 }
 
 const handleSubmit = async () => {
+  // 验证必填字段
+  if (!form.code || !form.name || !form.customer || !form.manager || !form.start_date || !form.end_date) {
+    ElMessage.warning('请填写所有必填字段（项目编号、名称、客户、项目经理、开始日期、结束日期）')
+    return
+  }
+  
   try {
+    // 构建提交数据，只发送需要的字段
+    const payload = {
+      code: form.code,
+      name: form.name,
+      customer: form.customer,
+      manager: form.manager,
+      start_date: form.start_date,
+      end_date: form.end_date,
+      status: form.status || 'DRAFT',
+      budget_total: form.budget_total || 0
+    }
+    
+    // 可选字段
+    if (form.sales_order) {
+      payload.sales_order = form.sales_order
+    }
+    
     if (isEdit.value) {
-      await request.put(`/projects/projects/${form.id}/`, form)
+      await request.put(`/projects/projects/${form.id}/`, payload)
       ElMessage.success('更新项目成功')
     } else {
-      await request.post('/projects/projects/', form)
+      await request.post('/projects/projects/', payload)
       ElMessage.success('创建项目成功')
     }
     dialogVisible.value = false
     loadProjects()
   } catch (error) {
-    ElMessage.error('保存项目失败')
+    console.error('保存项目失败:', error)
+    ElMessage.error(error.response?.data?.detail || '保存项目失败')
   }
 }
 
