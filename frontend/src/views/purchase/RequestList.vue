@@ -43,9 +43,9 @@
             <el-tag :type="getStatusType(row.status)">{{ getStatusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="total_amount" label="金额" width="120" align="right">
+        <el-table-column prop="total_with_tax" label="含税总额" width="120" align="right">
           <template #default="{ row }">
-            ¥{{ parseFloat(row.total_amount || 0).toFixed(2) }}
+            ¥{{ parseFloat(row.total_with_tax || row.total_amount || 0).toFixed(2) }}
           </template>
         </el-table-column>
         <el-table-column prop="created_at" label="创建时间" width="160" />
@@ -78,16 +78,28 @@
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="900px" destroy-on-close>
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
         <el-row :gutter="20">
-          <el-col :span="12">
+          <el-col :span="8">
             <el-form-item label="关联项目" prop="project">
               <el-select v-model="form.project" placeholder="选择项目" filterable style="width: 100%;">
                 <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col :span="8">
             <el-form-item label="需求日期" prop="required_date">
               <el-date-picker v-model="form.required_date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%;" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="增值税率">
+              <el-select v-model="form.tax_rate" placeholder="选择税率" style="width: 100%;">
+                <el-option :value="0" label="0% (免税)" />
+                <el-option :value="1" label="1%" />
+                <el-option :value="3" label="3%" />
+                <el-option :value="6" label="6%" />
+                <el-option :value="9" label="9%" />
+                <el-option :value="13" label="13%" />
+              </el-select>
             </el-form-item>
           </el-col>
         </el-row>
@@ -134,8 +146,19 @@
           </el-table-column>
         </el-table>
         
-        <div class="total-amount">
-          合计金额：<span class="amount">¥{{ calculateTotal().toFixed(2) }}</span>
+        <div class="total-section">
+          <div class="total-row">
+            <span class="label">不含税金额：</span>
+            <span class="value">¥{{ calculateTotal().toFixed(2) }}</span>
+          </div>
+          <div class="total-row">
+            <span class="label">税额 ({{ form.tax_rate }}%)：</span>
+            <span class="value">¥{{ calculateTax().toFixed(2) }}</span>
+          </div>
+          <div class="total-row total">
+            <span class="label">含税总额：</span>
+            <span class="amount">¥{{ calculateTotalWithTax().toFixed(2) }}</span>
+          </div>
         </div>
       </el-form>
       <template #footer>
@@ -230,6 +253,7 @@ const form = reactive({
   id: null,
   project: null,
   required_date: '',
+  tax_rate: 13,
   notes: '',
   lines: []
 })
@@ -325,6 +349,7 @@ const handleAdd = () => {
     id: null,
     project: null,
     required_date: '',
+    tax_rate: 13,
     notes: '',
     lines: [{ item: null, qty: 1, estimated_price: 0 }]
   })
@@ -344,6 +369,7 @@ const handleEdit = async (row) => {
       id: data.id,
       project: data.project,
       required_date: data.required_date || '',
+      tax_rate: data.tax_rate ?? 13,
       notes: data.notes || '',
       lines: (data.lines || []).map(line => ({
         id: line.id,
@@ -399,6 +425,14 @@ const calculateTotal = () => {
   }, 0)
 }
 
+const calculateTax = () => {
+  return calculateTotal() * (form.tax_rate || 0) / 100
+}
+
+const calculateTotalWithTax = () => {
+  return calculateTotal() + calculateTax()
+}
+
 const handleSave = async () => {
   try {
     await formRef.value?.validate()
@@ -415,6 +449,7 @@ const handleSave = async () => {
     const payload = {
       project: form.project,
       required_date: form.required_date,
+      tax_rate: form.tax_rate,
       notes: form.notes,
       lines: validLines.map(line => ({
         item: line.item,
@@ -533,13 +568,38 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
-.total-amount {
+.total-section {
   text-align: right;
   margin-top: 15px;
-  font-size: 16px;
+  padding: 10px;
+  background: #fafafa;
+  border-radius: 4px;
 }
 
-.total-amount .amount {
+.total-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.total-row .label {
+  color: #606266;
+  margin-right: 10px;
+}
+
+.total-row .value {
+  min-width: 100px;
+  text-align: right;
+}
+
+.total-row.total {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #dcdfe6;
+}
+
+.total-row .amount {
   color: #f56c6c;
   font-weight: bold;
   font-size: 18px;

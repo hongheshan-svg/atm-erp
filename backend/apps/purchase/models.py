@@ -18,6 +18,15 @@ class PurchaseRequest(BaseModel):
         ('CONVERTED', '已转采购订单'),
     ]
     
+    TAX_RATE_CHOICES = [
+        (0, '0% (免税)'),
+        (1, '1%'),
+        (3, '3%'),
+        (6, '6%'),
+        (9, '9%'),
+        (13, '13%'),
+    ]
+    
     request_no = models.CharField(max_length=50, unique=True, verbose_name='申请单号')
     project = models.ForeignKey(
         'projects.Project',
@@ -41,11 +50,30 @@ class PurchaseRequest(BaseModel):
         default='DRAFT',
         verbose_name='状态'
     )
+    
+    # 税率相关
+    tax_rate = models.IntegerField(
+        choices=TAX_RATE_CHOICES,
+        default=13,
+        verbose_name='增值税税率(%)'
+    )
     total_amount = models.DecimalField(
         max_digits=15,
         decimal_places=2,
         default=0,
-        verbose_name='总金额'
+        verbose_name='不含税金额'
+    )
+    tax_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='税额'
+    )
+    total_with_tax = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='含税总额'
     )
     notes = models.TextField(blank=True, verbose_name='备注')
     
@@ -129,6 +157,15 @@ class PurchaseOrder(BaseModel):
         ('CANCELLED', '已取消'),
     ]
     
+    TAX_RATE_CHOICES = [
+        (0, '0% (免税)'),
+        (1, '1%'),
+        (3, '3%'),
+        (6, '6%'),
+        (9, '9%'),
+        (13, '13%'),
+    ]
+    
     order_no = models.CharField(max_length=50, unique=True, verbose_name='订单号')
     supplier = models.ForeignKey(
         'masterdata.Supplier',
@@ -152,11 +189,30 @@ class PurchaseOrder(BaseModel):
         default='DRAFT',
         verbose_name='状态'
     )
+    
+    # 税率相关
+    tax_rate = models.IntegerField(
+        choices=TAX_RATE_CHOICES,
+        default=13,
+        verbose_name='增值税税率(%)'
+    )
     total_amount = models.DecimalField(
         max_digits=15,
         decimal_places=2,
         default=0,
-        verbose_name='总金额'
+        verbose_name='不含税金额'
+    )
+    tax_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='税额'
+    )
+    total_with_tax = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='含税总额'
     )
     payment_terms = models.CharField(max_length=200, blank=True, verbose_name='付款条款')
     notes = models.TextField(blank=True, verbose_name='备注')

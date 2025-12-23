@@ -17,6 +17,12 @@
       <el-table :data="projects" v-loading="loading" stripe border>
         <el-table-column prop="code" label="项目编号" width="150" />
         <el-table-column prop="name" label="项目名称" />
+        <el-table-column prop="sales_order_no" label="关联订单" width="140">
+          <template #default="{ row }">
+            <el-tag v-if="row.sales_order_no" type="success" size="small">{{ row.sales_order_no }}</el-tag>
+            <span v-else class="text-muted">-</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="customer_name" label="客户" />
         <el-table-column prop="manager_name" label="负责人" />
         <el-table-column prop="status" label="状态" width="120">
@@ -40,6 +46,22 @@
     <!-- 新增/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="800px">
       <el-form :model="form" ref="formRef" label-width="150px">
+        <el-form-item label="关联销售订单">
+          <el-select 
+            v-model="form.sales_order" 
+            filterable 
+            clearable
+            placeholder="选择销售订单 (可选)"
+            @change="handleSalesOrderChange"
+          >
+            <el-option 
+              v-for="so in salesOrders" 
+              :key="so.id" 
+              :label="`${so.order_no} - ${so.customer_name}`" 
+              :value="so.id"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="项目编号">
           <el-input v-model="form.code" />
         </el-form-item>
@@ -108,6 +130,7 @@ const loading = ref(false)
 const projects = ref([])
 const customers = ref([])
 const users = ref([])
+const salesOrders = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('创建项目')
 const isEdit = ref(false)
@@ -119,6 +142,7 @@ const form = reactive({
   id: null,
   code: '',
   name: '',
+  sales_order: null,
   customer: null,
   manager: null,
   start_date: '',
@@ -192,6 +216,26 @@ const loadUsers = async () => {
   }
 }
 
+const loadSalesOrders = async () => {
+  try {
+    // 只加载未关联项目的销售订单，或者当前编辑项目已关联的订单
+    const response = await request.get('/sales/orders/')
+    salesOrders.value = response.results || response || []
+  } catch (error) {
+    console.error('Failed to load sales orders')
+  }
+}
+
+// 当选择销售订单时，自动填充客户
+const handleSalesOrderChange = (soId) => {
+  if (soId) {
+    const selectedOrder = salesOrders.value.find(so => so.id === soId)
+    if (selectedOrder) {
+      form.customer = selectedOrder.customer
+    }
+  }
+}
+
 const handleView = (row) => {
   router.push(`/projects/${row.id}`)
 }
@@ -199,7 +243,7 @@ const handleView = (row) => {
 const handleAdd = () => {
   dialogTitle.value = '创建项目'
   isEdit.value = false
-  Object.assign(form, { id: null, code: '', name: '', customer: null, manager: null, start_date: '', end_date: '', budget_total: 0, status: 'DRAFT' })
+  Object.assign(form, { id: null, code: '', name: '', sales_order: null, customer: null, manager: null, start_date: '', end_date: '', budget_total: 0, status: 'DRAFT' })
   dialogVisible.value = true
 }
 
@@ -256,6 +300,7 @@ onMounted(() => {
   loadProjects()
   loadCustomers()
   loadUsers()
+  loadSalesOrders()
 })
 </script>
 

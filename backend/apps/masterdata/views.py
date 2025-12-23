@@ -44,9 +44,10 @@ class ItemCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         return Response(tree_data)
 
 
-class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.ModelViewSet):
+class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for Item management.
+    NOTE: 物料是主数据，所有用户都可以查看，不应用数据范围限制
     """
     queryset = Item.objects.all()
     serializer_class = ItemSerializer
@@ -166,9 +167,10 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.M
             )
 
 
-class CustomerViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.ModelViewSet):
+class CustomerViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for Customer management.
+    NOTE: 客户是主数据，所有用户都可以查看，不应用数据范围限制
     """
     queryset = Customer.objects.all()
     serializer_class = CustomerSerializer
@@ -177,9 +179,10 @@ class CustomerViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewse
     ordering_fields = ['code', 'created_at']
 
 
-class SupplierViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.ModelViewSet):
+class SupplierViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for Supplier management.
+    NOTE: 供应商是主数据，所有用户都可以查看，不应用数据范围限制
     """
     queryset = Supplier.objects.all()
     serializer_class = SupplierSerializer

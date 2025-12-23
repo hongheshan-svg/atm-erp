@@ -10,6 +10,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source='customer.name', read_only=True)
     manager_name = serializers.CharField(source='manager.get_full_name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    sales_order_no = serializers.SerializerMethodField()
     
     # Calculated fields
     actual_material_cost = serializers.SerializerMethodField()
@@ -20,13 +21,18 @@ class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
         fields = [
-            'id', 'code', 'name', 'customer', 'customer_name', 'manager', 'manager_name',
+            'id', 'code', 'name', 'customer', 'customer_name', 
+            'sales_order', 'sales_order_no',
+            'manager', 'manager_name',
             'start_date', 'end_date', 'status', 'status_display', 'budget_total',
             'budget_material', 'budget_labor', 'budget_expense', 'description', 'notes',
             'actual_material_cost', 'actual_labor_cost', 'actual_expense_cost',
             'total_actual_cost', 'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
+    
+    def get_sales_order_no(self, obj):
+        return obj.sales_order.order_no if obj.sales_order else None
     
     def get_actual_material_cost(self, obj):
         # Will be calculated in reports service

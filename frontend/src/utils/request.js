@@ -25,7 +25,11 @@ service.interceptors.request.use(
 // Response interceptor
 service.interceptors.response.use(
   response => {
-    // 直接返回响应数据的 data 部分
+    // 对于blob类型的响应，返回完整响应对象
+    if (response.config.responseType === 'blob') {
+      return response
+    }
+    // 其他情况直接返回响应数据的 data 部分
     return response.data
   },
   async error => {

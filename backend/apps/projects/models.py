@@ -26,6 +26,14 @@ class Project(BaseModel):
         related_name='projects',
         verbose_name='客户'
     )
+    sales_order = models.ForeignKey(
+        'sales.SalesOrder',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='linked_projects',
+        verbose_name='关联销售订单'
+    )
     manager = models.ForeignKey(
         'accounts.User',
         on_delete=models.PROTECT,

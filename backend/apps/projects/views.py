@@ -207,7 +207,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
     
     @action(detail=False, methods=['get'])
     def export_excel(self, request):
-        """Export BOM items to Excel file."""
+        """Export BOM items to Excel file with formatted headers."""
         project_id = request.query_params.get('project')
         
         if not project_id:
@@ -229,35 +229,124 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             is_deleted=False
         ).select_related('item', 'item__category')
         
-        data = []
-        for bom in bom_items:
-            data.append({
-                '物料编码': bom.item.sku,
-                '物料名称': bom.item.name,
-                '规格型号': bom.item.specification or '',
-                '单位': bom.item.get_unit_display(),
-                '物料类别': bom.item.category.name if bom.item.category else '',
-                '计划数量': float(bom.planned_qty),
-                '实际使用数量': float(bom.actual_qty),
-                '预估单价': float(bom.item.standard_cost),
-                '预估成本': float(bom.estimated_cost),
-                '备注': bom.notes or '',
-            })
-        
-        df = pd.DataFrame(data)
-        
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, index=False, sheet_name='BOM清单')
-            
-            # Get workbook and worksheet
             workbook = writer.book
-            worksheet = writer.sheets['BOM清单']
+            worksheet = workbook.add_worksheet('BOM清单')
             
-            # Set column widths
-            column_widths = [15, 25, 20, 8, 15, 12, 12, 12, 12, 25]
-            for i, width in enumerate(column_widths):
-                worksheet.set_column(i, i, width)
+            # Define formats
+            title_format = workbook.add_format({
+                'bold': True,
+                'font_size': 14,
+                'align': 'left',
+                'valign': 'vcenter'
+            })
+            header_format = workbook.add_format({
+                'bold': True,
+                'bg_color': '#4472C4',
+                'font_color': 'white',
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter'
+            })
+            data_format = workbook.add_format({
+                'border': 1,
+                'align': 'left',
+                'valign': 'vcenter'
+            })
+            number_format = workbook.add_format({
+                'border': 1,
+                'align': 'right',
+                'valign': 'vcenter',
+                'num_format': '#,##0'
+            })
+            money_format = workbook.add_format({
+                'border': 1,
+                'align': 'right',
+                'valign': 'vcenter',
+                'num_format': '¥#,##0.00'
+            })
+            
+            # Write title
+            from datetime import datetime
+            worksheet.merge_range(0, 0, 0, 9, f'项目BOM清单 - {project.name} ({project.code})', title_format)
+            worksheet.write(1, 0, f'导出时间: {datetime.now().strftime("%Y-%m-%d %H:%M")}')
+            
+            # Column headers
+            headers = [
+                ('序号', 6),
+                ('物料编码', 15),
+                ('物料名称', 25),
+                ('规格型号', 20),
+                ('单位', 8),
+                ('物料类别', 15),
+                ('计划数量', 12),
+                ('已使用', 10),
+                ('预估单价', 12),
+                ('预估成本', 12),
+                ('备注', 25),
+            ]
+            
+            # Write headers (row 3)
+            for col, (header, width) in enumerate(headers):
+                worksheet.write(3, col, header, header_format)
+                worksheet.set_column(col, col, width)
+            
+            # Write data
+            row = 4
+            total_planned = 0
+            total_actual = 0
+            total_cost = 0
+            
+            for idx, bom in enumerate(bom_items, 1):
+                planned = float(bom.planned_qty)
+                actual = float(bom.actual_qty)
+                price = float(bom.item.standard_cost)
+                cost = float(bom.estimated_cost)
+                
+                total_planned += planned
+                total_actual += actual
+                total_cost += cost
+                
+                worksheet.write(row, 0, idx, data_format)
+                worksheet.write(row, 1, bom.item.sku, data_format)
+                worksheet.write(row, 2, bom.item.name, data_format)
+                worksheet.write(row, 3, bom.item.specification or '', data_format)
+                worksheet.write(row, 4, bom.item.get_unit_display(), data_format)
+                worksheet.write(row, 5, bom.item.category.name if bom.item.category else '', data_format)
+                worksheet.write(row, 6, planned, number_format)
+                worksheet.write(row, 7, actual, number_format)
+                worksheet.write(row, 8, price, money_format)
+                worksheet.write(row, 9, cost, money_format)
+                worksheet.write(row, 10, bom.notes or '', data_format)
+                row += 1
+            
+            # Write totals
+            total_format = workbook.add_format({
+                'bold': True,
+                'border': 1,
+                'bg_color': '#E2EFDA',
+                'align': 'right'
+            })
+            worksheet.write(row, 5, '合计:', total_format)
+            worksheet.write(row, 6, total_planned, total_format)
+            worksheet.write(row, 7, total_actual, total_format)
+            worksheet.write(row, 8, '', total_format)
+            worksheet.write(row, 9, total_cost, workbook.add_format({
+                'bold': True,
+                'border': 1,
+                'bg_color': '#E2EFDA',
+                'align': 'right',
+                'num_format': '¥#,##0.00'
+            }))
+            worksheet.write(row, 10, '', total_format)
+            
+            # Set row heights
+            worksheet.set_row(0, 25)
+            worksheet.set_row(3, 22)
+            
+            # Freeze panes
+            worksheet.freeze_panes(4, 0)
         
         output.seek(0)
         
@@ -270,49 +359,174 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
     
     @action(detail=False, methods=['get'])
     def export_template(self, request):
-        """Export BOM import template."""
-        # Create template with example data
-        template_data = [
-            {
-                '物料编码(必填)': 'MAT001',
-                '计划数量(必填)': 100,
-                '预估单价': 10.00,
-                '备注': '示例数据，请删除后填写实际数据',
-            },
-            {
-                '物料编码(必填)': 'MAT002',
-                '计划数量(必填)': 50,
-                '预估单价': 25.50,
-                '备注': '',
-            },
-        ]
-        
-        df = pd.DataFrame(template_data)
-        
+        """Export BOM import template with headers and example data."""
         output = BytesIO()
+        
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, index=False, sheet_name='BOM导入模板')
-            
             workbook = writer.book
-            worksheet = writer.sheets['BOM导入模板']
             
-            # Set column widths
-            worksheet.set_column(0, 0, 20)  # 物料编码
-            worksheet.set_column(1, 1, 15)  # 计划数量
-            worksheet.set_column(2, 2, 12)  # 预估单价
-            worksheet.set_column(3, 3, 30)  # 备注
+            # ========== Sheet 1: BOM导入数据 ==========
+            worksheet = workbook.add_worksheet('BOM导入数据')
             
-            # Add header format
+            # Define formats
             header_format = workbook.add_format({
                 'bold': True,
                 'bg_color': '#4472C4',
                 'font_color': 'white',
-                'border': 1
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter',
+                'text_wrap': True
+            })
+            required_format = workbook.add_format({
+                'bold': True,
+                'bg_color': '#C00000',
+                'font_color': 'white',
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter',
+                'text_wrap': True
+            })
+            readonly_format = workbook.add_format({
+                'bold': True,
+                'bg_color': '#808080',
+                'font_color': 'white',
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter',
+                'text_wrap': True
+            })
+            example_format = workbook.add_format({
+                'bg_color': '#FFF2CC',
+                'border': 1,
+                'italic': True,
+                'font_color': '#666666'
+            })
+            readonly_example_format = workbook.add_format({
+                'bg_color': '#E0E0E0',
+                'border': 1,
+                'italic': True,
+                'font_color': '#999999'
             })
             
-            # Write headers with format
-            for col, header in enumerate(df.columns):
-                worksheet.write(0, col, header, header_format)
+            # Column headers: (name, width, type: 'required'/'optional'/'readonly')
+            headers = [
+                ('序号', 8, 'readonly'),
+                ('物料编码*', 15, 'required'),
+                ('物料名称', 20, 'readonly'),
+                ('规格型号', 15, 'readonly'),
+                ('单位', 8, 'readonly'),
+                ('计划数量*', 12, 'required'),
+                ('已领用', 10, 'readonly'),
+                ('剩余需求', 10, 'readonly'),
+                ('预估单价', 12, 'optional'),
+                ('预估成本', 12, 'readonly'),
+                ('备注', 25, 'optional'),
+            ]
+            
+            # Write headers
+            for col, (header, width, htype) in enumerate(headers):
+                if htype == 'required':
+                    fmt = required_format
+                elif htype == 'readonly':
+                    fmt = readonly_format
+                else:
+                    fmt = header_format
+                worksheet.write(0, col, header, fmt)
+                worksheet.set_column(col, col, width)
+            
+            # Write example data (row 1)
+            example_data = [
+                (1, example_format),
+                ('MAT001', example_format),
+                ('(系统自动填充)', readonly_example_format),
+                ('(系统自动填充)', readonly_example_format),
+                ('(自动)', readonly_example_format),
+                (100, example_format),
+                ('(自动)', readonly_example_format),
+                ('(自动)', readonly_example_format),
+                (10.00, example_format),
+                ('(自动计算)', readonly_example_format),
+                ('示例，请删除', example_format),
+            ]
+            for col, (value, fmt) in enumerate(example_data):
+                worksheet.write(1, col, value, fmt)
+            
+            # Write second example row
+            example_data2 = [
+                (2, example_format),
+                ('MAT002', example_format),
+                ('(系统自动填充)', readonly_example_format),
+                ('(系统自动填充)', readonly_example_format),
+                ('(自动)', readonly_example_format),
+                (50, example_format),
+                ('(自动)', readonly_example_format),
+                ('(自动)', readonly_example_format),
+                (25.50, example_format),
+                ('(自动计算)', readonly_example_format),
+                ('', example_format),
+            ]
+            for col, (value, fmt) in enumerate(example_data2):
+                worksheet.write(2, col, value, fmt)
+            
+            # Set row height
+            worksheet.set_row(0, 30)
+            
+            # Freeze header row
+            worksheet.freeze_panes(1, 0)
+            
+            # ========== Sheet 2: 填写说明 ==========
+            help_sheet = workbook.add_worksheet('填写说明')
+            
+            title_format = workbook.add_format({
+                'bold': True,
+                'font_size': 16,
+                'font_color': '#4472C4'
+            })
+            section_format = workbook.add_format({
+                'bold': True,
+                'font_size': 12,
+                'font_color': '#C00000'
+            })
+            bold_format = workbook.add_format({'bold': True})
+            
+            help_content = [
+                ('BOM导入模板填写说明', title_format),
+                ('', None),
+                ('【列说明】', section_format),
+                ('', None),
+                ('红色表头 = 必填字段（导入时必须填写）', bold_format),
+                ('  • 物料编码*：必须与系统中物料管理的SKU完全一致', None),
+                ('  • 计划数量*：正整数，表示该物料在项目中的计划使用数量', None),
+                ('', None),
+                ('蓝色表头 = 选填字段（可以为空）', bold_format),
+                ('  • 预估单价：物料的预估采购单价，不填则使用物料的标准成本', None),
+                ('  • 备注：备注信息', None),
+                ('', None),
+                ('灰色表头 = 系统自动填充（导入时忽略，无需填写）', bold_format),
+                ('  • 序号、物料名称、规格型号、单位：根据物料编码自动获取', None),
+                ('  • 已领用、剩余需求、预估成本：系统自动计算', None),
+                ('', None),
+                ('【导入步骤】', section_format),
+                ('', None),
+                ('1. 删除示例数据行（黄色背景的行）', None),
+                ('2. 只填写：物料编码、计划数量、预估单价（可选）、备注（可选）', None),
+                ('3. 灰色列可以留空或删除，系统会自动忽略', None),
+                ('4. 保存文件并在系统中导入', None),
+                ('', None),
+                ('【常见错误】', section_format),
+                ('', None),
+                ('• 物料编码不存在：请先在"物料管理"中创建该物料', None),
+                ('• 数量格式错误：请输入正整数', None),
+                ('• 物料已存在：勾选"更新已存在的物料"可覆盖', None),
+            ]
+            
+            help_sheet.set_column(0, 0, 70)
+            for row, (text, fmt) in enumerate(help_content):
+                if fmt:
+                    help_sheet.write(row, 0, text, fmt)
+                else:
+                    help_sheet.write(row, 0, text)
         
         output.seek(0)
         
@@ -407,6 +621,10 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             sku = str(row[sku_column]).strip() if pd.notna(row[sku_column]) else ''
             if not sku:
                 error_rows.append({'row': row_num, 'error': '物料编码为空'})
+                continue
+            
+            # Skip example/template rows
+            if sku.startswith('MAT00') or sku.startswith('(') or '示例' in sku or '自动' in sku:
                 continue
             
             # Find item by SKU
@@ -644,11 +862,16 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             'items': shortage_list
         })
     
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get', 'post'])
     def copy_from_project(self, request):
         """Copy BOM from another project."""
-        source_project_id = request.query_params.get('source_project')
-        target_project_id = request.query_params.get('target_project')
+        # Support both GET and POST
+        if request.method == 'POST':
+            source_project_id = request.data.get('source_project')
+            target_project_id = request.data.get('target_project')
+        else:
+            source_project_id = request.query_params.get('source_project')
+            target_project_id = request.query_params.get('target_project')
         
         if not source_project_id or not target_project_id:
             return Response(

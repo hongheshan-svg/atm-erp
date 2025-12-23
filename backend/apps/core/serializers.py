@@ -51,9 +51,9 @@ class AttachmentSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'file_size', 'file_type', 'uploaded_by', 'uploaded_at']
     
     def get_file_url(self, obj):
-        request = self.context.get('request')
-        if obj.file and request:
-            return request.build_absolute_uri(obj.file.url)
+        if obj.file:
+            # 返回相对路径，让前端使用当前域名访问
+            return f"/media/{obj.file.name}"
         return None
     
     def get_file_size_display(self, obj):

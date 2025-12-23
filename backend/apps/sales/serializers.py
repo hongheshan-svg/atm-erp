@@ -13,17 +13,44 @@ from .models import (
 
 class SalesQuotationLineSerializer(serializers.ModelSerializer):
     """SalesQuotationLine serializer."""
-    item_name = serializers.CharField(source='item.name', read_only=True)
-    item_sku = serializers.CharField(source='item.sku', read_only=True)
-    item_unit = serializers.CharField(source='item.get_unit_display', read_only=True)
+    # 物料关联信息（可选）
+    item_name = serializers.SerializerMethodField()
+    item_sku = serializers.SerializerMethodField()
+    item_unit = serializers.SerializerMethodField()
+    item_spec = serializers.SerializerMethodField()
     
     class Meta:
         model = SalesQuotationLine
         fields = [
-            'id', 'quotation', 'item', 'item_sku', 'item_name', 'item_unit',
+            'id', 'quotation', 'item', 'item_sku', 'item_name', 'item_unit', 'item_spec',
+            'custom_name', 'custom_spec', 'custom_unit',
             'qty', 'unit_price', 'line_amount', 'notes', 'is_deleted'
         ]
         read_only_fields = ['line_amount']
+    
+    def get_item_name(self, obj):
+        """返回产品名称：优先物料，其次手动填写"""
+        if obj.item:
+            return obj.item.name
+        return obj.custom_name or ''
+    
+    def get_item_sku(self, obj):
+        """返回产品编码"""
+        if obj.item:
+            return obj.item.sku
+        return ''
+    
+    def get_item_unit(self, obj):
+        """返回单位"""
+        if obj.item:
+            return obj.item.get_unit_display()
+        return obj.custom_unit or '件'
+    
+    def get_item_spec(self, obj):
+        """返回规格型号"""
+        if obj.item:
+            return getattr(obj.item, 'spec', '') or ''
+        return obj.custom_spec or ''
 
 
 class SalesQuotationSerializer(serializers.ModelSerializer):
@@ -31,6 +58,7 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source='customer.name', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    tax_rate_display = serializers.CharField(source='get_tax_rate_display', read_only=True)
     lines = SalesQuotationLineSerializer(many=True, read_only=True)
     
     class Meta:
@@ -38,9 +66,10 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'quote_no', 'customer', 'customer_name', 'project', 'project_name',
             'quote_date', 'valid_until', 'status', 'status_display', 'version',
-            'total_amount', 'notes', 'lines', 'is_deleted', 'created_at', 'updated_at'
+            'tax_rate', 'tax_rate_display', 'total_amount', 'tax_amount', 'total_with_tax',
+            'notes', 'lines', 'is_deleted', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['quote_no', 'quote_date', 'created_at', 'updated_at']
+        read_only_fields = ['quote_no', 'quote_date', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
     
     def create(self, validated_data):
         """Create quotation with lines."""
@@ -50,19 +79,28 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
             quotation = SalesQuotation.objects.create(**validated_data)
             
             for line_data in lines_data:
-                if line_data.get('item') and line_data.get('qty'):
+                # 支持两种模式：选择物料 或 手动填写产品信息
+                has_item = line_data.get('item')
+                has_custom = line_data.get('custom_name')
+                
+                if (has_item or has_custom) and line_data.get('qty'):
                     SalesQuotationLine.objects.create(
                         quotation=quotation,
-                        item_id=line_data['item'],
+                        item_id=line_data.get('item') if has_item else None,
+                        custom_name=line_data.get('custom_name', ''),
+                        custom_spec=line_data.get('custom_spec', ''),
+                        custom_unit=line_data.get('custom_unit', '件'),
                         qty=line_data['qty'],
                         unit_price=line_data.get('unit_price', 0),
                         notes=line_data.get('notes', ''),
                         created_by=quotation.created_by
                     )
             
-            # Update total amount
+            # Update total amount and tax
             total = quotation.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
             quotation.total_amount = total
+            quotation.tax_amount = total * quotation.tax_rate / 100
+            quotation.total_with_tax = total + quotation.tax_amount
             quotation.save()
         
         return quotation
@@ -81,19 +119,28 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
             instance.lines.all().delete()
             
             for line_data in lines_data:
-                if line_data.get('item') and line_data.get('qty'):
+                # 支持两种模式：选择物料 或 手动填写产品信息
+                has_item = line_data.get('item')
+                has_custom = line_data.get('custom_name')
+                
+                if (has_item or has_custom) and line_data.get('qty'):
                     SalesQuotationLine.objects.create(
                         quotation=instance,
-                        item_id=line_data['item'],
+                        item_id=line_data.get('item') if has_item else None,
+                        custom_name=line_data.get('custom_name', ''),
+                        custom_spec=line_data.get('custom_spec', ''),
+                        custom_unit=line_data.get('custom_unit', '件'),
                         qty=line_data['qty'],
                         unit_price=line_data.get('unit_price', 0),
                         notes=line_data.get('notes', ''),
                         created_by=instance.created_by
                     )
             
-            # Update total amount
+            # Update total amount and tax
             total = instance.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
             instance.total_amount = total
+            instance.tax_amount = total * instance.tax_rate / 100
+            instance.total_with_tax = total + instance.tax_amount
             instance.save()
         
         return instance
@@ -101,19 +148,46 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
 
 class SalesOrderLineSerializer(serializers.ModelSerializer):
     """SalesOrderLine serializer."""
-    item_name = serializers.CharField(source='item.name', read_only=True)
-    item_sku = serializers.CharField(source='item.sku', read_only=True)
-    item_unit = serializers.CharField(source='item.get_unit_display', read_only=True)
+    # 物料关联信息（可选）
+    item_name = serializers.SerializerMethodField()
+    item_sku = serializers.SerializerMethodField()
+    item_unit = serializers.SerializerMethodField()
+    item_spec = serializers.SerializerMethodField()
     remaining_qty = serializers.SerializerMethodField()
     
     class Meta:
         model = SalesOrderLine
         fields = [
-            'id', 'so', 'item', 'item_sku', 'item_name', 'item_unit',
+            'id', 'so', 'item', 'item_sku', 'item_name', 'item_unit', 'item_spec',
+            'custom_name', 'custom_spec', 'custom_unit',
             'qty', 'unit_price', 'line_amount', 'delivered_qty', 'remaining_qty',
             'notes', 'is_deleted'
         ]
         read_only_fields = ['line_amount', 'delivered_qty']
+    
+    def get_item_name(self, obj):
+        """返回产品名称：优先物料，其次手动填写"""
+        if obj.item:
+            return obj.item.name
+        return obj.custom_name or ''
+    
+    def get_item_sku(self, obj):
+        """返回产品编码"""
+        if obj.item:
+            return obj.item.sku
+        return ''
+    
+    def get_item_unit(self, obj):
+        """返回单位"""
+        if obj.item:
+            return obj.item.get_unit_display()
+        return obj.custom_unit or '件'
+    
+    def get_item_spec(self, obj):
+        """返回规格型号"""
+        if obj.item:
+            return getattr(obj.item, 'spec', '') or ''
+        return obj.custom_spec or ''
     
     def get_remaining_qty(self, obj):
         return float(obj.qty - obj.delivered_qty)
@@ -121,7 +195,13 @@ class SalesOrderLineSerializer(serializers.ModelSerializer):
 
 class SalesOrderLineWriteSerializer(serializers.Serializer):
     """Serializer for creating/updating SO lines."""
-    item = serializers.IntegerField()
+    # 物料可选（非标定制可不选）
+    item = serializers.IntegerField(required=False, allow_null=True)
+    # 手动填写的产品信息
+    custom_name = serializers.CharField(required=False, allow_blank=True, default='')
+    custom_spec = serializers.CharField(required=False, allow_blank=True, default='')
+    custom_unit = serializers.CharField(required=False, allow_blank=True, default='件')
+    
     qty = serializers.DecimalField(max_digits=15, decimal_places=2)
     unit_price = serializers.DecimalField(max_digits=15, decimal_places=2)
     notes = serializers.CharField(required=False, allow_blank=True, default='')
@@ -132,6 +212,7 @@ class SalesOrderSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source='customer.name', read_only=True)
     project_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    tax_rate_display = serializers.CharField(source='get_tax_rate_display', read_only=True)
     lines = SalesOrderLineSerializer(many=True, read_only=True)
     
     def get_project_name(self, obj):
@@ -141,10 +222,11 @@ class SalesOrderSerializer(serializers.ModelSerializer):
         model = SalesOrder
         fields = [
             'id', 'order_no', 'customer', 'customer_name', 'project', 'project_name',
-            'order_date', 'delivery_date', 'status', 'status_display', 'total_amount',
+            'order_date', 'delivery_date', 'status', 'status_display',
+            'tax_rate', 'tax_rate_display', 'total_amount', 'tax_amount', 'total_with_tax',
             'payment_terms', 'notes', 'lines', 'is_deleted', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['order_no', 'order_date', 'created_at', 'updated_at']
+        read_only_fields = ['order_no', 'order_date', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
     
     def create(self, validated_data):
         """Create SO with lines."""
@@ -154,19 +236,28 @@ class SalesOrderSerializer(serializers.ModelSerializer):
             so = SalesOrder.objects.create(**validated_data)
             
             for line_data in lines_data:
-                if line_data.get('item') and line_data.get('qty'):
+                # 支持两种模式：选择物料 或 手动填写产品信息
+                has_item = line_data.get('item')
+                has_custom = line_data.get('custom_name')
+                
+                if (has_item or has_custom) and line_data.get('qty'):
                     SalesOrderLine.objects.create(
                         so=so,
-                        item_id=line_data['item'],
+                        item_id=line_data.get('item') if has_item else None,
+                        custom_name=line_data.get('custom_name', ''),
+                        custom_spec=line_data.get('custom_spec', ''),
+                        custom_unit=line_data.get('custom_unit', '件'),
                         qty=line_data['qty'],
                         unit_price=line_data.get('unit_price', 0),
                         notes=line_data.get('notes', ''),
                         created_by=so.created_by
                     )
             
-            # Update total amount
+            # Update total amount and tax
             total = so.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
             so.total_amount = total
+            so.tax_amount = total * so.tax_rate / 100
+            so.total_with_tax = total + so.tax_amount
             so.save()
         
         return so
@@ -185,19 +276,28 @@ class SalesOrderSerializer(serializers.ModelSerializer):
             instance.lines.all().delete()
             
             for line_data in lines_data:
-                if line_data.get('item') and line_data.get('qty'):
+                # 支持两种模式：选择物料 或 手动填写产品信息
+                has_item = line_data.get('item')
+                has_custom = line_data.get('custom_name')
+                
+                if (has_item or has_custom) and line_data.get('qty'):
                     SalesOrderLine.objects.create(
                         so=instance,
-                        item_id=line_data['item'],
+                        item_id=line_data.get('item') if has_item else None,
+                        custom_name=line_data.get('custom_name', ''),
+                        custom_spec=line_data.get('custom_spec', ''),
+                        custom_unit=line_data.get('custom_unit', '件'),
                         qty=line_data['qty'],
                         unit_price=line_data.get('unit_price', 0),
                         notes=line_data.get('notes', ''),
                         created_by=instance.created_by
                     )
             
-            # Update total amount
+            # Update total amount and tax
             total = instance.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
             instance.total_amount = total
+            instance.tax_amount = total * instance.tax_rate / 100
+            instance.total_with_tax = total + instance.tax_amount
             instance.save()
         
         return instance

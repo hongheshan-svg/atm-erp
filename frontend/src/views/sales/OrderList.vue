@@ -42,9 +42,9 @@
             <el-tag :type="getStatusType(row.status)">{{ getStatusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="total_amount" label="总金额" width="120" align="right">
+        <el-table-column prop="total_with_tax" label="含税总额" width="120" align="right">
           <template #default="{ row }">
-            ¥{{ parseFloat(row.total_amount || 0).toFixed(2) }}
+            ¥{{ parseFloat(row.total_with_tax || row.total_amount || 0).toFixed(2) }}
           </template>
         </el-table-column>
         <el-table-column prop="order_date" label="订单日期" width="120" />
@@ -99,12 +99,24 @@
           </el-col>
         </el-row>
         <el-row :gutter="20">
-          <el-col :span="12">
+          <el-col :span="8">
+            <el-form-item label="增值税率">
+              <el-select v-model="form.tax_rate" placeholder="选择税率" style="width: 100%;">
+                <el-option :value="0" label="0% (免税)" />
+                <el-option :value="1" label="1%" />
+                <el-option :value="3" label="3%" />
+                <el-option :value="6" label="6%" />
+                <el-option :value="9" label="9%" />
+                <el-option :value="13" label="13%" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
             <el-form-item label="付款条款">
               <el-input v-model="form.payment_terms" placeholder="如：预付30%，发货前付清" />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col :span="8">
             <el-form-item label="备注">
               <el-input v-model="form.notes" placeholder="请输入备注" />
             </el-form-item>
@@ -112,49 +124,54 @@
         </el-row>
         
         <!-- 订单明细 -->
-        <el-divider content-position="left">订单明细</el-divider>
+        <el-divider content-position="left">订单明细（非标定制产品可直接填写）</el-divider>
         <div style="margin-bottom: 10px; display: flex; gap: 10px;">
           <el-button type="primary" size="small" @click="addLine">
             <el-icon><Plus /></el-icon>
             添加产品
           </el-button>
-          <el-button type="success" size="small" @click="showStockDialog">
-            <el-icon><Box /></el-icon>
-            从库存选择
-          </el-button>
         </div>
         
         <el-table :data="form.lines" border size="small">
-          <el-table-column label="产品/物料" min-width="200">
+          <el-table-column label="产品名称 *" min-width="180">
             <template #default="{ row, $index }">
-              <el-select v-model="row.item" placeholder="选择产品" filterable style="width: 100%;" @change="onItemChange($index)">
-                <el-option v-for="item in items" :key="item.id" :label="`${item.sku} - ${item.name}`" :value="item.id">
-                  <div style="display: flex; justify-content: space-between;">
-                    <span>{{ item.sku }} - {{ item.name }}</span>
-                    <span style="color: #67c23a; font-size: 12px; margin-left: 10px;">
-                      库存: {{ getItemStock(item.id) }}
-                    </span>
-                  </div>
-                </el-option>
-              </el-select>
+              <el-input 
+                v-model="row.custom_name" 
+                placeholder="输入产品名称" 
+                size="small"
+              />
             </template>
           </el-table-column>
-          <el-table-column label="数量" width="120">
+          <el-table-column label="规格型号" min-width="150">
             <template #default="{ row }">
-              <el-input-number v-model="row.qty" :min="1" :precision="0" size="small" style="width: 100%;" />
+              <el-input 
+                v-model="row.custom_spec" 
+                placeholder="如：φ20×100mm" 
+                size="small"
+              />
             </template>
           </el-table-column>
-          <el-table-column label="单价" width="120">
+          <el-table-column label="单位" width="80">
             <template #default="{ row }">
-              <el-input-number v-model="row.unit_price" :min="0" :precision="2" size="small" style="width: 100%;" />
+              <el-input v-model="row.custom_unit" placeholder="件" size="small" />
             </template>
           </el-table-column>
-          <el-table-column label="小计" width="120" align="right">
+          <el-table-column label="数量" width="100">
+            <template #default="{ row }">
+              <el-input-number v-model="row.qty" :min="1" :precision="0" size="small" controls-position="right" style="width: 100%;" />
+            </template>
+          </el-table-column>
+          <el-table-column label="单价" width="110">
+            <template #default="{ row }">
+              <el-input-number v-model="row.unit_price" :min="0" :precision="2" size="small" controls-position="right" style="width: 100%;" />
+            </template>
+          </el-table-column>
+          <el-table-column label="小计" width="100" align="right">
             <template #default="{ row }">
               ¥{{ ((row.qty || 0) * (row.unit_price || 0)).toFixed(2) }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="80" align="center">
+          <el-table-column label="操作" width="60" align="center">
             <template #default="{ $index }">
               <el-button type="danger" size="small" link @click="removeLine($index)">
                 <el-icon><Delete /></el-icon>
@@ -163,8 +180,19 @@
           </el-table-column>
         </el-table>
         
-        <div class="total-amount">
-          合计金额：<span class="amount">¥{{ calculateTotal().toFixed(2) }}</span>
+        <div class="total-section">
+          <div class="total-row">
+            <span class="label">不含税金额：</span>
+            <span class="value">¥{{ calculateTotal().toFixed(2) }}</span>
+          </div>
+          <div class="total-row">
+            <span class="label">税额 ({{ form.tax_rate }}%)：</span>
+            <span class="value">¥{{ calculateTax().toFixed(2) }}</span>
+          </div>
+          <div class="total-row total">
+            <span class="label">含税总额：</span>
+            <span class="amount">¥{{ calculateTotalWithTax().toFixed(2) }}</span>
+          </div>
         </div>
       </el-form>
       <template #footer>
@@ -183,36 +211,6 @@
       />
     </el-dialog>
 
-    <!-- 从库存选择对话框 -->
-    <el-dialog v-model="stockDialogVisible" title="从库存选择产品" width="900px" destroy-on-close>
-      <el-table
-        :data="stockItems"
-        v-loading="loadingStock"
-        @selection-change="handleStockSelection"
-        max-height="400"
-        border
-        stripe
-      >
-        <el-table-column type="selection" width="55" />
-        <el-table-column prop="item_sku" label="产品编码" width="120" />
-        <el-table-column prop="item_name" label="产品名称" />
-        <el-table-column prop="warehouse_name" label="仓库" width="120" />
-        <el-table-column prop="qty_on_hand" label="可用库存" width="100" align="right">
-          <template #default="{ row }">
-            <span style="color: #67c23a; font-weight: 600;">{{ parseFloat(row.qty_on_hand).toFixed(0) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="weighted_avg_cost" label="参考成本" width="100" align="right">
-          <template #default="{ row }">
-            ¥{{ parseFloat(row.weighted_avg_cost || 0).toFixed(2) }}
-          </template>
-        </el-table-column>
-      </el-table>
-      <template #footer>
-        <el-button @click="stockDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="confirmStockSelection">确定添加</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -220,7 +218,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Delete, Box } from '@element-plus/icons-vue'
+import { Plus, Delete } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
 
@@ -230,18 +228,12 @@ const saving = ref(false)
 const orders = ref([])
 const customers = ref([])
 const projects = ref([])
-const items = ref([])
-const stocks = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('创建销售订单')
 const isEdit = ref(false)
 const formRef = ref(null)
 const attachmentDialogVisible = ref(false)
 const currentOrder = ref(null)
-const stockDialogVisible = ref(false)
-const stockItems = ref([])
-const loadingStock = ref(false)
-const selectedStockItems = ref([])
 
 const searchForm = reactive({
   customer: null,
@@ -259,6 +251,7 @@ const form = reactive({
   customer: null,
   project: null,
   delivery_date: '',
+  tax_rate: 13,
   payment_terms: '',
   notes: '',
   lines: []
@@ -329,79 +322,6 @@ const loadProjects = async () => {
   }
 }
 
-const loadItems = async () => {
-  try {
-    const res = await request.get('/masterdata/items/')
-    items.value = res.data?.results || res.results || res.data || []
-  } catch (error) {
-    console.error('加载物料失败:', error)
-  }
-}
-
-const loadStocks = async () => {
-  try {
-    const res = await request.get('/inventory/stocks/', { params: { page_size: 500 } })
-    stocks.value = res.data?.results || res.results || res.data || []
-  } catch (error) {
-    console.error('加载库存失败:', error)
-  }
-}
-
-// 获取物料库存
-const getItemStock = (itemId) => {
-  const stock = stocks.value.find(s => s.item === itemId)
-  return stock ? parseFloat(stock.qty_on_hand).toFixed(0) : '0'
-}
-
-// 显示库存选择对话框
-const showStockDialog = async () => {
-  loadingStock.value = true
-  stockDialogVisible.value = true
-  try {
-    const res = await request.get('/inventory/stocks/', { params: { page_size: 200 } })
-    stockItems.value = (res.data?.results || res.results || res.data || [])
-      .filter(s => parseFloat(s.qty_on_hand) > 0)
-  } catch (error) {
-    console.error('加载库存失败:', error)
-  } finally {
-    loadingStock.value = false
-  }
-}
-
-// 库存选择变化
-const handleStockSelection = (selection) => {
-  selectedStockItems.value = selection
-}
-
-// 确认库存选择
-const confirmStockSelection = () => {
-  if (selectedStockItems.value.length === 0) {
-    ElMessage.warning('请选择至少一个产品')
-    return
-  }
-
-  selectedStockItems.value.forEach(stock => {
-    const exists = form.lines.some(line => line.item === stock.item)
-    if (!exists) {
-      const item = items.value.find(i => i.id === stock.item)
-      form.lines.push({
-        item: stock.item,
-        qty: 1,
-        unit_price: parseFloat(stock.weighted_avg_cost || 0) * 1.3
-      })
-    }
-  })
-
-  // 移除空行
-  form.lines = form.lines.filter(line => line.item !== null)
-  if (form.lines.length === 0) {
-    form.lines.push({ item: null, qty: 1, unit_price: 0 })
-  }
-
-  stockDialogVisible.value = false
-  ElMessage.success('已添加所选产品')
-}
-
 const resetSearch = () => {
   searchForm.customer = null
   searchForm.status = null
@@ -417,9 +337,10 @@ const handleAdd = () => {
     customer: null,
     project: null,
     delivery_date: '',
+    tax_rate: 13,
     payment_terms: '',
     notes: '',
-    lines: [{ item: null, qty: 1, unit_price: 0 }]
+    lines: [{ custom_name: '', custom_spec: '', custom_unit: '件', qty: 1, unit_price: 0 }]
   })
   dialogVisible.value = true
 }
@@ -437,18 +358,22 @@ const handleEdit = async (row) => {
       customer: data.customer,
       project: data.project,
       delivery_date: data.delivery_date || '',
+      tax_rate: data.tax_rate ?? 13,
       payment_terms: data.payment_terms || '',
       notes: data.notes || '',
       lines: (data.lines || []).map(line => ({
         id: line.id,
         item: line.item,
-        qty: line.qty,
+        custom_name: line.custom_name || line.item_name || '',
+        custom_spec: line.custom_spec || line.item_spec || '',
+        custom_unit: line.custom_unit || line.item_unit || '件',
+        qty: parseFloat(line.qty || 1),
         unit_price: parseFloat(line.unit_price || 0)
       }))
     })
     
     if (form.lines.length === 0) {
-      form.lines = [{ item: null, qty: 1, unit_price: 0 }]
+      form.lines = [{ custom_name: '', custom_spec: '', custom_unit: '件', qty: 1, unit_price: 0 }]
     }
     
     dialogVisible.value = true
@@ -462,7 +387,7 @@ const handleView = (row) => {
 }
 
 const addLine = () => {
-  form.lines.push({ item: null, qty: 1, unit_price: 0 })
+  form.lines.push({ custom_name: '', custom_spec: '', custom_unit: '件', qty: 1, unit_price: 0 })
 }
 
 const removeLine = (index) => {
@@ -473,28 +398,28 @@ const removeLine = (index) => {
   }
 }
 
-const onItemChange = (index) => {
-  const line = form.lines[index]
-  const item = items.value.find(i => i.id === line.item)
-  if (item) {
-    // 销售价格可以基于成本加成
-    line.unit_price = parseFloat(item.standard_cost || 0) * 1.3 // 默认30%加成
-  }
-}
-
 const calculateTotal = () => {
   return form.lines.reduce((sum, line) => {
     return sum + (line.qty || 0) * (line.unit_price || 0)
   }, 0)
 }
 
+const calculateTax = () => {
+  return calculateTotal() * (form.tax_rate || 0) / 100
+}
+
+const calculateTotalWithTax = () => {
+  return calculateTotal() + calculateTax()
+}
+
 const handleSave = async () => {
   try {
     await formRef.value?.validate()
     
-    const validLines = form.lines.filter(line => line.item && line.qty > 0)
+    // 验证：至少有一行填写了产品名称
+    const validLines = form.lines.filter(line => line.custom_name && line.qty > 0)
     if (validLines.length === 0) {
-      ElMessage.warning('请至少添加一行有效的物料明细')
+      ElMessage.warning('请至少添加一行产品明细（需填写产品名称）')
       return
     }
     
@@ -504,10 +429,14 @@ const handleSave = async () => {
       customer: form.customer,
       project: form.project,
       delivery_date: form.delivery_date,
+      tax_rate: form.tax_rate,
       payment_terms: form.payment_terms,
       notes: form.notes,
       lines: validLines.map(line => ({
-        item: line.item,
+        item: line.item || null,
+        custom_name: line.custom_name,
+        custom_spec: line.custom_spec || '',
+        custom_unit: line.custom_unit || '件',
         qty: line.qty,
         unit_price: line.unit_price
       }))
@@ -572,8 +501,6 @@ onMounted(() => {
   loadOrders()
   loadCustomers()
   loadProjects()
-  loadItems()
-  loadStocks()
 })
 </script>
 
@@ -588,13 +515,38 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
-.total-amount {
+.total-section {
   text-align: right;
   margin-top: 15px;
-  font-size: 16px;
+  padding: 10px;
+  background: #fafafa;
+  border-radius: 4px;
 }
 
-.total-amount .amount {
+.total-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.total-row .label {
+  color: #606266;
+  margin-right: 10px;
+}
+
+.total-row .value {
+  min-width: 100px;
+  text-align: right;
+}
+
+.total-row.total {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #dcdfe6;
+}
+
+.total-row .amount {
   color: #f56c6c;
   font-weight: bold;
   font-size: 18px;

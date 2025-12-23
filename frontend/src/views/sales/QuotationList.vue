@@ -48,9 +48,14 @@
         <el-table-column prop="project_name" label="关联项目" width="150" show-overflow-tooltip />
         <el-table-column prop="quote_date" label="报价日期" width="120" />
         <el-table-column prop="valid_until" label="有效期至" width="120" />
-        <el-table-column prop="total_amount" label="报价金额" width="130" align="right">
+        <el-table-column prop="tax_rate" label="税率" width="80" align="center">
           <template #default="{ row }">
-            ¥{{ (row.total_amount || 0).toFixed(2) }}
+            {{ row.tax_rate ?? 13 }}%
+          </template>
+        </el-table-column>
+        <el-table-column prop="total_with_tax" label="含税总额" width="130" align="right">
+          <template #default="{ row }">
+            ¥{{ (row.total_with_tax || row.total_amount || 0).toFixed(2) }}
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">

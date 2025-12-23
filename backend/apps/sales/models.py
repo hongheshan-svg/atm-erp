@@ -18,6 +18,15 @@ class SalesQuotation(BaseModel):
         ('EXPIRED', '已过期'),
     ]
     
+    TAX_RATE_CHOICES = [
+        (0, '0% (免税)'),
+        (1, '1%'),
+        (3, '3%'),
+        (6, '6%'),
+        (9, '9%'),
+        (13, '13%'),
+    ]
+    
     quote_no = models.CharField(max_length=50, unique=True, verbose_name='报价单号')
     customer = models.ForeignKey(
         'masterdata.Customer',
@@ -42,11 +51,30 @@ class SalesQuotation(BaseModel):
         verbose_name='状态'
     )
     version = models.IntegerField(default=1, verbose_name='版本号')
+    
+    # 税率相关
+    tax_rate = models.IntegerField(
+        choices=TAX_RATE_CHOICES,
+        default=13,
+        verbose_name='增值税税率(%)'
+    )
     total_amount = models.DecimalField(
         max_digits=15,
         decimal_places=2,
         default=0,
-        verbose_name='总金额'
+        verbose_name='不含税金额'
+    )
+    tax_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='税额'
+    )
+    total_with_tax = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='含税总额'
     )
     notes = models.TextField(blank=True, verbose_name='备注')
     
@@ -68,6 +96,7 @@ class SalesQuotation(BaseModel):
 class SalesQuotationLine(BaseModel):
     """
     Sales Quotation Line - 销售报价明细
+    NOTE: 非标定制项目支持手动填写产品信息，item 为可选
     """
     quotation = models.ForeignKey(
         SalesQuotation,
@@ -75,12 +104,20 @@ class SalesQuotationLine(BaseModel):
         related_name='lines',
         verbose_name='销售报价'
     )
+    # 物料关联（可选，非标产品可不选）
     item = models.ForeignKey(
         'masterdata.Item',
         on_delete=models.PROTECT,
         related_name='quotation_lines',
-        verbose_name='物料'
+        verbose_name='物料',
+        null=True,
+        blank=True
     )
+    # 手动填写的产品信息（非标定制用）
+    custom_name = models.CharField(max_length=200, blank=True, verbose_name='产品名称')
+    custom_spec = models.CharField(max_length=200, blank=True, verbose_name='规格型号')
+    custom_unit = models.CharField(max_length=50, blank=True, default='件', verbose_name='单位')
+    
     qty = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='数量')
     unit_price = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='单价')
     line_amount = models.DecimalField(
@@ -90,6 +127,13 @@ class SalesQuotationLine(BaseModel):
         verbose_name='行金额'
     )
     notes = models.TextField(blank=True, verbose_name='备注')
+    
+    @property
+    def display_name(self):
+        """返回产品显示名称"""
+        if self.item:
+            return self.item.name
+        return self.custom_name or '未命名产品'
     
     class Meta:
         db_table = 'sales_quotation_line'
@@ -118,6 +162,15 @@ class SalesOrder(BaseModel):
         ('CANCELLED', '已取消'),
     ]
     
+    TAX_RATE_CHOICES = [
+        (0, '0% (免税)'),
+        (1, '1%'),
+        (3, '3%'),
+        (6, '6%'),
+        (9, '9%'),
+        (13, '13%'),
+    ]
+    
     order_no = models.CharField(max_length=50, unique=True, verbose_name='订单号')
     customer = models.ForeignKey(
         'masterdata.Customer',
@@ -141,11 +194,30 @@ class SalesOrder(BaseModel):
         default='DRAFT',
         verbose_name='状态'
     )
+    
+    # 税率相关
+    tax_rate = models.IntegerField(
+        choices=TAX_RATE_CHOICES,
+        default=13,
+        verbose_name='增值税税率(%)'
+    )
     total_amount = models.DecimalField(
         max_digits=15,
         decimal_places=2,
         default=0,
-        verbose_name='总金额'
+        verbose_name='不含税金额'
+    )
+    tax_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='税额'
+    )
+    total_with_tax = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='含税总额'
     )
     payment_terms = models.CharField(max_length=200, blank=True, verbose_name='付款条款')
     notes = models.TextField(blank=True, verbose_name='备注')
@@ -168,6 +240,7 @@ class SalesOrder(BaseModel):
 class SalesOrderLine(BaseModel):
     """
     Sales Order Line - 销售订单明细
+    NOTE: 非标定制项目支持手动填写产品信息，item 为可选
     """
     so = models.ForeignKey(
         SalesOrder,
@@ -175,12 +248,20 @@ class SalesOrderLine(BaseModel):
         related_name='lines',
         verbose_name='销售订单'
     )
+    # 物料关联（可选，非标产品可不选）
     item = models.ForeignKey(
         'masterdata.Item',
         on_delete=models.PROTECT,
         related_name='so_lines',
-        verbose_name='物料'
+        verbose_name='物料',
+        null=True,
+        blank=True
     )
+    # 手动填写的产品信息（非标定制用）
+    custom_name = models.CharField(max_length=200, blank=True, verbose_name='产品名称')
+    custom_spec = models.CharField(max_length=200, blank=True, verbose_name='规格型号')
+    custom_unit = models.CharField(max_length=50, blank=True, default='件', verbose_name='单位')
+    
     qty = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='订购数量')
     unit_price = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='单价')
     line_amount = models.DecimalField(
@@ -196,6 +277,20 @@ class SalesOrderLine(BaseModel):
         verbose_name='已发货数量'
     )
     notes = models.TextField(blank=True, verbose_name='备注')
+    
+    @property
+    def display_name(self):
+        """返回产品显示名称"""
+        if self.item:
+            return self.item.name
+        return self.custom_name or '未命名产品'
+    
+    @property
+    def display_spec(self):
+        """返回产品规格"""
+        if self.item:
+            return self.item.spec or ''
+        return self.custom_spec or ''
     
     class Meta:
         db_table = 'sales_order_line'

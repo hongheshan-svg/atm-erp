@@ -44,6 +44,7 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(source='project.name', read_only=True)
     requestor_name = serializers.CharField(source='requestor.get_full_name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    tax_rate_display = serializers.CharField(source='get_tax_rate_display', read_only=True)
     lines = PurchaseRequestLineSerializer(many=True, read_only=True)
     budget_info = serializers.SerializerMethodField()
     
@@ -51,10 +52,11 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
         model = PurchaseRequest
         fields = [
             'id', 'request_no', 'project', 'project_name', 'requestor', 'requestor_name',
-            'request_date', 'required_date', 'status', 'status_display', 'total_amount',
+            'request_date', 'required_date', 'status', 'status_display',
+            'tax_rate', 'tax_rate_display', 'total_amount', 'tax_amount', 'total_with_tax',
             'notes', 'lines', 'is_deleted', 'created_at', 'updated_at', 'budget_info'
         ]
-        read_only_fields = ['request_no', 'requestor', 'request_date', 'created_at', 'updated_at']
+        read_only_fields = ['request_no', 'requestor', 'request_date', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
     
     def get_budget_info(self, obj):
         """Get budget validation info for this request."""
@@ -90,6 +92,8 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
                     total_amount += qty * estimated_price
             
             pr.total_amount = total_amount
+            pr.tax_amount = total_amount * pr.tax_rate / 100
+            pr.total_with_tax = total_amount + pr.tax_amount
             pr.save()
         
         return pr
@@ -124,6 +128,8 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
                     total_amount += qty * estimated_price
             
             instance.total_amount = total_amount
+            instance.tax_amount = total_amount * instance.tax_rate / 100
+            instance.total_with_tax = total_amount + instance.tax_amount
             instance.save()
         
         return instance
@@ -154,16 +160,18 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    tax_rate_display = serializers.CharField(source='get_tax_rate_display', read_only=True)
     lines = PurchaseOrderLineSerializer(many=True, read_only=True)
     
     class Meta:
         model = PurchaseOrder
         fields = [
             'id', 'order_no', 'supplier', 'supplier_name', 'project', 'project_name',
-            'order_date', 'delivery_date', 'status', 'status_display', 'total_amount',
+            'order_date', 'delivery_date', 'status', 'status_display',
+            'tax_rate', 'tax_rate_display', 'total_amount', 'tax_amount', 'total_with_tax',
             'payment_terms', 'notes', 'lines', 'is_deleted', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['order_no', 'order_date', 'created_at', 'updated_at']
+        read_only_fields = ['order_no', 'order_date', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
     
     def create(self, validated_data):
         """Create PO with lines."""
@@ -183,9 +191,11 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
                         created_by=po.created_by
                     )
             
-            # Update total amount
+            # Update total amount and tax
             total = po.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
             po.total_amount = total
+            po.tax_amount = total * po.tax_rate / 100
+            po.total_with_tax = total + po.tax_amount
             po.save()
         
         return po
@@ -214,9 +224,11 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
                         created_by=instance.created_by
                     )
             
-            # Update total amount
+            # Update total amount and tax
             total = instance.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
             instance.total_amount = total
+            instance.tax_amount = total * instance.tax_rate / 100
+            instance.total_with_tax = total + instance.tax_amount
             instance.save()
         
         return instance

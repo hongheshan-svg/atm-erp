@@ -489,8 +489,13 @@ const handleExportExcel = async () => {
       responseType: 'blob'
     })
     
-    // Create download link
-    const url = window.URL.createObjectURL(new Blob([response.data]))
+    // 获取实际的blob数据
+    const blobData = response.data || response
+    const blob = new Blob([blobData], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    })
+    
+    const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
     link.setAttribute('download', `BOM_${currentProjectName.value.split(' - ')[0]}.xlsx`)
@@ -512,7 +517,13 @@ const handleDownloadTemplate = async () => {
       responseType: 'blob'
     })
     
-    const url = window.URL.createObjectURL(new Blob([response.data]))
+    // 获取实际的blob数据
+    const blobData = response.data || response
+    const blob = new Blob([blobData], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    })
+    
+    const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
     link.setAttribute('download', 'BOM_import_template.xlsx')
@@ -564,10 +575,11 @@ const handleConfirmImport = async () => {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     
+    const data = response.data || response
     importResult.value = data
     
     if (data.created > 0 || data.updated > 0) {
-      ElMessage.success(data.message)
+      ElMessage.success(data.message || `导入成功：新增${data.created}条，更新${data.updated}条`)
       fetchBOM()
     } else if (data.errors && data.errors.length > 0) {
       ElMessage.warning('导入完成，但存在错误，请查看详情')
@@ -593,14 +605,13 @@ const handleConfirmCopy = async () => {
   
   copying.value = true
   try {
-    const response = await request.get('/projects/bom/copy_from_project/', {
-      params: {
-        source_project: copySourceProject.value,
-        target_project: selectedProject.value
-      }
+    const response = await request.post('/projects/bom/copy_from_project/', {
+      source_project: copySourceProject.value,
+      target_project: selectedProject.value
     })
     
-    ElMessage.success(data.message)
+    const data = response.data || response
+    ElMessage.success(data.message || '复制成功')
     copyDialogVisible.value = false
     fetchBOM()
   } catch (error) {

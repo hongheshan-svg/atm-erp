@@ -18,15 +18,26 @@ class UserTrackingMixin:
 class DataScopeMixin:
     """
     Mixin to automatically apply data scope filtering to queryset.
+    支持模块级权限控制：特定角色可以查看特定模块的全部数据
     """
     data_scope_field = 'created_by'  # Can be overridden in view
+    module_name = None  # 模块名称，用于模块级权限控制
     
     def get_queryset(self):
         queryset = super().get_queryset()
+        # 自动检测模块名称（从app名称推断）
+        module = self.module_name
+        if not module:
+            # 从 queryset.model 的 app_label 获取模块名
+            module = getattr(queryset.model, '_meta', None)
+            if module:
+                module = module.app_label
+        
         return apply_data_scope_filter(
             queryset,
             self.request.user,
-            self.data_scope_field
+            self.data_scope_field,
+            module_name=module
         )
 
 

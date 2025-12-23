@@ -42,9 +42,9 @@
             <el-tag :type="getStatusType(row.status)">{{ getStatusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="total_amount" label="总金额" width="120" align="right">
+        <el-table-column prop="total_with_tax" label="含税总额" width="120" align="right">
           <template #default="{ row }">
-            ¥{{ parseFloat(row.total_amount || 0).toFixed(2) }}
+            ¥{{ parseFloat(row.total_with_tax || row.total_amount || 0).toFixed(2) }}
           </template>
         </el-table-column>
         <el-table-column prop="order_date" label="订单日期" width="120" />
@@ -99,12 +99,24 @@
           </el-col>
         </el-row>
         <el-row :gutter="20">
-          <el-col :span="12">
+          <el-col :span="8">
+            <el-form-item label="增值税率">
+              <el-select v-model="form.tax_rate" placeholder="选择税率" style="width: 100%;">
+                <el-option :value="0" label="0% (免税)" />
+                <el-option :value="1" label="1%" />
+                <el-option :value="3" label="3%" />
+                <el-option :value="6" label="6%" />
+                <el-option :value="9" label="9%" />
+                <el-option :value="13" label="13%" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
             <el-form-item label="付款条款">
               <el-input v-model="form.payment_terms" placeholder="如：月结30天" />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col :span="8">
             <el-form-item label="备注">
               <el-input v-model="form.notes" placeholder="请输入备注" />
             </el-form-item>
@@ -150,8 +162,19 @@
           </el-table-column>
         </el-table>
         
-        <div class="total-amount">
-          合计金额：<span class="amount">¥{{ calculateTotal().toFixed(2) }}</span>
+        <div class="total-section">
+          <div class="total-row">
+            <span class="label">不含税金额：</span>
+            <span class="value">¥{{ calculateTotal().toFixed(2) }}</span>
+          </div>
+          <div class="total-row">
+            <span class="label">税额 ({{ form.tax_rate }}%)：</span>
+            <span class="value">¥{{ calculateTax().toFixed(2) }}</span>
+          </div>
+          <div class="total-row total">
+            <span class="label">含税总额：</span>
+            <span class="amount">¥{{ calculateTotalWithTax().toFixed(2) }}</span>
+          </div>
         </div>
       </el-form>
       <template #footer>
@@ -210,6 +233,7 @@ const form = reactive({
   supplier: null,
   project: null,
   delivery_date: '',
+  tax_rate: 13,
   payment_terms: '',
   notes: '',
   lines: []
@@ -304,6 +328,7 @@ const handleAdd = () => {
     supplier: null,
     project: null,
     delivery_date: '',
+    tax_rate: 13,
     payment_terms: '',
     notes: '',
     lines: [{ item: null, qty: 1, unit_price: 0 }]
@@ -324,6 +349,7 @@ const handleEdit = async (row) => {
       supplier: data.supplier,
       project: data.project,
       delivery_date: data.delivery_date || '',
+      tax_rate: data.tax_rate ?? 13,
       payment_terms: data.payment_terms || '',
       notes: data.notes || '',
       lines: (data.lines || []).map(line => ({
@@ -374,6 +400,14 @@ const calculateTotal = () => {
   }, 0)
 }
 
+const calculateTax = () => {
+  return calculateTotal() * (form.tax_rate || 0) / 100
+}
+
+const calculateTotalWithTax = () => {
+  return calculateTotal() + calculateTax()
+}
+
 const handleSave = async () => {
   try {
     await formRef.value?.validate()
@@ -390,6 +424,7 @@ const handleSave = async () => {
       supplier: form.supplier,
       project: form.project,
       delivery_date: form.delivery_date,
+      tax_rate: form.tax_rate,
       payment_terms: form.payment_terms,
       notes: form.notes,
       lines: validLines.map(line => ({
@@ -473,13 +508,38 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
-.total-amount {
+.total-section {
   text-align: right;
   margin-top: 15px;
-  font-size: 16px;
+  padding: 10px;
+  background: #fafafa;
+  border-radius: 4px;
 }
 
-.total-amount .amount {
+.total-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.total-row .label {
+  color: #606266;
+  margin-right: 10px;
+}
+
+.total-row .value {
+  min-width: 100px;
+  text-align: right;
+}
+
+.total-row.total {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #dcdfe6;
+}
+
+.total-row .amount {
   color: #f56c6c;
   font-weight: bold;
   font-size: 18px;

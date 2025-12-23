@@ -18,9 +18,16 @@
             {{ getStatusLabel(order.status) }}
           </el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="订单金额" :span="3">
-          <span style="font-size: 18px; font-weight: 600; color: #409EFF;">
-            ¥{{ (order.total_amount || 0).toFixed(2) }}
+        <el-descriptions-item label="增值税率">{{ order.tax_rate ?? 13 }}%</el-descriptions-item>
+        <el-descriptions-item label="不含税金额">
+          ¥{{ (order.total_amount || 0).toFixed(2) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="税额">
+          ¥{{ (order.tax_amount || 0).toFixed(2) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="含税总额" :span="3">
+          <span style="font-size: 18px; font-weight: 600; color: #f56c6c;">
+            ¥{{ (order.total_with_tax || order.total_amount || 0).toFixed(2) }}
           </span>
         </el-descriptions-item>
         <el-descriptions-item label="创建人">{{ order.created_by_name }}</el-descriptions-item>
@@ -34,38 +41,49 @@
 
       <el-table :data="order.lines || []" border stripe>
         <el-table-column type="index" label="#" width="50" />
-        <el-table-column prop="item_sku" label="物料编码" width="150" />
-        <el-table-column prop="item_name" label="物料名称" min-width="200" />
-        <el-table-column prop="specification" label="规格" width="150" />
+        <el-table-column label="产品名称" min-width="200">
+          <template #default="{ row }">
+            {{ row.item_name || row.custom_name || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="规格型号" width="150">
+          <template #default="{ row }">
+            {{ row.item_spec || row.custom_spec || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="单位" width="80">
+          <template #default="{ row }">
+            {{ row.item_unit || row.custom_unit || '件' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="qty" label="订单数量" width="100" align="right" />
-        <el-table-column prop="delivered_qty" label="已发货数量" width="110" align="right">
+        <el-table-column prop="delivered_qty" label="已发货" width="90" align="right">
           <template #default="{ row }">
             <span :style="{ color: row.delivered_qty >= row.qty ? '#67C23A' : '#E6A23C' }">
               {{ row.delivered_qty || 0 }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="发货进度" width="120">
+        <el-table-column label="进度" width="100">
           <template #default="{ row }">
             <el-progress
-              :percentage="((row.delivered_qty || 0) / (row.qty || 1) * 100)"
+              :percentage="Math.min(100, ((row.delivered_qty || 0) / (row.qty || 1) * 100))"
               :stroke-width="6"
               :status="(row.delivered_qty || 0) >= row.qty ? 'success' : null"
             />
           </template>
         </el-table-column>
-        <el-table-column prop="unit" label="单位" width="80" />
-        <el-table-column prop="unit_price" label="单价" width="120" align="right">
+        <el-table-column prop="unit_price" label="单价" width="110" align="right">
           <template #default="{ row }">
-            ¥{{ (row.unit_price || 0).toFixed(2) }}
+            ¥{{ parseFloat(row.unit_price || 0).toFixed(2) }}
           </template>
         </el-table-column>
-        <el-table-column label="金额" width="130" align="right">
+        <el-table-column label="金额" width="120" align="right">
           <template #default="{ row }">
-            ¥{{ ((row.qty || 0) * (row.unit_price || 0)).toFixed(2) }}
+            ¥{{ (parseFloat(row.qty || 0) * parseFloat(row.unit_price || 0)).toFixed(2) }}
           </template>
         </el-table-column>
-        <el-table-column prop="notes" label="备注" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="notes" label="备注" min-width="120" show-overflow-tooltip />
       </el-table>
 
       <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center;">
@@ -232,13 +250,13 @@ const loadOrderDetail = async () => {
   loading.value = true
   try {
     const response = await request.get(`/sales/orders/${route.params.id}/`)
-    order.value = data
+    order.value = response.data || response
     
     // 加载关联的发货单
-    const { data: deliveries } = await request.get(`/sales/deliveries/`, {
-      params: { sales_order: route.params.id }
+    const deliveryRes = await request.get(`/sales/deliveries/`, {
+      params: { so: route.params.id }
     })
-    deliveryOrders.value = deliveries.results || deliveries
+    deliveryOrders.value = deliveryRes.data?.results || deliveryRes.results || deliveryRes.data || []
   } catch (error) {
     console.error('加载订单详情失败:', error)
     ElMessage.error('加载订单详情失败')
