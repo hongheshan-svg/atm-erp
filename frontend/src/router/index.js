@@ -123,7 +123,7 @@ const routes = [
         path: 'projects/ecn',
         name: 'ECNList',
         component: () => import('@/views/projects/ECNList.vue'),
-        meta: { title: 'ECN变更', icon: 'Edit', menuId: 'projects:ecn' }
+        meta: { title: 'ECN变更', icon: 'Edit', menuId: 'projects:list' }  // 使用与项目列表相同的权限
       },
       // Purchase
       {
