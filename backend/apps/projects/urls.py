@@ -8,7 +8,9 @@ from .views import (
     ProjectMemberViewSet,
     ProjectTaskViewSet,
     ProjectBOMViewSet,
-    TimeLogViewSet
+    TimeLogViewSet,
+    ECNViewSet,
+    ECNItemViewSet
 )
 
 router = DefaultRouter()
@@ -17,6 +19,8 @@ router.register(r'members', ProjectMemberViewSet, basename='member')
 router.register(r'tasks', ProjectTaskViewSet, basename='task')
 router.register(r'bom', ProjectBOMViewSet, basename='bom')
 router.register(r'time-logs', TimeLogViewSet, basename='time-log')
+router.register(r'ecn', ECNViewSet, basename='ecn')
+router.register(r'ecn-items', ECNItemViewSet, basename='ecn-item')
 
 urlpatterns = [
     path('', include(router.urls)),

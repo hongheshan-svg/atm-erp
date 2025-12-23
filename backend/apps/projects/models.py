@@ -349,3 +349,246 @@ class TimeLog(BaseModel):
     def __str__(self):
         return f"{self.project.code} - {self.user.username} - {self.date} - {self.hours}h"
 
+
+class ECN(BaseModel):
+    """
+    Engineering Change Notice - 工程变更通知
+    """
+    STATUS_CHOICES = [
+        ('DRAFT', '草稿'),
+        ('PENDING', '待评审'),
+        ('REVIEWING', '评审中'),
+        ('APPROVED', '已批准'),
+        ('REJECTED', '已拒绝'),
+        ('IMPLEMENTING', '实施中'),
+        ('COMPLETED', '已完成'),
+        ('CANCELLED', '已取消'),
+    ]
+    
+    CHANGE_TYPE_CHOICES = [
+        ('DESIGN', '设计变更'),
+        ('PROCESS', '工艺变更'),
+        ('MATERIAL', '材料替换'),
+        ('SPEC', '规格变更'),
+        ('DRAWING', '图纸变更'),
+        ('OTHER', '其他变更'),
+    ]
+    
+    PRIORITY_CHOICES = [
+        ('URGENT', '紧急'),
+        ('HIGH', '高'),
+        ('MEDIUM', '中'),
+        ('LOW', '低'),
+    ]
+    
+    ecn_no = models.CharField(max_length=50, unique=True, verbose_name='变更编号')
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='ecns',
+        verbose_name='项目'
+    )
+    title = models.CharField(max_length=200, verbose_name='变更标题')
+    change_type = models.CharField(
+        max_length=20,
+        choices=CHANGE_TYPE_CHOICES,
+        default='DESIGN',
+        verbose_name='变更类型'
+    )
+    priority = models.CharField(
+        max_length=20,
+        choices=PRIORITY_CHOICES,
+        default='MEDIUM',
+        verbose_name='优先级'
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='DRAFT',
+        verbose_name='状态'
+    )
+    reason = models.TextField(verbose_name='变更原因')
+    description = models.TextField(verbose_name='变更描述')
+    impact_analysis = models.TextField(blank=True, verbose_name='影响分析')
+    cost_impact = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='成本影响'
+    )
+    schedule_impact = models.CharField(max_length=200, blank=True, verbose_name='进度影响')
+    
+    # 申请信息
+    requested_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.PROTECT,
+        related_name='requested_ecns',
+        verbose_name='申请人'
+    )
+    requested_date = models.DateField(verbose_name='申请日期')
+    
+    # 批准信息
+    approved_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='approved_ecns',
+        verbose_name='批准人'
+    )
+    approved_date = models.DateField(null=True, blank=True, verbose_name='批准日期')
+    
+    # 实施信息
+    implemented_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='implemented_ecns',
+        verbose_name='实施人'
+    )
+    implemented_date = models.DateField(null=True, blank=True, verbose_name='实施日期')
+    implementation_notes = models.TextField(blank=True, verbose_name='实施说明')
+    
+    class Meta:
+        db_table = 'project_ecn'
+        verbose_name = '工程变更通知'
+        verbose_name_plural = verbose_name
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.ecn_no} - {self.title}"
+    
+    def save(self, *args, **kwargs):
+        if not self.ecn_no:
+            # 自动生成ECN编号
+            from django.utils import timezone
+            today = timezone.now()
+            prefix = f"ECN{today.strftime('%Y%m%d')}"
+            last_ecn = ECN.objects.filter(ecn_no__startswith=prefix).order_by('-ecn_no').first()
+            if last_ecn:
+                last_num = int(last_ecn.ecn_no[-4:])
+                self.ecn_no = f"{prefix}{last_num + 1:04d}"
+            else:
+                self.ecn_no = f"{prefix}0001"
+        super().save(*args, **kwargs)
+
+
+class ECNItem(BaseModel):
+    """
+    ECN变更明细 - 记录具体的变更内容
+    """
+    ITEM_CHANGE_TYPE_CHOICES = [
+        ('ADD', '新增'),
+        ('DELETE', '删除'),
+        ('MODIFY', '修改'),
+        ('REPLACE', '替换'),
+    ]
+    
+    ecn = models.ForeignKey(
+        ECN,
+        on_delete=models.CASCADE,
+        related_name='items',
+        verbose_name='ECN'
+    )
+    bom_item = models.ForeignKey(
+        ProjectBOM,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ecn_items',
+        verbose_name='BOM条目'
+    )
+    item = models.ForeignKey(
+        'masterdata.Item',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='ecn_items',
+        verbose_name='物料'
+    )
+    new_item = models.ForeignKey(
+        'masterdata.Item',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='ecn_new_items',
+        verbose_name='新物料（替换时使用）'
+    )
+    change_type = models.CharField(
+        max_length=20,
+        choices=ITEM_CHANGE_TYPE_CHOICES,
+        default='MODIFY',
+        verbose_name='变更类型'
+    )
+    field_name = models.CharField(max_length=100, blank=True, verbose_name='变更字段')
+    old_value = models.TextField(blank=True, verbose_name='原值')
+    new_value = models.TextField(blank=True, verbose_name='新值')
+    old_qty = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='原数量'
+    )
+    new_qty = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='新数量'
+    )
+    notes = models.TextField(blank=True, verbose_name='备注')
+    
+    class Meta:
+        db_table = 'project_ecn_item'
+        verbose_name = 'ECN变更明细'
+        verbose_name_plural = verbose_name
+        ordering = ['id']
+    
+    def __str__(self):
+        return f"{self.ecn.ecn_no} - {self.get_change_type_display()}"
+
+
+class ECNApproval(BaseModel):
+    """
+    ECN审批记录
+    """
+    ACTION_CHOICES = [
+        ('SUBMIT', '提交评审'),
+        ('APPROVE', '批准'),
+        ('REJECT', '拒绝'),
+        ('RETURN', '退回修改'),
+        ('IMPLEMENT', '开始实施'),
+        ('COMPLETE', '完成实施'),
+        ('CANCEL', '取消'),
+    ]
+    
+    ecn = models.ForeignKey(
+        ECN,
+        on_delete=models.CASCADE,
+        related_name='approvals',
+        verbose_name='ECN'
+    )
+    approver = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.PROTECT,
+        related_name='ecn_approvals',
+        verbose_name='操作人'
+    )
+    action = models.CharField(
+        max_length=20,
+        choices=ACTION_CHOICES,
+        verbose_name='操作'
+    )
+    comment = models.TextField(blank=True, verbose_name='审批意见')
+    
+    class Meta:
+        db_table = 'project_ecn_approval'
+        verbose_name = 'ECN审批记录'
+        verbose_name_plural = verbose_name
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.ecn.ecn_no} - {self.approver.username} - {self.get_action_display()}"
+

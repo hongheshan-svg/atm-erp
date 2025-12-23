@@ -11,10 +11,11 @@ import pandas as pd
 from io import BytesIO
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin, DataScopeMixin
 from apps.masterdata.models import Item
-from .models import Project, ProjectMember, ProjectTask, ProjectBOM, TimeLog
+from .models import Project, ProjectMember, ProjectTask, ProjectBOM, TimeLog, ECN, ECNItem, ECNApproval
 from .serializers import (
     ProjectSerializer, ProjectMemberSerializer,
-    ProjectTaskSerializer, ProjectBOMSerializer, TimeLogSerializer
+    ProjectTaskSerializer, ProjectBOMSerializer, TimeLogSerializer,
+    ECNSerializer, ECNWriteSerializer, ECNItemSerializer, ECNApprovalSerializer
 )
 
 
@@ -1003,4 +1004,297 @@ class TimeLogViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         time_log.status = 'REJECTED'
         time_log.save()
         return Response(TimeLogSerializer(time_log).data)
+
+
+class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.ModelViewSet):
+    """
+    ViewSet for ECN (Engineering Change Notice) management.
+    """
+    queryset = ECN.objects.all()
+    filterset_fields = ['project', 'change_type', 'priority', 'status', 'requested_by', 'is_deleted']
+    search_fields = ['ecn_no', 'title', 'description']
+    ordering_fields = ['ecn_no', 'requested_date', 'created_at']
+    module_name = 'projects'
+    
+    def get_serializer_class(self):
+        if self.action in ['create', 'update', 'partial_update']:
+            return ECNWriteSerializer
+        return ECNSerializer
+    
+    @action(detail=True, methods=['post'])
+    def submit(self, request, pk=None):
+        """Submit ECN for review."""
+        ecn = self.get_object()
+        
+        if ecn.status != 'DRAFT':
+            return Response(
+                {'error': '只有草稿状态的ECN可以提交评审'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        ecn.status = 'PENDING'
+        ecn.save()
+        
+        # Create approval record
+        ECNApproval.objects.create(
+            ecn=ecn,
+            approver=request.user,
+            action='SUBMIT',
+            comment=request.data.get('comment', ''),
+            created_by=request.user
+        )
+        
+        return Response(ECNSerializer(ecn, context={'request': request}).data)
+    
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        """Approve ECN."""
+        ecn = self.get_object()
+        
+        if ecn.status not in ['PENDING', 'REVIEWING']:
+            return Response(
+                {'error': '当前状态无法批准'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        from django.utils import timezone
+        
+        ecn.status = 'APPROVED'
+        ecn.approved_by = request.user
+        ecn.approved_date = timezone.now().date()
+        ecn.save()
+        
+        # Create approval record
+        ECNApproval.objects.create(
+            ecn=ecn,
+            approver=request.user,
+            action='APPROVE',
+            comment=request.data.get('comment', ''),
+            created_by=request.user
+        )
+        
+        return Response(ECNSerializer(ecn, context={'request': request}).data)
+    
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        """Reject ECN."""
+        ecn = self.get_object()
+        
+        if ecn.status not in ['PENDING', 'REVIEWING']:
+            return Response(
+                {'error': '当前状态无法拒绝'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        ecn.status = 'REJECTED'
+        ecn.save()
+        
+        # Create approval record
+        ECNApproval.objects.create(
+            ecn=ecn,
+            approver=request.user,
+            action='REJECT',
+            comment=request.data.get('comment', '拒绝'),
+            created_by=request.user
+        )
+        
+        return Response(ECNSerializer(ecn, context={'request': request}).data)
+    
+    @action(detail=True, methods=['post'])
+    def return_to_draft(self, request, pk=None):
+        """Return ECN to draft for modification."""
+        ecn = self.get_object()
+        
+        if ecn.status not in ['PENDING', 'REVIEWING', 'REJECTED']:
+            return Response(
+                {'error': '当前状态无法退回'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        ecn.status = 'DRAFT'
+        ecn.save()
+        
+        # Create approval record
+        ECNApproval.objects.create(
+            ecn=ecn,
+            approver=request.user,
+            action='RETURN',
+            comment=request.data.get('comment', '退回修改'),
+            created_by=request.user
+        )
+        
+        return Response(ECNSerializer(ecn, context={'request': request}).data)
+    
+    @action(detail=True, methods=['post'])
+    def start_implementation(self, request, pk=None):
+        """Start ECN implementation."""
+        ecn = self.get_object()
+        
+        if ecn.status != 'APPROVED':
+            return Response(
+                {'error': '只有已批准的ECN可以开始实施'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        ecn.status = 'IMPLEMENTING'
+        ecn.implemented_by = request.user
+        ecn.save()
+        
+        # Create approval record
+        ECNApproval.objects.create(
+            ecn=ecn,
+            approver=request.user,
+            action='IMPLEMENT',
+            comment=request.data.get('comment', ''),
+            created_by=request.user
+        )
+        
+        return Response(ECNSerializer(ecn, context={'request': request}).data)
+    
+    @action(detail=True, methods=['post'])
+    def complete(self, request, pk=None):
+        """Complete ECN implementation."""
+        ecn = self.get_object()
+        
+        if ecn.status != 'IMPLEMENTING':
+            return Response(
+                {'error': '只有实施中的ECN可以完成'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        from django.utils import timezone
+        
+        ecn.status = 'COMPLETED'
+        ecn.implemented_date = timezone.now().date()
+        ecn.implementation_notes = request.data.get('implementation_notes', '')
+        ecn.save()
+        
+        # Apply changes to BOM if applicable
+        self._apply_bom_changes(ecn)
+        
+        # Create approval record
+        ECNApproval.objects.create(
+            ecn=ecn,
+            approver=request.user,
+            action='COMPLETE',
+            comment=request.data.get('comment', '实施完成'),
+            created_by=request.user
+        )
+        
+        return Response(ECNSerializer(ecn, context={'request': request}).data)
+    
+    def _apply_bom_changes(self, ecn):
+        """Apply ECN changes to project BOM."""
+        for item in ecn.items.all():
+            if item.change_type == 'ADD' and item.item:
+                # Add new BOM item
+                ProjectBOM.objects.get_or_create(
+                    project=ecn.project,
+                    item=item.item,
+                    defaults={
+                        'planned_qty': item.new_qty or 0,
+                        'notes': f'通过ECN {ecn.ecn_no} 添加',
+                        'created_by': ecn.implemented_by
+                    }
+                )
+            elif item.change_type == 'DELETE' and item.bom_item:
+                # Mark BOM item as deleted
+                item.bom_item.is_deleted = True
+                item.bom_item.notes = f'{item.bom_item.notes}\n通过ECN {ecn.ecn_no} 删除'
+                item.bom_item.save()
+            elif item.change_type == 'MODIFY' and item.bom_item:
+                # Update BOM item quantity
+                if item.new_qty is not None:
+                    item.bom_item.planned_qty = item.new_qty
+                    item.bom_item.notes = f'{item.bom_item.notes}\n通过ECN {ecn.ecn_no} 修改数量'
+                    item.bom_item.save()
+            elif item.change_type == 'REPLACE' and item.bom_item and item.new_item:
+                # Replace BOM item
+                old_bom = item.bom_item
+                old_bom.is_deleted = True
+                old_bom.notes = f'{old_bom.notes}\n通过ECN {ecn.ecn_no} 替换为 {item.new_item.sku}'
+                old_bom.save()
+                
+                # Create new BOM item
+                ProjectBOM.objects.create(
+                    project=ecn.project,
+                    item=item.new_item,
+                    planned_qty=item.new_qty or old_bom.planned_qty,
+                    notes=f'通过ECN {ecn.ecn_no} 替换自 {old_bom.item.sku}',
+                    created_by=ecn.implemented_by
+                )
+    
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        """Cancel ECN."""
+        ecn = self.get_object()
+        
+        if ecn.status in ['COMPLETED', 'CANCELLED']:
+            return Response(
+                {'error': '已完成或已取消的ECN无法取消'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        ecn.status = 'CANCELLED'
+        ecn.save()
+        
+        # Create approval record
+        ECNApproval.objects.create(
+            ecn=ecn,
+            approver=request.user,
+            action='CANCEL',
+            comment=request.data.get('comment', '取消'),
+            created_by=request.user
+        )
+        
+        return Response(ECNSerializer(ecn, context={'request': request}).data)
+    
+    @action(detail=True, methods=['post'])
+    def add_item(self, request, pk=None):
+        """Add item to ECN."""
+        ecn = self.get_object()
+        
+        if ecn.status not in ['DRAFT']:
+            return Response(
+                {'error': '只有草稿状态可以添加明细'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = ECNItemSerializer(data={**request.data, 'ecn': ecn.id})
+        serializer.is_valid(raise_exception=True)
+        serializer.save(created_by=request.user)
+        
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['delete'], url_path='remove_item/(?P<item_id>[^/.]+)')
+    def remove_item(self, request, pk=None, item_id=None):
+        """Remove item from ECN."""
+        ecn = self.get_object()
+        
+        if ecn.status not in ['DRAFT']:
+            return Response(
+                {'error': '只有草稿状态可以删除明细'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            ecn_item = ECNItem.objects.get(id=item_id, ecn=ecn)
+            ecn_item.delete()
+            return Response({'message': '删除成功'})
+        except ECNItem.DoesNotExist:
+            return Response(
+                {'error': '明细不存在'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+
+class ECNItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+    """
+    ViewSet for ECN Item management.
+    """
+    queryset = ECNItem.objects.all()
+    serializer_class = ECNItemSerializer
+    filterset_fields = ['ecn', 'change_type', 'item']
+    search_fields = ['notes']
+    ordering_fields = ['created_at']
 

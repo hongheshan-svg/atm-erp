@@ -119,6 +119,12 @@ const routes = [
         component: () => import('@/views/projects/ProjectGantt.vue'),
         meta: { title: '甘特图', icon: 'Calendar', menuId: 'projects:gantt' }
       },
+      {
+        path: 'projects/ecn',
+        name: 'ECNList',
+        component: () => import('@/views/projects/ECNList.vue'),
+        meta: { title: 'ECN变更', icon: 'Edit', menuId: 'projects:ecn' }
+      },
       // Purchase
       {
         path: 'purchase/requests',
