@@ -10,11 +10,12 @@
 
       <el-table :data="suppliers" v-loading="loading" stripe border>
         <el-table-column prop="code" label="编码" width="120" />
-        <el-table-column prop="name" label="供应商名称" />
-        <el-table-column prop="contact_person" label="联系人" />
-        <el-table-column prop="phone" label="电话" />
-        <el-table-column prop="email" label="邮箱" />
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column prop="name" label="供应商名称" min-width="180" />
+        <el-table-column prop="contact_person" label="联系人" width="100" />
+        <el-table-column prop="phone" label="电话" width="130" />
+        <el-table-column prop="email" label="邮箱" width="180" />
+        <el-table-column prop="address" label="地址" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="status" label="状态" width="80">
           <template #default="{ row }">
             <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ row.status === 'ACTIVE' ? '激活' : '停用' }}</el-tag>
           </template>
