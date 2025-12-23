@@ -16,7 +16,7 @@
           <el-input v-model="searchForm.sales_order_no" placeholder="请输入销售订单号" clearable />
         </el-form-item>
         <el-form-item label="仓库">
-          <el-select v-model="searchForm.warehouse" placeholder="请选择仓库" clearable>
+          <el-select v-model="searchForm.warehouse" placeholder="请选择仓库" clearable style="width: 180px;">
             <el-option
               v-for="warehouse in warehouses"
               :key="warehouse.id"
@@ -26,7 +26,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="searchForm.status" placeholder="请选择状态" clearable>
+          <el-select v-model="searchForm.status" placeholder="请选择状态" clearable style="width: 140px;">
             <el-option label="草稿" value="DRAFT" />
             <el-option label="已确认" value="CONFIRMED" />
             <el-option label="已完成" value="COMPLETED" />
@@ -216,7 +216,7 @@ const resetSearch = () => {
 const handleView = async (row) => {
   try {
     const response = await request.get(`/sales/deliveries/${row.id}/`)
-    currentDelivery.value = data
+    currentDelivery.value = response.data || response
     detailVisible.value = true
   } catch (error) {
     console.error('加载发货单详情失败:', error)
