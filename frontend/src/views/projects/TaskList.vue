@@ -341,7 +341,10 @@ const getMockTasks = () => {
 
 const buildTree = (tasks, parentId = null) => {
   return tasks
-    .filter(task => (task.parent || task.parent_id) === parentId)
+    .filter(task => {
+      const taskParent = task.parent ?? task.parent_id ?? null
+      return taskParent === parentId
+    })
     .map(task => ({
       ...task,
       children: buildTree(tasks, task.id)
