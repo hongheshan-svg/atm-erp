@@ -21,8 +21,8 @@ def generate_code(prefix, length=8):
 ROLE_MODULE_FULL_ACCESS = {
     '销售': ['sales'],
     '采购': ['purchase'],
-    '项目': ['projects'],
-    '财务': ['finance'],
+    '项目': ['projects', 'sales'],  # 项目经理可查看销售订单
+    '财务': ['finance', 'sales', 'purchase'],  # 财务可查看销售和采购
     '仓库': ['inventory'],
     '库存': ['inventory'],
     '生产': ['projects', 'inventory'],
