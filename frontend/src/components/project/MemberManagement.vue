@@ -200,9 +200,10 @@ const estimatedLaborCost = computed(() => {
 const loadMemberList = async () => {
   loading.value = true
   try {
-    const { data } = await request.get(`/projects/members/`, {
+    const response = await request.get(`/projects/members/`, {
       params: { project: props.projectId }
     })
+    const data = response.data || response
     memberList.value = data.results || data
   } catch (error) {
     console.error('加载成员失败:', error)
@@ -214,9 +215,10 @@ const loadMemberList = async () => {
 
 const loadUsers = async () => {
   try {
-    const { data } = await request.get('/auth/users/', {
+    const response = await request.get('/auth/users/', {
       params: { is_active: true, page_size: 100 }
     })
+    const data = response.data || response
     userOptions.value = data.results || data
   } catch (error) {
     console.error('加载用户失败:', error)

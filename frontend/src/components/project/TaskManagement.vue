@@ -214,9 +214,10 @@ const getStatusLabel = (status) => {
 const loadTasks = async () => {
   loading.value = true
   try {
-    const { data } = await request.get(`/projects/tasks/`, {
+    const response = await request.get(`/projects/tasks/`, {
       params: { project: props.projectId }
     })
+    const data = response.data || response
     // 构建树形结构
     tasks.value = buildTaskTree(data.results || data)
   } catch (error) {
@@ -229,9 +230,10 @@ const loadTasks = async () => {
 
 const loadProjectMembers = async () => {
   try {
-    const { data } = await request.get(`/projects/members/`, {
+    const response = await request.get(`/projects/members/`, {
       params: { project: props.projectId }
     })
+    const data = response.data || response
     projectMembers.value = data.results || data
   } catch (error) {
     console.error('加载项目成员失败:', error)

@@ -160,9 +160,10 @@ const rules = {
 const loadBOMList = async () => {
   loading.value = true
   try {
-    const { data } = await request.get(`/projects/bom/`, {
+    const response = await request.get(`/projects/bom/`, {
       params: { project: props.projectId }
     })
+    const data = response.data || response
     bomList.value = data.results || data
   } catch (error) {
     console.error('加载BOM失败:', error)
@@ -180,9 +181,10 @@ const searchItems = async (query) => {
 
   searchingItems.value = true
   try {
-    const { data } = await request.get('/masterdata/items/', {
+    const response = await request.get('/masterdata/items/', {
       params: { search: query, page_size: 20 }
     })
+    const data = response.data || response
     itemOptions.value = data.results || data
   } catch (error) {
     console.error('搜索物料失败:', error)
