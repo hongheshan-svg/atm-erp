@@ -64,7 +64,7 @@
         </el-table-column>
         <el-table-column label="进度" width="150">
           <template #default="{ row }">
-            <el-progress :percentage="row.progress || 0" :status="getProgressStatus(row.progress)" />
+            <el-progress :percentage="row.progress_percent || row.progress || 0" :status="getProgressStatus(row.progress_percent || row.progress)" />
           </template>
         </el-table-column>
         <el-table-column prop="planned_hours" label="计划工时" width="100" align="right">
@@ -96,7 +96,7 @@
         <el-form-item label="任务名称" prop="name">
           <el-input v-model="form.name" placeholder="输入任务名称" />
         </el-form-item>
-        <el-form-item label="父任务" v-if="form.parent_id">
+        <el-form-item label="父任务" v-if="form.parent">
           <el-input :value="parentTaskName" disabled />
         </el-form-item>
         <el-form-item label="负责人" prop="assignee">
@@ -111,14 +111,14 @@
         </el-form-item>
         <el-form-item label="状态" prop="status">
           <el-select v-model="form.status" placeholder="选择状态" style="width: 100%;">
-            <el-option label="待开始" value="PENDING" />
+            <el-option label="待办" value="TODO" />
             <el-option label="进行中" value="IN_PROGRESS" />
             <el-option label="已完成" value="COMPLETED" />
             <el-option label="已取消" value="CANCELLED" />
           </el-select>
         </el-form-item>
-        <el-form-item label="进度" prop="progress">
-          <el-slider v-model="form.progress" :marks="{ 0: '0%', 50: '50%', 100: '100%' }" />
+        <el-form-item label="进度" prop="progress_percent">
+          <el-slider v-model="form.progress_percent" :marks="{ 0: '0%', 50: '50%', 100: '100%' }" />
         </el-form-item>
         <el-row :gutter="20">
           <el-col :span="12">
@@ -204,11 +204,12 @@ const stats = reactive({
 
 const form = reactive({
   id: null,
+  code: '',
   name: '',
-  parent_id: null,
+  parent: null,
   assignee: null,
-  status: 'PENDING',
-  progress: 0,
+  status: 'TODO',
+  progress_percent: 0,
   planned_hours: 0,
   actual_hours: 0,
   start_date: '',
@@ -231,6 +232,7 @@ const dialogTitle = computed(() => form.id ? '编辑任务' : '新增任务')
 
 const getStatusType = (status) => {
   const types = {
+    'TODO': 'info',
     'PENDING': 'info',
     'IN_PROGRESS': '',
     'COMPLETED': 'success',
@@ -241,7 +243,8 @@ const getStatusType = (status) => {
 
 const getStatusLabel = (status) => {
   const labels = {
-    'PENDING': '待开始',
+    'TODO': '待办',
+    'PENDING': '待办',
     'IN_PROGRESS': '进行中',
     'COMPLETED': '已完成',
     'CANCELLED': '已取消'
@@ -338,7 +341,7 @@ const getMockTasks = () => {
 
 const buildTree = (tasks, parentId = null) => {
   return tasks
-    .filter(task => task.parent_id === parentId)
+    .filter(task => (task.parent || task.parent_id) === parentId)
     .map(task => ({
       ...task,
       children: buildTree(tasks, task.id)
@@ -390,17 +393,24 @@ const fetchProjectMembers = async () => {
 
 const resetForm = () => {
   form.id = null
+  form.code = ''
   form.name = ''
-  form.parent_id = null
+  form.parent = null
   form.assignee = null
-  form.status = 'PENDING'
-  form.progress = 0
+  form.status = 'TODO'
+  form.progress_percent = 0
   form.planned_hours = 0
   form.actual_hours = 0
   form.start_date = ''
   form.end_date = ''
   form.description = ''
   parentTaskName.value = ''
+}
+
+// 生成任务编号
+const generateTaskCode = () => {
+  const timestamp = Date.now().toString(36).toUpperCase()
+  return `T-${timestamp}`
 }
 
 const handleAdd = () => {
@@ -410,13 +420,25 @@ const handleAdd = () => {
 
 const handleAddChild = (row) => {
   resetForm()
-  form.parent_id = row.id
+  form.parent = row.id
   parentTaskName.value = row.name
   dialogVisible.value = true
 }
 
 const handleEdit = (row) => {
-  Object.assign(form, row)
+  form.id = row.id
+  form.code = row.code || ''
+  form.name = row.name || ''
+  form.parent = row.parent || null
+  form.assignee = row.assignee || null
+  form.status = row.status || 'TODO'
+  form.progress_percent = row.progress_percent || row.progress || 0
+  form.planned_hours = row.planned_hours || 0
+  form.actual_hours = row.actual_hours || 0
+  form.start_date = row.start_date || ''
+  form.end_date = row.end_date || ''
+  form.description = row.description || ''
+  parentTaskName.value = ''
   dialogVisible.value = true
 }
 
@@ -438,7 +460,39 @@ const handleSubmit = async () => {
   try {
     await formRef.value.validate()
     
-    const data = { ...form, project: selectedProject.value }
+    // 构建提交数据
+    const data = {
+      project: selectedProject.value,
+      name: form.name,
+      status: form.status,
+      progress_percent: form.progress_percent || 0,
+      planned_hours: form.planned_hours || 0,
+      actual_hours: form.actual_hours || 0,
+    }
+    
+    // 新增时自动生成编号
+    if (!form.id) {
+      data.code = form.code || generateTaskCode()
+    } else {
+      data.code = form.code
+    }
+    
+    // 可选字段，只有有值时才添加
+    if (form.parent) {
+      data.parent = form.parent
+    }
+    if (form.assignee) {
+      data.assignee = form.assignee
+    }
+    if (form.start_date) {
+      data.start_date = form.start_date
+    }
+    if (form.end_date) {
+      data.end_date = form.end_date
+    }
+    if (form.description) {
+      data.description = form.description
+    }
     
     if (form.id) {
       await request.put(`/projects/tasks/${form.id}/`, data)
@@ -451,6 +505,7 @@ const handleSubmit = async () => {
     dialogVisible.value = false
     fetchTasks()
   } catch (error) {
+    console.error('操作失败:', error)
     if (error !== 'cancel') {
       ElMessage.error('操作失败')
     }
