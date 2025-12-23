@@ -12,7 +12,7 @@
           <el-descriptions :column="2" border>
             <el-descriptions-item label="项目编号">{{ project.code }}</el-descriptions-item>
             <el-descriptions-item label="状态">
-              <el-tag :type="get状态Type(project.status)">{{ project.status }}</el-tag>
+              <el-tag :type="getStatusType(project.status)">{{ getStatusLabel(project.status) }}</el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="客户">{{ project.customer_name }}</el-descriptions-item>
             <el-descriptions-item label="负责人">{{ project.manager_name }}</el-descriptions-item>
@@ -75,8 +75,30 @@ const memberManagementRef = ref(null)
 
 const projectId = computed(() => route.params.id)
 
-const get状态Type = (status) => {
-  const types = { draft: 'info', active: 'success', paused: 'warning', completed: '', archived: 'info' }
+const statusMap = {
+  'DRAFT': '草稿',
+  'PLANNING': '规划中',
+  'ACTIVE': '进行中',
+  'PAUSED': '暂停',
+  'COMPLETED': '已完成',
+  'CANCELLED': '已取消',
+  'ARCHIVED': '已归档'
+}
+
+const getStatusLabel = (status) => {
+  return statusMap[status] || status
+}
+
+const getStatusType = (status) => {
+  const types = {
+    'DRAFT': 'info',
+    'PLANNING': 'primary',
+    'ACTIVE': 'success',
+    'PAUSED': 'warning',
+    'COMPLETED': '',
+    'CANCELLED': 'danger',
+    'ARCHIVED': 'info'
+  }
   return types[status] || ''
 }
 
