@@ -54,7 +54,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
@@ -67,8 +67,16 @@ const loginFormRef = ref(null)
 const loading = ref(false)
 
 const loginForm = reactive({
-  username: 'admin',
+  username: '',
   password: ''
+})
+
+// 页面加载时读取上次的用户名
+onMounted(() => {
+  const lastUsername = localStorage.getItem('last_username')
+  if (lastUsername) {
+    loginForm.username = lastUsername
+  }
 })
 
 const loginRules = {
@@ -86,6 +94,8 @@ const handleLogin = async () => {
         const success = await userStore.login(loginForm.username, loginForm.password)
         
         if (success) {
+          // 登录成功后保存用户名
+          localStorage.setItem('last_username', loginForm.username)
           ElMessage.success('登录成功')
           router.push('/')
         } else {
