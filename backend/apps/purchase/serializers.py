@@ -54,7 +54,7 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
             'request_date', 'required_date', 'status', 'status_display', 'total_amount',
             'notes', 'lines', 'is_deleted', 'created_at', 'updated_at', 'budget_info'
         ]
-        read_only_fields = ['request_no', 'request_date', 'created_at', 'updated_at']
+        read_only_fields = ['request_no', 'requestor', 'request_date', 'created_at', 'updated_at']
     
     def get_budget_info(self, obj):
         """Get budget validation info for this request."""

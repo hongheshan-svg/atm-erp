@@ -1,0 +1,235 @@
+# ERP System Docker Compose
+# Services: PostgreSQL, Redis, Elasticsearch, Backend, Celery, Nginx
+
+services:
+  # ===========================================
+  # PostgreSQL Database
+  # ===========================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: erp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-erp_db}
+      POSTGRES_USER: ${DB_USER:-erp_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-erp_password}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"  # 使用5433避免与本地PostgreSQL冲突
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-erp_user} -d ${DB_NAME:-erp_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - erp-network
+
+  # ===========================================
+  # Redis Cache & Message Broker
+  # ===========================================
+  redis:
+    image: redis:7-alpine
+    container_name: erp-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6380:6379"  # 使用6380避免与本地Redis冲突
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - erp-network
+
+  # ===========================================
+  # Elasticsearch (Search Engine)
+  # ===========================================
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.16
+    container_name: erp-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9201:9200"  # 使用9201避免与本地ES冲突
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - erp-network
+
+  # ===========================================
+  # Django Backend (API Server)
+  # ===========================================
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    container_name: erp-backend
+    restart: unless-stopped
+    environment:
+      - DEBUG=${DEBUG:-False}
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-change-this-in-production-123456}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1,backend}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-erp_db}
+      - DB_USER=${DB_USER:-erp_user}
+      - DB_PASSWORD=${DB_PASSWORD:-erp_password}
+      - REDIS_HOST=redis
+      - REDIS_URL=redis://redis:6379/1
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - ELASTICSEARCH_HOST=elasticsearch:9200
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:80}
+      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-http://localhost,http://localhost:80}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost}
+    volumes:
+      - static_files:/app/staticfiles
+      - media_files:/app/uploads
+      - backend_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/health/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - erp-network
+
+  # ===========================================
+  # Celery Worker (Async Tasks)
+  # ===========================================
+  celery:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    container_name: erp-celery
+    restart: unless-stopped
+    command: celery -A config worker -l info --concurrency=2
+    environment:
+      - DEBUG=${DEBUG:-False}
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-change-this-in-production-123456}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-erp_db}
+      - DB_USER=${DB_USER:-erp_user}
+      - DB_PASSWORD=${DB_PASSWORD:-erp_password}
+      - REDIS_HOST=redis
+      - REDIS_URL=redis://redis:6379/1
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - ELASTICSEARCH_HOST=elasticsearch:9200
+    volumes:
+      - media_files:/app/uploads
+      - backend_logs:/app/logs
+    depends_on:
+      - backend
+      - redis
+    networks:
+      - erp-network
+
+  # ===========================================
+  # Celery Beat (Scheduled Tasks)
+  # ===========================================
+  celery-beat:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    container_name: erp-celery-beat
+    restart: unless-stopped
+    command: celery -A config beat -l info
+    environment:
+      - DEBUG=${DEBUG:-False}
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-change-this-in-production-123456}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-erp_db}
+      - DB_USER=${DB_USER:-erp_user}
+      - DB_PASSWORD=${DB_PASSWORD:-erp_password}
+      - REDIS_HOST=redis
+      - REDIS_URL=redis://redis:6379/1
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - backend
+      - redis
+    networks:
+      - erp-network
+
+  # ===========================================
+  # Nginx (Reverse Proxy + Static Files)
+  # ===========================================
+  nginx:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+    container_name: erp-nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80"   # 使用8080避免与本地Nginx冲突
+      - "8443:443"  # HTTPS端口
+    volumes:
+      - static_files:/app/staticfiles:ro
+      - media_files:/app/uploads:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - erp-network
+
+# ===========================================
+# Volumes
+# ===========================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  static_files:
+    driver: local
+  media_files:
+    driver: local
+  backend_logs:
+    driver: local
+  nginx_logs:
+    driver: local
+
+# ===========================================
+# Networks
+# ===========================================
+networks:
+  erp-network:
+    driver: bridge
+

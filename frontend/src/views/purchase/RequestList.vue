@@ -434,10 +434,15 @@ const handleSave = async () => {
     dialogVisible.value = false
     loadRequests()
   } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('保存采购申请失败')
-      console.error(error)
+    console.error('保存失败详情:', error.response?.data || error)
+    const errData = error.response?.data
+    let errMsg = '保存采购申请失败'
+    if (errData) {
+      if (errData.required_date) errMsg = '请选择需求日期'
+      else if (errData.detail) errMsg = errData.detail
+      else if (typeof errData === 'object') errMsg = JSON.stringify(errData)
     }
+    ElMessage.error(errMsg)
   } finally {
     saving.value = false
   }

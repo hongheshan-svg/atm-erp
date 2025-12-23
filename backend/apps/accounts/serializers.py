@@ -45,15 +45,16 @@ class RoleSerializer(serializers.ModelSerializer):
             'is_active', 'sort_order', 'user_count', 'is_deleted',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['code', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at']
     
     def get_user_count(self, obj):
         return obj.users.filter(is_deleted=False, is_active=True).count()
     
     def create(self, validated_data):
         import uuid
-        # 自动生成角色编码
-        validated_data['code'] = f"ROLE{uuid.uuid4().hex[:6].upper()}"
+        # 如果没有提供code，自动生成角色编码
+        if not validated_data.get('code'):
+            validated_data['code'] = f"ROLE{uuid.uuid4().hex[:6].upper()}"
         return super().create(validated_data)
 
 

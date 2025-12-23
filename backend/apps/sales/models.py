@@ -108,7 +108,7 @@ class SalesQuotationLine(BaseModel):
 class SalesOrder(BaseModel):
     """
     Sales Order (SO) - 销售订单
-    NOTE: project is REQUIRED for revenue attribution
+    NOTE: project is OPTIONAL - some orders are placed before project creation (e.g. custom orders)
     """
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
@@ -129,7 +129,9 @@ class SalesOrder(BaseModel):
         'projects.Project',
         on_delete=models.PROTECT,
         related_name='sales_orders',
-        verbose_name='关联项目'
+        verbose_name='关联项目',
+        null=True,
+        blank=True
     )
     order_date = models.DateField(auto_now_add=True, verbose_name='订单日期')
     delivery_date = models.DateField(verbose_name='交货日期')

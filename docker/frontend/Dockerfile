@@ -1,0 +1,45 @@
+# ERP Frontend Dockerfile
+# Multi-stage build: Build Vue3 app and serve with Nginx
+
+# ===============================
+# Stage 1: Build Vue application
+# ===============================
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY frontend/package*.json ./
+
+# Install dependencies
+RUN npm ci --prefer-offline
+
+# Copy source code
+COPY frontend/ ./
+
+# Build for production
+ENV VITE_API_BASE_URL=/api
+RUN npm run build
+
+# ===============================
+# Stage 2: Serve with Nginx
+# ===============================
+FROM nginx:alpine
+
+# Remove default nginx config
+RUN rm -rf /etc/nginx/conf.d/*
+
+# Copy custom nginx config
+COPY docker/nginx/nginx.conf /etc/nginx/nginx.conf
+
+# Copy built frontend files
+COPY --from=builder /app/dist /var/www/erp
+
+# Create necessary directories
+RUN mkdir -p /var/cache/nginx /var/log/nginx
+
+# Expose port
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
+

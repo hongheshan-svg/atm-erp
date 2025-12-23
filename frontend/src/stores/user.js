@@ -61,7 +61,12 @@ export const useUserStore = defineStore('user', () => {
   // Check menu access
   function hasMenu(menuId) {
     if (!menuId) return true
-    if (menuIds.value.length === 0) return true  // Empty means all menus
+    // 超级管理员有所有权限
+    if (userInfo.value?.is_superuser) return true
+    // 如果有通配符权限
+    if (permissions.value?.includes('*:*:*')) return true
+    // 如果没有配置菜单权限，则无权限访问
+    if (!menuIds.value || menuIds.value.length === 0) return false
     return menuIds.value.includes(menuId)
   }
 

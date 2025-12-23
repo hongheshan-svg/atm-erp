@@ -82,14 +82,14 @@
             {{ Math.max(0, (row.planned_qty || 0) - (row.actual_qty || 0)) }}
           </template>
         </el-table-column>
-        <el-table-column prop="unit_price" label="单价" width="100" align="right">
+        <el-table-column prop="estimated_cost" label="单价" width="100" align="right">
           <template #default="{ row }">
-            ¥{{ row.unit_price || 0 }}
+            ¥{{ row.estimated_cost || 0 }}
           </template>
         </el-table-column>
         <el-table-column label="预估成本" width="120" align="right">
           <template #default="{ row }">
-            ¥{{ ((row.planned_qty || 0) * (row.unit_price || 0)).toFixed(2) }}
+            ¥{{ ((row.planned_qty || 0) * (row.estimated_cost || 0)).toFixed(2) }}
           </template>
         </el-table-column>
         <el-table-column label="完成率" width="100">
@@ -119,7 +119,7 @@
             <el-option
               v-for="item in items"
               :key="item.id"
-              :label="`${item.code} - ${item.name}`"
+              :label="`${item.sku} - ${item.name}`"
               :value="item.id"
             />
           </el-select>
@@ -147,7 +147,7 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="单价">
-              <el-input-number v-model="form.unit_price" :min="0" :precision="2" style="width: 100%;" />
+              <el-input-number v-model="form.estimated_cost" :min="0" :precision="2" style="width: 100%;" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -301,7 +301,7 @@ const form = reactive({
   specification: '',
   unit: '',
   planned_qty: 1,
-  unit_price: 0,
+  estimated_cost: 0,
   notes: ''
 })
 
@@ -326,7 +326,7 @@ const totalActualQty = computed(() =>
 )
 
 const totalEstimatedCost = computed(() => 
-  bomItems.value.reduce((sum, item) => sum + (item.planned_qty || 0) * (item.unit_price || 0), 0)
+  bomItems.value.reduce((sum, item) => sum + (item.planned_qty || 0) * (item.estimated_cost || 0), 0)
 )
 
 const getProgressStatus = (row) => {
@@ -357,11 +357,11 @@ const fetchBOM = async () => {
     const res = await request.get('/projects/bom/', {
       params: { project: selectedProject.value }
     })
-    bomItems.value = res.data?.results || res.results || res.data || []
+    bomItems.value = res.data?.results || res.results || res.data || res || []
   } catch (error) {
     console.error('获取BOM列表失败:', error)
-    // 使用模拟数据
-    bomItems.value = getMockBOM()
+    bomItems.value = []
+    ElMessage.error('获取BOM列表失败')
   } finally {
     loading.value = false
   }
@@ -369,10 +369,10 @@ const fetchBOM = async () => {
 
 const getMockBOM = () => {
   return [
-    { id: 1, item: 1, item_code: 'MAT-001', item_name: '电子元器件A', specification: '10mm x 5mm', unit: '个', planned_qty: 1000, actual_qty: 800, unit_price: 2.5, notes: '核心元件' },
-    { id: 2, item: 2, item_code: 'MAT-002', item_name: '机械配件B', specification: 'M8 x 30', unit: '套', planned_qty: 50, actual_qty: 50, unit_price: 45, notes: '' },
-    { id: 3, item: 3, item_code: 'MAT-003', item_name: '包装材料C', specification: '50cm x 50cm', unit: '张', planned_qty: 500, actual_qty: 200, unit_price: 0.5, notes: '包装用' },
-    { id: 4, item: 4, item_code: 'MAT-004', item_name: '连接线缆D', specification: '2m', unit: '根', planned_qty: 200, actual_qty: 0, unit_price: 15, notes: '待采购' }
+    { id: 1, item: 1, item_code: 'MAT-001', item_name: '电子元器件A', specification: '10mm x 5mm', unit: '个', planned_qty: 1000, actual_qty: 800, estimated_cost: 2.5, notes: '核心元件' },
+    { id: 2, item: 2, item_code: 'MAT-002', item_name: '机械配件B', specification: 'M8 x 30', unit: '套', planned_qty: 50, actual_qty: 50, estimated_cost: 45, notes: '' },
+    { id: 3, item: 3, item_code: 'MAT-003', item_name: '包装材料C', specification: '50cm x 50cm', unit: '张', planned_qty: 500, actual_qty: 200, estimated_cost: 0.5, notes: '包装用' },
+    { id: 4, item: 4, item_code: 'MAT-004', item_name: '连接线缆D', specification: '2m', unit: '根', planned_qty: 200, actual_qty: 0, estimated_cost: 15, notes: '待采购' }
   ]
 }
 
@@ -393,18 +393,18 @@ const resetForm = () => {
   form.specification = ''
   form.unit = ''
   form.planned_qty = 1
-  form.unit_price = 0
+  form.estimated_cost = 0
   form.notes = ''
 }
 
 const handleItemChange = (itemId) => {
   const item = items.value.find(i => i.id === itemId)
   if (item) {
-    form.item_code = item.code
+    form.item_code = item.sku
     form.item_name = item.name
     form.specification = item.specification || ''
     form.unit = item.unit || ''
-    form.unit_price = item.standard_cost || 0
+    form.estimated_cost = item.standard_cost || 0
   }
 }
 
@@ -450,7 +450,14 @@ const handleSubmit = async () => {
     fetchBOM()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('操作失败')
+      const errData = error.response?.data
+      if (errData?.non_field_errors) {
+        ElMessage.error('该物料已在BOM中存在，请勿重复添加')
+      } else if (errData?.item) {
+        ElMessage.error(errData.item[0] || '物料错误')
+      } else {
+        ElMessage.error('操作失败')
+      }
     }
   }
 }

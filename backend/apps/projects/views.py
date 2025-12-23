@@ -4,7 +4,7 @@ Views for projects app.
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from django.db.models import Sum, F
 from django.http import HttpResponse
 import pandas as pd
@@ -179,7 +179,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
     filterset_fields = ['project', 'item', 'is_deleted']
     search_fields = ['item__sku', 'item__name']
     ordering_fields = ['created_at']
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
     
     @action(detail=False, methods=['post'])
     def batch_create(self, request):

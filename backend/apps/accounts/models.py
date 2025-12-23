@@ -124,6 +124,11 @@ class User(AbstractUser, SoftDeleteModel):
     def __str__(self):
         return f"{self.username} ({self.get_full_name() or self.employee_id})"
     
+    def get_full_name(self):
+        """中文姓名格式：姓(last_name) + 名(first_name)"""
+        full_name = f"{self.last_name}{self.first_name}".strip()
+        return full_name or self.username
+    
     def has_permission(self, permission_code):
         """Check if user has a specific permission."""
         if self.is_superuser:

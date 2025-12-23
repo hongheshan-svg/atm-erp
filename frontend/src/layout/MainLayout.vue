@@ -13,128 +13,128 @@
         :collapse-transition="false"
         router
       >
-        <el-menu-item index="/dashboard">
+        <el-menu-item index="/dashboard" v-if="hasMenuAccess('dashboard')">
           <el-icon><DataAnalysis /></el-icon>
           <span>仪表盘</span>
         </el-menu-item>
         
-        <el-sub-menu index="workflow">
+        <el-sub-menu index="workflow" v-if="hasMenuAccess('workflow')">
           <template #title>
             <el-icon><Checked /></el-icon>
             <span>审批中心</span>
           </template>
-          <el-menu-item index="/workflow/tasks">待办审批</el-menu-item>
-          <el-menu-item index="/workflow/my-submissions">我的提交</el-menu-item>
-          <el-menu-item index="/workflow/config">流程配置</el-menu-item>
+          <el-menu-item index="/workflow/tasks" v-if="hasMenuAccess('workflow:tasks')">待办审批</el-menu-item>
+          <el-menu-item index="/workflow/my-submissions" v-if="hasMenuAccess('workflow:my-submissions')">我的提交</el-menu-item>
+          <el-menu-item index="/workflow/config" v-if="hasMenuAccess('workflow:config')">流程配置</el-menu-item>
         </el-sub-menu>
 
-        <el-sub-menu index="system">
+        <el-sub-menu index="system" v-if="hasMenuAccess('system')">
           <template #title>
             <el-icon><Setting /></el-icon>
             <span>系统管理</span>
           </template>
-          <el-menu-item index="/users">用户管理</el-menu-item>
-          <el-menu-item index="/roles">角色管理</el-menu-item>
-          <el-menu-item index="/departments">部门管理</el-menu-item>
-          <el-menu-item index="/notification-settings">通知设置</el-menu-item>
-          <el-menu-item index="/system/audit-log">审计日志</el-menu-item>
-          <el-menu-item index="/system/notifications">通知中心</el-menu-item>
-          <el-menu-item index="/system/login-logs">登录日志</el-menu-item>
-          <el-menu-item index="/system/webhooks">Webhook管理</el-menu-item>
-          <el-menu-item index="/system/dashboard-config">仪表盘配置</el-menu-item>
+          <el-menu-item index="/users" v-if="hasMenuAccess('system:users')">用户管理</el-menu-item>
+          <el-menu-item index="/roles" v-if="hasMenuAccess('system:roles')">角色管理</el-menu-item>
+          <el-menu-item index="/departments" v-if="hasMenuAccess('system:departments')">部门管理</el-menu-item>
+          <el-menu-item index="/notification-settings" v-if="hasMenuAccess('system:notifications')">通知设置</el-menu-item>
+          <el-menu-item index="/system/audit-log" v-if="hasMenuAccess('system:audit-log')">审计日志</el-menu-item>
+          <el-menu-item index="/system/notifications" v-if="hasMenuAccess('system:notifications')">通知中心</el-menu-item>
+          <el-menu-item index="/system/login-logs" v-if="hasMenuAccess('system:login-logs')">登录日志</el-menu-item>
+          <el-menu-item index="/system/webhooks" v-if="hasMenuAccess('system:webhooks')">Webhook管理</el-menu-item>
+          <el-menu-item index="/system/dashboard-config" v-if="hasMenuAccess('system:dashboard-config')">仪表盘配置</el-menu-item>
         </el-sub-menu>
         
-        <el-sub-menu index="masterdata">
+        <el-sub-menu index="masterdata" v-if="hasMenuAccess('masterdata')">
           <template #title>
             <el-icon><Document /></el-icon>
             <span>基础数据</span>
           </template>
-          <el-menu-item index="/items">物料管理</el-menu-item>
-          <el-menu-item index="/customers">客户管理</el-menu-item>
-          <el-menu-item index="/suppliers">供应商管理</el-menu-item>
-          <el-menu-item index="/warehouses">仓库管理</el-menu-item>
-          <el-menu-item index="/locations">库位管理</el-menu-item>
+          <el-menu-item index="/items" v-if="hasMenuAccess('masterdata:items')">物料管理</el-menu-item>
+          <el-menu-item index="/customers" v-if="hasMenuAccess('masterdata:customers')">客户管理</el-menu-item>
+          <el-menu-item index="/suppliers" v-if="hasMenuAccess('masterdata:suppliers')">供应商管理</el-menu-item>
+          <el-menu-item index="/warehouses" v-if="hasMenuAccess('masterdata:warehouses')">仓库管理</el-menu-item>
+          <el-menu-item index="/locations" v-if="hasMenuAccess('masterdata:locations')">库位管理</el-menu-item>
         </el-sub-menu>
         
-        <el-sub-menu index="projects">
+        <el-sub-menu index="projects" v-if="hasMenuAccess('projects')">
           <template #title>
             <el-icon><Management /></el-icon>
             <span>项目管理</span>
           </template>
-          <el-menu-item index="/projects">项目列表</el-menu-item>
-          <el-menu-item index="/projects/tasks">任务管理</el-menu-item>
-          <el-menu-item index="/projects/members">成员管理</el-menu-item>
-          <el-menu-item index="/projects/bom">BOM清单</el-menu-item>
-          <el-menu-item index="/projects/time-logs">工时填报</el-menu-item>
-          <el-menu-item index="/projects/gantt">甘特图</el-menu-item>
+          <el-menu-item index="/projects" v-if="hasMenuAccess('projects:list')">项目列表</el-menu-item>
+          <el-menu-item index="/projects/tasks" v-if="hasMenuAccess('projects:tasks')">任务管理</el-menu-item>
+          <el-menu-item index="/projects/members" v-if="hasMenuAccess('projects:members')">成员管理</el-menu-item>
+          <el-menu-item index="/projects/bom" v-if="hasMenuAccess('projects:bom')">BOM清单</el-menu-item>
+          <el-menu-item index="/projects/time-logs" v-if="hasMenuAccess('projects:time-logs')">工时填报</el-menu-item>
+          <el-menu-item index="/projects/gantt" v-if="hasMenuAccess('projects:gantt')">甘特图</el-menu-item>
         </el-sub-menu>
         
-        <el-sub-menu index="purchase">
+        <el-sub-menu index="purchase" v-if="hasMenuAccess('purchase')">
           <template #title>
             <el-icon><ShoppingCart /></el-icon>
             <span>采购管理</span>
           </template>
-          <el-menu-item index="/purchase/requests">采购申请</el-menu-item>
-          <el-menu-item index="/purchase/orders">采购订单</el-menu-item>
-          <el-menu-item index="/purchase/goods-receipts">到货质检</el-menu-item>
+          <el-menu-item index="/purchase/requests" v-if="hasMenuAccess('purchase:requests')">采购申请</el-menu-item>
+          <el-menu-item index="/purchase/orders" v-if="hasMenuAccess('purchase:orders')">采购订单</el-menu-item>
+          <el-menu-item index="/purchase/goods-receipts" v-if="hasMenuAccess('purchase:goods-receipts')">到货质检</el-menu-item>
         </el-sub-menu>
         
-        <el-sub-menu index="sales">
+        <el-sub-menu index="sales" v-if="hasMenuAccess('sales')">
           <template #title>
             <el-icon><Sell /></el-icon>
             <span>销售管理</span>
           </template>
-          <el-menu-item index="/sales/quotations">销售报价</el-menu-item>
-          <el-menu-item index="/sales/orders">销售订单</el-menu-item>
-          <el-menu-item index="/sales/delivery-orders">发货单</el-menu-item>
+          <el-menu-item index="/sales/quotations" v-if="hasMenuAccess('sales:quotations')">销售报价</el-menu-item>
+          <el-menu-item index="/sales/orders" v-if="hasMenuAccess('sales:orders')">销售订单</el-menu-item>
+          <el-menu-item index="/sales/delivery-orders" v-if="hasMenuAccess('sales:delivery-orders')">发货单</el-menu-item>
         </el-sub-menu>
         
-        <el-sub-menu index="inventory">
+        <el-sub-menu index="inventory" v-if="hasMenuAccess('inventory')">
           <template #title>
             <el-icon><Goods /></el-icon>
             <span>库存管理</span>
           </template>
-          <el-menu-item index="/inventory/stocks">库存查询</el-menu-item>
-          <el-menu-item index="/inventory/batches">批次管理</el-menu-item>
-          <el-menu-item index="/inventory/moves">库存流水</el-menu-item>
-          <el-menu-item index="/inventory/transfer">库存调拨</el-menu-item>
-          <el-menu-item index="/inventory/adjustment">库存盘点</el-menu-item>
-          <el-menu-item index="/inventory/alert">库存预警</el-menu-item>
+          <el-menu-item index="/inventory/stocks" v-if="hasMenuAccess('inventory:stocks')">库存查询</el-menu-item>
+          <el-menu-item index="/inventory/batches" v-if="hasMenuAccess('inventory:batches')">批次管理</el-menu-item>
+          <el-menu-item index="/inventory/moves" v-if="hasMenuAccess('inventory:moves')">库存流水</el-menu-item>
+          <el-menu-item index="/inventory/transfer" v-if="hasMenuAccess('inventory:transfer')">库存调拨</el-menu-item>
+          <el-menu-item index="/inventory/adjustment" v-if="hasMenuAccess('inventory:adjustment')">库存盘点</el-menu-item>
+          <el-menu-item index="/inventory/alert" v-if="hasMenuAccess('inventory:alert')">库存预警</el-menu-item>
         </el-sub-menu>
         
-        <el-sub-menu index="finance">
+        <el-sub-menu index="finance" v-if="hasMenuAccess('finance')">
           <template #title>
             <el-icon><Money /></el-icon>
             <span>财务管理</span>
           </template>
-          <el-menu-item index="/finance/expenses">费用报销</el-menu-item>
-          <el-menu-item index="/finance/shared-expenses">公共费用分摊</el-menu-item>
-          <el-menu-item index="/finance/ar">应收账款</el-menu-item>
-          <el-menu-item index="/finance/ap">应付账款</el-menu-item>
-          <el-menu-item index="/finance/invoices">发票管理</el-menu-item>
-          <el-menu-item index="/finance/project-costs">项目成本核算</el-menu-item>
+          <el-menu-item index="/finance/expenses" v-if="hasMenuAccess('finance:expenses')">费用报销</el-menu-item>
+          <el-menu-item index="/finance/shared-expenses" v-if="hasMenuAccess('finance:shared-expenses')">公共费用分摊</el-menu-item>
+          <el-menu-item index="/finance/ar" v-if="hasMenuAccess('finance:ar')">应收账款</el-menu-item>
+          <el-menu-item index="/finance/ap" v-if="hasMenuAccess('finance:ap')">应付账款</el-menu-item>
+          <el-menu-item index="/finance/invoices" v-if="hasMenuAccess('finance:invoices')">发票管理</el-menu-item>
+          <el-menu-item index="/finance/project-costs" v-if="hasMenuAccess('finance:project-costs')">项目成本核算</el-menu-item>
         </el-sub-menu>
         
-        <el-sub-menu index="reports">
+        <el-sub-menu index="reports" v-if="hasMenuAccess('reports')">
           <template #title>
             <el-icon><TrendCharts /></el-icon>
             <span>报表中心</span>
           </template>
-          <el-menu-item index="/reports/profitability">项目利润分析</el-menu-item>
-          <el-menu-item index="/reports/cash-flow">现金流预测</el-menu-item>
-          <el-menu-item index="/reports/inventory-turnover">库存周转率</el-menu-item>
-          <el-menu-item index="/reports/slow-moving">呆滞物料分析</el-menu-item>
-          <el-menu-item index="/reports/aging">账龄分析</el-menu-item>
-          <el-menu-item index="/reports/purchase-price-trend">采购价格趋势</el-menu-item>
+          <el-menu-item index="/reports/profitability" v-if="hasMenuAccess('reports:profitability')">项目利润分析</el-menu-item>
+          <el-menu-item index="/reports/cash-flow" v-if="hasMenuAccess('reports:cash-flow')">现金流预测</el-menu-item>
+          <el-menu-item index="/reports/inventory-turnover" v-if="hasMenuAccess('reports:inventory-turnover')">库存周转率</el-menu-item>
+          <el-menu-item index="/reports/slow-moving" v-if="hasMenuAccess('reports:slow-moving')">呆滞物料分析</el-menu-item>
+          <el-menu-item index="/reports/aging" v-if="hasMenuAccess('reports:aging')">账龄分析</el-menu-item>
+          <el-menu-item index="/reports/purchase-price-trend" v-if="hasMenuAccess('reports:purchase-price-trend')">采购价格趋势</el-menu-item>
         </el-sub-menu>
         
-        <el-sub-menu index="analytics">
+        <el-sub-menu index="analytics" v-if="hasMenuAccess('analytics')">
           <template #title>
             <el-icon><DataLine /></el-icon>
             <span>数据分析</span>
           </template>
-          <el-menu-item index="/analytics/project">项目分析</el-menu-item>
-          <el-menu-item index="/analytics/inventory">库存分析</el-menu-item>
+          <el-menu-item index="/analytics/project" v-if="hasMenuAccess('analytics:project')">项目分析</el-menu-item>
+          <el-menu-item index="/analytics/inventory" v-if="hasMenuAccess('analytics:inventory')">库存分析</el-menu-item>
         </el-sub-menu>
       </el-menu>
     </el-aside>
@@ -185,7 +185,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import {
@@ -198,6 +198,37 @@ const router = useRouter()
 const userStore = useUserStore()
 
 const isCollapse = ref(false)
+
+// 检查是否有菜单访问权限
+const hasMenuAccess = (menuId) => {
+  // 超级管理员有所有权限
+  if (userStore.userInfo?.is_superuser) {
+    return true
+  }
+  
+  // 如果权限列表包含 *:*:* 则有所有权限
+  if (userStore.permissions?.includes('*:*:*')) {
+    return true
+  }
+  
+  // 获取用户的菜单权限列表
+  const menuIds = userStore.menuIds
+  
+  // 如果 menuIds 为空或未定义，表示没有配置权限，不显示任何菜单
+  if (!menuIds || menuIds.length === 0) {
+    return false
+  }
+  
+  // 检查是否在权限列表中
+  // 对于父菜单，检查是否有任何子菜单的权限
+  if (!menuId.includes(':')) {
+    // 这是父菜单，检查是否有任何以该前缀开头的子菜单权限
+    return menuIds.some(id => id === menuId || id.startsWith(menuId + ':'))
+  }
+  
+  // 子菜单直接检查
+  return menuIds.includes(menuId)
+}
 
 const toggleCollapse = () => {
   isCollapse.value = !isCollapse.value
@@ -363,4 +394,3 @@ onMounted(async () => {
   opacity: 0;
 }
 </style>
-

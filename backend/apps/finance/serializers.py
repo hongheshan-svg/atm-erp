@@ -55,9 +55,15 @@ class ExpenseSerializer(serializers.ModelSerializer):
 class AccountReceivableSerializer(serializers.ModelSerializer):
     """AccountReceivable serializer."""
     customer_name = serializers.CharField(source='customer.name', read_only=True)
-    so_no = serializers.CharField(source='so.order_no', read_only=True)
-    project_name = serializers.CharField(source='project.name', read_only=True)
+    so_no = serializers.SerializerMethodField()
+    project_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
+    def get_so_no(self, obj):
+        return obj.so.order_no if obj.so else None
+    
+    def get_project_name(self, obj):
+        return obj.project.name if obj.project else '未关联项目'
     currency_code = serializers.CharField(source='currency.code', read_only=True)
     amount_remaining = serializers.SerializerMethodField()
     

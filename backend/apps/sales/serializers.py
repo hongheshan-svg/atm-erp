@@ -130,9 +130,12 @@ class SalesOrderLineWriteSerializer(serializers.Serializer):
 class SalesOrderSerializer(serializers.ModelSerializer):
     """SalesOrder serializer."""
     customer_name = serializers.CharField(source='customer.name', read_only=True)
-    project_name = serializers.CharField(source='project.name', read_only=True)
+    project_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     lines = SalesOrderLineSerializer(many=True, read_only=True)
+    
+    def get_project_name(self, obj):
+        return obj.project.name if obj.project else '未关联项目'
     
     class Meta:
         model = SalesOrder

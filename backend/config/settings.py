@@ -157,6 +157,14 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+        'rest_framework.parsers.FormParser',
+        'rest_framework.parsers.MultiPartParser',
+    ],
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
     'DEFAULT_FILTER_BACKENDS': [
@@ -227,8 +235,13 @@ SPECTACULAR_SETTINGS = {
 
 # Logging
 import os
-LOG_DIR = BASE_DIR.parent / 'logs'
-if not LOG_DIR.exists():
+LOG_DIR = BASE_DIR / 'logs'  # Use /app/logs in Docker
+try:
+    if not LOG_DIR.exists():
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+except PermissionError:
+    # Fallback to /tmp if no write permission
+    LOG_DIR = Path('/tmp/erp_logs')
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 LOGGING = {

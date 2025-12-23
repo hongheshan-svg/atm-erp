@@ -10,7 +10,7 @@
 
       <el-form :inline="true" :model="searchForm" class="search-form">
         <el-form-item label="仓库">
-          <el-select v-model="searchForm.warehouse" placeholder="选择仓库" clearable>
+          <el-select v-model="searchForm.warehouse" placeholder="选择仓库" clearable style="width: 180px;">
             <el-option v-for="wh in warehouses" :key="wh.id" :label="wh.name" :value="wh.id" />
           </el-select>
         </el-form-item>

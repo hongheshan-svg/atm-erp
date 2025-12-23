@@ -47,8 +47,13 @@
           <el-input v-model="form.name" />
         </el-form-item>
         <el-form-item label="客户">
-          <el-select v-model="form.customer" filterable>
+          <el-select v-model="form.customer" filterable placeholder="请选择客户">
             <el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="项目经理">
+          <el-select v-model="form.manager" filterable placeholder="请选择项目经理">
+            <el-option v-for="u in users" :key="u.id" :label="getUserDisplayName(u)" :value="u.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="开始日期">
@@ -102,6 +107,7 @@ const router = useRouter()
 const loading = ref(false)
 const projects = ref([])
 const customers = ref([])
+const users = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('创建项目')
 const isEdit = ref(false)
@@ -114,6 +120,7 @@ const form = reactive({
   code: '',
   name: '',
   customer: null,
+  manager: null,
   start_date: '',
   end_date: '',
   budget_total: 0,
@@ -146,6 +153,15 @@ const getStatusLabel = (status) => {
   return labels[status] || status
 }
 
+const getUserDisplayName = (user) => {
+  // 优先显示姓名，如果没有则显示用户名
+  const fullName = (user.last_name || '') + (user.first_name || '')
+  if (fullName.trim() && fullName !== user.username) {
+    return fullName
+  }
+  return user.username
+}
+
 const loadProjects = async () => {
   loading.value = true
   try {
@@ -167,6 +183,15 @@ const loadCustomers = async () => {
   }
 }
 
+const loadUsers = async () => {
+  try {
+    const response = await request.get('/auth/users/')
+    users.value = response.results || response || []
+  } catch (error) {
+    console.error('Failed to load users')
+  }
+}
+
 const handleView = (row) => {
   router.push(`/projects/${row.id}`)
 }
@@ -174,7 +199,7 @@ const handleView = (row) => {
 const handleAdd = () => {
   dialogTitle.value = '创建项目'
   isEdit.value = false
-  Object.assign(form, { id: null, code: '', name: '', customer: null, start_date: '', end_date: '', budget_total: 0, status: 'DRAFT' })
+  Object.assign(form, { id: null, code: '', name: '', customer: null, manager: null, start_date: '', end_date: '', budget_total: 0, status: 'DRAFT' })
   dialogVisible.value = true
 }
 
@@ -230,6 +255,7 @@ const handleExport = async () => {
 onMounted(() => {
   loadProjects()
   loadCustomers()
+  loadUsers()
 })
 </script>
 
