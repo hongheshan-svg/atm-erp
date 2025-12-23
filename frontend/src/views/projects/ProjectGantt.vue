@@ -209,13 +209,13 @@ const loadProjectTasks = async () => {
   try {
     // Load project details
     const projectRes = await request.get(`/projects/projects/${selectedProject.value}/`)
-    currentProject.value = projectRes.data
+    currentProject.value = projectRes.data || projectRes
     
     // Load tasks
     const tasksRes = await request.get('/projects/tasks/', {
       params: { project: selectedProject.value }
     })
-    taskList.value = tasksRes.response.results || tasksRes.data
+    taskList.value = tasksRes.results || tasksRes.data || tasksRes || []
     
     // Ensure tasks have dates
     taskList.value = taskList.value.map(task => ({
