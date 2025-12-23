@@ -13,7 +13,7 @@
           <el-input v-model="searchForm.po_no" placeholder="请输入采购订单号" clearable />
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="searchForm.status" placeholder="请选择状态" clearable>
+          <el-select v-model="searchForm.status" placeholder="请选择状态" clearable style="width: 140px;">
             <el-option label="草稿" value="DRAFT" />
             <el-option label="已确认" value="CONFIRMED" />
             <el-option label="已完成" value="COMPLETED" />
