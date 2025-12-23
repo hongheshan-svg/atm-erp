@@ -122,7 +122,7 @@ import request from '@/utils/request'
 
 const kpis = ref({
   financial: {
-    revenue: { total: 0, orders: 0, average_order: 0 },
+    revenue: { total: 0, orders: 0 },
     purchases: { total: 0, orders: 0 },
     receivables: 0,
     payables: 0,
@@ -173,23 +173,33 @@ const loadKPIs = async () => {
   try {
     const res = await request.get('/analytics/dashboard/')
     const data = res.data || res
+    // 后端返回格式: { financial: {...}, projects: {...}, inventory: {...} }
     kpis.value = {
       financial: {
-        revenue: { total: data.sales?.total_amount || 0, orders: data.sales?.total_orders || 0 },
-        net_cash_position: (data.inventory?.total_value || 0) - (data.purchase?.total_amount || 0)
+        revenue: { 
+          total: data.financial?.revenue?.total || 0, 
+          orders: data.financial?.revenue?.orders || 0 
+        },
+        purchases: {
+          total: data.financial?.purchases?.total || 0,
+          orders: data.financial?.purchases?.orders || 0
+        },
+        receivables: data.financial?.receivables || 0,
+        payables: data.financial?.payables || 0,
+        net_cash_position: data.financial?.net_cash_position || 0
       },
       projects: {
-        active_projects: data.projects?.active || 0,
-        total_budget: data.projects?.total || 0,
-        task_completion_rate: 0,
-        total_tasks: 0,
-        completed_tasks: 0
+        active_projects: data.projects?.active_projects || 0,
+        total_budget: data.projects?.total_budget || 0,
+        task_completion_rate: data.projects?.task_completion_rate || 0,
+        total_tasks: data.projects?.total_tasks || 0,
+        completed_tasks: data.projects?.completed_tasks || 0
       },
       inventory: {
-        inventory_value: data.inventory?.total_value || 0,
-        total_items: data.inventory?.low_stock_items || 0,
+        inventory_value: data.inventory?.inventory_value || 0,
+        total_items: data.inventory?.total_items || 0,
         low_stock_items: data.inventory?.low_stock_items || 0,
-        recent_movements: 0
+        recent_movements: data.inventory?.recent_movements || 0
       }
     }
   } catch (error) {
@@ -198,6 +208,9 @@ const loadKPIs = async () => {
     kpis.value = {
       financial: {
         revenue: { total: 0, orders: 0 },
+        purchases: { total: 0, orders: 0 },
+        receivables: 0,
+        payables: 0,
         net_cash_position: 0
       },
       projects: {

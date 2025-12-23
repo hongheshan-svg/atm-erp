@@ -17,26 +17,34 @@ class DashboardKPIService:
     @staticmethod
     def get_financial_kpis(start_date=None, end_date=None):
         """Calculate financial KPIs"""
-        if not start_date:
-            start_date = datetime.now() - timedelta(days=30)
-        if not end_date:
-            end_date = datetime.now()
+        # 构建销售订单查询
+        sales_qs = SalesOrder.objects.filter(
+            status__in=['CONFIRMED', 'COMPLETED'],
+            is_deleted=False
+        )
         
-        # Revenue metrics - 使用含税金额
-        sales_data = SalesOrder.objects.filter(
-            order_date__range=[start_date, end_date],
-            status__in=['CONFIRMED', 'COMPLETED']
-        ).aggregate(
+        # 构建采购订单查询
+        purchase_qs = PurchaseOrder.objects.filter(
+            is_deleted=False
+        )
+        
+        # 如果有日期范围，添加日期过滤
+        if start_date and end_date:
+            sales_qs = sales_qs.filter(order_date__range=[start_date, end_date])
+            purchase_qs = purchase_qs.filter(order_date__range=[start_date, end_date])
+        
+        # Revenue metrics - 使用含税金额（优先）或不含税金额
+        sales_data = sales_qs.aggregate(
             total_revenue=Sum('total_with_tax'),
+            total_amount=Sum('total_amount'),
             order_count=Count('id'),
             avg_order_value=Avg('total_with_tax')
         )
         
-        # Purchase metrics - 使用含税金额
-        purchase_data = PurchaseOrder.objects.filter(
-            order_date__range=[start_date, end_date]
-        ).aggregate(
+        # Purchase metrics - 使用含税金额（优先）或不含税金额
+        purchase_data = purchase_qs.aggregate(
             total_purchases=Sum('total_with_tax'),
+            total_amount=Sum('total_amount'),
             po_count=Count('id')
         )
         
@@ -53,19 +61,25 @@ class DashboardKPIService:
             total_payable=Sum(F('amount_due') - F('amount_paid'))
         )
         
+        # 优先使用含税金额，如果没有则使用不含税金额
+        sales_total = sales_data['total_revenue'] or sales_data['total_amount'] or 0
+        purchase_total = purchase_data['total_purchases'] or purchase_data['total_amount'] or 0
+        receivables = ar_data['total_receivable'] or 0
+        payables = ap_data['total_payable'] or 0
+        
         return {
             'revenue': {
-                'total': sales_data['total_revenue'] or 0,
+                'total': float(sales_total),
                 'orders': sales_data['order_count'] or 0,
-                'average_order': sales_data['avg_order_value'] or 0
+                'average_order': float(sales_data['avg_order_value'] or 0)
             },
             'purchases': {
-                'total': purchase_data['total_purchases'] or 0,
+                'total': float(purchase_total),
                 'orders': purchase_data['po_count'] or 0
             },
-            'receivables': ar_data['total_receivable'] or 0,
-            'payables': ap_data['total_payable'] or 0,
-            'net_cash_position': (ar_data['total_receivable'] or 0) - (ap_data['total_payable'] or 0)
+            'receivables': float(receivables),
+            'payables': float(payables),
+            'net_cash_position': float(receivables - payables)
         }
     
     @staticmethod
