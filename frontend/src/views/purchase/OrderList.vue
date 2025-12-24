@@ -49,7 +49,7 @@
         </el-table-column>
         <el-table-column prop="order_date" label="订单日期" width="120" />
         <el-table-column prop="delivery_date" label="交货日期" width="120" />
-        <el-table-column label="操作" width="350" fixed="right">
+        <el-table-column label="操作" width="400" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
@@ -57,6 +57,7 @@
             <el-button size="small" type="warning" @click="handleViewAttachments(row)">附件</el-button>
             <el-button size="small" type="success" @click="receiveGoods(row)" v-if="row.status === 'CONFIRMED' || row.status === 'PARTIAL'">收货</el-button>
             <el-button size="small" type="danger" @click="handleCancel(row)" v-if="row.status === 'DRAFT' || row.status === 'CONFIRMED'">取消</el-button>
+            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -481,12 +482,29 @@ const handleCancel = async (row) => {
 }
 
 const receiveGoods = (row) => {
-  router.push(`/purchase/receipts?po_id=${row.id}`)
+  router.push(`/purchase/goods-receipts?po_id=${row.id}`)
 }
 
 const handleViewAttachments = (row) => {
   currentOrder.value = row
   attachmentDialogVisible.value = true
+}
+
+const handleDelete = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除采购订单 ${row.order_no} 吗？此操作不可恢复！`, 
+      '删除订单', 
+      { type: 'warning' }
+    )
+    await request.delete(`/purchase/orders/${row.id}/`)
+    ElMessage.success('订单已删除')
+    loadOrders()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除订单失败')
+    }
+  }
 }
 
 onMounted(() => {

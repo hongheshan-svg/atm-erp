@@ -10,7 +10,10 @@ from .views import (
     ProjectBOMViewSet,
     TimeLogViewSet,
     ECNViewSet,
-    ECNItemViewSet
+    ECNItemViewSet,
+    AfterSalesOrderViewSet,
+    ServiceRecordViewSet,
+    SparePartUsageViewSet
 )
 
 router = DefaultRouter()
@@ -21,6 +24,11 @@ router.register(r'bom', ProjectBOMViewSet, basename='bom')
 router.register(r'time-logs', TimeLogViewSet, basename='time-log')
 router.register(r'ecn', ECNViewSet, basename='ecn')
 router.register(r'ecn-items', ECNItemViewSet, basename='ecn-item')
+
+# 售后管理
+router.register(r'aftersales', AfterSalesOrderViewSet, basename='aftersales')
+router.register(r'service-records', ServiceRecordViewSet, basename='service-record')
+router.register(r'spare-parts', SparePartUsageViewSet, basename='spare-part')
 
 urlpatterns = [
     path('', include(router.urls)),

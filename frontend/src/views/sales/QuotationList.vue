@@ -67,7 +67,7 @@
         </el-table-column>
         <el-table-column prop="version" label="版本" width="80" align="center" />
         <el-table-column prop="created_by_name" label="创建人" width="100" />
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="操作" width="340" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
@@ -82,6 +82,7 @@
             >
               转销售订单
             </el-button>
+            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -314,6 +315,23 @@ const handleConvertToOrder = async (row) => {
 const handlePrint = () => {
   ElMessage.info('打印功能待实现')
   // 这里可以集成打印或PDF生成功能
+}
+
+const handleDelete = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除报价单 ${row.quotation_no} 吗？此操作不可恢复！`, 
+      '删除报价单', 
+      { type: 'warning' }
+    )
+    await request.delete(`/sales/quotations/${row.id}/`)
+    ElMessage.success('报价单已删除')
+    loadQuotations()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除报价单失败')
+    }
+  }
 }
 
 onMounted(() => {

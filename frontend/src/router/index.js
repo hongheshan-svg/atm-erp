@@ -125,6 +125,19 @@ const routes = [
         component: () => import('@/views/projects/ECNList.vue'),
         meta: { title: 'ECN变更', icon: 'Edit', menuId: 'projects:list' }  // 使用与项目列表相同的权限
       },
+      // After Sales - 售后管理
+      {
+        path: 'aftersales/orders',
+        name: 'AfterSalesOrderList',
+        component: () => import('@/views/aftersales/OrderList.vue'),
+        meta: { title: '售后工单', icon: 'Service', menuId: 'aftersales:orders' }
+      },
+      {
+        path: 'aftersales/orders/:id',
+        name: 'AfterSalesOrderDetail',
+        component: () => import('@/views/aftersales/OrderDetail.vue'),
+        meta: { title: '工单详情', menuId: 'aftersales:orders' }
+      },
       // Purchase
       {
         path: 'purchase/requests',
@@ -478,7 +491,7 @@ router.beforeEach(async (to, from, next) => {
           }
           const targetPath = menuToPath[firstMenu] || '/profile'
           next(targetPath)
-        } else {
+  } else {
           // 没有任何权限，跳转到个人中心
           next('/profile')
         }
@@ -487,7 +500,7 @@ router.beforeEach(async (to, from, next) => {
     }
   }
   
-  next()
+    next()
 })
 
 export default router

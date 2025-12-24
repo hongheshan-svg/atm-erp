@@ -8,12 +8,16 @@ from datetime import datetime
 
 def generate_code(prefix, length=8):
     """
-    Generate a unique code with prefix.
-    Example: PR20240101001, SO20240101001
+    Generate a unique code with prefix and sequence number.
+    Example: PR20240101001, SO20240101002
+    Uses timestamp + random suffix for uniqueness.
     """
     date_str = datetime.now().strftime('%Y%m%d')
-    random_str = ''.join(random.choices(string.digits, k=length - len(date_str)))
-    return f"{prefix}{date_str}{random_str}"
+    # 使用时间戳的后几位 + 随机数确保唯一性
+    import time
+    timestamp_suffix = str(int(time.time() * 1000))[-4:]
+    random_suffix = ''.join(random.choices(string.digits, k=2))
+    return f"{prefix}{date_str}{timestamp_suffix}{random_suffix}"
 
 
 # 角色模块全访问权限映射

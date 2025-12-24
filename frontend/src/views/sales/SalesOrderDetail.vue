@@ -20,7 +20,7 @@
         </el-descriptions-item>
         <el-descriptions-item label="增值税率">{{ order.tax_rate ?? 13 }}%</el-descriptions-item>
         <el-descriptions-item label="不含税金额">
-          ¥{{ (order.total_amount || 0).toFixed(2) }}
+            ¥{{ (order.total_amount || 0).toFixed(2) }}
         </el-descriptions-item>
         <el-descriptions-item label="税额">
           ¥{{ (order.tax_amount || 0).toFixed(2) }}

@@ -22,24 +22,41 @@
       </el-form>
 
       <el-table :data="items" v-loading="loading" stripe border>
-        <el-table-column prop="id" label="编号" width="80" />
-        <el-table-column prop="sku" label="物料编码" />
-        <el-table-column prop="name" label="物料名称" />
-        <el-table-column prop="specification" label="规格" />
-        <el-table-column prop="unit" label="单位" width="80" />
-        <el-table-column prop="standard_cost" label="标准成本" width="120">
+        <el-table-column prop="sku" label="物料编码" width="120" fixed />
+        <el-table-column prop="name" label="物料名称" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="brand" label="品牌" width="100" show-overflow-tooltip />
+        <el-table-column prop="model" label="型号" width="100" show-overflow-tooltip />
+        <el-table-column prop="specification" label="规格" width="120" show-overflow-tooltip />
+        <el-table-column prop="unit_display" label="单位" width="60" />
+        <el-table-column label="采购价" width="100" align="right">
+          <template #default="{ row }">
+            ¥{{ parseFloat(row.purchase_price || 0).toFixed(2) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="销售价" width="100" align="right">
+          <template #default="{ row }">
+            ¥{{ parseFloat(row.sale_price || 0).toFixed(2) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="税率" width="70" align="center">
+          <template #default="{ row }">
+            {{ row.tax_rate }}%
+          </template>
+        </el-table-column>
+        <el-table-column label="标准成本" width="100" align="right">
           <template #default="{ row }">
             ¥{{ parseFloat(row.standard_cost || 0).toFixed(2) }}
           </template>
         </el-table-column>
-        <el-table-column prop="is_active" label="状态" width="100">
+        <el-table-column prop="manufacturer" label="生产厂家" width="120" show-overflow-tooltip />
+        <el-table-column prop="is_active" label="状态" width="80" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.is_active ? 'success' : 'info'">
+            <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
               {{ row.is_active ? '启用' : '禁用' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
@@ -59,41 +76,171 @@
       />
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="800px">
-      <el-form :model="form" :rules="rules" ref="formRef" label-width="150px">
-        <el-form-item label="物料编码" prop="sku">
-          <el-input v-model="form.sku" placeholder="请输入物料编码" />
-        </el-form-item>
-        <el-form-item label="物料名称" prop="name">
-          <el-input v-model="form.name" placeholder="请输入物料名称" />
-        </el-form-item>
-        <el-form-item label="规格">
-          <el-input v-model="form.specification" type="textarea" placeholder="请输入规格描述" />
-        </el-form-item>
-        <el-form-item label="单位" prop="unit">
-          <el-select v-model="form.unit" placeholder="选择单位">
-            <el-option label="个" value="PCS" />
-            <el-option label="千克" value="KG" />
-            <el-option label="米" value="M" />
-            <el-option label="平方米" value="M2" />
-            <el-option label="立方米" value="M3" />
-            <el-option label="套" value="SET" />
-            <el-option label="箱" value="BOX" />
-            <el-option label="包" value="PACK" />
-            <el-option label="小时" value="HOUR" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="标准成本">
-          <el-input-number v-model="form.standard_cost" :min="0" :precision="2" />
-        </el-form-item>
-        <el-form-item label="最小库存">
-          <el-input-number v-model="form.min_stock" :min="0" />
-        </el-form-item>
-        <el-form-item label="最大库存">
-          <el-input-number v-model="form.max_stock" :min="0" />
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-switch v-model="form.is_active" active-text="启用" inactive-text="禁用" />
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="900px">
+      <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
+        <el-divider content-position="left">基本信息</el-divider>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="物料编码" prop="sku">
+              <el-input v-model="form.sku" placeholder="请输入物料编码" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="物料名称" prop="name">
+              <el-input v-model="form.name" placeholder="请输入物料名称" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="品牌">
+              <el-input v-model="form.brand" placeholder="品牌名称" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="型号">
+              <el-input v-model="form.model" placeholder="产品型号" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="生产厂家">
+              <el-input v-model="form.manufacturer" placeholder="生产厂家" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="产地">
+              <el-input v-model="form.origin_country" placeholder="产地/国家" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="规格型号">
+              <el-input v-model="form.specification" placeholder="规格描述" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="条形码">
+              <el-input v-model="form.barcode" placeholder="条形码" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="8">
+            <el-form-item label="单位" prop="unit">
+              <el-select v-model="form.unit" placeholder="选择单位" style="width: 100%">
+                <el-option label="个" value="PCS" />
+                <el-option label="千克" value="KG" />
+                <el-option label="米" value="M" />
+                <el-option label="平方米" value="M2" />
+                <el-option label="立方米" value="M3" />
+                <el-option label="套" value="SET" />
+                <el-option label="箱" value="BOX" />
+                <el-option label="包" value="PACK" />
+                <el-option label="小时" value="HOUR" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="物料类型">
+              <el-select v-model="form.item_type" placeholder="选择类型" style="width: 100%">
+                <el-option label="原材料" value="MATERIAL" />
+                <el-option label="产成品" value="PRODUCT" />
+                <el-option label="半成品" value="SEMI" />
+                <el-option label="服务" value="SERVICE" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="状态">
+              <el-switch v-model="form.is_active" active-text="启用" inactive-text="禁用" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-divider content-position="left">价格与税率</el-divider>
+        <el-row :gutter="20">
+          <el-col :span="8">
+            <el-form-item label="采购单价">
+              <el-input-number v-model="form.purchase_price" :min="0" :precision="2" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="销售单价">
+              <el-input-number v-model="form.sale_price" :min="0" :precision="2" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="标准成本">
+              <el-input-number v-model="form.standard_cost" :min="0" :precision="2" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="8">
+            <el-form-item label="税率">
+              <el-select v-model="form.tax_rate" placeholder="选择税率" style="width: 100%">
+                <el-option label="0%" :value="0" />
+                <el-option label="1%" :value="1" />
+                <el-option label="3%" :value="3" />
+                <el-option label="6%" :value="6" />
+                <el-option label="9%" :value="9" />
+                <el-option label="13%" :value="13" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-divider content-position="left">库存设置</el-divider>
+        <el-row :gutter="20">
+          <el-col :span="6">
+            <el-form-item label="最小库存">
+              <el-input-number v-model="form.min_stock" :min="0" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="最大库存">
+              <el-input-number v-model="form.max_stock" :min="0" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="安全库存">
+              <el-input-number v-model="form.safety_stock" :min="0" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="采购周期">
+              <el-input-number v-model="form.lead_time" :min="0" style="width: 100%">
+                <template #append>天</template>
+              </el-input-number>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-divider content-position="left">其他信息</el-divider>
+        <el-row :gutter="20">
+          <el-col :span="8">
+            <el-form-item label="重量(kg)">
+              <el-input-number v-model="form.weight" :min="0" :precision="3" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="体积(m³)">
+              <el-input-number v-model="form.volume" :min="0" :precision="3" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="保质期">
+              <el-input-number v-model="form.shelf_life" :min="0" style="width: 100%">
+                <template #append>天</template>
+              </el-input-number>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="描述">
+          <el-input v-model="form.description" type="textarea" :rows="2" placeholder="物料描述" />
         </el-form-item>
         
         <!-- 附件上传 -->
@@ -173,10 +320,30 @@ const form = reactive({
   sku: '',
   name: '',
   specification: '',
+  // 品牌型号
+  brand: '',
+  model: '',
+  manufacturer: '',
+  origin_country: '',
+  barcode: '',
+  // 类型单位
+  item_type: 'MATERIAL',
   unit: 'PCS',
+  // 价格税率
+  purchase_price: 0,
+  sale_price: 0,
   standard_cost: 0,
+  tax_rate: 13,
+  // 库存
   min_stock: 0,
   max_stock: 0,
+  safety_stock: 0,
+  lead_time: 0,
+  // 其他
+  weight: 0,
+  volume: 0,
+  shelf_life: 0,
+  description: '',
   is_active: true
 })
 
@@ -249,10 +416,30 @@ const handleAdd = () => {
     sku: '',
     name: '',
     specification: '',
+    // 品牌型号
+    brand: '',
+    model: '',
+    manufacturer: '',
+    origin_country: '',
+    barcode: '',
+    // 类型单位
+    item_type: 'MATERIAL',
     unit: 'PCS',
+    // 价格税率
+    purchase_price: 0,
+    sale_price: 0,
     standard_cost: 0,
+    tax_rate: 13,
+    // 库存
     min_stock: 0,
     max_stock: 0,
+    safety_stock: 0,
+    lead_time: 0,
+    // 其他
+    weight: 0,
+    volume: 0,
+    shelf_life: 0,
+    description: '',
     is_active: true
   })
   dialogVisible.value = true

@@ -64,7 +64,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="description" label="说明" show-overflow-tooltip />
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="操作" width="340" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
@@ -73,6 +73,7 @@
             <el-button size="small" type="success" @click="handleApprove(row)" v-if="row.status === 'SUBMITTED'">批准</el-button>
             <el-button size="small" type="danger" @click="handleReject(row)" v-if="row.status === 'SUBMITTED'">拒绝</el-button>
             <el-button size="small" type="primary" @click="handleReimburse(row)" v-if="row.status === 'APPROVED'">报销</el-button>
+            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -523,6 +524,23 @@ const handleReimburse = async (row) => {
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('操作失败')
+    }
+  }
+}
+
+const handleDelete = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除费用报销单 ${row.expense_no} 吗？此操作不可恢复！`, 
+      '删除费用报销单', 
+      { type: 'warning' }
+    )
+    await request.delete(`/finance/expenses/${row.id}/`)
+    ElMessage.success('费用报销单已删除')
+    loadExpenses()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除费用报销单失败')
     }
   }
 }

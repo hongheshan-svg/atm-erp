@@ -57,13 +57,14 @@
           </template>
         </el-table-column>
         <el-table-column prop="reference_type" label="关联单据" width="120" />
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'REGISTERED'">编辑</el-button>
             <el-button size="small" type="success" @click="handleCertify(row)" v-if="row.status === 'REGISTERED' && row.invoice_type === 'INPUT'">
               认证
             </el-button>
+            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -322,6 +323,23 @@ const resetForm = () => {
   })
   currentId.value = null
   if (formRef.value) formRef.value.clearValidate()
+}
+
+const handleDelete = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除发票 ${row.invoice_no} 吗？此操作不可恢复！`, 
+      '删除发票', 
+      { type: 'warning' }
+    )
+    await request.delete(`/finance/invoices/${row.id}/`)
+    ElMessage.success('发票已删除')
+    loadInvoices()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除发票失败')
+    }
+  }
 }
 
 onMounted(() => loadInvoices())

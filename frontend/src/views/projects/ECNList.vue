@@ -89,7 +89,7 @@
         <el-table-column prop="requested_by_name" label="申请人" width="100" />
         <el-table-column prop="requested_date" label="申请日期" width="110" />
         <el-table-column prop="approved_date" label="批准日期" width="110" />
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="操作" width="340" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
@@ -98,6 +98,7 @@
             <el-button size="small" type="danger" @click="handleReject(row)" v-if="row.status === 'PENDING' || row.status === 'REVIEWING'">拒绝</el-button>
             <el-button size="small" type="warning" @click="handleImplement(row)" v-if="row.status === 'APPROVED'">开始实施</el-button>
             <el-button size="small" type="success" @click="handleComplete(row)" v-if="row.status === 'IMPLEMENTING'">完成</el-button>
+            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -814,6 +815,23 @@ const getItemChangeTypeTagType = (type) => {
     'REPLACE': 'primary'
   }
   return types[type] || 'info'
+}
+
+const handleDelete = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除ECN ${row.ecn_no} 吗？此操作不可恢复！`, 
+      '删除ECN', 
+      { type: 'warning' }
+    )
+    await request.delete(`/projects/ecn/${row.id}/`)
+    ElMessage.success('ECN已删除')
+    loadECNList()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除ECN失败')
+    }
+  }
 }
 
 // 初始化

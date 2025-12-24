@@ -49,7 +49,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="created_at" label="创建时间" width="160" />
-        <el-table-column label="操作" width="320" fixed="right">
+        <el-table-column label="操作" width="380" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
@@ -57,6 +57,7 @@
             <el-button size="small" type="success" @click="handleApprove(row)" v-if="row.status === 'SUBMITTED'">批准</el-button>
             <el-button size="small" type="danger" @click="handleReject(row)" v-if="row.status === 'SUBMITTED'">拒绝</el-button>
             <el-button size="small" type="primary" @click="convertToPO(row)" v-if="row.status === 'APPROVED'">转采购订单</el-button>
+            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -218,9 +219,12 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+
+const route = useRoute()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -549,11 +553,67 @@ const doConvertToPO = async () => {
   }
 }
 
+// 处理从BOM页面传递过来的数据
+const handleBomData = () => {
+  if (route.query.from_bom === '1') {
+    const bomData = sessionStorage.getItem('bom_to_pr')
+    if (bomData) {
+      try {
+        const data = JSON.parse(bomData)
+        sessionStorage.removeItem('bom_to_pr') // 清除已使用的数据
+        
+        // 预填充表单
+        dialogTitle.value = '创建采购申请（来自BOM）'
+        isEdit.value = false
+        Object.assign(form, {
+          id: null,
+          project: data.project,
+          required_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 默认7天后
+          tax_rate: 13,
+          notes: `根据项目 ${data.projectName} 的BOM清单生成`,
+          lines: data.lines.map(line => ({
+            item: line.item,
+            qty: line.qty,
+            estimated_price: line.estimated_price || 0
+          }))
+        })
+        dialogVisible.value = true
+        
+        ElMessage.success(`已导入 ${data.lines.length} 种物料，请确认后保存`)
+      } catch (e) {
+        console.error('解析BOM数据失败:', e)
+      }
+    }
+  }
+}
+
+const handleDelete = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除采购申请 ${row.request_no} 吗？此操作不可恢复！`, 
+      '删除申请', 
+      { type: 'warning' }
+    )
+    await request.delete(`/purchase/requests/${row.id}/`)
+    ElMessage.success('采购申请已删除')
+    loadRequests()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除采购申请失败')
+    }
+  }
+}
+
 onMounted(() => {
   loadRequests()
   loadProjects()
   loadItems()
   loadSuppliers()
+  
+  // 延迟处理BOM数据，确保其他数据加载完成
+  setTimeout(() => {
+    handleBomData()
+  }, 300)
 })
 </script>
 

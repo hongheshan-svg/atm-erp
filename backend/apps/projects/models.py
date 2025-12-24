@@ -592,3 +592,239 @@ class ECNApproval(BaseModel):
     def __str__(self):
         return f"{self.ecn.ecn_no} - {self.approver.username} - {self.get_action_display()}"
 
+
+# ==================== 售后管理模型 ====================
+
+class AfterSalesOrder(BaseModel):
+    """
+    售后工单模型 - 用于跟踪项目交付后的售后服务请求
+    """
+    TYPE_CHOICES = [
+        ('WARRANTY', '保修服务'),
+        ('REPAIR', '维修服务'),
+        ('MAINTENANCE', '保养维护'),
+        ('UPGRADE', '升级改造'),
+        ('TRAINING', '培训服务'),
+        ('INSPECTION', '巡检服务'),
+        ('COMPLAINT', '客户投诉'),
+        ('OTHER', '其他'),
+    ]
+    
+    PRIORITY_CHOICES = [
+        ('LOW', '低'),
+        ('MEDIUM', '中'),
+        ('HIGH', '高'),
+        ('URGENT', '紧急'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('PENDING', '待处理'),
+        ('ASSIGNED', '已派单'),
+        ('IN_PROGRESS', '处理中'),
+        ('ON_SITE', '现场服务'),
+        ('WAITING_PARTS', '等待备件'),
+        ('RESOLVED', '已解决'),
+        ('CLOSED', '已关闭'),
+        ('CANCELLED', '已取消'),
+    ]
+    
+    order_no = models.CharField(max_length=50, unique=True, verbose_name='工单编号')
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='aftersales_orders',
+        verbose_name='关联项目'
+    )
+    customer = models.ForeignKey(
+        'masterdata.Customer',
+        on_delete=models.PROTECT,
+        related_name='aftersales_orders',
+        verbose_name='客户'
+    )
+    order_type = models.CharField(
+        max_length=20,
+        choices=TYPE_CHOICES,
+        default='REPAIR',
+        verbose_name='工单类型'
+    )
+    priority = models.CharField(
+        max_length=20,
+        choices=PRIORITY_CHOICES,
+        default='MEDIUM',
+        verbose_name='优先级'
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='PENDING',
+        verbose_name='状态'
+    )
+    
+    # 问题描述
+    title = models.CharField(max_length=200, verbose_name='问题标题')
+    description = models.TextField(verbose_name='问题描述')
+    equipment_info = models.CharField(max_length=500, blank=True, verbose_name='设备信息')
+    fault_code = models.CharField(max_length=50, blank=True, verbose_name='故障代码')
+    
+    # 联系信息
+    contact_person = models.CharField(max_length=50, verbose_name='联系人')
+    contact_phone = models.CharField(max_length=20, verbose_name='联系电话')
+    site_address = models.CharField(max_length=500, blank=True, verbose_name='现场地址')
+    
+    # 时间信息
+    reported_at = models.DateTimeField(auto_now_add=True, verbose_name='报修时间')
+    expected_date = models.DateField(null=True, blank=True, verbose_name='期望完成日期')
+    resolved_at = models.DateTimeField(null=True, blank=True, verbose_name='解决时间')
+    closed_at = models.DateTimeField(null=True, blank=True, verbose_name='关闭时间')
+    
+    # 责任人
+    assigned_to = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_aftersales',
+        verbose_name='负责人'
+    )
+    
+    # 费用信息
+    is_warranty = models.BooleanField(default=True, verbose_name='是否保修期内')
+    labor_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name='人工费用')
+    travel_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name='差旅费用')
+    parts_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name='备件费用')
+    other_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name='其他费用')
+    
+    # 解决方案
+    solution = models.TextField(blank=True, verbose_name='解决方案')
+    root_cause = models.TextField(blank=True, verbose_name='根本原因')
+    preventive_action = models.TextField(blank=True, verbose_name='预防措施')
+    
+    # 客户满意度
+    satisfaction_score = models.IntegerField(
+        null=True, blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        verbose_name='满意度评分(1-5)'
+    )
+    customer_feedback = models.TextField(blank=True, verbose_name='客户反馈')
+    
+    class Meta:
+        db_table = 'aftersales_order'
+        verbose_name = '售后工单'
+        verbose_name_plural = verbose_name
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.order_no} - {self.title}"
+    
+    @property
+    def total_cost(self):
+        """计算总成本"""
+        return self.labor_cost + self.travel_cost + self.parts_cost + self.other_cost
+
+
+class ServiceRecord(BaseModel):
+    """
+    服务记录模型 - 记录每次服务的详细信息
+    """
+    SERVICE_TYPE_CHOICES = [
+        ('REMOTE', '远程支持'),
+        ('ON_SITE', '现场服务'),
+        ('PHONE', '电话支持'),
+        ('VIDEO', '视频会议'),
+    ]
+    
+    aftersales_order = models.ForeignKey(
+        AfterSalesOrder,
+        on_delete=models.CASCADE,
+        related_name='service_records',
+        verbose_name='售后工单'
+    )
+    service_type = models.CharField(
+        max_length=20,
+        choices=SERVICE_TYPE_CHOICES,
+        default='ON_SITE',
+        verbose_name='服务类型'
+    )
+    technician = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.PROTECT,
+        related_name='service_records',
+        verbose_name='服务人员'
+    )
+    
+    # 时间记录
+    service_date = models.DateField(verbose_name='服务日期')
+    start_time = models.TimeField(null=True, blank=True, verbose_name='开始时间')
+    end_time = models.TimeField(null=True, blank=True, verbose_name='结束时间')
+    work_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name='工时(小时)')
+    
+    # 服务内容
+    work_content = models.TextField(verbose_name='工作内容')
+    findings = models.TextField(blank=True, verbose_name='现场发现')
+    actions_taken = models.TextField(blank=True, verbose_name='采取措施')
+    result = models.TextField(blank=True, verbose_name='服务结果')
+    next_steps = models.TextField(blank=True, verbose_name='后续计划')
+    
+    # 费用
+    labor_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name='人工费用')
+    travel_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name='差旅费用')
+    
+    # 客户签字
+    customer_signature = models.CharField(max_length=100, blank=True, verbose_name='客户签字')
+    signed_at = models.DateTimeField(null=True, blank=True, verbose_name='签字时间')
+    
+    class Meta:
+        db_table = 'aftersales_service_record'
+        verbose_name = '服务记录'
+        verbose_name_plural = verbose_name
+        ordering = ['-service_date', '-start_time']
+    
+    def __str__(self):
+        return f"{self.aftersales_order.order_no} - {self.service_date}"
+
+
+class SparePartUsage(BaseModel):
+    """
+    备件使用记录 - 跟踪售后服务中的备件消耗
+    """
+    aftersales_order = models.ForeignKey(
+        AfterSalesOrder,
+        on_delete=models.CASCADE,
+        related_name='spare_parts',
+        verbose_name='售后工单'
+    )
+    service_record = models.ForeignKey(
+        ServiceRecord,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='spare_parts',
+        verbose_name='服务记录'
+    )
+    item = models.ForeignKey(
+        'masterdata.Item',
+        on_delete=models.PROTECT,
+        related_name='spare_part_usages',
+        verbose_name='备件'
+    )
+    
+    qty = models.DecimalField(max_digits=12, decimal_places=2, verbose_name='数量')
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=2, verbose_name='单价')
+    is_warranty = models.BooleanField(default=True, verbose_name='保修范围')
+    is_replaced = models.BooleanField(default=True, verbose_name='是否更换')
+    serial_no = models.CharField(max_length=100, blank=True, verbose_name='序列号')
+    notes = models.TextField(blank=True, verbose_name='备注')
+    
+    class Meta:
+        db_table = 'aftersales_spare_part_usage'
+        verbose_name = '备件使用记录'
+        verbose_name_plural = verbose_name
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.aftersales_order.order_no} - {self.item.name}"
+    
+    @property
+    def total_cost(self):
+        return self.qty * self.unit_cost
+

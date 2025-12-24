@@ -70,6 +70,14 @@
           <el-menu-item index="/projects/ecn" v-if="hasMenuAccess('projects:list') || hasMenuAccess('projects:ecn')">ECN变更</el-menu-item>
         </el-sub-menu>
         
+        <el-sub-menu index="aftersales" v-if="hasMenuAccess('aftersales') || hasMenuAccess('projects')">
+          <template #title>
+            <el-icon><Service /></el-icon>
+            <span>售后管理</span>
+          </template>
+          <el-menu-item index="/aftersales/orders" v-if="hasMenuAccess('aftersales:orders') || hasMenuAccess('projects:list')">售后工单</el-menu-item>
+        </el-sub-menu>
+        
         <el-sub-menu index="purchase" v-if="hasMenuAccess('purchase')">
           <template #title>
             <el-icon><ShoppingCart /></el-icon>
@@ -191,7 +199,7 @@ import { useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import {
   DataAnalysis, Setting, Document, Management, ShoppingCart,
-  Sell, Goods, Money, TrendCharts, Fold, Expand, UserFilled, DataLine, Checked
+  Sell, Goods, Money, TrendCharts, Fold, Expand, UserFilled, DataLine, Checked, Service
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 

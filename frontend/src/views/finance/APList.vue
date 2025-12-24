@@ -48,10 +48,11 @@
             <el-tag :type="getStatusType(row.status)">{{ getStatusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" type="primary" @click="handlePayment(row)" v-if="row.status !== 'PAID'">登记付款</el-button>
+            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -140,7 +141,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 
 const loading = ref(false)
@@ -207,6 +208,23 @@ const submitPayment = async () => {
     loadAPList()
   } catch (error) {
     ElMessage.error('付款登记失败')
+  }
+}
+
+const handleDelete = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除此应付账款记录吗？此操作不可恢复！`, 
+      '删除应付账款', 
+      { type: 'warning' }
+    )
+    await request.delete(`/finance/payables/${row.id}/`)
+    ElMessage.success('应付账款已删除')
+    loadAPList()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除应付账款失败')
+    }
   }
 }
 

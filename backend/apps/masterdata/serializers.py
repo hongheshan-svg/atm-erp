@@ -28,17 +28,29 @@ class ItemSerializer(serializers.ModelSerializer):
     default_supplier_name = serializers.CharField(source='default_supplier.name', read_only=True)
     item_type_display = serializers.CharField(source='get_item_type_display', read_only=True)
     unit_display = serializers.CharField(source='get_unit_display', read_only=True)
+    tax_rate_display = serializers.SerializerMethodField()
     
     class Meta:
         model = Item
         fields = [
-            'id', 'sku', 'name', 'specification', 'category', 'category_name',
-            'item_type', 'item_type_display', 'unit', 'unit_display',
-            'standard_cost', 'default_supplier', 'default_supplier_name',
-            'min_stock', 'max_stock', 'description', 'image', 'barcode',
+            'id', 'sku', 'name', 'specification', 
+            # 品牌型号
+            'brand', 'model', 'manufacturer', 'origin_country',
+            'category', 'category_name', 'item_type', 'item_type_display', 
+            'unit', 'unit_display',
+            # 价格税率
+            'standard_cost', 'purchase_price', 'sale_price', 'tax_rate', 'tax_rate_display',
+            'default_supplier', 'default_supplier_name',
+            # 库存
+            'min_stock', 'max_stock', 'safety_stock', 'lead_time',
+            # 其他
+            'description', 'image', 'barcode', 'weight', 'volume', 'shelf_life',
             'is_active', 'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
+    
+    def get_tax_rate_display(self, obj):
+        return f"{obj.tax_rate}%"
 
 
 class CustomerSerializer(serializers.ModelSerializer):

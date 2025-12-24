@@ -62,8 +62,45 @@
         </el-col>
       </el-row>
       
+      <!-- 搜索栏 -->
+      <div class="search-bar" v-if="selectedProject">
+        <el-input 
+          v-model="searchKeyword" 
+          placeholder="搜索物料编码/名称/规格" 
+          clearable 
+          style="width: 300px; margin-right: 15px;"
+          @input="handleSearch"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+        <span v-if="selectedRows.length > 0" class="selection-info">
+          已选择 <el-tag type="primary" size="small">{{ selectedRows.length }}</el-tag> 项
+          <el-button type="warning" size="small" @click="handleGeneratePRFromSelected" style="margin-left: 10px;">
+            <el-icon><Document /></el-icon>
+            生成选中项采购申请
+          </el-button>
+          <el-button type="danger" size="small" @click="handleBatchDelete" style="margin-left: 5px;">
+            <el-icon><Delete /></el-icon>
+            批量删除
+          </el-button>
+          <el-button size="small" @click="clearSelection" style="margin-left: 5px;">
+            取消选择
+          </el-button>
+        </span>
+      </div>
+      
       <!-- BOM列表 -->
-      <el-table :data="bomItems" border stripe v-loading="loading">
+      <el-table 
+        :data="filteredBomItems" 
+        border 
+        stripe 
+        v-loading="loading"
+        ref="tableRef"
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column type="selection" width="50" />
         <el-table-column type="index" label="序号" width="60" />
         <el-table-column prop="item_code" label="物料编码" width="120" />
         <el-table-column prop="item_name" label="物料名称" min-width="180" />
@@ -268,9 +305,12 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Document, Download, Upload, ArrowDown, CopyDocument, UploadFilled } from '@element-plus/icons-vue'
+import { Plus, Document, Download, Upload, ArrowDown, CopyDocument, UploadFilled, Search, Delete } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+
+const router = useRouter()
 
 const loading = ref(false)
 const selectedProject = ref(null)
@@ -279,6 +319,11 @@ const bomItems = ref([])
 const items = ref([])
 const dialogVisible = ref(false)
 const formRef = ref(null)
+const tableRef = ref(null)
+
+// 搜索和多选
+const searchKeyword = ref('')
+const selectedRows = ref([])
 
 // Import/Export related
 const importDialogVisible = ref(false)
@@ -328,6 +373,19 @@ const totalActualQty = computed(() =>
 const totalEstimatedCost = computed(() => 
   bomItems.value.reduce((sum, item) => sum + (item.planned_qty || 0) * (item.estimated_cost || 0), 0)
 )
+
+// 搜索过滤后的 BOM 列表
+const filteredBomItems = computed(() => {
+  if (!searchKeyword.value.trim()) {
+    return bomItems.value
+  }
+  const keyword = searchKeyword.value.toLowerCase().trim()
+  return bomItems.value.filter(item => {
+    return (item.item_code && item.item_code.toLowerCase().includes(keyword)) ||
+           (item.item_name && item.item_name.toLowerCase().includes(keyword)) ||
+           (item.specification && item.specification.toLowerCase().includes(keyword))
+  })
+})
 
 const getProgressStatus = (row) => {
   const percentage = ((row.actual_qty || 0) / (row.planned_qty || 1)) * 100
@@ -462,16 +520,106 @@ const handleSubmit = async () => {
   }
 }
 
-const handleGeneratePR = () => {
-  ElMessageBox.confirm('确定要根据BOM清单生成采购申请吗？', '生成采购申请', {
-    type: 'info'
-  }).then(async () => {
-    try {
-      await request.post(`/projects/projects/${selectedProject.value}/generate-pr/`)
-      ElMessage.success('采购申请生成成功')
-    } catch (error) {
-      ElMessage.warning('采购申请生成功能开发中...')
+// 搜索处理
+const handleSearch = () => {
+  // 搜索时清空选择
+  selectedRows.value = []
+  if (tableRef.value) {
+    tableRef.value.clearSelection()
+  }
+}
+
+// 多选处理
+const handleSelectionChange = (rows) => {
+  selectedRows.value = rows
+}
+
+// 清除选择
+const clearSelection = () => {
+  selectedRows.value = []
+  if (tableRef.value) {
+    tableRef.value.clearSelection()
+  }
+}
+
+// 批量删除
+const handleBatchDelete = async () => {
+  if (selectedRows.value.length === 0) {
+    ElMessage.warning('请先选择要删除的物料')
+    return
+  }
+  
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedRows.value.length} 项物料吗？此操作不可恢复！`,
+      '批量删除',
+      { type: 'warning' }
+    )
+    
+    // 逐个删除选中的物料
+    for (const row of selectedRows.value) {
+      await request.delete(`/projects/bom/${row.id}/`)
     }
+    
+    ElMessage.success(`成功删除 ${selectedRows.value.length} 项物料`)
+    clearSelection()
+    fetchBOM()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败')
+    }
+  }
+}
+
+// 根据选中项生成采购申请
+const handleGeneratePRFromSelected = () => {
+  if (selectedRows.value.length === 0) {
+    ElMessage.warning('请先选择要生成采购申请的物料')
+    return
+  }
+  
+  // 使用选中的物料生成采购申请
+  generatePurchaseRequest(selectedRows.value)
+}
+
+const handleGeneratePR = () => {
+  // 筛选出需要采购的物料（剩余需求 > 0）
+  const itemsToOrder = bomItems.value.filter(item => {
+    const remaining = (item.planned_qty || 0) - (item.actual_qty || 0)
+    return remaining > 0
+  })
+  
+  if (itemsToOrder.length === 0) {
+    ElMessage.warning('所有物料已满足需求，无需生成采购申请')
+    return
+  }
+  
+  generatePurchaseRequest(itemsToOrder)
+}
+
+// 通用的生成采购申请函数
+const generatePurchaseRequest = (itemsToOrder) => {
+  ElMessageBox.confirm(
+    `将根据选中物料生成采购申请，包含 ${itemsToOrder.length} 种物料。确定继续？`, 
+    '生成采购申请', 
+    { type: 'info' }
+  ).then(() => {
+    // 将需要采购的物料信息存储到sessionStorage
+    const prData = {
+      project: selectedProject.value,
+      projectName: currentProjectName.value,
+      lines: itemsToOrder.map(item => ({
+        item: item.item,
+        item_sku: item.item_code,
+        item_name: item.item_name,
+        qty: Math.max(1, (item.planned_qty || 0) - (item.actual_qty || 0)),
+        estimated_price: item.estimated_cost || 0
+      }))
+    }
+    sessionStorage.setItem('bom_to_pr', JSON.stringify(prData))
+    
+    // 跳转到采购申请页面
+    router.push('/purchase/requests?from_bom=1')
   }).catch(() => {})
 }
 
@@ -606,8 +754,8 @@ const handleConfirmCopy = async () => {
   copying.value = true
   try {
     const response = await request.post('/projects/bom/copy_from_project/', {
-      source_project: copySourceProject.value,
-      target_project: selectedProject.value
+        source_project: copySourceProject.value,
+        target_project: selectedProject.value
     })
     
     const data = response.data || response
@@ -659,6 +807,20 @@ onMounted(() => {
 
 .text-danger {
   color: #f56c6c;
+}
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
+  padding: 10px 0;
+}
+
+.selection-info {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: #606266;
 }
 
 .mb-15 {

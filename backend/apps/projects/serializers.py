@@ -2,7 +2,11 @@
 Serializers for projects app.
 """
 from rest_framework import serializers
-from .models import Project, ProjectMember, ProjectTask, ProjectBOM, TimeLog, ECN, ECNItem, ECNApproval
+from .models import (
+    Project, ProjectMember, ProjectTask, ProjectBOM, TimeLog, 
+    ECN, ECNItem, ECNApproval,
+    AfterSalesOrder, ServiceRecord, SparePartUsage
+)
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -250,3 +254,111 @@ class ECNWriteSerializer(serializers.ModelSerializer):
                 ECNItem.objects.create(ecn=instance, **item_data)
         
         return instance
+
+
+# ==================== 售后管理序列化器 ====================
+
+class SparePartUsageSerializer(serializers.ModelSerializer):
+    """备件使用记录序列化器"""
+    item_name = serializers.CharField(source='item.name', read_only=True)
+    item_sku = serializers.CharField(source='item.sku', read_only=True)
+    total_cost = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    
+    class Meta:
+        model = SparePartUsage
+        fields = [
+            'id', 'aftersales_order', 'service_record', 'item', 'item_name', 'item_sku',
+            'qty', 'unit_cost', 'total_cost', 'is_warranty', 'is_replaced',
+            'serial_no', 'notes', 'created_at'
+        ]
+
+
+class ServiceRecordSerializer(serializers.ModelSerializer):
+    """服务记录序列化器"""
+    technician_name = serializers.CharField(source='technician.get_full_name', read_only=True)
+    service_type_display = serializers.CharField(source='get_service_type_display', read_only=True)
+    spare_parts = SparePartUsageSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = ServiceRecord
+        fields = [
+            'id', 'aftersales_order', 'service_type', 'service_type_display',
+            'technician', 'technician_name', 'service_date', 'start_time', 'end_time',
+            'work_hours', 'work_content', 'findings', 'actions_taken', 'result',
+            'next_steps', 'labor_cost', 'travel_cost', 'customer_signature',
+            'signed_at', 'spare_parts', 'created_at'
+        ]
+
+
+class AfterSalesOrderSerializer(serializers.ModelSerializer):
+    """售后工单序列化器"""
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    project_code = serializers.CharField(source='project.code', read_only=True)
+    customer_name = serializers.CharField(source='customer.name', read_only=True)
+    assigned_to_name = serializers.CharField(source='assigned_to.get_full_name', read_only=True)
+    order_type_display = serializers.CharField(source='get_order_type_display', read_only=True)
+    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    total_cost = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    
+    service_records = ServiceRecordSerializer(many=True, read_only=True)
+    spare_parts = SparePartUsageSerializer(many=True, read_only=True)
+    
+    # 统计字段
+    service_count = serializers.SerializerMethodField()
+    total_work_hours = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = AfterSalesOrder
+        fields = [
+            'id', 'order_no', 'project', 'project_name', 'project_code',
+            'customer', 'customer_name', 'order_type', 'order_type_display',
+            'priority', 'priority_display', 'status', 'status_display',
+            'title', 'description', 'equipment_info', 'fault_code',
+            'contact_person', 'contact_phone', 'site_address',
+            'reported_at', 'expected_date', 'resolved_at', 'closed_at',
+            'assigned_to', 'assigned_to_name',
+            'is_warranty', 'labor_cost', 'travel_cost', 'parts_cost', 'other_cost', 'total_cost',
+            'solution', 'root_cause', 'preventive_action',
+            'satisfaction_score', 'customer_feedback',
+            'service_records', 'spare_parts',
+            'service_count', 'total_work_hours',
+            'created_at', 'updated_at'
+        ]
+    
+    def get_service_count(self, obj):
+        return obj.service_records.count()
+    
+    def get_total_work_hours(self, obj):
+        from django.db.models import Sum
+        result = obj.service_records.aggregate(total=Sum('work_hours'))
+        return result['total'] or 0
+
+
+class AfterSalesOrderListSerializer(serializers.ModelSerializer):
+    """售后工单列表序列化器（简化版）"""
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    project_code = serializers.CharField(source='project.code', read_only=True)
+    customer_name = serializers.CharField(source='customer.name', read_only=True)
+    assigned_to_name = serializers.CharField(source='assigned_to.get_full_name', read_only=True)
+    order_type_display = serializers.CharField(source='get_order_type_display', read_only=True)
+    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    total_cost = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    service_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = AfterSalesOrder
+        fields = [
+            'id', 'order_no', 'project', 'project_name', 'project_code',
+            'customer', 'customer_name', 'order_type', 'order_type_display',
+            'priority', 'priority_display', 'status', 'status_display',
+            'title', 'contact_person', 'contact_phone',
+            'reported_at', 'expected_date', 'resolved_at',
+            'assigned_to', 'assigned_to_name', 'is_warranty',
+            'total_cost', 'service_count', 'satisfaction_score',
+            'created_at'
+        ]
+    
+    def get_service_count(self, obj):
+        return obj.service_records.count()

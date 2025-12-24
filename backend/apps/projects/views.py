@@ -11,11 +11,17 @@ import pandas as pd
 from io import BytesIO
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin, DataScopeMixin
 from apps.masterdata.models import Item
-from .models import Project, ProjectMember, ProjectTask, ProjectBOM, TimeLog, ECN, ECNItem, ECNApproval
+from .models import (
+    Project, ProjectMember, ProjectTask, ProjectBOM, TimeLog, 
+    ECN, ECNItem, ECNApproval,
+    AfterSalesOrder, ServiceRecord, SparePartUsage
+)
 from .serializers import (
     ProjectSerializer, ProjectMemberSerializer,
     ProjectTaskSerializer, ProjectBOMSerializer, TimeLogSerializer,
-    ECNSerializer, ECNWriteSerializer, ECNItemSerializer, ECNApprovalSerializer
+    ECNSerializer, ECNWriteSerializer, ECNItemSerializer, ECNApprovalSerializer,
+    AfterSalesOrderSerializer, AfterSalesOrderListSerializer,
+    ServiceRecordSerializer, SparePartUsageSerializer
 )
 
 
@@ -362,7 +368,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
     def export_template(self, request):
         """Export BOM import template with headers and example data."""
         output = BytesIO()
-        
+            
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             workbook = writer.book
             
@@ -1297,4 +1303,242 @@ class ECNItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     filterset_fields = ['ecn', 'change_type', 'item']
     search_fields = ['notes']
     ordering_fields = ['created_at']
+
+
+# ==================== 售后管理视图 ====================
+
+class AfterSalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.ModelViewSet):
+    """
+    售后工单管理视图
+    """
+    queryset = AfterSalesOrder.objects.all()
+    filterset_fields = ['project', 'customer', 'order_type', 'priority', 'status', 'assigned_to', 'is_warranty']
+    search_fields = ['order_no', 'title', 'description', 'contact_person', 'contact_phone']
+    ordering_fields = ['order_no', 'reported_at', 'priority', 'status', 'created_at']
+    ordering = ['-created_at']
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return AfterSalesOrderListSerializer
+        return AfterSalesOrderSerializer
+    
+    def perform_create(self, serializer):
+        from apps.core.utils import generate_code
+        order_no = generate_code('AS')
+        serializer.save(order_no=order_no, created_by=self.request.user)
+    
+    @action(detail=False, methods=['get'])
+    def statistics(self, request):
+        """获取售后统计数据"""
+        from django.db.models import Count, Avg
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # 按状态统计
+        status_stats = queryset.values('status').annotate(count=Count('id'))
+        
+        # 按类型统计
+        type_stats = queryset.values('order_type').annotate(count=Count('id'))
+        
+        # 成本统计
+        cost_stats = queryset.aggregate(
+            total_labor=Sum('labor_cost'),
+            total_travel=Sum('travel_cost'),
+            total_parts=Sum('parts_cost'),
+            total_other=Sum('other_cost')
+        )
+        
+        # 满意度统计
+        satisfaction_stats = queryset.filter(
+            satisfaction_score__isnull=False
+        ).aggregate(avg_score=Avg('satisfaction_score'))
+        
+        # 本月新增工单
+        today = timezone.now().date()
+        month_start = today.replace(day=1)
+        monthly_count = queryset.filter(reported_at__date__gte=month_start).count()
+        
+        # 待处理工单
+        pending_count = queryset.filter(status__in=['PENDING', 'ASSIGNED']).count()
+        
+        return Response({
+            'status_stats': list(status_stats),
+            'type_stats': list(type_stats),
+            'cost_stats': cost_stats,
+            'satisfaction_avg': satisfaction_stats.get('avg_score'),
+            'monthly_count': monthly_count,
+            'pending_count': pending_count
+        })
+    
+    @action(detail=True, methods=['post'])
+    def assign(self, request, pk=None):
+        """派单"""
+        order = self.get_object()
+        assigned_to_id = request.data.get('assigned_to')
+        
+        if not assigned_to_id:
+            return Response({'error': '请指定负责人'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        from apps.accounts.models import User
+        try:
+            assigned_to = User.objects.get(id=assigned_to_id)
+        except User.DoesNotExist:
+            return Response({'error': '用户不存在'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        order.assigned_to = assigned_to
+        order.status = 'ASSIGNED'
+        order.save()
+        
+        return Response({'message': '派单成功', 'status': order.status})
+    
+    @action(detail=True, methods=['post'])
+    def start_service(self, request, pk=None):
+        """开始服务"""
+        order = self.get_object()
+        order.status = 'IN_PROGRESS'
+        order.save()
+        return Response({'message': '已开始服务', 'status': order.status})
+    
+    @action(detail=True, methods=['post'])
+    def on_site(self, request, pk=None):
+        """现场服务"""
+        order = self.get_object()
+        order.status = 'ON_SITE'
+        order.save()
+        return Response({'message': '已到达现场', 'status': order.status})
+    
+    @action(detail=True, methods=['post'])
+    def waiting_parts(self, request, pk=None):
+        """等待备件"""
+        order = self.get_object()
+        order.status = 'WAITING_PARTS'
+        order.save()
+        return Response({'message': '等待备件', 'status': order.status})
+    
+    @action(detail=True, methods=['post'])
+    def resolve(self, request, pk=None):
+        """解决问题"""
+        order = self.get_object()
+        from django.utils import timezone
+        
+        solution = request.data.get('solution', '')
+        root_cause = request.data.get('root_cause', '')
+        preventive_action = request.data.get('preventive_action', '')
+        
+        order.solution = solution
+        order.root_cause = root_cause
+        order.preventive_action = preventive_action
+        order.status = 'RESOLVED'
+        order.resolved_at = timezone.now()
+        order.save()
+        
+        return Response({'message': '问题已解决', 'status': order.status})
+    
+    @action(detail=True, methods=['post'])
+    def close(self, request, pk=None):
+        """关闭工单"""
+        order = self.get_object()
+        from django.utils import timezone
+        
+        satisfaction_score = request.data.get('satisfaction_score')
+        customer_feedback = request.data.get('customer_feedback', '')
+        
+        if satisfaction_score:
+            order.satisfaction_score = satisfaction_score
+        order.customer_feedback = customer_feedback
+        order.status = 'CLOSED'
+        order.closed_at = timezone.now()
+        order.save()
+        
+        return Response({'message': '工单已关闭', 'status': order.status})
+    
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        """取消工单"""
+        order = self.get_object()
+        order.status = 'CANCELLED'
+        order.save()
+        return Response({'message': '工单已取消', 'status': order.status})
+    
+    @action(detail=True, methods=['post'])
+    def update_cost(self, request, pk=None):
+        """更新成本"""
+        order = self.get_object()
+        
+        labor_cost = request.data.get('labor_cost')
+        travel_cost = request.data.get('travel_cost')
+        parts_cost = request.data.get('parts_cost')
+        other_cost = request.data.get('other_cost')
+        
+        if labor_cost is not None:
+            order.labor_cost = labor_cost
+        if travel_cost is not None:
+            order.travel_cost = travel_cost
+        if parts_cost is not None:
+            order.parts_cost = parts_cost
+        if other_cost is not None:
+            order.other_cost = other_cost
+        
+        order.save()
+        
+        return Response({
+            'message': '成本更新成功',
+            'total_cost': order.total_cost
+        })
+
+
+class ServiceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+    """
+    服务记录管理视图
+    """
+    queryset = ServiceRecord.objects.all()
+    serializer_class = ServiceRecordSerializer
+    filterset_fields = ['aftersales_order', 'service_type', 'technician', 'service_date']
+    search_fields = ['work_content', 'findings', 'actions_taken']
+    ordering_fields = ['service_date', 'created_at']
+    ordering = ['-service_date']
+    
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+        
+        # 更新工单人工和差旅费用
+        record = serializer.instance
+        order = record.aftersales_order
+        
+        from django.db.models import Sum
+        totals = order.service_records.aggregate(
+            labor=Sum('labor_cost'),
+            travel=Sum('travel_cost')
+        )
+        order.labor_cost = totals['labor'] or 0
+        order.travel_cost = totals['travel'] or 0
+        order.save()
+
+
+class SparePartUsageViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+    """
+    备件使用记录管理视图
+    """
+    queryset = SparePartUsage.objects.all()
+    serializer_class = SparePartUsageSerializer
+    filterset_fields = ['aftersales_order', 'service_record', 'item', 'is_warranty']
+    search_fields = ['serial_no', 'notes']
+    ordering_fields = ['created_at']
+    ordering = ['-created_at']
+    
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+        
+        # 更新工单备件费用
+        usage = serializer.instance
+        order = usage.aftersales_order
+        
+        from django.db.models import Sum, F
+        total = order.spare_parts.aggregate(
+            parts_cost=Sum(F('qty') * F('unit_cost'))
+        )
+        order.parts_cost = total['parts_cost'] or 0
+        order.save()
 

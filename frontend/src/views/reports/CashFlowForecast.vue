@@ -202,25 +202,66 @@ const getOverdueLabel = (dueDate) => {
 
 const fetchData = async () => {
   try {
-    // 获取应收账款
+    // 获取现金流预测汇总数据
+    const forecastRes = await request.get('/analytics/cash-flow-forecast/')
+    const forecastData = forecastRes.data || forecastRes
+    
+    // 设置概览数据
+    overview.expectedInflow = forecastData.expected_inflows || 0
+    overview.expectedOutflow = forecastData.expected_outflows || 0
+    overview.netFlow = forecastData.net_cash_flow || 0
+    
+    // 获取应收账款明细
     const arRes = await request.get('/finance/receivables/', {
       params: { status: 'PENDING', page_size: 100 }
     })
     arList.value = arRes.data?.results || arRes.results || arRes.data || []
     
-    // 获取应付账款
+    // 获取应付账款明细
     const apRes = await request.get('/finance/payables/', {
       params: { status: 'PENDING', page_size: 100 }
     })
     apList.value = apRes.data?.results || apRes.results || apRes.data || []
     
-    calculateOverview()
+    // 尝试获取当前现金余额（从财务汇总）
+    try {
+      const dashboardRes = await request.get('/analytics/dashboard/')
+      const dashboardData = dashboardRes.data || dashboardRes
+      // 使用应收 - 应付作为近似现金状况
+      const receivables = dashboardData.financial?.receivables || 0
+      const payables = dashboardData.financial?.payables || 0
+      overview.currentBalance = receivables - payables
+      if (overview.currentBalance <= 0) {
+        overview.currentBalance = 100000 // 如果为负数，使用默认值
+      }
+    } catch (e) {
+      overview.currentBalance = 100000 // 默认值
+    }
+    
     initTrendChart()
     checkAlerts()
   } catch (error) {
     console.error('获取数据失败:', error)
-    // 使用模拟数据
+    // 获取数据失败时尝试单独获取应收应付
+    try {
+      const arRes = await request.get('/finance/receivables/', {
+        params: { status: 'PENDING', page_size: 100 }
+      })
+      arList.value = arRes.data?.results || arRes.results || arRes.data || []
+      
+      const apRes = await request.get('/finance/payables/', {
+        params: { status: 'PENDING', page_size: 100 }
+      })
+      apList.value = apRes.data?.results || apRes.results || apRes.data || []
+      
+      calculateOverview()
+      initTrendChart()
+      checkAlerts()
+    } catch (e) {
+      console.error('获取应收应付失败:', e)
+      // 最后使用模拟数据
     useMockData()
+    }
   }
 }
 
@@ -248,21 +289,31 @@ const calculateOverview = () => {
   const endDate = new Date()
   endDate.setDate(endDate.getDate() + days)
   
-  // 计算预计收款
+  // 计算预计收款（基于应收账款列表）
   overview.expectedInflow = arList.value
-    .filter(ar => new Date(ar.due_date) <= endDate)
-    .reduce((sum, ar) => sum + (ar.amount_due - ar.amount_paid), 0)
+    .filter(ar => {
+      if (!ar.due_date) return true // 没有到期日的也算进来
+      return new Date(ar.due_date) <= endDate
+    })
+    .reduce((sum, ar) => sum + ((ar.amount_due || 0) - (ar.amount_paid || 0)), 0)
   
-  // 计算预计付款
+  // 计算预计付款（基于应付账款列表）
   overview.expectedOutflow = apList.value
-    .filter(ap => new Date(ap.due_date) <= endDate)
-    .reduce((sum, ap) => sum + (ap.amount_due - ap.amount_paid), 0)
+    .filter(ap => {
+      if (!ap.due_date) return true // 没有到期日的也算进来
+      return new Date(ap.due_date) <= endDate
+    })
+    .reduce((sum, ap) => sum + ((ap.amount_due || 0) - (ap.amount_paid || 0)), 0)
   
   // 净现金流
   overview.netFlow = overview.expectedInflow - overview.expectedOutflow
   
-  if (!overview.currentBalance) {
-    overview.currentBalance = 500000 // 默认余额
+  // 如果没有余额数据，使用应收减应付的方式估算
+  if (!overview.currentBalance || overview.currentBalance === 0) {
+    // 使用所有待收款减去待付款作为估算
+    const totalAR = arList.value.reduce((sum, ar) => sum + ((ar.amount_due || 0) - (ar.amount_paid || 0)), 0)
+    const totalAP = apList.value.reduce((sum, ap) => sum + ((ap.amount_due || 0) - (ap.amount_paid || 0)), 0)
+    overview.currentBalance = Math.max(totalAR - totalAP, 0)
   }
 }
 

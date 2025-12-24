@@ -55,9 +55,25 @@ class Item(BaseModel):
         ('HOUR', '小时'),
     ]
     
+    TAX_RATE_CHOICES = [
+        (0, '0%'),
+        (1, '1%'),
+        (3, '3%'),
+        (6, '6%'),
+        (9, '9%'),
+        (13, '13%'),
+    ]
+    
     sku = models.CharField(max_length=100, unique=True, verbose_name='SKU编码')
     name = models.CharField(max_length=200, verbose_name='物料名称')
     specification = models.CharField(max_length=200, blank=True, verbose_name='规格型号')
+    
+    # 品牌型号相关
+    brand = models.CharField(max_length=100, blank=True, verbose_name='品牌')
+    model = models.CharField(max_length=100, blank=True, verbose_name='型号')
+    manufacturer = models.CharField(max_length=200, blank=True, verbose_name='生产厂家')
+    origin_country = models.CharField(max_length=100, blank=True, verbose_name='产地')
+    
     category = models.ForeignKey(
         ItemCategory,
         on_delete=models.SET_NULL,
@@ -73,12 +89,32 @@ class Item(BaseModel):
         verbose_name='物料类型'
     )
     unit = models.CharField(max_length=20, choices=UNIT_CHOICES, default='PCS', verbose_name='单位')
+    
+    # 价格和税率相关
     standard_cost = models.DecimalField(
         max_digits=15,
         decimal_places=2,
         default=0,
         verbose_name='标准成本'
     )
+    purchase_price = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='采购单价'
+    )
+    sale_price = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='销售单价'
+    )
+    tax_rate = models.IntegerField(
+        choices=TAX_RATE_CHOICES,
+        default=13,
+        verbose_name='税率(%)'
+    )
+    
     default_supplier = models.ForeignKey(
         'Supplier',
         on_delete=models.SET_NULL,
@@ -87,6 +123,8 @@ class Item(BaseModel):
         related_name='default_items',
         verbose_name='默认供应商'
     )
+    
+    # 库存相关
     min_stock = models.DecimalField(
         max_digits=15,
         decimal_places=2,
@@ -99,9 +137,21 @@ class Item(BaseModel):
         default=0,
         verbose_name='最大库存'
     )
+    safety_stock = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='安全库存'
+    )
+    lead_time = models.IntegerField(default=0, verbose_name='采购周期(天)')
+    
+    # 其他信息
     description = models.TextField(blank=True, verbose_name='描述')
     image = models.ImageField(upload_to='items/', blank=True, verbose_name='图片')
     barcode = models.CharField(max_length=100, blank=True, verbose_name='条形码')
+    weight = models.DecimalField(max_digits=10, decimal_places=3, default=0, verbose_name='重量(kg)')
+    volume = models.DecimalField(max_digits=10, decimal_places=3, default=0, verbose_name='体积(m³)')
+    shelf_life = models.IntegerField(default=0, verbose_name='保质期(天)')
     is_active = models.BooleanField(default=True, verbose_name='激活状态')
     
     class Meta:

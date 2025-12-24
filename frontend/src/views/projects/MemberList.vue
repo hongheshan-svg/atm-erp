@@ -92,13 +92,13 @@
           <el-input :value="form.user_name" disabled />
         </el-form-item>
         <el-form-item label="项目角色" prop="role">
-          <el-select v-model="form.role" placeholder="选择角色" style="width: 100%;">
-            <el-option label="项目经理" value="MANAGER" />
-            <el-option label="技术负责人" value="TECH_LEAD" />
-            <el-option label="开发人员" value="DEVELOPER" />
-            <el-option label="测试人员" value="TESTER" />
-            <el-option label="设计人员" value="DESIGNER" />
-            <el-option label="其他" value="OTHER" />
+          <el-select v-model="form.role" placeholder="选择角色" filterable style="width: 100%;">
+            <el-option
+              v-for="role in roles"
+              :key="role.id"
+              :label="role.name"
+              :value="role.name"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="时薪" prop="hourly_rate">
@@ -130,6 +130,7 @@ const selectedProject = ref(null)
 const projects = ref([])
 const members = ref([])
 const allUsers = ref([])
+const roles = ref([])
 const dialogVisible = ref(false)
 const formRef = ref(null)
 
@@ -137,7 +138,7 @@ const form = reactive({
   id: null,
   user: null,
   user_name: '',
-  role: 'DEVELOPER',
+  role: '',
   hourly_rate: 100,
   join_date: '',
   notes: ''
@@ -152,11 +153,17 @@ const rules = {
 const dialogTitle = computed(() => form.id ? '编辑成员' : '添加成员')
 
 const managerCount = computed(() => 
-  members.value.filter(m => m.role === 'MANAGER' || m.role === 'TECH_LEAD').length
+  members.value.filter(m => {
+    const role = m.role || ''
+    return role.includes('经理') || role.includes('负责人') || role.includes('主管') || role.includes('总监')
+  }).length
 )
 
 const developerCount = computed(() => 
-  members.value.filter(m => m.role === 'DEVELOPER').length
+  members.value.filter(m => {
+    const role = m.role || ''
+    return role.includes('开发') || role.includes('工程师') || role.includes('技术')
+  }).length
 )
 
 const totalLaborCost = computed(() => 
@@ -169,27 +176,16 @@ const availableUsers = computed(() => {
 })
 
 const getRoleType = (role) => {
-  const types = {
-    'MANAGER': 'danger',
-    'TECH_LEAD': 'warning',
-    'DEVELOPER': '',
-    'TESTER': 'success',
-    'DESIGNER': 'info',
-    'OTHER': 'info'
-  }
-  return types[role] || 'info'
+  // 根据角色名称返回不同的标签类型
+  if (!role) return 'info'
+  if (role.includes('经理') || role.includes('总监') || role.includes('主管')) return 'danger'
+  if (role.includes('负责人') || role.includes('组长')) return 'warning'
+  if (role.includes('测试') || role.includes('质量')) return 'success'
+  return ''
 }
 
 const getRoleLabel = (role) => {
-  const labels = {
-    'MANAGER': '项目经理',
-    'TECH_LEAD': '技术负责人',
-    'DEVELOPER': '开发人员',
-    'TESTER': '测试人员',
-    'DESIGNER': '设计人员',
-    'OTHER': '其他'
-  }
-  return labels[role] || role
+  return role || '未分配'
 }
 
 const fetchProjects = async () => {
@@ -225,10 +221,10 @@ const fetchMembers = async () => {
 
 const getMockMembers = () => {
   return [
-    { id: 1, user: 1, user_name: 'admin', user_email: 'admin@example.com', user_department: '技术部', role: 'MANAGER', hourly_rate: 200, total_hours: 120, join_date: '2024-01-01' },
-    { id: 2, user: 2, user_name: '张三', user_email: 'zhangsan@example.com', user_department: '技术部', role: 'TECH_LEAD', hourly_rate: 150, total_hours: 160, join_date: '2024-01-05' },
-    { id: 3, user: 3, user_name: '李四', user_email: 'lisi@example.com', user_department: '技术部', role: 'DEVELOPER', hourly_rate: 100, total_hours: 200, join_date: '2024-01-10' },
-    { id: 4, user: 4, user_name: '王五', user_email: 'wangwu@example.com', user_department: '测试部', role: 'TESTER', hourly_rate: 80, total_hours: 80, join_date: '2024-02-01' }
+    { id: 1, user: 1, user_name: 'admin', user_email: 'admin@example.com', user_department: '技术部', role: '项目经理', hourly_rate: 200, total_hours: 120, join_date: '2024-01-01' },
+    { id: 2, user: 2, user_name: '张三', user_email: 'zhangsan@example.com', user_department: '技术部', role: '技术负责人', hourly_rate: 150, total_hours: 160, join_date: '2024-01-05' },
+    { id: 3, user: 3, user_name: '李四', user_email: 'lisi@example.com', user_department: '技术部', role: '开发工程师', hourly_rate: 100, total_hours: 200, join_date: '2024-01-10' },
+    { id: 4, user: 4, user_name: '王五', user_email: 'wangwu@example.com', user_department: '测试部', role: '测试工程师', hourly_rate: 80, total_hours: 80, join_date: '2024-02-01' }
   ]
 }
 
@@ -241,11 +237,29 @@ const fetchUsers = async () => {
   }
 }
 
+const fetchRoles = async () => {
+  try {
+    const res = await request.get('/auth/roles/')
+    roles.value = res.data?.results || res.results || res.data || []
+  } catch (error) {
+    console.error('获取角色列表失败:', error)
+    // 使用默认角色
+    roles.value = [
+      { id: 1, name: '项目经理' },
+      { id: 2, name: '技术负责人' },
+      { id: 3, name: '开发人员' },
+      { id: 4, name: '测试人员' },
+      { id: 5, name: '设计人员' },
+      { id: 6, name: '其他' }
+    ]
+  }
+}
+
 const resetForm = () => {
   form.id = null
   form.user = null
   form.user_name = ''
-  form.role = 'DEVELOPER'
+  form.role = roles.value.length > 0 ? roles.value[0].name : ''
   form.hourly_rate = 100
   form.join_date = new Date().toISOString().split('T')[0]
   form.notes = ''
@@ -305,6 +319,7 @@ watch(selectedProject, () => {
 onMounted(() => {
   fetchProjects()
   fetchUsers()
+  fetchRoles()
 })
 </script>
 

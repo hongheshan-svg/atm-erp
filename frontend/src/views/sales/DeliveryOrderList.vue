@@ -54,13 +54,14 @@
         </el-table-column>
         <el-table-column prop="created_by_name" label="创建人" width="100" />
         <el-table-column prop="notes" label="备注" show-overflow-tooltip />
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" type="success" @click="handleConfirm(row)" v-if="row.status === 'DRAFT'">
               确认发货
             </el-button>
             <el-button size="small" type="primary" @click="handlePrint(row)">打印</el-button>
+            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -246,6 +247,23 @@ const handleConfirm = async (row) => {
 const handlePrint = (row) => {
   ElMessage.info('打印功能待实现')
   // 这里可以集成打印或PDF生成功能
+}
+
+const handleDelete = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除发货单 ${row.delivery_no} 吗？此操作不可恢复！`, 
+      '删除发货单', 
+      { type: 'warning' }
+    )
+    await request.delete(`/sales/deliveries/${row.id}/`)
+    ElMessage.success('发货单已删除')
+    loadDeliveryOrders()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除发货单失败')
+    }
+  }
 }
 
 onMounted(() => {

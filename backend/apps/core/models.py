@@ -111,6 +111,9 @@ class Attachment(models.Model):
         ('CERTIFICATE', '证书/资质'),
         ('REPORT', '报告'),
         ('IMAGE', '图片'),
+        ('VIDEO', '视频'),
+        ('FAULT_IMAGE', '故障图片'),
+        ('FAULT_VIDEO', '故障视频'),
         ('OTHER', '其他'),
     ]
     
