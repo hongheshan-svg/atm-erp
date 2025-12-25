@@ -14,12 +14,26 @@
       <!-- 搜索栏 -->
       <el-form :inline="true" class="search-form">
         <el-form-item label="项目">
-          <el-select v-model="searchForm.project" placeholder="选择项目" clearable style="width: 200px;">
+          <el-select 
+            v-model="searchForm.project" 
+            placeholder="选择项目" 
+            clearable 
+            filterable
+            style="width: 250px;"
+            @change="loadRequests"
+          >
             <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="searchForm.status" placeholder="选择状态" clearable style="width: 120px;">
+          <el-select 
+            v-model="searchForm.status" 
+            placeholder="选择状态" 
+            clearable 
+            style="width: 120px;"
+            @change="loadRequests"
+          >
+            <el-option label="全部" :value="null" />
             <el-option label="草稿" value="DRAFT" />
             <el-option label="已提交" value="SUBMITTED" />
             <el-option label="已批准" value="APPROVED" />
@@ -28,10 +42,25 @@
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="loadRequests">搜索</el-button>
-          <el-button @click="resetSearch">重置</el-button>
+          <el-button type="primary" @click="loadRequests">
+            <el-icon><Search /></el-icon>
+            搜索
+          </el-button>
+          <el-button @click="resetSearch">
+            <el-icon><RefreshLeft /></el-icon>
+            重置
+          </el-button>
         </el-form-item>
       </el-form>
+      
+      <!-- 过滤提示 -->
+      <el-alert
+        v-if="searchForm.project || searchForm.status"
+        :title="getFilterTip()"
+        type="info"
+        :closable="false"
+        style="margin-bottom: 15px;"
+      />
 
       <el-table :data="requests" v-loading="loading" stripe border>
         <el-table-column prop="request_no" label="采购申请号" width="150" />
@@ -218,10 +247,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Delete } from '@element-plus/icons-vue'
+import { Plus, Delete, Search, RefreshLeft } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 const route = useRoute()
@@ -344,6 +373,28 @@ const resetSearch = () => {
   searchForm.status = null
   pagination.page = 1
   loadRequests()
+}
+
+// 获取过滤提示文本
+const getFilterTip = () => {
+  const tips = []
+  if (searchForm.project) {
+    const proj = projects.value.find(p => p.id === searchForm.project)
+    if (proj) {
+      tips.push(`项目: ${proj.name}`)
+    }
+  }
+  if (searchForm.status) {
+    const statusMap = {
+      DRAFT: '草稿',
+      SUBMITTED: '已提交',
+      APPROVED: '已批准',
+      REJECTED: '已拒绝',
+      CONVERTED: '已转订单'
+    }
+    tips.push(`状态: ${statusMap[searchForm.status]}`)
+  }
+  return `当前过滤条件：${tips.join(' | ')} （共 ${pagination.total} 条记录）`
 }
 
 const handleAdd = () => {
@@ -604,11 +655,24 @@ const handleDelete = async (row) => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 首先加载项目和其他数据
+  await Promise.all([
+    loadProjects(),
+    loadItems(),
+    loadSuppliers()
+  ])
+  
+  // 检查URL参数中是否有项目过滤
+  if (route.query.project) {
+    const projectId = parseInt(route.query.project)
+    if (!isNaN(projectId)) {
+      searchForm.project = projectId
+    }
+  }
+  
+  // 加载采购申请列表
   loadRequests()
-  loadProjects()
-  loadItems()
-  loadSuppliers()
   
   // 延迟处理BOM数据，确保其他数据加载完成
   setTimeout(() => {
