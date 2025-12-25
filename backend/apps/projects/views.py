@@ -188,6 +188,35 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
     ordering_fields = ['created_at']
     parser_classes = [JSONParser, MultiPartParser, FormParser]
     
+    def create(self, request, *args, **kwargs):
+        """
+        创建BOM时，如果存在已软删除的相同记录，则恢复它而不是报错
+        """
+        project_id = request.data.get('project')
+        item_id = request.data.get('item')
+        
+        if project_id and item_id:
+            # 查找是否有已删除的相同记录
+            existing_bom = ProjectBOM.objects.filter(
+                project_id=project_id, 
+                item_id=item_id, 
+                is_deleted=True
+            ).first()
+            
+            if existing_bom:
+                # 恢复软删除的记录并更新数据
+                existing_bom.is_deleted = False
+                existing_bom.planned_qty = request.data.get('planned_qty', existing_bom.planned_qty)
+                existing_bom.estimated_cost = request.data.get('estimated_cost', existing_bom.estimated_cost)
+                existing_bom.notes = request.data.get('notes', existing_bom.notes)
+                existing_bom.updated_by = request.user
+                existing_bom.save()
+                
+                serializer = self.get_serializer(existing_bom)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+        return super().create(request, *args, **kwargs)
+    
     @action(detail=False, methods=['post'])
     def batch_create(self, request):
         """Batch create BOM items for a project."""
