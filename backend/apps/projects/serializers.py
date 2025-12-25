@@ -118,6 +118,7 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
     item_type = serializers.CharField(source='item.get_item_type_display', read_only=True)
     item_brand = serializers.CharField(source='item.brand', read_only=True, allow_blank=True)
     item_model = serializers.CharField(source='item.model', read_only=True, allow_blank=True)
+    version_brand_display = serializers.SerializerMethodField()
     item_standard_cost = serializers.DecimalField(source='item.standard_cost', max_digits=15, decimal_places=2, read_only=True)
     requester_name = serializers.CharField(source='requester.get_full_name', read_only=True)
     has_drawing_display = serializers.CharField(source='get_has_drawing_display', read_only=True)
@@ -130,12 +131,26 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
             'item_specification', 'specification', 'item_unit', 'unit', 
             'item_type', 'item_brand', 'item_model', 'item_standard_cost',
             'planned_qty', 'actual_qty', 'estimated_cost',
-            'version_brand', 'has_drawing', 'has_drawing_display',
+            'version_brand', 'version_brand_display', 'has_drawing', 'has_drawing_display',
             'required_date', 'requester', 'requester_name',
             'description', 'notes',
             'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
+
+    def get_version_brand_display(self, obj):
+        """
+        版本/品牌显示规则：
+        - 如果BOM行填写了 version_brand，则优先展示（允许项目级覆盖）
+        - 否则回退到物料主数据 brand/model 组合
+        """
+        if getattr(obj, 'version_brand', None):
+            return obj.version_brand
+        brand = getattr(obj.item, 'brand', '') if getattr(obj, 'item', None) else ''
+        model = getattr(obj.item, 'model', '') if getattr(obj, 'item', None) else ''
+        if brand and model:
+            return f'{brand}/{model}'
+        return brand or model or ''
 
 
 class TimeLogSerializer(serializers.ModelSerializer):

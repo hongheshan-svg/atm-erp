@@ -90,6 +90,7 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
             spec_col = find_column(df, ['规格型号', '规格', 'specification'])
             brand_col = find_column(df, ['品牌', 'brand'])
             model_col = find_column(df, ['型号', 'model'])
+            version_brand_col = find_column(df, ['版本/品牌'])
             unit_col = find_column(df, ['单位', 'unit'])
             type_col = find_column(df, ['物料类型', '类型', 'item_type'])
             purchase_col = find_column(df, ['采购单价', '采购价', 'purchase'])
@@ -146,14 +147,26 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                     return default
                 
                 try:
+                    # Parse version/brand to brand/model if provided and brand/model not provided
+                    vb = get_val(version_brand_col)
+                    parsed_brand = get_val(brand_col)
+                    parsed_model = get_val(model_col)
+                    if vb and not (parsed_brand or parsed_model):
+                        if '/' in vb:
+                            parts = [p.strip() for p in vb.split('/', 1)]
+                            parsed_brand = parts[0]
+                            parsed_model = parts[1] if len(parts) > 1 else ''
+                        else:
+                            parsed_brand = vb
+
                     # Check if item exists
                     item, created = Item.objects.update_or_create(
                         sku=sku,
                         defaults={
                             'name': name,
                             'specification': get_val(spec_col),
-                            'brand': get_val(brand_col),
-                            'model': get_val(model_col),
+                            'brand': parsed_brand,
+                            'model': parsed_model,
                             'unit': get_val(unit_col, 'PCS'),
                             'item_type': get_val(type_col, 'MATERIAL'),
                             'purchase_price': get_num(purchase_col),
@@ -168,10 +181,13 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                             'max_stock': get_num(max_col),
                             'barcode': get_val(barcode_col),
                             'description': get_val(desc_col),
-                            'created_by': request.user if created else None,
                             'updated_by': request.user,
                         }
                     )
+                    # created_by 只在创建时赋值，避免把历史 created_by 覆盖为 None
+                    if created and hasattr(item, 'created_by') and item.created_by_id is None:
+                        item.created_by = request.user
+                        item.save(update_fields=['created_by'])
                     if created:
                         created_count += 1
                     else:
@@ -340,8 +356,7 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                 ('物料编码*', 12, True),
                 ('物料名称*', 20, True),
                 ('规格型号', 15, False),
-                ('品牌', 10, False),
-                ('型号', 10, False),
+                ('版本/品牌', 12, False),
                 ('单位', 8, False),
                 ('物料类型', 10, False),
                 ('采购单价', 10, False),
@@ -369,8 +384,7 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                 'MAT001',
                 '示例物料',
                 '100x50x25mm',
-                '品牌A',
-                'Model-X',
+                '品牌A/Model-X',
                 'PCS',
                 'MATERIAL',
                 '100.00',

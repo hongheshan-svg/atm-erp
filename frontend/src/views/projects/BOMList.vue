@@ -105,7 +105,7 @@
         <el-table-column prop="item_code" label="物料编码" width="100" />
         <el-table-column prop="item_name" label="物料名称" width="150" />
         <el-table-column prop="specification" label="规格型号" width="100" />
-        <el-table-column prop="version_brand" label="版本/品牌" width="100" />
+        <el-table-column prop="version_brand_display" label="版本/品牌" width="100" />
         <el-table-column prop="unit" label="单位" width="60" />
         <el-table-column prop="planned_qty" label="计划数量" width="90" align="right" />
         <el-table-column prop="actual_qty" label="已领用" width="80" align="right">
@@ -533,7 +533,9 @@ const handleItemChange = (itemId) => {
     form.unit = item.unit_display || item.unit || ''
     form.item_type = item.item_type_display || item.item_type || ''
     form.estimated_cost = item.standard_cost || 0
-    form.version_brand = item.brand || ''
+    const brand = item.brand || ''
+    const model = item.model || ''
+    form.version_brand = brand && model ? `${brand}/${model}` : (brand || model || '')
   }
 }
 

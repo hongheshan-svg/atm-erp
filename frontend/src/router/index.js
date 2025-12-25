@@ -8,6 +8,11 @@ const routes = [
     component: () => import('@/views/Login.vue'),
     meta: { requiresAuth: false }
   },
+  // 兼容旧链接（避免用户误以为路径错了）
+  {
+    path: '/masterdata/items',
+    redirect: '/items'
+  },
   {
     path: '/',
     component: () => import('@/layout/MainLayout.vue'),

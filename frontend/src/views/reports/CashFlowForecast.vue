@@ -254,9 +254,9 @@ const fetchData = async () => {
       })
       apList.value = apRes.data?.results || apRes.results || apRes.data || []
       
-      calculateOverview()
-      initTrendChart()
-      checkAlerts()
+  calculateOverview()
+  initTrendChart()
+  checkAlerts()
     } catch (e) {
       console.error('获取应收应付失败:', e)
       arList.value = []
