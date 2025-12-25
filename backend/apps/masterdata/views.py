@@ -14,6 +14,7 @@ from .serializers import (
     SupplierSerializer, WarehouseSerializer, WarehouseLocationSerializer,
     WarehouseLocationTreeSerializer
 )
+from .item_code_generator import ItemCodeGenerator
 
 
 class ItemCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
@@ -54,6 +55,43 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     filterset_fields = ['category', 'item_type', 'is_active', 'is_deleted']
     search_fields = ['sku', 'name', 'specification', 'barcode']
     ordering_fields = ['sku', 'created_at', 'standard_cost']
+    
+    @action(detail=False, methods=['post'])
+    def generate_code(self, request):
+        """
+        生成物料编码
+        
+        参数：
+        - level1_code: 一级代码 ('1'=有图, '2'=无图)
+        - level2_code: 二级代码 ('1'-'8')
+        """
+        level1_code = request.data.get('level1_code')
+        level2_code = request.data.get('level2_code')
+        
+        if not level1_code or not level2_code:
+            return Response(
+                {'error': '请提供一级代码和二级代码'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            code = ItemCodeGenerator.generate_code(level1_code, level2_code)
+            code_info = ItemCodeGenerator.parse_code(code)
+            
+            return Response({
+                'code': code,
+                'info': code_info
+            })
+        except ValueError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
+    @action(detail=False, methods=['get'])
+    def get_level2_choices(self, request):
+        """获取二级代码选项"""
+        return Response(ItemCodeGenerator.get_level2_choices())
     
     @action(detail=False, methods=['post'])
     def import_excel(self, request):

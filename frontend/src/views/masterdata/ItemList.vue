@@ -114,7 +114,11 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="物料编码" prop="sku">
-              <el-input v-model="form.sku" placeholder="请输入物料编码" />
+              <el-input v-model="form.sku" placeholder="请输入或生成物料编码">
+                <template #append>
+                  <el-button @click="showCodeGenerator = true" :icon="Setting">生成</el-button>
+                </template>
+              </el-input>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -315,13 +319,62 @@
         <el-button type="primary" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 编码生成器对话框 -->
+    <el-dialog v-model="showCodeGenerator" title="生成物料编码" width="500px">
+      <el-alert
+        title="编码规则说明"
+        type="info"
+        :closable="false"
+        style="margin-bottom: 20px;"
+      >
+        <p>一级代码(1位) + 二级代码(1位) + 年份(2位) + 流水号(6位)</p>
+        <p style="margin-top: 8px; font-size: 12px; color: #909399;">
+          • 一级代码：1=有图，2=无图<br/>
+          • 年份：有图=当前年份，无图=99<br/>
+          • 流水号：根据年份自动累加
+        </p>
+      </el-alert>
+
+      <el-form label-width="100px">
+        <el-form-item label="一级代码">
+          <el-radio-group v-model="codeGenForm.level1">
+            <el-radio label="1">有图</el-radio>
+            <el-radio label="2">无图</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item label="二级代码">
+          <el-select v-model="codeGenForm.level2" placeholder="选择类别" style="width: 100%;">
+            <el-option label="1-机加" value="1" />
+            <el-option label="2-钣金" value="2" />
+            <el-option label="3-特殊工艺" value="3" />
+            <el-option label="4-其他" value="4" />
+            <el-option label="5-机械类" value="5" />
+            <el-option label="6-电气类" value="6" />
+            <el-option label="7-耗材辅料" value="7" />
+            <el-option label="8-办公用品" value="8" />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="预览编码" v-if="generatedCode">
+          <el-tag type="success" size="large">{{ generatedCode }}</el-tag>
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="showCodeGenerator = false">取消</el-button>
+        <el-button type="primary" @click="generateCode" :loading="generating">生成编码</el-button>
+        <el-button type="success" @click="applyCode" :disabled="!generatedCode">应用</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Upload, Download, Document, ArrowDown } from '@element-plus/icons-vue'
+import { Upload, Download, Document, ArrowDown, Setting } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
 
@@ -335,6 +388,15 @@ const dialogVisible = ref(false)
 const dialogTitle = ref('新增物料')
 const isEdit = ref(false)
 const formRef = ref(null)
+
+// 编码生成器
+const showCodeGenerator = ref(false)
+const generating = ref(false)
+const generatedCode = ref('')
+const codeGenForm = reactive({
+  level1: '1',  // 默认有图
+  level2: ''
+})
 
 const searchForm = reactive({
   sku: '',
@@ -565,6 +627,37 @@ const handleImport = () => {
     }
   }
   input.click()
+}
+
+// 生成编码
+const generateCode = async () => {
+  if (!codeGenForm.level2) {
+    ElMessage.warning('请选择二级代码')
+    return
+  }
+
+  generating.value = true
+  try {
+    const res = await request.post('/masterdata/items/generate_code/', {
+      level1_code: codeGenForm.level1,
+      level2_code: codeGenForm.level2
+    })
+    generatedCode.value = res.code
+    ElMessage.success('编码生成成功')
+  } catch (error) {
+    ElMessage.error('生成编码失败')
+  } finally {
+    generating.value = false
+  }
+}
+
+// 应用编码
+const applyCode = () => {
+  form.sku = generatedCode.value
+  showCodeGenerator.value = false
+  generatedCode.value = ''
+  codeGenForm.level2 = ''
+  ElMessage.success('编码已应用')
 }
 
 const handleSubmit = async () => {
