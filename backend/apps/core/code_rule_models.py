@@ -22,8 +22,7 @@ class CodeRule(BaseModel):
     
     RULE_TYPE_CHOICES = [
         ('PROJECT', '项目编号'),
-        # 注意：物料编码有特殊规则，不使用通用编码规则系统，请在物料管理页面使用"生成"按钮
-        # ('ITEM', '物料编码'),
+        ('ITEM', '物料编码'),
         ('PURCHASE_CONTRACT', '采购合同'),
         ('SALES_CONTRACT', '销售合同'),
         ('PURCHASE_REQUEST', '采购申请'),

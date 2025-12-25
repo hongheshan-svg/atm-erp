@@ -80,19 +80,18 @@ class CodeRuleViewSet(viewsets.ModelViewSet):
                 'separator': '-',
                 'description': '格式：PRJ-YYYYMM-0001'
             },
-            # 注意：物料编码有特殊规则，不使用通用编码规则系统
-            # 物料编码请在物料管理页面使用"生成"按钮
-            # {
-            #     'rule_type': 'ITEM',
-            #     'rule_name': '物料编码规则',
-            #     'prefix': 'ITEM',
-            #     'date_format': '',
-            #     'seq_length': 6,
-            #     'seq_start': 1,
-            #     'reset_mode': 'NONE',
-            #     'separator': '',
-            #     'description': '格式：ITEM000001'
-            # },
+            {
+                'rule_type': 'ITEM',
+                'rule_name': '物料编码规则（特殊规则）',
+                'prefix': '',
+                'date_format': '',
+                'seq_length': 6,
+                'seq_start': 1,
+                'reset_mode': 'NONE',
+                'separator': '',
+                'is_active': False,
+                'description': '⚠️ 物料编码使用特殊规则，不通过此处配置。\n规则：一级代码(1位)+二级代码(1位)+年份(2位)+流水号(6位)\n请在"物料管理"页面使用"生成编码"功能。'
+            },
             {
                 'rule_type': 'PURCHASE_CONTRACT',
                 'rule_name': '采购合同编号规则',

@@ -79,6 +79,30 @@
       width="700px"
       destroy-on-close
     >
+      <!-- 物料编码特殊提示 -->
+      <el-alert
+        v-if="form.rule_type === 'ITEM'"
+        title="⚠️ 物料编码使用特殊规则"
+        type="warning"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 20px;"
+      >
+        <p>物料编码采用特殊的10位编码规则，不通过此处配置：</p>
+        <p style="margin-top: 8px; font-weight: bold;">
+          一级代码(1位) + 二级代码(1位) + 年份(2位) + 流水号(6位)
+        </p>
+        <p style="margin-top: 8px; color: #E6A23C;">
+          • 一级代码：1=有图，2=无图<br/>
+          • 二级代码：1-8（机加/钣金/特殊工艺等）<br/>
+          • 年份：有图=当前年份，无图=99<br/>
+          • 流水号：自动累加（6位）
+        </p>
+        <p style="margin-top: 12px; color: #409EFF;">
+          📌 请在"物料管理"页面使用"生成编码"功能创建物料编码。
+        </p>
+      </el-alert>
+
       <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
         <el-form-item label="规则类型" prop="rule_type">
           <el-select v-model="form.rule_type" placeholder="选择规则类型" :disabled="isEdit" style="width: 100%;">
@@ -87,44 +111,44 @@
         </el-form-item>
 
         <el-form-item label="规则名称" prop="rule_name">
-          <el-input v-model="form.rule_name" placeholder="输入规则名称" />
+          <el-input v-model="form.rule_name" placeholder="输入规则名称" :disabled="form.rule_type === 'ITEM'" />
         </el-form-item>
 
         <el-divider content-position="left">编码格式配置</el-divider>
 
         <el-form-item label="固定前缀">
-          <el-input v-model="form.prefix" placeholder="如：PRJ、ITEM等" maxlength="20" show-word-limit />
+          <el-input v-model="form.prefix" placeholder="如：PRJ、SC等" maxlength="20" show-word-limit :disabled="form.rule_type === 'ITEM'" />
           <div class="el-form-item__extra">编码的固定前缀部分</div>
         </el-form-item>
 
         <el-form-item label="日期格式">
-          <el-input v-model="form.date_format" placeholder="如：YYYYMMDD、YYYY-MM等" />
+          <el-input v-model="form.date_format" placeholder="如：YYYYMMDD、YYYY-MM等" :disabled="form.rule_type === 'ITEM'" />
           <div class="el-form-item__extra">
             支持：YYYY(年)、YY(年后两位)、MM(月)、DD(日)，可自由组合
           </div>
         </el-form-item>
 
         <el-form-item label="分隔符">
-          <el-input v-model="form.separator" placeholder="如：-、_等" maxlength="5" style="width: 100px;" />
+          <el-input v-model="form.separator" placeholder="如：-、_等" maxlength="5" style="width: 100px;" :disabled="form.rule_type === 'ITEM'" />
           <div class="el-form-item__extra">各部分之间的分隔符，留空表示无分隔符</div>
         </el-form-item>
 
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="序列号长度" prop="seq_length">
-              <el-input-number v-model="form.seq_length" :min="1" :max="10" style="width: 100%;" />
+              <el-input-number v-model="form.seq_length" :min="1" :max="10" style="width: 100%;" :disabled="form.rule_type === 'ITEM'" />
               <div class="el-form-item__extra">不足位数时前面补0</div>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="序列号起始" prop="seq_start">
-              <el-input-number v-model="form.seq_start" :min="1" :max="99999" style="width: 100%;" />
+              <el-input-number v-model="form.seq_start" :min="1" :max="99999" style="width: 100%;" :disabled="form.rule_type === 'ITEM'" />
             </el-form-item>
           </el-col>
         </el-row>
 
         <el-form-item label="重置模式" prop="reset_mode">
-          <el-radio-group v-model="form.reset_mode">
+          <el-radio-group v-model="form.reset_mode" :disabled="form.rule_type === 'ITEM'">
             <el-radio label="NONE">不重置</el-radio>
             <el-radio label="DAILY">每日重置</el-radio>
             <el-radio label="MONTHLY">每月重置</el-radio>
@@ -144,8 +168,16 @@
         <el-divider content-position="left">示例预览</el-divider>
         
         <el-alert
+          v-if="form.rule_type !== 'ITEM'"
           :title="`示例编码：${generateExample()}`"
           type="success"
+          :closable="false"
+          show-icon
+        />
+        <el-alert
+          v-else
+          title="物料编码示例：1125000001（有图+机加+2025年+流水号1）"
+          type="info"
           :closable="false"
           show-icon
         />
@@ -214,8 +246,7 @@ const form = reactive({
 
 const ruleTypes = [
   { value: 'PROJECT', label: '项目编号' },
-  // 注意：物料编码有特殊规则，请在"基础数据-物料管理"页面使用编码生成功能
-  // { value: 'ITEM', label: '物料编码' },
+  { value: 'ITEM', label: '物料编码' },
   { value: 'PURCHASE_CONTRACT', label: '采购合同' },
   { value: 'SALES_CONTRACT', label: '销售合同' },
   { value: 'PURCHASE_REQUEST', label: '采购申请' },
