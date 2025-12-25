@@ -79,17 +79,28 @@
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px">
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
         <el-form-item label="选择用户" prop="user" v-if="!form.id">
-          <el-select v-model="form.user" placeholder="选择用户" filterable style="width: 100%;">
+          <el-select v-model="form.user" placeholder="选择用户" filterable style="width: 100%;" @change="handleUserChange">
             <el-option
               v-for="user in availableUsers"
               :key="user.id"
-              :label="user.username"
+              :label="getUserDisplayName(user)"
               :value="user.id"
-            />
+            >
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span>{{ getUserDisplayName(user) }}</span>
+                <span style="color: #999; font-size: 12px;">{{ user.department_name || '' }}</span>
+              </div>
+            </el-option>
           </el-select>
         </el-form-item>
         <el-form-item label="成员" v-else>
           <el-input :value="form.user_name" disabled />
+        </el-form-item>
+        <el-form-item label="邮箱" v-if="form.user">
+          <el-input :value="selectedUserInfo.email" disabled placeholder="自动带出" />
+        </el-form-item>
+        <el-form-item label="部门" v-if="form.user">
+          <el-input :value="selectedUserInfo.department" disabled placeholder="自动带出" />
         </el-form-item>
         <el-form-item label="项目角色" prop="role">
           <el-select v-model="form.role" placeholder="选择角色" filterable style="width: 100%;">
@@ -174,6 +185,31 @@ const availableUsers = computed(() => {
   const memberUserIds = members.value.map(m => m.user)
   return allUsers.value.filter(u => !memberUserIds.includes(u.id))
 })
+
+// 选中用户的信息（用于自动带出邮箱和部门）
+const selectedUserInfo = computed(() => {
+  if (!form.user) return { email: '', department: '' }
+  const user = allUsers.value.find(u => u.id === form.user)
+  if (!user) return { email: '', department: '' }
+  return {
+    email: user.email || '',
+    department: user.department_name || ''
+  }
+})
+
+// 获取用户显示名称
+const getUserDisplayName = (user) => {
+  const fullName = `${user.last_name || ''}${user.first_name || ''}`.trim()
+  return fullName || user.username || `用户${user.id}`
+}
+
+// 用户选择变更时的处理
+const handleUserChange = (userId) => {
+  const user = allUsers.value.find(u => u.id === userId)
+  if (user) {
+    form.user_name = getUserDisplayName(user)
+  }
+}
 
 const getRoleType = (role) => {
   // 根据角色名称返回不同的标签类型

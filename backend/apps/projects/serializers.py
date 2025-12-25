@@ -59,16 +59,26 @@ class ProjectSerializer(serializers.ModelSerializer):
 class ProjectMemberSerializer(serializers.ModelSerializer):
     """ProjectMember serializer."""
     user_name = serializers.CharField(source='user.get_full_name', read_only=True)
+    user_email = serializers.CharField(source='user.email', read_only=True)
+    user_department = serializers.SerializerMethodField()
     project_name = serializers.CharField(source='project.name', read_only=True)
+    total_hours = serializers.DecimalField(source='actual_hours', max_digits=10, decimal_places=2, read_only=True)
+    join_date = serializers.DateField(source='created_at', read_only=True)
     
     class Meta:
         model = ProjectMember
         fields = [
-            'id', 'project', 'project_name', 'user', 'user_name', 'role',
-            'hourly_rate', 'allocated_hours', 'actual_hours', 'is_active',
-            'is_deleted', 'created_at', 'updated_at'
+            'id', 'project', 'project_name', 'user', 'user_name', 'user_email', 
+            'user_department', 'role', 'hourly_rate', 'allocated_hours', 'actual_hours',
+            'total_hours', 'join_date', 'is_active', 'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
+    
+    def get_user_department(self, obj):
+        """获取用户部门名称"""
+        if obj.user and hasattr(obj.user, 'department') and obj.user.department:
+            return obj.user.department.name
+        return ''
 
 
 class ProjectTaskSerializer(serializers.ModelSerializer):
