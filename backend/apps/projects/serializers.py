@@ -109,13 +109,19 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(source='project.name', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
     item_sku = serializers.CharField(source='item.sku', read_only=True)
+    item_code = serializers.CharField(source='item.sku', read_only=True)  # 别名，兼容前端
+    item_specification = serializers.CharField(source='item.specification', read_only=True, allow_blank=True)
+    specification = serializers.CharField(source='item.specification', read_only=True, allow_blank=True)  # 别名
     item_unit = serializers.CharField(source='item.get_unit_display', read_only=True)
+    unit = serializers.CharField(source='item.get_unit_display', read_only=True)  # 别名
+    item_standard_cost = serializers.DecimalField(source='item.standard_cost', max_digits=15, decimal_places=2, read_only=True)
     
     class Meta:
         model = ProjectBOM
         fields = [
-            'id', 'project', 'project_name', 'item', 'item_sku', 'item_name',
-            'item_unit', 'planned_qty', 'actual_qty', 'estimated_cost', 'notes',
+            'id', 'project', 'project_name', 'item', 'item_sku', 'item_code', 'item_name',
+            'item_specification', 'specification', 'item_unit', 'unit', 'item_standard_cost',
+            'planned_qty', 'actual_qty', 'estimated_cost', 'notes',
             'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
