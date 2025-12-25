@@ -338,7 +338,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             worksheet.merge_range(0, 0, 0, 16, f'项目BOM清单 - {project.name} ({project.code})', title_format)
             worksheet.write(1, 0, f'导出时间: {datetime.now().strftime("%Y-%m-%d %H:%M")}')
             
-            # Column headers: (name, width, format_type)
+            # Column headers: (name, width, format_type) - 与表格和导入模板保持一致
             headers = [
                 ('序号', 6, 'normal'),
                 ('物料编码', 15, 'required'),
@@ -346,13 +346,13 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 ('规格型号', 15, 'normal'),
                 ('版本/品牌', 12, 'normal'),
                 ('单位', 8, 'normal'),
+                ('物料类型', 10, 'normal'),
                 ('计划数量', 12, 'required'),
                 ('已领用', 10, 'normal'),
                 ('剩余需求', 10, 'normal'),
                 ('预估单价', 12, 'yellow'),
                 ('预估成本', 12, 'green'),
                 ('有图/无图', 10, 'normal'),
-                ('物料类型', 10, 'normal'),
                 ('需求日期', 12, 'normal'),
                 ('申请人', 10, 'normal'),
                 ('备注', 20, 'normal'),
@@ -395,13 +395,13 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 worksheet.write(row, 3, bom.item.specification or '', data_format)
                 worksheet.write(row, 4, bom.version_brand or bom.item.brand or '', data_format)
                 worksheet.write(row, 5, bom.item.get_unit_display(), data_format)
-                worksheet.write(row, 6, planned, number_format)
-                worksheet.write(row, 7, actual, number_format)
-                worksheet.write(row, 8, remaining, number_format)
-                worksheet.write(row, 9, price, money_format)
-                worksheet.write(row, 10, cost, money_format)
-                worksheet.write(row, 11, bom.get_has_drawing_display(), data_format)
-                worksheet.write(row, 12, bom.item.get_item_type_display(), data_format)
+                worksheet.write(row, 6, bom.item.get_item_type_display(), data_format)
+                worksheet.write(row, 7, planned, number_format)
+                worksheet.write(row, 8, actual, number_format)
+                worksheet.write(row, 9, remaining, number_format)
+                worksheet.write(row, 10, price, money_format)
+                worksheet.write(row, 11, cost, money_format)
+                worksheet.write(row, 12, bom.get_has_drawing_display(), data_format)
                 worksheet.write(row, 13, bom.required_date.strftime('%Y-%m-%d') if bom.required_date else '', data_format)
                 worksheet.write(row, 14, bom.requester.get_full_name() if bom.requester else '', data_format)
                 worksheet.write(row, 15, bom.notes or '', data_format)
@@ -422,13 +422,13 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 'align': 'right',
                 'num_format': '¥#,##0.00'
             })
-            worksheet.write(row, 5, '合计:', total_format)
-            worksheet.write(row, 6, total_planned, total_format)
-            worksheet.write(row, 7, total_actual, total_format)
-            worksheet.write(row, 8, max(0, total_planned - total_actual), total_format)
-            worksheet.write(row, 9, '', total_format)
-            worksheet.write(row, 10, total_cost, total_money_format)
-            for col in range(11, 17):
+            worksheet.write(row, 6, '合计:', total_format)
+            worksheet.write(row, 7, total_planned, total_format)
+            worksheet.write(row, 8, total_actual, total_format)
+            worksheet.write(row, 9, max(0, total_planned - total_actual), total_format)
+            worksheet.write(row, 10, '', total_format)
+            worksheet.write(row, 11, total_cost, total_money_format)
+            for col in range(12, 17):
                 worksheet.write(row, col, '', total_format)
             
             # Set row heights
@@ -518,6 +518,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             })
             
             # Column headers: (name, width, type: 'required'/'optional'/'readonly'/'yellow'/'green')
+            # 顺序与表格和导出Excel保持一致
             headers = [
                 ('序号', 8, 'readonly'),
                 ('物料编码*', 15, 'required'),
@@ -525,13 +526,13 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 ('规格型号', 15, 'readonly'),
                 ('版本/品牌', 12, 'optional'),
                 ('单位', 8, 'readonly'),
+                ('物料类型', 10, 'readonly'),
                 ('计划数量*', 12, 'required'),
                 ('已领用', 10, 'readonly'),
                 ('剩余需求', 10, 'readonly'),
                 ('预估单价', 12, 'yellow'),
                 ('预估成本', 12, 'green'),
                 ('有图/无图', 10, 'optional'),
-                ('物料类型', 10, 'readonly'),
                 ('需求日期', 12, 'optional'),
                 ('申请人', 10, 'optional'),
                 ('备注', 20, 'optional'),
@@ -561,13 +562,13 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 ('(系统自动填充)', readonly_example_format),
                 ('V1.0', example_format),
                 ('(自动)', readonly_example_format),
+                ('(自动)', readonly_example_format),
                 (100, example_format),
                 ('(自动)', readonly_example_format),
                 ('(自动)', readonly_example_format),
                 (10, example_format),
                 ('(自动计算)', readonly_example_format),
                 ('有图', example_format),
-                ('(自动)', readonly_example_format),
                 ('2025-01-15', example_format),
                 ('张三', example_format),
                 ('示例，请删除', example_format),
@@ -584,13 +585,13 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 ('(系统自动填充)', readonly_example_format),
                 ('', example_format),
                 ('(自动)', readonly_example_format),
+                ('(自动)', readonly_example_format),
                 (50, example_format),
                 ('(自动)', readonly_example_format),
                 ('(自动)', readonly_example_format),
                 (25.5, example_format),
                 ('(自动计算)', readonly_example_format),
                 ('无图', example_format),
-                ('(自动)', readonly_example_format),
                 ('', example_format),
                 ('', example_format),
                 ('', example_format),

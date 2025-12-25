@@ -53,12 +53,12 @@
         </el-table-column>
         <el-table-column prop="unit_display" label="单位" width="60" />
         <el-table-column prop="item_type_display" label="物料类型" width="80" />
-        <el-table-column label="采购价" width="90" align="right">
+        <el-table-column label="采购单价" width="90" align="right">
           <template #default="{ row }">
             ¥{{ parseFloat(row.purchase_price || 0).toFixed(2) }}
           </template>
         </el-table-column>
-        <el-table-column label="销售价" width="90" align="right">
+        <el-table-column label="销售单价" width="90" align="right">
           <template #default="{ row }">
             ¥{{ parseFloat(row.sale_price || 0).toFixed(2) }}
           </template>
@@ -68,17 +68,17 @@
             ¥{{ parseFloat(row.standard_cost || 0).toFixed(2) }}
           </template>
         </el-table-column>
-        <el-table-column label="税率" width="60" align="center">
+        <el-table-column label="税率(%)" width="70" align="center">
           <template #default="{ row }">
-            {{ row.tax_rate }}%
+            {{ row.tax_rate }}
           </template>
         </el-table-column>
-        <el-table-column prop="manufacturer" label="生产厂家" width="100" show-overflow-tooltip />
+        <el-table-column prop="manufacturer" label="生产厂家" width="120" show-overflow-tooltip />
         <el-table-column prop="origin_country" label="产地" width="80" show-overflow-tooltip />
         <el-table-column prop="safety_stock" label="安全库存" width="80" align="right" />
-        <el-table-column prop="lead_time" label="采购周期" width="80" align="center">
+        <el-table-column label="采购周期(天)" width="90" align="center">
           <template #default="{ row }">
-            {{ row.lead_time ? `${row.lead_time}天` : '' }}
+            {{ row.lead_time || '' }}
           </template>
         </el-table-column>
         <el-table-column prop="is_active" label="状态" width="70" align="center">

@@ -104,9 +104,10 @@
         <el-table-column type="index" label="序号" width="60" />
         <el-table-column prop="item_code" label="物料编码" width="100" />
         <el-table-column prop="item_name" label="物料名称" width="150" />
-        <el-table-column prop="specification" label="规格型号" width="100" />
-        <el-table-column prop="version_brand_display" label="版本/品牌" width="100" />
+        <el-table-column prop="specification" label="规格型号" width="120" show-overflow-tooltip />
+        <el-table-column prop="version_brand_display" label="版本/品牌" width="100" show-overflow-tooltip />
         <el-table-column prop="unit" label="单位" width="60" />
+        <el-table-column prop="item_type" label="物料类型" width="80" />
         <el-table-column prop="planned_qty" label="计划数量" width="90" align="right" />
         <el-table-column prop="actual_qty" label="已领用" width="80" align="right">
           <template #default="{ row }">
@@ -131,11 +132,10 @@
           </template>
         </el-table-column>
         <el-table-column prop="has_drawing_display" label="有图/无图" width="80" />
-        <el-table-column prop="item_type" label="物料类型" width="80" />
         <el-table-column prop="required_date" label="需求日期" width="100" />
         <el-table-column prop="requester_name" label="申请人" width="80" />
-        <el-table-column prop="notes" label="备注" width="120" />
-        <el-table-column prop="description" label="说明" width="120" />
+        <el-table-column prop="notes" label="备注" width="150" show-overflow-tooltip />
+        <el-table-column prop="description" label="说明" min-width="150" show-overflow-tooltip />
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
