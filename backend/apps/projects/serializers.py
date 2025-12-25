@@ -63,7 +63,7 @@ class ProjectMemberSerializer(serializers.ModelSerializer):
     user_department = serializers.SerializerMethodField()
     project_name = serializers.CharField(source='project.name', read_only=True)
     total_hours = serializers.DecimalField(source='actual_hours', max_digits=10, decimal_places=2, read_only=True)
-    join_date = serializers.DateField(source='created_at', read_only=True)
+    join_date = serializers.SerializerMethodField()
     
     class Meta:
         model = ProjectMember
@@ -78,6 +78,12 @@ class ProjectMemberSerializer(serializers.ModelSerializer):
         """获取用户部门名称"""
         if obj.user and hasattr(obj.user, 'department') and obj.user.department:
             return obj.user.department.name
+        return ''
+    
+    def get_join_date(self, obj):
+        """获取加入日期"""
+        if obj.created_at:
+            return obj.created_at.strftime('%Y-%m-%d')
         return ''
 
 
