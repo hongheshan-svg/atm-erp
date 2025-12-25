@@ -212,20 +212,10 @@ const fetchMembers = async () => {
     members.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('获取成员列表失败:', error)
-    // 使用模拟数据
-    members.value = getMockMembers()
+    members.value = []
   } finally {
     loading.value = false
   }
-}
-
-const getMockMembers = () => {
-  return [
-    { id: 1, user: 1, user_name: 'admin', user_email: 'admin@example.com', user_department: '技术部', role: '项目经理', hourly_rate: 200, total_hours: 120, join_date: '2024-01-01' },
-    { id: 2, user: 2, user_name: '张三', user_email: 'zhangsan@example.com', user_department: '技术部', role: '技术负责人', hourly_rate: 150, total_hours: 160, join_date: '2024-01-05' },
-    { id: 3, user: 3, user_name: '李四', user_email: 'lisi@example.com', user_department: '技术部', role: '开发工程师', hourly_rate: 100, total_hours: 200, join_date: '2024-01-10' },
-    { id: 4, user: 4, user_name: '王五', user_email: 'wangwu@example.com', user_department: '测试部', role: '测试工程师', hourly_rate: 80, total_hours: 80, join_date: '2024-02-01' }
-  ]
 }
 
 const fetchUsers = async () => {
