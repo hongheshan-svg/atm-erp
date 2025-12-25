@@ -245,8 +245,111 @@ const handleConfirm = async (row) => {
 }
 
 const handlePrint = (row) => {
-  ElMessage.info('打印功能待实现')
-  // 这里可以集成打印或PDF生成功能
+  if (!row) {
+    ElMessage.warning('请选择要打印的发货单')
+    return
+  }
+  
+  // 创建打印内容
+  const printContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>发货单 - ${row.delivery_no}</title>
+      <style>
+        body { font-family: 'Microsoft YaHei', Arial, sans-serif; padding: 20px; }
+        .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 20px; }
+        .header h1 { margin: 0; font-size: 28px; }
+        .info-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        .info-table td { padding: 8px; border: 1px solid #ddd; }
+        .info-table td:first-child { width: 20%; background: #f5f5f5; font-weight: bold; }
+        .items-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        .items-table th, .items-table td { padding: 8px; border: 1px solid #ddd; text-align: left; }
+        .items-table th { background: #f5f5f5; font-weight: bold; }
+        .items-table td.number { text-align: right; }
+        .footer { margin-top: 40px; border-top: 1px solid #ddd; padding-top: 20px; }
+        @media print {
+          body { padding: 0; }
+          .no-print { display: none; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>发货单</h1>
+        <p>Delivery Order</p>
+      </div>
+      
+      <table class="info-table">
+        <tr><td>发货单号</td><td>${row.delivery_no}</td></tr>
+        <tr><td>关联订单</td><td>${row.order_no || '-'}</td></tr>
+        <tr><td>客户名称</td><td>${row.customer_name || '-'}</td></tr>
+        <tr><td>发货日期</td><td>${row.delivery_date}</td></tr>
+        <tr><td>发货仓库</td><td>${row.warehouse_name || '-'}</td></tr>
+        <tr><td>收货地址</td><td>${row.delivery_address || '-'}</td></tr>
+        <tr><td>联系人</td><td>${row.contact_person || '-'}</td></tr>
+        <tr><td>联系电话</td><td>${row.contact_phone || '-'}</td></tr>
+        <tr><td>状态</td><td>${row.status_display || row.status}</td></tr>
+      </table>
+      
+      <table class="items-table">
+        <thead>
+          <tr>
+            <th>序号</th>
+            <th>物料编码</th>
+            <th>物料名称</th>
+            <th>规格</th>
+            <th>单位</th>
+            <th class="number">发货数量</th>
+            <th>批次号</th>
+            <th>备注</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(row.lines || []).map((line, index) => \`
+            <tr>
+              <td>\${index + 1}</td>
+              <td>\${line.item_code || '-'}</td>
+              <td>\${line.item_name || '-'}</td>
+              <td>\${line.specification || '-'}</td>
+              <td>\${line.unit || '-'}</td>
+              <td class="number">\${line.delivered_qty}</td>
+              <td>\${line.batch_no || '-'}</td>
+              <td>\${line.notes || ''}</td>
+            </tr>
+          \`).join('')}
+        </tbody>
+      </table>
+      
+      ${row.notes ? `<div style="margin: 20px 0;"><strong>备注：</strong>${row.notes}</div>` : ''}
+      
+      <div class="footer">
+        <div style="display: flex; justify-content: space-between;">
+          <div>
+            <p>发货人：____________</p>
+            <p>日期：____________</p>
+          </div>
+          <div>
+            <p>收货人：____________</p>
+            <p>日期：____________</p>
+          </div>
+        </div>
+      </div>
+      
+      <div class="no-print" style="text-align: center; margin-top: 20px;">
+        <button onclick="window.print()" style="padding: 10px 30px; font-size: 16px;">打印</button>
+        <button onclick="window.close()" style="padding: 10px 30px; font-size: 16px; margin-left: 10px;">关闭</button>
+      </div>
+    </body>
+    </html>
+  `
+  
+  // 打开新窗口打印
+  const printWindow = window.open('', '_blank')
+  printWindow.document.write(printContent)
+  printWindow.document.close()
+  printWindow.focus()
 }
 
 const handleDelete = async (row) => {
