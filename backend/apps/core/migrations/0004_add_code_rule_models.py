@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('core', '0003_webhookendpoint_webhookdelivery_loginlog_and_more'),
+        ('core', '0003_security_webhook_dashboard'),
     ]
 
     operations = [
