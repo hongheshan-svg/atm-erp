@@ -230,23 +230,51 @@ const rules = {
 
 const dialogTitle = computed(() => form.id ? '编辑任务' : '新增任务')
 
+// 所有用户列表（用于负责人选择的备选）
+const allUsers = ref([])
+
 // 将项目成员/用户列表转换为统一的下拉选项格式
 const assigneeOptions = computed(() => {
-  return projectMembers.value.map(member => {
+  const options = []
+  const addedUserIds = new Set()
+  
+  // 首先添加项目成员
+  for (const member of projectMembers.value) {
     // 项目成员数据 (来自 /projects/members/)
     if (member.user !== undefined) {
-      return {
-        id: member.user,
-        label: member.user_name || `用户${member.user}`
+      if (!addedUserIds.has(member.user)) {
+        options.push({
+          id: member.user,
+          label: member.user_name || `用户${member.user}`
+        })
+        addedUserIds.add(member.user)
+      }
+    } else {
+      // 用户数据 (来自 /auth/users/)
+      const fullName = `${member.last_name || ''}${member.first_name || ''}`.trim()
+      if (!addedUserIds.has(member.id)) {
+        options.push({
+          id: member.id,
+          label: fullName || member.username || `用户${member.id}`
+        })
+        addedUserIds.add(member.id)
       }
     }
-    // 用户数据 (来自 /auth/users/)
-    const fullName = `${member.last_name || ''}${member.first_name || ''}`.trim()
-    return {
-      id: member.id,
-      label: fullName || member.username || `用户${member.id}`
+  }
+  
+  // 然后从全部用户列表中添加缺失的用户（特别是当前任务的负责人可能不在项目成员中）
+  for (const user of allUsers.value) {
+    if (!addedUserIds.has(user.id)) {
+      const fullName = `${user.last_name || ''}${user.first_name || ''}`.trim()
+      options.push({
+        id: user.id,
+        label: fullName || user.username || `用户${user.id}`
+      })
+      addedUserIds.add(user.id)
     }
-  })
+  }
+  
+  return options
 })
 
 const getStatusType = (status) => {
@@ -340,24 +368,23 @@ const fetchProjectMembers = async () => {
   if (!selectedProject.value) return
   
   try {
-    // 使用查询参数过滤项目成员
-    const res = await request.get('/projects/members/', {
-      params: { project: selectedProject.value }
-    })
-    projectMembers.value = res.data?.results || res.results || res.data || []
+    // 同时获取项目成员和所有用户
+    const [membersRes, usersRes] = await Promise.all([
+      request.get('/projects/members/', { params: { project: selectedProject.value } }),
+      request.get('/auth/users/')
+    ])
     
-    // 如果没有成员，使用用户列表作为备选
-    if (projectMembers.value.length === 0) {
-      const userRes = await request.get('/auth/users/')
-      projectMembers.value = userRes.data?.results || userRes.results || userRes.data || []
-    }
+    projectMembers.value = membersRes.data?.results || membersRes.results || membersRes.data || []
+    allUsers.value = usersRes.data?.results || usersRes.results || usersRes.data || []
   } catch (error) {
     // 使用用户列表作为备选
     try {
       const userRes = await request.get('/auth/users/')
-      projectMembers.value = userRes.data?.results || userRes.results || userRes.data || []
+      allUsers.value = userRes.data?.results || userRes.results || userRes.data || []
+      projectMembers.value = []
     } catch (e) {
-      projectMembers.value = [{ id: 1, username: 'admin' }]
+      allUsers.value = [{ id: 1, username: 'admin' }]
+      projectMembers.value = []
     }
   }
 }
