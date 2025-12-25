@@ -106,6 +106,7 @@ class ProjectTaskSerializer(serializers.ModelSerializer):
 
 class ProjectBOMSerializer(serializers.ModelSerializer):
     """ProjectBOM serializer."""
+    project_code = serializers.CharField(source='project.code', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
     item_sku = serializers.CharField(source='item.sku', read_only=True)
@@ -114,14 +115,24 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
     specification = serializers.CharField(source='item.specification', read_only=True, allow_blank=True)  # 别名
     item_unit = serializers.CharField(source='item.get_unit_display', read_only=True)
     unit = serializers.CharField(source='item.get_unit_display', read_only=True)  # 别名
+    item_type = serializers.CharField(source='item.get_item_type_display', read_only=True)
+    item_brand = serializers.CharField(source='item.brand', read_only=True, allow_blank=True)
+    item_model = serializers.CharField(source='item.model', read_only=True, allow_blank=True)
     item_standard_cost = serializers.DecimalField(source='item.standard_cost', max_digits=15, decimal_places=2, read_only=True)
+    requester_name = serializers.CharField(source='requester.get_full_name', read_only=True)
+    has_drawing_display = serializers.CharField(source='get_has_drawing_display', read_only=True)
     
     class Meta:
         model = ProjectBOM
         fields = [
-            'id', 'project', 'project_name', 'item', 'item_sku', 'item_code', 'item_name',
-            'item_specification', 'specification', 'item_unit', 'unit', 'item_standard_cost',
-            'planned_qty', 'actual_qty', 'estimated_cost', 'notes',
+            'id', 'project', 'project_code', 'project_name', 
+            'item', 'item_sku', 'item_code', 'item_name',
+            'item_specification', 'specification', 'item_unit', 'unit', 
+            'item_type', 'item_brand', 'item_model', 'item_standard_cost',
+            'planned_qty', 'actual_qty', 'estimated_cost',
+            'version_brand', 'has_drawing', 'has_drawing_display',
+            'required_date', 'requester', 'requester_name',
+            'description', 'notes',
             'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']

@@ -102,44 +102,41 @@
       >
         <el-table-column type="selection" width="50" />
         <el-table-column type="index" label="序号" width="60" />
-        <el-table-column prop="item_code" label="物料编码" width="120" />
-        <el-table-column prop="item_name" label="物料名称" min-width="180" />
-        <el-table-column prop="specification" label="规格" width="120" />
+        <el-table-column prop="item_code" label="物料编码" width="100" />
+        <el-table-column prop="item_name" label="物料名称" width="150" />
+        <el-table-column prop="specification" label="规格型号" width="100" />
+        <el-table-column prop="version_brand" label="版本/品牌" width="100" />
         <el-table-column prop="unit" label="单位" width="60" />
-        <el-table-column prop="planned_qty" label="计划数量" width="100" align="right" />
-        <el-table-column prop="actual_qty" label="已领用" width="100" align="right">
+        <el-table-column prop="planned_qty" label="计划数量" width="90" align="right" />
+        <el-table-column prop="actual_qty" label="已领用" width="80" align="right">
           <template #default="{ row }">
             <span :class="row.actual_qty > row.planned_qty ? 'text-danger' : ''">
               {{ row.actual_qty || 0 }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="剩余需求" width="100" align="right">
+        <el-table-column label="剩余需求" width="80" align="right">
           <template #default="{ row }">
             {{ Math.max(0, (row.planned_qty || 0) - (row.actual_qty || 0)) }}
           </template>
         </el-table-column>
-        <el-table-column prop="estimated_cost" label="单价" width="100" align="right">
+        <el-table-column prop="estimated_cost" label="预估单价" width="90" align="right">
           <template #default="{ row }">
             ¥{{ row.estimated_cost || 0 }}
           </template>
         </el-table-column>
-        <el-table-column label="预估成本" width="120" align="right">
+        <el-table-column label="预估成本" width="100" align="right">
           <template #default="{ row }">
             ¥{{ ((row.planned_qty || 0) * (row.estimated_cost || 0)).toFixed(2) }}
           </template>
         </el-table-column>
-        <el-table-column label="完成率" width="100">
-          <template #default="{ row }">
-            <el-progress 
-              :percentage="Math.min(100, Math.round(((row.actual_qty || 0) / (row.planned_qty || 1)) * 100))" 
-              :status="getProgressStatus(row)"
-              :stroke-width="10"
-            />
-          </template>
-        </el-table-column>
-        <el-table-column prop="notes" label="备注" min-width="150" />
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column prop="has_drawing_display" label="有图/无图" width="80" />
+        <el-table-column prop="item_type" label="物料类型" width="80" />
+        <el-table-column prop="required_date" label="需求日期" width="100" />
+        <el-table-column prop="requester_name" label="申请人" width="80" />
+        <el-table-column prop="notes" label="备注" width="120" />
+        <el-table-column prop="description" label="说明" width="120" />
+        <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
@@ -149,7 +146,7 @@
     </el-card>
     
     <!-- 添加/编辑物料对话框 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="600px">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="800px">
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
         <el-form-item label="所属项目">
           <el-input :value="currentProjectName" disabled>
@@ -172,31 +169,79 @@
           <el-input :value="`${form.item_code} - ${form.item_name}`" disabled />
         </el-form-item>
         <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="规格">
+          <el-col :span="8">
+            <el-form-item label="规格型号">
               <el-input v-model="form.specification" disabled />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col :span="8">
             <el-form-item label="单位">
               <el-input v-model="form.unit" disabled />
             </el-form-item>
           </el-col>
+          <el-col :span="8">
+            <el-form-item label="物料类型">
+              <el-input v-model="form.item_type" disabled />
+            </el-form-item>
+          </el-col>
         </el-row>
         <el-row :gutter="20">
-          <el-col :span="12">
+          <el-col :span="8">
             <el-form-item label="计划数量" prop="planned_qty">
               <el-input-number v-model="form.planned_qty" :min="1" :max="999999" style="width: 100%;" />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
-            <el-form-item label="单价">
+          <el-col :span="8">
+            <el-form-item label="预估单价">
               <el-input-number v-model="form.estimated_cost" :min="0" :precision="2" style="width: 100%;" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="版本/品牌">
+              <el-input v-model="form.version_brand" placeholder="版本号或品牌" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="8">
+            <el-form-item label="有图/无图">
+              <el-select v-model="form.has_drawing" style="width: 100%;">
+                <el-option label="有图" value="YES" />
+                <el-option label="无图" value="NO" />
+                <el-option label="待定" value="PENDING" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="需求日期">
+              <el-date-picker 
+                v-model="form.required_date" 
+                type="date" 
+                placeholder="选择日期"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                style="width: 100%;"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="申请人">
+              <el-select v-model="form.requester" placeholder="选择申请人" filterable clearable style="width: 100%;">
+                <el-option
+                  v-for="user in users"
+                  :key="user.id"
+                  :label="user.name"
+                  :value="user.id"
+                />
+              </el-select>
             </el-form-item>
           </el-col>
         </el-row>
         <el-form-item label="备注">
           <el-input v-model="form.notes" type="textarea" :rows="2" placeholder="备注信息" />
+        </el-form-item>
+        <el-form-item label="说明">
+          <el-input v-model="form.description" type="textarea" :rows="2" placeholder="详细说明" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -324,6 +369,7 @@ const selectedProject = ref(null)
 const projects = ref([])
 const bomItems = ref([])
 const items = ref([])
+const users = ref([])
 const dialogVisible = ref(false)
 const formRef = ref(null)
 const tableRef = ref(null)
@@ -352,9 +398,15 @@ const form = reactive({
   item_name: '',
   specification: '',
   unit: '',
+  item_type: '',
   planned_qty: 1,
   estimated_cost: 0,
-  notes: ''
+  version_brand: '',
+  has_drawing: 'PENDING',
+  required_date: null,
+  requester: null,
+  notes: '',
+  description: ''
 })
 
 const rules = {
@@ -441,6 +493,19 @@ const fetchItems = async () => {
   }
 }
 
+const fetchUsers = async () => {
+  try {
+    const res = await request.get('/auth/users/')
+    const userList = res.data?.results || res.results || res.data || []
+    users.value = userList.map(u => ({
+      id: u.id,
+      name: `${u.last_name || ''}${u.first_name || ''}`.trim() || u.username || `用户${u.id}`
+    }))
+  } catch (error) {
+    console.error('获取用户列表失败:', error)
+  }
+}
+
 const resetForm = () => {
   form.id = null
   form.item = null
@@ -448,9 +513,15 @@ const resetForm = () => {
   form.item_name = ''
   form.specification = ''
   form.unit = ''
+  form.item_type = ''
   form.planned_qty = 1
   form.estimated_cost = 0
+  form.version_brand = ''
+  form.has_drawing = 'PENDING'
+  form.required_date = null
+  form.requester = null
   form.notes = ''
+  form.description = ''
 }
 
 const handleItemChange = (itemId) => {
@@ -459,8 +530,10 @@ const handleItemChange = (itemId) => {
     form.item_code = item.sku
     form.item_name = item.name
     form.specification = item.specification || ''
-    form.unit = item.unit || ''
+    form.unit = item.unit_display || item.unit || ''
+    form.item_type = item.item_type_display || item.item_type || ''
     form.estimated_cost = item.standard_cost || 0
+    form.version_brand = item.brand || ''
   }
 }
 
@@ -775,6 +848,7 @@ watch(selectedProject, () => {
 onMounted(() => {
   fetchProjects()
   fetchItems()
+  fetchUsers()
 })
 </script>
 

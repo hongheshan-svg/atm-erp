@@ -5,7 +5,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
-from django.db.models import Sum, F
+from django.db.models import Sum, F, Q
 from django.http import HttpResponse
 import pandas as pd
 from io import BytesIO
@@ -263,7 +263,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         bom_items = self.get_queryset().filter(
             project_id=project_id,
             is_deleted=False
-        ).select_related('item', 'item__category')
+        ).select_related('item', 'item__category', 'requester')
         
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -285,6 +285,30 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 'align': 'center',
                 'valign': 'vcenter'
             })
+            required_header = workbook.add_format({
+                'bold': True,
+                'bg_color': '#C00000',
+                'font_color': 'white',
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter'
+            })
+            yellow_header = workbook.add_format({
+                'bold': True,
+                'bg_color': '#FFFF00',
+                'font_color': 'black',
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter'
+            })
+            green_header = workbook.add_format({
+                'bold': True,
+                'bg_color': '#92D050',
+                'font_color': 'black',
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter'
+            })
             data_format = workbook.add_format({
                 'border': 1,
                 'align': 'left',
@@ -294,7 +318,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 'border': 1,
                 'align': 'right',
                 'valign': 'vcenter',
-                'num_format': '#,##0'
+                'num_format': '#,##0.00'
             })
             money_format = workbook.add_format({
                 'border': 1,
@@ -302,30 +326,50 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 'valign': 'vcenter',
                 'num_format': '¥#,##0.00'
             })
+            date_format = workbook.add_format({
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter',
+                'num_format': 'yyyy-mm-dd'
+            })
             
             # Write title
             from datetime import datetime
-            worksheet.merge_range(0, 0, 0, 9, f'项目BOM清单 - {project.name} ({project.code})', title_format)
+            worksheet.merge_range(0, 0, 0, 16, f'项目BOM清单 - {project.name} ({project.code})', title_format)
             worksheet.write(1, 0, f'导出时间: {datetime.now().strftime("%Y-%m-%d %H:%M")}')
             
-            # Column headers
+            # Column headers: (name, width, format_type)
             headers = [
-                ('序号', 6),
-                ('物料编码', 15),
-                ('物料名称', 25),
-                ('规格型号', 20),
-                ('单位', 8),
-                ('物料类别', 15),
-                ('计划数量', 12),
-                ('已使用', 10),
-                ('预估单价', 12),
-                ('预估成本', 12),
-                ('备注', 25),
+                ('序号', 6, 'normal'),
+                ('物料编码', 15, 'required'),
+                ('物料名称', 20, 'normal'),
+                ('规格型号', 15, 'normal'),
+                ('版本/品牌', 12, 'normal'),
+                ('单位', 8, 'normal'),
+                ('计划数量', 12, 'required'),
+                ('已领用', 10, 'normal'),
+                ('剩余需求', 10, 'normal'),
+                ('预估单价', 12, 'yellow'),
+                ('预估成本', 12, 'green'),
+                ('有图/无图', 10, 'normal'),
+                ('物料类型', 10, 'normal'),
+                ('需求日期', 12, 'normal'),
+                ('申请人', 10, 'normal'),
+                ('备注', 20, 'normal'),
+                ('说明', 25, 'normal'),
             ]
             
             # Write headers (row 3)
-            for col, (header, width) in enumerate(headers):
-                worksheet.write(3, col, header, header_format)
+            for col, (header, width, fmt_type) in enumerate(headers):
+                if fmt_type == 'required':
+                    fmt = required_header
+                elif fmt_type == 'yellow':
+                    fmt = yellow_header
+                elif fmt_type == 'green':
+                    fmt = green_header
+                else:
+                    fmt = header_format
+                worksheet.write(3, col, header, fmt)
                 worksheet.set_column(col, col, width)
             
             # Write data
@@ -337,8 +381,9 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             for idx, bom in enumerate(bom_items, 1):
                 planned = float(bom.planned_qty)
                 actual = float(bom.actual_qty)
-                price = float(bom.item.standard_cost)
-                cost = float(bom.estimated_cost)
+                remaining = max(0, planned - actual)
+                price = float(bom.estimated_cost) if bom.estimated_cost else float(bom.item.standard_cost)
+                cost = planned * price
                 
                 total_planned += planned
                 total_actual += actual
@@ -348,13 +393,19 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 worksheet.write(row, 1, bom.item.sku, data_format)
                 worksheet.write(row, 2, bom.item.name, data_format)
                 worksheet.write(row, 3, bom.item.specification or '', data_format)
-                worksheet.write(row, 4, bom.item.get_unit_display(), data_format)
-                worksheet.write(row, 5, bom.item.category.name if bom.item.category else '', data_format)
+                worksheet.write(row, 4, bom.version_brand or bom.item.brand or '', data_format)
+                worksheet.write(row, 5, bom.item.get_unit_display(), data_format)
                 worksheet.write(row, 6, planned, number_format)
                 worksheet.write(row, 7, actual, number_format)
-                worksheet.write(row, 8, price, money_format)
-                worksheet.write(row, 9, cost, money_format)
-                worksheet.write(row, 10, bom.notes or '', data_format)
+                worksheet.write(row, 8, remaining, number_format)
+                worksheet.write(row, 9, price, money_format)
+                worksheet.write(row, 10, cost, money_format)
+                worksheet.write(row, 11, bom.get_has_drawing_display(), data_format)
+                worksheet.write(row, 12, bom.item.get_item_type_display(), data_format)
+                worksheet.write(row, 13, bom.required_date.strftime('%Y-%m-%d') if bom.required_date else '', data_format)
+                worksheet.write(row, 14, bom.requester.get_full_name() if bom.requester else '', data_format)
+                worksheet.write(row, 15, bom.notes or '', data_format)
+                worksheet.write(row, 16, bom.description or '', data_format)
                 row += 1
             
             # Write totals
@@ -364,18 +415,21 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 'bg_color': '#E2EFDA',
                 'align': 'right'
             })
-            worksheet.write(row, 5, '合计:', total_format)
-            worksheet.write(row, 6, total_planned, total_format)
-            worksheet.write(row, 7, total_actual, total_format)
-            worksheet.write(row, 8, '', total_format)
-            worksheet.write(row, 9, total_cost, workbook.add_format({
+            total_money_format = workbook.add_format({
                 'bold': True,
                 'border': 1,
                 'bg_color': '#E2EFDA',
                 'align': 'right',
                 'num_format': '¥#,##0.00'
-            }))
-            worksheet.write(row, 10, '', total_format)
+            })
+            worksheet.write(row, 5, '合计:', total_format)
+            worksheet.write(row, 6, total_planned, total_format)
+            worksheet.write(row, 7, total_actual, total_format)
+            worksheet.write(row, 8, max(0, total_planned - total_actual), total_format)
+            worksheet.write(row, 9, '', total_format)
+            worksheet.write(row, 10, total_cost, total_money_format)
+            for col in range(11, 17):
+                worksheet.write(row, col, '', total_format)
             
             # Set row heights
             worksheet.set_row(0, 25)
@@ -432,6 +486,24 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 'valign': 'vcenter',
                 'text_wrap': True
             })
+            yellow_format = workbook.add_format({
+                'bold': True,
+                'bg_color': '#FFFF00',
+                'font_color': 'black',
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter',
+                'text_wrap': True
+            })
+            green_format = workbook.add_format({
+                'bold': True,
+                'bg_color': '#92D050',
+                'font_color': 'black',
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter',
+                'text_wrap': True
+            })
             example_format = workbook.add_format({
                 'bg_color': '#FFF2CC',
                 'border': 1,
@@ -445,19 +517,25 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 'font_color': '#999999'
             })
             
-            # Column headers: (name, width, type: 'required'/'optional'/'readonly')
+            # Column headers: (name, width, type: 'required'/'optional'/'readonly'/'yellow'/'green')
             headers = [
                 ('序号', 8, 'readonly'),
                 ('物料编码*', 15, 'required'),
                 ('物料名称', 20, 'readonly'),
                 ('规格型号', 15, 'readonly'),
+                ('版本/品牌', 12, 'optional'),
                 ('单位', 8, 'readonly'),
                 ('计划数量*', 12, 'required'),
                 ('已领用', 10, 'readonly'),
                 ('剩余需求', 10, 'readonly'),
-                ('预估单价', 12, 'optional'),
-                ('预估成本', 12, 'readonly'),
-                ('备注', 25, 'optional'),
+                ('预估单价', 12, 'yellow'),
+                ('预估成本', 12, 'green'),
+                ('有图/无图', 10, 'optional'),
+                ('物料类型', 10, 'readonly'),
+                ('需求日期', 12, 'optional'),
+                ('申请人', 10, 'optional'),
+                ('备注', 20, 'optional'),
+                ('说明', 25, 'optional'),
             ]
             
             # Write headers
@@ -466,6 +544,10 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                     fmt = required_format
                 elif htype == 'readonly':
                     fmt = readonly_format
+                elif htype == 'yellow':
+                    fmt = yellow_format
+                elif htype == 'green':
+                    fmt = green_format
                 else:
                     fmt = header_format
                 worksheet.write(0, col, header, fmt)
@@ -473,33 +555,45 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             
             # Write example data (row 1)
             example_data = [
-                (1, example_format),
+                (1, readonly_example_format),
                 ('MAT001', example_format),
                 ('(系统自动填充)', readonly_example_format),
                 ('(系统自动填充)', readonly_example_format),
+                ('V1.0', example_format),
                 ('(自动)', readonly_example_format),
                 (100, example_format),
                 ('(自动)', readonly_example_format),
                 ('(自动)', readonly_example_format),
-                (10.00, example_format),
+                (10, example_format),
                 ('(自动计算)', readonly_example_format),
+                ('有图', example_format),
+                ('(自动)', readonly_example_format),
+                ('2025-01-15', example_format),
+                ('张三', example_format),
                 ('示例，请删除', example_format),
+                ('', example_format),
             ]
             for col, (value, fmt) in enumerate(example_data):
                 worksheet.write(1, col, value, fmt)
             
             # Write second example row
             example_data2 = [
-                (2, example_format),
+                (2, readonly_example_format),
                 ('MAT002', example_format),
                 ('(系统自动填充)', readonly_example_format),
                 ('(系统自动填充)', readonly_example_format),
+                ('', example_format),
                 ('(自动)', readonly_example_format),
                 (50, example_format),
                 ('(自动)', readonly_example_format),
                 ('(自动)', readonly_example_format),
-                (25.50, example_format),
+                (25.5, example_format),
                 ('(自动计算)', readonly_example_format),
+                ('无图', example_format),
+                ('(自动)', readonly_example_format),
+                ('', example_format),
+                ('', example_format),
+                ('', example_format),
                 ('', example_format),
             ]
             for col, (value, fmt) in enumerate(example_data2):
@@ -535,25 +629,36 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 ('  • 物料编码*：必须与系统中物料管理的SKU完全一致', None),
                 ('  • 计划数量*：正整数，表示该物料在项目中的计划使用数量', None),
                 ('', None),
-                ('蓝色表头 = 选填字段（可以为空）', bold_format),
+                ('黄色表头 = 价格字段（可选填）', bold_format),
                 ('  • 预估单价：物料的预估采购单价，不填则使用物料的标准成本', None),
-                ('  • 备注：备注信息', None),
+                ('', None),
+                ('蓝色表头 = 选填字段（可以为空）', bold_format),
+                ('  • 版本/品牌：物料的版本号或品牌信息', None),
+                ('  • 有图/无图：填写"有图"、"无图"或"待定"', None),
+                ('  • 需求日期：格式YYYY-MM-DD，如2025-01-15', None),
+                ('  • 申请人：填写申请人姓名（系统会自动匹配）', None),
+                ('  • 备注/说明：备注和详细说明信息', None),
+                ('', None),
+                ('绿色表头 = 自动计算字段', bold_format),
+                ('  • 预估成本：= 计划数量 × 预估单价，系统自动计算', None),
                 ('', None),
                 ('灰色表头 = 系统自动填充（导入时忽略，无需填写）', bold_format),
-                ('  • 序号、物料名称、规格型号、单位：根据物料编码自动获取', None),
-                ('  • 已领用、剩余需求、预估成本：系统自动计算', None),
+                ('  • 序号、物料名称、规格型号、单位、物料类型：根据物料编码自动获取', None),
+                ('  • 已领用、剩余需求：系统自动计算', None),
                 ('', None),
                 ('【导入步骤】', section_format),
                 ('', None),
                 ('1. 删除示例数据行（黄色背景的行）', None),
-                ('2. 只填写：物料编码、计划数量、预估单价（可选）、备注（可选）', None),
-                ('3. 灰色列可以留空或删除，系统会自动忽略', None),
-                ('4. 保存文件并在系统中导入', None),
+                ('2. 必填字段：物料编码、计划数量', None),
+                ('3. 选填字段：版本/品牌、预估单价、有图/无图、需求日期、申请人、备注、说明', None),
+                ('4. 灰色列可以留空或删除，系统会自动忽略', None),
+                ('5. 保存文件并在系统中导入', None),
                 ('', None),
                 ('【常见错误】', section_format),
                 ('', None),
                 ('• 物料编码不存在：请先在"物料管理"中创建该物料', None),
                 ('• 数量格式错误：请输入正整数', None),
+                ('• 日期格式错误：请使用YYYY-MM-DD格式', None),
                 ('• 物料已存在：勾选"更新已存在的物料"可覆盖', None),
             ]
             
@@ -634,18 +739,25 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Find optional columns
-        price_column = None
-        for col in df.columns:
-            if '预估单价' in col or '单价' in col or '成本' in col:
-                price_column = col
-                break
+        # Find optional columns with helper function
+        def find_column(df, keywords):
+            for col in df.columns:
+                for keyword in keywords:
+                    if keyword in col:
+                        return col
+            return None
         
-        notes_column = None
-        for col in df.columns:
-            if '备注' in col or '说明' in col:
-                notes_column = col
-                break
+        price_column = find_column(df, ['预估单价', '单价'])
+        notes_column = find_column(df, ['备注'])
+        description_column = find_column(df, ['说明'])
+        version_brand_column = find_column(df, ['版本/品牌', '版本', '品牌'])
+        has_drawing_column = find_column(df, ['有图/无图', '有图', '无图'])
+        required_date_column = find_column(df, ['需求日期', '日期'])
+        requester_column = find_column(df, ['申请人'])
+        
+        # Import User model for requester lookup
+        from apps.accounts.models import User
+        from datetime import datetime
         
         created_count = 0
         updated_count = 0
@@ -689,12 +801,52 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 except (ValueError, TypeError):
                     pass  # Use item's standard cost
             
-            estimated_cost = planned_qty * float(unit_price)
-            
             # Get notes (optional)
             notes = ''
             if notes_column and pd.notna(row.get(notes_column)):
                 notes = str(row[notes_column])
+            
+            # Get description (optional)
+            description = ''
+            if description_column and pd.notna(row.get(description_column)):
+                description = str(row[description_column])
+            
+            # Get version/brand (optional)
+            version_brand = ''
+            if version_brand_column and pd.notna(row.get(version_brand_column)):
+                version_brand = str(row[version_brand_column])
+            
+            # Get has_drawing (optional)
+            has_drawing = 'PENDING'
+            if has_drawing_column and pd.notna(row.get(has_drawing_column)):
+                drawing_val = str(row[has_drawing_column]).strip()
+                if '有图' in drawing_val:
+                    has_drawing = 'YES'
+                elif '无图' in drawing_val:
+                    has_drawing = 'NO'
+            
+            # Get required_date (optional)
+            required_date = None
+            if required_date_column and pd.notna(row.get(required_date_column)):
+                try:
+                    date_val = row[required_date_column]
+                    if isinstance(date_val, str):
+                        required_date = datetime.strptime(date_val, '%Y-%m-%d').date()
+                    else:
+                        required_date = pd.to_datetime(date_val).date()
+                except (ValueError, TypeError):
+                    pass  # Ignore invalid date
+            
+            # Get requester (optional)
+            requester = None
+            if requester_column and pd.notna(row.get(requester_column)):
+                requester_name = str(row[requester_column]).strip()
+                # Try to find user by name
+                requester = User.objects.filter(
+                    Q(username=requester_name) |
+                    Q(first_name__icontains=requester_name) |
+                    Q(last_name__icontains=requester_name)
+                ).first()
             
             # Check if BOM item exists
             existing_bom = ProjectBOM.objects.filter(
@@ -706,9 +858,18 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             if existing_bom:
                 if update_existing:
                     existing_bom.planned_qty = planned_qty
-                    existing_bom.estimated_cost = estimated_cost
+                    existing_bom.estimated_cost = unit_price
                     if notes:
                         existing_bom.notes = notes
+                    if description:
+                        existing_bom.description = description
+                    if version_brand:
+                        existing_bom.version_brand = version_brand
+                    existing_bom.has_drawing = has_drawing
+                    if required_date:
+                        existing_bom.required_date = required_date
+                    if requester:
+                        existing_bom.requester = requester
                     existing_bom.save()
                     updated_count += 1
                 else:
@@ -721,8 +882,13 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                     project=project,
                     item=item,
                     planned_qty=planned_qty,
-                    estimated_cost=estimated_cost,
+                    estimated_cost=unit_price,
                     notes=notes,
+                    description=description,
+                    version_brand=version_brand,
+                    has_drawing=has_drawing,
+                    required_date=required_date,
+                    requester=requester,
                     created_by=request.user
                 )
                 created_count += 1

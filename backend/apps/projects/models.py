@@ -252,6 +252,12 @@ class ProjectBOM(BaseModel):
     """
     Project Bill of Materials - planning material requirements.
     """
+    HAS_DRAWING_CHOICES = [
+        ('YES', '有图'),
+        ('NO', '无图'),
+        ('PENDING', '待定'),
+    ]
+    
     project = models.ForeignKey(
         Project,
         on_delete=models.CASCADE,
@@ -280,8 +286,26 @@ class ProjectBOM(BaseModel):
         max_digits=15,
         decimal_places=2,
         default=0,
-        verbose_name='预估成本'
+        verbose_name='预估单价'
     )
+    # 新增字段
+    version_brand = models.CharField(max_length=100, blank=True, verbose_name='版本/品牌')
+    has_drawing = models.CharField(
+        max_length=10,
+        choices=HAS_DRAWING_CHOICES,
+        default='PENDING',
+        verbose_name='有图/无图'
+    )
+    required_date = models.DateField(null=True, blank=True, verbose_name='需求日期')
+    requester = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='requested_boms',
+        verbose_name='申请人'
+    )
+    description = models.TextField(blank=True, verbose_name='说明')
     notes = models.TextField(blank=True, verbose_name='备注')
     
     class Meta:
