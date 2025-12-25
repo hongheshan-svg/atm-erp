@@ -102,9 +102,9 @@
         <el-form-item label="负责人" prop="assignee">
           <el-select v-model="form.assignee" placeholder="选择负责人" filterable style="width: 100%;">
             <el-option
-              v-for="member in projectMembers"
+              v-for="member in assigneeOptions"
               :key="member.id"
-              :label="member.username"
+              :label="member.label"
               :value="member.id"
             />
           </el-select>
@@ -229,6 +229,25 @@ const rules = {
 }
 
 const dialogTitle = computed(() => form.id ? '编辑任务' : '新增任务')
+
+// 将项目成员/用户列表转换为统一的下拉选项格式
+const assigneeOptions = computed(() => {
+  return projectMembers.value.map(member => {
+    // 项目成员数据 (来自 /projects/members/)
+    if (member.user !== undefined) {
+      return {
+        id: member.user,
+        label: member.user_name || `用户${member.user}`
+      }
+    }
+    // 用户数据 (来自 /auth/users/)
+    const fullName = `${member.last_name || ''}${member.first_name || ''}`.trim()
+    return {
+      id: member.id,
+      label: fullName || member.username || `用户${member.id}`
+    }
+  })
+})
 
 const getStatusType = (status) => {
   const types = {
