@@ -483,13 +483,11 @@ const handleMoveUp = async (row, index) => {
   const prevTask = tasks[index - 1]
   
   try {
-    // 交换两个任务的 sort_order
-    const prevOrder = prevTask.sort_order ?? index - 1
-    const currentOrder = row.sort_order ?? index
-    
+    // 使用索引位置作为新的 sort_order（交换位置）
+    // 当前任务移到上一个位置，上一个任务移到当前位置
     await Promise.all([
-      request.patch(`/projects/tasks/${row.id}/`, { sort_order: prevOrder }),
-      request.patch(`/projects/tasks/${prevTask.id}/`, { sort_order: currentOrder })
+      request.patch(`/projects/tasks/${row.id}/`, { sort_order: index - 1 }),
+      request.patch(`/projects/tasks/${prevTask.id}/`, { sort_order: index })
     ])
     
     ElMessage.success('排序已更新')
@@ -507,13 +505,11 @@ const handleMoveDown = async (row, index) => {
   const nextTask = tasks[index + 1]
   
   try {
-    // 交换两个任务的 sort_order
-    const nextOrder = nextTask.sort_order ?? index + 1
-    const currentOrder = row.sort_order ?? index
-    
+    // 使用索引位置作为新的 sort_order（交换位置）
+    // 当前任务移到下一个位置，下一个任务移到当前位置
     await Promise.all([
-      request.patch(`/projects/tasks/${row.id}/`, { sort_order: nextOrder }),
-      request.patch(`/projects/tasks/${nextTask.id}/`, { sort_order: currentOrder })
+      request.patch(`/projects/tasks/${row.id}/`, { sort_order: index + 1 }),
+      request.patch(`/projects/tasks/${nextTask.id}/`, { sort_order: index })
     ])
     
     ElMessage.success('排序已更新')
