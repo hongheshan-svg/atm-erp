@@ -270,6 +270,10 @@ const fetchProjects = async () => {
 const fetchTasks = async () => {
   if (!selectedProject.value) {
     taskTree.value = []
+    stats.total = 0
+    stats.inProgress = 0
+    stats.completed = 0
+    stats.totalHours = 0
     return
   }
   
@@ -284,59 +288,14 @@ const fetchTasks = async () => {
     calculateStats(tasks)
   } catch (error) {
     console.error('获取任务列表失败:', error)
-    // 使用模拟数据
-    taskTree.value = getMockTasks()
-    calculateStats(flattenTree(taskTree.value))
+    taskTree.value = []
+    stats.total = 0
+    stats.inProgress = 0
+    stats.completed = 0
+    stats.totalHours = 0
   } finally {
     loading.value = false
   }
-}
-
-const getMockTasks = () => {
-  return [
-    {
-      id: 1,
-      name: '需求分析',
-      assignee_name: 'admin',
-      status: 'COMPLETED',
-      progress: 100,
-      planned_hours: 40,
-      actual_hours: 45,
-      start_date: '2024-01-01',
-      end_date: '2024-01-15',
-      children: [
-        { id: 11, name: '用户访谈', assignee_name: 'admin', status: 'COMPLETED', progress: 100, planned_hours: 16, actual_hours: 18, start_date: '2024-01-01', end_date: '2024-01-05' },
-        { id: 12, name: '需求文档编写', assignee_name: 'admin', status: 'COMPLETED', progress: 100, planned_hours: 24, actual_hours: 27, start_date: '2024-01-06', end_date: '2024-01-15' }
-      ]
-    },
-    {
-      id: 2,
-      name: '系统设计',
-      assignee_name: 'admin',
-      status: 'IN_PROGRESS',
-      progress: 60,
-      planned_hours: 60,
-      actual_hours: 40,
-      start_date: '2024-01-16',
-      end_date: '2024-02-15',
-      children: [
-        { id: 21, name: '架构设计', assignee_name: 'admin', status: 'COMPLETED', progress: 100, planned_hours: 20, actual_hours: 22, start_date: '2024-01-16', end_date: '2024-01-25' },
-        { id: 22, name: '数据库设计', assignee_name: 'admin', status: 'IN_PROGRESS', progress: 50, planned_hours: 20, actual_hours: 10, start_date: '2024-01-26', end_date: '2024-02-05' },
-        { id: 23, name: 'API设计', assignee_name: 'admin', status: 'PENDING', progress: 0, planned_hours: 20, actual_hours: 0, start_date: '2024-02-06', end_date: '2024-02-15' }
-      ]
-    },
-    {
-      id: 3,
-      name: '开发实现',
-      assignee_name: 'admin',
-      status: 'PENDING',
-      progress: 0,
-      planned_hours: 200,
-      actual_hours: 0,
-      start_date: '2024-02-16',
-      end_date: '2024-05-15'
-    }
-  ]
 }
 
 const buildTree = (tasks, parentId = null) => {
@@ -349,16 +308,6 @@ const buildTree = (tasks, parentId = null) => {
       ...task,
       children: buildTree(tasks, task.id)
     }))
-}
-
-const flattenTree = (tree, result = []) => {
-  tree.forEach(node => {
-    result.push(node)
-    if (node.children) {
-      flattenTree(node.children, result)
-    }
-  })
-  return result
 }
 
 const calculateStats = (tasks) => {

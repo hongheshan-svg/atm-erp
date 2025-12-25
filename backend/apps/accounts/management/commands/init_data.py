@@ -48,55 +48,55 @@ class Command(BaseCommand):
                 'name': '系统管理员',
                 'code': 'ADMIN',
                 'description': '系统超级管理员，拥有所有权限',
-                'data_scope': 'all'
+                'data_scope': 'ALL'
             },
             {
                 'name': '总经理',
                 'code': 'GM',
                 'description': '总经理，查看所有数据',
-                'data_scope': 'all'
+                'data_scope': 'ALL'
             },
             {
                 'name': '销售经理',
                 'code': 'SALES_MANAGER',
                 'description': '销售部门经理',
-                'data_scope': 'department'
+                'data_scope': 'DEPARTMENT'
             },
             {
                 'name': '销售员',
                 'code': 'SALES',
                 'description': '销售人员',
-                'data_scope': 'self'
+                'data_scope': 'SELF'
             },
             {
                 'name': '采购经理',
                 'code': 'PURCHASE_MANAGER',
                 'description': '采购部门经理',
-                'data_scope': 'department'
+                'data_scope': 'DEPARTMENT'
             },
             {
                 'name': '采购员',
                 'code': 'PURCHASE',
                 'description': '采购人员',
-                'data_scope': 'self'
+                'data_scope': 'SELF'
             },
             {
                 'name': '仓库管理员',
                 'code': 'WAREHOUSE_ADMIN',
                 'description': '仓库管理人员',
-                'data_scope': 'department'
+                'data_scope': 'DEPARTMENT'
             },
             {
                 'name': '项目经理',
                 'code': 'PROJECT_MANAGER',
                 'description': '项目管理人员',
-                'data_scope': 'self'
+                'data_scope': 'SELF'
             },
             {
                 'name': '财务人员',
                 'code': 'FINANCE',
                 'description': '财务管理人员',
-                'data_scope': 'all'
+                'data_scope': 'ALL'
             },
         ]
         
