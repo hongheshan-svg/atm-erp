@@ -93,7 +93,7 @@
 ## 支持的编码类型
 
 1. **项目编号** (PROJECT) - 已集成自动生成
-2. **物料编码** (ITEM) - 支持手动输入或自动生成
+2. **物料编码** - **特殊处理**：有独立的编码生成器，不使用通用编码规则系统。详见 `ITEM_CODE_RULE.md`
 3. **采购合同** (PURCHASE_CONTRACT)
 4. **销售合同** (SALES_CONTRACT)
 5. **采购申请** (PURCHASE_REQUEST)

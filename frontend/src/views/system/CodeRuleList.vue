@@ -214,7 +214,8 @@ const form = reactive({
 
 const ruleTypes = [
   { value: 'PROJECT', label: '项目编号' },
-  { value: 'ITEM', label: '物料编码' },
+  // 注意：物料编码有特殊规则，请在"基础数据-物料管理"页面使用编码生成功能
+  // { value: 'ITEM', label: '物料编码' },
   { value: 'PURCHASE_CONTRACT', label: '采购合同' },
   { value: 'SALES_CONTRACT', label: '销售合同' },
   { value: 'PURCHASE_REQUEST', label: '采购申请' },
