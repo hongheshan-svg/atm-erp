@@ -57,22 +57,33 @@ class ProjectSerializer(serializers.ModelSerializer):
 
 
 class ProjectMemberSerializer(serializers.ModelSerializer):
-    """ProjectMember serializer."""
+    """
+    ProjectMember serializer with salary privacy protection.
+    
+    时薪信息只对以下角色可见：
+    - 超级管理员
+    - 项目经理（该项目的manager）
+    - HR部门成员
+    - 财务部门成员
+    """
     user_name = serializers.CharField(source='user.get_full_name', read_only=True)
     user_email = serializers.CharField(source='user.email', read_only=True)
     user_department = serializers.SerializerMethodField()
     project_name = serializers.CharField(source='project.name', read_only=True)
     total_hours = serializers.DecimalField(source='actual_hours', max_digits=10, decimal_places=2, read_only=True)
     join_date = serializers.SerializerMethodField()
+    labor_cost = serializers.SerializerMethodField()
+    can_view_salary = serializers.SerializerMethodField()
     
     class Meta:
         model = ProjectMember
         fields = [
             'id', 'project', 'project_name', 'user', 'user_name', 'user_email', 
             'user_department', 'role', 'hourly_rate', 'allocated_hours', 'actual_hours',
-            'total_hours', 'join_date', 'is_active', 'is_deleted', 'created_at', 'updated_at'
+            'total_hours', 'labor_cost', 'join_date', 'can_view_salary',
+            'is_active', 'is_deleted', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at', 'labor_cost', 'can_view_salary']
     
     def get_user_department(self, obj):
         """获取用户部门名称"""
@@ -85,6 +96,64 @@ class ProjectMemberSerializer(serializers.ModelSerializer):
         if obj.created_at:
             return obj.created_at.strftime('%Y-%m-%d')
         return ''
+    
+    def get_labor_cost(self, obj):
+        """
+        获取人工成本（工时×时薪）
+        需要有查看薪资权限才返回真实值，否则返回null
+        """
+        if self._can_view_salary_info(obj):
+            return float(obj.actual_hours * obj.hourly_rate)
+        return None
+    
+    def get_can_view_salary(self, obj):
+        """标记当前用户是否有查看薪资的权限"""
+        return self._can_view_salary_info(obj)
+    
+    def _can_view_salary_info(self, obj):
+        """
+        判断当前用户是否有权限查看薪资信息
+        """
+        request = self.context.get('request')
+        if not request or not request.user:
+            return False
+        
+        user = request.user
+        
+        # 超级管理员可以查看所有薪资信息
+        if user.is_superuser:
+            return True
+        
+        # 项目经理可以查看本项目所有成员的薪资
+        if obj.project.manager_id == user.id:
+            return True
+        
+        # HR部门和财务部门可以查看所有薪资信息
+        if hasattr(user, 'department') and user.department:
+            dept_name = user.department.name
+            if dept_name in ['人力资源部', 'HR', '人事部', '财务部', '财务']:
+                return True
+        
+        # 检查用户是否有特定权限（通过角色权限系统）
+        if hasattr(user, 'roles'):
+            for role in user.roles.all():
+                if role.code in ['hr_manager', 'finance_manager', 'ceo', 'cfo']:
+                    return True
+        
+        return False
+    
+    def to_representation(self, instance):
+        """
+        重写序列化输出，根据权限过滤敏感字段
+        """
+        data = super().to_representation(instance)
+        
+        # 如果没有查看薪资权限，移除敏感字段或设置为null
+        if not self._can_view_salary_info(instance):
+            data['hourly_rate'] = None  # 时薪设置为null
+            data['labor_cost'] = None  # 人工成本设置为null
+        
+        return data
 
 
 class ProjectTaskSerializer(serializers.ModelSerializer):

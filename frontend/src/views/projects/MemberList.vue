@@ -32,10 +32,26 @@
         <el-col :span="6">
           <el-statistic title="开发人员" :value="developerCount" suffix="人" />
         </el-col>
-        <el-col :span="6">
+        <el-col :span="6" v-if="canViewSalary">
           <el-statistic title="总工时成本" :value="totalLaborCost" :precision="2" prefix="¥" />
         </el-col>
+        <el-col :span="6" v-else>
+          <el-statistic title="总工时" :value="totalHours" :precision="2" suffix="小时" />
+        </el-col>
       </el-row>
+      
+      <!-- 权限提示 -->
+      <el-alert
+        v-if="!canViewSalary && selectedProject"
+        title="隐私保护提示"
+        type="info"
+        :closable="false"
+        style="margin-bottom: 15px;"
+      >
+        <template #default>
+          <span>出于隐私保护，时薪和工时成本信息仅对项目经理、HR和财务部门可见。</span>
+        </template>
+      </el-alert>
       
       <!-- 成员列表 -->
       <el-table :data="members" border stripe v-loading="loading">
@@ -50,19 +66,27 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="hourly_rate" label="时薪(元/小时)" width="120" align="right">
+        <!-- 时薪列：仅对有权限的用户显示 -->
+        <el-table-column v-if="canViewSalary" prop="hourly_rate" label="时薪(元/小时)" width="120" align="right">
           <template #default="{ row }">
-            ¥{{ row.hourly_rate || 0 }}
+            <span v-if="row.hourly_rate !== null && row.hourly_rate !== undefined">
+              ¥{{ parseFloat(row.hourly_rate).toFixed(2) }}
+            </span>
+            <span v-else style="color: #ccc;">-</span>
           </template>
         </el-table-column>
         <el-table-column prop="total_hours" label="累计工时" width="100" align="right">
           <template #default="{ row }">
-            {{ row.total_hours || 0 }}小时
+            {{ parseFloat(row.total_hours || 0).toFixed(2) }}小时
           </template>
         </el-table-column>
-        <el-table-column label="工时成本" width="120" align="right">
+        <!-- 工时成本列：仅对有权限的用户显示 -->
+        <el-table-column v-if="canViewSalary" label="工时成本" width="120" align="right">
           <template #default="{ row }">
-            ¥{{ ((row.total_hours || 0) * (row.hourly_rate || 0)).toFixed(2) }}
+            <span v-if="row.labor_cost !== null && row.labor_cost !== undefined">
+              ¥{{ parseFloat(row.labor_cost).toFixed(2) }}
+            </span>
+            <span v-else style="color: #ccc;">-</span>
           </template>
         </el-table-column>
         <el-table-column prop="join_date" label="加入日期" width="110" />
@@ -112,9 +136,22 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="时薪" prop="hourly_rate">
-          <el-input-number v-model="form.hourly_rate" :min="0" :max="10000" :precision="2" style="width: 100%;" />
+        <!-- 时薪字段：仅对有权限的用户显示 -->
+        <el-form-item v-if="canViewSalary" label="时薪" prop="hourly_rate">
+          <el-input-number v-model="form.hourly_rate" :min="0" :max="10000" :precision="2" style="width: 100%;">
+            <template #suffix>
+              <span style="color: #999; font-size: 12px;">元/小时</span>
+            </template>
+          </el-input-number>
+          <div style="color: #999; font-size: 12px; margin-top: 5px;">
+            <el-icon><Lock /></el-icon> 薪资信息仅项目经理、HR和财务可见
+          </div>
         </el-form-item>
+        <el-alert v-else type="warning" :closable="false" style="margin-bottom: 15px;">
+          <template #default>
+            <span>您没有权限设置或查看时薪信息。如需设置，请联系项目经理或HR。</span>
+          </template>
+        </el-alert>
         <el-form-item label="加入日期" prop="join_date">
           <el-date-picker v-model="form.join_date" type="date" placeholder="选择日期" style="width: 100%;" value-format="YYYY-MM-DD" />
         </el-form-item>
@@ -133,7 +170,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Lock } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 const loading = ref(false)
@@ -155,11 +192,15 @@ const form = reactive({
   notes: ''
 })
 
-const rules = {
+// 表单验证规则（时薪字段根据权限动态设置）
+const rules = computed(() => ({
   user: [{ required: true, message: '请选择用户', trigger: 'change' }],
   role: [{ required: true, message: '请选择角色', trigger: 'change' }],
-  hourly_rate: [{ required: true, message: '请输入时薪', trigger: 'blur' }]
-}
+  // 只有有权限的用户才需要填写时薪
+  hourly_rate: canViewSalary.value 
+    ? [{ required: true, message: '请输入时薪', trigger: 'blur' }]
+    : []
+}))
 
 const dialogTitle = computed(() => form.id ? '编辑成员' : '添加成员')
 
@@ -177,9 +218,29 @@ const developerCount = computed(() =>
   }).length
 )
 
-const totalLaborCost = computed(() => 
-  members.value.reduce((sum, m) => sum + (m.total_hours || 0) * (m.hourly_rate || 0), 0)
-)
+// 判断当前用户是否有查看薪资的权限
+const canViewSalary = computed(() => {
+  // 如果有任何一个成员的 can_view_salary 为 true，说明当前用户有权限
+  // 后端已经做了权限判断，前端只需要检查返回值
+  if (members.value.length > 0) {
+    return members.value.some(m => m.can_view_salary === true)
+  }
+  return false
+})
+
+const totalLaborCost = computed(() => {
+  // 只有有权限时才计算总成本
+  if (!canViewSalary.value) return 0
+  return members.value.reduce((sum, m) => {
+    // 使用后端返回的 labor_cost
+    return sum + (m.labor_cost || 0)
+  }, 0)
+})
+
+const totalHours = computed(() => {
+  // 总工时（不涉及薪资信息，所有人可见）
+  return members.value.reduce((sum, m) => sum + parseFloat(m.total_hours || 0), 0)
+})
 
 const availableUsers = computed(() => {
   const memberUserIds = members.value.map(m => m.user)
@@ -320,6 +381,12 @@ const handleSubmit = async () => {
     await formRef.value.validate()
     
     const data = { ...form, project: selectedProject.value }
+    
+    // 如果当前用户没有查看薪资权限，移除 hourly_rate 字段
+    // 后端会保留原有的时薪值或使用默认值
+    if (!canViewSalary.value) {
+      delete data.hourly_rate
+    }
     
     if (form.id) {
       await request.put(`/projects/members/${form.id}/`, data)
