@@ -307,18 +307,18 @@ const handlePrint = (row) => {
           </tr>
         </thead>
         <tbody>
-          ${(row.lines || []).map((line, index) => \`
+          ${(row.lines || []).map((line, index) => `
             <tr>
-              <td>\${index + 1}</td>
-              <td>\${line.item_code || '-'}</td>
-              <td>\${line.item_name || '-'}</td>
-              <td>\${line.specification || '-'}</td>
-              <td>\${line.unit || '-'}</td>
-              <td class="number">\${line.delivered_qty}</td>
-              <td>\${line.batch_no || '-'}</td>
-              <td>\${line.notes || ''}</td>
+              <td>${index + 1}</td>
+              <td>${line.item_code || '-'}</td>
+              <td>${line.item_name || '-'}</td>
+              <td>${line.specification || '-'}</td>
+              <td>${line.unit || '-'}</td>
+              <td class="number">${line.delivered_qty}</td>
+              <td>${line.batch_no || '-'}</td>
+              <td>${line.notes || ''}</td>
             </tr>
-          \`).join('')}
+          `).join('')}
         </tbody>
       </table>
       
