@@ -145,9 +145,28 @@ class UserViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
             )
         
         user = self.get_object()
-        new_password = request.data.get('new_password', '123456')
+        new_password = request.data.get('new_password')
+        
+        # 密码安全验证
+        if not new_password or len(new_password) < 6:
+            return Response(
+                {'detail': '新密码至少需要6位字符'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         user.set_password(new_password)
         user.save()
         
-        return Response({'message': f'密码已重置为: {new_password}'})
+        # 记录敏感操作日志
+        from apps.core.models import AuditLog
+        AuditLog.objects.create(
+            user=request.user,
+            action='RESET_PASSWORD',
+            model_name='User',
+            object_id=user.id,
+            details=f'管理员重置了用户 {user.username} 的密码'
+        )
+        
+        # 安全返回：不在响应中包含明文密码
+        return Response({'message': '密码重置成功，请通知用户使用新密码登录'})
 

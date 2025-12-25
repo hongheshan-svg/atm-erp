@@ -137,6 +137,29 @@ class AttachmentViewSet(viewsets.ModelViewSet):
     
     def create(self, request, *args, **kwargs):
         """上传附件"""
+        from apps.core.validators import validate_uploaded_file, sanitize_filename
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        
+        # 获取上传的文件
+        file = request.FILES.get('file')
+        if not file:
+            return Response(
+                {'error': '请选择要上传的文件'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 安全验证
+        try:
+            validate_uploaded_file(file)
+        except DjangoValidationError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 清理文件名
+        file.name = sanitize_filename(file.name)
+        
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         attachment = serializer.save()
@@ -165,6 +188,9 @@ class AttachmentViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def batch_upload(self, request):
         """批量上传附件"""
+        from apps.core.validators import validate_uploaded_file, sanitize_filename
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        
         files = request.FILES.getlist('files')
         related_model = request.data.get('related_model')
         related_id = request.data.get('related_id')
@@ -182,20 +208,46 @@ class AttachmentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        attachments = []
-        for file in files:
-            attachment = Attachment.objects.create(
-                file=file,
-                original_name=file.name,
-                related_model=related_model,
-                related_id=related_id,
-                category=category,
-                uploaded_by=request.user
+        # 限制批量上传数量
+        if len(files) > 10:
+            return Response(
+                {'error': '一次最多上传10个文件'},
+                status=status.HTTP_400_BAD_REQUEST
             )
-            attachments.append(attachment)
+        
+        attachments = []
+        errors = []
+        
+        for file in files:
+            try:
+                # 安全验证
+                validate_uploaded_file(file)
+                file.name = sanitize_filename(file.name)
+                
+                attachment = Attachment.objects.create(
+                    file=file,
+                    original_name=file.name,
+                    related_model=related_model,
+                    related_id=related_id,
+                    category=category,
+                    uploaded_by=request.user
+                )
+                attachments.append(attachment)
+            except DjangoValidationError as e:
+                errors.append({
+                    'filename': file.name,
+                    'error': str(e)
+                })
         
         serializer = AttachmentSerializer(attachments, many=True, context={'request': request})
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        response_data = {
+            'success': serializer.data,
+            'errors': errors,
+            'total': len(files),
+            'uploaded': len(attachments),
+            'failed': len(errors)
+        }
+        return Response(response_data, status=status.HTTP_201_CREATED)
     
     @action(detail=False, methods=['delete'])
     def batch_delete(self, request):
