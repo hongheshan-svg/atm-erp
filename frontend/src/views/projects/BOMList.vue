@@ -151,6 +151,13 @@
     <!-- 添加/编辑物料对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="600px">
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
+        <el-form-item label="所属项目">
+          <el-input :value="currentProjectName" disabled>
+            <template #prefix>
+              <el-icon><Folder /></el-icon>
+            </template>
+          </el-input>
+        </el-form-item>
         <el-form-item label="选择物料" prop="item" v-if="!form.id">
           <el-select v-model="form.item" placeholder="选择物料" filterable style="width: 100%;" @change="handleItemChange">
             <el-option
@@ -307,7 +314,7 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Document, Download, Upload, ArrowDown, CopyDocument, UploadFilled, Search, Delete } from '@element-plus/icons-vue'
+import { Plus, Document, Download, Upload, ArrowDown, CopyDocument, UploadFilled, Search, Delete, Folder } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 const router = useRouter()
