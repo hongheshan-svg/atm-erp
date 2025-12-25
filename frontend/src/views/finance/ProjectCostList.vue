@@ -336,16 +336,45 @@ const handleReset = () => {
 
 const handleRecalculate = async () => {
   try {
-    await request.post('/analytics/recalculate-costs/')
-    ElMessage.success('成本重新计算完成')
-    fetchData()
+    const res = await request.post('/analytics/recalculate-costs/')
+    ElMessage.success(res.message || '成本重新计算已触发')
+    // 延迟刷新数据，给后端计算时间
+    setTimeout(() => {
+      fetchData()
+    }, 1000)
   } catch (error) {
-    ElMessage.warning('成本计算功能开发中...')
+    console.error('成本计算失败:', error)
+    ElMessage.error('成本计算失败，请稍后重试')
   }
 }
 
 const handleExport = () => {
-  ElMessage.success('导出功能开发中...')
+  if (!tableData.value.length) {
+    ElMessage.warning('没有数据可导出')
+    return
+  }
+  
+  import('@/utils/export').then(({ exportToExcel, formatMoney }) => {
+    const columns = [
+      { field: 'code', title: '项目编号' },
+      { field: 'name', title: '项目名称' },
+      { field: 'manager_name', title: '项目经理' },
+      { field: 'status_display', title: '状态' },
+      { field: 'budget_total', title: '总预算', formatter: formatMoney },
+      { field: 'revenue', title: '收入', formatter: formatMoney },
+      { field: 'material_cost', title: '材料成本', formatter: formatMoney },
+      { field: 'labor_cost', title: '人工成本', formatter: formatMoney },
+      { field: 'expense_cost', title: '费用成本', formatter: formatMoney },
+      { field: 'total_cost', title: '总成本', formatter: formatMoney },
+      { field: 'profit', title: '利润', formatter: formatMoney },
+      { field: 'profit_margin', title: '利润率(%)', formatter: (val) => (val * 100).toFixed(2) + '%' }
+    ]
+    exportToExcel(tableData.value, columns, '项目成本核算表')
+    ElMessage.success('导出成功')
+  }).catch(error => {
+    console.error('导出失败:', error)
+    ElMessage.error('导出失败')
+  })
 }
 
 const handleRowClick = (row) => {

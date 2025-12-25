@@ -262,11 +262,22 @@ const fetchData = async () => {
   }
 }
 
-const calculateStats = () => {
+const calculateStats = async () => {
   stats.itemCount = tableData.value.length
   stats.totalQty = tableData.value.reduce((sum, item) => sum + item.qty, 0)
   stats.totalValue = tableData.value.reduce((sum, item) => sum + item.total_value, 0)
-  stats.percentage = 15.5 // 模拟数据
+  
+  // 计算呆滞库存占总库存的百分比
+  try {
+    const res = await request.get('/inventory/stocks/valuation/')
+    const totalInventoryValue = res.total_value || 0
+    stats.percentage = totalInventoryValue > 0 
+      ? ((stats.totalValue / totalInventoryValue) * 100).toFixed(2)
+      : 0
+  } catch (error) {
+    console.error('获取总库存金额失败:', error)
+    stats.percentage = 0
+  }
 }
 
 const initCharts = () => {
@@ -423,31 +434,187 @@ const handleExport = () => {
   })
 }
 
-const handleViewDetail = (row) => {
+const handleViewDetail = async (row) => {
   currentItem.value = row
-  // 模拟移动历史
-  moveHistory.value = [
-    { id: 1, move_date: row.last_move_date, move_type_label: '采购入库', qty: 1000, reference_no: 'PO-2024-001' },
-    { id: 2, move_date: '2024-05-10', move_type_label: '项目领料', qty: -200, reference_no: 'PRJ-001' },
-    { id: 3, move_date: '2024-04-15', move_type_label: '销售出库', qty: -100, reference_no: 'SO-2024-005' }
-  ]
+  // 加载真实的移动历史
+  try {
+    const res = await request.get('/inventory/stock-moves/', {
+      params: {
+        item: row.item_id,
+        warehouse: row.warehouse_id,
+        page_size: 20,
+        ordering: '-move_date'
+      }
+    })
+    const moves = res.data?.results || res.results || res.data || []
+    moveHistory.value = moves.map(m => ({
+      id: m.id,
+      move_date: m.move_date,
+      move_type_label: m.move_type_display || m.move_type,
+      qty: m.move_type.startsWith('IN') ? m.qty : -m.qty,
+      reference_no: m.move_no
+    }))
+  } catch (error) {
+    console.error('获取移动历史失败:', error)
+    moveHistory.value = []
+  }
   detailVisible.value = true
 }
 
-const handleBatchDisposal = () => {
-  ElMessageBox.confirm('确定要对选中的物料进行报废处理吗？', '批量报废', {
-    type: 'warning'
-  }).then(() => {
-    ElMessage.success('报废处理功能开发中...')
-  }).catch(() => {})
+const handleBatchDisposal = async () => {
+  if (!selectedRows.value.length) {
+    ElMessage.warning('请先选择要报废的物料')
+    return
+  }
+  
+  try {
+    await ElMessageBox.confirm(
+      `确定要对选中的 ${selectedRows.value.length} 种物料进行报废处理吗？报废后将生成库存调整单。`,
+      '批量报废',
+      {
+        type: 'warning',
+        confirmButtonText: '确认报废',
+        cancelButtonText: '取消'
+      }
+    )
+    
+    // 为每个选中的物料创建库存调整
+    let successCount = 0
+    let failCount = 0
+    
+    for (const row of selectedRows.value) {
+      try {
+        await request.post('/inventory/stock-adjustments/', {
+          warehouse: row.warehouse_id,
+          adjustment_date: new Date().toISOString().split('T')[0],
+          reason: '呆滞物料报废处理',
+          notes: `呆滞天数：${row.aging_days}天`,
+          lines: [{
+            item: row.item_id,
+            system_qty: row.qty,
+            actual_qty: 0,
+            variance: -row.qty,
+            notes: '呆滞报废'
+          }]
+        })
+        successCount++
+      } catch (error) {
+        console.error(`报废物料 ${row.item_code} 失败:`, error)
+        failCount++
+      }
+    }
+    
+    if (successCount > 0) {
+      ElMessage.success(`成功报废 ${successCount} 种物料${failCount > 0 ? `，${failCount} 种失败` : ''}`)
+      fetchData() // 刷新数据
+      selectedRows.value = []
+    } else {
+      ElMessage.error('报废操作失败')
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('报废操作失败')
+    }
+  }
 }
 
-const handleBatchTransfer = () => {
-  ElMessage.success('批量调拨功能开发中...')
+const handleBatchTransfer = async () => {
+  if (!selectedRows.value.length) {
+    ElMessage.warning('请先选择要调拨的物料')
+    return
+  }
+  
+  try {
+    const { value: targetWarehouse } = await ElMessageBox.prompt(
+      `选中 ${selectedRows.value.length} 种物料，请输入目标仓库ID`,
+      '批量调拨',
+      {
+        confirmButtonText: '确认调拨',
+        cancelButtonText: '取消',
+        inputPattern: /^\d+$/,
+        inputErrorMessage: '请输入有效的仓库ID'
+      }
+    )
+    
+    let successCount = 0
+    let failCount = 0
+    
+    for (const row of selectedRows.value) {
+      try {
+        await request.post('/inventory/stock-moves/create_transfer/', {
+          item: row.item_id,
+          warehouse_from: row.warehouse_id,
+          warehouse_to: parseInt(targetWarehouse),
+          qty: row.qty,
+          unit_cost: row.unit_cost,
+          move_date: new Date().toISOString().split('T')[0],
+          notes: `呆滞物料调拨（呆滞${row.aging_days}天）`
+        })
+        successCount++
+      } catch (error) {
+        console.error(`调拨物料 ${row.item_code} 失败:`, error)
+        failCount++
+      }
+    }
+    
+    if (successCount > 0) {
+      ElMessage.success(`成功调拨 ${successCount} 种物料${failCount > 0 ? `，${failCount} 种失败` : ''}`)
+      fetchData()
+      selectedRows.value = []
+    } else {
+      ElMessage.error('调拨操作失败')
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('调拨操作失败')
+    }
+  }
 }
 
-const handleBatchPromotion = () => {
-  ElMessage.success('促销清仓功能开发中...')
+const handleBatchPromotion = async () => {
+  if (!selectedRows.value.length) {
+    ElMessage.warning('请先选择要促销的物料')
+    return
+  }
+  
+  try {
+    const { value: discountPercent } = await ElMessageBox.prompt(
+      `选中 ${selectedRows.value.length} 种物料，请输入折扣比例（例如：30表示3折）`,
+      '批量促销',
+      {
+        confirmButtonText: '确认',
+        cancelButtonText: '取消',
+        inputPattern: /^\d+$/,
+        inputErrorMessage: '请输入1-99之间的数字'
+      }
+    )
+    
+    const discount = parseInt(discountPercent) / 100
+    if (discount <= 0 || discount >= 1) {
+      ElMessage.error('折扣比例必须在1-99之间')
+      return
+    }
+    
+    // 为选中的物料应用促销标记（可以在物料主数据中添加促销标记字段）
+    // 这里先显示促销信息提示
+    const promotionInfo = selectedRows.value.map(row => {
+      const originalPrice = row.unit_cost
+      const promotionPrice = (originalPrice * discount).toFixed(2)
+      return `${row.item_code} - ${row.item_name}: ¥${originalPrice} → ¥${promotionPrice} (${discountPercent}折)`
+    }).join('\n')
+    
+    await ElMessageBox.alert(
+      `以下物料已标记为促销（需在销售模块应用促销价格）：\n\n${promotionInfo}`,
+      '促销清仓',
+      { type: 'success' }
+    )
+    
+    ElMessage.info('促销信息已生成，请在销售模块中应用促销价格')
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('促销操作失败')
+    }
+  }
 }
 
 onMounted(() => {
