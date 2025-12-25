@@ -28,6 +28,11 @@ router.register(r'webhook-deliveries', WebhookDeliveryViewSet, basename='webhook
 router.register(r'dashboard-widgets', DashboardWidgetViewSet, basename='dashboard-widget')
 router.register(r'user-dashboard', UserDashboardViewSet, basename='user-dashboard')
 
+# Code Rules
+from .code_rule_views import CodeRuleViewSet, CodeHistoryViewSet
+router.register(r'code-rules', CodeRuleViewSet, basename='code-rule')
+router.register(r'code-history', CodeHistoryViewSet, basename='code-history')
+
 urlpatterns = [
     path('', include(router.urls)),
     path('workflow/', include('apps.core.workflow.urls')),

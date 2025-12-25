@@ -50,6 +50,12 @@ const routes = [
         component: () => import('@/views/system/DepartmentList.vue'),
         meta: { title: '部门管理', icon: 'OfficeBuilding', menuId: 'system:departments' }
       },
+      {
+        path: 'code-rules',
+        name: 'CodeRuleList',
+        component: () => import('@/views/system/CodeRuleList.vue'),
+        meta: { title: '编码规则', icon: 'SetUp', menuId: 'system:code-rules' }
+      },
       // Master Data
       {
         path: 'items',
@@ -483,6 +489,7 @@ router.beforeEach(async (to, from, next) => {
             'system:users': '/users',
             'system:roles': '/roles',
             'system:departments': '/departments',
+            'system:code-rules': '/code-rules',
             'masterdata:items': '/items',
             'masterdata:customers': '/customers',
             'masterdata:suppliers': '/suppliers',

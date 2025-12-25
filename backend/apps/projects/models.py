@@ -20,7 +20,7 @@ class Project(BaseModel):
         ('ARCHIVED', '已归档'),
     ]
     
-    code = models.CharField(max_length=50, unique=True, verbose_name='项目编号')
+    code = models.CharField(max_length=50, unique=True, blank=True, verbose_name='项目编号')
     name = models.CharField(max_length=200, verbose_name='项目名称')
     customer = models.ForeignKey(
         'masterdata.Customer',
@@ -88,6 +88,13 @@ class Project(BaseModel):
     
     def __str__(self):
         return f"{self.code} - {self.name}"
+    
+    def save(self, *args, **kwargs):
+        # 自动生成项目编号
+        if not self.code:
+            from apps.core.utils import generate_code
+            self.code = generate_code('PRJ', rule_type='PROJECT')
+        super().save(*args, **kwargs)
     
     def get_actual_material_cost(self):
         """Get actual material cost from stock moves."""

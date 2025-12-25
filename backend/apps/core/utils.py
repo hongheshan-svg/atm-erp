@@ -6,14 +6,48 @@ import string
 from datetime import datetime
 
 
-def generate_code(prefix, length=8):
+def generate_code(prefix, length=8, rule_type=None):
     """
-    Generate a unique code with prefix and sequence number.
-    Example: PR20240101001, SO20240101002
-    Uses timestamp + random suffix for uniqueness.
+    Generate unique code with prefix and timestamp + random suffix.
+    如果指定了rule_type，则使用编码规则生成；否则使用默认规则。
+    
+    Args:
+        prefix: 前缀（仅在无编码规则时使用）
+        length: 长度（仅在无编码规则时使用）
+        rule_type: 编码规则类型（如：'PROJECT', 'ITEM'等）
+    
+    Returns:
+        生成的编码
     """
+    # 如果指定了规则类型，尝试使用编码规则
+    if rule_type:
+        try:
+            from apps.core.code_rule_models import CodeRule, CodeHistory
+            
+            # 查找活动的编码规则
+            rule = CodeRule.objects.filter(rule_type=rule_type, is_active=True).first()
+            if rule:
+                code = rule.generate_code()
+                
+                # 记录历史（可选）
+                try:
+                    CodeHistory.objects.create(
+                        rule=rule,
+                        generated_code=code,
+                        sequence_number=rule.current_seq
+                    )
+                except:
+                    pass  # 历史记录失败不影响编码生成
+                
+                return code
+        except Exception as e:
+            # 编码规则不可用时，使用默认规则
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f'使用编码规则失败，回退到默认规则: {e}')
+    
+    # 默认规则：前缀 + 日期 + 时间戳后缀 + 随机后缀
     date_str = datetime.now().strftime('%Y%m%d')
-    # 使用时间戳的后几位 + 随机数确保唯一性
     import time
     timestamp_suffix = str(int(time.time() * 1000))[-4:]
     random_suffix = ''.join(random.choices(string.digits, k=2))
