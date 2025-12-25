@@ -243,22 +243,11 @@ const fetchData = async () => {
     calculateStats()
   } catch (error) {
     console.error('获取工时记录失败:', error)
-    // 使用模拟数据
-    timeLogs.value = getMockTimeLogs()
-    calculateStats()
+    timeLogs.value = []
+    ElMessage.error('获取工时记录失败')
   } finally {
     loading.value = false
   }
-}
-
-const getMockTimeLogs = () => {
-  const today = new Date()
-  return [
-    { id: 1, date: today.toISOString().split('T')[0], project_name: '智能制造系统开发项目', task_name: '需求分析', hours: 8, description: '完成用户需求调研和文档整理', status: 'APPROVED', created_at: today.toISOString() },
-    { id: 2, date: new Date(today - 86400000).toISOString().split('T')[0], project_name: '智能制造系统开发项目', task_name: '系统设计', hours: 6, description: '架构设计和技术选型', status: 'APPROVED', created_at: new Date(today - 86400000).toISOString() },
-    { id: 3, date: new Date(today - 86400000 * 2).toISOString().split('T')[0], project_name: 'ERP系统升级项目', task_name: '开发实现', hours: 8, description: '完成用户模块开发', status: 'PENDING', created_at: new Date(today - 86400000 * 2).toISOString() },
-    { id: 4, date: new Date(today - 86400000 * 3).toISOString().split('T')[0], project_name: 'ERP系统升级项目', task_name: '测试', hours: 4, description: '单元测试和集成测试', status: 'PENDING', created_at: new Date(today - 86400000 * 3).toISOString() }
-  ]
 }
 
 const calculateStats = () => {

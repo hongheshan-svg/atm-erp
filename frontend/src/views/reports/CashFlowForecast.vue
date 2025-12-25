@@ -259,29 +259,11 @@ const fetchData = async () => {
       checkAlerts()
     } catch (e) {
       console.error('获取应收应付失败:', e)
-      // 最后使用模拟数据
-    useMockData()
+      arList.value = []
+      apList.value = []
+      ElMessage.error('获取应收应付数据失败')
     }
   }
-}
-
-const useMockData = () => {
-  arList.value = [
-    { id: 1, customer_name: '华为技术有限公司', invoice_no: 'INV-2024-001', due_date: '2024-12-15', amount_due: 150000, amount_paid: 50000 },
-    { id: 2, customer_name: '腾讯科技有限公司', invoice_no: 'INV-2024-002', due_date: '2024-12-20', amount_due: 80000, amount_paid: 0 },
-    { id: 3, customer_name: '阿里巴巴集团', invoice_no: 'INV-2024-003', due_date: '2025-01-05', amount_due: 200000, amount_paid: 100000 }
-  ]
-  
-  apList.value = [
-    { id: 1, supplier_name: '深圳供应商A', invoice_no: 'PINV-2024-001', due_date: '2024-12-10', amount_due: 50000, amount_paid: 0 },
-    { id: 2, supplier_name: '广州供应商B', invoice_no: 'PINV-2024-002', due_date: '2024-12-25', amount_due: 30000, amount_paid: 10000 },
-    { id: 3, supplier_name: '上海供应商C', invoice_no: 'PINV-2024-003', due_date: '2025-01-10', amount_due: 80000, amount_paid: 0 }
-  ]
-  
-  overview.currentBalance = 500000
-  calculateOverview()
-  initTrendChart()
-  checkAlerts()
 }
 
 const calculateOverview = () => {

@@ -298,59 +298,11 @@ const fetchData = async () => {
     calculateSummary(data)
   } catch (error) {
     console.error('获取项目成本失败:', error)
-    // 使用模拟数据
-    tableData.value = getMockData()
-    calculateSummary(tableData.value)
+    tableData.value = []
+    ElMessage.error('获取项目成本数据失败')
   } finally {
     loading.value = false
   }
-}
-
-const getMockData = () => {
-  return [
-    {
-      id: 1,
-      code: 'PRJ-2024-001',
-      name: '智能制造系统开发项目',
-      manager_name: 'admin',
-      status: 'ACTIVE',
-      start_date: '2024-01-01',
-      end_date: '2024-12-31',
-      budget_total: 500000,
-      budget_material: 200000,
-      budget_labor: 200000,
-      budget_expense: 100000,
-      revenue: 450000,
-      material_cost: 150000,
-      labor_cost: 120000,
-      expense_cost: 50000,
-      total_cost: 320000,
-      profit: 130000,
-      profit_margin: 28.89,
-      budget_usage: 64
-    },
-    {
-      id: 2,
-      code: 'PRJ-2024-002',
-      name: 'ERP系统升级项目',
-      manager_name: 'admin',
-      status: 'COMPLETED',
-      start_date: '2024-03-01',
-      end_date: '2024-09-30',
-      budget_total: 300000,
-      budget_material: 100000,
-      budget_labor: 150000,
-      budget_expense: 50000,
-      revenue: 350000,
-      material_cost: 80000,
-      labor_cost: 140000,
-      expense_cost: 45000,
-      total_cost: 265000,
-      profit: 85000,
-      profit_margin: 24.29,
-      budget_usage: 88.33
-    }
-  ]
 }
 
 const calculateSummary = (data) => {

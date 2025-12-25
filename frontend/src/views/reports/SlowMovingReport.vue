@@ -255,75 +255,11 @@ const fetchData = async () => {
     initCharts()
   } catch (error) {
     console.error('获取呆滞物料失败:', error)
-    // 使用模拟数据
-    useMockData()
+    tableData.value = []
+    ElMessage.error('获取呆滞物料数据失败')
   } finally {
     loading.value = false
   }
-}
-
-const useMockData = () => {
-  tableData.value = [
-    {
-      id: 1,
-      item_code: 'MAT-001',
-      item_name: '电子元器件A',
-      category_name: '电子元件',
-      specification: '10mm x 5mm',
-      unit: '个',
-      warehouse_name: '主仓库',
-      qty: 5000,
-      unit_cost: 2.5,
-      total_value: 12500,
-      last_move_date: '2024-06-15',
-      aging_days: 163
-    },
-    {
-      id: 2,
-      item_code: 'MAT-002',
-      item_name: '机械配件B',
-      category_name: '机械配件',
-      specification: 'M8 x 30',
-      unit: '套',
-      warehouse_name: '主仓库',
-      qty: 200,
-      unit_cost: 45,
-      total_value: 9000,
-      last_move_date: '2024-03-20',
-      aging_days: 250
-    },
-    {
-      id: 3,
-      item_code: 'MAT-003',
-      item_name: '包装材料C',
-      category_name: '包装材料',
-      specification: '50cm x 50cm',
-      unit: '张',
-      warehouse_name: '辅料仓',
-      qty: 10000,
-      unit_cost: 0.5,
-      total_value: 5000,
-      last_move_date: '2024-01-10',
-      aging_days: 319
-    },
-    {
-      id: 4,
-      item_code: 'MAT-004',
-      item_name: '塑料原料D',
-      category_name: '原材料',
-      specification: 'ABS颗粒',
-      unit: 'kg',
-      warehouse_name: '原料仓',
-      qty: 500,
-      unit_cost: 15,
-      total_value: 7500,
-      last_move_date: '2023-11-25',
-      aging_days: 365
-    }
-  ]
-  
-  calculateStats()
-  initCharts()
 }
 
 const calculateStats = () => {

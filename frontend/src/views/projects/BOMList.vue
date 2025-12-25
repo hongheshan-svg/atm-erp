@@ -425,15 +425,6 @@ const fetchBOM = async () => {
   }
 }
 
-const getMockBOM = () => {
-  return [
-    { id: 1, item: 1, item_code: 'MAT-001', item_name: '电子元器件A', specification: '10mm x 5mm', unit: '个', planned_qty: 1000, actual_qty: 800, estimated_cost: 2.5, notes: '核心元件' },
-    { id: 2, item: 2, item_code: 'MAT-002', item_name: '机械配件B', specification: 'M8 x 30', unit: '套', planned_qty: 50, actual_qty: 50, estimated_cost: 45, notes: '' },
-    { id: 3, item: 3, item_code: 'MAT-003', item_name: '包装材料C', specification: '50cm x 50cm', unit: '张', planned_qty: 500, actual_qty: 200, estimated_cost: 0.5, notes: '包装用' },
-    { id: 4, item: 4, item_code: 'MAT-004', item_name: '连接线缆D', specification: '2m', unit: '根', planned_qty: 200, actual_qty: 0, estimated_cost: 15, notes: '待采购' }
-  ]
-}
-
 const fetchItems = async () => {
   try {
     const res = await request.get('/masterdata/items/')

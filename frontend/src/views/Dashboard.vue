@@ -204,7 +204,7 @@ const loadKPIs = async () => {
     }
   } catch (error) {
     console.error('Failed to load KPIs', error)
-    // 使用模拟数据
+    // 设置默认空数据
     kpis.value = {
       financial: {
         revenue: { total: 0, orders: 0 },
@@ -238,7 +238,7 @@ const loadCashFlowForecast = async () => {
     renderCashFlowChart()
   } catch (error) {
     console.error('Failed to load cash flow forecast', error)
-    // 使用模拟数据
+    // 设置默认空数据
     cashFlowForecast.value = {
       expected_inflows: 0,
       expected_outflows: 0,
@@ -254,11 +254,7 @@ const loadNotifications = async () => {
     notifications.value = (response.results || response || []).slice(0, 5)
   } catch (error) {
     console.error('Failed to load notifications', error)
-    // 使用模拟数据
-    notifications.value = [
-      { id: 1, title: '系统通知', message: '欢迎使用ERP系统', type: 'INFO', is_read: false, created_at: new Date().toISOString() },
-      { id: 2, title: '库存预警', message: '物料A库存不足', type: 'WARNING', is_read: false, created_at: new Date().toISOString() }
-    ]
+    notifications.value = []
   }
 }
 
