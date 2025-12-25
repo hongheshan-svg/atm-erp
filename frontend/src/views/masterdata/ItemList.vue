@@ -4,7 +4,27 @@
       <template #header>
         <div class="card-header">
           <span>物料主数据</span>
-          <el-button type="primary" @click="handleAdd">新增物料</el-button>
+          <div class="header-actions">
+            <el-button type="primary" @click="handleAdd">新增物料</el-button>
+            <el-dropdown style="margin-left: 10px;">
+              <el-button type="success">
+                导入/导出 <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item @click="handleExport">
+                    <el-icon><Download /></el-icon> 导出Excel
+                  </el-dropdown-item>
+                  <el-dropdown-item @click="handleImport">
+                    <el-icon><Upload /></el-icon> 导入Excel
+                  </el-dropdown-item>
+                  <el-dropdown-item @click="handleDownloadTemplate">
+                    <el-icon><Document /></el-icon> 下载导入模板
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </div>
       </template>
 
@@ -22,41 +42,53 @@
       </el-form>
 
       <el-table :data="items" v-loading="loading" stripe border>
-        <el-table-column prop="sku" label="物料编码" width="120" fixed />
-        <el-table-column prop="name" label="物料名称" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="brand" label="品牌" width="100" show-overflow-tooltip />
-        <el-table-column prop="model" label="型号" width="100" show-overflow-tooltip />
-        <el-table-column prop="specification" label="规格" width="120" show-overflow-tooltip />
+        <el-table-column type="index" label="序号" width="60" fixed />
+        <el-table-column prop="sku" label="物料编码" width="100" fixed />
+        <el-table-column prop="name" label="物料名称" width="150" show-overflow-tooltip />
+        <el-table-column prop="specification" label="规格型号" width="120" show-overflow-tooltip />
+        <el-table-column label="版本/品牌" width="120">
+          <template #default="{ row }">
+            {{ row.brand || row.model ? `${row.brand || ''}${row.brand && row.model ? '/' : ''}${row.model || ''}` : '' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="unit_display" label="单位" width="60" />
-        <el-table-column label="采购价" width="100" align="right">
+        <el-table-column prop="item_type_display" label="物料类型" width="80" />
+        <el-table-column label="采购价" width="90" align="right">
           <template #default="{ row }">
             ¥{{ parseFloat(row.purchase_price || 0).toFixed(2) }}
           </template>
         </el-table-column>
-        <el-table-column label="销售价" width="100" align="right">
+        <el-table-column label="销售价" width="90" align="right">
           <template #default="{ row }">
             ¥{{ parseFloat(row.sale_price || 0).toFixed(2) }}
           </template>
         </el-table-column>
-        <el-table-column label="税率" width="70" align="center">
-          <template #default="{ row }">
-            {{ row.tax_rate }}%
-          </template>
-        </el-table-column>
-        <el-table-column label="标准成本" width="100" align="right">
+        <el-table-column label="标准成本" width="90" align="right">
           <template #default="{ row }">
             ¥{{ parseFloat(row.standard_cost || 0).toFixed(2) }}
           </template>
         </el-table-column>
-        <el-table-column prop="manufacturer" label="生产厂家" width="120" show-overflow-tooltip />
-        <el-table-column prop="is_active" label="状态" width="80" align="center">
+        <el-table-column label="税率" width="60" align="center">
+          <template #default="{ row }">
+            {{ row.tax_rate }}%
+          </template>
+        </el-table-column>
+        <el-table-column prop="manufacturer" label="生产厂家" width="100" show-overflow-tooltip />
+        <el-table-column prop="origin_country" label="产地" width="80" show-overflow-tooltip />
+        <el-table-column prop="safety_stock" label="安全库存" width="80" align="right" />
+        <el-table-column prop="lead_time" label="采购周期" width="80" align="center">
+          <template #default="{ row }">
+            {{ row.lead_time ? `${row.lead_time}天` : '' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="is_active" label="状态" width="70" align="center">
           <template #default="{ row }">
             <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
               {{ row.is_active ? '启用' : '禁用' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
@@ -289,7 +321,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Upload } from '@element-plus/icons-vue'
+import { Upload, Download, Document, ArrowDown } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
 
@@ -465,6 +497,74 @@ const handleDelete = async (row) => {
       ElMessage.error('删除物料失败')
     }
   }
+}
+
+// 导出Excel
+const handleExport = async () => {
+  try {
+    const response = await request.get('/masterdata/items/export_excel/', {
+      responseType: 'blob'
+    })
+    const url = window.URL.createObjectURL(new Blob([response.data || response]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `物料主数据_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    ElMessage.success('导出成功')
+  } catch (error) {
+    ElMessage.error('导出失败')
+  }
+}
+
+// 下载导入模板
+const handleDownloadTemplate = async () => {
+  try {
+    const response = await request.get('/masterdata/items/export_template/', {
+      responseType: 'blob'
+    })
+    const url = window.URL.createObjectURL(new Blob([response.data || response]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', '物料导入模板.xlsx')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    ElMessage.success('模板下载成功')
+  } catch (error) {
+    ElMessage.error('模板下载失败')
+  }
+}
+
+// 导入Excel
+const handleImport = () => {
+  // 创建一个隐藏的文件输入
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.xlsx,.xls'
+  input.onchange = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    try {
+      const res = await request.post('/masterdata/items/import_excel/', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      const data = res.data || res
+      ElMessage.success(`导入完成：新增 ${data.created || 0} 条，更新 ${data.updated || 0} 条`)
+      if (data.errors && data.errors.length > 0) {
+        ElMessage.warning(`有 ${data.errors.length} 行导入失败，请检查数据`)
+      }
+      loadItems()
+    } catch (error) {
+      ElMessage.error('导入失败: ' + (error.response?.data?.error || '未知错误'))
+    }
+  }
+  input.click()
 }
 
 const handleSubmit = async () => {
