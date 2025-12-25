@@ -36,6 +36,7 @@
           <el-menu-item index="/users" v-if="hasMenuAccess('system:users')">用户管理</el-menu-item>
           <el-menu-item index="/roles" v-if="hasMenuAccess('system:roles')">角色管理</el-menu-item>
           <el-menu-item index="/departments" v-if="hasMenuAccess('system:departments')">部门管理</el-menu-item>
+          <el-menu-item index="/code-rules" v-if="hasMenuAccess('system:code-rules')">编码规则</el-menu-item>
           <el-menu-item index="/notification-settings" v-if="hasMenuAccess('system:notifications')">通知设置</el-menu-item>
           <el-menu-item index="/system/audit-log" v-if="hasMenuAccess('system:audit-log')">审计日志</el-menu-item>
           <el-menu-item index="/system/notifications" v-if="hasMenuAccess('system:notifications')">通知中心</el-menu-item>
