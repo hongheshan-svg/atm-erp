@@ -79,8 +79,14 @@
         </el-table-column>
         <el-table-column prop="start_date" label="开始日期" width="110" />
         <el-table-column prop="end_date" label="结束日期" width="110" />
-        <el-table-column label="操作" width="200" fixed="right">
-          <template #default="{ row }">
+        <el-table-column label="操作" width="280" fixed="right">
+          <template #default="{ row, $index }">
+            <el-button type="info" link size="small" @click="handleMoveUp(row, $index)" :disabled="$index === 0" title="上移">
+              <el-icon><Top /></el-icon>
+            </el-button>
+            <el-button type="info" link size="small" @click="handleMoveDown(row, $index)" :disabled="$index === flatTasks.length - 1" title="下移">
+              <el-icon><Bottom /></el-icon>
+            </el-button>
             <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button type="success" link size="small" @click="handleLogTime(row)">填报工时</el-button>
             <el-button type="warning" link size="small" @click="handleAddChild(row)">添加子任务</el-button>
@@ -181,7 +187,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Top, Bottom } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 const loading = ref(false)
@@ -229,6 +235,21 @@ const rules = {
 }
 
 const dialogTitle = computed(() => form.id ? '编辑任务' : '新增任务')
+
+// 扁平化任务列表（用于排序判断）
+const flatTasks = computed(() => {
+  const result = []
+  const flatten = (tasks) => {
+    for (const task of tasks) {
+      result.push(task)
+      if (task.children && task.children.length > 0) {
+        flatten(task.children)
+      }
+    }
+  }
+  flatten(taskTree.value)
+  return result
+})
 
 // 所有用户列表（用于负责人选择的备选）
 const allUsers = ref([])
@@ -454,6 +475,54 @@ const handleDelete = (row) => {
   }).catch(() => {})
 }
 
+// 上移任务
+const handleMoveUp = async (row, index) => {
+  if (index === 0) return
+  
+  const tasks = flatTasks.value
+  const prevTask = tasks[index - 1]
+  
+  try {
+    // 交换两个任务的 sort_order
+    const prevOrder = prevTask.sort_order ?? index - 1
+    const currentOrder = row.sort_order ?? index
+    
+    await Promise.all([
+      request.patch(`/projects/tasks/${row.id}/`, { sort_order: prevOrder }),
+      request.patch(`/projects/tasks/${prevTask.id}/`, { sort_order: currentOrder })
+    ])
+    
+    ElMessage.success('排序已更新')
+    fetchTasks()
+  } catch (error) {
+    ElMessage.error('排序更新失败')
+  }
+}
+
+// 下移任务
+const handleMoveDown = async (row, index) => {
+  const tasks = flatTasks.value
+  if (index >= tasks.length - 1) return
+  
+  const nextTask = tasks[index + 1]
+  
+  try {
+    // 交换两个任务的 sort_order
+    const nextOrder = nextTask.sort_order ?? index + 1
+    const currentOrder = row.sort_order ?? index
+    
+    await Promise.all([
+      request.patch(`/projects/tasks/${row.id}/`, { sort_order: nextOrder }),
+      request.patch(`/projects/tasks/${nextTask.id}/`, { sort_order: currentOrder })
+    ])
+    
+    ElMessage.success('排序已更新')
+    fetchTasks()
+  } catch (error) {
+    ElMessage.error('排序更新失败')
+  }
+}
+
 const handleSubmit = async () => {
   try {
     await formRef.value.validate()
@@ -468,9 +537,12 @@ const handleSubmit = async () => {
       actual_hours: form.actual_hours || 0,
     }
     
-    // 新增时自动生成编号
+    // 新增时自动生成编号，并设置排序到最后
     if (!form.id) {
       data.code = form.code || generateTaskCode()
+      // 新任务排在最后
+      const maxSortOrder = flatTasks.value.reduce((max, t) => Math.max(max, t.sort_order ?? 0), 0)
+      data.sort_order = maxSortOrder + 1
     } else {
       data.code = form.code
     }
