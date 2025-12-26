@@ -33,8 +33,8 @@
         <el-table-column prop="id" label="编号" width="80" />
         <el-table-column prop="username" label="用户名" />
         <el-table-column prop="email" label="邮箱" />
-        <el-table-column prop="department_info.name" label="部门" />
-        <el-table-column prop="role_info.name" label="角色" />
+        <el-table-column prop="department_name" label="部门" />
+        <el-table-column prop="role_name" label="角色" />
         <el-table-column prop="is_active" label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="row.is_active ? 'success' : 'danger'">
