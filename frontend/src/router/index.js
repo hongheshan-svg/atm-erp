@@ -136,6 +136,19 @@ const routes = [
         component: () => import('@/views/projects/ECNList.vue'),
         meta: { title: 'ECN变更', icon: 'Edit', menuId: 'projects:list' }  // 使用与项目列表相同的权限
       },
+      // Bug跟踪
+      {
+        path: 'projects/bugs',
+        name: 'BugList',
+        component: () => import('@/views/projects/BugList.vue'),
+        meta: { title: 'Bug跟踪', icon: 'Warning', menuId: 'projects:bugs' }
+      },
+      {
+        path: 'projects/bugs/:id',
+        name: 'BugDetail',
+        component: () => import('@/views/projects/BugDetail.vue'),
+        meta: { title: 'Bug详情', menuId: 'projects:bugs' }
+      },
       // After Sales - 售后管理
       {
         path: 'aftersales/orders',

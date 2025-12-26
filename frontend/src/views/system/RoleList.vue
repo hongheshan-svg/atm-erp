@@ -189,7 +189,8 @@ const menuTree = ref([
       { id: 'projects:members', label: '成员管理' },
       { id: 'projects:bom', label: 'BOM清单' },
       { id: 'projects:time-logs', label: '工时填报' },
-      { id: 'projects:gantt', label: '甘特图' }
+      { id: 'projects:gantt', label: '甘特图' },
+      { id: 'projects:bugs', label: 'Bug跟踪' }
     ]
   },
   {

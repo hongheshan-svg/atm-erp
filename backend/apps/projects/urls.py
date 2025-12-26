@@ -15,6 +15,7 @@ from .views import (
     ServiceRecordViewSet,
     SparePartUsageViewSet
 )
+from .bug_views import BugViewSet, BugCommentViewSet, BugAttachmentViewSet
 
 router = DefaultRouter()
 router.register(r'projects', ProjectViewSet, basename='project')
@@ -29,6 +30,11 @@ router.register(r'ecn-items', ECNItemViewSet, basename='ecn-item')
 router.register(r'aftersales', AfterSalesOrderViewSet, basename='aftersales')
 router.register(r'service-records', ServiceRecordViewSet, basename='service-record')
 router.register(r'spare-parts', SparePartUsageViewSet, basename='spare-part')
+
+# Bug跟踪
+router.register(r'bugs', BugViewSet, basename='bug')
+router.register(r'bug-comments', BugCommentViewSet, basename='bug-comment')
+router.register(r'bug-attachments', BugAttachmentViewSet, basename='bug-attachment')
 
 urlpatterns = [
     path('', include(router.urls)),

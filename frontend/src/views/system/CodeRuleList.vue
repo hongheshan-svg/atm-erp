@@ -258,6 +258,7 @@ const ruleTypes = [
   { value: 'GOODS_RECEIPT', label: '收货单' },
   { value: 'STOCK_MOVE', label: '库存移动' },
   { value: 'STOCK_ADJUSTMENT', label: '库存调整' },
+  { value: 'BUG', label: 'Bug编号' },
 ]
 
 const formRules = {

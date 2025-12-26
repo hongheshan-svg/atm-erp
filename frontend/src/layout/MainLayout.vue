@@ -69,6 +69,7 @@
           <el-menu-item index="/projects/time-logs" v-if="hasMenuAccess('projects:time-logs')">工时填报</el-menu-item>
           <el-menu-item index="/projects/gantt" v-if="hasMenuAccess('projects:gantt')">甘特图</el-menu-item>
           <el-menu-item index="/projects/ecn" v-if="hasMenuAccess('projects:list') || hasMenuAccess('projects:ecn')">ECN变更</el-menu-item>
+          <el-menu-item index="/projects/bugs" v-if="hasMenuAccess('projects:bugs')">Bug跟踪</el-menu-item>
         </el-sub-menu>
         
         <el-sub-menu index="aftersales" v-if="hasMenuAccess('aftersales') || hasMenuAccess('projects')">

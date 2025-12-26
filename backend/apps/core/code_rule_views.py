@@ -136,6 +136,17 @@ class CodeRuleViewSet(viewsets.ModelViewSet):
                 'separator': '-',
                 'description': '格式：SO-YYYYMMDD-0001'
             },
+            {
+                'rule_type': 'BUG',
+                'rule_name': 'Bug编号规则',
+                'prefix': 'BUG',
+                'date_format': 'YYYY',
+                'seq_length': 6,
+                'seq_start': 1,
+                'reset_mode': 'YEARLY',
+                'separator': '',
+                'description': '格式：BUG2025000001'
+            },
         ]
         
         created_count = 0
