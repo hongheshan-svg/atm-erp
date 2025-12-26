@@ -37,6 +37,8 @@ class DepartmentSerializer(serializers.ModelSerializer):
 class RoleSerializer(serializers.ModelSerializer):
     """Role serializer."""
     user_count = serializers.SerializerMethodField()
+    # 显式设置 code 为可选字段，允许空值
+    code = serializers.CharField(max_length=50, required=False, allow_blank=True)
     
     class Meta:
         model = Role
@@ -52,7 +54,7 @@ class RoleSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         import uuid
-        # 如果没有提供code，自动生成角色编码
+        # 如果没有提供code或为空，自动生成角色编码
         if not validated_data.get('code'):
             validated_data['code'] = f"ROLE{uuid.uuid4().hex[:6].upper()}"
         return super().create(validated_data)
