@@ -192,29 +192,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         """
         创建BOM时，如果存在已软删除的相同记录，则恢复它而不是报错
         """
-        project_id = request.data.get('project')
-        item_id = request.data.get('item')
-        
-        if project_id and item_id:
-            # 查找是否有已删除的相同记录
-            existing_bom = ProjectBOM.objects.filter(
-                project_id=project_id, 
-                item_id=item_id, 
-                is_deleted=True
-            ).first()
-            
-            if existing_bom:
-                # 恢复软删除的记录并更新数据
-                existing_bom.is_deleted = False
-                existing_bom.planned_qty = request.data.get('planned_qty', existing_bom.planned_qty)
-                existing_bom.estimated_cost = request.data.get('estimated_cost', existing_bom.estimated_cost)
-                existing_bom.notes = request.data.get('notes', existing_bom.notes)
-                existing_bom.updated_by = request.user
-                existing_bom.save()
-                
-                serializer = self.get_serializer(existing_bom)
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
-        
+        # 直接调用父类创建方法
         return super().create(request, *args, **kwargs)
     
     @action(detail=False, methods=['post'])
@@ -1400,10 +1378,8 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.Mo
                     }
                 )
             elif item.change_type == 'DELETE' and item.bom_item:
-                # Mark BOM item as deleted
-                item.bom_item.is_deleted = True
-                item.bom_item.notes = f'{item.bom_item.notes}\n通过ECN {ecn.ecn_no} 删除'
-                item.bom_item.save()
+                # 物理删除BOM项
+                item.bom_item.delete()
             elif item.change_type == 'MODIFY' and item.bom_item:
                 # Update BOM item quantity
                 if item.new_qty is not None:
@@ -1411,20 +1387,21 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.Mo
                     item.bom_item.notes = f'{item.bom_item.notes}\n通过ECN {ecn.ecn_no} 修改数量'
                     item.bom_item.save()
             elif item.change_type == 'REPLACE' and item.bom_item and item.new_item:
-                # Replace BOM item
-                old_bom = item.bom_item
-                old_bom.is_deleted = True
-                old_bom.notes = f'{old_bom.notes}\n通过ECN {ecn.ecn_no} 替换为 {item.new_item.sku}'
-                old_bom.save()
+                # 替换BOM项：先创建新项，再删除旧项
+                old_qty = item.bom_item.planned_qty
+                old_sku = item.bom_item.item.sku
                 
                 # Create new BOM item
                 ProjectBOM.objects.create(
                     project=ecn.project,
                     item=item.new_item,
-                    planned_qty=item.new_qty or old_bom.planned_qty,
-                    notes=f'通过ECN {ecn.ecn_no} 替换自 {old_bom.item.sku}',
+                    planned_qty=item.new_qty or old_qty,
+                    notes=f'通过ECN {ecn.ecn_no} 替换自 {old_sku}',
                     created_by=ecn.implemented_by
                 )
+                
+                # 物理删除旧的BOM项
+                item.bom_item.delete()
     
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):

@@ -43,17 +43,16 @@ class DataScopeMixin:
 
 class SoftDeleteMixin:
     """
-    Mixin to handle soft delete instead of hard delete.
+    Mixin for ViewSet - 现在执行物理删除。
+    保留名称以兼容现有代码，但行为已改为物理删除。
     """
     def perform_destroy(self, instance):
-        if hasattr(instance, 'soft_delete'):
-            instance.soft_delete()
-        else:
-            instance.delete()
+        # 物理删除
+        instance.delete()
     
     def get_queryset(self):
         queryset = super().get_queryset()
-        # Exclude soft-deleted items by default
+        # 仍然过滤掉旧的软删除记录（向后兼容）
         if hasattr(queryset.model, 'is_deleted'):
             return queryset.filter(is_deleted=False)
         return queryset
