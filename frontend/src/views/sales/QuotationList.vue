@@ -65,7 +65,11 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="version" label="版本" width="80" align="center" />
+        <el-table-column prop="version" label="版本" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag type="info" size="small">V{{ row.version || 1 }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="created_by_name" label="创建人" width="100" />
         <el-table-column label="操作" width="340" fixed="right">
           <template #default="{ row }">
