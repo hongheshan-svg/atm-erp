@@ -44,13 +44,35 @@ class RoleSerializer(serializers.ModelSerializer):
         model = Role
         fields = [
             'id', 'code', 'name', 'description', 'data_scope', 'permissions',
-            'is_active', 'sort_order', 'user_count', 'is_deleted',
+            'is_active', 'sort_order', 'user_count',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
     
     def get_user_count(self, obj):
         return obj.users.filter(is_deleted=False, is_active=True).count()
+    
+    def validate_name(self, value):
+        """检查角色名称唯一性（排除当前记录）"""
+        instance = self.instance
+        qs = Role.objects.filter(name=value, is_deleted=False)
+        if instance:
+            qs = qs.exclude(pk=instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError('该角色名称已存在')
+        return value
+    
+    def validate_code(self, value):
+        """检查角色编码唯一性（排除当前记录和空值）"""
+        if not value:
+            return value
+        instance = self.instance
+        qs = Role.objects.filter(code=value, is_deleted=False)
+        if instance:
+            qs = qs.exclude(pk=instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError('该角色编码已存在')
+        return value
     
     def create(self, validated_data):
         import uuid

@@ -63,15 +63,42 @@ class DepartmentViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
         return Response(tree_data)
 
 
-class RoleViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
+class RoleViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Role management.
+    角色使用物理删除，以便删除后可以创建同名角色。
     """
-    queryset = Role.objects.all()
+    queryset = Role.objects.filter(is_deleted=False)
     serializer_class = RoleSerializer
-    filterset_fields = ['data_scope', 'is_active', 'is_deleted']
+    filterset_fields = ['data_scope', 'is_active']
     search_fields = ['code', 'name']
     ordering_fields = ['sort_order', 'code', 'created_at']
+    
+    def destroy(self, request, *args, **kwargs):
+        """物理删除角色"""
+        instance = self.get_object()
+        
+        # 检查是否有用户关联此角色
+        user_count = instance.users.filter(is_deleted=False, is_active=True).count()
+        if user_count > 0:
+            return Response(
+                {'detail': f'无法删除，还有 {user_count} 个用户使用此角色'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 记录审计日志
+        from apps.core.models import AuditLog
+        AuditLog.objects.create(
+            user=request.user,
+            action='DELETE',
+            model_name='Role',
+            object_id=instance.id,
+            details=f'删除角色: {instance.name} ({instance.code})'
+        )
+        
+        # 物理删除
+        instance.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class UserViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
