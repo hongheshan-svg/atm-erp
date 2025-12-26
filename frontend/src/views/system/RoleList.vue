@@ -42,8 +42,17 @@
         <el-form-item label="角色名称" prop="name">
           <el-input v-model="form.name" placeholder="请输入角色名称" />
         </el-form-item>
-        <el-form-item label="角色编码" prop="code">
-          <el-input v-model="form.code" placeholder="请输入角色编码（如：ADMIN, SALES）" :disabled="isEdit" />
+        <el-form-item label="角色编码">
+          <el-input v-model="form.code" placeholder="留空则自动生成（如：ADMIN, SALES）" :disabled="isEdit">
+            <template #append v-if="!isEdit">
+              <el-tooltip content="留空将自动生成编码，也可手动输入便于程序识别的英文编码" placement="top">
+                <el-icon><QuestionFilled /></el-icon>
+              </el-tooltip>
+            </template>
+          </el-input>
+          <div class="el-form-item__extra" v-if="!isEdit">
+            💡 建议使用英文大写，如：ADMIN、SALES_MANAGER、FINANCE 等
+          </div>
         </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="form.description" type="textarea" placeholder="请输入描述" />
@@ -99,6 +108,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { QuestionFilled } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 const loading = ref(false)
@@ -125,8 +135,8 @@ const form = reactive({
 })
 
 const rules = {
-  name: [{ required: true, message: '请输入角色名称', trigger: 'blur' }],
-  code: [{ required: true, message: '请输入角色编码', trigger: 'blur' }]
+  name: [{ required: true, message: '请输入角色名称', trigger: 'blur' }]
+  // code 不再必填，后端会自动生成
 }
 
 // 定义系统菜单树
