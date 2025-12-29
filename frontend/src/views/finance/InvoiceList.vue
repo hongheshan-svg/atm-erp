@@ -673,9 +673,25 @@ const handleView = async (row) => {
   }
 }
 
-const downloadAttachment = (attachment) => {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
-  window.open(`${baseUrl}/core/attachments/${attachment.id}/download/`, '_blank')
+const downloadAttachment = async (attachment) => {
+  try {
+    const response = await request.get(`/core/attachments/${attachment.id}/download/`, {
+      responseType: 'blob'
+    })
+    
+    // 创建下载链接
+    const url = window.URL.createObjectURL(new Blob([response]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', attachment.original_name || 'attachment.pdf')
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('Download error:', error)
+    ElMessage.error('下载失败')
+  }
 }
 
 const deleteAttachment = async (attachment) => {
