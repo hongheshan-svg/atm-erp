@@ -822,7 +822,14 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         import os
         from apps.core.models import Attachment
         
+        # 支持多文件上传(files)和单文件上传(file)
         files = request.FILES.getlist('files')
+        if not files:
+            # el-upload 的 multiple 模式会逐个发送文件，字段名为 'file'
+            single_file = request.FILES.get('file')
+            if single_file:
+                files = [single_file]
+        
         if not files:
             return Response({'error': '请选择要上传的PDF文件'}, status=status.HTTP_400_BAD_REQUEST)
         

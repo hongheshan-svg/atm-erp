@@ -22,21 +22,17 @@
                 <el-icon><Upload /></el-icon> 导入
               </el-button>
             </el-upload>
-            <el-upload
-              ref="pdfUploadRef"
-              :action="pdfUploadUrl"
-              :headers="uploadHeaders"
-              :on-success="handlePdfUploadSuccess"
-              :on-error="handlePdfUploadError"
-              :before-upload="beforePdfUpload"
-              :show-file-list="false"
+            <el-button type="warning" @click="handleBatchPdfUpload">
+              <el-icon><Files /></el-icon> 批量导入PDF
+            </el-button>
+            <input 
+              ref="pdfInputRef"
+              type="file"
               accept=".pdf"
               multiple
-            >
-              <el-button type="warning">
-                <el-icon><Files /></el-icon> 批量导入PDF
-              </el-button>
-            </el-upload>
+              style="display: none"
+              @change="handlePdfFilesSelected"
+            />
             <el-button @click="handleExport">
               <el-icon><Download /></el-icon> 导出
             </el-button>
@@ -497,7 +493,7 @@ const invoiceAttachments = ref([])
 const isEdit = ref(false)
 const currentId = ref(null)
 const uploadRef = ref(null)
-const pdfUploadRef = ref(null)
+const pdfInputRef = ref(null)
 const importResultVisible = ref(false)
 const importResult = ref(null)
 const pdfImportResultVisible = ref(false)
@@ -885,33 +881,77 @@ const handleUploadError = (error) => {
 }
 
 // PDF批量导入处理
-const beforePdfUpload = (file) => {
-  const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
-  if (!isPdf) {
-    ElMessage.error('只支持PDF文件格式')
-    return false
-  }
-  if (file.size > 50 * 1024 * 1024) {
-    ElMessage.error('文件大小不能超过50MB')
-    return false
-  }
-  return true
+const handleBatchPdfUpload = () => {
+  pdfInputRef.value?.click()
 }
 
-const handlePdfUploadSuccess = (response) => {
-  pdfImportResult.value = response
-  pdfImportResultVisible.value = true
+const handlePdfFilesSelected = async (event) => {
+  const files = event.target.files
+  if (!files || files.length === 0) return
   
-  if (response.matched > 0) {
-    ElMessage.success(`PDF导入完成：成功匹配 ${response.matched} 个文件`)
-  } else {
-    ElMessage.warning('未匹配到任何发票，请检查文件名是否包含正确的数电发票号码')
+  // 验证文件
+  const validFiles = []
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      ElMessage.warning(`跳过非PDF文件: ${file.name}`)
+      continue
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      ElMessage.warning(`文件过大(>50MB): ${file.name}`)
+      continue
+    }
+    validFiles.push(file)
   }
-}
-
-const handlePdfUploadError = (error) => {
-  console.error('PDF Upload error:', error)
-  ElMessage.error('PDF导入失败')
+  
+  if (validFiles.length === 0) {
+    ElMessage.error('没有有效的PDF文件')
+    event.target.value = ''
+    return
+  }
+  
+  // 创建 FormData 并添加所有文件
+  const formData = new FormData()
+  validFiles.forEach(file => {
+    formData.append('files', file)
+  })
+  
+  try {
+    ElMessage.info(`正在上传 ${validFiles.length} 个PDF文件...`)
+    
+    const token = localStorage.getItem('access_token')
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+    
+    const response = await fetch(`${baseUrl}/finance/invoices/import_pdf/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': token ? `Bearer ${token}` : ''
+      },
+      body: formData
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Upload failed')
+    }
+    
+    const result = await response.json()
+    pdfImportResult.value = result
+    pdfImportResultVisible.value = true
+    
+    if (result.matched > 0) {
+      ElMessage.success(`PDF导入完成：成功匹配 ${result.matched} 个文件`)
+      loadInvoices()
+    } else {
+      ElMessage.warning('未匹配到任何发票，请检查文件名是否包含正确的数电发票号码')
+    }
+  } catch (error) {
+    console.error('PDF Upload error:', error)
+    ElMessage.error(`PDF导入失败: ${error.message}`)
+  }
+  
+  // 清空文件输入
+  event.target.value = ''
 }
 
 const downloadTemplate = async () => {
