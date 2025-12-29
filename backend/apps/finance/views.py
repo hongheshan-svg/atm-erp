@@ -332,8 +332,11 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for Invoice management.
     """
+    from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+    
     queryset = Invoice.objects.all()
     serializer_class = InvoiceSerializer
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     filterset_fields = ['invoice_type', 'status', 'reference_type', 'is_deleted']
     search_fields = ['invoice_no', 'party_name']
     ordering_fields = ['invoice_date', 'total_amount', 'created_at']
@@ -804,6 +807,127 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
             'success': True,
             'deleted_count': deleted_count
         })
+    
+    @action(detail=False, methods=['post'])
+    def import_pdf(self, request):
+        """
+        批量导入发票PDF文件。
+        PDF文件名应包含数电发票号码，系统将自动匹配并关联到对应发票。
+        支持的文件名格式:
+        - 25952000000272801788.pdf
+        - 发票_25952000000272801788.pdf
+        - 任何包含20位数电发票号码的文件名
+        """
+        import re
+        import os
+        from apps.core.models import Attachment
+        
+        files = request.FILES.getlist('files')
+        if not files:
+            return Response({'error': '请选择要上传的PDF文件'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 数电发票号码通常是20位数字
+        invoice_no_pattern = re.compile(r'(\d{20})')
+        
+        results = {
+            'total': len(files),
+            'matched': 0,
+            'unmatched': 0,
+            'matched_files': [],
+            'unmatched_files': []
+        }
+        
+        for file in files:
+            filename = file.name
+            file_ext = os.path.splitext(filename)[1].lower()
+            
+            # 只接受PDF文件
+            if file_ext != '.pdf':
+                results['unmatched'] += 1
+                results['unmatched_files'].append({
+                    'filename': filename,
+                    'reason': '不是PDF文件'
+                })
+                continue
+            
+            # 从文件名中提取数电发票号码
+            match = invoice_no_pattern.search(filename)
+            if not match:
+                results['unmatched'] += 1
+                results['unmatched_files'].append({
+                    'filename': filename,
+                    'reason': '文件名中未找到20位数电发票号码'
+                })
+                continue
+            
+            invoice_no = match.group(1)
+            
+            # 查找对应的发票
+            invoice = Invoice.objects.filter(
+                Q(digital_invoice_no=invoice_no) | Q(invoice_no=invoice_no),
+                is_deleted=False
+            ).first()
+            
+            if not invoice:
+                results['unmatched'] += 1
+                results['unmatched_files'].append({
+                    'filename': filename,
+                    'reason': f'未找到发票号码 {invoice_no}'
+                })
+                continue
+            
+            # 检查是否已存在相同的附件
+            existing = Attachment.objects.filter(
+                related_model='Invoice',
+                related_id=invoice.id,
+                original_name=filename
+            ).exists()
+            
+            if existing:
+                results['unmatched'] += 1
+                results['unmatched_files'].append({
+                    'filename': filename,
+                    'reason': '该附件已存在'
+                })
+                continue
+            
+            # 创建附件记录
+            attachment = Attachment.objects.create(
+                file=file,
+                original_name=filename,
+                file_size=file.size,
+                file_type='application/pdf',
+                category='INVOICE',
+                related_model='Invoice',
+                related_id=invoice.id,
+                description=f'发票PDF - {invoice_no}',
+                uploaded_by=request.user
+            )
+            
+            results['matched'] += 1
+            results['matched_files'].append({
+                'filename': filename,
+                'invoice_no': invoice_no,
+                'invoice_id': invoice.id,
+                'attachment_id': attachment.id
+            })
+        
+        return Response(results)
+    
+    @action(detail=True, methods=['get'])
+    def attachments(self, request, pk=None):
+        """获取发票的附件列表"""
+        from apps.core.models import Attachment
+        from apps.core.serializers import AttachmentSerializer
+        
+        invoice = self.get_object()
+        attachments = Attachment.objects.filter(
+            related_model='Invoice',
+            related_id=invoice.id
+        )
+        
+        serializer = AttachmentSerializer(attachments, many=True, context={'request': request})
+        return Response(serializer.data)
 
 
 class SharedExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):

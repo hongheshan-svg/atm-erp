@@ -142,6 +142,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
     items = InvoiceItemSerializer(many=True, read_only=True)
     item_count = serializers.SerializerMethodField()
+    attachment_count = serializers.SerializerMethodField()
     
     class Meta:
         model = Invoice
@@ -154,13 +155,17 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'invoice_source', 'invoice_category', 'invoice_category_display',
             'reference_type', 'reference_type_display', 'reference_id',
             'status', 'status_display', 'notes', 'created_by_name',
-            'items', 'item_count',
+            'items', 'item_count', 'attachment_count',
             'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['total_amount', 'created_at', 'updated_at']
     
     def get_item_count(self, obj):
         return obj.items.count()
+    
+    def get_attachment_count(self, obj):
+        from apps.core.models import Attachment
+        return Attachment.objects.filter(related_model='Invoice', related_id=obj.id).count()
 
 
 class SharedExpenseAllocationSerializer(serializers.ModelSerializer):

@@ -22,6 +22,21 @@
                 <el-icon><Upload /></el-icon> 导入
               </el-button>
             </el-upload>
+            <el-upload
+              ref="pdfUploadRef"
+              :action="pdfUploadUrl"
+              :headers="uploadHeaders"
+              :on-success="handlePdfUploadSuccess"
+              :on-error="handlePdfUploadError"
+              :before-upload="beforePdfUpload"
+              :show-file-list="false"
+              accept=".pdf"
+              multiple
+            >
+              <el-button type="warning">
+                <el-icon><Files /></el-icon> 批量导入PDF
+              </el-button>
+            </el-upload>
             <el-button @click="handleExport">
               <el-icon><Download /></el-icon> 导出
             </el-button>
@@ -114,6 +129,12 @@
             <el-table-column prop="item_count" label="明细" width="60" align="center">
               <template #default="{ row }">
                 <el-tag v-if="row.item_count > 0" size="small" type="info">{{ row.item_count }}</el-tag>
+                <span v-else style="color: #909399;">-</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="attachment_count" label="附件" width="60" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.attachment_count > 0" size="small" type="success">{{ row.attachment_count }}</el-tag>
                 <span v-else style="color: #909399;">-</span>
               </template>
             </el-table-column>
@@ -288,6 +309,26 @@
         </el-table>
       </div>
       
+      <!-- 附件列表 -->
+      <div v-if="invoiceAttachments.length > 0" style="margin-top: 20px;">
+        <el-divider content-position="left">
+          <span style="font-weight: bold;">附件 ({{ invoiceAttachments.length }} 个)</span>
+        </el-divider>
+        <el-table :data="invoiceAttachments" border stripe size="small" max-height="200">
+          <el-table-column prop="original_name" label="文件名" show-overflow-tooltip />
+          <el-table-column prop="file_size_display" label="大小" width="100" />
+          <el-table-column prop="uploaded_at" label="上传时间" width="160">
+            <template #default="{ row }">{{ formatDate(row.uploaded_at) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="120" align="center">
+            <template #default="{ row }">
+              <el-button size="small" link type="primary" @click="downloadAttachment(row)">下载</el-button>
+              <el-button size="small" link type="danger" @click="deleteAttachment(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+      
       <template #footer>
         <el-button @click="detailVisible = false">关闭</el-button>
       </template>
@@ -386,13 +427,48 @@
         <el-button type="primary" @click="importResultVisible = false">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- PDF导入结果对话框 -->
+    <el-dialog v-model="pdfImportResultVisible" title="PDF批量导入结果" width="700px">
+      <el-descriptions :column="3" border v-if="pdfImportResult">
+        <el-descriptions-item label="上传文件数">
+          {{ pdfImportResult.total }} 个
+        </el-descriptions-item>
+        <el-descriptions-item label="匹配成功">
+          <span class="text-success">{{ pdfImportResult.matched }} 个</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="未匹配">
+          <span :class="pdfImportResult.unmatched > 0 ? 'text-warning' : ''">{{ pdfImportResult.unmatched }} 个</span>
+        </el-descriptions-item>
+      </el-descriptions>
+      
+      <div v-if="pdfImportResult?.matched_files?.length > 0" style="margin-top: 15px;">
+        <el-divider content-position="left">匹配成功的文件</el-divider>
+        <el-table :data="pdfImportResult.matched_files" size="small" max-height="200">
+          <el-table-column prop="filename" label="文件名" show-overflow-tooltip />
+          <el-table-column prop="invoice_no" label="发票号码" width="200" />
+        </el-table>
+      </div>
+      
+      <div v-if="pdfImportResult?.unmatched_files?.length > 0" style="margin-top: 15px;">
+        <el-divider content-position="left">未匹配的文件</el-divider>
+        <el-table :data="pdfImportResult.unmatched_files" size="small" max-height="200">
+          <el-table-column prop="filename" label="文件名" show-overflow-tooltip />
+          <el-table-column prop="reason" label="原因" width="250" />
+        </el-table>
+      </div>
+      
+      <template #footer>
+        <el-button type="primary" @click="pdfImportResultVisible = false">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Upload, Download, Document } from '@element-plus/icons-vue'
+import { Plus, Upload, Download, Document, Files } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 const loading = ref(false)
@@ -417,16 +493,24 @@ const reconciliationFormRef = ref(null)
 
 const currentInvoice = ref({})
 const currentReconciliation = ref(null)
+const invoiceAttachments = ref([])
 const isEdit = ref(false)
 const currentId = ref(null)
 const uploadRef = ref(null)
+const pdfUploadRef = ref(null)
 const importResultVisible = ref(false)
 const importResult = ref(null)
+const pdfImportResultVisible = ref(false)
+const pdfImportResult = ref(null)
 
 // Upload configuration
 const uploadUrl = computed(() => {
   const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
   return `${baseUrl}/finance/invoices/import_excel/`
+})
+const pdfUploadUrl = computed(() => {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+  return `${baseUrl}/finance/invoices/import_pdf/`
 })
 const uploadHeaders = computed(() => {
   const token = localStorage.getItem('access_token')
@@ -578,9 +662,40 @@ const handleView = async (row) => {
   try {
     const response = await request.get(`/finance/invoices/${row.id}/`)
     currentInvoice.value = response
+    
+    // 加载附件
+    try {
+      const attachments = await request.get(`/finance/invoices/${row.id}/attachments/`)
+      invoiceAttachments.value = attachments
+    } catch {
+      invoiceAttachments.value = []
+    }
+    
     detailVisible.value = true
   } catch (error) {
     ElMessage.error('加载发票详情失败')
+  }
+}
+
+const downloadAttachment = (attachment) => {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+  window.open(`${baseUrl}/core/attachments/${attachment.id}/download/`, '_blank')
+}
+
+const deleteAttachment = async (attachment) => {
+  try {
+    await ElMessageBox.confirm('确定要删除此附件吗？', '提示', { type: 'warning' })
+    await request.delete(`/core/attachments/${attachment.id}/`)
+    ElMessage.success('附件已删除')
+    // 刷新附件列表
+    const attachments = await request.get(`/finance/invoices/${currentInvoice.value.id}/attachments/`)
+    invoiceAttachments.value = attachments
+    // 刷新发票列表以更新附件数量
+    loadInvoices()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败')
+    }
   }
 }
 
@@ -767,6 +882,36 @@ const handleUploadSuccess = (response) => {
 const handleUploadError = (error) => {
   console.error('Upload error:', error)
   ElMessage.error('导入失败，请检查文件格式')
+}
+
+// PDF批量导入处理
+const beforePdfUpload = (file) => {
+  const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+  if (!isPdf) {
+    ElMessage.error('只支持PDF文件格式')
+    return false
+  }
+  if (file.size > 50 * 1024 * 1024) {
+    ElMessage.error('文件大小不能超过50MB')
+    return false
+  }
+  return true
+}
+
+const handlePdfUploadSuccess = (response) => {
+  pdfImportResult.value = response
+  pdfImportResultVisible.value = true
+  
+  if (response.matched > 0) {
+    ElMessage.success(`PDF导入完成：成功匹配 ${response.matched} 个文件`)
+  } else {
+    ElMessage.warning('未匹配到任何发票，请检查文件名是否包含正确的数电发票号码')
+  }
+}
+
+const handlePdfUploadError = (error) => {
+  console.error('PDF Upload error:', error)
+  ElMessage.error('PDF导入失败')
 }
 
 const downloadTemplate = async () => {
