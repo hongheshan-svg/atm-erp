@@ -114,7 +114,38 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="付款条款">
-              <el-input v-model="form.payment_terms" placeholder="如：月结30天" />
+              <el-select v-model="form.payment_terms" placeholder="选择付款条款" style="width: 100%;">
+                <el-option value="PREPAY" label="预付款" />
+                <el-option value="COD" label="货到付款" />
+                <el-option value="NET15" label="月结15天" />
+                <el-option value="NET30" label="月结30天" />
+                <el-option value="NET45" label="月结45天" />
+                <el-option value="NET60" label="月结60天" />
+                <el-option value="NET90" label="月结90天" />
+                <el-option value="NET120" label="月结120天" />
+                <el-option value="MILESTONE" label="分期付款" />
+                <el-option value="OTHER" label="其他" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        
+        <el-row :gutter="20">
+          <el-col :span="8">
+            <el-form-item label="付款方式">
+              <el-select v-model="form.payment_method" placeholder="选择付款方式" style="width: 100%;">
+                <el-option value="WIRE" label="电汇" />
+                <el-option value="ACCEPTANCE" label="承兑汇票" />
+                <el-option value="CHECK" label="支票" />
+                <el-option value="CASH" label="现金" />
+                <el-option value="LC" label="信用证" />
+                <el-option value="OTHER" label="其他" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="付款说明">
+              <el-input v-model="form.payment_terms_detail" placeholder="付款条款补充说明" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -235,7 +266,9 @@ const form = reactive({
   project: null,
   delivery_date: '',
   tax_rate: 13,
-  payment_terms: '',
+  payment_terms: 'NET30',
+  payment_method: 'WIRE',
+  payment_terms_detail: '',
   notes: '',
   lines: []
 })
@@ -330,7 +363,9 @@ const handleAdd = () => {
     project: null,
     delivery_date: '',
     tax_rate: 13,
-    payment_terms: '',
+    payment_terms: 'NET30',
+    payment_method: 'WIRE',
+    payment_terms_detail: '',
     notes: '',
     lines: [{ item: null, qty: 1, unit_price: 0 }]
   })
@@ -351,7 +386,9 @@ const handleEdit = async (row) => {
       project: data.project,
       delivery_date: data.delivery_date || '',
       tax_rate: data.tax_rate ?? 13,
-      payment_terms: data.payment_terms || '',
+      payment_terms: data.payment_terms || 'NET30',
+      payment_method: data.payment_method || 'WIRE',
+      payment_terms_detail: data.payment_terms_detail || '',
       notes: data.notes || '',
       lines: (data.lines || []).map(line => ({
         id: line.id,
@@ -427,6 +464,8 @@ const handleSave = async () => {
       delivery_date: form.delivery_date,
       tax_rate: form.tax_rate,
       payment_terms: form.payment_terms,
+      payment_method: form.payment_method,
+      payment_terms_detail: form.payment_terms_detail,
       notes: form.notes,
       lines: validLines.map(line => ({
         item: line.item,

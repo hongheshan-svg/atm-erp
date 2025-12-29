@@ -444,6 +444,8 @@ class Invoice(BaseModel):
         ('REGISTERED', '已登记'),
         ('CERTIFIED', '已认证'),
         ('VOID', '已作废'),
+        ('NORMAL', '正常'),
+        ('RED', '红冲'),
     ]
     
     REFERENCE_TYPE_CHOICES = [
@@ -452,15 +454,38 @@ class Invoice(BaseModel):
         ('EXPENSE', '费用报销'),
     ]
     
+    INVOICE_CATEGORY_CHOICES = [
+        ('SPECIAL', '数电发票（增值税专用发票）'),
+        ('NORMAL', '数电发票（普通发票）'),
+        ('PAPER_SPECIAL', '纸质增值税专用发票'),
+        ('PAPER_NORMAL', '纸质普通发票'),
+    ]
+    
     invoice_type = models.CharField(max_length=10, choices=INVOICE_TYPE_CHOICES, verbose_name='发票类型')
     invoice_no = models.CharField(max_length=50, unique=True, verbose_name='发票号')
-    invoice_date = models.DateField(verbose_name='开票日期')
+    invoice_code = models.CharField(max_length=50, blank=True, verbose_name='发票代码')
+    digital_invoice_no = models.CharField(max_length=50, blank=True, verbose_name='数电发票号码')
+    invoice_date = models.DateTimeField(verbose_name='开票日期')
+    
+    # 销方信息 (Seller info)
+    seller_tax_no = models.CharField(max_length=50, blank=True, verbose_name='销方识别号')
+    seller_name = models.CharField(max_length=200, blank=True, verbose_name='销方名称')
+    
+    # 购方信息 (Buyer info) 
+    buyer_tax_no = models.CharField(max_length=50, blank=True, verbose_name='购方识别号')
+    buyer_name = models.CharField(max_length=200, blank=True, verbose_name='购买方名称')
+    
+    # 保持兼容性的字段
     party_name = models.CharField(max_length=200, verbose_name='对方单位')
     tax_number = models.CharField(max_length=50, blank=True, verbose_name='税号')
     
     amount_before_tax = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='金额（不含税）')
     tax_amount = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='税额')
     total_amount = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='价税合计')
+    
+    # 发票分类信息
+    invoice_source = models.CharField(max_length=100, blank=True, verbose_name='发票来源')
+    invoice_category = models.CharField(max_length=50, choices=INVOICE_CATEGORY_CHOICES, blank=True, verbose_name='发票票种')
     
     reference_type = models.CharField(
         max_length=20,
@@ -488,6 +513,43 @@ class Invoice(BaseModel):
         if self.amount_before_tax and self.tax_amount:
             self.total_amount = self.amount_before_tax + self.tax_amount
         super().save(*args, **kwargs)
+
+
+class InvoiceItem(BaseModel):
+    """
+    Invoice line items / details.
+    发票明细行，记录每张发票的商品明细。
+    """
+    invoice = models.ForeignKey(
+        Invoice,
+        on_delete=models.CASCADE,
+        related_name='items',
+        verbose_name='发票'
+    )
+    line_no = models.IntegerField(default=1, verbose_name='行号')
+    
+    # 商品信息
+    tax_category_code = models.CharField(max_length=50, blank=True, verbose_name='税收分类编码')
+    business_type = models.CharField(max_length=100, blank=True, verbose_name='特定业务类型')
+    item_name = models.CharField(max_length=500, verbose_name='货物或应税劳务名称')
+    specification = models.CharField(max_length=200, blank=True, verbose_name='规格型号')
+    unit = models.CharField(max_length=50, blank=True, verbose_name='单位')
+    
+    # 数量和金额
+    quantity = models.DecimalField(max_digits=15, decimal_places=4, null=True, blank=True, verbose_name='数量')
+    unit_price = models.DecimalField(max_digits=15, decimal_places=6, null=True, blank=True, verbose_name='单价')
+    amount = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='金额')
+    tax_rate = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name='税率(%)')
+    tax_amount = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True, verbose_name='税额')
+    
+    class Meta:
+        db_table = 'invoice_item'
+        verbose_name = '发票明细'
+        verbose_name_plural = verbose_name
+        ordering = ['invoice', 'line_no']
+    
+    def __str__(self):
+        return f"{self.invoice.invoice_no} - {self.item_name}"
 
 
 class SharedExpense(BaseModel):
@@ -612,3 +674,12 @@ class SharedExpenseAllocation(BaseModel):
     
     def __str__(self):
         return f"{self.shared_expense.expense_no} -> {self.project.code}"
+
+
+# Import additional models for Django discovery
+from .bank_statement_models import BankStatement, BankStatementImportLog  # noqa: E402, F401
+from .reconciliation_models import (  # noqa: E402, F401
+    PurchaseReconciliation, PurchaseReconciliationLine,
+    SalesReconciliation, SalesReconciliationLine,
+    InvoiceReconciliation, InvoiceReconciliationLine
+)

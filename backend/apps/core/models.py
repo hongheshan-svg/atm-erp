@@ -194,3 +194,7 @@ class SystemNotification(models.Model):
     
     def __str__(self):
         return f"{self.user} - {self.title}"
+
+
+# 导入权限配置模型，使其可被迁移系统发现
+from .permission_models import ModulePermissionRule, RoleModulePermission

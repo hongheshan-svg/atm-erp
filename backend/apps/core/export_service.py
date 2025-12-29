@@ -272,11 +272,16 @@ EXPORT_COLUMNS = {
     ],
     'ar': [
         {'field': 'ar_no', 'header': '应收单号', 'width': 15},
-        {'field': 'customer__name', 'header': '客户', 'width': 20},
+        {'field': 'customer__name', 'header': '客户', 'width': 25},
+        {'field': 'so__order_no', 'header': '销售订单', 'width': 15},
+        {'field': 'project__name', 'header': '项目', 'width': 20},
+        {'field': 'invoice_no', 'header': '发票号', 'width': 15},
+        {'field': 'invoice_date', 'header': '发票日期', 'width': 12},
         {'field': 'amount_due', 'header': '应收金额', 'width': 15},
         {'field': 'amount_paid', 'header': '已收金额', 'width': 15},
         {'field': 'due_date', 'header': '到期日', 'width': 12},
         {'field': 'status', 'header': '状态', 'width': 10},
+        {'field': 'created_at', 'header': '创建时间', 'width': 18},
     ],
     'ap': [
         {'field': 'ap_no', 'header': '应付单号', 'width': 15},

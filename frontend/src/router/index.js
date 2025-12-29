@@ -261,6 +261,18 @@ const routes = [
         component: () => import('@/views/inventory/StockMoveList.vue'),
         meta: { title: '库存流水', icon: 'List', menuId: 'inventory:moves' }
       },
+      {
+        path: 'inventory/requisitions',
+        name: 'RequisitionList',
+        component: () => import('@/views/inventory/RequisitionList.vue'),
+        meta: { title: '生产领料', icon: 'TakeawayBox', menuId: 'inventory:requisitions' }
+      },
+      {
+        path: 'inventory/returns',
+        name: 'ReturnList',
+        component: () => import('@/views/inventory/ReturnList.vue'),
+        meta: { title: '生产退料', icon: 'RefreshLeft', menuId: 'inventory:returns' }
+      },
       // Finance
       {
         path: 'finance/expenses',

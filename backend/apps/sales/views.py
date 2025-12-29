@@ -6,7 +6,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.http import HttpResponse
 from django.db import transaction
-from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin, DataScopeMixin
+from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.data_permission import DataPermissionMixin
 from .models import (
     SalesQuotation, SalesQuotationLine,
     SalesOrder, SalesOrderLine,
@@ -19,7 +20,7 @@ from .serializers import (
 )
 
 
-class SalesQuotationViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.ModelViewSet):
+class SalesQuotationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for SalesQuotation management.
     """
@@ -111,7 +112,7 @@ class SalesQuotationLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
     search_fields = ['item__sku', 'item__name']
 
 
-class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.ModelViewSet):
+class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for SalesOrder management.
     """
@@ -191,7 +192,7 @@ class SalesOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
     search_fields = ['item__sku', 'item__name']
 
 
-class DeliveryOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.ModelViewSet):
+class DeliveryOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for DeliveryOrder management.
     """

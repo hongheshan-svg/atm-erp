@@ -188,7 +188,15 @@ class Customer(BaseModel):
         verbose_name='信用额度'
     )
     payment_terms = models.CharField(max_length=100, blank=True, verbose_name='付款条款')
+    
+    # 开票信息 (Invoice Information)
+    invoice_title = models.CharField(max_length=200, blank=True, verbose_name='开票名称')
     tax_number = models.CharField(max_length=100, blank=True, verbose_name='税号')
+    bank_name = models.CharField(max_length=200, blank=True, verbose_name='开户银行')
+    bank_account = models.CharField(max_length=100, blank=True, verbose_name='银行账号')
+    registered_address = models.TextField(blank=True, verbose_name='注册地址')
+    registered_phone = models.CharField(max_length=50, blank=True, verbose_name='注册电话')
+    
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -225,9 +233,15 @@ class Supplier(BaseModel):
     email = models.EmailField(blank=True, verbose_name='邮箱')
     address = models.TextField(blank=True, verbose_name='地址')
     payment_terms = models.CharField(max_length=100, blank=True, verbose_name='付款条款')
+    
+    # 开票信息 (Invoice Information)
+    invoice_title = models.CharField(max_length=200, blank=True, verbose_name='开票名称')
     tax_number = models.CharField(max_length=100, blank=True, verbose_name='税号')
     bank_name = models.CharField(max_length=200, blank=True, verbose_name='开户银行')
     bank_account = models.CharField(max_length=100, blank=True, verbose_name='银行账号')
+    registered_address = models.TextField(blank=True, verbose_name='注册地址')
+    registered_phone = models.CharField(max_length=50, blank=True, verbose_name='注册电话')
+    
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,

@@ -166,6 +166,30 @@ class PurchaseOrder(BaseModel):
         (13, '13%'),
     ]
     
+    # 付款条款选项 - 账期
+    PAYMENT_TERMS_CHOICES = [
+        ('PREPAY', '预付款'),
+        ('COD', '货到付款'),
+        ('NET15', '月结15天'),
+        ('NET30', '月结30天'),
+        ('NET45', '月结45天'),
+        ('NET60', '月结60天'),
+        ('NET90', '月结90天'),
+        ('NET120', '月结120天'),
+        ('MILESTONE', '分期付款'),
+        ('OTHER', '其他'),
+    ]
+    
+    # 付款方式选项
+    PAYMENT_METHOD_CHOICES = [
+        ('WIRE', '电汇'),
+        ('ACCEPTANCE', '承兑汇票'),
+        ('CHECK', '支票'),
+        ('CASH', '现金'),
+        ('LC', '信用证'),
+        ('OTHER', '其他'),
+    ]
+    
     order_no = models.CharField(max_length=50, unique=True, verbose_name='订单号')
     supplier = models.ForeignKey(
         'masterdata.Supplier',
@@ -214,7 +238,21 @@ class PurchaseOrder(BaseModel):
         default=0,
         verbose_name='含税总额'
     )
-    payment_terms = models.CharField(max_length=200, blank=True, verbose_name='付款条款')
+    
+    # 付款条款与方式
+    payment_terms = models.CharField(
+        max_length=20,
+        choices=PAYMENT_TERMS_CHOICES,
+        default='NET30',
+        verbose_name='付款条款'
+    )
+    payment_method = models.CharField(
+        max_length=20,
+        choices=PAYMENT_METHOD_CHOICES,
+        default='WIRE',
+        verbose_name='付款方式'
+    )
+    payment_terms_detail = models.CharField(max_length=200, blank=True, verbose_name='付款条款说明')
     notes = models.TextField(blank=True, verbose_name='备注')
     
     class Meta:

@@ -121,11 +121,15 @@ def export_ar(request):
     """Export accounts receivable to Excel."""
     from apps.finance.models import AccountReceivable
     
-    queryset = AccountReceivable.objects.filter(is_deleted=False).select_related('customer')
+    queryset = AccountReceivable.objects.filter(is_deleted=False).select_related('customer', 'so', 'project')
     
     status_filter = request.query_params.get('status')
     if status_filter:
         queryset = queryset.filter(status=status_filter)
+    
+    customer_id = request.query_params.get('customer')
+    if customer_id:
+        queryset = queryset.filter(customer_id=customer_id)
     
     return ExcelExportService.export_queryset(
         queryset,

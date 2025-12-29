@@ -167,10 +167,14 @@ class Bug(BaseModel):
     def save(self, *args, **kwargs):
         # 自动生成Bug编号
         if not self.bug_number:
-            from apps.core.code_rule_services import CodeRuleService
             try:
-                self.bug_number = CodeRuleService.generate_code('BUG')
-            except:
+                from apps.core.code_rule_models import CodeRule
+                rule = CodeRule.objects.filter(rule_type='BUG', is_active=True).first()
+                if rule:
+                    self.bug_number = rule.generate_code()
+                else:
+                    raise Exception('No active BUG code rule found')
+            except Exception:
                 # 如果编码规则不存在，使用简单编号
                 import datetime
                 year = datetime.datetime.now().year
@@ -180,7 +184,7 @@ class Bug(BaseModel):
                 if last_bug:
                     try:
                         seq = int(last_bug.bug_number[-6:]) + 1
-                    except:
+                    except Exception:
                         seq = 1
                 else:
                     seq = 1

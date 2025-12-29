@@ -3,7 +3,7 @@ Serializers for finance app.
 """
 from rest_framework import serializers
 from .models import (
-    Currency, ExchangeRateHistory, Expense, Invoice,
+    Currency, ExchangeRateHistory, Expense, Invoice, InvoiceItem,
     AccountReceivable, AccountPayable, Payment,
     SharedExpense, SharedExpenseAllocation
 )
@@ -120,23 +120,47 @@ class PaymentSerializer(serializers.ModelSerializer):
         read_only_fields = ['payment_no', 'created_at', 'updated_at']
 
 
+class InvoiceItemSerializer(serializers.ModelSerializer):
+    """Invoice line item serializer."""
+    
+    class Meta:
+        model = InvoiceItem
+        fields = [
+            'id', 'invoice', 'line_no', 'tax_category_code', 'business_type',
+            'item_name', 'specification', 'unit', 'quantity', 'unit_price',
+            'amount', 'tax_rate', 'tax_amount', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+
 class InvoiceSerializer(serializers.ModelSerializer):
     """Invoice serializer."""
     invoice_type_display = serializers.CharField(source='get_invoice_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     reference_type_display = serializers.CharField(source='get_reference_type_display', read_only=True)
+    invoice_category_display = serializers.CharField(source='get_invoice_category_display', read_only=True)
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
+    items = InvoiceItemSerializer(many=True, read_only=True)
+    item_count = serializers.SerializerMethodField()
     
     class Meta:
         model = Invoice
         fields = [
-            'id', 'invoice_type', 'invoice_type_display', 'invoice_no', 'invoice_date',
-            'party_name', 'tax_number', 'amount_before_tax', 'tax_amount', 'total_amount',
+            'id', 'invoice_type', 'invoice_type_display', 
+            'invoice_no', 'invoice_code', 'digital_invoice_no', 'invoice_date',
+            'seller_tax_no', 'seller_name', 'buyer_tax_no', 'buyer_name',
+            'party_name', 'tax_number', 
+            'amount_before_tax', 'tax_amount', 'total_amount',
+            'invoice_source', 'invoice_category', 'invoice_category_display',
             'reference_type', 'reference_type_display', 'reference_id',
             'status', 'status_display', 'notes', 'created_by_name',
+            'items', 'item_count',
             'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['total_amount', 'created_at', 'updated_at']
+    
+    def get_item_count(self, obj):
+        return obj.items.count()
 
 
 class SharedExpenseAllocationSerializer(serializers.ModelSerializer):

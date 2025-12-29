@@ -8,7 +8,8 @@ from rest_framework.response import Response
 from django.utils import timezone
 from django.db import transaction
 from django.db.models import Q, Sum, F, Count
-from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin, DataScopeMixin
+from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.data_permission import DataPermissionMixin
 from apps.projects.models import Project
 from .models import (
     Currency, ExchangeRateHistory, Expense, Invoice,
@@ -89,7 +90,7 @@ class PaymentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     ordering_fields = ['payment_date', 'amount', 'created_at']
 
 
-class ExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.ModelViewSet):
+class ExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for Expense management.
     """
@@ -190,7 +191,7 @@ class ExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewset
         return Response(ExpenseSerializer(expense).data)
 
 
-class AccountReceivableViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.ModelViewSet):
+class AccountReceivableViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for AccountReceivable management.
     """
@@ -274,7 +275,7 @@ class AccountReceivableViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixi
         return Response(aging_data)
 
 
-class AccountPayableViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.ModelViewSet):
+class AccountPayableViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for AccountPayable management.
     """
@@ -378,6 +379,431 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         invoice.status = 'VOID'
         invoice.save()
         return Response(InvoiceSerializer(invoice).data)
+    
+    @action(detail=False, methods=['get'])
+    def download_template(self, request):
+        """Download invoice import template Excel file."""
+        import io
+        import openpyxl
+        from openpyxl.utils import get_column_letter
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from django.http import HttpResponse
+        
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = '发票导入模板'
+        
+        headers = [
+            '发票类型', '发票号码', '数电发票号码', '开票日期',
+            '销方识别号', '销方名称', '购方识别号', '购买方名称',
+            '金额', '税额', '价税合计', '发票来源', '发票票种', '发票状态', '备注'
+        ]
+        
+        header_font = Font(bold=True, color='FFFFFF')
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal='center')
+        
+        example = [
+            '销项发票', 'INV-2025-001', '25952000000022399509', '2025-01-15',
+            '91440300MA5GR95713', '深圳市示例公司', '911310267954776025', '客户公司名称',
+            '100000', '13000', '113000', '电子发票服务平台', '数电发票（增值税专用发票）', '正常', ''
+        ]
+        for col, val in enumerate(example, 1):
+            ws.cell(row=2, column=col, value=val)
+        
+        widths = [10, 15, 25, 12, 22, 30, 22, 30, 12, 12, 12, 20, 30, 10, 20]
+        for col, width in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(col)].width = width
+        
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        response = HttpResponse(
+            output.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename="invoice_import_template.xlsx"'
+        return response
+    
+    @action(detail=False, methods=['get'])
+    def export_excel(self, request):
+        """Export invoices to Excel."""
+        import io
+        import openpyxl
+        from openpyxl.utils import get_column_letter
+        from django.http import HttpResponse
+        from django.utils import timezone
+        
+        queryset = self.get_queryset().filter(is_deleted=False)
+        
+        invoice_type = request.query_params.get('invoice_type')
+        status_filter = request.query_params.get('status')
+        if invoice_type:
+            queryset = queryset.filter(invoice_type=invoice_type)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = '发票列表'
+        
+        headers = [
+            '序号', '发票类型', '发票号码', '数电发票号码', '开票日期',
+            '销方识别号', '销方名称', '购方识别号', '购买方名称',
+            '金额', '税额', '价税合计', '发票来源', '发票票种', '状态', '备注'
+        ]
+        
+        for col, header in enumerate(headers, 1):
+            ws.cell(row=1, column=col, value=header)
+        
+        for row, inv in enumerate(queryset, 2):
+            ws.cell(row=row, column=1, value=row-1)
+            ws.cell(row=row, column=2, value=inv.get_invoice_type_display())
+            ws.cell(row=row, column=3, value=inv.invoice_no)
+            ws.cell(row=row, column=4, value=inv.digital_invoice_no)
+            ws.cell(row=row, column=5, value=inv.invoice_date.strftime('%Y-%m-%d %H:%M:%S') if inv.invoice_date else '')
+            ws.cell(row=row, column=6, value=inv.seller_tax_no)
+            ws.cell(row=row, column=7, value=inv.seller_name)
+            ws.cell(row=row, column=8, value=inv.buyer_tax_no)
+            ws.cell(row=row, column=9, value=inv.buyer_name)
+            ws.cell(row=row, column=10, value=float(inv.amount_before_tax))
+            ws.cell(row=row, column=11, value=float(inv.tax_amount))
+            ws.cell(row=row, column=12, value=float(inv.total_amount))
+            ws.cell(row=row, column=13, value=inv.invoice_source)
+            ws.cell(row=row, column=14, value=inv.get_invoice_category_display() if inv.invoice_category else '')
+            ws.cell(row=row, column=15, value=inv.get_status_display())
+            ws.cell(row=row, column=16, value=inv.notes)
+        
+        widths = [6, 10, 15, 25, 20, 22, 30, 22, 30, 15, 15, 15, 20, 30, 10, 20]
+        for col, width in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(col)].width = width
+        
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        response = HttpResponse(
+            output.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="invoices_{timezone.now().strftime("%Y%m%d")}.xlsx"'
+        return response
+    
+    @action(detail=False, methods=['post'])
+    def import_excel(self, request):
+        """Import invoices from Excel file (supports 2025年开票明细.xlsx format)."""
+        import io
+        import openpyxl
+        from django.db import transaction
+        from decimal import Decimal, InvalidOperation
+        from datetime import datetime
+        from .models import InvoiceItem
+        
+        file = request.FILES.get('file')
+        if not file:
+            return Response({'error': '请上传文件'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not file.name.endswith(('.xlsx', '.xls')):
+            return Response({'error': '只支持Excel文件格式(.xlsx, .xls)'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        def parse_decimal(value, default=Decimal('0')):
+            """Safely parse decimal value."""
+            if value is None:
+                return default
+            try:
+                return Decimal(str(value).replace(',', ''))
+            except (InvalidOperation, ValueError):
+                return default
+        
+        def parse_datetime(value):
+            """Parse datetime from various formats."""
+            if value is None:
+                return datetime.now()
+            if isinstance(value, datetime):
+                return value
+            if isinstance(value, str):
+                for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%Y/%m/%d %H:%M:%S', '%Y/%m/%d']:
+                    try:
+                        return datetime.strptime(value.strip(), fmt)
+                    except ValueError:
+                        continue
+            return datetime.now()
+        
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(file.read()))
+            
+            success_count = 0
+            update_count = 0
+            item_count = 0
+            errors = []
+            
+            # ========== Step 1: Import invoice headers from "发票基础信息" ==========
+            if '发票基础信息' in wb.sheetnames:
+                sheet = wb['发票基础信息']
+            else:
+                sheet = wb.active
+            
+            headers = [str(cell.value).strip() if cell.value else '' for cell in sheet[1]]
+            
+            # Map headers to fields based on the Excel format
+            col_map = {
+                '发票类型': 'invoice_type_str',
+                '发票代码': 'invoice_code',
+                '发票号码': 'invoice_no',
+                '数电发票号码': 'digital_invoice_no',
+                '销方识别号': 'seller_tax_no',
+                '销方名称': 'seller_name',
+                '购方识别号': 'buyer_tax_no',
+                '购买方名称': 'buyer_name',
+                '开票日期': 'invoice_date',
+                '金额': 'amount_before_tax',
+                '税额': 'tax_amount',
+                '价税合计': 'total_amount',
+                '发票来源': 'invoice_source',
+                '发票票种': 'invoice_category_str',
+                '发票状态': 'status_str',
+                '状态': 'status_str',
+                '备注': 'notes',
+            }
+            
+            header_to_field = {}
+            for idx, header in enumerate(headers):
+                if header in col_map:
+                    header_to_field[idx] = col_map[header]
+            
+            # Store created/updated invoices for line item import
+            invoice_map = {}  # invoice_no -> Invoice object
+            
+            with transaction.atomic():
+                for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
+                    try:
+                        data = {}
+                        for col_idx, cell in enumerate(row):
+                            if col_idx in header_to_field:
+                                field = header_to_field[col_idx]
+                                value = cell.value
+                                if value is not None:
+                                    data[field] = value
+                        
+                        # Skip empty rows
+                        if not data:
+                            continue
+                        
+                        # Determine invoice number
+                        invoice_no = data.get('digital_invoice_no') or data.get('invoice_no')
+                        if not invoice_no:
+                            continue
+                        invoice_no = str(invoice_no).strip()
+                        
+                        # Parse invoice date
+                        invoice_date = parse_datetime(data.get('invoice_date'))
+                        
+                        # Parse amounts
+                        amount_before_tax = parse_decimal(data.get('amount_before_tax'))
+                        tax_amount = parse_decimal(data.get('tax_amount'))
+                        total_amount = parse_decimal(data.get('total_amount'))
+                        if not total_amount:
+                            total_amount = amount_before_tax + tax_amount
+                        
+                        # Parse status
+                        status_map = {'正常': 'NORMAL', '已登记': 'REGISTERED', '已认证': 'CERTIFIED', '已作废': 'VOID', '红冲': 'RED'}
+                        status_str = str(data.get('status_str', '')).strip()
+                        inv_status = status_map.get(status_str, 'REGISTERED')
+                        
+                        # Parse invoice category
+                        category_map = {
+                            '数电发票（增值税专用发票）': 'SPECIAL',
+                            '数电发票（普通发票）': 'NORMAL',
+                        }
+                        category_str = str(data.get('invoice_category_str', '')).strip()
+                        invoice_category = category_map.get(category_str, '')
+                        
+                        # Determine invoice type (INPUT/OUTPUT) based on seller
+                        seller_name = str(data.get('seller_name', '')).strip()
+                        invoice_type = 'OUTPUT'
+                        
+                        # Determine party_name (the other party)
+                        buyer_name = str(data.get('buyer_name', '')).strip()
+                        party_name = buyer_name or seller_name
+                        
+                        # Check if invoice exists (including soft-deleted)
+                        existing = Invoice.objects.filter(invoice_no=invoice_no).first()
+                        if existing:
+                            # Restore if was deleted
+                            if existing.is_deleted:
+                                existing.is_deleted = False
+                                existing.deleted_at = None
+                            existing.digital_invoice_no = str(data.get('digital_invoice_no', '')).strip()
+                            existing.invoice_date = invoice_date
+                            existing.seller_tax_no = str(data.get('seller_tax_no', '')).strip()
+                            existing.seller_name = seller_name
+                            existing.buyer_tax_no = str(data.get('buyer_tax_no', '')).strip()
+                            existing.buyer_name = buyer_name
+                            existing.party_name = party_name
+                            existing.amount_before_tax = amount_before_tax
+                            existing.tax_amount = tax_amount
+                            existing.total_amount = total_amount
+                            existing.invoice_source = str(data.get('invoice_source', '')).strip()
+                            existing.invoice_category = invoice_category
+                            existing.status = inv_status
+                            existing.save()
+                            # Delete existing items for reimport
+                            existing.items.all().delete()
+                            invoice_map[invoice_no] = existing
+                            update_count += 1
+                        else:
+                            inv = Invoice.objects.create(
+                                invoice_type=invoice_type,
+                                invoice_no=invoice_no,
+                                invoice_code=str(data.get('invoice_code', '')).strip(),
+                                digital_invoice_no=str(data.get('digital_invoice_no', '')).strip(),
+                                invoice_date=invoice_date,
+                                seller_tax_no=str(data.get('seller_tax_no', '')).strip(),
+                                seller_name=seller_name,
+                                buyer_tax_no=str(data.get('buyer_tax_no', '')).strip(),
+                                buyer_name=buyer_name,
+                                party_name=party_name,
+                                amount_before_tax=amount_before_tax,
+                                tax_amount=tax_amount,
+                                total_amount=total_amount,
+                                invoice_source=str(data.get('invoice_source', '')).strip(),
+                                invoice_category=invoice_category,
+                                status=inv_status,
+                            )
+                            invoice_map[invoice_no] = inv
+                            success_count += 1
+                    
+                    except Exception as e:
+                        errors.append({'row': row_idx, 'sheet': '发票基础信息', 'error': str(e)})
+                
+                # ========== Step 2: Import line items from "信息汇总表" ==========
+                if '信息汇总表' in wb.sheetnames:
+                    detail_sheet = wb['信息汇总表']
+                    detail_headers = [str(cell.value).strip() if cell.value else '' for cell in detail_sheet[1]]
+                    
+                    # Map detail sheet columns
+                    detail_col_map = {
+                        '数电发票号码': 'invoice_no',
+                        '税收分类编码': 'tax_category_code',
+                        '特定业务类型': 'business_type',
+                        '货物或应税劳务名称': 'item_name',
+                        '规格型号': 'specification',
+                        '单位': 'unit',
+                        '数量': 'quantity',
+                        '单价': 'unit_price',
+                        '金额': 'amount',
+                        '税率': 'tax_rate',
+                        '税额': 'tax_amount',
+                    }
+                    
+                    detail_header_to_field = {}
+                    for idx, header in enumerate(detail_headers):
+                        if header in detail_col_map:
+                            detail_header_to_field[idx] = detail_col_map[header]
+                    
+                    # Track line numbers per invoice
+                    invoice_line_counts = {}
+                    
+                    for row_idx, row in enumerate(detail_sheet.iter_rows(min_row=2), start=2):
+                        try:
+                            data = {}
+                            for col_idx, cell in enumerate(row):
+                                if col_idx in detail_header_to_field:
+                                    field = detail_header_to_field[col_idx]
+                                    value = cell.value
+                                    if value is not None:
+                                        data[field] = value
+                            
+                            if not data:
+                                continue
+                            
+                            invoice_no = str(data.get('invoice_no', '')).strip()
+                            if not invoice_no:
+                                continue
+                            
+                            # Find the invoice (from map or database)
+                            invoice = invoice_map.get(invoice_no)
+                            if not invoice:
+                                invoice = Invoice.objects.filter(
+                                    Q(invoice_no=invoice_no) | Q(digital_invoice_no=invoice_no)
+                                ).first()
+                            
+                            if not invoice:
+                                continue
+                            
+                            # Increment line number
+                            if invoice_no not in invoice_line_counts:
+                                invoice_line_counts[invoice_no] = 0
+                            invoice_line_counts[invoice_no] += 1
+                            line_no = invoice_line_counts[invoice_no]
+                            
+                            # Create line item
+                            item_name = str(data.get('item_name', '')).strip()
+                            if not item_name:
+                                continue
+                            
+                            InvoiceItem.objects.create(
+                                invoice=invoice,
+                                line_no=line_no,
+                                tax_category_code=str(data.get('tax_category_code', '')).strip(),
+                                business_type=str(data.get('business_type', '')).strip(),
+                                item_name=item_name,
+                                specification=str(data.get('specification', '')).strip() if data.get('specification') else '',
+                                unit=str(data.get('unit', '')).strip() if data.get('unit') else '',
+                                quantity=parse_decimal(data.get('quantity'), None),
+                                unit_price=parse_decimal(data.get('unit_price'), None),
+                                amount=parse_decimal(data.get('amount')),
+                                tax_rate=parse_decimal(data.get('tax_rate'), None),
+                                tax_amount=parse_decimal(data.get('tax_amount'), None),
+                            )
+                            item_count += 1
+                        
+                        except Exception as e:
+                            errors.append({'row': row_idx, 'sheet': '信息汇总表', 'error': str(e)})
+            
+            return Response({
+                'success_count': success_count,
+                'update_count': update_count,
+                'item_count': item_count,
+                'error_count': len(errors),
+                'errors': errors[:10]
+            })
+        
+        except Exception as e:
+            return Response({'error': f'导入失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=['post'])
+    def bulk_delete(self, request):
+        """Bulk delete invoices."""
+        ids = request.data.get('ids', [])
+        if not ids:
+            return Response({'error': '请选择要删除的发票'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        from django.utils import timezone
+        from .models import InvoiceItem
+        
+        # Soft delete invoices and their items
+        deleted_count = Invoice.objects.filter(id__in=ids, is_deleted=False).update(
+            is_deleted=True,
+            deleted_at=timezone.now()
+        )
+        
+        # Also delete related items
+        InvoiceItem.objects.filter(invoice_id__in=ids).update(
+            is_deleted=True,
+            deleted_at=timezone.now()
+        )
+        
+        return Response({
+            'success': True,
+            'deleted_count': deleted_count
+        })
 
 
 class SharedExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):

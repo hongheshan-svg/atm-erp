@@ -302,3 +302,9 @@ class StockAdjustmentLine(BaseModel):
         self.qty_diff = self.qty_actual - self.qty_system
         super().save(*args, **kwargs)
 
+
+# 导入领料/退料模型，使其可被迁移系统发现
+from .material_models import (
+    MaterialRequisition, MaterialRequisitionLine,
+    MaterialReturn, MaterialReturnLine
+)

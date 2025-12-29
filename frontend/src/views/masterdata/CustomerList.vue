@@ -4,16 +4,58 @@
       <template #header>
         <div class="card-header">
           <span>客户管理</span>
-          <el-button type="primary" @click="handleAdd">新增客户</el-button>
+          <div class="header-actions">
+            <el-button @click="downloadTemplate">
+              <el-icon><Document /></el-icon> 下载模板
+            </el-button>
+            <el-upload
+              ref="uploadRef"
+              :action="uploadUrl"
+              :headers="uploadHeaders"
+              :on-success="handleUploadSuccess"
+              :on-error="handleUploadError"
+              :before-upload="beforeUpload"
+              :show-file-list="false"
+              accept=".xlsx,.xls"
+            >
+              <el-button type="success">
+                <el-icon><Upload /></el-icon> 导入
+              </el-button>
+            </el-upload>
+            <el-button @click="handleExport">
+              <el-icon><Download /></el-icon> 导出
+            </el-button>
+            <el-button type="primary" @click="handleAdd">
+              <el-icon><Plus /></el-icon> 新增客户
+            </el-button>
+          </div>
         </div>
       </template>
 
+      <!-- 搜索条件 -->
+      <el-form :inline="true" :model="searchForm" class="search-form">
+        <el-form-item label="客户名称">
+          <el-input v-model="searchForm.search" placeholder="搜索名称/编码/联系人/电话" clearable style="width: 220px;" @keyup.enter="loadCustomers" />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="searchForm.status" placeholder="全部" clearable style="width: 100px;">
+            <el-option label="激活" value="ACTIVE" />
+            <el-option label="停用" value="INACTIVE" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="loadCustomers">查询</el-button>
+          <el-button @click="resetSearch">重置</el-button>
+        </el-form-item>
+      </el-form>
+
       <el-table :data="customers" v-loading="loading" stripe border>
         <el-table-column prop="code" label="编码" width="120" />
-        <el-table-column prop="name" label="客户名称" min-width="180" />
+        <el-table-column prop="name" label="客户名称" min-width="180" show-overflow-tooltip />
         <el-table-column prop="contact_person" label="联系人" width="100" />
         <el-table-column prop="phone" label="电话" width="130" />
-        <el-table-column prop="email" label="邮箱" width="180" />
+        <el-table-column prop="tax_number" label="税号" width="180" show-overflow-tooltip />
+        <el-table-column prop="bank_name" label="开户银行" width="150" show-overflow-tooltip />
         <el-table-column prop="address" label="地址" min-width="200" show-overflow-tooltip />
         <el-table-column prop="status" label="状态" width="80">
           <template #default="{ row }">
@@ -28,39 +70,120 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <el-pagination
+        v-model:current-page="pagination.page"
+        v-model:page-size="pagination.pageSize"
+        :total="pagination.total"
+        layout="total, sizes, prev, pager, next"
+        @size-change="loadCustomers"
+        @current-change="loadCustomers"
+        style="margin-top: 20px; justify-content: flex-end;"
+      />
     </el-card>
 
     <!-- 新增/编辑对话框 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="700px">
-      <el-form :model="form" ref="formRef" label-width="120px">
-        <el-form-item label="编码" prop="code">
-          <el-input v-model="form.code" />
-        </el-form-item>
-        <el-form-item label="名称" prop="name">
-          <el-input v-model="form.name" />
-        </el-form-item>
-        <el-form-item label="联系人">
-          <el-input v-model="form.contact_person" />
-        </el-form-item>
-        <el-form-item label="电话">
-          <el-input v-model="form.phone" />
-        </el-form-item>
-        <el-form-item label="邮箱">
-          <el-input v-model="form.email" />
-        </el-form-item>
-        <el-form-item label="地址">
-          <el-input v-model="form.address" type="textarea" />
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="form.status">
-            <el-option label="激活" value="ACTIVE" />
-            <el-option label="停用" value="INACTIVE" />
-          </el-select>
-        </el-form-item>
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="800px">
+      <el-form :model="form" ref="formRef" label-width="120px" :rules="formRules">
+        <el-tabs v-model="activeFormTab">
+          <el-tab-pane label="基本信息" name="basic">
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="编码" prop="code">
+                  <el-input v-model="form.code" :disabled="isEdit" placeholder="留空自动生成" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="客户名称" prop="name">
+                  <el-input v-model="form.name" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="简称">
+                  <el-input v-model="form.short_name" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="状态">
+                  <el-select v-model="form.status" style="width: 100%;">
+                    <el-option label="激活" value="ACTIVE" />
+                    <el-option label="停用" value="INACTIVE" />
+                    <el-option label="潜在客户" value="POTENTIAL" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="联系人">
+                  <el-input v-model="form.contact_person" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="电话">
+                  <el-input v-model="form.phone" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="邮箱">
+                  <el-input v-model="form.email" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="信用额度">
+                  <el-input-number v-model="form.credit_limit" :min="0" :precision="2" style="width: 100%;" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-form-item label="地址">
+              <el-input v-model="form.address" type="textarea" :rows="2" />
+            </el-form-item>
+            <el-form-item label="付款条款">
+              <el-input v-model="form.payment_terms" placeholder="如：月结30天" />
+            </el-form-item>
+            <el-form-item label="备注">
+              <el-input v-model="form.notes" type="textarea" :rows="2" />
+            </el-form-item>
+          </el-tab-pane>
+
+          <el-tab-pane label="开票信息" name="invoice">
+            <el-alert type="info" :closable="false" style="margin-bottom: 20px;">
+              开票信息用于生成增值税发票，请确保信息准确完整。
+            </el-alert>
+            <el-form-item label="开票名称" prop="invoice_title">
+              <el-input v-model="form.invoice_title" placeholder="公司全称（与营业执照一致）" />
+            </el-form-item>
+            <el-form-item label="税号" prop="tax_number">
+              <el-input v-model="form.tax_number" placeholder="纳税人识别号/统一社会信用代码" />
+            </el-form-item>
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="开户银行">
+                  <el-input v-model="form.bank_name" placeholder="开户银行全称" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="银行账号">
+                  <el-input v-model="form.bank_account" placeholder="银行账号" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-form-item label="注册地址">
+              <el-input v-model="form.registered_address" type="textarea" :rows="2" placeholder="营业执照上的注册地址" />
+            </el-form-item>
+            <el-form-item label="注册电话">
+              <el-input v-model="form.registered_phone" placeholder="公司注册电话" />
+            </el-form-item>
+          </el-tab-pane>
+        </el-tabs>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmit">提交</el-button>
+        <el-button type="primary" @click="handleSubmit" :loading="submitting">提交</el-button>
       </template>
     </el-dialog>
     
@@ -73,16 +196,43 @@
         title="客户相关资料"
       />
     </el-dialog>
+
+    <!-- 导入结果对话框 -->
+    <el-dialog v-model="importResultVisible" title="导入结果" width="500px">
+      <el-descriptions :column="2" border v-if="importResult">
+        <el-descriptions-item label="新增客户">
+          <span class="text-success">{{ importResult.success_count }} 个</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="更新客户">
+          <span class="text-primary">{{ importResult.update_count }} 个</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="错误数">
+          <span :class="importResult.error_count > 0 ? 'text-danger' : ''">{{ importResult.error_count }} 个</span>
+        </el-descriptions-item>
+      </el-descriptions>
+      <div v-if="importResult?.errors?.length > 0" style="margin-top: 15px;">
+        <el-alert title="导入错误详情" type="error" :closable="false">
+          <div v-for="(err, idx) in importResult.errors" :key="idx">
+            第 {{ err.row }} 行: {{ err.error }}
+          </div>
+        </el-alert>
+      </div>
+      <template #footer>
+        <el-button type="primary" @click="importResultVisible = false; loadCustomers()">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Upload, Download, Document } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
 
 const loading = ref(false)
+const submitting = ref(false)
 const customers = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增客户')
@@ -90,23 +240,62 @@ const isEdit = ref(false)
 const formRef = ref(null)
 const attachmentDialogVisible = ref(false)
 const currentCustomer = ref(null)
+const activeFormTab = ref('basic')
+const importResultVisible = ref(false)
+const importResult = ref(null)
+const uploadRef = ref(null)
+
+const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
+const searchForm = reactive({ search: '', status: null })
+
+// Upload configuration
+const uploadUrl = computed(() => {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+  return `${baseUrl}/masterdata/customers/import_excel/`
+})
+const uploadHeaders = computed(() => {
+  const token = localStorage.getItem('access_token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+})
 
 const form = reactive({
   id: null,
   code: '',
   name: '',
+  short_name: '',
   contact_person: '',
   phone: '',
   email: '',
   address: '',
-  status: 'ACTIVE'
+  credit_limit: 0,
+  payment_terms: '',
+  // 开票信息
+  invoice_title: '',
+  tax_number: '',
+  bank_name: '',
+  bank_account: '',
+  registered_address: '',
+  registered_phone: '',
+  status: 'ACTIVE',
+  notes: ''
 })
+
+const formRules = {
+  name: [{ required: true, message: '请输入客户名称', trigger: 'blur' }]
+}
 
 const loadCustomers = async () => {
   loading.value = true
   try {
-    const response = await request.get('/masterdata/customers/')
+    const params = { 
+      page: pagination.page, 
+      page_size: pagination.pageSize,
+      ...searchForm
+    }
+    Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
+    const response = await request.get('/masterdata/customers/', { params })
     customers.value = response.results || response || []
+    pagination.total = response.count || 0
   } catch (error) {
     ElMessage.error('加载客户失败')
   } finally {
@@ -114,16 +303,30 @@ const loadCustomers = async () => {
   }
 }
 
+const resetSearch = () => {
+  searchForm.search = ''
+  searchForm.status = null
+  pagination.page = 1
+  loadCustomers()
+}
+
 const handleAdd = () => {
   dialogTitle.value = '新增客户'
   isEdit.value = false
-  Object.assign(form, { id: null, code: '', name: '', contact_person: '', phone: '', email: '', address: '', status: 'ACTIVE' })
+  activeFormTab.value = 'basic'
+  Object.assign(form, { 
+    id: null, code: '', name: '', short_name: '', contact_person: '', phone: '', 
+    email: '', address: '', credit_limit: 0, payment_terms: '',
+    invoice_title: '', tax_number: '', bank_name: '', bank_account: '',
+    registered_address: '', registered_phone: '', status: 'ACTIVE', notes: ''
+  })
   dialogVisible.value = true
 }
 
 const handleEdit = (row) => {
   dialogTitle.value = '编辑客户'
   isEdit.value = true
+  activeFormTab.value = 'basic'
   Object.assign(form, row)
   dialogVisible.value = true
 }
@@ -141,6 +344,8 @@ const handleDelete = async (row) => {
 
 const handleSubmit = async () => {
   try {
+    await formRef.value.validate()
+    submitting.value = true
     if (isEdit.value) {
       await request.put(`/masterdata/customers/${form.id}/`, form)
       ElMessage.success('更新客户成功')
@@ -151,13 +356,79 @@ const handleSubmit = async () => {
     dialogVisible.value = false
     loadCustomers()
   } catch (error) {
-    ElMessage.error('保存客户失败')
+    if (error !== 'cancel') ElMessage.error('保存客户失败: ' + (error.response?.data?.error || error.message))
+  } finally {
+    submitting.value = false
   }
 }
 
 const handleViewAttachments = (row) => {
   currentCustomer.value = row
   attachmentDialogVisible.value = true
+}
+
+const beforeUpload = (file) => {
+  const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
+  if (!isExcel) {
+    ElMessage.error('只支持Excel文件格式(.xlsx, .xls)')
+    return false
+  }
+  return true
+}
+
+const handleUploadSuccess = (response) => {
+  importResult.value = response
+  importResultVisible.value = true
+  ElMessage.success(`导入完成：新增 ${response.success_count} 个，更新 ${response.update_count} 个`)
+}
+
+const handleUploadError = (error) => {
+  console.error('Upload error:', error)
+  ElMessage.error('导入失败，请检查文件格式')
+}
+
+const handleExport = async () => {
+  try {
+    const params = { ...searchForm }
+    Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
+    
+    const response = await request.get('/masterdata/customers/export_excel/', {
+      params,
+      responseType: 'blob'
+    })
+    
+    const url = window.URL.createObjectURL(new Blob([response]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `客户列表_${new Date().toISOString().split('T')[0]}.xlsx`)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('导出成功')
+  } catch (error) {
+    ElMessage.error('导出失败')
+  }
+}
+
+const downloadTemplate = async () => {
+  try {
+    const response = await request.get('/masterdata/customers/download_template/', {
+      responseType: 'blob'
+    })
+    
+    const url = window.URL.createObjectURL(new Blob([response]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', '客户导入模板.xlsx')
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('模板下载成功')
+  } catch (error) {
+    ElMessage.error('下载模板失败')
+  }
 }
 
 onMounted(() => {
@@ -171,5 +442,15 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
 }
+.header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.search-form {
+  margin-bottom: 15px;
+}
+.text-success { color: #67c23a; font-weight: bold; }
+.text-primary { color: #409eff; font-weight: bold; }
+.text-danger { color: #f56c6c; font-weight: bold; }
 </style>
-

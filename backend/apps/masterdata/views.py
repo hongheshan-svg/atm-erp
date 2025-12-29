@@ -520,8 +520,219 @@ class CustomerViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
     queryset = Customer.objects.all()
     serializer_class = CustomerSerializer
     filterset_fields = ['status', 'is_deleted']
-    search_fields = ['code', 'name', 'contact_person', 'phone']
+    search_fields = ['code', 'name', 'contact_person', 'phone', 'tax_number']
     ordering_fields = ['code', 'created_at']
+    
+    @action(detail=False, methods=['get'])
+    def download_template(self, request):
+        """Download customer import template Excel file."""
+        import io
+        import openpyxl
+        from openpyxl.utils import get_column_letter
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from django.http import HttpResponse
+        
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = '客户导入模板'
+        
+        headers = [
+            '客户编码', '客户名称', '简称', '联系人', '电话', '邮箱', '地址',
+            '开票名称', '税号', '开户银行', '银行账号', '注册地址', '注册电话',
+            '信用额度', '状态', '备注'
+        ]
+        
+        # Header style
+        header_font = Font(bold=True, color='FFFFFF')
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal='center')
+        
+        # Example row
+        example = [
+            'C001', '示例公司名称', '示例简称', '张三', '13800138000', 
+            'example@company.com', '北京市朝阳区xxx路xxx号',
+            '示例公司全称（开票）', '91110000XXXXXXXX', '中国工商银行北京分行',
+            '1234567890123456789', '北京市朝阳区注册地址', '010-12345678',
+            '100000', '激活', '备注信息'
+        ]
+        for col, val in enumerate(example, 1):
+            ws.cell(row=2, column=col, value=val)
+        
+        # Column widths
+        widths = [12, 25, 12, 10, 15, 25, 35, 25, 22, 25, 22, 35, 15, 12, 8, 20]
+        for col, width in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(col)].width = width
+        
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        response = HttpResponse(
+            output.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename="customer_import_template.xlsx"'
+        return response
+    
+    @action(detail=False, methods=['get'])
+    def export_excel(self, request):
+        """Export customers to Excel."""
+        import io
+        import openpyxl
+        from openpyxl.utils import get_column_letter
+        from django.http import HttpResponse
+        from django.utils import timezone
+        
+        queryset = self.get_queryset().filter(is_deleted=False)
+        
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = '客户列表'
+        
+        headers = [
+            '客户编码', '客户名称', '简称', '联系人', '电话', '邮箱', '地址',
+            '开票名称', '税号', '开户银行', '银行账号', '注册地址', '注册电话',
+            '信用额度', '付款条款', '状态', '备注'
+        ]
+        
+        for col, header in enumerate(headers, 1):
+            ws.cell(row=1, column=col, value=header)
+        
+        for row, customer in enumerate(queryset, 2):
+            ws.cell(row=row, column=1, value=customer.code)
+            ws.cell(row=row, column=2, value=customer.name)
+            ws.cell(row=row, column=3, value=customer.short_name)
+            ws.cell(row=row, column=4, value=customer.contact_person)
+            ws.cell(row=row, column=5, value=customer.phone)
+            ws.cell(row=row, column=6, value=customer.email)
+            ws.cell(row=row, column=7, value=customer.address)
+            ws.cell(row=row, column=8, value=customer.invoice_title)
+            ws.cell(row=row, column=9, value=customer.tax_number)
+            ws.cell(row=row, column=10, value=customer.bank_name)
+            ws.cell(row=row, column=11, value=customer.bank_account)
+            ws.cell(row=row, column=12, value=customer.registered_address)
+            ws.cell(row=row, column=13, value=customer.registered_phone)
+            ws.cell(row=row, column=14, value=float(customer.credit_limit))
+            ws.cell(row=row, column=15, value=customer.payment_terms)
+            ws.cell(row=row, column=16, value=customer.get_status_display())
+            ws.cell(row=row, column=17, value=customer.notes)
+        
+        column_widths = [12, 30, 15, 10, 15, 25, 40, 30, 22, 25, 25, 40, 15, 12, 15, 8, 30]
+        for col, width in enumerate(column_widths, 1):
+            ws.column_dimensions[get_column_letter(col)].width = width
+        
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        response = HttpResponse(
+            output.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="customers_{timezone.now().strftime("%Y%m%d")}.xlsx"'
+        return response
+    
+    @action(detail=False, methods=['post'])
+    def import_excel(self, request):
+        """Import customers from Excel."""
+        import io
+        import openpyxl
+        from decimal import Decimal, InvalidOperation
+        from django.db import transaction
+        
+        file = request.FILES.get('file')
+        if not file:
+            return Response({'error': '请上传文件'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not file.name.endswith(('.xlsx', '.xls')):
+            return Response({'error': '只支持Excel文件格式(.xlsx, .xls)'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(file.read()))
+            sheet = wb.active
+            
+            # Get headers from first row
+            headers = [cell.value for cell in sheet[1]]
+            
+            # Map columns
+            col_map = {
+                '客户编码': 'code', '客户名称': 'name', '简称': 'short_name',
+                '联系人': 'contact_person', '电话': 'phone', '邮箱': 'email', '地址': 'address',
+                '开票名称': 'invoice_title', '税号': 'tax_number', '开户银行': 'bank_name',
+                '银行账号': 'bank_account', '注册地址': 'registered_address', '注册电话': 'registered_phone',
+                '信用额度': 'credit_limit', '付款条款': 'payment_terms', '状态': 'status', '备注': 'notes'
+            }
+            
+            header_to_field = {}
+            for idx, header in enumerate(headers):
+                if header and header in col_map:
+                    header_to_field[idx] = col_map[header]
+            
+            success_count = 0
+            update_count = 0
+            errors = []
+            
+            with transaction.atomic():
+                for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
+                    try:
+                        data = {}
+                        for col_idx, cell in enumerate(row):
+                            if col_idx in header_to_field:
+                                field = header_to_field[col_idx]
+                                value = cell.value
+                                if value is not None:
+                                    data[field] = str(value).strip() if not isinstance(value, (int, float)) else value
+                        
+                        if not data.get('code') or not data.get('name'):
+                            continue
+                        
+                        # Handle credit_limit
+                        if 'credit_limit' in data:
+                            try:
+                                data['credit_limit'] = Decimal(str(data['credit_limit']))
+                            except (InvalidOperation, ValueError):
+                                data['credit_limit'] = Decimal('0')
+                        
+                        # Handle status
+                        status_map = {'激活': 'ACTIVE', '停用': 'INACTIVE', '潜在客户': 'POTENTIAL'}
+                        if 'status' in data and data['status'] in status_map:
+                            data['status'] = status_map[data['status']]
+                        elif 'status' not in data:
+                            data['status'] = 'ACTIVE'
+                        
+                        # Check if customer exists
+                        existing = Customer.objects.filter(code=data['code']).first()
+                        if existing:
+                            for key, value in data.items():
+                                if value:
+                                    setattr(existing, key, value)
+                            existing.save()
+                            update_count += 1
+                        else:
+                            Customer.objects.create(**data)
+                            success_count += 1
+                    
+                    except Exception as e:
+                        errors.append({'row': row_idx, 'error': str(e)})
+            
+            return Response({
+                'success_count': success_count,
+                'update_count': update_count,
+                'error_count': len(errors),
+                'errors': errors[:10]
+            })
+        
+        except Exception as e:
+            return Response({'error': f'导入失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class SupplierViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
@@ -532,8 +743,206 @@ class SupplierViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
     queryset = Supplier.objects.all()
     serializer_class = SupplierSerializer
     filterset_fields = ['status', 'is_deleted']
-    search_fields = ['code', 'name', 'contact_person', 'phone']
+    search_fields = ['code', 'name', 'contact_person', 'phone', 'tax_number']
     ordering_fields = ['code', 'created_at']
+    
+    @action(detail=False, methods=['get'])
+    def download_template(self, request):
+        """Download supplier import template Excel file."""
+        import io
+        import openpyxl
+        from openpyxl.utils import get_column_letter
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from django.http import HttpResponse
+        
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = '供应商导入模板'
+        
+        headers = [
+            '供应商编码', '供应商名称', '简称', '联系人', '电话', '邮箱', '地址',
+            '开票名称', '税号', '开户银行', '银行账号', '注册地址', '注册电话',
+            '状态', '备注'
+        ]
+        
+        # Header style
+        header_font = Font(bold=True, color='FFFFFF')
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal='center')
+        
+        # Example row
+        example = [
+            'S001', '示例供应商名称', '示例简称', '李四', '13900139000',
+            'supplier@company.com', '上海市浦东新区xxx路xxx号',
+            '示例供应商全称（开票）', '91310000XXXXXXXX', '中国建设银行上海分行',
+            '9876543210987654321', '上海市浦东新区注册地址', '021-87654321',
+            '激活', '备注信息'
+        ]
+        for col, val in enumerate(example, 1):
+            ws.cell(row=2, column=col, value=val)
+        
+        # Column widths
+        widths = [12, 25, 12, 10, 15, 25, 35, 25, 22, 25, 22, 35, 15, 8, 20]
+        for col, width in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(col)].width = width
+        
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        response = HttpResponse(
+            output.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename="supplier_import_template.xlsx"'
+        return response
+    
+    @action(detail=False, methods=['get'])
+    def export_excel(self, request):
+        """Export suppliers to Excel."""
+        import io
+        import openpyxl
+        from openpyxl.utils import get_column_letter
+        from django.http import HttpResponse
+        from django.utils import timezone
+        
+        queryset = self.get_queryset().filter(is_deleted=False)
+        
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = '供应商列表'
+        
+        headers = [
+            '供应商编码', '供应商名称', '简称', '联系人', '电话', '邮箱', '地址',
+            '开票名称', '税号', '开户银行', '银行账号', '注册地址', '注册电话',
+            '付款条款', '状态', '备注'
+        ]
+        
+        for col, header in enumerate(headers, 1):
+            ws.cell(row=1, column=col, value=header)
+        
+        for row, supplier in enumerate(queryset, 2):
+            ws.cell(row=row, column=1, value=supplier.code)
+            ws.cell(row=row, column=2, value=supplier.name)
+            ws.cell(row=row, column=3, value=supplier.short_name)
+            ws.cell(row=row, column=4, value=supplier.contact_person)
+            ws.cell(row=row, column=5, value=supplier.phone)
+            ws.cell(row=row, column=6, value=supplier.email)
+            ws.cell(row=row, column=7, value=supplier.address)
+            ws.cell(row=row, column=8, value=supplier.invoice_title)
+            ws.cell(row=row, column=9, value=supplier.tax_number)
+            ws.cell(row=row, column=10, value=supplier.bank_name)
+            ws.cell(row=row, column=11, value=supplier.bank_account)
+            ws.cell(row=row, column=12, value=supplier.registered_address)
+            ws.cell(row=row, column=13, value=supplier.registered_phone)
+            ws.cell(row=row, column=14, value=supplier.payment_terms)
+            ws.cell(row=row, column=15, value=supplier.get_status_display())
+            ws.cell(row=row, column=16, value=supplier.notes)
+        
+        column_widths = [12, 30, 15, 10, 15, 25, 40, 30, 22, 25, 25, 40, 15, 15, 8, 30]
+        for col, width in enumerate(column_widths, 1):
+            ws.column_dimensions[get_column_letter(col)].width = width
+        
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        response = HttpResponse(
+            output.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="suppliers_{timezone.now().strftime("%Y%m%d")}.xlsx"'
+        return response
+    
+    @action(detail=False, methods=['post'])
+    def import_excel(self, request):
+        """Import suppliers from Excel."""
+        import io
+        import openpyxl
+        from django.db import transaction
+        
+        file = request.FILES.get('file')
+        if not file:
+            return Response({'error': '请上传文件'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not file.name.endswith(('.xlsx', '.xls')):
+            return Response({'error': '只支持Excel文件格式(.xlsx, .xls)'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(file.read()))
+            sheet = wb.active
+            
+            headers = [cell.value for cell in sheet[1]]
+            
+            col_map = {
+                '供应商编码': 'code', '供应商名称': 'name', '简称': 'short_name',
+                '联系人': 'contact_person', '电话': 'phone', '邮箱': 'email', '地址': 'address',
+                '开票名称': 'invoice_title', '税号': 'tax_number', '开户银行': 'bank_name',
+                '银行账号': 'bank_account', '注册地址': 'registered_address', '注册电话': 'registered_phone',
+                '付款条款': 'payment_terms', '状态': 'status', '备注': 'notes'
+            }
+            
+            header_to_field = {}
+            for idx, header in enumerate(headers):
+                if header and header in col_map:
+                    header_to_field[idx] = col_map[header]
+            
+            success_count = 0
+            update_count = 0
+            errors = []
+            
+            with transaction.atomic():
+                for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
+                    try:
+                        data = {}
+                        for col_idx, cell in enumerate(row):
+                            if col_idx in header_to_field:
+                                field = header_to_field[col_idx]
+                                value = cell.value
+                                if value is not None:
+                                    data[field] = str(value).strip() if not isinstance(value, (int, float)) else value
+                        
+                        if not data.get('code') or not data.get('name'):
+                            continue
+                        
+                        status_map = {'激活': 'ACTIVE', '停用': 'INACTIVE', '潜在供应商': 'POTENTIAL'}
+                        if 'status' in data and data['status'] in status_map:
+                            data['status'] = status_map[data['status']]
+                        elif 'status' not in data:
+                            data['status'] = 'ACTIVE'
+                        
+                        existing = Supplier.objects.filter(code=data['code']).first()
+                        if existing:
+                            for key, value in data.items():
+                                if value:
+                                    setattr(existing, key, value)
+                            existing.save()
+                            update_count += 1
+                        else:
+                            Supplier.objects.create(**data)
+                            success_count += 1
+                    
+                    except Exception as e:
+                        errors.append({'row': row_idx, 'error': str(e)})
+            
+            return Response({
+                'success_count': success_count,
+                'update_count': update_count,
+                'error_count': len(errors),
+                'errors': errors[:10]
+            })
+        
+        except Exception as e:
+            return Response({'error': f'导入失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class WarehouseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):

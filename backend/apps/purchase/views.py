@@ -6,7 +6,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db import transaction
 from django.db.models import Sum
-from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin, DataScopeMixin
+from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.data_permission import DataPermissionMixin
 from apps.projects.models import Project
 from apps.inventory.cost_methods import CostingMethodFactory, FIFOCostingService
 from .models import (
@@ -22,7 +23,7 @@ from .serializers import (
 from .services import BudgetValidationService
 
 
-class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.ModelViewSet):
+class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for PurchaseRequest management.
     """
@@ -256,7 +257,7 @@ class PurchaseRequestLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
     search_fields = ['item__sku', 'item__name']
 
 
-class PurchaseOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.ModelViewSet):
+class PurchaseOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for PurchaseOrder management.
     """
@@ -305,7 +306,7 @@ class PurchaseOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
     search_fields = ['item__sku', 'item__name']
 
 
-class GoodsReceiptViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.ModelViewSet):
+class GoodsReceiptViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for GoodsReceipt management.
     """

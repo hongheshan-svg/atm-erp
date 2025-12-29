@@ -6,7 +6,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db import transaction
 from django.utils import timezone
-from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin, DataScopeMixin
+from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.data_permission import DataPermissionMixin
 from .rfq_models import RFQ, RFQLine, RFQSupplier, SupplierQuotation, SupplierQuotationLine
 from .rfq_serializers import (
     RFQSerializer, RFQLineSerializer, RFQSupplierSerializer,
@@ -14,7 +15,7 @@ from .rfq_serializers import (
 )
 
 
-class RFQViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.ModelViewSet):
+class RFQViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """RFQ viewset"""
     queryset = RFQ.objects.all()
     serializer_class = RFQSerializer

@@ -161,6 +161,8 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(source='project.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     tax_rate_display = serializers.CharField(source='get_tax_rate_display', read_only=True)
+    payment_terms_display = serializers.CharField(source='get_payment_terms_display', read_only=True)
+    payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
     lines = PurchaseOrderLineSerializer(many=True, read_only=True)
     
     class Meta:
@@ -169,7 +171,8 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             'id', 'order_no', 'supplier', 'supplier_name', 'project', 'project_name',
             'order_date', 'delivery_date', 'status', 'status_display',
             'tax_rate', 'tax_rate_display', 'total_amount', 'tax_amount', 'total_with_tax',
-            'payment_terms', 'notes', 'lines', 'is_deleted', 'created_at', 'updated_at'
+            'payment_terms', 'payment_terms_display', 'payment_method', 'payment_method_display',
+            'payment_terms_detail', 'notes', 'lines', 'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['order_no', 'order_date', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
     

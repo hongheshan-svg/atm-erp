@@ -114,7 +114,42 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="付款条款">
-              <el-input v-model="form.payment_terms" placeholder="如：预付30%，发货前付清" />
+              <el-select v-model="form.payment_terms" placeholder="选择付款条款" style="width: 100%;">
+                <el-option value="FULL_PREPAY" label="全款预付" />
+                <el-option value="COD" label="货到付款" />
+                <el-option value="NET30" label="月结30天" />
+                <el-option value="NET60" label="月结60天" />
+                <el-option value="NET90" label="月结90天" />
+                <el-option value="M_30_70" label="30%预付/70%发货前" />
+                <el-option value="M_30_30_40" label="30%预付/30%发货前/40%验收后" />
+                <el-option value="M_30_30_30_10" label="30%预付/30%发货前/30%验收/10%质保" />
+                <el-option value="M_30_60_10" label="30%预付/60%验收/10%质保" />
+                <el-option value="M_50_40_10" label="50%预付/40%验收/10%质保" />
+                <el-option value="M_40_50_10" label="40%预付/50%验收/10%质保" />
+                <el-option value="M_20_70_10" label="20%预付/70%验收/10%质保" />
+                <el-option value="CUSTOM" label="自定义分期" />
+                <el-option value="OTHER" label="其他" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        
+        <el-row :gutter="20">
+          <el-col :span="8">
+            <el-form-item label="付款方式">
+              <el-select v-model="form.payment_method" placeholder="选择付款方式" style="width: 100%;">
+                <el-option value="WIRE" label="电汇" />
+                <el-option value="ACCEPTANCE" label="承兑汇票" />
+                <el-option value="CHECK" label="支票" />
+                <el-option value="CASH" label="现金" />
+                <el-option value="LC" label="信用证" />
+                <el-option value="OTHER" label="其他" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="付款说明">
+              <el-input v-model="form.payment_terms_detail" placeholder="付款条款补充说明（自定义分期时填写）" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -253,7 +288,9 @@ const form = reactive({
   project: null,
   delivery_date: '',
   tax_rate: 13,
-  payment_terms: '',
+  payment_terms: 'M_30_30_30_10',
+  payment_method: 'WIRE',
+  payment_terms_detail: '',
   notes: '',
   lines: []
 })
@@ -339,7 +376,9 @@ const handleAdd = () => {
     project: null,
     delivery_date: '',
     tax_rate: 13,
-    payment_terms: '',
+    payment_terms: 'M_30_30_30_10',
+    payment_method: 'WIRE',
+    payment_terms_detail: '',
     notes: '',
     lines: [{ custom_name: '', custom_spec: '', custom_unit: '件', qty: 1, unit_price: 0 }]
   })
@@ -360,7 +399,9 @@ const handleEdit = async (row) => {
       project: data.project,
       delivery_date: data.delivery_date || '',
       tax_rate: data.tax_rate ?? 13,
-      payment_terms: data.payment_terms || '',
+      payment_terms: data.payment_terms || 'M_30_30_30_10',
+      payment_method: data.payment_method || 'WIRE',
+      payment_terms_detail: data.payment_terms_detail || '',
       notes: data.notes || '',
       lines: (data.lines || []).map(line => ({
         id: line.id,
@@ -432,6 +473,8 @@ const handleSave = async () => {
       delivery_date: form.delivery_date,
       tax_rate: form.tax_rate,
       payment_terms: form.payment_terms,
+      payment_method: form.payment_method,
+      payment_terms_detail: form.payment_terms_detail,
       notes: form.notes,
       lines: validLines.map(line => ({
         item: line.item || null,

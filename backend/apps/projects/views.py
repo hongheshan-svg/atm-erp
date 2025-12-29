@@ -9,7 +9,8 @@ from django.db.models import Sum, F, Q
 from django.http import HttpResponse
 import pandas as pd
 from io import BytesIO
-from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin, DataScopeMixin
+from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.data_permission import DataPermissionMixin
 from apps.masterdata.models import Item
 from .models import (
     Project, ProjectMember, ProjectTask, ProjectBOM, TimeLog, 
@@ -25,7 +26,7 @@ from .serializers import (
 )
 
 
-class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.ModelViewSet):
+class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for Project management.
     """
@@ -1186,7 +1187,7 @@ class TimeLogViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         return Response(TimeLogSerializer(time_log).data)
 
 
-class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.ModelViewSet):
+class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for ECN (Engineering Change Notice) management.
     """
@@ -1480,7 +1481,7 @@ class ECNItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 
 # ==================== 售后管理视图 ====================
 
-class AfterSalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataScopeMixin, viewsets.ModelViewSet):
+class AfterSalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     售后工单管理视图
     """

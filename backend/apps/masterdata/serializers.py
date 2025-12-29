@@ -61,7 +61,10 @@ class CustomerSerializer(serializers.ModelSerializer):
         model = Customer
         fields = [
             'id', 'code', 'name', 'short_name', 'contact_person', 'phone',
-            'email', 'address', 'credit_limit', 'payment_terms', 'tax_number',
+            'email', 'address', 'credit_limit', 'payment_terms',
+            # 开票信息
+            'invoice_title', 'tax_number', 'bank_name', 'bank_account',
+            'registered_address', 'registered_phone',
             'status', 'status_display', 'notes', 'is_deleted',
             'created_at', 'updated_at'
         ]
@@ -76,8 +79,11 @@ class SupplierSerializer(serializers.ModelSerializer):
         model = Supplier
         fields = [
             'id', 'code', 'name', 'short_name', 'contact_person', 'phone',
-            'email', 'address', 'payment_terms', 'tax_number', 'bank_name',
-            'bank_account', 'status', 'status_display', 'notes', 'is_deleted',
+            'email', 'address', 'payment_terms',
+            # 开票信息
+            'invoice_title', 'tax_number', 'bank_name', 'bank_account',
+            'registered_address', 'registered_phone',
+            'status', 'status_display', 'notes', 'is_deleted',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']

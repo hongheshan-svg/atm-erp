@@ -4,80 +4,181 @@
       <template #header>
         <div class="card-header">
           <span>发票管理</span>
-          <el-button type="primary" @click="handleCreate">
-            <el-icon><Plus /></el-icon>
-            登记发票
-          </el-button>
+          <div class="header-actions" v-if="activeTab === 'invoices'">
+            <el-button @click="downloadTemplate">
+              <el-icon><Document /></el-icon> 下载模板
+            </el-button>
+            <el-upload
+              ref="uploadRef"
+              :action="uploadUrl"
+              :headers="uploadHeaders"
+              :on-success="handleUploadSuccess"
+              :on-error="handleUploadError"
+              :before-upload="beforeUpload"
+              :show-file-list="false"
+              accept=".xlsx,.xls"
+            >
+              <el-button type="success">
+                <el-icon><Upload /></el-icon> 导入
+              </el-button>
+            </el-upload>
+            <el-button @click="handleExport">
+              <el-icon><Download /></el-icon> 导出
+            </el-button>
+            <el-button type="primary" @click="handleCreate">
+              <el-icon><Plus /></el-icon> 登记发票
+            </el-button>
+          </div>
         </div>
       </template>
 
-      <el-form :inline="true" :model="searchForm" class="search-form">
-        <el-form-item label="发票类型">
-          <el-select v-model="searchForm.invoice_type" placeholder="请选择类型" clearable>
-            <el-option label="进项发票" value="INPUT" />
-            <el-option label="销项发票" value="OUTPUT" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="发票号">
-          <el-input v-model="searchForm.invoice_no" placeholder="请输入发票号" clearable />
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="searchForm.status" placeholder="请选择状态" clearable>
-            <el-option label="已登记" value="REGISTERED" />
-            <el-option label="已认证" value="CERTIFIED" />
-            <el-option label="已作废" value="VOID" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="loadInvoices">查询</el-button>
-          <el-button @click="resetSearch">重置</el-button>
-        </el-form-item>
-      </el-form>
+      <el-tabs v-model="activeTab" @tab-change="handleTabChange">
+        <!-- 发票列表 -->
+        <el-tab-pane label="发票列表" name="invoices">
+          <el-form :inline="true" :model="searchForm" class="search-form">
+            <el-form-item label="发票类型">
+              <el-select v-model="searchForm.invoice_type" placeholder="请选择类型" clearable style="width: 120px;">
+                <el-option label="进项发票" value="INPUT" />
+                <el-option label="销项发票" value="OUTPUT" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="发票号">
+              <el-input v-model="searchForm.invoice_no" placeholder="请输入发票号" clearable style="width: 160px;" />
+            </el-form-item>
+            <el-form-item label="状态">
+              <el-select v-model="searchForm.status" placeholder="请选择状态" clearable style="width: 120px;">
+                <el-option label="正常" value="NORMAL" />
+                <el-option label="已登记" value="REGISTERED" />
+                <el-option label="已认证" value="CERTIFIED" />
+                <el-option label="红冲" value="RED" />
+                <el-option label="已作废" value="VOID" />
+              </el-select>
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="loadInvoices">查询</el-button>
+              <el-button @click="resetSearch">重置</el-button>
+            </el-form-item>
+          </el-form>
 
-      <el-table :data="invoices" v-loading="loading" border stripe>
-        <el-table-column prop="invoice_no" label="发票号" width="180" />
-        <el-table-column prop="invoice_type" label="类型" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.invoice_type === 'INPUT' ? 'success' : 'primary'">
-              {{ row.invoice_type === 'INPUT' ? '进项' : '销项' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="invoice_date" label="开票日期" width="120" />
-        <el-table-column prop="party_name" label="对方单位" width="200" />
-        <el-table-column prop="tax_amount" label="税额" width="120" align="right">
-          <template #default="{ row }">¥{{ (row.tax_amount || 0).toFixed(2) }}</template>
-        </el-table-column>
-        <el-table-column prop="total_amount" label="价税合计" width="130" align="right">
-          <template #default="{ row }">¥{{ (row.total_amount || 0).toFixed(2) }}</template>
-        </el-table-column>
-        <el-table-column prop="status" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)">{{ getStatusLabel(row.status) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="reference_type" label="关联单据" width="120" />
-        <el-table-column label="操作" width="260" fixed="right">
-          <template #default="{ row }">
-            <el-button size="small" @click="handleView(row)">查看</el-button>
-            <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'REGISTERED'">编辑</el-button>
-            <el-button size="small" type="success" @click="handleCertify(row)" v-if="row.status === 'REGISTERED' && row.invoice_type === 'INPUT'">
-              认证
+          <div class="batch-actions" v-if="selectedInvoices.length > 0" style="margin-bottom: 10px;">
+            <el-button type="danger" size="small" @click="handleBatchDelete">
+              批量删除 ({{ selectedInvoices.length }})
             </el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+          </div>
+          
+          <el-table :data="invoices" v-loading="loading" border stripe style="width: 100%;" @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="45" />
+            <el-table-column type="index" label="序号" width="55" align="center" :index="(index) => (pagination.page - 1) * pagination.pageSize + index + 1" />
+            <el-table-column prop="digital_invoice_no" label="数电发票号码" width="200" show-overflow-tooltip>
+              <template #default="{ row }">
+                {{ row.digital_invoice_no || row.invoice_no }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="invoice_type" label="类型" width="65">
+              <template #default="{ row }">
+                <el-tag :type="row.invoice_type === 'INPUT' ? 'success' : 'primary'" size="small">
+                  {{ row.invoice_type === 'INPUT' ? '进项' : '销项' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="invoice_date" label="开票日期" width="160">
+              <template #default="{ row }">
+                {{ formatDate(row.invoice_date) }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="buyer_name" label="购买方" min-width="150" show-overflow-tooltip>
+              <template #default="{ row }">
+                {{ row.buyer_name || row.party_name }}
+              </template>
+            </el-table-column>
+            <el-table-column label="金额" width="120" align="right">
+              <template #default="{ row }">
+                <div>¥{{ formatNumber(row.amount_before_tax) }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="税额" width="100" align="right">
+              <template #default="{ row }">
+                <div style="color: #909399;">¥{{ formatNumber(row.tax_amount) }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="价税合计" width="120" align="right">
+              <template #default="{ row }">
+                <div class="text-primary">¥{{ formatNumber(row.total_amount) }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="status" label="状态" width="75">
+              <template #default="{ row }">
+                <el-tag :type="getInvoiceStatusType(row.status)" size="small">{{ getInvoiceStatusLabel(row.status) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="item_count" label="明细" width="60" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.item_count > 0" size="small" type="info">{{ row.item_count }}</el-tag>
+                <span v-else style="color: #909399;">-</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="150" fixed="right">
+              <template #default="{ row }">
+                <el-button size="small" link @click="handleView(row)">查看</el-button>
+                <el-button size="small" link @click="handleEdit(row)" v-if="row.status === 'REGISTERED'">编辑</el-button>
+                <el-button size="small" link type="danger" @click="handleDelete(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
 
-      <el-pagination
-        v-model:current-page="pagination.page"
-        v-model:page-size="pagination.pageSize"
-        :total="pagination.total"
-        layout="total, sizes, prev, pager, next"
-        @size-change="loadInvoices"
-        @current-change="loadInvoices"
-        style="margin-top: 20px; justify-content: flex-end;"
-      />
+          <el-pagination
+            v-model:current-page="pagination.page"
+            v-model:page-size="pagination.pageSize"
+            :total="pagination.total"
+            layout="total, sizes, prev, pager, next"
+            @size-change="handleSizeChange"
+            @current-change="loadInvoices"
+            style="margin-top: 20px; justify-content: flex-end;"
+          />
+        </el-tab-pane>
+
+        <!-- 发票对账 -->
+        <el-tab-pane label="发票对账" name="reconciliation">
+          <div class="tab-header">
+            <el-radio-group v-model="invoiceType" @change="loadReconciliationList" style="margin-right: 15px;">
+              <el-radio-button value="INPUT">进项发票</el-radio-button>
+              <el-radio-button value="OUTPUT">销项发票</el-radio-button>
+            </el-radio-group>
+            <el-button type="primary" @click="handleAddReconciliation">
+              <el-icon><Plus /></el-icon> 新建对账单
+            </el-button>
+          </div>
+          
+          <el-table :data="reconciliationList" v-loading="reconciliationLoading" stripe border style="margin-top: 15px;">
+            <el-table-column prop="reconciliation_no" label="对账单号" width="150" />
+            <el-table-column prop="invoice_type_display" label="类型" width="100" />
+            <el-table-column prop="period_start" label="期间开始" width="110" />
+            <el-table-column prop="period_end" label="期间结束" width="110" />
+            <el-table-column prop="total_invoice_count" label="发票数量" width="100" align="center" />
+            <el-table-column prop="total_invoice_amount" label="发票金额" width="130" align="right">
+              <template #default="{ row }">¥{{ formatNumber(row.total_invoice_amount) }}</template>
+            </el-table-column>
+            <el-table-column prop="matched_count" label="已匹配" width="80" align="center" />
+            <el-table-column prop="unmatched_count" label="未匹配" width="80" align="center">
+              <template #default="{ row }">
+                <span :class="row.unmatched_count > 0 ? 'text-danger' : ''">{{ row.unmatched_count }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="status_display" label="状态" width="100" align="center">
+              <template #default="{ row }">
+                <el-tag :type="getReconciliationStatusType(row.status)">{{ row.status_display }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="200" fixed="right">
+              <template #default="{ row }">
+                <el-button size="small" @click="handleViewReconciliation(row)">查看</el-button>
+                <el-button size="small" type="primary" @click="handleGenerateReconciliation(row)" v-if="['DRAFT', 'UNMATCHED', 'PARTIAL'].includes(row.status)">生成明细</el-button>
+                <el-button size="small" type="success" @click="handleConfirmReconciliation(row)" v-if="['MATCHED', 'PARTIAL'].includes(row.status)">确认</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-tab-pane>
+      </el-tabs>
     </el-card>
 
     <!-- 登记/编辑发票对话框 -->
@@ -108,9 +209,7 @@
           <el-input-number v-model="formData.tax_amount" :min="0" :precision="2" style="width: 100%" />
         </el-form-item>
         <el-form-item label="价税合计">
-          <span style="font-size: 18px; font-weight: 600; color: #409EFF;">
-            ¥{{ ((formData.amount_before_tax || 0) + (formData.tax_amount || 0)).toFixed(2) }}
-          </span>
+          <span class="amount-primary">¥{{ formatNumber((formData.amount_before_tax || 0) + (formData.tax_amount || 0)) }}</span>
         </el-form-item>
         <el-form-item label="关联单据类型">
           <el-select v-model="formData.reference_type" placeholder="请选择" clearable>
@@ -130,55 +229,209 @@
     </el-dialog>
 
     <!-- 发票详情对话框 -->
-    <el-dialog v-model="detailVisible" title="发票详情" width="600px">
+    <el-dialog v-model="detailVisible" title="发票详情" width="1000px">
       <el-descriptions :column="2" border>
-        <el-descriptions-item label="发票号">{{ currentInvoice.invoice_no }}</el-descriptions-item>
-        <el-descriptions-item label="类型">
+        <el-descriptions-item label="数电发票号码" :span="2">{{ currentInvoice.digital_invoice_no || currentInvoice.invoice_no }}</el-descriptions-item>
+        <el-descriptions-item label="发票类型">
           <el-tag :type="currentInvoice.invoice_type === 'INPUT' ? 'success' : 'primary'">
-            {{ currentInvoice.invoice_type === 'INPUT' ? '进项' : '销项' }}
+            {{ currentInvoice.invoice_type === 'INPUT' ? '进项发票' : '销项发票' }}
           </el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="开票日期">{{ currentInvoice.invoice_date }}</el-descriptions-item>
-        <el-descriptions-item label="对方单位">{{ currentInvoice.party_name }}</el-descriptions-item>
-        <el-descriptions-item label="税号" :span="2">{{ currentInvoice.tax_number }}</el-descriptions-item>
-        <el-descriptions-item label="金额（不含税）">¥{{ (currentInvoice.amount_before_tax || 0).toFixed(2) }}</el-descriptions-item>
-        <el-descriptions-item label="税额">¥{{ (currentInvoice.tax_amount || 0).toFixed(2) }}</el-descriptions-item>
+        <el-descriptions-item label="开票日期">{{ formatDate(currentInvoice.invoice_date) }}</el-descriptions-item>
+        <el-descriptions-item label="销方识别号">{{ currentInvoice.seller_tax_no }}</el-descriptions-item>
+        <el-descriptions-item label="销方名称">{{ currentInvoice.seller_name }}</el-descriptions-item>
+        <el-descriptions-item label="购方识别号">{{ currentInvoice.buyer_tax_no }}</el-descriptions-item>
+        <el-descriptions-item label="购买方名称">{{ currentInvoice.buyer_name }}</el-descriptions-item>
+        <el-descriptions-item label="金额（不含税）">¥{{ formatNumber(currentInvoice.amount_before_tax) }}</el-descriptions-item>
+        <el-descriptions-item label="税额">¥{{ formatNumber(currentInvoice.tax_amount) }}</el-descriptions-item>
         <el-descriptions-item label="价税合计" :span="2">
-          <span style="font-size: 16px; font-weight: 600;">
-            ¥{{ (currentInvoice.total_amount || 0).toFixed(2) }}
-          </span>
+          <span class="amount-primary">¥{{ formatNumber(currentInvoice.total_amount) }}</span>
         </el-descriptions-item>
-        <el-descriptions-item label="状态" :span="2">
-          <el-tag :type="getStatusType(currentInvoice.status)">
-            {{ getStatusLabel(currentInvoice.status) }}
-          </el-tag>
+        <el-descriptions-item label="发票来源">{{ currentInvoice.invoice_source || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="发票票种">{{ currentInvoice.invoice_category_display || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="getInvoiceStatusType(currentInvoice.status)">{{ getInvoiceStatusLabel(currentInvoice.status) }}</el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="关联单据">{{ currentInvoice.reference_type || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="创建人">{{ currentInvoice.created_by_name }}</el-descriptions-item>
+        <el-descriptions-item label="创建人">{{ currentInvoice.created_by_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="2">{{ currentInvoice.notes || '-' }}</el-descriptions-item>
       </el-descriptions>
+      
+      <!-- 发票明细 -->
+      <div v-if="currentInvoice.items && currentInvoice.items.length > 0" style="margin-top: 20px;">
+        <el-divider content-position="left">
+          <span style="font-weight: bold;">发票明细 ({{ currentInvoice.items.length }} 项)</span>
+        </el-divider>
+        <el-table :data="currentInvoice.items" border stripe size="small" max-height="300">
+          <el-table-column prop="line_no" label="行号" width="55" align="center" />
+          <el-table-column prop="item_name" label="货物或劳务名称" min-width="200" show-overflow-tooltip />
+          <el-table-column prop="specification" label="规格型号" width="100" show-overflow-tooltip />
+          <el-table-column prop="unit" label="单位" width="55" align="center" />
+          <el-table-column prop="quantity" label="数量" width="70" align="right">
+            <template #default="{ row }">{{ row.quantity || '-' }}</template>
+          </el-table-column>
+          <el-table-column prop="unit_price" label="单价" width="100" align="right">
+            <template #default="{ row }">
+              {{ row.unit_price ? formatNumber(row.unit_price) : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="amount" label="金额" width="100" align="right">
+            <template #default="{ row }">¥{{ formatNumber(row.amount) }}</template>
+          </el-table-column>
+          <el-table-column prop="tax_rate" label="税率" width="60" align="center">
+            <template #default="{ row }">{{ row.tax_rate ? row.tax_rate + '%' : '-' }}</template>
+          </el-table-column>
+          <el-table-column prop="tax_amount" label="税额" width="90" align="right">
+            <template #default="{ row }">
+              {{ row.tax_amount ? '¥' + formatNumber(row.tax_amount) : '-' }}
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+      
       <template #footer>
         <el-button @click="detailVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 新建发票对账单对话框 -->
+    <el-dialog v-model="reconciliationDialogVisible" title="新建发票对账单" width="500px">
+      <el-form :model="reconciliationForm" label-width="100px" :rules="reconciliationRules" ref="reconciliationFormRef">
+        <el-form-item label="发票类型" prop="invoice_type">
+          <el-radio-group v-model="reconciliationForm.invoice_type">
+            <el-radio value="INPUT">进项发票</el-radio>
+            <el-radio value="OUTPUT">销项发票</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="期间开始" prop="period_start">
+          <el-date-picker v-model="reconciliationForm.period_start" type="date" value-format="YYYY-MM-DD" style="width: 100%;" />
+        </el-form-item>
+        <el-form-item label="期间结束" prop="period_end">
+          <el-date-picker v-model="reconciliationForm.period_end" type="date" value-format="YYYY-MM-DD" style="width: 100%;" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="reconciliationForm.notes" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="reconciliationDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveReconciliation" :loading="saving">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 发票对账详情对话框 -->
+    <el-dialog v-model="reconciliationDetailVisible" :title="reconciliationDetailTitle" width="1000px">
+      <el-descriptions :column="4" border v-if="currentReconciliation">
+        <el-descriptions-item label="对账单号">{{ currentReconciliation.reconciliation_no }}</el-descriptions-item>
+        <el-descriptions-item label="发票类型">{{ currentReconciliation.invoice_type_display }}</el-descriptions-item>
+        <el-descriptions-item label="期间">{{ currentReconciliation.period_start }} ~ {{ currentReconciliation.period_end }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="getReconciliationStatusType(currentReconciliation.status)">{{ currentReconciliation.status_display }}</el-tag>
+        </el-descriptions-item>
+      </el-descriptions>
+      
+      <el-descriptions :column="4" border v-if="currentReconciliation" style="margin-top: 15px;">
+        <el-descriptions-item label="发票数量">{{ currentReconciliation.total_invoice_count }}</el-descriptions-item>
+        <el-descriptions-item label="发票金额">
+          <span class="text-primary">¥{{ formatNumber(currentReconciliation.total_invoice_amount) }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="已匹配">
+          <span class="text-success">{{ currentReconciliation.matched_count }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="未匹配">
+          <span :class="currentReconciliation.unmatched_count > 0 ? 'text-danger' : 'text-success'">
+            {{ currentReconciliation.unmatched_count }}
+          </span>
+        </el-descriptions-item>
+      </el-descriptions>
+      
+      <el-divider>发票明细</el-divider>
+      
+        <el-table :data="currentReconciliation?.lines || []" border size="small" max-height="400">
+        <el-table-column prop="invoice_date" label="日期" width="100" />
+        <el-table-column prop="invoice_no" label="发票号" width="140" />
+        <el-table-column prop="party_name" label="对方单位" width="150" />
+        <el-table-column prop="total_amount" label="价税合计" width="120" align="right">
+          <template #default="{ row }">¥{{ formatNumber(row.total_amount) }}</template>
+        </el-table-column>
+        <el-table-column prop="matched_order_no" label="匹配订单" width="140" />
+        <el-table-column prop="match_status_display" label="匹配状态" width="100" />
+        <el-table-column prop="notes" label="备注" />
+      </el-table>
+    </el-dialog>
+
+    <!-- 导入结果对话框 -->
+    <el-dialog v-model="importResultVisible" title="导入结果" width="500px">
+      <el-descriptions :column="2" border v-if="importResult">
+        <el-descriptions-item label="新增发票">
+          <span class="text-success">{{ importResult.success_count }} 条</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="更新发票">
+          <span class="text-primary">{{ importResult.update_count }} 条</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="发票明细">
+          <span class="text-info">{{ importResult.item_count || 0 }} 条</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="错误数">
+          <span :class="importResult.error_count > 0 ? 'text-danger' : ''">{{ importResult.error_count }} 条</span>
+        </el-descriptions-item>
+      </el-descriptions>
+      <div v-if="importResult?.errors?.length > 0" style="margin-top: 15px;">
+        <el-alert title="导入错误详情" type="error" :closable="false">
+          <div v-for="(err, idx) in importResult.errors" :key="idx">
+            第 {{ err.row }} 行 ({{ err.sheet || '发票基础信息' }}): {{ err.error }}
+          </div>
+        </el-alert>
+      </div>
+      <template #footer>
+        <el-button type="primary" @click="importResultVisible = false">确定</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Upload, Download, Document } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 const loading = ref(false)
+const reconciliationLoading = ref(false)
+const saving = ref(false)
+const activeTab = ref('invoices')
+const invoiceType = ref('INPUT')
+
 const invoices = ref([])
+const reconciliationList = ref([])
+const selectedInvoices = ref([])
+
 const dialogVisible = ref(false)
 const detailVisible = ref(false)
+const reconciliationDialogVisible = ref(false)
+const reconciliationDetailVisible = ref(false)
+
 const dialogTitle = ref('')
+const reconciliationDetailTitle = ref('')
 const formRef = ref(null)
+const reconciliationFormRef = ref(null)
+
 const currentInvoice = ref({})
+const currentReconciliation = ref(null)
 const isEdit = ref(false)
 const currentId = ref(null)
+const uploadRef = ref(null)
+const importResultVisible = ref(false)
+const importResult = ref(null)
+
+// Upload configuration
+const uploadUrl = computed(() => {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+  return `${baseUrl}/finance/invoices/import_excel/`
+})
+const uploadHeaders = computed(() => {
+  const token = localStorage.getItem('access_token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+})
 
 const searchForm = reactive({
   invoice_type: null,
@@ -204,6 +457,13 @@ const formData = reactive({
   notes: ''
 })
 
+const reconciliationForm = reactive({
+  invoice_type: 'INPUT',
+  period_start: '',
+  period_end: '',
+  notes: ''
+})
+
 const rules = {
   invoice_type: [{ required: true, message: '请选择发票类型', trigger: 'change' }],
   invoice_no: [{ required: true, message: '请输入发票号', trigger: 'blur' }],
@@ -213,8 +473,56 @@ const rules = {
   tax_amount: [{ required: true, message: '请输入税额', trigger: 'blur' }]
 }
 
-const getStatusType = (s) => ({ 'REGISTERED': 'info', 'CERTIFIED': 'success', 'VOID': 'danger' }[s] || 'info')
-const getStatusLabel = (s) => ({ 'REGISTERED': '已登记', 'CERTIFIED': '已认证', 'VOID': '已作废' }[s] || s)
+const reconciliationRules = {
+  invoice_type: [{ required: true, message: '请选择发票类型' }],
+  period_start: [{ required: true, message: '请选择开始日期' }],
+  period_end: [{ required: true, message: '请选择结束日期' }]
+}
+
+const formatNumber = (num) => parseFloat(num || 0).toFixed(2)
+const formatDate = (dateStr) => {
+  if (!dateStr) return '-'
+  const d = new Date(dateStr)
+  return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+const getInvoiceStatusType = (s) => ({ 'REGISTERED': 'info', 'CERTIFIED': 'success', 'VOID': 'danger', 'NORMAL': 'success', 'RED': 'warning' }[s] || 'info')
+const getInvoiceStatusLabel = (s) => ({ 'REGISTERED': '已登记', 'CERTIFIED': '已认证', 'VOID': '已作废', 'NORMAL': '正常', 'RED': '红冲' }[s] || s)
+
+const getInvoiceProgress = (row) => {
+  // 进项发票：未认证=50%，已认证=100%，已作废=0%
+  // 销项发票：已登记=100%，已作废=0%
+  if (row.status === 'VOID') return 0
+  if (row.invoice_type === 'INPUT') {
+    return row.status === 'CERTIFIED' ? 100 : 50
+  }
+  return 100 // 销项发票登记即完成
+}
+
+const getInvoiceProgressColor = (row) => {
+  if (row.status === 'VOID') return '#909399'
+  if (row.status === 'CERTIFIED') return '#67c23a'
+  if (row.invoice_type === 'INPUT' && row.status === 'REGISTERED') return '#e6a23c'
+  return '#67c23a'
+}
+
+const getInvoiceProgressLabel = (row) => {
+  if (row.status === 'VOID') return '作废'
+  if (row.invoice_type === 'INPUT') {
+    return row.status === 'CERTIFIED' ? '已认证' : '待认证'
+  }
+  return '完成'
+}
+
+const getReconciliationStatusType = (status) => {
+  const types = { DRAFT: 'info', MATCHED: 'success', PARTIAL: 'warning', UNMATCHED: 'danger', CONFIRMED: 'success' }
+  return types[status] || 'info'
+}
+
+const handleTabChange = (tab) => {
+  if (tab === 'invoices') loadInvoices()
+  else if (tab === 'reconciliation') loadReconciliationList()
+}
 
 const loadInvoices = async () => {
   loading.value = true
@@ -231,10 +539,30 @@ const loadInvoices = async () => {
   }
 }
 
+const loadReconciliationList = async () => {
+  reconciliationLoading.value = true
+  try {
+    const res = await request.get('/finance/invoice-reconciliations/', {
+      params: { invoice_type: invoiceType.value }
+    })
+    reconciliationList.value = res.results || res || []
+  } catch (error) {
+    ElMessage.error('加载发票对账单失败')
+  } finally {
+    reconciliationLoading.value = false
+  }
+}
+
 const resetSearch = () => {
   searchForm.invoice_type = null
   searchForm.invoice_no = ''
   searchForm.status = null
+  pagination.page = 1
+  loadInvoices()
+}
+
+const handleSizeChange = (size) => {
+  pagination.pageSize = size
   pagination.page = 1
   loadInvoices()
 }
@@ -249,7 +577,7 @@ const handleCreate = () => {
 const handleView = async (row) => {
   try {
     const response = await request.get(`/finance/invoices/${row.id}/`)
-    currentInvoice.value = data
+    currentInvoice.value = response
     detailVisible.value = true
   } catch (error) {
     ElMessage.error('加载发票详情失败')
@@ -327,18 +655,161 @@ const resetForm = () => {
 
 const handleDelete = async (row) => {
   try {
-    await ElMessageBox.confirm(
-      `确定要删除发票 ${row.invoice_no} 吗？此操作不可恢复！`, 
-      '删除发票', 
-      { type: 'warning' }
-    )
+    await ElMessageBox.confirm(`确定要删除发票 ${row.invoice_no} 吗？此操作不可恢复！`, '删除发票', { type: 'warning' })
     await request.delete(`/finance/invoices/${row.id}/`)
     ElMessage.success('发票已删除')
     loadInvoices()
   } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除发票失败')
-    }
+    if (error !== 'cancel') ElMessage.error('删除发票失败')
+  }
+}
+
+const handleSelectionChange = (selection) => {
+  selectedInvoices.value = selection
+}
+
+const handleBatchDelete = async () => {
+  if (selectedInvoices.value.length === 0) {
+    ElMessage.warning('请先选择要删除的发票')
+    return
+  }
+  
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedInvoices.value.length} 条发票吗？此操作不可恢复！`, 
+      '批量删除', 
+      { type: 'warning' }
+    )
+    
+    const ids = selectedInvoices.value.map(item => item.id)
+    const response = await request.post('/finance/invoices/bulk_delete/', { ids })
+    
+    ElMessage.success(`成功删除 ${response.deleted_count} 条发票`)
+    selectedInvoices.value = []
+    loadInvoices()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error('批量删除失败')
+  }
+}
+
+// 发票对账功能
+const handleAddReconciliation = () => {
+  Object.assign(reconciliationForm, { invoice_type: invoiceType.value, period_start: '', period_end: '', notes: '' })
+  reconciliationDialogVisible.value = true
+}
+
+const saveReconciliation = async () => {
+  try {
+    await reconciliationFormRef.value.validate()
+    saving.value = true
+    await request.post('/finance/invoice-reconciliations/', reconciliationForm)
+    ElMessage.success('创建成功')
+    reconciliationDialogVisible.value = false
+    loadReconciliationList()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error('保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+const handleViewReconciliation = async (row) => {
+  try {
+    const res = await request.get(`/finance/invoice-reconciliations/${row.id}/`)
+    currentReconciliation.value = res
+    reconciliationDetailTitle.value = `发票对账单 - ${row.reconciliation_no}`
+    reconciliationDetailVisible.value = true
+  } catch (error) {
+    ElMessage.error('加载详情失败')
+  }
+}
+
+const handleGenerateReconciliation = async (row) => {
+  try {
+    await ElMessageBox.confirm('确定要生成发票对账明细吗？', '确认')
+    await request.post(`/finance/invoice-reconciliations/${row.id}/generate_lines/`)
+    ElMessage.success('生成成功')
+    loadReconciliationList()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error('生成失败: ' + (error.response?.data?.error || error.message))
+  }
+}
+
+const handleConfirmReconciliation = async (row) => {
+  try {
+    await ElMessageBox.confirm('确定要确认该对账单吗？', '确认')
+    await request.post(`/finance/invoice-reconciliations/${row.id}/confirm/`)
+    ElMessage.success('确认成功')
+    loadReconciliationList()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error('确认失败')
+  }
+}
+
+// 导入导出功能
+const beforeUpload = (file) => {
+  const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
+  if (!isExcel) {
+    ElMessage.error('只支持Excel文件格式(.xlsx, .xls)')
+    return false
+  }
+  return true
+}
+
+const handleUploadSuccess = (response) => {
+  importResult.value = response
+  importResultVisible.value = true
+  const itemInfo = response.item_count ? `，明细 ${response.item_count} 条` : ''
+  ElMessage.success(`导入完成：新增 ${response.success_count} 条，更新 ${response.update_count} 条${itemInfo}`)
+  loadInvoices()
+}
+
+const handleUploadError = (error) => {
+  console.error('Upload error:', error)
+  ElMessage.error('导入失败，请检查文件格式')
+}
+
+const downloadTemplate = async () => {
+  try {
+    const response = await request.get('/finance/invoices/download_template/', {
+      responseType: 'blob'
+    })
+    
+    const url = window.URL.createObjectURL(new Blob([response]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', '发票导入模板.xlsx')
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('模板下载成功')
+  } catch (error) {
+    ElMessage.error('下载模板失败')
+  }
+}
+
+const handleExport = async () => {
+  try {
+    const params = { ...searchForm }
+    Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
+    
+    const response = await request.get('/finance/invoices/export_excel/', {
+      params,
+      responseType: 'blob'
+    })
+    
+    const url = window.URL.createObjectURL(new Blob([response]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `发票列表_${new Date().toISOString().split('T')[0]}.xlsx`)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('导出成功')
+  } catch (error) {
+    ElMessage.error('导出失败')
   }
 }
 
@@ -348,6 +819,12 @@ onMounted(() => loadInvoices())
 <style scoped>
 .invoice-list { padding: 20px; }
 .card-header { display: flex; justify-content: space-between; align-items: center; }
+.header-actions { display: flex; gap: 10px; align-items: center; }
 .search-form { margin-bottom: 20px; }
+.tab-header { display: flex; align-items: center; gap: 10px; }
+.text-danger { color: #f56c6c; font-weight: bold; }
+.text-warning { color: #e6a23c; font-weight: bold; }
+.text-success { color: #67c23a; font-weight: bold; }
+.text-primary { color: #409eff; font-weight: bold; }
+.amount-primary { font-size: 18px; font-weight: 600; color: #409EFF; }
 </style>
-

@@ -2,9 +2,16 @@
 Security validators for file uploads and data validation.
 """
 import os
-import magic
 from django.core.exceptions import ValidationError
 from django.conf import settings
+
+# 尝试导入python-magic，如果不可用则设为None
+try:
+    import magic
+    MAGIC_AVAILABLE = True
+except ImportError:
+    magic = None
+    MAGIC_AVAILABLE = False
 
 
 # 允许的文件扩展名
@@ -79,6 +86,10 @@ def validate_file_mime_type(file):
     """
     使用python-magic验证真实的MIME类型（防止伪造扩展名）。
     """
+    if not MAGIC_AVAILABLE:
+        # python-magic未安装，跳过MIME验证
+        return
+    
     try:
         # 读取文件头部分进行检测
         file_content = file.read(2048)
@@ -88,7 +99,7 @@ def validate_file_mime_type(file):
         if mime not in ALLOWED_MIME_TYPES:
             raise ValidationError(f'不支持的文件类型（MIME: {mime}）')
     except Exception as e:
-        # 如果python-magic不可用，退回到基于扩展名的验证
+        # 如果出错，退回到基于扩展名的验证
         pass
 
 

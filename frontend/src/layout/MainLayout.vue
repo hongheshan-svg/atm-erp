@@ -111,6 +111,8 @@
           <el-menu-item index="/inventory/transfer" v-if="hasMenuAccess('inventory:transfer')">库存调拨</el-menu-item>
           <el-menu-item index="/inventory/adjustment" v-if="hasMenuAccess('inventory:adjustment')">库存盘点</el-menu-item>
           <el-menu-item index="/inventory/alert" v-if="hasMenuAccess('inventory:alert')">库存预警</el-menu-item>
+          <el-menu-item index="/inventory/requisitions" v-if="hasMenuAccess('inventory:requisitions')">生产领料</el-menu-item>
+          <el-menu-item index="/inventory/returns" v-if="hasMenuAccess('inventory:returns')">生产退料</el-menu-item>
         </el-sub-menu>
         
         <el-sub-menu index="finance" v-if="hasMenuAccess('finance')">
