@@ -781,6 +781,21 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': f'导入失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
+    def perform_destroy(self, instance):
+        """删除发票时同时删除关联的附件"""
+        from apps.core.models import Attachment
+        
+        # 删除关联的附件文件
+        attachments = Attachment.objects.filter(related_model='Invoice', related_id=instance.id)
+        for attachment in attachments:
+            # 删除物理文件
+            if attachment.file:
+                attachment.file.delete(save=False)
+            attachment.delete()
+        
+        # 删除发票（物理删除）
+        instance.delete()
+    
     @action(detail=False, methods=['post'])
     def bulk_delete(self, request):
         """Bulk delete invoices."""
@@ -788,20 +803,21 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         if not ids:
             return Response({'error': '请选择要删除的发票'}, status=status.HTTP_400_BAD_REQUEST)
         
-        from django.utils import timezone
+        from apps.core.models import Attachment
         from .models import InvoiceItem
         
-        # Soft delete invoices and their items
-        deleted_count = Invoice.objects.filter(id__in=ids, is_deleted=False).update(
-            is_deleted=True,
-            deleted_at=timezone.now()
-        )
+        # 删除关联的附件文件
+        attachments = Attachment.objects.filter(related_model='Invoice', related_id__in=ids)
+        for attachment in attachments:
+            if attachment.file:
+                attachment.file.delete(save=False)
+            attachment.delete()
         
-        # Also delete related items
-        InvoiceItem.objects.filter(invoice_id__in=ids).update(
-            is_deleted=True,
-            deleted_at=timezone.now()
-        )
+        # 删除发票明细
+        InvoiceItem.objects.filter(invoice_id__in=ids).delete()
+        
+        # 删除发票
+        deleted_count = Invoice.objects.filter(id__in=ids).delete()[0]
         
         return Response({
             'success': True,
