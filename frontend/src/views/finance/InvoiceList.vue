@@ -679,8 +679,9 @@ const downloadAttachment = async (attachment) => {
       responseType: 'blob'
     })
     
-    // 创建下载链接
-    const url = window.URL.createObjectURL(new Blob([response]))
+    // response 是完整的 axios 响应对象，数据在 response.data 中
+    const blob = response.data
+    const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
     link.setAttribute('download', attachment.original_name || 'attachment.pdf')
