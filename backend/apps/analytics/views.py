@@ -291,7 +291,8 @@ class AnalyticsViewSet(viewsets.ViewSet):
             'id': p.id,
             'name': p.name,
             'customer_name': p.customer.name if p.customer else '',
-            'progress': p.progress or 0
+            'status': p.status,
+            'budget_total': float(p.budget_total or 0)
         } for p in active_projects_list]
         
         # Top 5 客户
