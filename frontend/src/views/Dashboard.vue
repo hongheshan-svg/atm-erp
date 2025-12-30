@@ -1,112 +1,258 @@
 <template>
   <div class="dashboard">
-    <el-row :gutter="20">
-      <!-- Financial KPIs - Responsive -->
+    <!-- 第一行：核心财务指标 -->
+    <el-row :gutter="16">
       <el-col :xs="24" :sm="12" :md="6">
-        <el-card shadow="hover" class="kpi-card">
-          <div class="kpi-icon revenue">
-            <el-icon><Money /></el-icon>
+        <el-card shadow="hover" class="kpi-card income">
+          <div class="kpi-header">
+            <el-icon class="kpi-icon"><TrendCharts /></el-icon>
+            <span class="kpi-trend up" v-if="kpis.financial.revenue_growth > 0">
+              +{{ kpis.financial.revenue_growth }}%
+            </span>
           </div>
-          <div class="kpi-content">
-            <div class="kpi-value">{{ formatCurrency(kpis.financial.revenue.total) }}</div>
-            <div class="kpi-label">总收入</div>
-            <div class="kpi-detail">{{ kpis.financial.revenue.orders }} 订单</div>
+          <div class="kpi-value">{{ formatCurrency(kpis.financial.revenue.total) }}</div>
+          <div class="kpi-label">本月收入</div>
+          <div class="kpi-footer">
+            <span>{{ kpis.financial.revenue.orders }} 笔订单</span>
           </div>
         </el-card>
       </el-col>
-
       <el-col :xs="24" :sm="12" :md="6">
-        <el-card shadow="hover" class="kpi-card">
-          <div class="kpi-icon projects">
-            <el-icon><Document /></el-icon>
+        <el-card shadow="hover" class="kpi-card expense">
+          <div class="kpi-header">
+            <el-icon class="kpi-icon"><Coin /></el-icon>
           </div>
-          <div class="kpi-content">
-            <div class="kpi-value">{{ kpis.projects.active_projects }}</div>
-            <div class="kpi-label">活跃项目</div>
-            <div class="kpi-detail">{{ formatCurrency(kpis.projects.total_budget) }} 预算</div>
+          <div class="kpi-value">{{ formatCurrency(kpis.financial.expenses) }}</div>
+          <div class="kpi-label">本月支出</div>
+          <div class="kpi-footer">
+            <span>{{ kpis.financial.purchase_orders }} 笔采购</span>
           </div>
         </el-card>
       </el-col>
-
       <el-col :xs="24" :sm="12" :md="6">
-        <el-card shadow="hover" class="kpi-card">
-          <div class="kpi-icon inventory">
-            <el-icon><Box /></el-icon>
+        <el-card shadow="hover" class="kpi-card receivable">
+          <div class="kpi-header">
+            <el-icon class="kpi-icon"><Wallet /></el-icon>
+            <span class="kpi-alert" v-if="kpis.financial.overdue_receivables > 0">
+              {{ kpis.financial.overdue_receivables }} 笔逾期
+            </span>
           </div>
-          <div class="kpi-content">
-            <div class="kpi-value">{{ formatCurrency(kpis.inventory.inventory_value) }}</div>
-            <div class="kpi-label">库存价值</div>
-            <div class="kpi-detail">{{ kpis.inventory.total_items }} 物料</div>
+          <div class="kpi-value">{{ formatCurrency(kpis.financial.receivables) }}</div>
+          <div class="kpi-label">应收账款</div>
+          <div class="kpi-footer">
+            <span>回款率 {{ kpis.financial.collection_rate }}%</span>
           </div>
         </el-card>
       </el-col>
-
       <el-col :xs="24" :sm="12" :md="6">
-        <el-card shadow="hover" class="kpi-card">
-          <div class="kpi-icon cash">
-            <el-icon><Wallet /></el-icon>
+        <el-card shadow="hover" class="kpi-card payable">
+          <div class="kpi-header">
+            <el-icon class="kpi-icon"><CreditCard /></el-icon>
+            <span class="kpi-alert" v-if="kpis.financial.overdue_payables > 0">
+              {{ kpis.financial.overdue_payables }} 笔逾期
+            </span>
           </div>
-          <div class="kpi-content">
-            <div class="kpi-value">{{ formatCurrency(kpis.financial.net_cash_position) }}</div>
-            <div class="kpi-label">资金净额</div>
-            <div class="kpi-detail">应收 - 应付</div>
+          <div class="kpi-value">{{ formatCurrency(kpis.financial.payables) }}</div>
+          <div class="kpi-label">应付账款</div>
+          <div class="kpi-footer">
+            <span>付款率 {{ kpis.financial.payment_rate }}%</span>
           </div>
         </el-card>
       </el-col>
     </el-row>
 
-    <!-- Charts Row - Responsive -->
-    <el-row :gutter="20" style="margin-top: 20px;">
-      <el-col :xs="24" :md="12">
-        <el-card shadow="hover">
-          <template #header>
-            <span>现金流预测（30天）</span>
-          </template>
-          <div ref="cashFlowChart" style="height: 300px;"></div>
+    <!-- 第二行：项目和订单 -->
+    <el-row :gutter="16" style="margin-top: 16px;">
+      <el-col :xs="24" :sm="12" :md="6">
+        <el-card shadow="hover" class="kpi-card project">
+          <div class="kpi-header">
+            <el-icon class="kpi-icon"><Folder /></el-icon>
+          </div>
+          <div class="kpi-value">{{ kpis.projects.active_count }}</div>
+          <div class="kpi-label">进行中项目</div>
+          <div class="kpi-footer">
+            <span>总预算 {{ formatCurrency(kpis.projects.total_budget) }}</span>
+          </div>
         </el-card>
       </el-col>
-
-      <el-col :xs="24" :md="12">
-        <el-card shadow="hover">
-          <template #header>
-            <span>项目完成状态</span>
-          </template>
-          <div ref="projectChart" style="height: 300px;"></div>
+      <el-col :xs="24" :sm="12" :md="6">
+        <el-card shadow="hover" class="kpi-card sales">
+          <div class="kpi-header">
+            <el-icon class="kpi-icon"><Sell /></el-icon>
+          </div>
+          <div class="kpi-value">{{ kpis.sales.pending_orders }}</div>
+          <div class="kpi-label">待处理销售单</div>
+          <div class="kpi-footer">
+            <span>本月 {{ kpis.sales.monthly_orders }} 单</span>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :md="6">
+        <el-card shadow="hover" class="kpi-card purchase">
+          <div class="kpi-header">
+            <el-icon class="kpi-icon"><ShoppingCart /></el-icon>
+          </div>
+          <div class="kpi-value">{{ kpis.purchase.pending_orders }}</div>
+          <div class="kpi-label">待处理采购单</div>
+          <div class="kpi-footer">
+            <span>本月 {{ kpis.purchase.monthly_orders }} 单</span>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :md="6">
+        <el-card shadow="hover" class="kpi-card inventory">
+          <div class="kpi-header">
+            <el-icon class="kpi-icon"><Box /></el-icon>
+            <span class="kpi-alert" v-if="kpis.inventory.low_stock > 0">
+              {{ kpis.inventory.low_stock }} 低库存
+            </span>
+          </div>
+          <div class="kpi-value">{{ formatCurrency(kpis.inventory.value) }}</div>
+          <div class="kpi-label">库存价值</div>
+          <div class="kpi-footer">
+            <span>{{ kpis.inventory.total_items }} 种物料</span>
+          </div>
         </el-card>
       </el-col>
     </el-row>
 
-    <!-- Alerts and Notifications -->
-    <el-row :gutter="20" style="margin-top: 20px;">
-      <el-col :span="24">
+    <!-- 第三行：图表和表格 -->
+    <el-row :gutter="16" style="margin-top: 16px;">
+      <!-- 收支趋势图 -->
+      <el-col :xs="24" :md="12">
         <el-card shadow="hover">
           <template #header>
-            <span>最近提醒</span>
+            <div class="card-header">
+              <span>收支趋势（近6个月）</span>
+            </div>
           </template>
-          <el-table :data="notifications" style="width: 100%">
-            <el-table-column prop="type" label="类型" width="100">
+          <div ref="trendChart" style="height: 300px;"></div>
+        </el-card>
+      </el-col>
+
+      <!-- 应收账款账龄分析 -->
+      <el-col :xs="24" :md="12">
+        <el-card shadow="hover">
+          <template #header>
+            <div class="card-header">
+              <span>应收账款账龄</span>
+            </div>
+          </template>
+          <div ref="agingChart" style="height: 300px;"></div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <!-- 第四行：待办事项 -->
+    <el-row :gutter="16" style="margin-top: 16px;">
+      <!-- 收款提醒 -->
+      <el-col :xs="24" :md="8">
+        <el-card shadow="hover" class="alert-card">
+          <template #header>
+            <div class="card-header">
+              <span>⚠️ 收款提醒</span>
+              <el-tag type="danger" size="small">{{ overdueReceivables.length }}</el-tag>
+            </div>
+          </template>
+          <div class="alert-list" v-if="overdueReceivables.length > 0">
+            <div class="alert-item" v-for="item in overdueReceivables.slice(0, 5)" :key="item.id">
+              <div class="alert-info">
+                <div class="alert-title">{{ item.customer_name }}</div>
+                <div class="alert-desc">{{ item.ar_no }} · 逾期{{ item.overdue_days }}天</div>
+              </div>
+              <div class="alert-amount text-danger">¥{{ formatNumber(item.amount_remaining) }}</div>
+            </div>
+          </div>
+          <el-empty v-else description="暂无逾期应收" :image-size="60" />
+        </el-card>
+      </el-col>
+
+      <!-- 付款提醒 -->
+      <el-col :xs="24" :md="8">
+        <el-card shadow="hover" class="alert-card">
+          <template #header>
+            <div class="card-header">
+              <span>📅 付款提醒</span>
+              <el-tag type="warning" size="small">{{ upcomingPayables.length }}</el-tag>
+            </div>
+          </template>
+          <div class="alert-list" v-if="upcomingPayables.length > 0">
+            <div class="alert-item" v-for="item in upcomingPayables.slice(0, 5)" :key="item.id">
+              <div class="alert-info">
+                <div class="alert-title">{{ item.supplier_name }}</div>
+                <div class="alert-desc">{{ item.ap_no }} · {{ item.days_until_due > 0 ? item.days_until_due + '天后到期' : '已逾期' }}</div>
+              </div>
+              <div class="alert-amount text-warning">¥{{ formatNumber(item.amount_remaining) }}</div>
+            </div>
+          </div>
+          <el-empty v-else description="暂无待付款项" :image-size="60" />
+        </el-card>
+      </el-col>
+
+      <!-- 项目进度 -->
+      <el-col :xs="24" :md="8">
+        <el-card shadow="hover" class="alert-card">
+          <template #header>
+            <div class="card-header">
+              <span>📊 项目进度</span>
+            </div>
+          </template>
+          <div class="project-list" v-if="activeProjects.length > 0">
+            <div class="project-item" v-for="project in activeProjects.slice(0, 5)" :key="project.id">
+              <div class="project-info">
+                <div class="project-name">{{ project.name }}</div>
+                <div class="project-customer">{{ project.customer_name }}</div>
+              </div>
+              <el-progress 
+                :percentage="project.progress || 0" 
+                :color="getProgressColor(project.progress)"
+                :stroke-width="8"
+              />
+            </div>
+          </div>
+          <el-empty v-else description="暂无进行中项目" :image-size="60" />
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <!-- 第五行：Top客户和供应商 -->
+    <el-row :gutter="16" style="margin-top: 16px;">
+      <el-col :xs="24" :md="12">
+        <el-card shadow="hover">
+          <template #header>
+            <div class="card-header">
+              <span>🏆 Top 5 客户（本月销售额）</span>
+            </div>
+          </template>
+          <el-table :data="topCustomers" size="small" stripe>
+            <el-table-column type="index" label="#" width="40" />
+            <el-table-column prop="name" label="客户" show-overflow-tooltip />
+            <el-table-column prop="amount" label="销售额" width="120" align="right">
               <template #default="{ row }">
-                <el-tag :type="getNotificationType(row.type)">{{ row.type }}</el-tag>
+                <span class="text-success">¥{{ formatNumber(row.amount) }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="title" label="标题" />
-            <el-table-column prop="message" label="消息" />
-            <el-table-column prop="created_at" label="时间" width="180">
+            <el-table-column prop="orders" label="订单" width="60" align="center" />
+          </el-table>
+        </el-card>
+      </el-col>
+
+      <el-col :xs="24" :md="12">
+        <el-card shadow="hover">
+          <template #header>
+            <div class="card-header">
+              <span>📦 Top 5 供应商（本月采购额）</span>
+            </div>
+          </template>
+          <el-table :data="topSuppliers" size="small" stripe>
+            <el-table-column type="index" label="#" width="40" />
+            <el-table-column prop="name" label="供应商" show-overflow-tooltip />
+            <el-table-column prop="amount" label="采购额" width="120" align="right">
               <template #default="{ row }">
-                {{ formatDateTime(row.created_at) }}
+                <span class="text-primary">¥{{ formatNumber(row.amount) }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="100">
-              <template #default="{ row }">
-                <el-button 
-                  v-if="!row.is_read" 
-                  size="small" 
-                  @click="markAsRead(row.id)"
-                >
-                  标为已读
-                </el-button>
-              </template>
-            </el-table-column>
+            <el-table-column prop="orders" label="订单" width="60" align="center" />
           </el-table>
         </el-card>
       </el-col>
@@ -115,162 +261,128 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { Money, Document, Box, Wallet } from '@element-plus/icons-vue'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { TrendCharts, Coin, Wallet, CreditCard, Folder, Sell, ShoppingCart, Box } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import request from '@/utils/request'
 
+// 数据
 const kpis = ref({
   financial: {
     revenue: { total: 0, orders: 0 },
-    purchases: { total: 0, orders: 0 },
+    expenses: 0,
+    purchase_orders: 0,
     receivables: 0,
     payables: 0,
-    net_cash_position: 0
+    overdue_receivables: 0,
+    overdue_payables: 0,
+    collection_rate: 0,
+    payment_rate: 0,
+    revenue_growth: 0
   },
   projects: {
-    active_projects: 0,
-    total_budget: 0,
-    task_completion_rate: 0,
-    total_tasks: 0,
-    completed_tasks: 0
+    active_count: 0,
+    total_budget: 0
+  },
+  sales: {
+    pending_orders: 0,
+    monthly_orders: 0
+  },
+  purchase: {
+    pending_orders: 0,
+    monthly_orders: 0
   },
   inventory: {
-    inventory_value: 0,
+    value: 0,
     total_items: 0,
-    low_stock_items: 0,
-    recent_movements: 0
+    low_stock: 0
   }
 })
 
-const cashFlowForecast = ref({})
-const notifications = ref([])
-const cashFlowChart = ref(null)
-const projectChart = ref(null)
+const overdueReceivables = ref([])
+const upcomingPayables = ref([])
+const activeProjects = ref([])
+const topCustomers = ref([])
+const topSuppliers = ref([])
+const trendData = ref({ months: [], income: [], expense: [] })
+const agingData = ref([])
 
+const trendChart = ref(null)
+const agingChart = ref(null)
+let trendChartInstance = null
+let agingChartInstance = null
+
+// 格式化
 const formatCurrency = (value) => {
-  return new Intl.NumberFormat('zh-CN', {
-    style: 'currency',
-    currency: 'CNY'
-  }).format(value || 0)
-}
-
-const formatDateTime = (dateStr) => {
-  return new Date(dateStr).toLocaleString()
-}
-
-const getNotificationType = (type) => {
-  const types = {
-    'INFO': 'info',
-    'WARNING': 'warning',
-    'ERROR': 'danger',
-    'SUCCESS': 'success'
+  const num = Number(value) || 0
+  if (num >= 10000) {
+    return '¥' + (num / 10000).toFixed(1) + '万'
   }
-  return types[type] || 'info'
+  return '¥' + num.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
 
-const loadKPIs = async () => {
+const formatNumber = (value) => {
+  return Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+const getProgressColor = (progress) => {
+  if (progress >= 80) return '#67c23a'
+  if (progress >= 50) return '#409eff'
+  if (progress >= 20) return '#e6a23c'
+  return '#f56c6c'
+}
+
+// 加载数据
+const loadDashboardData = async () => {
   try {
-    const res = await request.get('/analytics/dashboard/')
+    const res = await request.get('/analytics/management_dashboard/')
     const data = res.data || res
-    // 后端返回格式: { financial: {...}, projects: {...}, inventory: {...} }
+    
     kpis.value = {
       financial: {
-        revenue: { 
-          total: data.financial?.revenue?.total || 0, 
-          orders: data.financial?.revenue?.orders || 0 
-        },
-        purchases: {
-          total: data.financial?.purchases?.total || 0,
-          orders: data.financial?.purchases?.orders || 0
-        },
+        revenue: data.financial?.revenue || { total: 0, orders: 0 },
+        expenses: data.financial?.expenses || 0,
+        purchase_orders: data.financial?.purchase_orders || 0,
         receivables: data.financial?.receivables || 0,
         payables: data.financial?.payables || 0,
-        net_cash_position: data.financial?.net_cash_position || 0
+        overdue_receivables: data.financial?.overdue_receivables || 0,
+        overdue_payables: data.financial?.overdue_payables || 0,
+        collection_rate: data.financial?.collection_rate || 0,
+        payment_rate: data.financial?.payment_rate || 0,
+        revenue_growth: data.financial?.revenue_growth || 0
       },
-      projects: {
-        active_projects: data.projects?.active_projects || 0,
-        total_budget: data.projects?.total_budget || 0,
-        task_completion_rate: data.projects?.task_completion_rate || 0,
-        total_tasks: data.projects?.total_tasks || 0,
-        completed_tasks: data.projects?.completed_tasks || 0
-      },
-      inventory: {
-        inventory_value: data.inventory?.inventory_value || 0,
-        total_items: data.inventory?.total_items || 0,
-        low_stock_items: data.inventory?.low_stock_items || 0,
-        recent_movements: data.inventory?.recent_movements || 0
-      }
+      projects: data.projects || { active_count: 0, total_budget: 0 },
+      sales: data.sales || { pending_orders: 0, monthly_orders: 0 },
+      purchase: data.purchase || { pending_orders: 0, monthly_orders: 0 },
+      inventory: data.inventory || { value: 0, total_items: 0, low_stock: 0 }
     }
+    
+    overdueReceivables.value = data.overdue_receivables || []
+    upcomingPayables.value = data.upcoming_payables || []
+    activeProjects.value = data.active_projects || []
+    topCustomers.value = data.top_customers || []
+    topSuppliers.value = data.top_suppliers || []
+    trendData.value = data.trend_data || { months: [], income: [], expense: [] }
+    agingData.value = data.aging_data || []
+    
+    renderCharts()
   } catch (error) {
-    console.error('Failed to load KPIs', error)
-    // 设置默认空数据
-    kpis.value = {
-      financial: {
-        revenue: { total: 0, orders: 0 },
-        purchases: { total: 0, orders: 0 },
-        receivables: 0,
-        payables: 0,
-        net_cash_position: 0
-      },
-      projects: {
-        active_projects: 0,
-        total_budget: 0,
-        task_completion_rate: 0,
-        total_tasks: 0,
-        completed_tasks: 0
-      },
-      inventory: {
-        inventory_value: 0,
-        total_items: 0,
-        low_stock_items: 0,
-        recent_movements: 0
-      }
-    }
+    console.error('加载仪表盘数据失败:', error)
   }
 }
 
-const loadCashFlowForecast = async () => {
-  try {
-    const res = await request.get('/analytics/cash_flow_forecast/')
-    const data = res.data || res
-    cashFlowForecast.value = data
-    renderCashFlowChart()
-  } catch (error) {
-    console.error('Failed to load cash flow forecast', error)
-    // 设置默认空数据
-    cashFlowForecast.value = {
-      expected_inflows: 0,
-      expected_outflows: 0,
-      net_cash_flow: 0
-    }
-    renderCashFlowChart()
-  }
+// 渲染图表
+const renderCharts = () => {
+  renderTrendChart()
+  renderAgingChart()
 }
 
-const loadNotifications = async () => {
-  try {
-    const response = await request.get('/core/notifications/')
-    notifications.value = (response.results || response || []).slice(0, 5)
-  } catch (error) {
-    console.error('Failed to load notifications', error)
-    notifications.value = []
-  }
-}
-
-const markAsRead = async (id) => {
-  try {
-    await request.post(`/core/notifications/${id}/mark_read/`)
-    loadNotifications()
-  } catch (error) {
-    console.error('Failed to mark notification as read', error)
-  }
-}
-
-const renderCashFlowChart = () => {
-  if (!cashFlowChart.value) return
+const renderTrendChart = () => {
+  if (!trendChart.value) return
   
-  const chart = echarts.init(cashFlowChart.value)
+  if (!trendChartInstance) {
+    trendChartInstance = echarts.init(trendChart.value)
+  }
   
   const option = {
     tooltip: {
@@ -278,57 +390,83 @@ const renderCashFlowChart = () => {
       axisPointer: { type: 'shadow' }
     },
     legend: {
-      data: ['预期流出', '净现金流'],
-      top: 10
+      data: ['收入', '支出', '利润'],
+      top: 0
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true
     },
     xAxis: {
       type: 'category',
-      data: ['未来30天']
+      data: trendData.value.months || ['1月', '2月', '3月', '4月', '5月', '6月']
     },
     yAxis: {
-      type: 'value'
+      type: 'value',
+      axisLabel: {
+        formatter: (val) => val >= 10000 ? (val / 10000) + '万' : val
+      }
     },
     series: [
       {
-        name: '预期流入',
+        name: '收入',
         type: 'bar',
-        data: [cashFlowForecast.value.expected_inflows || 0],
-        itemStyle: { color: '#67C23A' }
+        data: trendData.value.income || [0, 0, 0, 0, 0, 0],
+        itemStyle: { color: '#67c23a' }
       },
       {
-        name: '预期流出',
+        name: '支出',
         type: 'bar',
-        data: [cashFlowForecast.value.expected_outflows || 0],
-        itemStyle: { color: '#F56C6C' }
+        data: trendData.value.expense || [0, 0, 0, 0, 0, 0],
+        itemStyle: { color: '#f56c6c' }
       },
       {
-        name: '净现金流',
-        type: 'bar',
-        data: [cashFlowForecast.value.net_cash_flow || 0],
-        itemStyle: { color: '#409EFF' }
+        name: '利润',
+        type: 'line',
+        data: (trendData.value.income || []).map((v, i) => v - (trendData.value.expense?.[i] || 0)),
+        itemStyle: { color: '#409eff' },
+        smooth: true
       }
     ]
   }
   
-  chart.setOption(option)
+  trendChartInstance.setOption(option)
 }
 
-const renderProjectChart = () => {
-  if (!projectChart.value) return
+const renderAgingChart = () => {
+  if (!agingChart.value) return
   
-  const chart = echarts.init(projectChart.value)
+  if (!agingChartInstance) {
+    agingChartInstance = echarts.init(agingChart.value)
+  }
   
-  const completionRate = kpis.value.projects.task_completion_rate || 0
+  const defaultData = [
+    { name: '0-30天', value: 0 },
+    { name: '31-60天', value: 0 },
+    { name: '61-90天', value: 0 },
+    { name: '90天以上', value: 0 }
+  ]
+  
+  const data = agingData.value.length > 0 ? agingData.value : defaultData
   
   const option = {
     tooltip: {
-      trigger: 'item'
+      trigger: 'item',
+      formatter: '{b}: ¥{c} ({d}%)'
+    },
+    legend: {
+      orient: 'vertical',
+      left: 'left',
+      top: 'center'
     },
     series: [
       {
-        name: '任务',
+        name: '账龄分布',
         type: 'pie',
         radius: ['40%', '70%'],
+        center: ['60%', '50%'],
         avoidLabelOverlap: false,
         itemStyle: {
           borderRadius: 10,
@@ -336,153 +474,218 @@ const renderProjectChart = () => {
           borderWidth: 2
         },
         label: {
-          show: false,
-          position: 'center'
+          show: false
         },
         emphasis: {
           label: {
             show: true,
-            fontSize: '20',
+            fontSize: '14',
             fontWeight: 'bold'
           }
         },
-        labelLine: {
-          show: false
-        },
-        data: [
-          { 
-            value: kpis.value.projects.completed_tasks, 
-            name: '已完成',
-            itemStyle: { color: '#67C23A' }
-          },
-          { 
-            value: kpis.value.projects.total_tasks - kpis.value.projects.completed_tasks, 
-            name: '进行中',
-            itemStyle: { color: '#E6A23C' }
+        data: data.map((item, index) => ({
+          ...item,
+          itemStyle: {
+            color: ['#67c23a', '#409eff', '#e6a23c', '#f56c6c'][index]
           }
-        ]
+        }))
       }
     ]
   }
   
-  chart.setOption(option)
+  agingChartInstance.setOption(option)
 }
 
-onMounted(async () => {
-  await loadKPIs()
-  await loadCashFlowForecast()
-  await loadNotifications()
-  
-  // Render charts after data is loaded
-  setTimeout(() => {
-    renderProjectChart()
-  }, 300)
+// 窗口大小变化时重新渲染图表
+const handleResize = () => {
+  trendChartInstance?.resize()
+  agingChartInstance?.resize()
+}
+
+onMounted(() => {
+  loadDashboardData()
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  trendChartInstance?.dispose()
+  agingChartInstance?.dispose()
 })
 </script>
 
 <style scoped>
 .dashboard {
-  padding: 20px;
+  padding: 16px;
+  background: #f5f7fa;
+  min-height: calc(100vh - 60px);
 }
 
 .kpi-card {
-  padding: 20px;
-  margin-bottom: 20px;
+  border-radius: 12px;
+  border: none;
+  margin-bottom: 16px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.kpi-card.income { border-top: 3px solid #67c23a; }
+.kpi-card.expense { border-top: 3px solid #f56c6c; }
+.kpi-card.receivable { border-top: 3px solid #409eff; }
+.kpi-card.payable { border-top: 3px solid #e6a23c; }
+.kpi-card.project { border-top: 3px solid #9b59b6; }
+.kpi-card.sales { border-top: 3px solid #3498db; }
+.kpi-card.purchase { border-top: 3px solid #1abc9c; }
+.kpi-card.inventory { border-top: 3px solid #34495e; }
+
+.kpi-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
+  margin-bottom: 12px;
 }
 
 .kpi-icon {
-  width: 60px;
-  height: 60px;
-  border-radius: 8px;
+  font-size: 24px;
+  color: #909399;
+}
+
+.kpi-trend {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.kpi-trend.up {
+  background: #e8f5e9;
+  color: #4caf50;
+}
+
+.kpi-alert {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: #fff3e0;
+  color: #ff9800;
+}
+
+.kpi-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #303133;
+  line-height: 1.2;
+}
+
+.kpi-label {
+  font-size: 14px;
+  color: #909399;
+  margin-top: 4px;
+}
+
+.kpi-footer {
+  font-size: 12px;
+  color: #c0c4cc;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.card-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
-  font-size: 30px;
-  color: white;
-  margin-right: 20px;
-  flex-shrink: 0;
+  font-weight: 600;
 }
 
-.kpi-icon.revenue {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+.alert-card {
+  height: 320px;
 }
 
-.kpi-icon.projects {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+.alert-list {
+  max-height: 240px;
+  overflow-y: auto;
 }
 
-.kpi-icon.inventory {
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+.alert-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f0f0;
 }
 
-.kpi-icon.cash {
-  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+.alert-item:last-child {
+  border-bottom: none;
 }
 
-.kpi-content {
+.alert-info {
   flex: 1;
   min-width: 0;
 }
 
-.kpi-value {
-  font-size: 24px;
-  font-weight: bold;
+.alert-title {
+  font-size: 14px;
+  font-weight: 500;
   color: #303133;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.kpi-label {
-  font-size: 14px;
-  color: #909399;
-  margin-top: 5px;
-}
-
-.kpi-detail {
+.alert-desc {
   font-size: 12px;
-  color: #C0C4CC;
-  margin-top: 5px;
+  color: #909399;
+  margin-top: 2px;
 }
 
-/* Responsive styles */
+.alert-amount {
+  font-size: 14px;
+  font-weight: 600;
+  margin-left: 12px;
+  white-space: nowrap;
+}
+
+.project-list {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.project-item {
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.project-item:last-child {
+  border-bottom: none;
+}
+
+.project-info {
+  margin-bottom: 8px;
+}
+
+.project-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.project-customer {
+  font-size: 12px;
+  color: #909399;
+}
+
+.text-success { color: #67c23a; }
+.text-danger { color: #f56c6c; }
+.text-warning { color: #e6a23c; }
+.text-primary { color: #409eff; }
+
 @media (max-width: 768px) {
-  .dashboard {
-    padding: 10px;
-  }
-  
-  .kpi-card {
-    padding: 15px;
-  }
-  
-  .kpi-icon {
-    width: 50px;
-    height: 50px;
-    font-size: 24px;
-    margin-right: 15px;
-  }
-  
-  .kpi-value {
-    font-size: 20px;
-  }
-}
-
-@media (max-width: 480px) {
-  .kpi-icon {
-    width: 40px;
-    height: 40px;
-    font-size: 20px;
-    margin-right: 10px;
-  }
-  
-  .kpi-value {
-    font-size: 18px;
-  }
-  
-  .kpi-label {
-    font-size: 12px;
-  }
+  .dashboard { padding: 10px; }
+  .kpi-value { font-size: 22px; }
+  .alert-card { height: auto; min-height: 200px; }
 }
 </style>
