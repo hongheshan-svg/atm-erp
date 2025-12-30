@@ -174,24 +174,52 @@ class StockMoveViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
     ordering_fields = ['move_date', 'created_at']
     
     @action(detail=False, methods=['post'])
-    def create_transfer(self, request):
-        """Create a warehouse transfer."""
+    def transfer(self, request):
+        """Create a warehouse transfer with multiple lines."""
         data = request.data
+        lines = data.get('lines', [])
         
+        if not lines:
+            return Response({'error': '请添加调拨明细'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        created_moves = []
         with transaction.atomic():
-            move = StockMove.objects.create(
-                item_id=data.get('item'),
-                warehouse_from_id=data.get('warehouse_from'),
-                warehouse_to_id=data.get('warehouse_to'),
-                qty=data.get('qty'),
-                unit_cost=data.get('unit_cost', 0),
-                move_type='TRANSFER',
-                move_date=data.get('move_date'),
-                status='COMPLETED',
-                created_by=request.user
-            )
+            for line in lines:
+                if not line.get('item') or not line.get('qty') or line.get('qty') <= 0:
+                    continue
+                    
+                # Get unit cost from stock
+                unit_cost = 0
+                try:
+                    stock = Stock.objects.get(
+                        warehouse_id=data.get('from_warehouse'),
+                        item_id=line.get('item')
+                    )
+                    unit_cost = stock.weighted_avg_cost
+                except Stock.DoesNotExist:
+                    pass
+                
+                move = StockMove.objects.create(
+                    item_id=line.get('item'),
+                    warehouse_from_id=data.get('from_warehouse'),
+                    warehouse_to_id=data.get('to_warehouse'),
+                    qty=line.get('qty'),
+                    unit_cost=unit_cost,
+                    move_type='TRANSFER',
+                    move_date=data.get('transfer_date'),
+                    notes=line.get('notes') or data.get('notes', ''),
+                    status='COMPLETED',
+                    created_by=request.user
+                )
+                created_moves.append(move)
         
-        return Response(StockMoveSerializer(move).data, status=status.HTTP_201_CREATED)
+        if not created_moves:
+            return Response({'error': '没有有效的调拨明细'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response({
+            'message': f'成功创建 {len(created_moves)} 条调拨记录',
+            'count': len(created_moves)
+        }, status=status.HTTP_201_CREATED)
     
     @action(detail=False, methods=['get'])
     def project_consumption(self, request):
