@@ -233,7 +233,7 @@ const loadLocations = async () => {
   
   try {
     const response = await request.get(`/masterdata/warehouses/${selectedWarehouse.value}/location_tree/`)
-    locationTree.value = data || []
+    locationTree.value = response || []
     selectedLocation.value = null
     childLocations.value = []
   } catch (error) {
