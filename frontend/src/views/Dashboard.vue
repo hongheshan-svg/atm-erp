@@ -33,11 +33,20 @@
         <el-card shadow="hover" class="kpi-card total-ar">
           <div class="kpi-header">
             <el-icon class="kpi-icon"><Money /></el-icon>
+            <span class="kpi-alert" v-if="kpis.financial.overdue_receivables > 0">
+              {{ kpis.financial.overdue_receivables }} 笔逾期
+            </span>
           </div>
           <div class="kpi-value">{{ formatCurrency(kpis.financial.total_receivables) }}</div>
           <div class="kpi-label">总应收账款</div>
           <div class="kpi-footer">
             <span>已收 {{ formatCurrency(kpis.financial.total_received) }}</span>
+            <span class="footer-divider">|</span>
+            <span class="footer-highlight">待收 {{ formatCurrency(kpis.financial.receivables) }}</span>
+          </div>
+          <div class="kpi-progress">
+            <el-progress :percentage="kpis.financial.collection_rate" :stroke-width="4" :show-text="false" color="#2ecc71" />
+            <span class="progress-label">回款率 {{ kpis.financial.collection_rate }}%</span>
           </div>
         </el-card>
       </el-col>
@@ -45,48 +54,27 @@
         <el-card shadow="hover" class="kpi-card total-ap">
           <div class="kpi-header">
             <el-icon class="kpi-icon"><Tickets /></el-icon>
+            <span class="kpi-alert" v-if="kpis.financial.overdue_payables > 0">
+              {{ kpis.financial.overdue_payables }} 笔逾期
+            </span>
           </div>
           <div class="kpi-value">{{ formatCurrency(kpis.financial.total_payables) }}</div>
           <div class="kpi-label">总应付账款</div>
           <div class="kpi-footer">
             <span>已付 {{ formatCurrency(kpis.financial.total_paid) }}</span>
+            <span class="footer-divider">|</span>
+            <span class="footer-highlight">待付 {{ formatCurrency(kpis.financial.payables) }}</span>
+          </div>
+          <div class="kpi-progress">
+            <el-progress :percentage="kpis.financial.payment_rate" :stroke-width="4" :show-text="false" color="#9b59b6" />
+            <span class="progress-label">付款率 {{ kpis.financial.payment_rate }}%</span>
           </div>
         </el-card>
       </el-col>
     </el-row>
     
-    <!-- 第二行：待收待付 -->
+    <!-- 第二行：业务指标 -->
     <el-row :gutter="16" style="margin-top: 16px;">
-      <el-col :xs="24" :sm="12" :md="6">
-        <el-card shadow="hover" class="kpi-card receivable">
-          <div class="kpi-header">
-            <el-icon class="kpi-icon"><Wallet /></el-icon>
-            <span class="kpi-alert" v-if="kpis.financial.overdue_receivables > 0">
-              {{ kpis.financial.overdue_receivables }} 笔逾期
-            </span>
-          </div>
-          <div class="kpi-value">{{ formatCurrency(kpis.financial.receivables) }}</div>
-          <div class="kpi-label">待收款</div>
-          <div class="kpi-footer">
-            <span>回款率 {{ kpis.financial.collection_rate }}%</span>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :md="6">
-        <el-card shadow="hover" class="kpi-card payable">
-          <div class="kpi-header">
-            <el-icon class="kpi-icon"><CreditCard /></el-icon>
-            <span class="kpi-alert" v-if="kpis.financial.overdue_payables > 0">
-              {{ kpis.financial.overdue_payables }} 笔逾期
-            </span>
-          </div>
-          <div class="kpi-value">{{ formatCurrency(kpis.financial.payables) }}</div>
-          <div class="kpi-label">待付款</div>
-          <div class="kpi-footer">
-            <span>付款率 {{ kpis.financial.payment_rate }}%</span>
-          </div>
-        </el-card>
-      </el-col>
       <el-col :xs="24" :sm="12" :md="6">
         <el-card shadow="hover" class="kpi-card project">
           <div class="kpi-header">
@@ -626,6 +614,37 @@ onUnmounted(() => {
   margin-top: 8px;
   padding-top: 8px;
   border-top: 1px solid #f0f0f0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.footer-divider {
+  color: #dcdfe6;
+  margin: 0 2px;
+}
+
+.footer-highlight {
+  color: #f56c6c;
+  font-weight: 500;
+}
+
+.kpi-progress {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kpi-progress .el-progress {
+  flex: 1;
+}
+
+.progress-label {
+  font-size: 11px;
+  color: #909399;
+  white-space: nowrap;
 }
 
 .card-header {
