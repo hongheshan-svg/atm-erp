@@ -62,6 +62,18 @@ app.conf.beat_schedule = {
         'schedule': crontab(hour=10, minute=30),
     },
     
+    # Project task progress reminders at 10:45 AM
+    'check-project-task-reminders': {
+        'task': 'apps.projects.tasks.check_project_task_reminders',
+        'schedule': crontab(hour=10, minute=45),
+    },
+    
+    # After-sales order reminders at 11 AM
+    'check-aftersales-reminders': {
+        'task': 'apps.projects.tasks.check_aftersales_reminders',
+        'schedule': crontab(hour=11, minute=0),
+    },
+    
     # Reset payment schedule reminders weekly on Monday
     'reset-payment-schedule-reminders': {
         'task': 'apps.finance.tasks.reset_payment_schedule_reminders',
