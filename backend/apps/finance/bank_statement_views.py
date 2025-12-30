@@ -511,12 +511,86 @@ class BankStatementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                     
                     statement.save()
                     matched_count += 1
+                    
+                    # 尝试匹配付款计划（仅收款）
+                    if statement.transaction_type == 'CREDIT' and statement.customer:
+                        self._try_match_payment_schedule(statement)
         
         return Response({
             'matched_count': matched_count,
             'project_matched_count': project_matched_count,
             'message': f'成功匹配 {matched_count} 条记录，其中 {project_matched_count} 条关联到项目'
         })
+    
+    def _try_match_payment_schedule(self, statement):
+        """
+        尝试将银行流水匹配到付款计划。
+        根据客户和金额找到最匹配的付款计划。
+        """
+        from apps.finance.models import PaymentSchedule
+        from decimal import Decimal
+        
+        customer = statement.customer
+        amount = statement.credit_amount or Decimal('0')
+        
+        if not customer or amount <= 0:
+            return None
+        
+        # 查找该客户待收款的付款计划
+        # 优先匹配金额完全相等的
+        exact_match = PaymentSchedule.objects.filter(
+            sales_order__customer=customer,
+            status__in=['PENDING', 'PARTIAL'],
+            amount_due=amount,
+            is_deleted=False
+        ).order_by('due_date').first()
+        
+        if exact_match:
+            exact_match.amount_paid += amount
+            if exact_match.amount_paid >= exact_match.amount_due:
+                exact_match.status = 'PAID'
+                exact_match.actual_paid_date = statement.transaction_time.date()
+                exact_match.reminder_status = 'COLLECTED'
+            else:
+                exact_match.status = 'PARTIAL'
+            exact_match.save()
+            exact_match.bank_statements.add(statement)
+            
+            # 更新流水的项目关联
+            if exact_match.project:
+                statement.project = exact_match.project
+                statement.save()
+            
+            return exact_match
+        
+        # 如果没有完全匹配，查找剩余金额接近的
+        pending_schedules = PaymentSchedule.objects.filter(
+            sales_order__customer=customer,
+            status__in=['PENDING', 'PARTIAL'],
+            is_deleted=False
+        ).order_by('due_date')
+        
+        for schedule in pending_schedules:
+            remaining = schedule.amount_due - schedule.amount_paid
+            # 如果付款金额在剩余金额的10%范围内，认为匹配
+            if abs(remaining - amount) <= remaining * Decimal('0.1'):
+                schedule.amount_paid += amount
+                if schedule.amount_paid >= schedule.amount_due:
+                    schedule.status = 'PAID'
+                    schedule.actual_paid_date = statement.transaction_time.date()
+                    schedule.reminder_status = 'COLLECTED'
+                else:
+                    schedule.status = 'PARTIAL'
+                schedule.save()
+                schedule.bank_statements.add(statement)
+                
+                if schedule.project:
+                    statement.project = schedule.project
+                    statement.save()
+                
+                return schedule
+        
+        return None
     
     @action(detail=False, methods=['get'])
     def summary_by_supplier(self, request):

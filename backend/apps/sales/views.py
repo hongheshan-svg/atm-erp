@@ -136,7 +136,7 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
         so.save()
         
         # Auto-create AR - 使用含税金额
-        from apps.finance.models import AccountReceivable
+        from apps.finance.models import AccountReceivable, PaymentSchedule
         AccountReceivable.objects.create(
             customer=so.customer,
             so=so,
@@ -147,7 +147,13 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
             created_by=request.user
         )
         
-        return Response(SalesOrderSerializer(so).data)
+        # 自动生成付款计划
+        schedules = PaymentSchedule.generate_from_sales_order(so)
+        
+        response_data = SalesOrderSerializer(so).data
+        response_data['payment_schedules_count'] = len(schedules)
+        
+        return Response(response_data)
     
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):

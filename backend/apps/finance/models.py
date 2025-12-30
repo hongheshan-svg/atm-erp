@@ -439,6 +439,294 @@ class Payment(BaseModel):
             self.ap.save()
 
 
+class PaymentSchedule(BaseModel):
+    """
+    Payment schedule for tracking payment milestones based on contract terms.
+    用于跟踪销售订单/合同的付款计划和进度。
+    """
+    MILESTONE_TYPE_CHOICES = [
+        ('PREPAY', '预付款'),
+        ('ON_DELIVERY', '发货款'),
+        ('ON_ACCEPTANCE', '验收款'),
+        ('WARRANTY', '质保金'),
+        ('PROGRESS', '进度款'),
+        ('FINAL', '尾款'),
+        ('CUSTOM', '自定义'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('PENDING', '待收款'),
+        ('PARTIAL', '部分收款'),
+        ('PAID', '已收款'),
+        ('OVERDUE', '已逾期'),
+        ('CANCELLED', '已取消'),
+    ]
+    
+    REMINDER_STATUS_CHOICES = [
+        ('NONE', '无需提醒'),
+        ('PENDING', '待提醒'),
+        ('REMINDED', '已提醒'),
+        ('COLLECTED', '已收款'),
+    ]
+    
+    schedule_no = models.CharField(max_length=50, unique=True, verbose_name='计划编号')
+    
+    # 关联销售订单
+    sales_order = models.ForeignKey(
+        SalesOrder,
+        on_delete=models.CASCADE,
+        related_name='payment_schedules',
+        verbose_name='销售订单'
+    )
+    
+    # 关联项目（可选，从销售订单继承）
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='payment_schedules',
+        verbose_name='项目'
+    )
+    
+    # 里程碑信息
+    milestone_type = models.CharField(
+        max_length=20,
+        choices=MILESTONE_TYPE_CHOICES,
+        default='CUSTOM',
+        verbose_name='付款节点类型'
+    )
+    milestone_name = models.CharField(max_length=100, verbose_name='付款节点名称')
+    milestone_order = models.IntegerField(default=1, verbose_name='节点顺序')
+    
+    # 金额信息
+    percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        verbose_name='付款比例(%)'
+    )
+    amount_due = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='应收金额')
+    amount_paid = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='已收金额')
+    
+    # 日期信息
+    due_date = models.DateField(verbose_name='计划收款日期')
+    actual_paid_date = models.DateField(null=True, blank=True, verbose_name='实际收款日期')
+    
+    # 状态
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='PENDING',
+        verbose_name='状态'
+    )
+    
+    # 提醒相关
+    reminder_status = models.CharField(
+        max_length=20,
+        choices=REMINDER_STATUS_CHOICES,
+        default='PENDING',
+        verbose_name='提醒状态'
+    )
+    reminder_days_before = models.IntegerField(default=7, verbose_name='提前提醒天数')
+    last_reminded_at = models.DateTimeField(null=True, blank=True, verbose_name='最后提醒时间')
+    
+    # 关联应收账款（匹配后设置）
+    account_receivable = models.ForeignKey(
+        'AccountReceivable',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='payment_schedules',
+        verbose_name='关联应收账款'
+    )
+    
+    # 关联银行流水（匹配后设置）
+    bank_statements = models.ManyToManyField(
+        'bank_statement_models.BankStatement',
+        blank=True,
+        related_name='payment_schedules',
+        verbose_name='关联银行流水'
+    )
+    
+    notes = models.TextField(blank=True, verbose_name='备注')
+    
+    class Meta:
+        db_table = 'payment_schedule'
+        verbose_name = '付款计划'
+        verbose_name_plural = verbose_name
+        ordering = ['sales_order', 'milestone_order']
+        indexes = [
+            models.Index(fields=['sales_order', 'milestone_order']),
+            models.Index(fields=['status', 'due_date']),
+            models.Index(fields=['reminder_status', 'due_date']),
+        ]
+    
+    def __str__(self):
+        return f"{self.schedule_no} - {self.milestone_name}"
+    
+    @property
+    def amount_remaining(self):
+        """剩余应收金额"""
+        return self.amount_due - self.amount_paid
+    
+    @property
+    def payment_progress(self):
+        """付款进度百分比"""
+        if self.amount_due == 0:
+            return 100
+        return round(float(self.amount_paid) / float(self.amount_due) * 100, 2)
+    
+    @property
+    def is_overdue(self):
+        """是否逾期"""
+        from django.utils import timezone
+        return self.status == 'PENDING' and self.due_date < timezone.now().date()
+    
+    @property
+    def days_until_due(self):
+        """距离到期天数（负数表示已逾期）"""
+        from django.utils import timezone
+        return (self.due_date - timezone.now().date()).days
+    
+    def save(self, *args, **kwargs):
+        # 自动生成编号
+        if not self.schedule_no:
+            from django.utils import timezone
+            date_str = timezone.now().strftime('%Y%m%d')
+            last = PaymentSchedule.objects.filter(schedule_no__startswith=f'PS{date_str}').order_by('-schedule_no').first()
+            if last:
+                last_seq = int(last.schedule_no[-4:])
+                new_seq = last_seq + 1
+            else:
+                new_seq = 1
+            self.schedule_no = f'PS{date_str}{new_seq:04d}'
+        
+        # 从销售订单继承项目
+        if not self.project and self.sales_order and self.sales_order.project:
+            self.project = self.sales_order.project
+        
+        # 更新状态
+        if self.amount_paid >= self.amount_due:
+            self.status = 'PAID'
+            self.reminder_status = 'COLLECTED'
+        elif self.amount_paid > 0:
+            self.status = 'PARTIAL'
+        elif self.is_overdue:
+            self.status = 'OVERDUE'
+        
+        super().save(*args, **kwargs)
+    
+    @classmethod
+    def generate_from_sales_order(cls, sales_order):
+        """
+        根据销售订单的付款条款自动生成付款计划。
+        """
+        from django.utils import timezone
+        from decimal import Decimal
+        from datetime import timedelta
+        
+        # 付款条款到付款计划的映射
+        PAYMENT_TERMS_MAP = {
+            'FULL_PREPAY': [
+                {'type': 'PREPAY', 'name': '全款预付', 'percentage': Decimal('100'), 'days_offset': 0}
+            ],
+            'COD': [
+                {'type': 'ON_DELIVERY', 'name': '货到付款', 'percentage': Decimal('100'), 'days_offset': 0}
+            ],
+            'NET30': [
+                {'type': 'FINAL', 'name': '月结30天', 'percentage': Decimal('100'), 'days_offset': 30}
+            ],
+            'NET60': [
+                {'type': 'FINAL', 'name': '月结60天', 'percentage': Decimal('100'), 'days_offset': 60}
+            ],
+            'NET90': [
+                {'type': 'FINAL', 'name': '月结90天', 'percentage': Decimal('100'), 'days_offset': 90}
+            ],
+            'M_30_70': [
+                {'type': 'PREPAY', 'name': '30%预付款', 'percentage': Decimal('30'), 'days_offset': 0},
+                {'type': 'ON_DELIVERY', 'name': '70%发货款', 'percentage': Decimal('70'), 'days_offset': 0}
+            ],
+            'M_30_30_40': [
+                {'type': 'PREPAY', 'name': '30%预付款', 'percentage': Decimal('30'), 'days_offset': 0},
+                {'type': 'ON_DELIVERY', 'name': '30%发货款', 'percentage': Decimal('30'), 'days_offset': 0},
+                {'type': 'ON_ACCEPTANCE', 'name': '40%验收款', 'percentage': Decimal('40'), 'days_offset': 30}
+            ],
+            'M_30_30_30_10': [
+                {'type': 'PREPAY', 'name': '30%预付款', 'percentage': Decimal('30'), 'days_offset': 0},
+                {'type': 'ON_DELIVERY', 'name': '30%发货款', 'percentage': Decimal('30'), 'days_offset': 0},
+                {'type': 'ON_ACCEPTANCE', 'name': '30%验收款', 'percentage': Decimal('30'), 'days_offset': 30},
+                {'type': 'WARRANTY', 'name': '10%质保金', 'percentage': Decimal('10'), 'days_offset': 365}
+            ],
+            'M_30_60_10': [
+                {'type': 'PREPAY', 'name': '30%预付款', 'percentage': Decimal('30'), 'days_offset': 0},
+                {'type': 'ON_ACCEPTANCE', 'name': '60%验收款', 'percentage': Decimal('60'), 'days_offset': 30},
+                {'type': 'WARRANTY', 'name': '10%质保金', 'percentage': Decimal('10'), 'days_offset': 365}
+            ],
+            'M_50_40_10': [
+                {'type': 'PREPAY', 'name': '50%预付款', 'percentage': Decimal('50'), 'days_offset': 0},
+                {'type': 'ON_ACCEPTANCE', 'name': '40%验收款', 'percentage': Decimal('40'), 'days_offset': 30},
+                {'type': 'WARRANTY', 'name': '10%质保金', 'percentage': Decimal('10'), 'days_offset': 365}
+            ],
+            'M_40_50_10': [
+                {'type': 'PREPAY', 'name': '40%预付款', 'percentage': Decimal('40'), 'days_offset': 0},
+                {'type': 'ON_ACCEPTANCE', 'name': '50%验收款', 'percentage': Decimal('50'), 'days_offset': 30},
+                {'type': 'WARRANTY', 'name': '10%质保金', 'percentage': Decimal('10'), 'days_offset': 365}
+            ],
+            'M_20_70_10': [
+                {'type': 'PREPAY', 'name': '20%预付款', 'percentage': Decimal('20'), 'days_offset': 0},
+                {'type': 'ON_ACCEPTANCE', 'name': '70%验收款', 'percentage': Decimal('70'), 'days_offset': 30},
+                {'type': 'WARRANTY', 'name': '10%质保金', 'percentage': Decimal('10'), 'days_offset': 365}
+            ],
+        }
+        
+        # 删除旧的付款计划
+        cls.objects.filter(sales_order=sales_order).delete()
+        
+        # 获取付款条款
+        payment_terms = sales_order.payment_terms
+        milestones = PAYMENT_TERMS_MAP.get(payment_terms, [])
+        
+        # 如果是自定义或其他，不自动生成
+        if not milestones:
+            return []
+        
+        # 基准日期（订单日期或交货日期）
+        base_date = sales_order.order_date or timezone.now().date()
+        delivery_date = sales_order.delivery_date or base_date
+        
+        schedules = []
+        for i, milestone in enumerate(milestones, 1):
+            # 计算应收金额
+            amount = sales_order.total_with_tax * milestone['percentage'] / Decimal('100')
+            
+            # 计算到期日期
+            if milestone['type'] == 'PREPAY':
+                due_date = base_date + timedelta(days=milestone['days_offset'])
+            elif milestone['type'] == 'ON_DELIVERY':
+                due_date = delivery_date
+            elif milestone['type'] in ['ON_ACCEPTANCE', 'FINAL']:
+                due_date = delivery_date + timedelta(days=milestone['days_offset'])
+            elif milestone['type'] == 'WARRANTY':
+                due_date = delivery_date + timedelta(days=milestone['days_offset'])
+            else:
+                due_date = base_date + timedelta(days=milestone['days_offset'])
+            
+            schedule = cls.objects.create(
+                sales_order=sales_order,
+                project=sales_order.project,
+                milestone_type=milestone['type'],
+                milestone_name=milestone['name'],
+                milestone_order=i,
+                percentage=milestone['percentage'],
+                amount_due=amount,
+                due_date=due_date,
+                reminder_days_before=7 if milestone['type'] != 'WARRANTY' else 30
+            )
+            schedules.append(schedule)
+        
+        return schedules
+
+
 class Invoice(BaseModel):
     """
     Invoice records for tax management.

@@ -232,7 +232,8 @@ const menuTree = ref([
       { id: 'finance:ar', label: '应收账款' },
       { id: 'finance:ap', label: '应付账款' },
       { id: 'finance:invoices', label: '发票管理' },
-      { id: 'finance:project-costs', label: '项目成本核算' }
+      { id: 'finance:project-costs', label: '项目成本核算' },
+      { id: 'finance:payment-schedules', label: '付款计划' }
     ]
   },
   {

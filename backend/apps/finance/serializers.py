@@ -4,7 +4,7 @@ Serializers for finance app.
 from rest_framework import serializers
 from .models import (
     Currency, ExchangeRateHistory, Expense, Invoice, InvoiceItem,
-    AccountReceivable, AccountPayable, Payment,
+    AccountReceivable, AccountPayable, Payment, PaymentSchedule,
     SharedExpense, SharedExpenseAllocation
 )
 
@@ -209,4 +209,56 @@ class SharedExpenseSerializer(serializers.ModelSerializer):
     
     def get_total_allocated(self, obj):
         return sum(a.allocated_amount for a in obj.allocations.all())
+
+
+class PaymentScheduleSerializer(serializers.ModelSerializer):
+    """PaymentSchedule serializer for tracking payment milestones."""
+    
+    milestone_type_display = serializers.CharField(source='get_milestone_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    reminder_status_display = serializers.CharField(source='get_reminder_status_display', read_only=True)
+    
+    # 关联对象信息
+    sales_order_no = serializers.CharField(source='sales_order.order_no', read_only=True)
+    customer_name = serializers.CharField(source='sales_order.customer.name', read_only=True)
+    project_code = serializers.CharField(source='project.code', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    
+    # 计算属性
+    amount_remaining = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    payment_progress = serializers.FloatField(read_only=True)
+    is_overdue = serializers.BooleanField(read_only=True)
+    days_until_due = serializers.IntegerField(read_only=True)
+    
+    class Meta:
+        model = PaymentSchedule
+        fields = [
+            'id', 'schedule_no', 'sales_order', 'sales_order_no', 'customer_name',
+            'project', 'project_code', 'project_name',
+            'milestone_type', 'milestone_type_display', 'milestone_name', 'milestone_order',
+            'percentage', 'amount_due', 'amount_paid', 'amount_remaining', 'payment_progress',
+            'due_date', 'actual_paid_date', 'is_overdue', 'days_until_due',
+            'status', 'status_display',
+            'reminder_status', 'reminder_status_display', 'reminder_days_before', 'last_reminded_at',
+            'account_receivable', 'notes',
+            'is_deleted', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['schedule_no', 'created_at', 'updated_at']
+
+
+class PaymentScheduleSummarySerializer(serializers.Serializer):
+    """Summary serializer for payment schedule overview."""
+    
+    total_amount = serializers.DecimalField(max_digits=15, decimal_places=2)
+    total_paid = serializers.DecimalField(max_digits=15, decimal_places=2)
+    total_remaining = serializers.DecimalField(max_digits=15, decimal_places=2)
+    overall_progress = serializers.FloatField()
+    
+    pending_count = serializers.IntegerField()
+    partial_count = serializers.IntegerField()
+    paid_count = serializers.IntegerField()
+    overdue_count = serializers.IntegerField()
+    
+    upcoming_payments = PaymentScheduleSerializer(many=True)
+    overdue_payments = PaymentScheduleSerializer(many=True)
 

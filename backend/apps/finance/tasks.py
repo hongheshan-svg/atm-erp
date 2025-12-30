@@ -350,3 +350,133 @@ def generate_daily_finance_summary():
         )
     
     return "Daily finance summary generated"
+
+
+@shared_task
+def check_payment_schedule_reminders():
+    """
+    Check for payment schedules that need reminders.
+    Runs daily at 9 AM.
+    
+    Sends reminders for:
+    1. Overdue payments
+    2. Payments due within the reminder window (default 7 days)
+    """
+    from .models import PaymentSchedule
+    from apps.accounts.models import User
+    from apps.core.models import Notification
+    from apps.core.notification_service import NotificationService
+    
+    today = timezone.now().date()
+    
+    # Find schedules needing reminders
+    # 1. Overdue and not yet reminded today
+    # 2. Due within reminder window and not yet reminded
+    schedules_to_remind = []
+    
+    pending_schedules = PaymentSchedule.objects.filter(
+        status__in=['PENDING', 'PARTIAL'],
+        reminder_status='PENDING',
+        is_deleted=False
+    ).select_related(
+        'sales_order', 'sales_order__customer', 'project'
+    ).order_by('due_date')
+    
+    for schedule in pending_schedules:
+        remind_date = schedule.due_date - timedelta(days=schedule.reminder_days_before)
+        
+        # Check if it's time to remind (today >= remind_date)
+        if today >= remind_date:
+            schedules_to_remind.append(schedule)
+    
+    if not schedules_to_remind:
+        return "No payment schedule reminders needed"
+    
+    # Update overdue status
+    for schedule in schedules_to_remind:
+        if schedule.due_date < today and schedule.status != 'OVERDUE':
+            schedule.status = 'OVERDUE'
+            schedule.save()
+    
+    # Create in-app notifications for finance and sales staff
+    message_lines = ["以下付款计划需要跟进收款：\n"]
+    
+    overdue_schedules = [s for s in schedules_to_remind if s.is_overdue]
+    upcoming_schedules = [s for s in schedules_to_remind if not s.is_overdue]
+    
+    if overdue_schedules:
+        message_lines.append("\n【已逾期】")
+        for s in overdue_schedules[:5]:
+            remaining = s.amount_due - s.amount_paid
+            message_lines.append(
+                f"- {s.sales_order.order_no} | {s.milestone_name} | "
+                f"{s.sales_order.customer.name} | ¥{remaining:,.2f} | 逾期{abs(s.days_until_due)}天"
+            )
+        if len(overdue_schedules) > 5:
+            message_lines.append(f"  ... 还有 {len(overdue_schedules) - 5} 笔")
+    
+    if upcoming_schedules:
+        message_lines.append("\n【即将到期】")
+        for s in upcoming_schedules[:5]:
+            remaining = s.amount_due - s.amount_paid
+            message_lines.append(
+                f"- {s.sales_order.order_no} | {s.milestone_name} | "
+                f"{s.sales_order.customer.name} | ¥{remaining:,.2f} | {s.days_until_due}天后到期"
+            )
+        if len(upcoming_schedules) > 5:
+            message_lines.append(f"  ... 还有 {len(upcoming_schedules) - 5} 笔")
+    
+    total_remaining = sum(s.amount_due - s.amount_paid for s in schedules_to_remind)
+    message_lines.append(f"\n待收款总额: ¥{total_remaining:,.2f}")
+    
+    message = "\n".join(message_lines)
+    
+    # Get finance and sales staff
+    recipients = User.objects.filter(
+        is_active=True,
+        is_deleted=False
+    ).filter(
+        role__code__in=['FINANCE', 'SALES', 'ADMIN']
+    ).values_list('id', flat=True)
+    
+    # Create in-app notifications
+    for user_id in recipients:
+        Notification.objects.create(
+            user_id=user_id,
+            title='付款计划收款提醒',
+            content=message,
+            notification_type='WARNING',
+            link='/finance/payment-schedules'
+        )
+    
+    # Mark as reminded
+    for schedule in schedules_to_remind:
+        schedule.reminder_status = 'REMINDED'
+        schedule.last_reminded_at = timezone.now()
+        schedule.save()
+    
+    # Send to DingTalk/WeChat Work
+    try:
+        NotificationService.send_payment_reminder(schedules_to_remind)
+    except Exception:
+        pass
+    
+    return f"Sent payment schedule reminders for {len(schedules_to_remind)} items, total: ¥{total_remaining:,.2f}"
+
+
+@shared_task
+def reset_payment_schedule_reminders():
+    """
+    Reset reminder status for schedules that were reminded but still not paid.
+    Runs weekly to allow for repeated reminders.
+    """
+    from .models import PaymentSchedule
+    
+    # Reset reminded schedules that are still pending
+    updated = PaymentSchedule.objects.filter(
+        status__in=['PENDING', 'PARTIAL', 'OVERDUE'],
+        reminder_status='REMINDED',
+        is_deleted=False
+    ).update(reminder_status='PENDING')
+    
+    return f"Reset {updated} payment schedule reminders"

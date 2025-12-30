@@ -369,3 +369,59 @@ class NotificationService:
         
         if cls._is_wechat_enabled():
             WeChatWorkNotification.send_markdown(content)
+    
+    @classmethod
+    def send_payment_reminder(cls, payment_schedules):
+        """
+        Send payment collection reminder notification.
+        
+        Args:
+            payment_schedules: List of PaymentSchedule instances that need reminders
+        """
+        if not payment_schedules:
+            return
+        
+        # Group by urgency
+        overdue = [p for p in payment_schedules if p.is_overdue]
+        upcoming = [p for p in payment_schedules if not p.is_overdue]
+        
+        title = "💰 收款提醒通知"
+        lines = [f"### {title}\n"]
+        
+        if overdue:
+            lines.append("#### ⚠️ 已逾期款项\n")
+            for p in overdue[:5]:
+                lines.append(
+                    f"- **{p.sales_order.order_no}** - {p.milestone_name}\n"
+                    f"  - 客户: {p.sales_order.customer.name}\n"
+                    f"  - 应收: ¥{p.amount_due:,.2f}\n"
+                    f"  - 已逾期: {abs(p.days_until_due)} 天\n"
+                )
+        
+        if upcoming:
+            lines.append("\n#### 📅 即将到期款项\n")
+            for p in upcoming[:5]:
+                lines.append(
+                    f"- **{p.sales_order.order_no}** - {p.milestone_name}\n"
+                    f"  - 客户: {p.sales_order.customer.name}\n"
+                    f"  - 应收: ¥{p.amount_due:,.2f}\n"
+                    f"  - 到期日: {p.due_date.strftime('%Y-%m-%d')} ({p.days_until_due} 天后)\n"
+                )
+        
+        total_count = len(payment_schedules)
+        shown_count = min(len(overdue), 5) + min(len(upcoming), 5)
+        if total_count > shown_count:
+            lines.append(f"\n... 还有 {total_count - shown_count} 项待收款\n")
+        
+        total_amount = sum(p.amount_due - p.amount_paid for p in payment_schedules)
+        lines.append(f"\n**待收款总额: ¥{total_amount:,.2f}**\n")
+        lines.append("\n请及时跟进收款！")
+        
+        markdown_content = "".join(lines)
+        
+        # Send to all channels
+        if cls._is_dingtalk_enabled():
+            DingTalkNotification.send_markdown(title, markdown_content)
+        
+        if cls._is_wechat_enabled():
+            WeChatWorkNotification.send_markdown(markdown_content)
