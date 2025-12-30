@@ -541,8 +541,9 @@ class PaymentSchedule(BaseModel):
     )
     
     # 关联银行流水（匹配后设置）
+    # Note: Use string reference with app label since BankStatement is in same app
     bank_statements = models.ManyToManyField(
-        'bank_statement_models.BankStatement',
+        'finance.BankStatement',
         blank=True,
         related_name='payment_schedules',
         verbose_name='关联银行流水'
