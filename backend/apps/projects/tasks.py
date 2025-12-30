@@ -186,41 +186,18 @@ def check_project_task_reminders():
     # Send to DingTalk/WeChat Work
     try:
         title = "📋 项目任务进度提醒"
-        markdown_content = f"### {title}\n\n"
         
+        # 群发安全内容（不含具体项目和人员信息）
+        safe_content = f"### {title}\n\n"
         if overdue_items:
-            markdown_content += f"#### ⚠️ 已逾期 ({len(overdue_items)}个)\n"
-            for item in overdue_items[:5]:
-                markdown_content += (
-                    f"- **[{item['project_code']}]** {item['task_name']}\n"
-                    f"  - 负责人: {item['assignee_name']} | 逾期{item['days_overdue']}天 | 进度{item['progress']}%\n"
-                )
-            if len(overdue_items) > 5:
-                markdown_content += f"  ... 还有 {len(overdue_items) - 5} 个\n"
-        
+            safe_content += f"⚠️ **{len(overdue_items)}** 个任务已逾期\n"
         if upcoming_items:
-            markdown_content += f"\n#### 📅 即将到期 ({len(upcoming_items)}个)\n"
-            for item in upcoming_items[:5]:
-                markdown_content += (
-                    f"- **[{item['project_code']}]** {item['task_name']}\n"
-                    f"  - 负责人: {item['assignee_name']} | {item['days_until']}天后 | 进度{item['progress']}%\n"
-                )
-            if len(upcoming_items) > 5:
-                markdown_content += f"  ... 还有 {len(upcoming_items) - 5} 个\n"
-        
+            safe_content += f"📅 **{len(upcoming_items)}** 个任务即将到期\n"
         if behind_items:
-            markdown_content += f"\n#### 🔴 进度落后 ({len(behind_items)}个)\n"
-            for item in behind_items[:5]:
-                markdown_content += (
-                    f"- **[{item['project_code']}]** {item['task_name']}\n"
-                    f"  - 负责人: {item['assignee_name']} | 应{item['expected_progress']}% 实{item['actual_progress']}%\n"
-                )
-            if len(behind_items) > 5:
-                markdown_content += f"  ... 还有 {len(behind_items) - 5} 个\n"
+            safe_content += f"🔴 **{len(behind_items)}** 个任务进度落后\n"
+        safe_content += "\n请登录ERP系统查看详情并及时跟进！"
         
-        markdown_content += "\n请相关负责人及时跟进！"
-        
-        NotificationService.send_custom_notification(title, markdown_content)
+        NotificationService.send_custom_notification(title, safe_content, group_safe_content=safe_content)
     except Exception:
         pass
     
@@ -328,25 +305,16 @@ def check_project_deadline_reminders():
     # Send to DingTalk/WeChat Work
     try:
         title = "📋 项目截止日期提醒"
-        markdown_content = f"### {title}\n\n"
         
+        # 群发安全内容（不含具体项目信息）
+        safe_content = f"### {title}\n\n"
         if overdue_items:
-            markdown_content += f"#### ⚠️ 已逾期 ({len(overdue_items)}个)\n"
-            for item in overdue_items[:5]:
-                markdown_content += f"- **{item['code']}** {item['name']}\n  - 负责人: {item['manager']} | 逾期{item['days_overdue']}天\n"
-            if len(overdue_items) > 5:
-                markdown_content += f"  ... 还有 {len(overdue_items) - 5} 个\n"
-        
+            safe_content += f"⚠️ **{len(overdue_items)}** 个项目已逾期\n"
         if upcoming_items:
-            markdown_content += f"\n#### 📅 即将到期 ({len(upcoming_items)}个)\n"
-            for item in upcoming_items[:5]:
-                markdown_content += f"- **{item['code']}** {item['name']}\n  - 负责人: {item['manager']} | {item['days_until']}天后\n"
-            if len(upcoming_items) > 5:
-                markdown_content += f"  ... 还有 {len(upcoming_items) - 5} 个\n"
+            safe_content += f"📅 **{len(upcoming_items)}** 个项目即将到期\n"
+        safe_content += "\n请登录ERP系统查看详情并及时跟进！"
         
-        markdown_content += "\n请及时跟进项目进度！"
-        
-        NotificationService.send_custom_notification(title, markdown_content)
+        NotificationService.send_custom_notification(title, safe_content, group_safe_content=safe_content)
     except Exception:
         pass
     
@@ -485,43 +453,18 @@ def check_aftersales_reminders():
     # Send to DingTalk/WeChat Work
     try:
         title = "🔧 售后工单提醒"
-        markdown_content = f"### {title}\n\n"
         
+        # 群发安全内容（不含具体客户信息）
+        safe_content = f"### {title}\n\n"
         if overdue_items:
-            markdown_content += f"#### ⚠️ 已逾期 ({len(overdue_items)}个)\n"
-            for item in overdue_items[:5]:
-                markdown_content += (
-                    f"- **{item['order_no']}** {item['title'][:20]}\n"
-                    f"  - 客户: {item['customer']} | {item['priority']} | 逾期{item['days_overdue']}天\n"
-                    f"  - 负责人: {item['assignee']}\n"
-                )
-            if len(overdue_items) > 5:
-                markdown_content += f"  ... 还有 {len(overdue_items) - 5} 个\n"
-        
+            safe_content += f"⚠️ **{len(overdue_items)}** 个工单已逾期\n"
         if upcoming_items:
-            markdown_content += f"\n#### 📅 即将到期 ({len(upcoming_items)}个)\n"
-            for item in upcoming_items[:5]:
-                markdown_content += (
-                    f"- **{item['order_no']}** {item['title'][:20]}\n"
-                    f"  - 客户: {item['customer']} | {item['priority']} | {item['days_until']}天后\n"
-                    f"  - 负责人: {item['assignee']}\n"
-                )
-            if len(upcoming_items) > 5:
-                markdown_content += f"  ... 还有 {len(upcoming_items) - 5} 个\n"
-        
+            safe_content += f"📅 **{len(upcoming_items)}** 个工单即将到期\n"
         if unassigned_items:
-            markdown_content += f"\n#### 🔴 紧急待指派 ({len(unassigned_items)}个)\n"
-            for item in unassigned_items[:5]:
-                markdown_content += (
-                    f"- **{item['order_no']}** {item['title'][:20]}\n"
-                    f"  - 客户: {item['customer']} | {item['priority']}\n"
-                )
-            if len(unassigned_items) > 5:
-                markdown_content += f"  ... 还有 {len(unassigned_items) - 5} 个\n"
+            safe_content += f"🔴 **{len(unassigned_items)}** 个紧急工单待指派\n"
+        safe_content += "\n请登录ERP系统查看详情并及时处理！"
         
-        markdown_content += "\n请相关人员及时处理！"
-        
-        NotificationService.send_custom_notification(title, markdown_content)
+        NotificationService.send_custom_notification(title, safe_content, group_safe_content=safe_content)
     except Exception:
         pass
     

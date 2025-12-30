@@ -235,33 +235,19 @@ class NotificationService:
         if not low_stock_items:
             return
         
-        # Build message
         title = "📦 库存预警通知"
-        lines = [f"### {title}\n", "以下物料库存不足，请及时补货：\n"]
         
-        for item in low_stock_items[:10]:  # Limit to 10 items
-            lines.append(
-                f"- **{item['sku']}** {item['name']}\n"
-                f"  - 仓库: {item['warehouse']}\n"
-                f"  - 当前库存: {item['qty_on_hand']}\n"
-                f"  - 安全库存: {item['min_stock']}\n"
-            )
+        # 群发安全内容（不含具体物料信息）
+        safe_content = f"### {title}\n\n"
+        safe_content += f"⚠️ **{len(low_stock_items)}** 种物料库存低于安全库存\n\n"
+        safe_content += "请登录ERP系统查看详情并及时补货！"
         
-        if len(low_stock_items) > 10:
-            lines.append(f"\n... 还有 {len(low_stock_items) - 10} 项\n")
-        
-        markdown_content = "".join(lines)
-        text_content = f"{title}\n\n" + "\n".join([
-            f"- {item['sku']} {item['name']}: 当前{item['qty_on_hand']}, 安全{item['min_stock']}"
-            for item in low_stock_items[:10]
-        ])
-        
-        # Send to all channels
+        # Send to group channels (safe content)
         if cls._is_dingtalk_enabled():
-            DingTalkNotification.send_markdown(title, markdown_content)
+            DingTalkNotification.send_markdown(title, safe_content)
         
         if cls._is_wechat_enabled():
-            WeChatWorkNotification.send_markdown(markdown_content)
+            WeChatWorkNotification.send_markdown(safe_content)
     
     @classmethod
     def send_approval_notification(cls, task):
@@ -273,37 +259,16 @@ class NotificationService:
         """
         title = "📋 审批任务提醒"
         
-        markdown_content = f"""### {title}
-
-您有一个新的审批任务待处理：
-
-- **单据类型**: {task.instance.workflow.get_business_type_display()}
-- **单据编号**: {task.instance.business_no}
-- **提交人**: {task.instance.submitter.get_full_name() or task.instance.submitter.username}
-- **金额**: ¥{task.instance.amount or 0:,.2f}
-- **审批步骤**: {task.step.name}
-- **截止时间**: {task.deadline.strftime('%Y-%m-%d %H:%M') if task.deadline else '无'}
-
-请及时处理！
-"""
-        
-        text_content = (
-            f"{title}\n\n"
-            f"单据: {task.instance.business_no}\n"
-            f"类型: {task.instance.workflow.get_business_type_display()}\n"
-            f"金额: ¥{task.instance.amount or 0:,.2f}\n"
-            f"请及时处理！"
-        )
-        
-        # Get assignee phone for @mention
-        assignee_phone = task.assignee.phone if hasattr(task.assignee, 'phone') else None
-        at_mobiles = [assignee_phone] if assignee_phone else []
+        # 群发安全内容（不含具体金额和人员）
+        safe_content = f"### {title}\n\n"
+        safe_content += f"您有一个新的 **{task.instance.workflow.get_business_type_display()}** 审批任务待处理\n\n"
+        safe_content += "请登录ERP系统查看详情并及时处理！"
         
         if cls._is_dingtalk_enabled():
-            DingTalkNotification.send_markdown(title, markdown_content, at_mobiles=at_mobiles)
+            DingTalkNotification.send_markdown(title, safe_content)
         
         if cls._is_wechat_enabled():
-            WeChatWorkNotification.send_markdown(markdown_content)
+            WeChatWorkNotification.send_markdown(safe_content)
     
     @classmethod
     def send_workflow_result_notification(cls, instance, result):
@@ -328,55 +293,45 @@ class NotificationService:
         
         title = f"{result_emoji} 审批结果通知"
         
-        # Get last task comment if rejected
-        last_comment = ""
-        if result == 'REJECTED':
-            last_task = instance.tasks.filter(status='REJECTED').order_by('-action_time').first()
-            if last_task and last_task.comment:
-                last_comment = f"\n- **拒绝原因**: {last_task.comment}"
-        
-        markdown_content = f"""### {title}
-
-您提交的单据审批{result_text}：
-
-- **单据类型**: {instance.workflow.get_business_type_display()}
-- **单据编号**: {instance.business_no}
-- **金额**: ¥{instance.amount or 0:,.2f}
-- **审批结果**: {result_text}{last_comment}
-"""
-        
-        submitter_phone = instance.submitter.phone if hasattr(instance.submitter, 'phone') else None
-        at_mobiles = [submitter_phone] if submitter_phone else []
+        # 群发安全内容（不含具体金额）
+        safe_content = f"### {title}\n\n"
+        safe_content += f"您提交的 **{instance.workflow.get_business_type_display()}** 审批{result_text}\n\n"
+        safe_content += "请登录ERP系统查看详情。"
         
         if cls._is_dingtalk_enabled():
-            DingTalkNotification.send_markdown(title, markdown_content, at_mobiles=at_mobiles)
+            DingTalkNotification.send_markdown(title, safe_content)
         
         if cls._is_wechat_enabled():
-            WeChatWorkNotification.send_markdown(markdown_content)
+            WeChatWorkNotification.send_markdown(safe_content)
     
     @classmethod
-    def send_custom_notification(cls, title, content, at_mobiles=None, to_users=None):
+    def send_custom_notification(cls, title, content, at_mobiles=None, to_users=None, group_safe_content=None):
         """
         Send custom notification to all channels or specific users.
         
         Args:
             title: Notification title
-            content: Notification content (markdown supported)
+            content: Notification content (markdown supported) - used for personal messages
             at_mobiles: List of mobile numbers to @mention (for group notifications)
             to_users: List of User objects or user IDs to send personal messages to
                      If provided, sends personal messages instead of group broadcast
+            group_safe_content: Safe content for group broadcasts (no sensitive data)
+                               If not provided, falls back to content
         """
-        # If specific users are provided, send personal messages
+        # If specific users are provided, send personal messages with detailed content
         if to_users:
             cls.send_personal_notification(to_users, title, content)
             return
         
-        # Otherwise, send to group channels
+        # For group channels, use safe content if provided
+        broadcast_content = group_safe_content if group_safe_content else content
+        
+        # Send to group channels
         if cls._is_dingtalk_enabled():
-            DingTalkNotification.send_markdown(title, content, at_mobiles=at_mobiles)
+            DingTalkNotification.send_markdown(title, broadcast_content, at_mobiles=at_mobiles)
         
         if cls._is_wechat_enabled():
-            WeChatWorkNotification.send_markdown(content)
+            WeChatWorkNotification.send_markdown(broadcast_content)
     
     @classmethod
     def send_personal_notification(cls, users, title, content):
@@ -469,42 +424,18 @@ class NotificationService:
         upcoming = [p for p in payment_schedules if not p.is_overdue]
         
         title = "💰 收款提醒通知"
-        lines = [f"### {title}\n"]
         
+        # 群发安全内容（不含具体财务数据）
+        safe_content = f"### {title}\n\n"
         if overdue:
-            lines.append("#### ⚠️ 已逾期款项\n")
-            for p in overdue[:5]:
-                lines.append(
-                    f"- **{p.sales_order.order_no}** - {p.milestone_name}\n"
-                    f"  - 客户: {p.sales_order.customer.name}\n"
-                    f"  - 应收: ¥{p.amount_due:,.2f}\n"
-                    f"  - 已逾期: {abs(p.days_until_due)} 天\n"
-                )
-        
+            safe_content += f"⚠️ **{len(overdue)}** 笔收款已逾期\n"
         if upcoming:
-            lines.append("\n#### 📅 即将到期款项\n")
-            for p in upcoming[:5]:
-                lines.append(
-                    f"- **{p.sales_order.order_no}** - {p.milestone_name}\n"
-                    f"  - 客户: {p.sales_order.customer.name}\n"
-                    f"  - 应收: ¥{p.amount_due:,.2f}\n"
-                    f"  - 到期日: {p.due_date.strftime('%Y-%m-%d')} ({p.days_until_due} 天后)\n"
-                )
+            safe_content += f"📅 **{len(upcoming)}** 笔收款即将到期\n"
+        safe_content += "\n请登录ERP系统查看详情并及时跟进收款！"
         
-        total_count = len(payment_schedules)
-        shown_count = min(len(overdue), 5) + min(len(upcoming), 5)
-        if total_count > shown_count:
-            lines.append(f"\n... 还有 {total_count - shown_count} 项待收款\n")
-        
-        total_amount = sum(p.amount_due - p.amount_paid for p in payment_schedules)
-        lines.append(f"\n**待收款总额: ¥{total_amount:,.2f}**\n")
-        lines.append("\n请及时跟进收款！")
-        
-        markdown_content = "".join(lines)
-        
-        # Send to all channels
+        # Send to group channels (safe content only)
         if cls._is_dingtalk_enabled():
-            DingTalkNotification.send_markdown(title, markdown_content)
+            DingTalkNotification.send_markdown(title, safe_content)
         
         if cls._is_wechat_enabled():
-            WeChatWorkNotification.send_markdown(markdown_content)
+            WeChatWorkNotification.send_markdown(safe_content)

@@ -99,14 +99,13 @@ def check_overdue_receivables():
     # Send to DingTalk/WeChat Work
     try:
         title = "💰 应收账款逾期提醒"
-        markdown_content = f"### {title}\n\n"
-        markdown_content += f"共 **{len(overdue_items)}** 笔应收账款已逾期，总额 **¥{total_overdue:,.2f}**\n\n"
-        for item in overdue_items[:5]:
-            markdown_content += f"- {item['ar_no']} | {item['customer']} | ¥{item['amount']:,.2f} | 逾期{item['days_overdue']}天\n"
-        if len(overdue_items) > 5:
-            markdown_content += f"\n... 还有 {len(overdue_items) - 5} 笔\n"
         
-        NotificationService.send_custom_notification(title, markdown_content)
+        # 群发安全内容（不含具体财务数据）
+        safe_content = f"### {title}\n\n"
+        safe_content += f"您有 **{len(overdue_items)}** 笔应收账款已逾期，请登录ERP系统查看详情并及时跟进催收。\n\n"
+        safe_content += "👉 [点击查看详情](应收账款管理)"
+        
+        NotificationService.send_custom_notification(title, safe_content, group_safe_content=safe_content)
     except Exception:
         pass
     
@@ -203,15 +202,13 @@ def check_overdue_payables():
     # Send to DingTalk/WeChat Work
     try:
         title = "💸 应付账款逾期提醒"
-        markdown_content = f"### {title}\n\n"
-        markdown_content += f"共 **{len(overdue_items)}** 笔应付账款已逾期，总额 **¥{total_overdue:,.2f}**\n\n"
-        for item in overdue_items[:5]:
-            markdown_content += f"- {item['ap_no']} | {item['supplier']} | ¥{item['amount']:,.2f} | 逾期{item['days_overdue']}天\n"
-        if len(overdue_items) > 5:
-            markdown_content += f"\n... 还有 {len(overdue_items) - 5} 笔\n"
-        markdown_content += "\n请及时安排付款！"
         
-        NotificationService.send_custom_notification(title, markdown_content)
+        # 群发安全内容（不含具体财务数据）
+        safe_content = f"### {title}\n\n"
+        safe_content += f"您有 **{len(overdue_items)}** 笔应付账款已逾期，请登录ERP系统查看详情并及时安排付款。\n\n"
+        safe_content += "👉 [点击查看详情](应付账款管理)"
+        
+        NotificationService.send_custom_notification(title, safe_content, group_safe_content=safe_content)
     except Exception:
         pass
     
@@ -315,26 +312,17 @@ def check_upcoming_due_dates():
     
     # Send to DingTalk/WeChat Work
     try:
-        title = "📅 账款到期预警 (7天内)"
-        markdown_content = f"### {title}\n\n"
+        title = "📅 账款到期预警"
         
+        # 群发安全内容（不含具体财务数据）
+        safe_content = f"### {title}\n\n"
         if ar_items:
-            markdown_content += f"#### 应收账款 ({len(ar_items)}笔，共 ¥{ar_total:,.2f})\n"
-            for item in ar_items[:3]:
-                markdown_content += f"- {item['ar_no']} | {item['customer']} | ¥{item['amount']:,.2f} | {item['days']}天后\n"
-            if len(ar_items) > 3:
-                markdown_content += f"  ... 还有 {len(ar_items) - 3} 笔\n"
-        
+            safe_content += f"- 📥 **{len(ar_items)}** 笔应收账款即将到期\n"
         if ap_items:
-            markdown_content += f"\n#### 应付账款 ({len(ap_items)}笔，共 ¥{ap_total:,.2f})\n"
-            for item in ap_items[:3]:
-                markdown_content += f"- {item['ap_no']} | {item['supplier']} | ¥{item['amount']:,.2f} | {item['days']}天后\n"
-            if len(ap_items) > 3:
-                markdown_content += f"  ... 还有 {len(ap_items) - 3} 笔\n"
+            safe_content += f"- 📤 **{len(ap_items)}** 笔应付账款即将到期\n"
+        safe_content += "\n请登录ERP系统查看详情，提前做好资金准备！"
         
-        markdown_content += "\n请提前做好资金准备！"
-        
-        NotificationService.send_custom_notification(title, markdown_content)
+        NotificationService.send_custom_notification(title, safe_content, group_safe_content=safe_content)
     except Exception:
         pass
     
@@ -416,20 +404,20 @@ def generate_daily_finance_summary():
     # Send to DingTalk/WeChat Work
     try:
         title = f"📊 财务日报 - {today}"
-        markdown_content = f"""### {title}
+        
+        # 群发安全内容（只发笔数，不发金额）
+        safe_content = f"""### {title}
 
-#### 应收账款
-- 待收款: **¥{(ar_stats['total_pending'] or 0):,.2f}** ({ar_stats['count_pending'] or 0}笔)
-- 逾期款: **¥{(ar_stats['total_overdue'] or 0):,.2f}** ({ar_stats['count_overdue'] or 0}笔)
+#### 今日待办
+- 📥 待收款 **{ar_stats['count_pending'] or 0}** 笔
+- ⚠️ 应收逾期 **{ar_stats['count_overdue'] or 0}** 笔
+- 📤 待付款 **{ap_stats['count_pending'] or 0}** 笔
+- ⚠️ 应付逾期 **{ap_stats['count_overdue'] or 0}** 笔
+- 📝 费用待审批 **{expense_pending['count'] or 0}** 笔
 
-#### 应付账款
-- 待付款: **¥{(ap_stats['total_pending'] or 0):,.2f}** ({ap_stats['count_pending'] or 0}笔)
-- 逾期款: **¥{(ap_stats['total_overdue'] or 0):,.2f}** ({ap_stats['count_overdue'] or 0}笔)
-
-#### 费用报销
-- 待审批: **¥{(expense_pending['total'] or 0):,.2f}** ({expense_pending['count'] or 0}笔)
+请登录ERP系统查看详情。
 """
-        NotificationService.send_custom_notification(title, markdown_content)
+        NotificationService.send_custom_notification(title, safe_content, group_safe_content=safe_content)
     except Exception:
         pass
     
@@ -676,35 +664,17 @@ def check_purchase_payment_schedule_reminders():
     
     # Send to DingTalk/WeChat Work
     try:
-        # Build purchase payment reminder message
         title = "💸 采购付款提醒"
-        lines = [f"### {title}\n"]
         
+        # 群发安全内容（不含具体财务数据）
+        safe_content = f"### {title}\n\n"
         if overdue_schedules:
-            lines.append("#### ⚠️ 已逾期付款\n")
-            for p in overdue_schedules[:5]:
-                lines.append(
-                    f"- **{p.purchase_order.order_no}** - {p.milestone_name}\n"
-                    f"  - 供应商: {p.purchase_order.supplier.name}\n"
-                    f"  - 应付: ¥{p.amount_due:,.2f}\n"
-                    f"  - 已逾期: {abs(p.days_until_due)} 天\n"
-                )
-        
+            safe_content += f"⚠️ **{len(overdue_schedules)}** 笔付款已逾期\n"
         if upcoming_schedules:
-            lines.append("\n#### 📅 即将到期付款\n")
-            for p in upcoming_schedules[:5]:
-                lines.append(
-                    f"- **{p.purchase_order.order_no}** - {p.milestone_name}\n"
-                    f"  - 供应商: {p.purchase_order.supplier.name}\n"
-                    f"  - 应付: ¥{p.amount_due:,.2f}\n"
-                    f"  - 到期日: {p.due_date.strftime('%Y-%m-%d')} ({p.days_until_due} 天后)\n"
-                )
+            safe_content += f"📅 **{len(upcoming_schedules)}** 笔付款即将到期\n"
+        safe_content += "\n请登录ERP系统查看详情并及时安排付款！"
         
-        lines.append(f"\n**待付款总额: ¥{total_remaining:,.2f}**\n")
-        lines.append("\n请及时安排付款！")
-        
-        markdown_content = "".join(lines)
-        NotificationService.send_custom_notification(title, markdown_content)
+        NotificationService.send_custom_notification(title, safe_content, group_safe_content=safe_content)
     except Exception:
         pass
     

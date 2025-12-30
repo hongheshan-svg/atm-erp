@@ -101,25 +101,16 @@ def check_delivery_reminders():
     # Send to DingTalk/WeChat Work
     try:
         title = "📦 采购订单到货提醒"
-        markdown_content = f"### {title}\n\n"
         
+        # 群发安全内容（不含具体供应商和金额）
+        safe_content = f"### {title}\n\n"
         if overdue_items:
-            markdown_content += f"#### ⚠️ 已逾期 ({len(overdue_items)}笔)\n"
-            for item in overdue_items[:5]:
-                markdown_content += f"- **{item['order_no']}** | {item['supplier']} | ¥{item['amount']:,.2f} | 逾期{item['days_overdue']}天\n"
-            if len(overdue_items) > 5:
-                markdown_content += f"  ... 还有 {len(overdue_items) - 5} 笔\n"
-        
+            safe_content += f"⚠️ **{len(overdue_items)}** 笔采购订单已逾期到货\n"
         if upcoming_items:
-            markdown_content += f"\n#### 📅 即将到货 ({len(upcoming_items)}笔)\n"
-            for item in upcoming_items[:5]:
-                markdown_content += f"- **{item['order_no']}** | {item['supplier']} | ¥{item['amount']:,.2f} | {item['days_until']}天后\n"
-            if len(upcoming_items) > 5:
-                markdown_content += f"  ... 还有 {len(upcoming_items) - 5} 笔\n"
+            safe_content += f"📅 **{len(upcoming_items)}** 笔采购订单即将到货\n"
+        safe_content += "\n请登录ERP系统查看详情并提前准备收货！"
         
-        markdown_content += "\n请提前准备收货！"
-        
-        NotificationService.send_custom_notification(title, markdown_content)
+        NotificationService.send_custom_notification(title, safe_content, group_safe_content=safe_content)
     except Exception:
         pass
     
