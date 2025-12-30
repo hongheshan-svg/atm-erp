@@ -5,6 +5,7 @@ from django.db import models
 from django.utils import timezone
 from apps.core.models import BaseModel
 from apps.masterdata.models import Customer, Supplier
+from apps.projects.models import Project
 
 
 class BankStatement(BaseModel):
@@ -101,6 +102,16 @@ class BankStatement(BaseModel):
         blank=True,
         related_name='bank_statements',
         verbose_name='关联付款记录'
+    )
+    
+    # 项目关联 - 用于成本核算
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='bank_statements',
+        verbose_name='关联项目'
     )
     
     match_confidence = models.DecimalField(
@@ -218,6 +229,38 @@ class BankStatement(BaseModel):
                 return customer, 70.0
         
         return None, 0
+    
+    def auto_match_project(self):
+        """
+        Automatically match project based on customer/supplier.
+        Returns: Project or None
+        """
+        # If customer is matched, find projects for that customer
+        if self.customer:
+            # Find active projects for this customer
+            project = Project.objects.filter(
+                customer=self.customer,
+                is_deleted=False,
+                status__in=['ACTIVE', 'PLANNING']
+            ).order_by('-created_at').first()
+            
+            if project:
+                return project
+        
+        # If supplier is matched, try to find project via purchase orders
+        if self.supplier:
+            from apps.purchase.models import PurchaseOrder
+            
+            # Find purchase orders for this supplier
+            po = PurchaseOrder.objects.filter(
+                supplier=self.supplier,
+                is_deleted=False
+            ).select_related('project').order_by('-created_at').first()
+            
+            if po and po.project:
+                return po.project
+        
+        return None
 
 
 class BankStatementImportLog(BaseModel):

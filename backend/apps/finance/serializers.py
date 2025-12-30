@@ -140,6 +140,8 @@ class InvoiceSerializer(serializers.ModelSerializer):
     reference_type_display = serializers.CharField(source='get_reference_type_display', read_only=True)
     invoice_category_display = serializers.CharField(source='get_invoice_category_display', read_only=True)
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
+    project_code = serializers.CharField(source='project.code', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True)
     items = InvoiceItemSerializer(many=True, read_only=True)
     item_count = serializers.SerializerMethodField()
     attachment_count = serializers.SerializerMethodField()
@@ -154,6 +156,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'amount_before_tax', 'tax_amount', 'total_amount',
             'invoice_source', 'invoice_category', 'invoice_category_display',
             'reference_type', 'reference_type_display', 'reference_id',
+            'project', 'project_code', 'project_name',
             'status', 'status_display', 'notes', 'created_by_name',
             'items', 'item_count', 'attachment_count',
             'is_deleted', 'created_at', 'updated_at'

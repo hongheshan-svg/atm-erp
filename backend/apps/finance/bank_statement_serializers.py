@@ -15,6 +15,8 @@ class BankStatementSerializer(serializers.ModelSerializer):
     related_ap_no = serializers.CharField(source='related_ap.ap_no', read_only=True)
     related_ar_no = serializers.CharField(source='related_ar.ar_no', read_only=True)
     related_payment_no = serializers.CharField(source='related_payment.payment_no', read_only=True)
+    project_code = serializers.CharField(source='project.code', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True)
     amount = serializers.SerializerMethodField()
     
     class Meta:
@@ -31,6 +33,7 @@ class BankStatementSerializer(serializers.ModelSerializer):
             'supplier', 'supplier_name', 'customer', 'customer_name',
             'related_ap', 'related_ap_no', 'related_ar', 'related_ar_no',
             'related_payment', 'related_payment_no',
+            'project', 'project_code', 'project_name',
             'match_confidence', 'match_notes',
             'is_deleted', 'created_at', 'updated_at'
         ]
@@ -62,5 +65,6 @@ class BankStatementMatchSerializer(serializers.Serializer):
     customer_id = serializers.IntegerField(required=False, allow_null=True)
     ap_id = serializers.IntegerField(required=False, allow_null=True)
     ar_id = serializers.IntegerField(required=False, allow_null=True)
+    project_id = serializers.IntegerField(required=False, allow_null=True)
     notes = serializers.CharField(required=False, allow_blank=True)
 

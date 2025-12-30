@@ -286,6 +286,14 @@ class AccountPayable(BaseModel):
         related_name='payables',
         verbose_name='采购订单'
     )
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='payables',
+        verbose_name='项目'
+    )
     invoice_no = models.CharField(max_length=50, null=True, blank=True, verbose_name='发票号')
     invoice_date = models.DateField(verbose_name='发票日期')
     
@@ -495,6 +503,16 @@ class Invoice(BaseModel):
         verbose_name='关联单据类型'
     )
     reference_id = models.IntegerField(null=True, blank=True, verbose_name='关联单据ID')
+    
+    # 项目关联 - 用于成本核算
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='invoices',
+        verbose_name='关联项目'
+    )
     
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='REGISTERED', verbose_name='状态')
     notes = models.TextField(blank=True, verbose_name='备注')

@@ -825,6 +825,37 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         })
     
     @action(detail=False, methods=['post'])
+    def set_project(self, request):
+        """
+        批量设置发票的关联项目。
+        用于将发票关联到项目进行成本核算。
+        """
+        invoice_ids = request.data.get('invoice_ids', [])
+        project_id = request.data.get('project_id')
+        
+        if not invoice_ids:
+            return Response({'error': '请选择要关联的发票'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not project_id:
+            return Response({'error': '请选择项目'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        from apps.projects.models import Project
+        
+        try:
+            project = Project.objects.get(id=project_id, is_deleted=False)
+        except Project.DoesNotExist:
+            return Response({'error': '项目不存在'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        updated_count = Invoice.objects.filter(id__in=invoice_ids).update(project=project)
+        
+        return Response({
+            'success': True,
+            'updated_count': updated_count,
+            'project_code': project.code,
+            'project_name': project.name
+        })
+    
+    @action(detail=False, methods=['post'])
     def import_pdf(self, request):
         """
         批量导入发票PDF文件。

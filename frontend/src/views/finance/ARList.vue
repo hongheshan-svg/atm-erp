@@ -99,6 +99,12 @@
                 <span v-else class="text-muted">未匹配</span>
               </template>
             </el-table-column>
+            <el-table-column label="关联项目" width="120" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span v-if="row.project_code" class="text-primary">{{ row.project_code }}</span>
+                <span v-else class="text-muted">-</span>
+              </template>
+            </el-table-column>
             <el-table-column label="置信度" width="70" align="center">
               <template #default="{ row }">
                 <el-tag v-if="row.match_confidence >= 70" type="success" size="small">{{ row.match_confidence }}%</el-tag>

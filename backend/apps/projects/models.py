@@ -131,6 +131,70 @@ class Project(BaseModel):
             status='APPROVED'
         ).aggregate(total=Sum('amount'))
         return result['total'] or 0
+    
+    def get_total_receivables(self):
+        """Get total receivables amount for this project."""
+        from apps.finance.models import AccountReceivable
+        from django.db.models import Sum
+        
+        result = AccountReceivable.objects.filter(
+            project=self,
+            is_deleted=False
+        ).aggregate(total=Sum('amount_due'))
+        return result['total'] or 0
+    
+    def get_total_payables(self):
+        """Get total payables amount for this project."""
+        from apps.finance.models import AccountPayable
+        from django.db.models import Sum
+        
+        result = AccountPayable.objects.filter(
+            project=self,
+            is_deleted=False
+        ).aggregate(total=Sum('amount_due'))
+        return result['total'] or 0
+    
+    def get_invoice_summary(self):
+        """Get invoice summary for this project (input vs output)."""
+        from apps.finance.models import Invoice
+        from django.db.models import Sum, Count, Q
+        
+        result = Invoice.objects.filter(
+            project=self,
+            is_deleted=False
+        ).aggregate(
+            input_count=Count('id', filter=Q(invoice_type='INPUT')),
+            input_amount=Sum('total_amount', filter=Q(invoice_type='INPUT')),
+            output_count=Count('id', filter=Q(invoice_type='OUTPUT')),
+            output_amount=Sum('total_amount', filter=Q(invoice_type='OUTPUT')),
+        )
+        return {
+            'input_count': result['input_count'] or 0,
+            'input_amount': result['input_amount'] or 0,
+            'output_count': result['output_count'] or 0,
+            'output_amount': result['output_amount'] or 0,
+        }
+    
+    def get_bank_statement_summary(self):
+        """Get bank statement summary for this project."""
+        from apps.finance.bank_statement_models import BankStatement
+        from django.db.models import Sum, Count, Q
+        
+        result = BankStatement.objects.filter(
+            project=self,
+            is_deleted=False
+        ).aggregate(
+            income_count=Count('id', filter=Q(transaction_type='CREDIT')),
+            income_amount=Sum('credit_amount', filter=Q(transaction_type='CREDIT')),
+            expense_count=Count('id', filter=Q(transaction_type='DEBIT')),
+            expense_amount=Sum('debit_amount', filter=Q(transaction_type='DEBIT')),
+        )
+        return {
+            'income_count': result['income_count'] or 0,
+            'income_amount': result['income_amount'] or 0,
+            'expense_count': result['expense_count'] or 0,
+            'expense_amount': result['expense_amount'] or 0,
+        }
 
 
 class ProjectMember(BaseModel):

@@ -122,6 +122,12 @@
                 <el-tag :type="getInvoiceStatusType(row.status)" size="small">{{ getInvoiceStatusLabel(row.status) }}</el-tag>
               </template>
             </el-table-column>
+            <el-table-column label="关联项目" width="110" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span v-if="row.project_code" class="text-primary">{{ row.project_code }}</span>
+                <span v-else class="text-muted">-</span>
+              </template>
+            </el-table-column>
             <el-table-column prop="item_count" label="明细" width="60" align="center">
               <template #default="{ row }">
                 <el-tag v-if="row.item_count > 0" size="small" type="info">{{ row.item_count }}</el-tag>

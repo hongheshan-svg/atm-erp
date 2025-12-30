@@ -251,7 +251,7 @@ class BankStatementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                         )
                         
                         if match_confidence >= 70:
-                            matched_count += 1
+                                    matched_count += 1
                         
                         statement.save()
                         records.append(statement)
@@ -440,6 +440,17 @@ class BankStatementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                 statement.supplier = None
                 statement.related_ap = None
             
+            # Set project if provided
+            project_id = data.get('project_id')
+            if project_id:
+                from apps.projects.models import Project
+                statement.project = Project.objects.get(id=project_id)
+            elif not statement.project:
+                # Try auto-matching project
+                project = statement.auto_match_project()
+                if project:
+                    statement.project = project
+            
             statement.status = 'MATCHED'
             statement.match_confidence = Decimal('100')
             statement.save()
@@ -459,6 +470,7 @@ class BankStatementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
     def auto_match_all(self, request):
         """
         Auto-match all pending bank statements.
+        Also attempts to match projects based on customer/supplier.
         """
         batch = request.data.get('import_batch')
         queryset = self.get_queryset().filter(status='PENDING')
@@ -467,9 +479,12 @@ class BankStatementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
             queryset = queryset.filter(import_batch=batch)
         
         matched_count = 0
+        project_matched_count = 0
         
         with transaction.atomic():
             for statement in queryset:
+                matched = False
+                
                 if statement.transaction_type == 'DEBIT':
                     supplier, confidence = statement.auto_match_supplier()
                     if supplier and confidence >= 70:
@@ -477,8 +492,7 @@ class BankStatementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                         statement.match_confidence = Decimal(str(confidence))
                         statement.match_type = 'AP'
                         statement.status = 'MATCHED'
-                        statement.save()
-                        matched_count += 1
+                        matched = True
                 else:
                     customer, confidence = statement.auto_match_customer()
                     if customer and confidence >= 70:
@@ -486,12 +500,22 @@ class BankStatementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                         statement.match_confidence = Decimal(str(confidence))
                         statement.match_type = 'AR'
                         statement.status = 'MATCHED'
-                        statement.save()
-                        matched_count += 1
+                        matched = True
+                
+                # Try to match project based on customer/supplier
+                if matched:
+                    project = statement.auto_match_project()
+                    if project:
+                        statement.project = project
+                        project_matched_count += 1
+                    
+                    statement.save()
+                    matched_count += 1
         
         return Response({
             'matched_count': matched_count,
-            'message': f'成功自动匹配 {matched_count} 条记录'
+            'project_matched_count': project_matched_count,
+            'message': f'成功匹配 {matched_count} 条记录，其中 {project_matched_count} 条关联到项目'
         })
     
     @action(detail=False, methods=['get'])
@@ -565,6 +589,37 @@ class BankStatementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         return Response({
             'success': True,
             'deleted_count': deleted_count
+        })
+    
+    @action(detail=False, methods=['post'])
+    def set_project(self, request):
+        """
+        批量设置银行流水的关联项目。
+        用于将银行流水关联到项目进行成本核算。
+        """
+        statement_ids = request.data.get('statement_ids', [])
+        project_id = request.data.get('project_id')
+        
+        if not statement_ids:
+            return Response({'error': '请选择要关联的流水记录'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not project_id:
+            return Response({'error': '请选择项目'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        from apps.projects.models import Project
+        
+        try:
+            project = Project.objects.get(id=project_id, is_deleted=False)
+        except Project.DoesNotExist:
+            return Response({'error': '项目不存在'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        updated_count = BankStatement.objects.filter(id__in=statement_ids).update(project=project)
+        
+        return Response({
+            'success': True,
+            'updated_count': updated_count,
+            'project_code': project.code,
+            'project_name': project.name
         })
 
 
