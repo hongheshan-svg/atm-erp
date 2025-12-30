@@ -49,7 +49,15 @@
         </el-form-item>
       </el-form>
 
-      <el-table :data="customers" v-loading="loading" stripe border>
+      <div class="table-toolbar" v-if="selectedItems.length > 0">
+        <span>已选择 {{ selectedItems.length }} 项</span>
+        <el-button type="danger" size="small" @click="handleBatchDelete">
+          批量删除
+        </el-button>
+      </div>
+      
+      <el-table :data="customers" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="code" label="编码" width="120" />
         <el-table-column prop="name" label="客户名称" min-width="180" show-overflow-tooltip />
         <el-table-column prop="contact_person" label="联系人" width="100" />
@@ -234,6 +242,7 @@ import AttachmentUpload from '@/components/AttachmentUpload.vue'
 const loading = ref(false)
 const submitting = ref(false)
 const customers = ref([])
+const selectedItems = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增客户')
 const isEdit = ref(false)
@@ -339,6 +348,31 @@ const handleDelete = async (row) => {
     loadCustomers()
   } catch (error) {
     if (error !== 'cancel') ElMessage.error('删除客户失败')
+  }
+}
+
+const handleSelectionChange = (selection) => {
+  selectedItems.value = selection
+}
+
+const handleBatchDelete = async () => {
+  if (selectedItems.value.length === 0) {
+    ElMessage.warning('请选择要删除的客户')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedItems.value.length} 个客户吗？`,
+      '批量删除',
+      { type: 'warning' }
+    )
+    const ids = selectedItems.value.map(item => item.id)
+    await request.post('/masterdata/customers/bulk_delete/', { ids })
+    ElMessage.success(`成功删除 ${selectedItems.value.length} 个客户`)
+    selectedItems.value = []
+    loadCustomers()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error('批量删除失败')
   }
 }
 
@@ -453,4 +487,13 @@ onMounted(() => {
 .text-success { color: #67c23a; font-weight: bold; }
 .text-primary { color: #409eff; font-weight: bold; }
 .text-danger { color: #f56c6c; font-weight: bold; }
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  background: #f0f9eb;
+  border-radius: 4px;
+}
 </style>

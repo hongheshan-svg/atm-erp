@@ -483,6 +483,19 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         response['Content-Disposition'] = 'attachment; filename=item_import_template.xlsx'
         return response
     
+    @action(detail=False, methods=['post'])
+    def bulk_delete(self, request):
+        """批量删除物料"""
+        ids = request.data.get('ids', [])
+        if not ids:
+            return Response({'error': '请选择要删除的物料'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        deleted_count = Item.objects.filter(id__in=ids).delete()[0]
+        return Response({
+            'message': f'成功删除 {deleted_count} 条物料',
+            'deleted_count': deleted_count
+        })
+    
     @action(detail=True, methods=['get'])
     def generate_barcode(self, request, pk=None):
         """Generate barcode for item"""
@@ -733,6 +746,19 @@ class CustomerViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
         
         except Exception as e:
             return Response({'error': f'导入失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=['post'])
+    def bulk_delete(self, request):
+        """批量删除客户"""
+        ids = request.data.get('ids', [])
+        if not ids:
+            return Response({'error': '请选择要删除的客户'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        deleted_count = Customer.objects.filter(id__in=ids).delete()[0]
+        return Response({
+            'message': f'成功删除 {deleted_count} 个客户',
+            'deleted_count': deleted_count
+        })
 
 
 class SupplierViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
@@ -943,6 +969,19 @@ class SupplierViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
         
         except Exception as e:
             return Response({'error': f'导入失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=['post'])
+    def bulk_delete(self, request):
+        """批量删除供应商"""
+        ids = request.data.get('ids', [])
+        if not ids:
+            return Response({'error': '请选择要删除的供应商'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        deleted_count = Supplier.objects.filter(id__in=ids).delete()[0]
+        return Response({
+            'message': f'成功删除 {deleted_count} 个供应商',
+            'deleted_count': deleted_count
+        })
 
 
 class WarehouseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):

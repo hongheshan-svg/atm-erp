@@ -629,10 +629,9 @@ const handleBatchDelete = async () => {
       { type: 'warning' }
     )
     
-    // 逐个删除选中的物料
-    for (const row of selectedRows.value) {
-      await request.delete(`/projects/bom/${row.id}/`)
-    }
+    // 使用批量删除接口
+    const ids = selectedRows.value.map(row => row.id)
+    await request.post('/projects/bom/bulk_delete/', { ids })
     
     ElMessage.success(`成功删除 ${selectedRows.value.length} 项物料`)
     clearSelection()

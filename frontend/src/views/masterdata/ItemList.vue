@@ -41,7 +41,15 @@
         </el-form-item>
       </el-form>
 
-      <el-table :data="items" v-loading="loading" stripe border>
+      <div class="table-toolbar" v-if="selectedItems.length > 0">
+        <span>已选择 {{ selectedItems.length }} 项</span>
+        <el-button type="danger" size="small" @click="handleBatchDelete">
+          批量删除
+        </el-button>
+      </div>
+      
+      <el-table :data="items" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" fixed />
         <el-table-column type="index" label="序号" width="60" fixed />
         <el-table-column prop="sku" label="物料编码" width="100" fixed />
         <el-table-column prop="name" label="物料名称" width="150" show-overflow-tooltip />
@@ -384,6 +392,7 @@ const tempFiles = ref([])
 
 const loading = ref(false)
 const items = ref([])
+const selectedItems = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增物料')
 const isEdit = ref(false)
@@ -561,6 +570,33 @@ const handleDelete = async (row) => {
   }
 }
 
+const handleSelectionChange = (selection) => {
+  selectedItems.value = selection
+}
+
+const handleBatchDelete = async () => {
+  if (selectedItems.value.length === 0) {
+    ElMessage.warning('请选择要删除的物料')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedItems.value.length} 条物料吗？`,
+      '批量删除',
+      { type: 'warning' }
+    )
+    const ids = selectedItems.value.map(item => item.id)
+    await request.post('/masterdata/items/bulk_delete/', { ids })
+    ElMessage.success(`成功删除 ${selectedItems.value.length} 条物料`)
+    selectedItems.value = []
+    loadItems()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('批量删除失败')
+    }
+  }
+}
+
 // 导出Excel
 const handleExport = async () => {
   try {
@@ -712,5 +748,15 @@ onMounted(() => {
   color: #909399;
   font-size: 12px;
   margin-top: 5px;
+}
+
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  background: #f0f9eb;
+  border-radius: 4px;
 }
 </style>

@@ -1044,6 +1044,19 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             'items': shortage_list
         })
     
+    @action(detail=False, methods=['post'])
+    def bulk_delete(self, request):
+        """批量删除BOM物料"""
+        ids = request.data.get('ids', [])
+        if not ids:
+            return Response({'error': '请选择要删除的物料'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        deleted_count = ProjectBOM.objects.filter(id__in=ids).delete()[0]
+        return Response({
+            'message': f'成功删除 {deleted_count} 条物料',
+            'deleted_count': deleted_count
+        })
+    
     @action(detail=False, methods=['get', 'post'])
     def copy_from_project(self, request):
         """Copy BOM from another project."""
