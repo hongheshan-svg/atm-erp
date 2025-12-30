@@ -133,7 +133,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
         from apps.sales.models import SalesOrder
         from apps.purchase.models import PurchaseOrder
         from apps.projects.models import Project
-        from apps.inventory.models import StockLevel
+        from apps.inventory.models import Stock
         from apps.masterdata.models import Item
         
         # 本月收入（销售订单）
@@ -215,7 +215,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
             is_deleted=False
         ).aggregate(
             count=Count('id'),
-            budget=Sum('budget')
+            budget_total=Sum('budget_total')
         )
         
         # 销售订单统计
@@ -241,17 +241,14 @@ class AnalyticsViewSet(viewsets.ViewSet):
         ).count()
         
         # 库存数据
-        inventory_value = StockLevel.objects.filter(
-            is_deleted=False
-        ).aggregate(
-            value=Sum(F('qty') * F('item__standard_cost'))
+        inventory_value = Stock.objects.aggregate(
+            value=Sum(F('qty_on_hand') * F('item__standard_cost'))
         )['value'] or 0
         
         total_items = Item.objects.filter(is_deleted=False, is_active=True).count()
         
-        low_stock_items = StockLevel.objects.filter(
-            qty__lt=F('item__safety_stock'),
-            is_deleted=False
+        low_stock_items = Stock.objects.filter(
+            qty_on_hand__lt=F('item__safety_stock')
         ).count()
         
         # 逾期应收列表
@@ -394,7 +391,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
             },
             'projects': {
                 'active_count': active_projects['count'] or 0,
-                'total_budget': float(active_projects['budget'] or 0)
+                'total_budget': float(active_projects['budget_total'] or 0)
             },
             'sales': {
                 'pending_orders': pending_sales,
