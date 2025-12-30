@@ -30,6 +30,34 @@
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :md="6">
+        <el-card shadow="hover" class="kpi-card total-ar">
+          <div class="kpi-header">
+            <el-icon class="kpi-icon"><Money /></el-icon>
+          </div>
+          <div class="kpi-value">{{ formatCurrency(kpis.financial.total_receivables) }}</div>
+          <div class="kpi-label">总应收账款</div>
+          <div class="kpi-footer">
+            <span>已收 {{ formatCurrency(kpis.financial.total_received) }}</span>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :md="6">
+        <el-card shadow="hover" class="kpi-card total-ap">
+          <div class="kpi-header">
+            <el-icon class="kpi-icon"><Tickets /></el-icon>
+          </div>
+          <div class="kpi-value">{{ formatCurrency(kpis.financial.total_payables) }}</div>
+          <div class="kpi-label">总应付账款</div>
+          <div class="kpi-footer">
+            <span>已付 {{ formatCurrency(kpis.financial.total_paid) }}</span>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+    
+    <!-- 第二行：待收待付 -->
+    <el-row :gutter="16" style="margin-top: 16px;">
+      <el-col :xs="24" :sm="12" :md="6">
         <el-card shadow="hover" class="kpi-card receivable">
           <div class="kpi-header">
             <el-icon class="kpi-icon"><Wallet /></el-icon>
@@ -38,7 +66,7 @@
             </span>
           </div>
           <div class="kpi-value">{{ formatCurrency(kpis.financial.receivables) }}</div>
-          <div class="kpi-label">应收账款</div>
+          <div class="kpi-label">待收款</div>
           <div class="kpi-footer">
             <span>回款率 {{ kpis.financial.collection_rate }}%</span>
           </div>
@@ -53,16 +81,12 @@
             </span>
           </div>
           <div class="kpi-value">{{ formatCurrency(kpis.financial.payables) }}</div>
-          <div class="kpi-label">应付账款</div>
+          <div class="kpi-label">待付款</div>
           <div class="kpi-footer">
             <span>付款率 {{ kpis.financial.payment_rate }}%</span>
           </div>
         </el-card>
       </el-col>
-    </el-row>
-
-    <!-- 第二行：项目和订单 -->
-    <el-row :gutter="16" style="margin-top: 16px;">
       <el-col :xs="24" :sm="12" :md="6">
         <el-card shadow="hover" class="kpi-card project">
           <div class="kpi-header">
@@ -262,7 +286,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { TrendCharts, Coin, Wallet, CreditCard, Folder, Sell, ShoppingCart, Box } from '@element-plus/icons-vue'
+import { TrendCharts, Coin, Wallet, CreditCard, Folder, Sell, ShoppingCart, Box, Money, Tickets } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import request from '@/utils/request'
 
@@ -272,6 +296,10 @@ const kpis = ref({
     revenue: { total: 0, orders: 0 },
     expenses: 0,
     purchase_orders: 0,
+    total_receivables: 0,
+    total_received: 0,
+    total_payables: 0,
+    total_paid: 0,
     receivables: 0,
     payables: 0,
     overdue_receivables: 0,
@@ -343,6 +371,10 @@ const loadDashboardData = async () => {
         revenue: data.financial?.revenue || { total: 0, orders: 0 },
         expenses: data.financial?.expenses || 0,
         purchase_orders: data.financial?.purchase_orders || 0,
+        total_receivables: data.financial?.total_receivables || 0,
+        total_received: data.financial?.total_received || 0,
+        total_payables: data.financial?.total_payables || 0,
+        total_paid: data.financial?.total_paid || 0,
         receivables: data.financial?.receivables || 0,
         payables: data.financial?.payables || 0,
         overdue_receivables: data.financial?.overdue_receivables || 0,
@@ -535,9 +567,11 @@ onUnmounted(() => {
 
 .kpi-card.income { border-top: 3px solid #67c23a; }
 .kpi-card.expense { border-top: 3px solid #f56c6c; }
+.kpi-card.total-ar { border-top: 3px solid #2ecc71; }
+.kpi-card.total-ap { border-top: 3px solid #9b59b6; }
 .kpi-card.receivable { border-top: 3px solid #409eff; }
 .kpi-card.payable { border-top: 3px solid #e6a23c; }
-.kpi-card.project { border-top: 3px solid #9b59b6; }
+.kpi-card.project { border-top: 3px solid #8e44ad; }
 .kpi-card.sales { border-top: 3px solid #3498db; }
 .kpi-card.purchase { border-top: 3px solid #1abc9c; }
 .kpi-card.inventory { border-top: 3px solid #34495e; }

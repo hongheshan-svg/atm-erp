@@ -198,16 +198,22 @@ class AnalyticsViewSet(viewsets.ViewSet):
             is_deleted=False
         ).count()
         
-        # 回款率和付款率
+        # 总应收账款和总应付账款（累计）
         ar_total = AccountReceivable.objects.filter(is_deleted=False).aggregate(
             due=Sum('amount_due'), paid=Sum('amount_paid')
         )
-        collection_rate = round(float(ar_total['paid'] or 0) / float(ar_total['due'] or 1) * 100, 1)
+        total_receivables = float(ar_total['due'] or 0)  # 总应收
+        total_received = float(ar_total['paid'] or 0)    # 已收款
+        outstanding_receivables = total_receivables - total_received  # 待收款
+        collection_rate = round(total_received / total_receivables * 100, 1) if total_receivables > 0 else 0
         
         ap_total = AccountPayable.objects.filter(is_deleted=False).aggregate(
             due=Sum('amount_due'), paid=Sum('amount_paid')
         )
-        payment_rate = round(float(ap_total['paid'] or 0) / float(ap_total['due'] or 1) * 100, 1)
+        total_payables = float(ap_total['due'] or 0)  # 总应付
+        total_paid = float(ap_total['paid'] or 0)     # 已付款
+        outstanding_payables = total_payables - total_paid  # 待付款
+        payment_rate = round(total_paid / total_payables * 100, 1) if total_payables > 0 else 0
         
         # 项目数据
         active_projects = Project.objects.filter(
@@ -382,8 +388,14 @@ class AnalyticsViewSet(viewsets.ViewSet):
                 },
                 'expenses': float(monthly_purchases['total'] or 0),
                 'purchase_orders': monthly_purchases['count'] or 0,
-                'receivables': float(receivables['total'] or 0),
-                'payables': float(payables['total'] or 0),
+                # 总应收/应付（累计）
+                'total_receivables': total_receivables,
+                'total_received': total_received,
+                'total_payables': total_payables,
+                'total_paid': total_paid,
+                # 待收/待付款
+                'receivables': outstanding_receivables,
+                'payables': outstanding_payables,
                 'overdue_receivables': overdue_ar,
                 'overdue_payables': overdue_ap,
                 'collection_rate': collection_rate,
