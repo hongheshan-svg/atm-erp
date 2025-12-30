@@ -123,6 +123,7 @@ def check_overdue_payables():
     from .models import AccountPayable
     from apps.accounts.models import User
     from apps.core.models import Notification
+    from apps.core.notification_service import NotificationService
     
     today = timezone.now().date()
     
@@ -142,6 +143,7 @@ def check_overdue_payables():
     # Build alert message
     message_lines = ["以下应付账款已逾期:\n"]
     total_overdue = Decimal('0')
+    overdue_items = []
     
     for ap in overdue_ap:
         remaining = ap.amount_due - ap.amount_paid
@@ -152,6 +154,12 @@ def check_overdue_payables():
             f"- {ap.ap_no} | 供应商: {ap.supplier.name} | "
             f"应付: ¥{remaining:,.2f} | 逾期: {days_overdue}天"
         )
+        overdue_items.append({
+            'ap_no': ap.ap_no,
+            'supplier': ap.supplier.name,
+            'amount': float(remaining),
+            'days_overdue': days_overdue
+        })
     
     message_lines.append(f"\n逾期总额: ¥{total_overdue:,.2f}")
     message = "\n".join(message_lines)
@@ -192,6 +200,21 @@ def check_overdue_payables():
         except Exception:
             pass
     
+    # Send to DingTalk/WeChat Work
+    try:
+        title = "💸 应付账款逾期提醒"
+        markdown_content = f"### {title}\n\n"
+        markdown_content += f"共 **{len(overdue_items)}** 笔应付账款已逾期，总额 **¥{total_overdue:,.2f}**\n\n"
+        for item in overdue_items[:5]:
+            markdown_content += f"- {item['ap_no']} | {item['supplier']} | ¥{item['amount']:,.2f} | 逾期{item['days_overdue']}天\n"
+        if len(overdue_items) > 5:
+            markdown_content += f"\n... 还有 {len(overdue_items) - 5} 笔\n"
+        markdown_content += "\n请及时安排付款！"
+        
+        NotificationService.send_custom_notification(title, markdown_content)
+    except Exception:
+        pass
+    
     return f"Sent overdue AP alert for {overdue_ap.count()} items, total: ¥{total_overdue:,.2f}"
 
 
@@ -204,6 +227,7 @@ def check_upcoming_due_dates():
     from .models import AccountReceivable, AccountPayable
     from apps.accounts.models import User
     from apps.core.models import Notification
+    from apps.core.notification_service import NotificationService
     
     today = timezone.now().date()
     warning_date = today + timedelta(days=7)
@@ -228,10 +252,13 @@ def check_upcoming_due_dates():
         return "No upcoming due dates"
     
     message_lines = ["以下账款即将到期 (7天内):\n"]
+    ar_items = []
+    ap_items = []
+    ar_total = Decimal('0')
+    ap_total = Decimal('0')
     
     if upcoming_ar.exists():
         message_lines.append("\n【应收账款】")
-        ar_total = Decimal('0')
         for ar in upcoming_ar:
             remaining = ar.amount_due - ar.amount_paid
             days_to_due = (ar.due_date - today).days
@@ -240,11 +267,16 @@ def check_upcoming_due_dates():
                 f"- {ar.ar_no} | {ar.customer.name} | "
                 f"¥{remaining:,.2f} | {days_to_due}天后到期"
             )
+            ar_items.append({
+                'ar_no': ar.ar_no,
+                'customer': ar.customer.name,
+                'amount': float(remaining),
+                'days': days_to_due
+            })
         message_lines.append(f"应收小计: ¥{ar_total:,.2f}")
     
     if upcoming_ap.exists():
         message_lines.append("\n【应付账款】")
-        ap_total = Decimal('0')
         for ap in upcoming_ap:
             remaining = ap.amount_due - ap.amount_paid
             days_to_due = (ap.due_date - today).days
@@ -253,6 +285,12 @@ def check_upcoming_due_dates():
                 f"- {ap.ap_no} | {ap.supplier.name} | "
                 f"¥{remaining:,.2f} | {days_to_due}天后到期"
             )
+            ap_items.append({
+                'ap_no': ap.ap_no,
+                'supplier': ap.supplier.name,
+                'amount': float(remaining),
+                'days': days_to_due
+            })
         message_lines.append(f"应付小计: ¥{ap_total:,.2f}")
     
     message = "\n".join(message_lines)
@@ -275,6 +313,31 @@ def check_upcoming_due_dates():
             link='/finance/ar'
         )
     
+    # Send to DingTalk/WeChat Work
+    try:
+        title = "📅 账款到期预警 (7天内)"
+        markdown_content = f"### {title}\n\n"
+        
+        if ar_items:
+            markdown_content += f"#### 应收账款 ({len(ar_items)}笔，共 ¥{ar_total:,.2f})\n"
+            for item in ar_items[:3]:
+                markdown_content += f"- {item['ar_no']} | {item['customer']} | ¥{item['amount']:,.2f} | {item['days']}天后\n"
+            if len(ar_items) > 3:
+                markdown_content += f"  ... 还有 {len(ar_items) - 3} 笔\n"
+        
+        if ap_items:
+            markdown_content += f"\n#### 应付账款 ({len(ap_items)}笔，共 ¥{ap_total:,.2f})\n"
+            for item in ap_items[:3]:
+                markdown_content += f"- {item['ap_no']} | {item['supplier']} | ¥{item['amount']:,.2f} | {item['days']}天后\n"
+            if len(ap_items) > 3:
+                markdown_content += f"  ... 还有 {len(ap_items) - 3} 笔\n"
+        
+        markdown_content += "\n请提前做好资金准备！"
+        
+        NotificationService.send_custom_notification(title, markdown_content)
+    except Exception:
+        pass
+    
     return f"Sent due date warnings: {upcoming_ar.count()} AR, {upcoming_ap.count()} AP"
 
 
@@ -287,6 +350,7 @@ def generate_daily_finance_summary():
     from .models import AccountReceivable, AccountPayable, Expense
     from apps.accounts.models import User
     from apps.core.models import Notification
+    from apps.core.notification_service import NotificationService
     from django.db.models import Sum, Count, Q
     
     today = timezone.now().date()
@@ -348,6 +412,26 @@ def generate_daily_finance_summary():
             content=message,
             notification_type='INFO'
         )
+    
+    # Send to DingTalk/WeChat Work
+    try:
+        title = f"📊 财务日报 - {today}"
+        markdown_content = f"""### {title}
+
+#### 应收账款
+- 待收款: **¥{(ar_stats['total_pending'] or 0):,.2f}** ({ar_stats['count_pending'] or 0}笔)
+- 逾期款: **¥{(ar_stats['total_overdue'] or 0):,.2f}** ({ar_stats['count_overdue'] or 0}笔)
+
+#### 应付账款
+- 待付款: **¥{(ap_stats['total_pending'] or 0):,.2f}** ({ap_stats['count_pending'] or 0}笔)
+- 逾期款: **¥{(ap_stats['total_overdue'] or 0):,.2f}** ({ap_stats['count_overdue'] or 0}笔)
+
+#### 费用报销
+- 待审批: **¥{(expense_pending['total'] or 0):,.2f}** ({expense_pending['count'] or 0}笔)
+"""
+        NotificationService.send_custom_notification(title, markdown_content)
+    except Exception:
+        pass
     
     return "Daily finance summary generated"
 

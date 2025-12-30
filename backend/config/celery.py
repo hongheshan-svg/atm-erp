@@ -30,6 +30,44 @@ app.conf.beat_schedule = {
         'schedule': crontab(hour=9, minute=10),
     },
     
+    # Payment schedule reminders at 9:15 AM
+    'check-payment-schedule-reminders': {
+        'task': 'apps.finance.tasks.check_payment_schedule_reminders',
+        'schedule': crontab(hour=9, minute=15),
+    },
+    'check-purchase-payment-schedule-reminders': {
+        'task': 'apps.finance.tasks.check_purchase_payment_schedule_reminders',
+        'schedule': crontab(hour=9, minute=20),
+    },
+    
+    # Sales/Purchase order delivery reminders at 9:30 AM
+    'check-sales-delivery-reminders': {
+        'task': 'apps.sales.tasks.check_delivery_reminders',
+        'schedule': crontab(hour=9, minute=30),
+    },
+    'check-purchase-delivery-reminders': {
+        'task': 'apps.purchase.tasks.check_delivery_reminders',
+        'schedule': crontab(hour=9, minute=35),
+    },
+    
+    # Workflow approval deadline reminders at 10 AM
+    'check-workflow-deadline-reminders': {
+        'task': 'apps.core.tasks.check_workflow_deadline_reminders',
+        'schedule': crontab(hour=10, minute=0),
+    },
+    
+    # Project deadline reminders at 10:30 AM
+    'check-project-deadline-reminders': {
+        'task': 'apps.projects.tasks.check_project_deadline_reminders',
+        'schedule': crontab(hour=10, minute=30),
+    },
+    
+    # Reset payment schedule reminders weekly on Monday
+    'reset-payment-schedule-reminders': {
+        'task': 'apps.finance.tasks.reset_payment_schedule_reminders',
+        'schedule': crontab(hour=1, minute=0, day_of_week=1),
+    },
+    
     # Finance daily summary at 6 PM
     'daily-finance-summary': {
         'task': 'apps.finance.tasks.generate_daily_finance_summary',

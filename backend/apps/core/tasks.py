@@ -267,4 +267,113 @@ def check_password_expiry():
     return "Password expiry check completed"
 
 
+@shared_task
+def check_workflow_deadline_reminders():
+    """
+    Check for workflow tasks with upcoming or overdue deadlines.
+    Runs daily at 10 AM.
+    
+    Sends reminders for:
+    1. Overdue approval tasks
+    2. Approval tasks with deadline within the next 24 hours
+    """
+    from .workflow.models import WorkflowTask
+    from apps.accounts.models import User
+    from .models import Notification
+    from .notification_service import NotificationService
+    
+    now = timezone.now()
+    warning_time = now + timedelta(hours=24)
+    
+    # Find overdue tasks
+    overdue_tasks = WorkflowTask.objects.filter(
+        deadline__lt=now,
+        status='PENDING',
+    ).select_related('instance', 'instance__workflow', 'assignee')
+    
+    # Find tasks with deadline within 24 hours
+    upcoming_tasks = WorkflowTask.objects.filter(
+        deadline__gte=now,
+        deadline__lte=warning_time,
+        status='PENDING',
+    ).select_related('instance', 'instance__workflow', 'assignee')
+    
+    if not overdue_tasks.exists() and not upcoming_tasks.exists():
+        return "No workflow deadline reminders needed"
+    
+    # Group by assignee
+    assignee_tasks = {}
+    
+    for task in list(overdue_tasks) + list(upcoming_tasks):
+        if task.assignee_id not in assignee_tasks:
+            assignee_tasks[task.assignee_id] = {'overdue': [], 'upcoming': []}
+        
+        is_overdue = task.deadline < now
+        task_info = {
+            'business_no': task.instance.business_no,
+            'business_type': task.instance.workflow.get_business_type_display() if task.instance.workflow else '未知',
+            'amount': float(task.instance.amount or 0),
+            'deadline': task.deadline.strftime('%Y-%m-%d %H:%M'),
+            'hours': abs((task.deadline - now).total_seconds() / 3600)
+        }
+        
+        if is_overdue:
+            assignee_tasks[task.assignee_id]['overdue'].append(task_info)
+        else:
+            assignee_tasks[task.assignee_id]['upcoming'].append(task_info)
+    
+    # Create notifications for each assignee
+    for assignee_id, tasks_data in assignee_tasks.items():
+        message_lines = ["您有待处理的审批任务:\n"]
+        
+        if tasks_data['overdue']:
+            message_lines.append("\n【已超时】")
+            for t in tasks_data['overdue'][:5]:
+                message_lines.append(
+                    f"- {t['business_no']} | {t['business_type']} | "
+                    f"¥{t['amount']:,.2f} | 已超时{t['hours']:.0f}小时"
+                )
+        
+        if tasks_data['upcoming']:
+            message_lines.append("\n【即将超时】")
+            for t in tasks_data['upcoming'][:5]:
+                message_lines.append(
+                    f"- {t['business_no']} | {t['business_type']} | "
+                    f"¥{t['amount']:,.2f} | {t['hours']:.0f}小时后超时"
+                )
+        
+        message = "\n".join(message_lines)
+        
+        Notification.objects.create(
+            user_id=assignee_id,
+            title='审批任务截止提醒',
+            content=message,
+            notification_type='WARNING',
+            link='/workflow/tasks'
+        )
+    
+    # Send summary to DingTalk/WeChat Work
+    try:
+        total_overdue = sum(len(t['overdue']) for t in assignee_tasks.values())
+        total_upcoming = sum(len(t['upcoming']) for t in assignee_tasks.values())
+        
+        if total_overdue > 0 or total_upcoming > 0:
+            title = "⏰ 审批任务截止提醒"
+            markdown_content = f"### {title}\n\n"
+            
+            if total_overdue > 0:
+                markdown_content += f"**⚠️ 已超时**: {total_overdue} 个审批任务\n"
+            
+            if total_upcoming > 0:
+                markdown_content += f"**📅 24小时内到期**: {total_upcoming} 个审批任务\n"
+            
+            markdown_content += "\n请相关人员及时处理！"
+            
+            NotificationService.send_custom_notification(title, markdown_content)
+    except Exception:
+        pass
+    
+    return f"Sent workflow deadline reminders: {overdue_tasks.count()} overdue, {upcoming_tasks.count()} upcoming"
+
+
 import io
