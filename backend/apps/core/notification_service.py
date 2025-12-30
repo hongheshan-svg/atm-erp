@@ -355,20 +355,103 @@ class NotificationService:
             WeChatWorkNotification.send_markdown(markdown_content)
     
     @classmethod
-    def send_custom_notification(cls, title, content, at_mobiles=None):
+    def send_custom_notification(cls, title, content, at_mobiles=None, to_users=None):
         """
-        Send custom notification to all channels.
+        Send custom notification to all channels or specific users.
         
         Args:
             title: Notification title
             content: Notification content (markdown supported)
-            at_mobiles: List of mobile numbers to @mention
+            at_mobiles: List of mobile numbers to @mention (for group notifications)
+            to_users: List of User objects or user IDs to send personal messages to
+                     If provided, sends personal messages instead of group broadcast
         """
+        # If specific users are provided, send personal messages
+        if to_users:
+            cls.send_personal_notification(to_users, title, content)
+            return
+        
+        # Otherwise, send to group channels
         if cls._is_dingtalk_enabled():
             DingTalkNotification.send_markdown(title, content, at_mobiles=at_mobiles)
         
         if cls._is_wechat_enabled():
             WeChatWorkNotification.send_markdown(content)
+    
+    @classmethod
+    def send_personal_notification(cls, users, title, content):
+        """
+        Send personal notification to specific users via WeChat Work / DingTalk app message.
+        
+        Args:
+            users: List of User objects, user IDs, or a queryset
+            title: Notification title
+            content: Notification content (will be truncated to 512 chars for WeChat)
+        """
+        from apps.accounts.models import User
+        
+        # Convert to user objects if needed
+        if not users:
+            return
+        
+        # If it's a queryset or list of IDs, fetch users
+        if hasattr(users, 'values_list'):
+            user_list = list(users)
+        elif isinstance(users[0], int):
+            user_list = list(User.objects.filter(id__in=users, is_active=True, is_deleted=False))
+        else:
+            user_list = users
+        
+        # Collect WeChat Work user IDs
+        wechat_user_ids = []
+        dingtalk_user_ids = []
+        
+        for user in user_list:
+            if hasattr(user, 'wechat_work_id') and user.wechat_work_id:
+                wechat_user_ids.append(user.wechat_work_id)
+            if hasattr(user, 'dingtalk_id') and user.dingtalk_id:
+                dingtalk_user_ids.append(user.dingtalk_id)
+        
+        # Send via WeChat Work app message
+        if wechat_user_ids and cls._is_wechat_enabled():
+            try:
+                from apps.core.notification_channels import WeChatWorkChannel
+                wechat = WeChatWorkChannel()
+                # Truncate content for WeChat Work text card (max 512 chars)
+                truncated_content = content[:500] + '...' if len(content) > 500 else content
+                wechat.send_app_message(wechat_user_ids, title, truncated_content)
+            except Exception as e:
+                logger.error(f"Failed to send WeChat Work personal message: {e}")
+        
+        # Send via DingTalk work notification
+        if dingtalk_user_ids and cls._is_dingtalk_enabled():
+            try:
+                from apps.core.notification_channels import DingTalkChannel
+                dingtalk = DingTalkChannel()
+                dingtalk.send_work_notification(dingtalk_user_ids, title, content)
+            except Exception as e:
+                logger.error(f"Failed to send DingTalk personal message: {e}")
+    
+    @classmethod
+    def send_to_user(cls, user, title, content):
+        """
+        Send personal notification to a single user.
+        
+        Args:
+            user: User object or user ID
+            title: Notification title
+            content: Notification content
+        """
+        from apps.accounts.models import User
+        
+        if isinstance(user, int):
+            try:
+                user = User.objects.get(id=user, is_active=True, is_deleted=False)
+            except User.DoesNotExist:
+                return False
+        
+        cls.send_personal_notification([user], title, content)
+        return True
     
     @classmethod
     def send_payment_reminder(cls, payment_schedules):

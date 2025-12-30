@@ -91,6 +91,10 @@ class User(AbstractUser, SoftDeleteModel):
     gender = models.CharField(max_length=1, choices=GENDER_CHOICES, blank=True, verbose_name='性别')
     birth_date = models.DateField(null=True, blank=True, verbose_name='出生日期')
     
+    # 企业微信/钉钉用户ID，用于发送个人消息
+    wechat_work_id = models.CharField(max_length=100, blank=True, verbose_name='企业微信用户ID')
+    dingtalk_id = models.CharField(max_length=100, blank=True, verbose_name='钉钉用户ID')
+    
     department = models.ForeignKey(
         Department,
         on_delete=models.SET_NULL,
