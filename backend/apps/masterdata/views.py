@@ -143,6 +143,7 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
             max_col = find_column(df, ['最大库存', 'max_stock'])
             barcode_col = find_column(df, ['条形码', 'barcode'])
             desc_col = find_column(df, ['描述', 'description'])
+            status_col = find_column(df, ['状态', 'status', 'is_active'])
             
             created_count = 0
             updated_count = 0
@@ -197,6 +198,10 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                         else:
                             parsed_brand = vb
 
+                    # Parse status
+                    status_val = get_val(status_col, '启用')
+                    is_active = status_val not in ['禁用', '停用', 'false', 'False', '0', 'INACTIVE']
+                    
                     # Check if item exists
                     item, created = Item.objects.update_or_create(
                         sku=sku,
@@ -217,6 +222,7 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                             'lead_time': get_int(lead_col),
                             'min_stock': get_num(min_col),
                             'max_stock': get_num(max_col),
+                            'is_active': is_active,
                             'barcode': get_val(barcode_col),
                             'description': get_val(desc_col),
                             'updated_by': request.user,
@@ -389,7 +395,7 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                 'font_color': '#666666'
             })
             
-            # Column headers: (name, width, required)
+            # Column headers: (name, width, required) - 与列表页面对应
             headers = [
                 ('物料编码*', 12, True),
                 ('物料名称*', 20, True),
@@ -404,11 +410,8 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                 ('生产厂家', 15, False),
                 ('产地', 10, False),
                 ('安全库存', 10, False),
-                ('采购周期(天)', 10, False),
-                ('最小库存', 10, False),
-                ('最大库存', 10, False),
-                ('条形码', 15, False),
-                ('描述', 25, False),
+                ('采购周期(天)', 12, False),
+                ('状态', 8, False),
             ]
             
             # Write headers
@@ -422,7 +425,7 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                 'MAT001',
                 '示例物料',
                 '100x50x25mm',
-                '品牌A/Model-X',
+                '品牌A/V1.0',
                 'PCS',
                 'MATERIAL',
                 '100.00',
@@ -433,10 +436,7 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                 '中国',
                 '10',
                 '7',
-                '5',
-                '100',
-                '',
-                '示例物料，请删除',
+                '启用',
             ]
             for col, value in enumerate(example_data):
                 worksheet.write(1, col, value, example_format)
@@ -458,10 +458,14 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                 ('', None),
                 ('【选填字段】', section_format),
                 ('  • 规格型号：物料规格描述', None),
-                ('  • 品牌/型号：品牌和产品型号', None),
+                ('  • 版本/品牌：品牌和产品版本，如"品牌A/V1.0"', None),
                 ('  • 单位：PCS/KG/M/M2/M3/SET/BOX/PACK/HOUR', None),
                 ('  • 物料类型：MATERIAL(原材料)/PRODUCT(产成品)/SEMI(半成品)/SERVICE(服务)', None),
-                ('  • 各种价格和库存参数', None),
+                ('  • 采购单价/销售单价/标准成本：数字', None),
+                ('  • 税率(%)：增值税率，如13', None),
+                ('  • 生产厂家/产地：文本', None),
+                ('  • 安全库存/采购周期(天)：数字', None),
+                ('  • 状态：启用/禁用', None),
                 ('', None),
                 ('【注意事项】', section_format),
                 ('  • 编码重复时将更新现有物料', None),
@@ -549,10 +553,9 @@ class CustomerViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
         ws = wb.active
         ws.title = '客户导入模板'
         
+        # 与列表页面显示的列对应
         headers = [
-            '客户编码', '客户名称', '简称', '联系人', '电话', '邮箱', '地址',
-            '开票名称', '税号', '开户银行', '银行账号', '注册地址', '注册电话',
-            '信用额度', '状态', '备注'
+            '客户编码', '客户名称', '联系人', '电话', '税号', '开户银行', '地址', '状态'
         ]
         
         # Header style
@@ -565,19 +568,17 @@ class CustomerViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
             cell.fill = header_fill
             cell.alignment = Alignment(horizontal='center')
         
-        # Example row
+        # Example row - 与列表页面对应
         example = [
-            'C001', '示例公司名称', '示例简称', '张三', '13800138000', 
-            'example@company.com', '北京市朝阳区xxx路xxx号',
-            '示例公司全称（开票）', '91110000XXXXXXXX', '中国工商银行北京分行',
-            '1234567890123456789', '北京市朝阳区注册地址', '010-12345678',
-            '100000', '激活', '备注信息'
+            'C001', '示例公司名称', '张三', '13800138000', 
+            '91110000XXXXXXXX', '中国工商银行北京分行',
+            '北京市朝阳区xxx路xxx号', '激活'
         ]
         for col, val in enumerate(example, 1):
             ws.cell(row=2, column=col, value=val)
         
-        # Column widths
-        widths = [12, 25, 12, 10, 15, 25, 35, 25, 22, 25, 22, 35, 15, 12, 8, 20]
+        # Column widths - 与列表页面对应
+        widths = [12, 25, 10, 15, 22, 20, 30, 8]
         for col, width in enumerate(widths, 1):
             ws.column_dimensions[get_column_letter(col)].width = width
         
@@ -785,10 +786,9 @@ class SupplierViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
         ws = wb.active
         ws.title = '供应商导入模板'
         
+        # 与列表页面显示的列对应
         headers = [
-            '供应商编码', '供应商名称', '简称', '联系人', '电话', '邮箱', '地址',
-            '开票名称', '税号', '开户银行', '银行账号', '注册地址', '注册电话',
-            '状态', '备注'
+            '供应商编码', '供应商名称', '联系人', '电话', '税号', '开户银行', '地址', '状态'
         ]
         
         # Header style
@@ -801,19 +801,17 @@ class SupplierViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
             cell.fill = header_fill
             cell.alignment = Alignment(horizontal='center')
         
-        # Example row
+        # Example row - 与列表页面对应
         example = [
-            'S001', '示例供应商名称', '示例简称', '李四', '13900139000',
-            'supplier@company.com', '上海市浦东新区xxx路xxx号',
-            '示例供应商全称（开票）', '91310000XXXXXXXX', '中国建设银行上海分行',
-            '9876543210987654321', '上海市浦东新区注册地址', '021-87654321',
-            '激活', '备注信息'
+            'S001', '示例供应商名称', '李四', '13900139000',
+            '91310000XXXXXXXX', '中国建设银行上海分行',
+            '上海市浦东新区xxx路xxx号', '激活'
         ]
         for col, val in enumerate(example, 1):
             ws.cell(row=2, column=col, value=val)
         
-        # Column widths
-        widths = [12, 25, 12, 10, 15, 25, 35, 25, 22, 25, 22, 35, 15, 8, 20]
+        # Column widths - 与列表页面对应
+        widths = [12, 25, 10, 15, 22, 20, 30, 8]
         for col, width in enumerate(widths, 1):
             ws.column_dimensions[get_column_letter(col)].width = width
         
