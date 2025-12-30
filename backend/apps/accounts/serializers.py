@@ -93,7 +93,8 @@ class UserSerializer(serializers.ModelSerializer):
             'id', 'username', 'employee_id', 'email', 'first_name', 'last_name',
             'phone', 'avatar', 'gender', 'birth_date', 'department', 'department_name',
             'role', 'role_name', 'position', 'hire_date', 'is_active', 'is_staff',
-            'is_superuser', 'last_login', 'date_joined', 'created_at', 'updated_at'
+            'is_superuser', 'last_login', 'date_joined', 'created_at', 'updated_at',
+            'wechat_work_id', 'dingtalk_id'
         ]
         read_only_fields = ['last_login', 'date_joined', 'created_at', 'updated_at']
         extra_kwargs = {

@@ -1,6 +1,7 @@
 """
 Views for accounts app.
 """
+from django.db import models
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -196,4 +197,244 @@ class UserViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
         
         # 安全返回：不在响应中包含明文密码
         return Response({'message': '密码重置成功，请通知用户使用新密码登录'})
+    
+    @action(detail=True, methods=['post'])
+    def set_wechat_id(self, request, pk=None):
+        """
+        Set user's WeChat Work ID for personal notifications.
+        Admin only.
+        """
+        if not request.user.is_staff:
+            return Response(
+                {'detail': '无权限执行此操作'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        user = self.get_object()
+        wechat_work_id = request.data.get('wechat_work_id', '').strip()
+        
+        user.wechat_work_id = wechat_work_id
+        user.save(update_fields=['wechat_work_id'])
+        
+        return Response({
+            'message': f'企业微信ID已更新',
+            'wechat_work_id': user.wechat_work_id
+        })
+    
+    @action(detail=False, methods=['get'])
+    def wechat_work_users(self, request):
+        """
+        Get list of users from WeChat Work API.
+        Can be used to match with ERP users.
+        Admin only.
+        """
+        if not request.user.is_staff:
+            return Response(
+                {'detail': '无权限执行此操作'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        from django.conf import settings
+        import requests
+        import time
+        
+        corp_id = getattr(settings, 'WECHAT_WORK_CORP_ID', '')
+        corp_secret = getattr(settings, 'WECHAT_WORK_CORP_SECRET', '')
+        
+        if not corp_id or not corp_secret:
+            return Response(
+                {'detail': '企业微信未配置'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Get access token
+            token_url = f'https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid={corp_id}&corpsecret={corp_secret}'
+            token_resp = requests.get(token_url, timeout=10)
+            token_data = token_resp.json()
+            
+            if token_data.get('errcode') != 0:
+                return Response(
+                    {'detail': f"获取token失败: {token_data.get('errmsg')}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            access_token = token_data.get('access_token')
+            
+            # Get department list first
+            dept_url = f'https://qyapi.weixin.qq.com/cgi-bin/department/list?access_token={access_token}'
+            dept_resp = requests.get(dept_url, timeout=10)
+            dept_data = dept_resp.json()
+            
+            if dept_data.get('errcode') != 0:
+                return Response(
+                    {'detail': f"获取部门失败: {dept_data.get('errmsg')}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            departments = dept_data.get('department', [])
+            
+            # Get users for each department
+            all_users = []
+            seen_userids = set()
+            
+            for dept in departments:
+                dept_id = dept['id']
+                users_url = f'https://qyapi.weixin.qq.com/cgi-bin/user/list?access_token={access_token}&department_id={dept_id}'
+                users_resp = requests.get(users_url, timeout=10)
+                users_data = users_resp.json()
+                
+                if users_data.get('errcode') == 0:
+                    for user in users_data.get('userlist', []):
+                        if user['userid'] not in seen_userids:
+                            seen_userids.add(user['userid'])
+                            all_users.append({
+                                'userid': user['userid'],
+                                'name': user.get('name', ''),
+                                'mobile': user.get('mobile', ''),
+                                'email': user.get('email', ''),
+                                'department': dept.get('name', '')
+                            })
+            
+            # Match with ERP users
+            erp_users = User.objects.filter(is_deleted=False)
+            matched = []
+            unmatched_wechat = []
+            unmatched_erp = list(erp_users.filter(wechat_work_id='').values('id', 'username', 'employee_id', 'phone'))
+            
+            for wu in all_users:
+                # Try to match by phone, employee_id, or username
+                erp_match = erp_users.filter(
+                    models.Q(phone=wu['mobile']) |
+                    models.Q(employee_id=wu['userid']) |
+                    models.Q(username=wu['userid'])
+                ).first()
+                
+                if erp_match:
+                    matched.append({
+                        'erp_user': {
+                            'id': erp_match.id,
+                            'username': erp_match.username,
+                            'name': erp_match.get_full_name()
+                        },
+                        'wechat_user': wu,
+                        'already_linked': erp_match.wechat_work_id == wu['userid']
+                    })
+                else:
+                    unmatched_wechat.append(wu)
+            
+            return Response({
+                'matched': matched,
+                'unmatched_wechat_users': unmatched_wechat,
+                'unmatched_erp_users': unmatched_erp,
+                'total_wechat_users': len(all_users),
+                'total_erp_users': erp_users.count()
+            })
+            
+        except Exception as e:
+            return Response(
+                {'detail': f'获取企业微信用户失败: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['post'])
+    def sync_wechat_ids(self, request):
+        """
+        Bulk sync WeChat Work IDs for matched users.
+        Admin only.
+        
+        Request body:
+        {
+            "mappings": [
+                {"erp_user_id": 1, "wechat_work_id": "zhangsan"},
+                ...
+            ]
+        }
+        """
+        if not request.user.is_staff:
+            return Response(
+                {'detail': '无权限执行此操作'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        mappings = request.data.get('mappings', [])
+        
+        if not mappings:
+            return Response(
+                {'detail': '没有提供映射数据'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        updated = 0
+        errors = []
+        
+        for mapping in mappings:
+            erp_user_id = mapping.get('erp_user_id')
+            wechat_work_id = mapping.get('wechat_work_id', '').strip()
+            
+            if not erp_user_id or not wechat_work_id:
+                continue
+            
+            try:
+                user = User.objects.get(id=erp_user_id, is_deleted=False)
+                user.wechat_work_id = wechat_work_id
+                user.save(update_fields=['wechat_work_id'])
+                updated += 1
+            except User.DoesNotExist:
+                errors.append(f'用户ID {erp_user_id} 不存在')
+            except Exception as e:
+                errors.append(f'用户ID {erp_user_id} 更新失败: {str(e)}')
+        
+        return Response({
+            'updated': updated,
+            'errors': errors
+        })
+    
+    @action(detail=False, methods=['post'])
+    def test_personal_notification(self, request):
+        """
+        Send a test personal notification to the specified user.
+        Admin only.
+        """
+        if not request.user.is_staff:
+            return Response(
+                {'detail': '无权限执行此操作'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        user_id = request.data.get('user_id')
+        if not user_id:
+            # Default to current user
+            user = request.user
+        else:
+            try:
+                user = User.objects.get(id=user_id, is_deleted=False)
+            except User.DoesNotExist:
+                return Response(
+                    {'detail': '用户不存在'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        
+        if not user.wechat_work_id:
+            return Response(
+                {'detail': f'用户 {user.username} 未配置企业微信ID'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        from apps.core.notification_service import NotificationService
+        
+        title = "🔔 ERP系统测试通知"
+        content = f"这是一条发送给 {user.get_full_name()} 的测试通知。\n\n如果您收到此消息，说明企业微信个人通知功能配置成功！"
+        
+        try:
+            NotificationService.send_to_user(user, title, content)
+            return Response({
+                'message': f'测试通知已发送给 {user.get_full_name()}',
+                'wechat_work_id': user.wechat_work_id
+            })
+        except Exception as e:
+            return Response(
+                {'detail': f'发送失败: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
