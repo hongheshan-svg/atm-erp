@@ -509,8 +509,8 @@ class BankStatementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                         statement.project = project
                         project_matched_count += 1
                     
-                    statement.save()
-                    matched_count += 1
+                        statement.save()
+                        matched_count += 1
                     
                     # 尝试匹配付款计划
                     if statement.transaction_type == 'CREDIT' and statement.customer:

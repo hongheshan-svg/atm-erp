@@ -212,6 +212,183 @@
           />
         </el-tab-pane>
 
+        <!-- 收款计划 -->
+        <el-tab-pane label="收款计划" name="paymentSchedule">
+          <!-- 统计卡片 -->
+          <el-row :gutter="16" class="summary-cards" style="margin-bottom: 16px;">
+            <el-col :span="6">
+              <el-card shadow="hover" class="summary-card">
+                <div class="summary-content">
+                  <div class="summary-label">待收款总额</div>
+                  <div class="summary-value text-primary">¥{{ formatNumber(scheduleSummary.total_remaining || 0) }}</div>
+                </div>
+              </el-card>
+            </el-col>
+            <el-col :span="6">
+              <el-card shadow="hover" class="summary-card">
+                <div class="summary-content">
+                  <div class="summary-label">收款进度</div>
+                  <div class="summary-value">
+                    <el-progress 
+                      :percentage="scheduleSummary.overall_progress || 0" 
+                      :color="getProgressColor(scheduleSummary.overall_progress)"
+                      :stroke-width="12"
+                    />
+                  </div>
+                </div>
+              </el-card>
+            </el-col>
+            <el-col :span="6">
+              <el-card shadow="hover" class="summary-card">
+                <div class="summary-content">
+                  <div class="summary-label">待收款笔数</div>
+                  <div class="summary-value">{{ (scheduleSummary.pending_count || 0) + (scheduleSummary.partial_count || 0) }} 笔</div>
+                </div>
+              </el-card>
+            </el-col>
+            <el-col :span="6">
+              <el-card shadow="hover" class="summary-card" style="border-left: 4px solid #f56c6c;">
+                <div class="summary-content">
+                  <div class="summary-label">已逾期</div>
+                  <div class="summary-value text-danger">{{ scheduleSummary.overdue_count || 0 }} 笔</div>
+                </div>
+              </el-card>
+            </el-col>
+          </el-row>
+
+          <!-- 筛选条件 -->
+          <el-form :inline="true" class="search-form">
+            <el-form-item label="状态">
+              <el-select v-model="scheduleFilters.status" placeholder="全部状态" clearable @change="loadPaymentSchedules" style="width: 120px;">
+                <el-option label="待收款" value="PENDING" />
+                <el-option label="部分收款" value="PARTIAL" />
+                <el-option label="已收款" value="PAID" />
+                <el-option label="已逾期" value="OVERDUE" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="付款节点">
+              <el-select v-model="scheduleFilters.milestone_type" placeholder="全部类型" clearable @change="loadPaymentSchedules" style="width: 120px;">
+                <el-option label="预付款" value="PREPAY" />
+                <el-option label="发货款" value="ON_DELIVERY" />
+                <el-option label="验收款" value="ON_ACCEPTANCE" />
+                <el-option label="质保金" value="WARRANTY" />
+                <el-option label="尾款" value="FINAL" />
+              </el-select>
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="loadPaymentSchedules">查询</el-button>
+              <el-button @click="resetScheduleFilters">重置</el-button>
+            </el-form-item>
+          </el-form>
+
+          <!-- 数据表格 -->
+          <el-table :data="paymentSchedules" stripe border v-loading="scheduleLoading">
+            <el-table-column type="index" label="序号" width="55" align="center" :index="(idx) => (schedulePagination.page - 1) * schedulePagination.pageSize + idx + 1" />
+            <el-table-column prop="sales_order_no" label="销售订单" width="130" />
+            <el-table-column prop="customer_name" label="客户" width="150" show-overflow-tooltip />
+            <el-table-column prop="project_name" label="项目" width="120" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span v-if="row.project_name">{{ row.project_name }}</span>
+                <span v-else class="text-muted">-</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="milestone_name" label="付款节点" width="100" />
+            <el-table-column prop="percentage" label="比例" width="70" align="right">
+              <template #default="{ row }">{{ row.percentage }}%</template>
+            </el-table-column>
+            <el-table-column label="应收金额" width="110" align="right">
+              <template #default="{ row }">
+                <span class="text-primary">¥{{ formatNumber(row.amount_due) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="已收金额" width="110" align="right">
+              <template #default="{ row }">
+                <span class="text-success">¥{{ formatNumber(row.amount_paid) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="收款进度" width="130">
+              <template #default="{ row }">
+                <el-progress 
+                  :percentage="row.payment_progress || 0" 
+                  :color="getProgressColor(row.payment_progress)"
+                  :stroke-width="8"
+                  :show-text="true"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column prop="due_date" label="计划收款日" width="100">
+              <template #default="{ row }">
+                <span :class="{ 'text-danger': row.is_overdue }">{{ row.due_date }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="距离到期" width="90" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.status === 'PAID'" type="success" size="small">已收款</el-tag>
+                <el-tag v-else-if="row.is_overdue" type="danger" size="small">逾期{{ Math.abs(row.days_until_due) }}天</el-tag>
+                <el-tag v-else-if="row.days_until_due <= 7" type="warning" size="small">{{ row.days_until_due }}天</el-tag>
+                <span v-else class="text-muted">{{ row.days_until_due }}天</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="status" label="状态" width="80" align="center">
+              <template #default="{ row }">
+                <el-tag :type="getScheduleStatusType(row.status)" size="small">{{ row.status_display }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="130" fixed="right">
+              <template #default="{ row }">
+                <el-button type="primary" link size="small" @click="handleRecordSchedulePayment(row)" v-if="row.status !== 'PAID'">登记收款</el-button>
+                <el-button type="info" link size="small" @click="handleViewScheduleDetail(row)">详情</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <el-pagination
+            v-model:current-page="schedulePagination.page"
+            v-model:page-size="schedulePagination.pageSize"
+            :total="schedulePagination.total"
+            layout="total, sizes, prev, pager, next"
+            @size-change="handleScheduleSizeChange"
+            @current-change="loadPaymentSchedules"
+            style="margin-top: 20px; justify-content: flex-end;"
+          />
+
+          <!-- 提醒信息 -->
+          <el-row :gutter="16" style="margin-top: 16px;" v-if="scheduleSummary.overdue_payments?.length || scheduleSummary.upcoming_payments?.length">
+            <el-col :span="12" v-if="scheduleSummary.overdue_payments?.length">
+              <el-card shadow="hover" style="border-top: 3px solid #f56c6c;">
+                <template #header><span>⚠️ 已逾期款项</span></template>
+                <el-table :data="scheduleSummary.overdue_payments" size="small" stripe>
+                  <el-table-column prop="sales_order_no" label="订单" width="120" />
+                  <el-table-column prop="customer_name" label="客户" show-overflow-tooltip />
+                  <el-table-column prop="milestone_name" label="节点" width="90" />
+                  <el-table-column label="待收" width="100" align="right">
+                    <template #default="{ row }">¥{{ formatNumber(row.amount_due - row.amount_paid) }}</template>
+                  </el-table-column>
+                  <el-table-column label="逾期" width="70" align="center">
+                    <template #default="{ row }"><span class="text-danger">{{ Math.abs(row.days_until_due) }}天</span></template>
+                  </el-table-column>
+                </el-table>
+              </el-card>
+            </el-col>
+            <el-col :span="12" v-if="scheduleSummary.upcoming_payments?.length">
+              <el-card shadow="hover" style="border-top: 3px solid #e6a23c;">
+                <template #header><span>📅 即将到期款项 (7天内)</span></template>
+                <el-table :data="scheduleSummary.upcoming_payments" size="small" stripe>
+                  <el-table-column prop="sales_order_no" label="订单" width="120" />
+                  <el-table-column prop="customer_name" label="客户" show-overflow-tooltip />
+                  <el-table-column prop="milestone_name" label="节点" width="90" />
+                  <el-table-column label="待收" width="100" align="right">
+                    <template #default="{ row }">¥{{ formatNumber(row.amount_due - row.amount_paid) }}</template>
+                  </el-table-column>
+                  <el-table-column label="到期" width="70" align="center">
+                    <template #default="{ row }"><span class="text-warning">{{ row.days_until_due }}天</span></template>
+                  </el-table-column>
+                </el-table>
+              </el-card>
+            </el-col>
+          </el-row>
+        </el-tab-pane>
+
         <!-- 销售对账 -->
         <el-tab-pane label="销售对账" name="reconciliation">
           <div class="tab-header">
@@ -529,6 +706,37 @@
       </template>
     </el-dialog>
 
+    <!-- 登记收款计划收款对话框 -->
+    <el-dialog v-model="schedulePaymentVisible" title="登记收款" width="450px">
+      <el-form :model="schedulePaymentForm" label-width="100px">
+        <el-form-item label="销售订单">
+          <el-input :value="currentSchedule?.sales_order_no" disabled />
+        </el-form-item>
+        <el-form-item label="客户">
+          <el-input :value="currentSchedule?.customer_name" disabled />
+        </el-form-item>
+        <el-form-item label="付款节点">
+          <el-input :value="currentSchedule?.milestone_name" disabled />
+        </el-form-item>
+        <el-form-item label="应收金额">
+          <el-input :value="'¥' + formatNumber(currentSchedule?.amount_due)" disabled />
+        </el-form-item>
+        <el-form-item label="已收金额">
+          <el-input :value="'¥' + formatNumber(currentSchedule?.amount_paid)" disabled />
+        </el-form-item>
+        <el-form-item label="本次收款" required>
+          <el-input-number v-model="schedulePaymentForm.amount" :min="0" :precision="2" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="收款日期">
+          <el-date-picker v-model="schedulePaymentForm.payment_date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="schedulePaymentVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitSchedulePayment" :loading="scheduleSubmitting">确认</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 导入结果对话框 -->
     <el-dialog v-model="importResultVisible" title="导入结果" width="500px">
       <el-descriptions :column="2" border v-if="importResult">
@@ -575,9 +783,11 @@ import request from '@/utils/request'
 const loading = ref(false)
 const reconciliationLoading = ref(false)
 const bankLoading = ref(false)
+const scheduleLoading = ref(false)
 const saving = ref(false)
 const autoMatching = ref(false)
 const matching = ref(false)
+const scheduleSubmitting = ref(false)
 const activeTab = ref('bankStatements')
 
 const arList = ref([])
@@ -588,6 +798,18 @@ const customers = ref([])
 const summaryData = ref([])
 const selectedLines = ref([])
 const customerARList = ref([])
+
+// 收款计划相关
+const paymentSchedules = ref([])
+const scheduleSummary = ref({
+  total_remaining: 0, overall_progress: 0, pending_count: 0, partial_count: 0, overdue_count: 0,
+  overdue_payments: [], upcoming_payments: []
+})
+const schedulePagination = reactive({ page: 1, pageSize: 20, total: 0 })
+const scheduleFilters = reactive({ status: '', milestone_type: '' })
+const schedulePaymentVisible = ref(false)
+const currentSchedule = ref(null)
+const schedulePaymentForm = reactive({ amount: 0, payment_date: new Date().toISOString().split('T')[0] })
 
 const paymentVisible = ref(false)
 const viewDialogVisible = ref(false)
@@ -677,6 +899,7 @@ const handleTabChange = (tab) => {
   if (tab === 'receivables') loadARList()
   else if (tab === 'reconciliation') loadReconciliationList()
   else if (tab === 'bankStatements') loadBankStatements()
+  else if (tab === 'paymentSchedule') { loadPaymentSchedules(); loadScheduleSummary() }
 }
 
 // Bank statement related functions
@@ -1070,6 +1293,80 @@ const batchConfirmDelivery = async () => {
   }
 }
 
+// 收款计划相关函数
+const loadPaymentSchedules = async () => {
+  scheduleLoading.value = true
+  try {
+    const params = { page: schedulePagination.page, page_size: schedulePagination.pageSize, ...scheduleFilters }
+    Object.keys(params).forEach(k => { if (!params[k]) delete params[k] })
+    const response = await request.get('/finance/payment-schedules/', { params })
+    paymentSchedules.value = response.results || []
+    schedulePagination.total = response.count || 0
+  } catch (error) {
+    ElMessage.error('加载收款计划失败')
+  } finally {
+    scheduleLoading.value = false
+  }
+}
+
+const loadScheduleSummary = async () => {
+  try {
+    const response = await request.get('/finance/payment-schedules/summary/')
+    scheduleSummary.value = response
+  } catch (error) {
+    console.error('加载统计信息失败:', error)
+  }
+}
+
+const resetScheduleFilters = () => {
+  scheduleFilters.status = ''
+  scheduleFilters.milestone_type = ''
+  schedulePagination.page = 1
+  loadPaymentSchedules()
+  loadScheduleSummary()
+}
+
+const handleScheduleSizeChange = (size) => {
+  schedulePagination.pageSize = size
+  schedulePagination.page = 1
+  loadPaymentSchedules()
+}
+
+const getScheduleStatusType = (status) => {
+  const types = { 'PENDING': 'info', 'PARTIAL': 'warning', 'PAID': 'success', 'OVERDUE': 'danger', 'CANCELLED': '' }
+  return types[status] || 'info'
+}
+
+const handleRecordSchedulePayment = (row) => {
+  currentSchedule.value = row
+  schedulePaymentForm.amount = Number(row.amount_due) - Number(row.amount_paid)
+  schedulePaymentForm.payment_date = new Date().toISOString().split('T')[0]
+  schedulePaymentVisible.value = true
+}
+
+const submitSchedulePayment = async () => {
+  if (!schedulePaymentForm.amount || schedulePaymentForm.amount <= 0) {
+    ElMessage.warning('请输入有效的收款金额')
+    return
+  }
+  scheduleSubmitting.value = true
+  try {
+    await request.post(`/finance/payment-schedules/${currentSchedule.value.id}/record_payment/`, schedulePaymentForm)
+    ElMessage.success('收款登记成功')
+    schedulePaymentVisible.value = false
+    loadPaymentSchedules()
+    loadScheduleSummary()
+  } catch (error) {
+    ElMessage.error('收款登记失败: ' + (error.response?.data?.error || error.message))
+  } finally {
+    scheduleSubmitting.value = false
+  }
+}
+
+const handleViewScheduleDetail = (row) => {
+  ElMessage.info(`订单: ${row.sales_order_no}, 节点: ${row.milestone_name}`)
+}
+
 onMounted(() => {
   loadBankStatements()
   loadCustomers()
@@ -1091,4 +1388,8 @@ onMounted(() => {
 .amount-success { font-size: 16px; font-weight: 600; color: #67C23A; }
 .amount-warning { font-size: 18px; font-weight: 600; color: #E6A23C; }
 .amount-lg { font-size: 16px; font-weight: 600; }
+.summary-card { text-align: center; }
+.summary-content { padding: 8px 0; }
+.summary-label { font-size: 14px; color: #606266; margin-bottom: 8px; }
+.summary-value { font-size: 24px; font-weight: bold; }
 </style>

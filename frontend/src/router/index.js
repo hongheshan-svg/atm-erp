@@ -310,18 +310,6 @@ const routes = [
         component: () => import('@/views/finance/ProjectCostList.vue'),
         meta: { title: '项目成本核算', icon: 'DataAnalysis', menuId: 'finance:project-costs' }
       },
-      {
-        path: 'finance/payment-schedules',
-        name: 'PaymentScheduleList',
-        component: () => import('@/views/finance/PaymentScheduleList.vue'),
-        meta: { title: '收款计划', icon: 'Calendar', menuId: 'finance:payment-schedules' }
-      },
-      {
-        path: 'finance/purchase-payment-schedules',
-        name: 'PurchasePaymentScheduleList',
-        component: () => import('@/views/finance/PurchasePaymentScheduleList.vue'),
-        meta: { title: '付款计划', icon: 'Wallet', menuId: 'finance:purchase-payment-schedules' }
-      },
       // Reports
       {
         path: 'reports/profitability',
