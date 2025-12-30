@@ -314,7 +314,13 @@ const routes = [
         path: 'finance/payment-schedules',
         name: 'PaymentScheduleList',
         component: () => import('@/views/finance/PaymentScheduleList.vue'),
-        meta: { title: '付款计划', icon: 'Calendar', menuId: 'finance:payment-schedules' }
+        meta: { title: '收款计划', icon: 'Calendar', menuId: 'finance:payment-schedules' }
+      },
+      {
+        path: 'finance/purchase-payment-schedules',
+        name: 'PurchasePaymentScheduleList',
+        component: () => import('@/views/finance/PurchasePaymentScheduleList.vue'),
+        meta: { title: '付款计划', icon: 'Wallet', menuId: 'finance:purchase-payment-schedules' }
       },
       // Reports
       {

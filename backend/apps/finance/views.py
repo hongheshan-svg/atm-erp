@@ -13,14 +13,14 @@ from apps.core.data_permission import DataPermissionMixin
 from apps.projects.models import Project
 from .models import (
     Currency, ExchangeRateHistory, Expense, Invoice,
-    AccountReceivable, AccountPayable, Payment, PaymentSchedule,
+    AccountReceivable, AccountPayable, Payment, PaymentSchedule, PurchasePaymentSchedule,
     SharedExpense, SharedExpenseAllocation
 )
 from .serializers import (
     CurrencySerializer, ExchangeRateHistorySerializer,
     ExpenseSerializer, InvoiceSerializer, AccountReceivableSerializer,
     AccountPayableSerializer, PaymentSerializer, PaymentScheduleSerializer,
-    SharedExpenseSerializer, SharedExpenseAllocationSerializer
+    PurchasePaymentScheduleSerializer, SharedExpenseSerializer, SharedExpenseAllocationSerializer
 )
 
 
@@ -1543,5 +1543,219 @@ class PaymentScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
         return Response({
             'success': True,
             'schedule': PaymentScheduleSerializer(schedule).data,
+            'message': f'成功匹配付款 ¥{amount}，当前进度 {schedule.payment_progress}%'
+        })
+
+
+class PurchasePaymentScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+    """
+    ViewSet for PurchasePaymentSchedule management.
+    用于管理和跟踪采购订单的付款计划。
+    """
+    queryset = PurchasePaymentSchedule.objects.filter(is_deleted=False).select_related(
+        'purchase_order', 'purchase_order__supplier', 'project', 'account_payable'
+    )
+    serializer_class = PurchasePaymentScheduleSerializer
+    filterset_fields = ['purchase_order', 'project', 'status', 'milestone_type', 'reminder_status']
+    search_fields = ['schedule_no', 'milestone_name', 'purchase_order__order_no']
+    ordering_fields = ['due_date', 'amount_due', 'created_at']
+    
+    @action(detail=False, methods=['get'])
+    def summary(self, request):
+        """Get purchase payment schedule summary statistics."""
+        from datetime import timedelta
+        
+        queryset = self.get_queryset()
+        
+        # 过滤条件
+        project_id = request.query_params.get('project_id')
+        supplier_id = request.query_params.get('supplier_id')
+        
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        if supplier_id:
+            queryset = queryset.filter(purchase_order__supplier_id=supplier_id)
+        
+        # 统计数据
+        stats = queryset.aggregate(
+            total_amount=Sum('amount_due'),
+            total_paid=Sum('amount_paid'),
+        )
+        
+        total_amount = stats['total_amount'] or Decimal('0')
+        total_paid = stats['total_paid'] or Decimal('0')
+        total_remaining = total_amount - total_paid
+        overall_progress = float(total_paid / total_amount * 100) if total_amount > 0 else 0
+        
+        # 按状态统计
+        status_counts = queryset.values('status').annotate(count=Count('id'))
+        counts = {s['status']: s['count'] for s in status_counts}
+        
+        # 即将到期的付款（7天内）
+        today = timezone.now().date()
+        upcoming = queryset.filter(
+            status__in=['PENDING', 'PARTIAL'],
+            due_date__gte=today,
+            due_date__lte=today + timedelta(days=7)
+        ).order_by('due_date')[:10]
+        
+        # 已逾期的付款
+        overdue = queryset.filter(
+            status__in=['PENDING', 'PARTIAL'],
+            due_date__lt=today
+        ).order_by('due_date')[:10]
+        
+        return Response({
+            'total_amount': total_amount,
+            'total_paid': total_paid,
+            'total_remaining': total_remaining,
+            'overall_progress': round(overall_progress, 2),
+            'pending_count': counts.get('PENDING', 0),
+            'partial_count': counts.get('PARTIAL', 0),
+            'paid_count': counts.get('PAID', 0),
+            'overdue_count': counts.get('OVERDUE', 0),
+            'upcoming_payments': PurchasePaymentScheduleSerializer(upcoming, many=True).data,
+            'overdue_payments': PurchasePaymentScheduleSerializer(overdue, many=True).data,
+        })
+    
+    @action(detail=False, methods=['post'])
+    def generate_for_order(self, request):
+        """Generate payment schedules for a purchase order."""
+        from apps.purchase.models import PurchaseOrder
+        
+        purchase_order_id = request.data.get('purchase_order_id')
+        if not purchase_order_id:
+            return Response({'error': '请提供采购订单ID'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            purchase_order = PurchaseOrder.objects.get(id=purchase_order_id, is_deleted=False)
+        except PurchaseOrder.DoesNotExist:
+            return Response({'error': '采购订单不存在'}, status=status.HTTP_404_NOT_FOUND)
+        
+        schedules = PurchasePaymentSchedule.generate_from_purchase_order(purchase_order)
+        
+        return Response({
+            'success': True,
+            'count': len(schedules),
+            'schedules': PurchasePaymentScheduleSerializer(schedules, many=True).data
+        })
+    
+    @action(detail=True, methods=['post'])
+    def record_payment(self, request, pk=None):
+        """Record a payment against this schedule."""
+        schedule = self.get_object()
+        amount = request.data.get('amount')
+        payment_date = request.data.get('payment_date', timezone.now().date())
+        
+        if not amount:
+            return Response({'error': '请提供付款金额'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            amount = Decimal(str(amount))
+        except:
+            return Response({'error': '金额格式错误'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        schedule.amount_paid += amount
+        if schedule.amount_paid >= schedule.amount_due:
+            schedule.status = 'PAID'
+            schedule.actual_paid_date = payment_date
+            schedule.reminder_status = 'PAID'
+        elif schedule.amount_paid > 0:
+            schedule.status = 'PARTIAL'
+        
+        schedule.save()
+        
+        return Response(PurchasePaymentScheduleSerializer(schedule).data)
+    
+    @action(detail=False, methods=['get'])
+    def reminders(self, request):
+        """Get purchase payment schedules that need reminders."""
+        from datetime import timedelta
+        
+        today = timezone.now().date()
+        
+        reminders = []
+        
+        queryset = self.get_queryset().filter(
+            status__in=['PENDING', 'PARTIAL'],
+            reminder_status='PENDING'
+        )
+        
+        for schedule in queryset:
+            remind_date = schedule.due_date - timedelta(days=schedule.reminder_days_before)
+            
+            if today >= remind_date:
+                reminders.append({
+                    'schedule': PurchasePaymentScheduleSerializer(schedule).data,
+                    'reminder_type': 'OVERDUE' if schedule.is_overdue else 'UPCOMING',
+                    'days_until_due': schedule.days_until_due,
+                    'urgency': 'HIGH' if schedule.is_overdue else ('MEDIUM' if schedule.days_until_due <= 3 else 'LOW')
+                })
+        
+        reminders.sort(key=lambda x: (
+            0 if x['urgency'] == 'HIGH' else (1 if x['urgency'] == 'MEDIUM' else 2),
+            x['days_until_due']
+        ))
+        
+        return Response({
+            'total_count': len(reminders),
+            'reminders': reminders
+        })
+    
+    @action(detail=True, methods=['post'])
+    def mark_reminded(self, request, pk=None):
+        """Mark a purchase payment schedule as reminded."""
+        schedule = self.get_object()
+        schedule.reminder_status = 'REMINDED'
+        schedule.last_reminded_at = timezone.now()
+        schedule.save()
+        
+        return Response(PurchasePaymentScheduleSerializer(schedule).data)
+    
+    @action(detail=False, methods=['post'])
+    def match_bank_statement(self, request):
+        """Match a bank statement to a purchase payment schedule."""
+        from .bank_statement_models import BankStatement
+        
+        schedule_id = request.data.get('schedule_id')
+        bank_statement_id = request.data.get('bank_statement_id')
+        
+        if not schedule_id or not bank_statement_id:
+            return Response(
+                {'error': '请提供付款计划ID和银行流水ID'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            schedule = PurchasePaymentSchedule.objects.get(id=schedule_id)
+            bank_statement = BankStatement.objects.get(id=bank_statement_id)
+        except (PurchasePaymentSchedule.DoesNotExist, BankStatement.DoesNotExist):
+            return Response({'error': '记录不存在'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # 更新付款进度
+        amount = bank_statement.debit_amount
+        schedule.amount_paid += amount
+        
+        if schedule.amount_paid >= schedule.amount_due:
+            schedule.status = 'PAID'
+            schedule.actual_paid_date = bank_statement.transaction_time.date()
+            schedule.reminder_status = 'PAID'
+        elif schedule.amount_paid > 0:
+            schedule.status = 'PARTIAL'
+        
+        schedule.save()
+        
+        # 关联银行流水到付款计划
+        schedule.bank_statements.add(bank_statement)
+        
+        # 更新银行流水状态
+        bank_statement.status = 'MATCHED'
+        bank_statement.match_type = 'AP'
+        bank_statement.project = schedule.project
+        bank_statement.save()
+        
+        return Response({
+            'success': True,
+            'schedule': PurchasePaymentScheduleSerializer(schedule).data,
             'message': f'成功匹配付款 ¥{amount}，当前进度 {schedule.payment_progress}%'
         })

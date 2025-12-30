@@ -279,7 +279,26 @@ class PurchaseOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
         
         po.status = 'CONFIRMED'
         po.save()
-        return Response(PurchaseOrderSerializer(po).data)
+        
+        # Auto-create AP - 使用含税金额
+        from apps.finance.models import AccountPayable, PurchasePaymentSchedule
+        AccountPayable.objects.create(
+            supplier=po.supplier,
+            po=po,
+            project=po.project,
+            invoice_date=po.order_date,
+            amount_due=po.total_with_tax or po.total_amount,  # 优先使用含税金额
+            due_date=request.data.get('due_date', po.delivery_date),
+            created_by=request.user
+        )
+        
+        # 自动生成付款计划
+        schedules = PurchasePaymentSchedule.generate_from_purchase_order(po)
+        
+        response_data = PurchaseOrderSerializer(po).data
+        response_data['payment_schedules_count'] = len(schedules)
+        
+        return Response(response_data)
     
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):

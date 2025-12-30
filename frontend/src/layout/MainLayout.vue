@@ -126,7 +126,8 @@
           <el-menu-item index="/finance/ap" v-if="hasMenuAccess('finance:ap')">应付账款</el-menu-item>
           <el-menu-item index="/finance/invoices" v-if="hasMenuAccess('finance:invoices')">发票管理</el-menu-item>
           <el-menu-item index="/finance/project-costs" v-if="hasMenuAccess('finance:project-costs')">项目成本核算</el-menu-item>
-          <el-menu-item index="/finance/payment-schedules" v-if="hasMenuAccess('finance:payment-schedules')">付款计划</el-menu-item>
+          <el-menu-item index="/finance/payment-schedules" v-if="hasMenuAccess('finance:payment-schedules')">收款计划</el-menu-item>
+          <el-menu-item index="/finance/purchase-payment-schedules" v-if="hasMenuAccess('finance:purchase-payment-schedules')">付款计划</el-menu-item>
         </el-sub-menu>
         
         <el-sub-menu index="reports" v-if="hasMenuAccess('reports')">

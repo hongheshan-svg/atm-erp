@@ -4,7 +4,7 @@ Serializers for finance app.
 from rest_framework import serializers
 from .models import (
     Currency, ExchangeRateHistory, Expense, Invoice, InvoiceItem,
-    AccountReceivable, AccountPayable, Payment, PaymentSchedule,
+    AccountReceivable, AccountPayable, Payment, PaymentSchedule, PurchasePaymentSchedule,
     SharedExpense, SharedExpenseAllocation
 )
 
@@ -261,4 +261,39 @@ class PaymentScheduleSummarySerializer(serializers.Serializer):
     
     upcoming_payments = PaymentScheduleSerializer(many=True)
     overdue_payments = PaymentScheduleSerializer(many=True)
+
+
+class PurchasePaymentScheduleSerializer(serializers.ModelSerializer):
+    """PurchasePaymentSchedule serializer for tracking purchase payment milestones."""
+    
+    milestone_type_display = serializers.CharField(source='get_milestone_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    reminder_status_display = serializers.CharField(source='get_reminder_status_display', read_only=True)
+    
+    # 关联对象信息
+    purchase_order_no = serializers.CharField(source='purchase_order.order_no', read_only=True)
+    supplier_name = serializers.CharField(source='purchase_order.supplier.name', read_only=True)
+    project_code = serializers.CharField(source='project.code', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    
+    # 计算属性
+    amount_remaining = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    payment_progress = serializers.FloatField(read_only=True)
+    is_overdue = serializers.BooleanField(read_only=True)
+    days_until_due = serializers.IntegerField(read_only=True)
+    
+    class Meta:
+        model = PurchasePaymentSchedule
+        fields = [
+            'id', 'schedule_no', 'purchase_order', 'purchase_order_no', 'supplier_name',
+            'project', 'project_code', 'project_name',
+            'milestone_type', 'milestone_type_display', 'milestone_name', 'milestone_order',
+            'percentage', 'amount_due', 'amount_paid', 'amount_remaining', 'payment_progress',
+            'due_date', 'actual_paid_date', 'is_overdue', 'days_until_due',
+            'status', 'status_display',
+            'reminder_status', 'reminder_status_display', 'reminder_days_before', 'last_reminded_at',
+            'account_payable', 'notes',
+            'is_deleted', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['schedule_no', 'created_at', 'updated_at']
 
