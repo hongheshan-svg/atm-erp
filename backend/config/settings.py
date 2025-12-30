@@ -291,9 +291,23 @@ FRONTEND_URL = config('FRONTEND_URL', default='http://localhost')
 # Enable notification channels
 NOTIFICATION_CHANNELS_ENABLED = config(
     'NOTIFICATION_CHANNELS_ENABLED',
-    default='email',
+    default='email,wechat_work',
     cast=lambda v: [s.strip() for s in v.split(',')]
 )
+
+# =============================================================================
+# WeChat Work (企业微信) Configuration
+# =============================================================================
+WECHAT_WORK_WEBHOOK_URL = config(
+    'WECHAT_WORK_WEBHOOK_URL',
+    default='https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=***REMOVED***'
+)
+WECHAT_WORK_CORP_ID = config('WECHAT_WORK_CORP_ID', default='ww338f2a2b8bb31d89')
+WECHAT_WORK_CORP_SECRET = config(
+    'WECHAT_WORK_CORP_SECRET',
+    default='***REMOVED***'
+)
+WECHAT_WORK_AGENT_ID = config('WECHAT_WORK_AGENT_ID', default='1000019')
 
 # =============================================================================
 # Inventory Costing Method
