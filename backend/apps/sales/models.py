@@ -156,6 +156,8 @@ class SalesOrder(BaseModel):
     """
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
+        ('PENDING', '审批中'),
+        ('REJECTED', '已拒绝'),
         ('CONFIRMED', '已确认'),
         ('PARTIAL', '部分发货'),
         ('COMPLETED', '完成'),

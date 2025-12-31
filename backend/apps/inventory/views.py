@@ -250,6 +250,8 @@ class StockMoveViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
 class StockAdjustmentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for StockAdjustment management.
+    
+    库存调整审批流程由审批中心的流程配置决定。
     """
     queryset = StockAdjustment.objects.all()
     serializer_class = StockAdjustmentSerializer
@@ -257,16 +259,68 @@ class StockAdjustmentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
     search_fields = ['adjustment_no']
     ordering_fields = ['adjustment_date', 'created_at']
     
+    def _calculate_cost_impact(self, adjustment):
+        """计算库存调整的成本影响"""
+        total = 0
+        for line in adjustment.lines.filter(is_deleted=False):
+            total += abs(line.cost_impact or 0)
+        return total
+    
     @action(detail=True, methods=['post'])
-    def confirm(self, request, pk=None):
-        """Confirm adjustment and create stock moves."""
+    def submit(self, request, pk=None):
+        """提交库存调整审批 - 审批步骤由流程配置决定"""
         adjustment = self.get_object()
-        if adjustment.status != 'DRAFT':
+        if adjustment.status not in ['DRAFT', 'REJECTED']:
             return Response(
-                {'error': '只能确认草稿状态的调整单'},
+                {'error': '只能提交草稿或已拒绝状态的调整单'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # 使用成本影响作为金额
+        amount = self._calculate_cost_impact(adjustment)
+        
+        try:
+            from apps.core.workflow.services import WorkflowService
+            
+            instance, error = WorkflowService.start_workflow(
+                business_type='STOCK_ADJUSTMENT',
+                business_id=adjustment.id,
+                business_no=adjustment.adjustment_no,
+                submitter=request.user,
+                amount=amount
+            )
+            
+            if instance:
+                adjustment.status = 'PENDING'
+                adjustment.save()
+                return Response({
+                    **StockAdjustmentSerializer(adjustment).data,
+                    'workflow_started': True,
+                    'workflow_id': instance.id,
+                    'message': '已提交审批，请在审批中心查看审批进度'
+                })
+            else:
+                # 未配置审批流程，直接确认
+                return self._do_confirm(adjustment, request)
+                
+        except Exception as e:
+            # 审批模块不可用，直接确认
+            return self._do_confirm(adjustment, request)
+    
+    @action(detail=True, methods=['post'])
+    def confirm(self, request, pk=None):
+        """直接确认库存调整（跳过审批）"""
+        adjustment = self.get_object()
+        if adjustment.status not in ['DRAFT', 'APPROVED']:
+            return Response(
+                {'error': '只能确认草稿或已审批状态的调整单'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        return self._do_confirm(adjustment, request)
+    
+    def _do_confirm(self, adjustment, request):
+        """执行库存调整确认逻辑"""
         with transaction.atomic():
             for line in adjustment.lines.filter(is_deleted=False):
                 if line.qty_diff != 0:
@@ -282,7 +336,7 @@ class StockAdjustmentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
                         )
                         unit_cost = stock.weighted_avg_cost
                     except Stock.DoesNotExist:
-                        unit_cost = line.item.standard_cost
+                        unit_cost = line.item.standard_cost if hasattr(line.item, 'standard_cost') else 0
                     
                     StockMove.objects.create(
                         item=line.item,

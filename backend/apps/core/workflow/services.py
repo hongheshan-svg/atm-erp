@@ -213,6 +213,16 @@ class WorkflowService:
                 delivery = DeliveryOrder.objects.get(id=instance.business_id)
                 if delivery.so.project:
                     return delivery.so.project.manager
+            
+            elif instance.business_type == 'PROJECT':
+                from apps.projects.models import Project
+                project = Project.objects.get(id=instance.business_id)
+                return project.manager
+            
+            elif instance.business_type == 'STOCK_ADJUSTMENT':
+                # 库存调整没有项目经理，返回None
+                return None
+                
         except Exception as e:
             logger.error(f"Error getting project manager: {e}")
         
@@ -333,17 +343,60 @@ class WorkflowService:
                 from apps.sales.models import DeliveryOrder
                 delivery = DeliveryOrder.objects.get(id=instance.business_id)
                 if result == 'APPROVED':
-                    # 审批通过，进入备货环节（不自动创建出库记录，由仓库确认备货时创建）
+                    # 审批通过，进入备货环节
                     delivery.status = 'PREPARING'
                     delivery.save()
                     logger.info(f"Delivery order {delivery.delivery_no} approved, entering PREPARING status")
-                    
                 elif result == 'REJECTED':
                     delivery.status = 'REJECTED'
                     delivery.save()
                 elif result == 'WITHDRAWN':
                     delivery.status = 'DRAFT'
                     delivery.save()
+            
+            elif instance.business_type == 'SALES_ORDER':
+                from apps.sales.models import SalesOrder
+                so = SalesOrder.objects.get(id=instance.business_id)
+                if result == 'APPROVED':
+                    so.status = 'CONFIRMED'  # 审批通过后确认订单
+                    so.save()
+                    logger.info(f"Sales order {so.order_no} approved, status changed to CONFIRMED")
+                elif result == 'REJECTED':
+                    so.status = 'REJECTED'
+                    so.save()
+                elif result == 'WITHDRAWN':
+                    so.status = 'DRAFT'
+                    so.save()
+            
+            elif instance.business_type == 'PROJECT':
+                from apps.projects.models import Project
+                project = Project.objects.get(id=instance.business_id)
+                if result == 'APPROVED':
+                    project.status = 'IN_PROGRESS'  # 审批通过后项目开始
+                    project.save()
+                    logger.info(f"Project {project.code} approved, status changed to IN_PROGRESS")
+                elif result == 'REJECTED':
+                    project.status = 'CANCELLED'
+                    project.save()
+                elif result == 'WITHDRAWN':
+                    project.status = 'PLANNING'
+                    project.save()
+            
+            elif instance.business_type == 'STOCK_ADJUSTMENT':
+                from apps.inventory.models import StockAdjustment
+                adjustment = StockAdjustment.objects.get(id=instance.business_id)
+                if result == 'APPROVED':
+                    adjustment.status = 'APPROVED'
+                    adjustment.save()
+                    # 执行库存调整
+                    adjustment.apply_adjustment()
+                    logger.info(f"Stock adjustment {adjustment.id} approved and applied")
+                elif result == 'REJECTED':
+                    adjustment.status = 'REJECTED'
+                    adjustment.save()
+                elif result == 'WITHDRAWN':
+                    adjustment.status = 'DRAFT'
+                    adjustment.save()
             
             # Notify submitter
             cls._notify_submitter(instance, result)

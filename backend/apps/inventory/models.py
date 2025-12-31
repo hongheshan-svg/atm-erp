@@ -212,9 +212,14 @@ class StockMove(BaseModel):
 class StockAdjustment(BaseModel):
     """
     Stock Adjustment - for cycle counting and corrections.
+    
+    库存调整审批流程由审批中心的流程配置决定。
     """
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
+        ('PENDING', '审批中'),
+        ('APPROVED', '已审批'),
+        ('REJECTED', '已拒绝'),
         ('CONFIRMED', '已确认'),
     ]
     
@@ -248,6 +253,45 @@ class StockAdjustment(BaseModel):
         if not self.adjustment_no:
             self.adjustment_no = generate_code('ADJ')
         super().save(*args, **kwargs)
+    
+    def apply_adjustment(self):
+        """执行库存调整，创建库存变动记录"""
+        from django.db import transaction as db_transaction
+        
+        with db_transaction.atomic():
+            for line in self.lines.filter(is_deleted=False):
+                if line.qty_diff != 0:
+                    # Create stock move for adjustment
+                    warehouse_to = self.warehouse if line.qty_diff > 0 else None
+                    warehouse_from = self.warehouse if line.qty_diff < 0 else None
+                    
+                    # Get current weighted average cost
+                    try:
+                        stock = Stock.objects.get(
+                            warehouse=self.warehouse,
+                            item=line.item,
+                            is_deleted=False
+                        )
+                        unit_cost = stock.weighted_avg_cost
+                    except Stock.DoesNotExist:
+                        unit_cost = 0
+                    
+                    StockMove.objects.create(
+                        item=line.item,
+                        warehouse_from=warehouse_from,
+                        warehouse_to=warehouse_to,
+                        qty=abs(line.qty_diff),
+                        unit_cost=unit_cost,
+                        move_type='ADJUST',
+                        reference_type='StockAdjustment',
+                        reference_id=self.id,
+                        move_date=self.adjustment_date,
+                        status='COMPLETED',
+                        created_by=self.created_by
+                    )
+            
+            self.status = 'CONFIRMED'
+            self.save()
 
 
 class StockAdjustmentLine(BaseModel):

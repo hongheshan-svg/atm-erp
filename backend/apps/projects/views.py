@@ -37,6 +37,59 @@ class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, vi
     ordering_fields = ['code', 'start_date', 'created_at']
     
     @action(detail=True, methods=['post'])
+    def submit(self, request, pk=None):
+        """提交项目审批 - 审批步骤由流程配置决定"""
+        project = self.get_object()
+        if project.status not in ['DRAFT', 'PLANNING', 'REJECTED']:
+            return Response(
+                {'error': '只能提交草稿、规划中或已拒绝状态的项目'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 使用项目预算作为金额
+        amount = project.budget or 0
+        
+        try:
+            from apps.core.workflow.services import WorkflowService
+            
+            instance, error = WorkflowService.start_workflow(
+                business_type='PROJECT',
+                business_id=project.id,
+                business_no=project.code,
+                submitter=request.user,
+                amount=amount
+            )
+            
+            if instance:
+                project.status = 'PENDING'
+                project.save()
+                return Response({
+                    **ProjectSerializer(project).data,
+                    'workflow_started': True,
+                    'workflow_id': instance.id,
+                    'message': '已提交审批，请在审批中心查看审批进度'
+                })
+            else:
+                # 未配置审批流程，直接激活
+                project.status = 'IN_PROGRESS'
+                project.save()
+                return Response({
+                    **ProjectSerializer(project).data,
+                    'workflow_started': False,
+                    'message': error or '未配置审批流程，项目已直接启动'
+                })
+                
+        except Exception as e:
+            # 审批模块不可用，直接激活
+            project.status = 'IN_PROGRESS'
+            project.save()
+            return Response({
+                **ProjectSerializer(project).data,
+                'workflow_started': False,
+                'message': f'项目已启动，但工作流服务异常: {e}'
+            })
+    
+    @action(detail=True, methods=['post'])
     def change_status(self, request, pk=None):
         """Change project status."""
         project = self.get_object()

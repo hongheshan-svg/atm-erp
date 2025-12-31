@@ -115,6 +115,8 @@ class SalesQuotationLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
 class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for SalesOrder management.
+    
+    销售订单审批流程由审批中心的流程配置决定。
     """
     queryset = SalesOrder.objects.all()
     serializer_class = SalesOrderSerializer
@@ -123,15 +125,60 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
     ordering_fields = ['order_date', 'created_at']
     
     @action(detail=True, methods=['post'])
-    def confirm(self, request, pk=None):
-        """Confirm sales order."""
+    def submit(self, request, pk=None):
+        """提交销售订单审批 - 审批步骤由流程配置决定"""
         so = self.get_object()
-        if so.status != 'DRAFT':
+        if so.status not in ['DRAFT', 'REJECTED']:
             return Response(
-                {'error': '只能确认草稿状态的订单'},
+                {'error': '只能提交草稿或已拒绝状态的订单'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # 计算订单金额用于流程路由
+        amount = so.total_with_tax or so.total_amount or 0
+        
+        try:
+            from apps.core.workflow.services import WorkflowService
+            
+            instance, error = WorkflowService.start_workflow(
+                business_type='SALES_ORDER',
+                business_id=so.id,
+                business_no=so.order_no,
+                submitter=request.user,
+                amount=amount
+            )
+            
+            if instance:
+                so.status = 'PENDING'
+                so.save()
+                return Response({
+                    **SalesOrderSerializer(so).data,
+                    'workflow_started': True,
+                    'workflow_id': instance.id,
+                    'message': '已提交审批，请在审批中心查看审批进度'
+                })
+            else:
+                # 未配置审批流程，直接确认
+                return self._do_confirm(so, request)
+                
+        except Exception as e:
+            # 审批模块不可用，直接确认
+            return self._do_confirm(so, request)
+    
+    @action(detail=True, methods=['post'])
+    def confirm(self, request, pk=None):
+        """直接确认销售订单（跳过审批）"""
+        so = self.get_object()
+        if so.status not in ['DRAFT', 'PENDING']:
+            return Response(
+                {'error': '只能确认草稿或待审批状态的订单'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        return self._do_confirm(so, request)
+    
+    def _do_confirm(self, so, request):
+        """执行订单确认逻辑"""
         so.status = 'CONFIRMED'
         so.save()
         
@@ -142,7 +189,7 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
             so=so,
             project=so.project,
             invoice_date=so.order_date,
-            amount_due=so.total_with_tax or so.total_amount,  # 优先使用含税金额
+            amount_due=so.total_with_tax or so.total_amount,
             due_date=request.data.get('due_date', so.delivery_date),
             created_by=request.user
         )
