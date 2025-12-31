@@ -145,10 +145,11 @@ const loadOrderDetail = async () => {
   loading.value = true
   try {
     const response = await request.get(`/purchase/orders/${route.params.id}/`)
-    order.value = data
-    const { data: r } = await request.get(`/purchase/receipts/`, { params: { purchase_order: route.params.id } })
-    receipts.value = r.results || r
+    order.value = response.data || response
+    const receiptRes = await request.get(`/purchase/receipts/`, { params: { purchase_order: route.params.id } })
+    receipts.value = receiptRes.data?.results || receiptRes.results || receiptRes.data || []
   } catch (error) {
+    console.error('加载订单详情失败:', error)
     ElMessage.error('加载订单详情失败')
   } finally {
     loading.value = false
