@@ -131,7 +131,7 @@ class Project(BaseModel):
             status='APPROVED'
         ).aggregate(total=Sum('amount'))
         return result['total'] or 0
-    
+
     def get_total_receivables(self):
         """Get total receivables amount for this project."""
         from apps.finance.models import AccountReceivable

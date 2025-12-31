@@ -111,7 +111,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
         """Trigger cost recalculation for all projects"""
         # This would typically be a Celery task
         return Response({'status': 'success', 'message': '成本重新计算已触发'})
-    
+
     @action(detail=False, methods=['get'], url_path='management_dashboard')
     def management_dashboard(self, request):
         """

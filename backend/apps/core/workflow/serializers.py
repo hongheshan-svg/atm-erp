@@ -11,6 +11,8 @@ class WorkflowStepSerializer(serializers.ModelSerializer):
     action_type_display = serializers.CharField(source='get_action_type_display', read_only=True)
     approver_user_name = serializers.CharField(source='approver_user.get_full_name', read_only=True)
     approver_role_name = serializers.CharField(source='approver_role.name', read_only=True)
+    cc_users_detail = serializers.SerializerMethodField(read_only=True)
+    cc_roles_detail = serializers.SerializerMethodField(read_only=True)
     
     class Meta:
         model = WorkflowStep
@@ -21,7 +23,20 @@ class WorkflowStepSerializer(serializers.ModelSerializer):
             'approver_role', 'approver_role_name',
             'action_type', 'action_type_display',
             'timeout_hours', 'skip_amount_threshold',
-            'created_at', 'updated_at'
+            'cc_users', 'cc_users_detail', 'cc_roles', 'cc_roles_detail',
+            'can_reject', 'created_at', 'updated_at'
+        ]
+    
+    def get_cc_users_detail(self, obj):
+        return [
+            {'id': u.id, 'name': u.get_full_name() or u.username}
+            for u in obj.cc_users.all()
+        ]
+    
+    def get_cc_roles_detail(self, obj):
+        return [
+            {'id': r.id, 'name': r.name}
+            for r in obj.cc_roles.all()
         ]
 
 

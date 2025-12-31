@@ -125,6 +125,25 @@ class WorkflowStep(BaseModel):
         help_text='低于此金额时跳过此步骤'
     )
     
+    # CC recipients - users to be notified when this step is completed
+    cc_users = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name='workflow_step_cc',
+        verbose_name='抄送人'
+    )
+    
+    # CC roles - all users with these roles will be notified
+    cc_roles = models.ManyToManyField(
+        'accounts.Role',
+        blank=True,
+        related_name='workflow_step_cc',
+        verbose_name='抄送角色'
+    )
+    
+    # Whether approver can reject
+    can_reject = models.BooleanField(default=True, verbose_name='允许拒绝')
+    
     class Meta:
         db_table = 'workflow_step'
         verbose_name = '审批步骤'

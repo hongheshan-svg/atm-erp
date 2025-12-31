@@ -10,7 +10,7 @@
               +{{ kpis.financial.revenue_growth }}%
             </span>
           </div>
-          <div class="kpi-value">{{ formatCurrency(kpis.financial.revenue.total) }}</div>
+            <div class="kpi-value">{{ formatCurrency(kpis.financial.revenue.total) }}</div>
           <div class="kpi-label">本月收入</div>
           <div class="kpi-footer">
             <span>{{ kpis.financial.revenue.orders }} 笔订单</span>
@@ -255,7 +255,7 @@
             <div class="card-header">
               <span>📦 Top 5 供应商（本月采购额）</span>
             </div>
-          </template>
+              </template>
           <el-table :data="topSuppliers" size="small" stripe>
             <el-table-column type="index" label="#" width="40" />
             <el-table-column prop="name" label="供应商" show-overflow-tooltip />
@@ -710,12 +710,12 @@ onUnmounted(() => {
 .project-item {
   padding: 10px 0;
   border-bottom: 1px solid #f0f0f0;
-}
-
+  }
+  
 .project-item:last-child {
   border-bottom: none;
-}
-
+  }
+  
 .project-info {
   margin-bottom: 8px;
 }
@@ -724,8 +724,8 @@ onUnmounted(() => {
   font-size: 14px;
   font-weight: 500;
   color: #303133;
-}
-
+  }
+  
 .project-customer {
   font-size: 12px;
   color: #909399;

@@ -162,7 +162,10 @@
                           {{ getApproverTypeLabel(step.approver_type) }}
                         </el-tag>
                         <el-tag v-if="step.can_reject" size="small" type="danger">可拒绝</el-tag>
-                        <el-tag v-if="step.timeout_days" size="small" type="warning">{{ step.timeout_days }}天超时</el-tag>
+                        <el-tag v-if="step.timeout_hours" size="small" type="warning">{{ Math.ceil(step.timeout_hours/24) }}天超时</el-tag>
+                        <el-tag v-if="getCcCount(step) > 0" size="small" type="info">
+                          抄送{{ getCcCount(step) }}人
+                        </el-tag>
                       </div>
                     </div>
                     <!-- 排序按钮 -->
@@ -312,6 +315,38 @@
             </el-form-item>
           </el-col>
         </el-row>
+
+        <el-divider content-position="left">抄送设置</el-divider>
+        
+        <el-form-item label="抄送人员">
+          <el-select 
+            v-model="stepForm.cc_users" 
+            multiple 
+            filterable 
+            style="width: 100%" 
+            placeholder="选择需要抄送的人员（可多选）"
+          >
+            <el-option v-for="user in users" :key="user.id" :label="getUserLabel(user)" :value="user.id">
+              <div class="user-option">
+                <span>{{ user.display_name || user.username }}</span>
+                <span class="user-dept">{{ user.department_name || '' }}</span>
+              </div>
+            </el-option>
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="抄送角色">
+          <el-select 
+            v-model="stepForm.cc_roles" 
+            multiple 
+            filterable 
+            style="width: 100%" 
+            placeholder="选择需要抄送的角色（可多选）"
+          >
+            <el-option v-for="role in roles" :key="role.id" :label="role.name" :value="role.id" />
+          </el-select>
+          <div class="form-tip">该角色下的所有人员都会收到抄送通知</div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="stepDialogVisible = false">取消</el-button>
@@ -358,7 +393,7 @@ const stepFormRef = ref(null)
 
 // 表单
 const form = ref({ code: '', name: '', business_type: '', amount_threshold: null, description: '', is_active: true })
-const stepForm = ref({ name: '', approver_type: 'USER', approver: null, role: null, can_reject: true, timeout_days: 3 })
+const stepForm = ref({ name: '', approver_type: 'USER', approver: null, role: null, can_reject: true, timeout_days: 3, cc_users: [], cc_roles: [] })
 
 // 常量
 const businessTypeLabels = {
@@ -437,11 +472,18 @@ const getApproverTypeColor = (type) => {
 }
 
 const getApproverDisplay = (step) => {
-  if (step.approver_type === 'USER') return step.approver_name || '未指定用户'
-  if (step.approver_type === 'ROLE') return step.role_name || '未指定角色'
-  if (step.approver_type === 'DEPARTMENT_HEAD') return '部门负责人'
-  if (step.approver_type === 'SUBMITTER_LEADER') return '直接上级'
+  if (step.approver_type === 'USER') return step.approver_user_name || '未指定用户'
+  if (step.approver_type === 'ROLE') return step.approver_role_name || '未指定角色'
+  if (step.approver_type === 'DEPARTMENT_HEAD' || step.approver_type === 'DEPARTMENT_MANAGER') return '部门负责人'
+  if (step.approver_type === 'SUBMITTER_LEADER' || step.approver_type === 'SUPERIOR') return '直接上级'
+  if (step.approver_type === 'PROJECT_MANAGER') return '项目经理'
   return '-'
+}
+
+const getCcCount = (step) => {
+  const userCount = step.cc_users_detail?.length || step.cc_users?.length || 0
+  const roleCount = step.cc_roles_detail?.length || step.cc_roles?.length || 0
+  return userCount + roleCount
 }
 
 const getUserLabel = (user) => {
@@ -566,14 +608,18 @@ const selectApproverType = (type) => {
 
 const addStep = async () => {
   isEditStep.value = false
-  stepForm.value = { name: '', approver_type: 'USER', approver: null, role: null, can_reject: true, timeout_days: 3 }
+  stepForm.value = { name: '', approver_type: 'USER', approver: null, role: null, can_reject: true, timeout_days: 3, cc_users: [], cc_roles: [] }
   await loadUsersAndRoles()
   stepDialogVisible.value = true
 }
 
 const editStep = async (step) => {
   isEditStep.value = true
-  stepForm.value = { ...step }
+  stepForm.value = { 
+    ...step,
+    cc_users: step.cc_users || [],
+    cc_roles: step.cc_roles || []
+  }
   await loadUsersAndRoles()
   stepDialogVisible.value = true
 }
@@ -1090,5 +1136,16 @@ onMounted(() => {
 .user-dept {
   font-size: 12px;
   color: #909399;
+}
+
+.form-tip {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+}
+
+:deep(.el-divider__text) {
+  font-size: 13px;
+  color: #606266;
 }
 </style>

@@ -209,8 +209,8 @@ def check_overdue_payables():
         safe_content += "👉 [点击查看详情](应付账款管理)"
         
         NotificationService.send_custom_notification(title, safe_content, group_safe_content=safe_content)
-    except Exception:
-        pass
+        except Exception:
+            pass
     
     return f"Sent overdue AP alert for {overdue_ap.count()} items, total: ¥{total_overdue:,.2f}"
 

@@ -201,7 +201,7 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                     # Parse status
                     status_val = get_val(status_col, '启用')
                     is_active = status_val not in ['禁用', '停用', 'false', 'False', '0', 'INACTIVE']
-                    
+
                     # Check if item exists
                     item, created = Item.objects.update_or_create(
                         sku=sku,
