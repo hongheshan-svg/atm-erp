@@ -50,7 +50,7 @@
             
             <!-- 审批中: 查看审批进度 -->
             <el-button size="small" type="info" @click="viewWorkflow(row)" 
-                       v-if="row.status === 'PENDING'">
+                       v-if="['SUBMITTED', 'PENDING'].includes(row.status)">
               审批进度
             </el-button>
             
@@ -329,6 +329,7 @@ const pagination = reactive({
 
 const statusOptions = [
   { value: 'DRAFT', label: '草稿' },
+  { value: 'SUBMITTED', label: '已提交' },
   { value: 'PENDING', label: '审批中' },
   { value: 'APPROVED', label: '已审批' },
   { value: 'PREPARING', label: '备货中' },
@@ -343,6 +344,7 @@ const statusOptions = [
 const getStatusType = (status) => {
   const types = {
     'DRAFT': 'info',
+    'SUBMITTED': 'warning',
     'PENDING': 'warning',
     'APPROVED': 'success',
     'PREPARING': 'primary',

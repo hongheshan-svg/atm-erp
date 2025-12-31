@@ -286,6 +286,10 @@ const deliveryForm = ref({
 const getStatusType = (status) => {
   const types = {
     'DRAFT': 'info',
+    'PENDING_APPROVAL': 'warning',
+    'PENDING': 'warning',
+    'APPROVED': 'success',
+    'REJECTED': 'danger',
     'CONFIRMED': 'warning',
     'PARTIAL': 'primary',
     'DELIVERED': 'success',
@@ -297,6 +301,10 @@ const getStatusType = (status) => {
 const getStatusLabel = (status) => {
   const labels = {
     'DRAFT': '草稿',
+    'PENDING_APPROVAL': '待审批',
+    'PENDING': '审批中',
+    'APPROVED': '已审批',
+    'REJECTED': '已拒绝',
     'CONFIRMED': '已确认',
     'PARTIAL': '部分发货',
     'DELIVERED': '已完成',

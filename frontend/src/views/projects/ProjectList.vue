@@ -154,6 +154,8 @@ const form = reactive({
 const getStatusType = (status) => {
   const types = {
     DRAFT: 'info',
+    PENDING: 'warning',
+    REJECTED: 'danger',
     PLANNING: 'info',
     ACTIVE: 'success',
     PAUSED: 'warning',
@@ -167,6 +169,8 @@ const getStatusType = (status) => {
 const getStatusLabel = (status) => {
   const labels = {
     DRAFT: '草稿',
+    PENDING: '审批中',
+    REJECTED: '已拒绝',
     PLANNING: '规划中',
     ACTIVE: '进行中',
     PAUSED: '暂停',

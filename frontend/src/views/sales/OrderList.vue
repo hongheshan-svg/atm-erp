@@ -21,6 +21,10 @@
         <el-form-item label="状态">
           <el-select v-model="searchForm.status" placeholder="选择状态" clearable style="width: 120px;">
             <el-option label="草稿" value="DRAFT" />
+            <el-option label="待审批" value="PENDING_APPROVAL" />
+            <el-option label="审批中" value="PENDING" />
+            <el-option label="已审批" value="APPROVED" />
+            <el-option label="已拒绝" value="REJECTED" />
             <el-option label="已确认" value="CONFIRMED" />
             <el-option label="部分发货" value="PARTIAL" />
             <el-option label="已完成" value="COMPLETED" />
@@ -303,6 +307,10 @@ const rules = {
 const getStatusType = (status) => {
   const types = { 
     DRAFT: 'info', 
+    PENDING_APPROVAL: 'warning',
+    PENDING: 'warning',
+    APPROVED: 'success',
+    REJECTED: 'danger',
     CONFIRMED: 'success', 
     PARTIAL: 'warning',
     COMPLETED: '', 
@@ -314,6 +322,10 @@ const getStatusType = (status) => {
 const getStatusLabel = (status) => {
   const labels = { 
     DRAFT: '草稿', 
+    PENDING_APPROVAL: '待审批',
+    PENDING: '审批中',
+    APPROVED: '已审批',
+    REJECTED: '已拒绝',
     CONFIRMED: '已确认', 
     PARTIAL: '部分发货',
     COMPLETED: '已完成', 

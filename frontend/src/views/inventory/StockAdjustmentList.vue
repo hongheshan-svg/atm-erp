@@ -25,8 +25,8 @@
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'COMPLETED' ? 'success' : 'warning'">
-              {{ row.status === 'COMPLETED' ? '已完成' : '草稿' }}
+            <el-tag :type="getStatusType(row.status)">
+              {{ getStatusLabel(row.status) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -118,6 +118,30 @@ const rules = {
   warehouse: [{ required: true, message: '请选择仓库', trigger: 'change' }],
   adjustment_date: [{ required: true, message: '请选择盘点日期', trigger: 'change' }],
   reason: [{ required: true, message: '请输入盘点原因', trigger: 'blur' }]
+}
+
+const getStatusType = (status) => {
+  const types = {
+    DRAFT: 'info',
+    PENDING: 'warning',
+    APPROVED: 'success',
+    REJECTED: 'danger',
+    CONFIRMED: 'success',
+    COMPLETED: 'success'
+  }
+  return types[status] || 'info'
+}
+
+const getStatusLabel = (status) => {
+  const labels = {
+    DRAFT: '草稿',
+    PENDING: '审批中',
+    APPROVED: '已审批',
+    REJECTED: '已拒绝',
+    CONFIRMED: '已确认',
+    COMPLETED: '已完成'
+  }
+  return labels[status] || status
 }
 
 const loadAdjustments = async () => {

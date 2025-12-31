@@ -303,6 +303,7 @@ const getStatusType = (status) => {
   const types = { 
     DRAFT: 'info', 
     SUBMITTED: 'warning', 
+    PENDING: 'warning',
     APPROVED: 'success', 
     REJECTED: 'danger', 
     CONVERTED: '' 
@@ -314,6 +315,7 @@ const getStatusLabel = (status) => {
   const labels = { 
     DRAFT: '草稿', 
     SUBMITTED: '已提交', 
+    PENDING: '审批中',
     APPROVED: '已批准', 
     REJECTED: '已拒绝', 
     CONVERTED: '已转订单' 

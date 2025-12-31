@@ -368,6 +368,7 @@ class DeliveryOrder(BaseModel):
     """
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
+        ('SUBMITTED', '已提交'),  # 兼容旧数据
         ('PENDING', '审批中'),  # 审批流程由流程配置决定
         ('APPROVED', '已审批'),  # 审批通过，准备进入操作流程
         ('PREPARING', '备货中'),
