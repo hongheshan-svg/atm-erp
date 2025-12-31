@@ -138,16 +138,19 @@ class WorkflowService:
     def _get_step_assignee(cls, step, instance):
         """
         Determine the assignee for a workflow step.
+        Falls back to approver_role if dynamic assignee is not found.
         """
         from apps.accounts.models import User
         
+        assignee = None
+        
         if step.approver_type == 'USER':
-            return step.approver_user
+            assignee = step.approver_user
         
         elif step.approver_type == 'ROLE':
             if step.approver_role:
                 # Get first active user with this role
-                return User.objects.filter(
+                assignee = User.objects.filter(
                     role=step.approver_role,
                     is_active=True,
                     is_deleted=False
@@ -156,20 +159,30 @@ class WorkflowService:
         elif step.approver_type == 'DEPARTMENT_MANAGER':
             # Get submitter's department manager
             if instance.submitter.department and instance.submitter.department.manager:
-                return instance.submitter.department.manager
+                assignee = instance.submitter.department.manager
         
         elif step.approver_type == 'PROJECT_MANAGER':
             # Get project manager from business object
             assignee = cls._get_project_manager(instance)
-            if assignee:
-                return assignee
         
         elif step.approver_type == 'SUPERIOR':
             # Get submitter's superior (department manager or higher)
             if instance.submitter.department and instance.submitter.department.manager:
-                return instance.submitter.department.manager
+                assignee = instance.submitter.department.manager
         
-        return None
+        # Fallback to approver_role if no assignee found
+        if not assignee and step.approver_role:
+            assignee = User.objects.filter(
+                role=step.approver_role,
+                is_active=True,
+                is_deleted=False
+            ).first()
+        
+        # Last resort: use first superuser
+        if not assignee:
+            assignee = User.objects.filter(is_superuser=True, is_active=True).first()
+        
+        return assignee
     
     @classmethod
     def _get_project_manager(cls, instance):
