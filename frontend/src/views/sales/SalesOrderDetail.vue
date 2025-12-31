@@ -20,14 +20,14 @@
         </el-descriptions-item>
         <el-descriptions-item label="增值税率">{{ order.tax_rate ?? 13 }}%</el-descriptions-item>
         <el-descriptions-item label="不含税金额">
-            ¥{{ (order.total_amount || 0).toFixed(2) }}
+            ¥{{ formatMoney(order.total_amount) }}
         </el-descriptions-item>
         <el-descriptions-item label="税额">
-          ¥{{ (order.tax_amount || 0).toFixed(2) }}
+          ¥{{ formatMoney(order.tax_amount) }}
         </el-descriptions-item>
         <el-descriptions-item label="含税总额" :span="3">
           <span style="font-size: 18px; font-weight: 600; color: #f56c6c;">
-            ¥{{ (order.total_with_tax || order.total_amount || 0).toFixed(2) }}
+            ¥{{ formatMoney(order.total_with_tax || order.total_amount) }}
           </span>
         </el-descriptions-item>
         <el-descriptions-item label="创建人">{{ order.created_by_name }}</el-descriptions-item>
@@ -105,7 +105,7 @@
             取消订单
           </el-button>
         </div>
-        <el-statistic title="订单总金额" :value="order.total_amount || 0" prefix="¥" :precision="2" />
+        <el-statistic title="订单总金额" :value="parseFloat(order.total_amount || 0)" prefix="¥" :precision="2" />
       </div>
     </el-card>
 
@@ -246,6 +246,8 @@ const getDeliveryStatusLabel = (status) => {
   return status === 'COMPLETED' ? '已完成' : '进行中'
 }
 
+const formatMoney = (val) => parseFloat(val || 0).toFixed(2)
+
 const loadOrderDetail = async () => {
   loading.value = true
   try {
@@ -342,17 +344,25 @@ const submitDelivery = async () => {
   }
 
   try {
+    // 获取订单明细以获取 item_id
+    const orderLines = order.value.lines || []
+    
     const payload = {
-      sales_order: route.params.id,
+      so: route.params.id,  // 使用正确的字段名
       warehouse: deliveryForm.value.warehouse,
       delivery_date: deliveryForm.value.delivery_date,
       notes: deliveryForm.value.notes,
       lines: deliveryForm.value.lines
         .filter(line => line.delivery_qty > 0)
-        .map(line => ({
-          order_line: line.order_line,
-          qty: line.delivery_qty
-        }))
+        .map(line => {
+          // 找到对应的订单明细获取 item_id
+          const orderLine = orderLines.find(ol => ol.id === line.order_line)
+          return {
+            so_line: line.order_line,  // 使用正确的字段名
+            item: orderLine?.item || orderLine?.item_id,
+            qty: line.delivery_qty
+          }
+        })
     }
 
     if (payload.lines.length === 0) {
@@ -366,7 +376,7 @@ const submitDelivery = async () => {
     loadOrderDetail()
   } catch (error) {
     console.error('创建发货单失败:', error)
-    ElMessage.error('创建发货单失败')
+    ElMessage.error(error.response?.data?.detail || error.response?.data?.error || '创建发货单失败')
   }
 }
 

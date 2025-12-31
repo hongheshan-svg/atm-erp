@@ -55,7 +55,7 @@
         </el-table-column>
         <el-table-column prop="total_with_tax" label="含税总额" width="130" align="right">
           <template #default="{ row }">
-            ¥{{ (row.total_with_tax || row.total_amount || 0).toFixed(2) }}
+            ¥{{ formatMoney(row.total_with_tax || row.total_amount) }}
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
@@ -139,12 +139,12 @@
         <el-table-column prop="unit" label="单位" width="80" />
         <el-table-column prop="unit_price" label="单价" width="120" align="right">
           <template #default="{ row }">
-            ¥{{ (row.unit_price || 0).toFixed(2) }}
+            ¥{{ formatMoney(row.unit_price) }}
           </template>
         </el-table-column>
         <el-table-column prop="amount" label="金额" width="130" align="right">
           <template #default="{ row }">
-            ¥{{ ((row.qty || 0) * (row.unit_price || 0)).toFixed(2) }}
+            ¥{{ formatMoney(parseFloat(row.qty || 0) * parseFloat(row.unit_price || 0)) }}
           </template>
         </el-table-column>
         <el-table-column prop="notes" label="备注" show-overflow-tooltip />
@@ -212,6 +212,8 @@ const getStatusLabel = (status) => {
   return labels[status] || status
 }
 
+const formatMoney = (val) => parseFloat(val || 0).toFixed(2)
+
 const loadQuotations = async () => {
   loading.value = true
   try {
@@ -265,6 +267,7 @@ const handleCreate = () => {
 const handleView = async (row) => {
   try {
     const response = await request.get(`/sales/quotations/${row.id}/`)
+    const data = response.data || response
     currentQuotation.value = data
     dialogTitle.value = `报价详情 - ${data.quote_no}`
     detailVisible.value = true
@@ -306,6 +309,7 @@ const handleConvertToOrder = async (row) => {
     })
 
     const response = await request.post(`/sales/quotations/${row.id}/convert_to_order/`)
+    const data = response.data || response
     ElMessage.success('转换成功')
     router.push(`/sales/orders/${data.id}`)
   } catch (error) {
