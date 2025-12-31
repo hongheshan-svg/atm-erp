@@ -16,6 +16,7 @@ class WorkflowDefinition(BaseModel):
         ('SALES_ORDER', '销售订单'),
         ('PROJECT', '项目立项'),
         ('STOCK_ADJUSTMENT', '库存调整'),
+        ('DELIVERY_ORDER', '发货单'),
     ]
     
     name = models.CharField(max_length=100, verbose_name='流程名称')

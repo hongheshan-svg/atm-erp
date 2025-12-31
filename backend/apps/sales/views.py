@@ -208,16 +208,68 @@ class DeliveryOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
     search_fields = ['delivery_no']
     ordering_fields = ['delivery_date', 'created_at']
     
+    def _calculate_delivery_amount(self, delivery):
+        """Calculate total amount for the delivery order."""
+        total = 0
+        for line in delivery.lines.filter(is_deleted=False):
+            total += line.qty * line.so_line.unit_price
+        return total
+    
     @action(detail=True, methods=['post'])
-    def confirm(self, request, pk=None):
-        """Confirm delivery and create stock moves."""
+    def submit(self, request, pk=None):
+        """Submit delivery order for approval."""
         delivery = self.get_object()
         if delivery.status != 'DRAFT':
             return Response(
-                {'error': '只能确认草稿状态的发货单'},
+                {'error': '只能提交草稿状态的发货单'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Calculate delivery amount for workflow routing
+        amount = self._calculate_delivery_amount(delivery)
+        
+        try:
+            from apps.core.workflow.services import WorkflowService
+            
+            instance, error = WorkflowService.start_workflow(
+                business_type='DELIVERY_ORDER',
+                business_id=delivery.id,
+                business_no=delivery.delivery_no,
+                submitter=request.user,
+                amount=amount
+            )
+            
+            if instance:
+                delivery.status = 'PENDING'
+                delivery.save()
+                return Response({
+                    **DeliveryOrderSerializer(delivery).data,
+                    'workflow_started': True,
+                    'workflow_id': instance.id,
+                    'message': '已提交审批'
+                })
+            else:
+                # No workflow configured, directly confirm
+                return self._do_confirm(delivery, request.user)
+                
+        except Exception as e:
+            # Workflow module not available, directly confirm
+            return self._do_confirm(delivery, request.user)
+    
+    @action(detail=True, methods=['post'])
+    def confirm(self, request, pk=None):
+        """Confirm delivery and create stock moves (called after approval or directly for small amounts)."""
+        delivery = self.get_object()
+        if delivery.status not in ['DRAFT', 'PENDING']:
+            return Response(
+                {'error': '只能确认草稿或待审批状态的发货单'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        return self._do_confirm(delivery, request.user)
+    
+    def _do_confirm(self, delivery, user):
+        """Actually confirm the delivery order."""
         with transaction.atomic():
             from apps.inventory.models import StockMove
             
@@ -227,14 +279,14 @@ class DeliveryOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
                     item=line.item,
                     warehouse_from=delivery.warehouse,
                     qty=line.qty,
-                    unit_cost=line.so_line.unit_price,  # Use selling price as reference
+                    unit_cost=line.so_line.unit_price,
                     move_type='OUT_SALES',
                     reference_type='DeliveryOrder',
                     reference_id=delivery.id,
                     project=delivery.so.project,
                     move_date=delivery.delivery_date,
                     status='COMPLETED',
-                    created_by=request.user
+                    created_by=user
                 )
                 
                 # Update delivered qty on SO line

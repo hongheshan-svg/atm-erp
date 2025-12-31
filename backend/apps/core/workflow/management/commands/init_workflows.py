@@ -299,4 +299,68 @@ class Command(BaseCommand):
             )
             self.stdout.write(f'  Created: {stock_workflow.name}')
         
+        # 9. Delivery Order Workflow (Small Amount) - No approval needed
+        do_workflow_small, created = WorkflowDefinition.objects.get_or_create(
+            code='DO_SMALL',
+            defaults={
+                'name': '发货单审批(小额)',
+                'business_type': 'DELIVERY_ORDER',
+                'description': '金额小于50000的发货单，仅需仓库主管确认',
+                'is_active': True,
+                'amount_threshold': None,
+            }
+        )
+        
+        if created:
+            WorkflowStep.objects.create(
+                workflow=do_workflow_small,
+                step_order=1,
+                name='仓库主管确认',
+                approver_type='DEPARTMENT_MANAGER',
+                action_type='APPROVE',
+                timeout_hours=12,
+            )
+            self.stdout.write(f'  Created: {do_workflow_small.name}')
+        
+        # 10. Delivery Order Workflow (Large Amount)
+        do_workflow_large, created = WorkflowDefinition.objects.get_or_create(
+            code='DO_LARGE',
+            defaults={
+                'name': '发货单审批(大额)',
+                'business_type': 'DELIVERY_ORDER',
+                'description': '金额大于等于50000的发货单，需仓库主管、财务和总经理审批',
+                'is_active': True,
+                'amount_threshold': 50000,
+            }
+        )
+        
+        if created:
+            WorkflowStep.objects.create(
+                workflow=do_workflow_large,
+                step_order=1,
+                name='仓库主管确认',
+                approver_type='DEPARTMENT_MANAGER',
+                action_type='APPROVE',
+                timeout_hours=12,
+            )
+            WorkflowStep.objects.create(
+                workflow=do_workflow_large,
+                step_order=2,
+                name='财务审核',
+                approver_type='ROLE',
+                approver_role=finance_role,
+                action_type='REVIEW',
+                timeout_hours=24,
+            )
+            WorkflowStep.objects.create(
+                workflow=do_workflow_large,
+                step_order=3,
+                name='总经理审批',
+                approver_type='ROLE',
+                approver_role=admin_role,
+                action_type='APPROVE',
+                timeout_hours=48,
+            )
+            self.stdout.write(f'  Created: {do_workflow_large.name}')
+        
         self.stdout.write(self.style.SUCCESS('Workflow initialization complete!'))

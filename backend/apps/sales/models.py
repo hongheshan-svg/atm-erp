@@ -354,6 +354,8 @@ class DeliveryOrder(BaseModel):
     """
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
+        ('PENDING', '待审批'),
+        ('REJECTED', '已拒绝'),
         ('CONFIRMED', '已确认'),
         ('COMPLETED', '完成'),
     ]

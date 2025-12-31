@@ -1,5 +1,5 @@
 // Service Worker for PWA
-const CACHE_NAME = 'erp-v1.0.11'
+const CACHE_NAME = 'erp-v1.0.12'
 const urlsToCache = [
   '/',
   '/index.html',

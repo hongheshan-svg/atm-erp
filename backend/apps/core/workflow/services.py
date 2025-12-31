@@ -207,6 +207,12 @@ class WorkflowService:
                 so = SalesOrder.objects.get(id=instance.business_id)
                 if so.project:
                     return so.project.manager
+            
+            elif instance.business_type == 'DELIVERY_ORDER':
+                from apps.sales.models import DeliveryOrder
+                delivery = DeliveryOrder.objects.get(id=instance.business_id)
+                if delivery.so.project:
+                    return delivery.so.project.manager
         except Exception as e:
             logger.error(f"Error getting project manager: {e}")
         
@@ -322,6 +328,52 @@ class WorkflowService:
                 elif result == 'WITHDRAWN':
                     expense.status = 'DRAFT'
                 expense.save()
+            
+            elif instance.business_type == 'DELIVERY_ORDER':
+                from apps.sales.models import DeliveryOrder
+                from apps.inventory.models import StockMove
+                delivery = DeliveryOrder.objects.get(id=instance.business_id)
+                if result == 'APPROVED':
+                    # Auto-confirm the delivery order and create stock moves
+                    for line in delivery.lines.filter(is_deleted=False):
+                        StockMove.objects.create(
+                            item=line.item,
+                            warehouse_from=delivery.warehouse,
+                            qty=line.qty,
+                            unit_cost=line.so_line.unit_price,
+                            move_type='OUT_SALES',
+                            reference_type='DeliveryOrder',
+                            reference_id=delivery.id,
+                            project=delivery.so.project,
+                            move_date=delivery.delivery_date,
+                            status='COMPLETED',
+                            created_by=instance.submitter
+                        )
+                        # Update delivered qty on SO line
+                        line.so_line.delivered_qty += line.qty
+                        line.so_line.save()
+                    
+                    delivery.status = 'CONFIRMED'
+                    delivery.save()
+                    
+                    # Check if SO is fully delivered
+                    so = delivery.so
+                    all_delivered = all(
+                        line.delivered_qty >= line.qty
+                        for line in so.lines.filter(is_deleted=False)
+                    )
+                    if all_delivered:
+                        so.status = 'COMPLETED'
+                    else:
+                        so.status = 'PARTIAL'
+                    so.save()
+                    
+                elif result == 'REJECTED':
+                    delivery.status = 'REJECTED'
+                    delivery.save()
+                elif result == 'WITHDRAWN':
+                    delivery.status = 'DRAFT'
+                    delivery.save()
             
             # Notify submitter
             cls._notify_submitter(instance, result)

@@ -28,6 +28,8 @@
         <el-form-item label="状态">
           <el-select v-model="searchForm.status" placeholder="请选择状态" clearable style="width: 140px;">
             <el-option label="草稿" value="DRAFT" />
+            <el-option label="待审批" value="PENDING" />
+            <el-option label="已拒绝" value="REJECTED" />
             <el-option label="已确认" value="CONFIRMED" />
             <el-option label="已完成" value="COMPLETED" />
           </el-select>
@@ -54,14 +56,22 @@
         </el-table-column>
         <el-table-column prop="created_by_name" label="创建人" width="100" />
         <el-table-column prop="notes" label="备注" show-overflow-tooltip />
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
-            <el-button size="small" type="success" @click="handleConfirm(row)" v-if="row.status === 'DRAFT'">
-              确认发货
+            <el-button size="small" type="warning" @click="handleSubmit(row)" v-if="row.status === 'DRAFT'">
+              提交审批
+            </el-button>
+            <el-button size="small" type="info" v-if="row.status === 'PENDING'" disabled>
+              审批中
+            </el-button>
+            <el-button size="small" type="warning" @click="handleSubmit(row)" v-if="row.status === 'REJECTED'">
+              重新提交
             </el-button>
             <el-button size="small" type="primary" @click="handlePrint(row)">打印</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button size="small" type="danger" @click="handleDelete(row)" v-if="['DRAFT', 'REJECTED'].includes(row.status)">
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -153,7 +163,9 @@ const pagination = reactive({
 const getStatusType = (status) => {
   const types = {
     'DRAFT': 'info',
-    'CONFIRMED': 'warning',
+    'PENDING': 'warning',
+    'REJECTED': 'danger',
+    'CONFIRMED': 'primary',
     'COMPLETED': 'success'
   }
   return types[status] || 'info'
@@ -162,6 +174,8 @@ const getStatusType = (status) => {
 const getStatusLabel = (status) => {
   const labels = {
     'DRAFT': '草稿',
+    'PENDING': '待审批',
+    'REJECTED': '已拒绝',
     'CONFIRMED': '已确认',
     'COMPLETED': '已完成'
   }
@@ -225,21 +239,27 @@ const handleView = async (row) => {
   }
 }
 
-const handleConfirm = async (row) => {
+const handleSubmit = async (row) => {
   try {
-    await ElMessageBox.confirm('确定要确认此发货单吗？确认后将生成出库记录。', '提示', {
+    await ElMessageBox.confirm('确定要提交此发货单进行审批吗？', '提交审批', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
-      type: 'warning'
+      type: 'info'
     })
 
-    await request.post(`/sales/deliveries/${row.id}/confirm/`)
-    ElMessage.success('发货单确认成功')
+    const response = await request.post(`/sales/deliveries/${row.id}/submit/`)
+    const data = response.data || response
+    
+    if (data.workflow_started) {
+      ElMessage.success('已提交审批，请等待审批通过')
+    } else {
+      ElMessage.success('发货单已确认（无需审批）')
+    }
     loadDeliveryOrders()
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('确认发货单失败:', error)
-      ElMessage.error('确认发货单失败')
+      console.error('提交发货单失败:', error)
+      ElMessage.error(error.response?.data?.error || '提交发货单失败')
     }
   }
 }
