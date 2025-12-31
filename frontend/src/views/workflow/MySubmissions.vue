@@ -4,14 +4,31 @@
       <template #header>
         <div class="card-header">
           <span>我的提交</span>
-          <el-button type="primary" @click="loadData" :loading="loading">
-            <el-icon><Refresh /></el-icon>
-            刷新
-          </el-button>
+          <div class="header-actions">
+            <el-button 
+              v-if="isAdmin && selectedWorkflows.length > 0" 
+              type="danger" 
+              @click="handleBatchDelete"
+              :loading="deleting"
+            >
+              <el-icon><Delete /></el-icon>
+              批量删除 ({{ selectedWorkflows.length }})
+            </el-button>
+            <el-button type="primary" @click="loadData" :loading="loading">
+              <el-icon><Refresh /></el-icon>
+              刷新
+            </el-button>
+          </div>
         </div>
       </template>
 
-      <el-table :data="workflows" v-loading="loading" stripe>
+      <el-table 
+        :data="workflows" 
+        v-loading="loading" 
+        stripe
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column v-if="isAdmin" type="selection" width="55" />
         <el-table-column prop="business_no" label="单据编号" width="150" />
         <el-table-column prop="business_type_display" label="业务类型" width="120" />
         <el-table-column prop="workflow_name" label="审批流程" width="150" />
@@ -47,7 +64,7 @@
             {{ row.completed_at ? formatDate(row.completed_at) : '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" :width="isAdmin ? 200 : 150" fixed="right">
           <template #default="{ row }">
             <el-button type="info" size="small" @click="viewDetail(row)">
               详情
@@ -59,6 +76,15 @@
               @click="handleWithdraw(row)"
             >
               撤回
+            </el-button>
+            <el-button 
+              v-if="isAdmin" 
+              type="danger" 
+              size="small" 
+              @click="handleDelete(row)"
+              plain
+            >
+              删除
             </el-button>
           </template>
         </el-table-column>
@@ -114,13 +140,25 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh } from '@element-plus/icons-vue'
-import { getMySubmittedWorkflows, withdrawWorkflow } from '@/api/workflow'
+import { Refresh, Delete } from '@element-plus/icons-vue'
+import { useUserStore } from '@/stores/user'
+import { getMySubmittedWorkflows, withdrawWorkflow, deleteWorkflowInstance, batchDeleteWorkflowInstances } from '@/api/workflow'
+
+const userStore = useUserStore()
+const isAdmin = computed(() => {
+  const user = userStore.user
+  if (!user) return false
+  if (user.is_superuser) return true
+  if (user.role?.code === 'ADMIN' || user.role?.code === 'SUPER_ADMIN') return true
+  return false
+})
 
 const loading = ref(false)
+const deleting = ref(false)
 const workflows = ref([])
+const selectedWorkflows = ref([])
 const detailDialogVisible = ref(false)
 const currentWorkflow = ref(null)
 
@@ -197,6 +235,52 @@ const handleWithdraw = async (row) => {
   }
 }
 
+const handleSelectionChange = (selection) => {
+  selectedWorkflows.value = selection
+}
+
+const handleDelete = async (row) => {
+  try {
+    await ElMessageBox.confirm('确定要删除此审批记录吗？删除后不可恢复', '确认删除', {
+      type: 'warning'
+    })
+    deleting.value = true
+    await deleteWorkflowInstance(row.id)
+    ElMessage.success('删除成功')
+    loadData()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.error || '删除失败')
+    }
+  } finally {
+    deleting.value = false
+  }
+}
+
+const handleBatchDelete = async () => {
+  if (selectedWorkflows.value.length === 0) return
+  
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedWorkflows.value.length} 条审批记录吗？删除后不可恢复`, 
+      '批量删除', 
+      { type: 'warning' }
+    )
+    deleting.value = true
+    const ids = selectedWorkflows.value.map(w => w.id)
+    await batchDeleteWorkflowInstances(ids)
+    ElMessage.success(`成功删除 ${ids.length} 条记录`)
+    selectedWorkflows.value = []
+    loadData()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.error || '批量删除失败')
+    }
+  } finally {
+    deleting.value = false
+  }
+}
+
 onMounted(() => {
   loadData()
 })
@@ -207,6 +291,11 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 .comment {
   color: #909399;

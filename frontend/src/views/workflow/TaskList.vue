@@ -4,16 +4,33 @@
       <template #header>
         <div class="card-header">
           <span>待办审批</span>
-          <el-badge :value="pendingCount" :hidden="pendingCount === 0" class="badge">
-            <el-button type="primary" @click="loadTasks" :loading="loading">
-              <el-icon><Refresh /></el-icon>
-              刷新
+          <div class="header-actions">
+            <el-button 
+              v-if="isAdmin && selectedTasks.length > 0" 
+              type="danger" 
+              @click="handleBatchDelete"
+              :loading="deleting"
+            >
+              <el-icon><Delete /></el-icon>
+              批量删除 ({{ selectedTasks.length }})
             </el-button>
-          </el-badge>
+            <el-badge :value="pendingCount" :hidden="pendingCount === 0" class="badge">
+              <el-button type="primary" @click="loadTasks" :loading="loading">
+                <el-icon><Refresh /></el-icon>
+                刷新
+              </el-button>
+            </el-badge>
+          </div>
         </div>
       </template>
 
-      <el-table :data="tasks" v-loading="loading" stripe>
+      <el-table 
+        :data="tasks" 
+        v-loading="loading" 
+        stripe
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column v-if="isAdmin" type="selection" width="55" />
         <el-table-column prop="business_no" label="单据编号" width="150" />
         <el-table-column prop="business_type_display" label="业务类型" width="120" />
         <el-table-column prop="workflow_name" label="审批流程" width="150" />
@@ -37,7 +54,7 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" :width="isAdmin ? 260 : 200" fixed="right">
           <template #default="{ row }">
             <el-button type="success" size="small" @click="handleApprove(row)">
               通过
@@ -47,6 +64,15 @@
             </el-button>
             <el-button type="info" size="small" @click="viewDetail(row)">
               详情
+            </el-button>
+            <el-button 
+              v-if="isAdmin" 
+              type="danger" 
+              size="small" 
+              @click="handleDelete(row)"
+              plain
+            >
+              删除
             </el-button>
           </template>
         </el-table-column>
@@ -98,15 +124,27 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh } from '@element-plus/icons-vue'
-import { getMyPendingTasks, getPendingTaskCount, approveTask, rejectTask } from '@/api/workflow'
+import { Refresh, Delete } from '@element-plus/icons-vue'
+import { useUserStore } from '@/stores/user'
+import { getMyPendingTasks, getPendingTaskCount, approveTask, rejectTask, deleteWorkflowTask, batchDeleteWorkflowTasks } from '@/api/workflow'
+
+const userStore = useUserStore()
+const isAdmin = computed(() => {
+  const user = userStore.user
+  if (!user) return false
+  if (user.is_superuser) return true
+  if (user.role?.code === 'ADMIN' || user.role?.code === 'SUPER_ADMIN') return true
+  return false
+})
 
 const loading = ref(false)
 const submitting = ref(false)
+const deleting = ref(false)
 const tasks = ref([])
 const pendingCount = ref(0)
+const selectedTasks = ref([])
 
 const approveDialogVisible = ref(false)
 const rejectDialogVisible = ref(false)
@@ -203,6 +241,52 @@ const viewDetail = (row) => {
   }
 }
 
+const handleSelectionChange = (selection) => {
+  selectedTasks.value = selection
+}
+
+const handleDelete = async (row) => {
+  try {
+    await ElMessageBox.confirm('确定要删除此审批任务吗？删除后不可恢复', '确认删除', {
+      type: 'warning'
+    })
+    deleting.value = true
+    await deleteWorkflowTask(row.id)
+    ElMessage.success('删除成功')
+    loadTasks()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.error || '删除失败')
+    }
+  } finally {
+    deleting.value = false
+  }
+}
+
+const handleBatchDelete = async () => {
+  if (selectedTasks.value.length === 0) return
+  
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedTasks.value.length} 条审批任务吗？删除后不可恢复`, 
+      '批量删除', 
+      { type: 'warning' }
+    )
+    deleting.value = true
+    const ids = selectedTasks.value.map(t => t.id)
+    await batchDeleteWorkflowTasks(ids)
+    ElMessage.success(`成功删除 ${ids.length} 条任务`)
+    selectedTasks.value = []
+    loadTasks()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.error || '批量删除失败')
+    }
+  } finally {
+    deleting.value = false
+  }
+}
+
 onMounted(() => {
   loadTasks()
 })
@@ -213,6 +297,11 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 .badge {
   margin-left: 10px;

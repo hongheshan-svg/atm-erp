@@ -16,6 +16,15 @@ from .serializers import (
 from .services import WorkflowService
 
 
+def is_admin(user):
+    """Check if user is an admin."""
+    if user.is_superuser:
+        return True
+    if hasattr(user, 'role') and user.role:
+        return user.role.code in ['ADMIN', 'SUPER_ADMIN']
+    return False
+
+
 class WorkflowDefinitionViewSet(viewsets.ModelViewSet):
     """ViewSet for workflow definitions."""
     queryset = WorkflowDefinition.objects.filter(is_deleted=False)
@@ -70,6 +79,50 @@ class WorkflowInstanceViewSet(viewsets.ModelViewSet):
         workflows = WorkflowService.get_workflow_history(business_type, int(business_id))
         serializer = self.get_serializer(workflows, many=True)
         return Response(serializer.data)
+    
+    @action(detail=True, methods=['delete'])
+    def admin_delete(self, request, pk=None):
+        """Delete a workflow instance (admin only)."""
+        if not is_admin(request.user):
+            return Response(
+                {'error': '只有管理员可以删除审批记录'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        instance = self.get_object()
+        # Soft delete associated tasks
+        instance.tasks.update(is_deleted=True)
+        # Soft delete instance
+        instance.is_deleted = True
+        instance.save()
+        
+        return Response({'message': '删除成功'})
+    
+    @action(detail=False, methods=['post'])
+    def batch_delete(self, request):
+        """Batch delete workflow instances (admin only)."""
+        if not is_admin(request.user):
+            return Response(
+                {'error': '只有管理员可以删除审批记录'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        ids = request.data.get('ids', [])
+        if not ids:
+            return Response(
+                {'error': '请提供要删除的记录ID'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        instances = WorkflowInstance.objects.filter(id__in=ids, is_deleted=False)
+        count = instances.count()
+        
+        # Soft delete associated tasks
+        WorkflowTask.objects.filter(instance__in=instances).update(is_deleted=True)
+        # Soft delete instances
+        instances.update(is_deleted=True)
+        
+        return Response({'message': f'成功删除 {count} 条记录'})
 
 
 class WorkflowTaskViewSet(viewsets.ModelViewSet):
@@ -120,3 +173,40 @@ class WorkflowTaskViewSet(viewsets.ModelViewSet):
         if success:
             return Response({'message': message})
         return Response({'error': message}, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['delete'])
+    def admin_delete(self, request, pk=None):
+        """Delete a workflow task (admin only)."""
+        if not is_admin(request.user):
+            return Response(
+                {'error': '只有管理员可以删除审批任务'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        task = self.get_object()
+        task.is_deleted = True
+        task.save()
+        
+        return Response({'message': '删除成功'})
+    
+    @action(detail=False, methods=['post'])
+    def batch_delete(self, request):
+        """Batch delete workflow tasks (admin only)."""
+        if not is_admin(request.user):
+            return Response(
+                {'error': '只有管理员可以删除审批任务'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        ids = request.data.get('ids', [])
+        if not ids:
+            return Response(
+                {'error': '请提供要删除的任务ID'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        tasks = WorkflowTask.objects.filter(id__in=ids, is_deleted=False)
+        count = tasks.count()
+        tasks.update(is_deleted=True)
+        
+        return Response({'message': f'成功删除 {count} 条任务'})

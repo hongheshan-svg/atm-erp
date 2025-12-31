@@ -136,3 +136,34 @@ export function rejectTask(id, comment) {
     data: { comment }
   })
 }
+
+// Admin delete functions
+export function deleteWorkflowInstance(id) {
+  return request({
+    url: `/core/workflow/instances/${id}/admin_delete/`,
+    method: 'delete'
+  })
+}
+
+export function batchDeleteWorkflowInstances(ids) {
+  return request({
+    url: '/core/workflow/instances/batch_delete/',
+    method: 'post',
+    data: { ids }
+  })
+}
+
+export function deleteWorkflowTask(id) {
+  return request({
+    url: `/core/workflow/tasks/${id}/admin_delete/`,
+    method: 'delete'
+  })
+}
+
+export function batchDeleteWorkflowTasks(ids) {
+  return request({
+    url: '/core/workflow/tasks/batch_delete/',
+    method: 'post',
+    data: { ids }
+  })
+}
