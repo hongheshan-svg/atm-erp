@@ -351,13 +351,39 @@ class SalesOrderLine(BaseModel):
 class DeliveryOrder(BaseModel):
     """
     Delivery Order (DO) - 发货单
+    
+    完整发货流程:
+    1. 销售发货通知 (DRAFT)
+    2. 项目申请发货 (SUBMITTED)
+    3. 老板审批 (BOSS_REVIEW)
+    4. 财务审批 (FINANCE_REVIEW)
+    5. 生产和仓库备货 (PREPARING)
+    6. 采购预约物流 (LOGISTICS_BOOKING)
+    7. 客户签署送货单 (CUSTOMER_SIGNING)
+    8. 采购上传送货单 (UPLOADING_RECEIPT)
+    9. 项目确认 (PROJECT_CONFIRMING)
+    10. 完成 (COMPLETED)
     """
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
-        ('PENDING', '待审批'),
+        ('SUBMITTED', '已提交'),
+        ('BOSS_REVIEW', '老板审批中'),
+        ('FINANCE_REVIEW', '财务审批中'),
+        ('PREPARING', '备货中'),
+        ('LOGISTICS_BOOKING', '预约物流中'),
+        ('CUSTOMER_SIGNING', '待客户签收'),
+        ('UPLOADING_RECEIPT', '待上传送货单'),
+        ('PROJECT_CONFIRMING', '待项目确认'),
+        ('COMPLETED', '已完成'),
         ('REJECTED', '已拒绝'),
-        ('CONFIRMED', '已确认'),
-        ('COMPLETED', '完成'),
+    ]
+    
+    PACKAGING_CHOICES = [
+        ('STANDARD', '标准包装'),
+        ('WOODEN_CASE', '木箱包装'),
+        ('CARTON', '纸箱包装'),
+        ('PALLET', '托盘包装'),
+        ('CUSTOM', '特殊包装'),
     ]
     
     delivery_no = models.CharField(max_length=50, unique=True, verbose_name='发货单号')
@@ -373,14 +399,58 @@ class DeliveryOrder(BaseModel):
         related_name='deliveries',
         verbose_name='发货仓库'
     )
-    delivery_date = models.DateField(verbose_name='发货日期')
+    delivery_date = models.DateField(verbose_name='计划发货日期')
+    actual_delivery_date = models.DateField(null=True, blank=True, verbose_name='实际发货日期')
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
         default='DRAFT',
         verbose_name='状态'
     )
+    
+    # 收货信息
+    receiver_name = models.CharField(max_length=100, blank=True, verbose_name='收货人')
+    receiver_phone = models.CharField(max_length=50, blank=True, verbose_name='收货电话')
+    receiver_address = models.TextField(blank=True, verbose_name='收货地址')
+    
+    # 包装、保险、物流要求
+    packaging_type = models.CharField(
+        max_length=20,
+        choices=PACKAGING_CHOICES,
+        default='STANDARD',
+        verbose_name='包装方式'
+    )
+    packaging_notes = models.TextField(blank=True, verbose_name='包装要求说明')
+    needs_insurance = models.BooleanField(default=False, verbose_name='需要保险')
+    insurance_amount = models.DecimalField(
+        max_digits=15, decimal_places=2, 
+        null=True, blank=True, 
+        verbose_name='保险金额'
+    )
+    
+    # 物流信息
+    logistics_company = models.CharField(max_length=100, blank=True, verbose_name='物流公司')
+    logistics_contact = models.CharField(max_length=100, blank=True, verbose_name='物流联系人')
+    logistics_phone = models.CharField(max_length=50, blank=True, verbose_name='物流电话')
+    tracking_number = models.CharField(max_length=100, blank=True, verbose_name='物流单号')
+    logistics_notes = models.TextField(blank=True, verbose_name='物流要求')
+    logistics_cost = models.DecimalField(
+        max_digits=15, decimal_places=2, 
+        null=True, blank=True, 
+        verbose_name='物流费用'
+    )
+    
+    # 送货单签收
+    signed_receipt = models.FileField(
+        upload_to='delivery_receipts/', 
+        null=True, blank=True, 
+        verbose_name='签收单据'
+    )
+    signed_date = models.DateField(null=True, blank=True, verbose_name='签收日期')
+    signed_by = models.CharField(max_length=100, blank=True, verbose_name='签收人')
+    
     notes = models.TextField(blank=True, verbose_name='备注')
+    rejection_reason = models.TextField(blank=True, verbose_name='拒绝原因')
     
     class Meta:
         db_table = 'delivery_order'
@@ -395,6 +465,14 @@ class DeliveryOrder(BaseModel):
         if not self.delivery_no:
             self.delivery_no = generate_code('DO')
         super().save(*args, **kwargs)
+    
+    @property
+    def total_amount(self):
+        """计算发货单总金额"""
+        total = 0
+        for line in self.lines.filter(is_deleted=False):
+            total += line.qty * line.so_line.unit_price
+        return total
 
 
 class DeliveryOrderLine(BaseModel):

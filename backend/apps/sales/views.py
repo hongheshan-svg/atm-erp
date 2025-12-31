@@ -201,6 +201,18 @@ class SalesOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
 class DeliveryOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for DeliveryOrder management.
+    
+    发货流程:
+    1. 销售发货通知 (DRAFT) - 销售创建发货单
+    2. 项目申请发货 (SUBMITTED) - 项目经理提交
+    3. 老板审批 (BOSS_REVIEW) - 老板审批
+    4. 财务审批 (FINANCE_REVIEW) - 财务审批
+    5. 生产和仓库备货 (PREPARING) - 仓库备货
+    6. 采购预约物流 (LOGISTICS_BOOKING) - 采购预约物流
+    7. 客户签署送货单 (CUSTOMER_SIGNING) - 等待客户签收
+    8. 采购上传送货单 (UPLOADING_RECEIPT) - 上传签收单
+    9. 项目确认 (PROJECT_CONFIRMING) - 项目确认完成
+    10. 完成 (COMPLETED)
     """
     queryset = DeliveryOrder.objects.all()
     serializer_class = DeliveryOrderSerializer
@@ -208,73 +220,84 @@ class DeliveryOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
     search_fields = ['delivery_no']
     ordering_fields = ['delivery_date', 'created_at']
     
-    def _calculate_delivery_amount(self, delivery):
-        """Calculate total amount for the delivery order."""
-        total = 0
-        for line in delivery.lines.filter(is_deleted=False):
-            total += line.qty * line.so_line.unit_price
-        return total
-    
+    # Step 1 -> 2: 项目申请发货
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
-        """Submit delivery order for approval."""
+        """项目申请发货 - 提交发货申请"""
         delivery = self.get_object()
-        if delivery.status != 'DRAFT':
+        if delivery.status not in ['DRAFT', 'REJECTED']:
             return Response(
-                {'error': '只能提交草稿状态的发货单'},
+                {'error': '只能提交草稿或已拒绝状态的发货单'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Calculate delivery amount for workflow routing
-        amount = self._calculate_delivery_amount(delivery)
+        delivery.status = 'SUBMITTED'
+        delivery.save()
         
-        try:
-            from apps.core.workflow.services import WorkflowService
-            
-            instance, error = WorkflowService.start_workflow(
-                business_type='DELIVERY_ORDER',
-                business_id=delivery.id,
-                business_no=delivery.delivery_no,
-                submitter=request.user,
-                amount=amount
-            )
-            
-            if instance:
-                delivery.status = 'PENDING'
-                delivery.save()
-                return Response({
-                    **DeliveryOrderSerializer(delivery).data,
-                    'workflow_started': True,
-                    'workflow_id': instance.id,
-                    'message': '已提交审批'
-                })
-            else:
-                # No workflow configured, directly confirm
-                return self._do_confirm(delivery, request.user)
-                
-        except Exception as e:
-            # Workflow module not available, directly confirm
-            return self._do_confirm(delivery, request.user)
+        return Response({
+            **DeliveryOrderSerializer(delivery).data,
+            'message': '已提交发货申请，等待老板审批'
+        })
     
+    # Step 2 -> 3: 老板审批
     @action(detail=True, methods=['post'])
-    def confirm(self, request, pk=None):
-        """Confirm delivery and create stock moves (called after approval or directly for small amounts)."""
+    def boss_approve(self, request, pk=None):
+        """老板审批通过"""
         delivery = self.get_object()
-        if delivery.status not in ['DRAFT', 'PENDING']:
+        if delivery.status != 'SUBMITTED':
             return Response(
-                {'error': '只能确认草稿或待审批状态的发货单'},
+                {'error': '当前状态不能进行老板审批'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        return self._do_confirm(delivery, request.user)
+        delivery.status = 'BOSS_REVIEW'
+        delivery.save()
+        
+        # 自动进入财务审批
+        delivery.status = 'FINANCE_REVIEW'
+        delivery.save()
+        
+        return Response({
+            **DeliveryOrderSerializer(delivery).data,
+            'message': '老板审批通过，等待财务审批'
+        })
     
-    def _do_confirm(self, delivery, user):
-        """Actually confirm the delivery order."""
+    # Step 3 -> 4: 财务审批
+    @action(detail=True, methods=['post'])
+    def finance_approve(self, request, pk=None):
+        """财务审批通过"""
+        delivery = self.get_object()
+        if delivery.status != 'FINANCE_REVIEW':
+            return Response(
+                {'error': '当前状态不能进行财务审批'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        delivery.status = 'PREPARING'
+        delivery.save()
+        
+        return Response({
+            **DeliveryOrderSerializer(delivery).data,
+            'message': '财务审批通过，请仓库开始备货'
+        })
+    
+    # Step 4 -> 5: 仓库确认备货完成
+    @action(detail=True, methods=['post'])
+    def confirm_prepared(self, request, pk=None):
+        """仓库确认备货完成"""
+        delivery = self.get_object()
+        if delivery.status != 'PREPARING':
+            return Response(
+                {'error': '当前状态不能确认备货'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 创建出库记录
         with transaction.atomic():
             from apps.inventory.models import StockMove
+            from django.utils import timezone
             
             for line in delivery.lines.filter(is_deleted=False):
-                # Create stock move for delivery
                 StockMove.objects.create(
                     item=line.item,
                     warehouse_from=delivery.warehouse,
@@ -284,31 +307,157 @@ class DeliveryOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
                     reference_type='DeliveryOrder',
                     reference_id=delivery.id,
                     project=delivery.so.project,
-                    move_date=delivery.delivery_date,
+                    move_date=timezone.now().date(),
                     status='COMPLETED',
-                    created_by=user
+                    created_by=request.user
                 )
                 
-                # Update delivered qty on SO line
+                # 更新销售订单发货数量
                 line.so_line.delivered_qty += line.qty
                 line.so_line.save()
-            
-            delivery.status = 'CONFIRMED'
-            delivery.save()
-            
-            # Check if SO is fully delivered
-            so = delivery.so
-            all_delivered = all(
-                line.delivered_qty >= line.qty
-                for line in so.lines.filter(is_deleted=False)
-            )
-            if all_delivered:
-                so.status = 'COMPLETED'
-            else:
-                so.status = 'PARTIAL'
-            so.save()
         
-        return Response(DeliveryOrderSerializer(delivery).data)
+        delivery.status = 'LOGISTICS_BOOKING'
+        delivery.save()
+        
+        return Response({
+            **DeliveryOrderSerializer(delivery).data,
+            'message': '备货完成，请采购预约物流'
+        })
+    
+    # Step 5 -> 6: 采购确认物流
+    @action(detail=True, methods=['post'])
+    def confirm_logistics(self, request, pk=None):
+        """采购确认物流信息"""
+        delivery = self.get_object()
+        if delivery.status != 'LOGISTICS_BOOKING':
+            return Response(
+                {'error': '当前状态不能确认物流'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 更新物流信息
+        logistics_company = request.data.get('logistics_company')
+        tracking_number = request.data.get('tracking_number')
+        logistics_cost = request.data.get('logistics_cost')
+        
+        if logistics_company:
+            delivery.logistics_company = logistics_company
+        if tracking_number:
+            delivery.tracking_number = tracking_number
+        if logistics_cost:
+            delivery.logistics_cost = logistics_cost
+        
+        delivery.status = 'CUSTOMER_SIGNING'
+        delivery.save()
+        
+        return Response({
+            **DeliveryOrderSerializer(delivery).data,
+            'message': '物流已预约，等待客户签收'
+        })
+    
+    # Step 6 -> 7: 客户签收
+    @action(detail=True, methods=['post'])
+    def confirm_signed(self, request, pk=None):
+        """确认客户已签收"""
+        delivery = self.get_object()
+        if delivery.status != 'CUSTOMER_SIGNING':
+            return Response(
+                {'error': '当前状态不能确认签收'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        signed_by = request.data.get('signed_by')
+        signed_date = request.data.get('signed_date')
+        
+        if signed_by:
+            delivery.signed_by = signed_by
+        if signed_date:
+            delivery.signed_date = signed_date
+        
+        delivery.status = 'UPLOADING_RECEIPT'
+        delivery.save()
+        
+        return Response({
+            **DeliveryOrderSerializer(delivery).data,
+            'message': '已确认签收，请上传送货单'
+        })
+    
+    # Step 7 -> 8: 上传送货单
+    @action(detail=True, methods=['post'])
+    def upload_receipt(self, request, pk=None):
+        """上传签收单据"""
+        delivery = self.get_object()
+        if delivery.status != 'UPLOADING_RECEIPT':
+            return Response(
+                {'error': '当前状态不能上传送货单'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if 'signed_receipt' in request.FILES:
+            delivery.signed_receipt = request.FILES['signed_receipt']
+        
+        delivery.status = 'PROJECT_CONFIRMING'
+        delivery.save()
+        
+        return Response({
+            **DeliveryOrderSerializer(delivery).data,
+            'message': '送货单已上传，等待项目确认'
+        })
+    
+    # Step 8 -> 9: 项目确认
+    @action(detail=True, methods=['post'])
+    def project_confirm(self, request, pk=None):
+        """项目确认完成"""
+        delivery = self.get_object()
+        if delivery.status != 'PROJECT_CONFIRMING':
+            return Response(
+                {'error': '当前状态不能进行项目确认'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        from django.utils import timezone
+        
+        delivery.status = 'COMPLETED'
+        delivery.actual_delivery_date = timezone.now().date()
+        delivery.save()
+        
+        # 更新销售订单状态
+        so = delivery.so
+        all_delivered = all(
+            line.delivered_qty >= line.qty
+            for line in so.lines.filter(is_deleted=False)
+        )
+        if all_delivered:
+            so.status = 'COMPLETED'
+        else:
+            so.status = 'PARTIAL'
+        so.save()
+        
+        return Response({
+            **DeliveryOrderSerializer(delivery).data,
+            'message': '发货流程已完成'
+        })
+    
+    # 拒绝操作（可在任意审批环节拒绝）
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        """拒绝发货申请"""
+        delivery = self.get_object()
+        if delivery.status in ['DRAFT', 'COMPLETED', 'REJECTED']:
+            return Response(
+                {'error': '当前状态不能拒绝'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        reason = request.data.get('reason', '')
+        delivery.status = 'REJECTED'
+        delivery.rejection_reason = reason
+        delivery.save()
+        
+        return Response({
+            **DeliveryOrderSerializer(delivery).data,
+            'message': '已拒绝'
+        })
 
 
 class DeliveryOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):

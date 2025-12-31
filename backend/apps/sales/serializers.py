@@ -324,18 +324,42 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
     """DeliveryOrder serializer."""
     so_no = serializers.CharField(source='so.order_no', read_only=True)
     customer_name = serializers.CharField(source='so.customer.name', read_only=True)
+    customer_contact = serializers.CharField(source='so.customer.contact', read_only=True)
+    customer_phone = serializers.CharField(source='so.customer.phone', read_only=True)
+    customer_address = serializers.CharField(source='so.customer.address', read_only=True)
+    project_name = serializers.CharField(source='so.project.name', read_only=True, allow_null=True)
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    packaging_type_display = serializers.CharField(source='get_packaging_type_display', read_only=True)
+    total_amount = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
     lines = DeliveryOrderLineSerializer(many=True, read_only=True)
     
     class Meta:
         model = DeliveryOrder
         fields = [
-            'id', 'delivery_no', 'so', 'so_no', 'customer_name', 'warehouse', 'warehouse_name',
-            'delivery_date', 'status', 'status_display', 'notes', 'lines',
-            'is_deleted', 'created_at', 'updated_at'
+            'id', 'delivery_no', 'so', 'so_no', 
+            # 客户信息
+            'customer_name', 'customer_contact', 'customer_phone', 'customer_address',
+            'project_name',
+            # 仓库和日期
+            'warehouse', 'warehouse_name', 'delivery_date', 'actual_delivery_date',
+            # 状态
+            'status', 'status_display',
+            # 收货信息
+            'receiver_name', 'receiver_phone', 'receiver_address',
+            # 包装和保险
+            'packaging_type', 'packaging_type_display', 'packaging_notes',
+            'needs_insurance', 'insurance_amount',
+            # 物流信息
+            'logistics_company', 'logistics_contact', 'logistics_phone',
+            'tracking_number', 'logistics_notes', 'logistics_cost',
+            # 签收信息
+            'signed_receipt', 'signed_date', 'signed_by',
+            # 其他
+            'notes', 'rejection_reason', 'total_amount', 'lines',
+            'is_deleted', 'created_at', 'updated_at', 'created_by'
         ]
-        read_only_fields = ['delivery_no', 'created_at', 'updated_at']
+        read_only_fields = ['delivery_no', 'created_at', 'updated_at', 'total_amount']
     
     def create(self, validated_data):
         """Create delivery order with lines."""

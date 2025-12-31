@@ -139,56 +139,112 @@
     <el-dialog
       v-model="deliveryDialogVisible"
       title="创建发货单"
-      width="70%"
+      width="85%"
+      top="3vh"
     >
-      <el-form :model="deliveryForm" label-width="120px">
-        <el-form-item label="发货仓库" required>
-          <el-select v-model="deliveryForm.warehouse" placeholder="请选择发货仓库" style="width: 100%">
-            <el-option
-              v-for="warehouse in warehouses"
-              :key="warehouse.id"
-              :label="warehouse.name"
-              :value="warehouse.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="发货日期" required>
-          <el-date-picker
-            v-model="deliveryForm.delivery_date"
-            type="date"
-            placeholder="选择发货日期"
-            value-format="YYYY-MM-DD"
-            style="width: 100%"
-          />
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input v-model="deliveryForm.notes" type="textarea" :rows="3" />
-        </el-form-item>
-        
-        <el-divider content-position="left">发货明细</el-divider>
-        
-        <el-table :data="deliveryForm.lines" border>
-          <el-table-column prop="item_name" label="物料" />
-          <el-table-column prop="qty" label="订单数量" width="100" align="right" />
-          <el-table-column prop="delivered_qty" label="已发货" width="100" align="right" />
-          <el-table-column label="本次发货" width="150">
-            <template #default="{ row, $index }">
-              <el-input-number
-                v-model="row.delivery_qty"
-                :min="0"
-                :max="row.qty - (row.delivered_qty || 0)"
-                :step="1"
-                size="small"
-                style="width: 100%"
-              />
-            </template>
-          </el-table-column>
-        </el-table>
+      <el-form :model="deliveryForm" label-width="100px">
+        <el-tabs v-model="deliveryActiveTab">
+          <!-- 基本信息 -->
+          <el-tab-pane label="基本信息" name="basic">
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="发货仓库" required>
+                  <el-select v-model="deliveryForm.warehouse" placeholder="请选择发货仓库" style="width: 100%">
+                    <el-option v-for="warehouse in warehouses" :key="warehouse.id" :label="warehouse.name" :value="warehouse.id" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="计划发货日期" required>
+                  <el-date-picker v-model="deliveryForm.delivery_date" type="date" placeholder="选择发货日期" 
+                                  value-format="YYYY-MM-DD" style="width: 100%" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </el-tab-pane>
+
+          <!-- 收货信息 -->
+          <el-tab-pane label="收货信息" name="receiver">
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="收货人">
+                  <el-input v-model="deliveryForm.receiver_name" placeholder="请输入收货人姓名" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="收货电话">
+                  <el-input v-model="deliveryForm.receiver_phone" placeholder="请输入收货电话" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="24">
+                <el-form-item label="收货地址">
+                  <el-input v-model="deliveryForm.receiver_address" type="textarea" :rows="2" placeholder="请输入收货地址" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </el-tab-pane>
+
+          <!-- 包装/保险/物流 -->
+          <el-tab-pane label="物流要求" name="logistics">
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="包装方式">
+                  <el-select v-model="deliveryForm.packaging_type" style="width: 100%">
+                    <el-option label="标准包装" value="STANDARD" />
+                    <el-option label="木箱包装" value="WOODEN_CASE" />
+                    <el-option label="纸箱包装" value="CARTON" />
+                    <el-option label="托盘包装" value="PALLET" />
+                    <el-option label="特殊包装" value="CUSTOM" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="需要保险">
+                  <el-switch v-model="deliveryForm.needs_insurance" />
+                  <el-input-number v-if="deliveryForm.needs_insurance" v-model="deliveryForm.insurance_amount" 
+                                   :precision="2" :min="0" placeholder="保险金额" style="margin-left: 10px; width: 150px" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="24">
+                <el-form-item label="包装要求">
+                  <el-input v-model="deliveryForm.packaging_notes" type="textarea" :rows="2" placeholder="请输入特殊包装要求" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="24">
+                <el-form-item label="物流要求">
+                  <el-input v-model="deliveryForm.logistics_notes" type="textarea" :rows="2" placeholder="请输入物流要求说明" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </el-tab-pane>
+
+          <!-- 产品信息 -->
+          <el-tab-pane label="产品明细" name="products">
+            <el-table :data="deliveryForm.lines" border>
+              <el-table-column prop="item_name" label="物料" />
+              <el-table-column prop="qty" label="订单数量" width="100" align="right" />
+              <el-table-column prop="delivered_qty" label="已发货" width="100" align="right" />
+              <el-table-column label="本次发货" width="150">
+                <template #default="{ row }">
+                  <el-input-number v-model="row.delivery_qty" :min="0" :max="row.qty - (row.delivered_qty || 0)" 
+                                   :step="1" size="small" style="width: 100%" />
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-tab-pane>
+
+          <!-- 备注 -->
+          <el-tab-pane label="备注" name="notes">
+            <el-form-item label="备注">
+              <el-input v-model="deliveryForm.notes" type="textarea" :rows="4" placeholder="请输入备注信息" />
+            </el-form-item>
+          </el-tab-pane>
+        </el-tabs>
       </el-form>
       
       <template #footer>
         <el-button @click="deliveryDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitDelivery">确定</el-button>
+        <el-button type="primary" @click="submitDelivery">创建发货单</el-button>
       </template>
     </el-dialog>
   </div>
@@ -209,11 +265,22 @@ const order = ref({})
 const deliveryOrders = ref([])
 const warehouses = ref([])
 const deliveryDialogVisible = ref(false)
+const deliveryActiveTab = ref('basic')
 const deliveryForm = ref({
   warehouse: null,
   delivery_date: new Date().toISOString().split('T')[0],
   notes: '',
-  lines: []
+  lines: [],
+  // 收货信息
+  receiver_name: '',
+  receiver_phone: '',
+  receiver_address: '',
+  // 物流要求
+  packaging_type: 'STANDARD',
+  packaging_notes: '',
+  needs_insurance: false,
+  insurance_amount: null,
+  logistics_notes: ''
 })
 
 const getStatusType = (status) => {
@@ -325,10 +392,30 @@ const handleCancel = async () => {
 }
 
 const handleCreateDelivery = () => {
+  // 重置表单
+  deliveryActiveTab.value = 'basic'
+  deliveryForm.value = {
+    warehouse: null,
+    delivery_date: new Date().toISOString().split('T')[0],
+    notes: '',
+    lines: [],
+    // 从客户信息预填收货信息
+    receiver_name: order.value.customer_contact || '',
+    receiver_phone: order.value.customer_phone || '',
+    receiver_address: order.value.customer_address || order.value.shipping_address || '',
+    // 物流要求
+    packaging_type: 'STANDARD',
+    packaging_notes: '',
+    needs_insurance: false,
+    insurance_amount: null,
+    logistics_notes: ''
+  }
+  
   // 准备发货明细
   deliveryForm.value.lines = order.value.lines.map(line => ({
     order_line: line.id,
-    item_name: line.item_name,
+    item_id: line.item,
+    item_name: line.item_name || line.custom_name,
     qty: line.qty,
     delivered_qty: line.delivered_qty || 0,
     delivery_qty: Math.max(0, line.qty - (line.delivered_qty || 0))
@@ -348,18 +435,28 @@ const submitDelivery = async () => {
     const orderLines = order.value.lines || []
     
     const payload = {
-      so: route.params.id,  // 使用正确的字段名
+      so: route.params.id,
       warehouse: deliveryForm.value.warehouse,
       delivery_date: deliveryForm.value.delivery_date,
       notes: deliveryForm.value.notes,
+      // 收货信息
+      receiver_name: deliveryForm.value.receiver_name,
+      receiver_phone: deliveryForm.value.receiver_phone,
+      receiver_address: deliveryForm.value.receiver_address,
+      // 物流要求
+      packaging_type: deliveryForm.value.packaging_type,
+      packaging_notes: deliveryForm.value.packaging_notes,
+      needs_insurance: deliveryForm.value.needs_insurance,
+      insurance_amount: deliveryForm.value.needs_insurance ? deliveryForm.value.insurance_amount : null,
+      logistics_notes: deliveryForm.value.logistics_notes,
+      // 产品明细
       lines: deliveryForm.value.lines
         .filter(line => line.delivery_qty > 0)
         .map(line => {
-          // 找到对应的订单明细获取 item_id
           const orderLine = orderLines.find(ol => ol.id === line.order_line)
           return {
-            so_line: line.order_line,  // 使用正确的字段名
-            item: orderLine?.item || orderLine?.item_id,
+            so_line: line.order_line,
+            item: line.item_id || orderLine?.item || orderLine?.item_id,
             qty: line.delivery_qty
           }
         })
