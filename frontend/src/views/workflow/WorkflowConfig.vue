@@ -64,9 +64,11 @@
             <div class="header-info">
               <h2>{{ selectedWorkflow.name }}</h2>
               <div class="header-meta">
-                <span class="code">{{ selectedWorkflow.code }}</span>
                 <el-tag :type="selectedWorkflow.is_active ? 'success' : 'danger'" size="small">
                   {{ selectedWorkflow.is_active ? '已启用' : '已停用' }}
+                </el-tag>
+                <el-tag type="info" size="small">
+                  {{ getBusinessTypeLabel(selectedWorkflow.business_type) }}
                 </el-tag>
               </div>
             </div>
@@ -229,13 +231,14 @@
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px" label-position="top">
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="流程编码" prop="code">
-              <el-input v-model="form.code" :disabled="isEdit" placeholder="如: WF_PR_001" />
+            <el-form-item label="流程名称" prop="name">
+              <el-input v-model="form.name" placeholder="如: 采购申请审批(大额)" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="流程名称" prop="name">
-              <el-input v-model="form.name" placeholder="如: 采购申请审批" />
+            <el-form-item label="流程编码" prop="code">
+              <el-input v-model="form.code" :disabled="isEdit" placeholder="系统自动生成或自定义" />
+              <div class="form-tip">流程唯一标识，创建后不可修改</div>
             </el-form-item>
           </el-col>
         </el-row>
@@ -407,8 +410,9 @@ const businessTypeLabels = {
 const approverTypes = [
   { value: 'USER', label: '指定用户', desc: '固定审批人', icon: 'UserFilled' },
   { value: 'ROLE', label: '指定角色', desc: '角色内任意用户', icon: 'Avatar' },
-  { value: 'DEPARTMENT_HEAD', label: '部门负责人', desc: '提交人部门领导', icon: 'OfficeBuilding' },
-  { value: 'SUBMITTER_LEADER', label: '直接上级', desc: '提交人的上级', icon: 'Connection' }
+  { value: 'DEPARTMENT_MANAGER', label: '部门经理', desc: '提交人部门经理', icon: 'OfficeBuilding' },
+  { value: 'PROJECT_MANAGER', label: '项目经理', desc: '关联项目的项目经理', icon: 'Briefcase' },
+  { value: 'SUPERIOR', label: '直接上级', desc: '提交人的上级', icon: 'Connection' }
 ]
 
 const rules = {
@@ -461,13 +465,21 @@ const estimatedDays = computed(() => {
 // 方法
 const formatAmount = (amount) => Number(amount).toLocaleString()
 
+const getBusinessTypeLabel = (type) => businessTypeLabels[type] || type
+
 const getApproverTypeLabel = (type) => {
   const t = approverTypes.find(a => a.value === type)
   return t ? t.label : type
 }
 
 const getApproverTypeColor = (type) => {
-  const colors = { 'USER': 'primary', 'ROLE': 'success', 'DEPARTMENT_HEAD': 'warning', 'SUBMITTER_LEADER': 'info' }
+  const colors = { 
+    'USER': 'primary', 
+    'ROLE': 'success', 
+    'DEPARTMENT_MANAGER': 'warning', 
+    'PROJECT_MANAGER': 'danger',
+    'SUPERIOR': 'info' 
+  }
   return colors[type] || ''
 }
 
