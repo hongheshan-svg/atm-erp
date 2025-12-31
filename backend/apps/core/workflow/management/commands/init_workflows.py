@@ -63,7 +63,7 @@ class Command(BaseCommand):
             defaults={
                 'name': '采购申请审批(大额)',
                 'business_type': 'PURCHASE_REQUEST',
-                'description': '金额大于等于10000的采购申请，需项目经理和财务双重审批',
+                'description': '金额大于等于10000的采购申请，需项目经理、财务和总经理审批',
                 'is_active': True,
                 'amount_threshold': 10000,
             }
@@ -84,6 +84,15 @@ class Command(BaseCommand):
                 name='财务审批',
                 approver_type='ROLE',
                 approver_role=finance_role,
+                action_type='REVIEW',
+                timeout_hours=24,
+            )
+            WorkflowStep.objects.create(
+                workflow=pr_workflow_large,
+                step_order=3,
+                name='总经理审批',
+                approver_type='ROLE',
+                approver_role=admin_role,
                 action_type='APPROVE',
                 timeout_hours=48,
             )
@@ -118,7 +127,7 @@ class Command(BaseCommand):
             defaults={
                 'name': '费用报销审批(大额)',
                 'business_type': 'EXPENSE',
-                'description': '金额大于等于5000的费用报销，需部门经理和财务双重审批',
+                'description': '金额大于等于5000的费用报销，需部门经理、财务和总经理审批',
                 'is_active': True,
                 'amount_threshold': 5000,
             }
@@ -139,6 +148,15 @@ class Command(BaseCommand):
                 name='财务审批',
                 approver_type='ROLE',
                 approver_role=finance_role,
+                action_type='REVIEW',
+                timeout_hours=24,
+            )
+            WorkflowStep.objects.create(
+                workflow=exp_workflow_large,
+                step_order=3,
+                name='总经理审批',
+                approver_type='ROLE',
+                approver_role=admin_role,
                 action_type='APPROVE',
                 timeout_hours=48,
             )
