@@ -17,7 +17,7 @@
           <el-tag :type="getStatusType(order.status)">{{ getStatusLabel(order.status) }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="订单金额" :span="3">
-          <span style="font-size: 18px; font-weight: 600; color: #67C23A;">¥{{ (order.total_amount || 0).toFixed(2) }}</span>
+          <span style="font-size: 18px; font-weight: 600; color: #67C23A;">¥{{ formatMoney(order.total_amount) }}</span>
         </el-descriptions-item>
         <el-descriptions-item label="付款条款" :span="3">{{ order.payment_terms || '-' }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="3">{{ order.notes || '-' }}</el-descriptions-item>
@@ -49,10 +49,10 @@
         </el-table-column>
         <el-table-column prop="unit" label="单位" width="80" />
         <el-table-column prop="unit_price" label="单价" width="120" align="right">
-          <template #default="{ row }">¥{{ (row.unit_price || 0).toFixed(2) }}</template>
+          <template #default="{ row }">¥{{ formatMoney(row.unit_price) }}</template>
         </el-table-column>
         <el-table-column label="金额" width="130" align="right">
-          <template #default="{ row }">¥{{ ((row.qty || 0) * (row.unit_price || 0)).toFixed(2) }}</template>
+          <template #default="{ row }">¥{{ formatMoney(parseFloat(row.qty || 0) * parseFloat(row.unit_price || 0)) }}</template>
         </el-table-column>
       </el-table>
 
@@ -65,7 +65,7 @@
           <el-button type="success" @click="handleConfirm" v-if="order.status === 'DRAFT'">确认订单</el-button>
           <el-button type="danger" @click="handleCancel" v-if="['DRAFT', 'CONFIRMED'].includes(order.status)">取消订单</el-button>
         </div>
-        <el-statistic title="订单总金额" :value="order.total_amount || 0" prefix="¥" :precision="2" />
+        <el-statistic title="订单总金额" :value="parseFloat(order.total_amount || 0)" prefix="¥" :precision="2" />
       </div>
     </el-card>
 
@@ -140,6 +140,7 @@ const receiptForm = ref({ warehouse: null, receipt_date: new Date().toISOString(
 
 const getStatusType = (s) => ({ 'DRAFT': 'info', 'CONFIRMED': 'warning', 'PARTIAL': 'primary', 'RECEIVED': 'success', 'CANCELLED': 'danger' }[s] || 'info')
 const getStatusLabel = (s) => ({ 'DRAFT': '草稿', 'CONFIRMED': '已确认', 'PARTIAL': '部分收货', 'RECEIVED': '已完成', 'CANCELLED': '已取消' }[s] || s)
+const formatMoney = (val) => parseFloat(val || 0).toFixed(2)
 
 const loadOrderDetail = async () => {
   loading.value = true
