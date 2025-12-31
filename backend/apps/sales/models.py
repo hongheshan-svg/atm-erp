@@ -354,21 +354,20 @@ class DeliveryOrder(BaseModel):
     
     完整发货流程:
     1. 销售发货通知 (DRAFT)
-    2. 项目申请发货 (SUBMITTED)
-    3. 老板审批 (BOSS_REVIEW)
-    4. 财务审批 (FINANCE_REVIEW)
-    5. 生产和仓库备货 (PREPARING)
-    6. 采购预约物流 (LOGISTICS_BOOKING)
-    7. 客户签署送货单 (CUSTOMER_SIGNING)
-    8. 采购上传送货单 (UPLOADING_RECEIPT)
-    9. 项目确认 (PROJECT_CONFIRMING)
-    10. 完成 (COMPLETED)
+    2. 项目申请发货 (PENDING) - 进入审批流程，由流程配置决定审批步骤
+    3. 审批通过后进入备货 (PREPARING)
+    4. 采购预约物流 (LOGISTICS_BOOKING)
+    5. 客户签署送货单 (CUSTOMER_SIGNING)
+    6. 采购上传送货单 (UPLOADING_RECEIPT)
+    7. 项目确认 (PROJECT_CONFIRMING)
+    8. 完成 (COMPLETED)
+    
+    注意: 审批步骤由审批中心的流程配置决定，修改流程配置会影响审批流程
     """
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
-        ('SUBMITTED', '已提交'),
-        ('BOSS_REVIEW', '老板审批中'),
-        ('FINANCE_REVIEW', '财务审批中'),
+        ('PENDING', '审批中'),  # 审批流程由流程配置决定
+        ('APPROVED', '已审批'),  # 审批通过，准备进入操作流程
         ('PREPARING', '备货中'),
         ('LOGISTICS_BOOKING', '预约物流中'),
         ('CUSTOMER_SIGNING', '待客户签收'),

@@ -404,7 +404,8 @@ const businessTypeLabels = {
   'EXPENSE': '费用报销',
   'SALES_ORDER': '销售订单',
   'PROJECT': '项目立项',
-  'STOCK_ADJUSTMENT': '库存调整'
+  'STOCK_ADJUSTMENT': '库存调整',
+  'DELIVERY_ORDER': '发货单'
 }
 
 const approverTypes = [

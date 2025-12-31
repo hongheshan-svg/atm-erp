@@ -204,15 +204,16 @@ class DeliveryOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
     
     发货流程:
     1. 销售发货通知 (DRAFT) - 销售创建发货单
-    2. 项目申请发货 (SUBMITTED) - 项目经理提交
-    3. 老板审批 (BOSS_REVIEW) - 老板审批
-    4. 财务审批 (FINANCE_REVIEW) - 财务审批
-    5. 生产和仓库备货 (PREPARING) - 仓库备货
-    6. 采购预约物流 (LOGISTICS_BOOKING) - 采购预约物流
-    7. 客户签署送货单 (CUSTOMER_SIGNING) - 等待客户签收
-    8. 采购上传送货单 (UPLOADING_RECEIPT) - 上传签收单
-    9. 项目确认 (PROJECT_CONFIRMING) - 项目确认完成
-    10. 完成 (COMPLETED)
+    2. 提交审批 (PENDING) - 进入审批中心，审批步骤由流程配置决定
+    3. 审批通过后进入操作流程:
+       - 仓库备货 (PREPARING)
+       - 采购预约物流 (LOGISTICS_BOOKING)
+       - 客户签署送货单 (CUSTOMER_SIGNING)
+       - 采购上传送货单 (UPLOADING_RECEIPT)
+       - 项目确认 (PROJECT_CONFIRMING)
+    4. 完成 (COMPLETED)
+    
+    注意: 审批步骤由审批中心的流程配置决定，修改流程配置会自动影响审批流程
     """
     queryset = DeliveryOrder.objects.all()
     serializer_class = DeliveryOrderSerializer
@@ -220,10 +221,17 @@ class DeliveryOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
     search_fields = ['delivery_no']
     ordering_fields = ['delivery_date', 'created_at']
     
-    # Step 1 -> 2: 项目申请发货
+    def _calculate_delivery_amount(self, delivery):
+        """计算发货单总金额"""
+        total = 0
+        for line in delivery.lines.filter(is_deleted=False):
+            total += line.qty * line.so_line.unit_price
+        return total
+    
+    # 提交审批 - 使用审批中心的流程配置
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
-        """项目申请发货 - 提交发货申请"""
+        """提交发货申请 - 进入审批中心，审批步骤由流程配置决定"""
         delivery = self.get_object()
         if delivery.status not in ['DRAFT', 'REJECTED']:
             return Response(
@@ -231,62 +239,96 @@ class DeliveryOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        delivery.status = 'SUBMITTED'
-        delivery.save()
+        # 计算金额用于流程路由
+        amount = self._calculate_delivery_amount(delivery)
         
-        return Response({
-            **DeliveryOrderSerializer(delivery).data,
-            'message': '已提交发货申请，等待老板审批'
-        })
-    
-    # Step 2 -> 3: 老板审批
-    @action(detail=True, methods=['post'])
-    def boss_approve(self, request, pk=None):
-        """老板审批通过"""
-        delivery = self.get_object()
-        if delivery.status != 'SUBMITTED':
-            return Response(
-                {'error': '当前状态不能进行老板审批'},
-                status=status.HTTP_400_BAD_REQUEST
+        try:
+            from apps.core.workflow.services import WorkflowService
+            
+            instance, error = WorkflowService.start_workflow(
+                business_type='DELIVERY_ORDER',
+                business_id=delivery.id,
+                business_no=delivery.delivery_no,
+                submitter=request.user,
+                amount=amount
             )
-        
-        delivery.status = 'BOSS_REVIEW'
-        delivery.save()
-        
-        # 自动进入财务审批
-        delivery.status = 'FINANCE_REVIEW'
-        delivery.save()
-        
-        return Response({
-            **DeliveryOrderSerializer(delivery).data,
-            'message': '老板审批通过，等待财务审批'
-        })
+            
+            if instance:
+                delivery.status = 'PENDING'
+                delivery.rejection_reason = ''  # 清除之前的拒绝原因
+                delivery.save()
+                return Response({
+                    **DeliveryOrderSerializer(delivery).data,
+                    'workflow_started': True,
+                    'workflow_id': instance.id,
+                    'message': '已提交审批，请在审批中心查看审批进度'
+                })
+            else:
+                # 未配置审批流程，直接进入备货
+                delivery.status = 'PREPARING'
+                delivery.save()
+                return Response({
+                    **DeliveryOrderSerializer(delivery).data,
+                    'workflow_started': False,
+                    'message': error or '未配置审批流程，已直接进入备货环节'
+                })
+                
+        except Exception as e:
+            # 审批模块不可用，直接进入备货
+            delivery.status = 'PREPARING'
+            delivery.save()
+            return Response({
+                **DeliveryOrderSerializer(delivery).data,
+                'workflow_started': False,
+                'message': f'提交成功，但工作流服务异常: {e}'
+            })
     
-    # Step 3 -> 4: 财务审批
-    @action(detail=True, methods=['post'])
-    def finance_approve(self, request, pk=None):
-        """财务审批通过"""
+    # 获取当前审批状态
+    @action(detail=True, methods=['get'])
+    def workflow_status(self, request, pk=None):
+        """获取发货单的审批状态"""
         delivery = self.get_object()
-        if delivery.status != 'FINANCE_REVIEW':
-            return Response(
-                {'error': '当前状态不能进行财务审批'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
         
-        delivery.status = 'PREPARING'
-        delivery.save()
-        
-        return Response({
-            **DeliveryOrderSerializer(delivery).data,
-            'message': '财务审批通过，请仓库开始备货'
-        })
+        try:
+            from apps.core.workflow.models import WorkflowInstance, WorkflowTask
+            
+            instance = WorkflowInstance.objects.filter(
+                business_type='DELIVERY_ORDER',
+                business_id=delivery.id,
+                is_deleted=False
+            ).order_by('-created_at').first()
+            
+            if instance:
+                pending_task = instance.tasks.filter(status='PENDING', is_deleted=False).first()
+                return Response({
+                    'has_workflow': True,
+                    'workflow_id': instance.id,
+                    'workflow_status': instance.status,
+                    'current_step': instance.current_step,
+                    'pending_task': {
+                        'id': pending_task.id,
+                        'step_name': pending_task.step.name,
+                        'assignee': pending_task.assignee.username if pending_task.assignee else None,
+                    } if pending_task else None
+                })
+            else:
+                return Response({
+                    'has_workflow': False,
+                    'message': '无审批流程'
+                })
+        except Exception as e:
+            return Response({
+                'has_workflow': False,
+                'error': str(e)
+            })
     
-    # Step 4 -> 5: 仓库确认备货完成
+    # 仓库确认备货完成
     @action(detail=True, methods=['post'])
     def confirm_prepared(self, request, pk=None):
         """仓库确认备货完成"""
         delivery = self.get_object()
-        if delivery.status != 'PREPARING':
+        # 允许从 APPROVED 或 PREPARING 状态确认备货
+        if delivery.status not in ['APPROVED', 'PREPARING']:
             return Response(
                 {'error': '当前状态不能确认备货'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -324,7 +366,7 @@ class DeliveryOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
             'message': '备货完成，请采购预约物流'
         })
     
-    # Step 5 -> 6: 采购确认物流
+    # 采购确认物流
     @action(detail=True, methods=['post'])
     def confirm_logistics(self, request, pk=None):
         """采购确认物流信息"""

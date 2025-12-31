@@ -38,56 +38,53 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="320" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             
-            <!-- 根据状态显示不同操作按钮 -->
+            <!-- 草稿/已拒绝: 可提交 -->
             <el-button size="small" type="warning" @click="handleSubmit(row)" 
                        v-if="['DRAFT', 'REJECTED'].includes(row.status)">
-              提交
+              提交审批
             </el-button>
             
-            <el-button size="small" type="success" @click="handleBossApprove(row)" 
-                       v-if="row.status === 'SUBMITTED'">
-              老板审批
+            <!-- 审批中: 查看审批进度 -->
+            <el-button size="small" type="info" @click="viewWorkflow(row)" 
+                       v-if="row.status === 'PENDING'">
+              审批进度
             </el-button>
             
-            <el-button size="small" type="success" @click="handleFinanceApprove(row)" 
-                       v-if="row.status === 'FINANCE_REVIEW'">
-              财务审批
-            </el-button>
-            
+            <!-- 已审批/备货中: 确认备货 -->
             <el-button size="small" type="primary" @click="handleConfirmPrepared(row)" 
-                       v-if="row.status === 'PREPARING'">
+                       v-if="['APPROVED', 'PREPARING'].includes(row.status)">
               备货完成
             </el-button>
             
+            <!-- 预约物流中: 确认物流 -->
             <el-button size="small" type="primary" @click="handleConfirmLogistics(row)" 
                        v-if="row.status === 'LOGISTICS_BOOKING'">
               确认物流
             </el-button>
             
+            <!-- 待签收: 确认签收 -->
             <el-button size="small" type="primary" @click="handleConfirmSigned(row)" 
                        v-if="row.status === 'CUSTOMER_SIGNING'">
               确认签收
             </el-button>
             
+            <!-- 待上传: 上传送货单 -->
             <el-button size="small" type="primary" @click="handleUploadReceipt(row)" 
                        v-if="row.status === 'UPLOADING_RECEIPT'">
               上传送货单
             </el-button>
             
+            <!-- 待项目确认: 项目确认 -->
             <el-button size="small" type="success" @click="handleProjectConfirm(row)" 
                        v-if="row.status === 'PROJECT_CONFIRMING'">
               项目确认
             </el-button>
             
-            <el-button size="small" type="danger" @click="handleReject(row)" 
-                       v-if="['SUBMITTED', 'FINANCE_REVIEW'].includes(row.status)">
-              拒绝
-            </el-button>
-            
+            <!-- 草稿/已拒绝: 可删除 -->
             <el-button size="small" type="danger" @click="handleDelete(row)" 
                        v-if="['DRAFT', 'REJECTED'].includes(row.status)">
               删除
@@ -282,10 +279,12 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
+const router = useRouter()
 const loading = ref(false)
 const submitting = ref(false)
 const deliveryOrders = ref([])
@@ -330,9 +329,8 @@ const pagination = reactive({
 
 const statusOptions = [
   { value: 'DRAFT', label: '草稿' },
-  { value: 'SUBMITTED', label: '已提交' },
-  { value: 'BOSS_REVIEW', label: '老板审批中' },
-  { value: 'FINANCE_REVIEW', label: '财务审批中' },
+  { value: 'PENDING', label: '审批中' },
+  { value: 'APPROVED', label: '已审批' },
   { value: 'PREPARING', label: '备货中' },
   { value: 'LOGISTICS_BOOKING', label: '预约物流中' },
   { value: 'CUSTOMER_SIGNING', label: '待客户签收' },
@@ -345,9 +343,8 @@ const statusOptions = [
 const getStatusType = (status) => {
   const types = {
     'DRAFT': 'info',
-    'SUBMITTED': 'warning',
-    'BOSS_REVIEW': 'warning',
-    'FINANCE_REVIEW': 'warning',
+    'PENDING': 'warning',
+    'APPROVED': 'success',
     'PREPARING': 'primary',
     'LOGISTICS_BOOKING': 'primary',
     'CUSTOMER_SIGNING': 'primary',
@@ -423,32 +420,10 @@ const handleSubmit = async (row) => {
   }
 }
 
-// 老板审批
-const handleBossApprove = async (row) => {
-  try {
-    await ElMessageBox.confirm('确定审批通过吗？', '老板审批', { type: 'success' })
-    await request.post(`/sales/deliveries/${row.id}/boss_approve/`)
-    ElMessage.success('老板审批通过')
-    loadDeliveryOrders()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '审批失败')
-    }
-  }
-}
-
-// 财务审批
-const handleFinanceApprove = async (row) => {
-  try {
-    await ElMessageBox.confirm('确定审批通过吗？', '财务审批', { type: 'success' })
-    await request.post(`/sales/deliveries/${row.id}/finance_approve/`)
-    ElMessage.success('财务审批通过')
-    loadDeliveryOrders()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '审批失败')
-    }
-  }
+// 查看审批进度 - 跳转到审批中心
+const viewWorkflow = (row) => {
+  // 跳转到审批中心查看审批进度
+  router.push('/workflow/my-submissions')
 }
 
 // 确认备货完成

@@ -331,42 +331,12 @@ class WorkflowService:
             
             elif instance.business_type == 'DELIVERY_ORDER':
                 from apps.sales.models import DeliveryOrder
-                from apps.inventory.models import StockMove
                 delivery = DeliveryOrder.objects.get(id=instance.business_id)
                 if result == 'APPROVED':
-                    # Auto-confirm the delivery order and create stock moves
-                    for line in delivery.lines.filter(is_deleted=False):
-                        StockMove.objects.create(
-                            item=line.item,
-                            warehouse_from=delivery.warehouse,
-                            qty=line.qty,
-                            unit_cost=line.so_line.unit_price,
-                            move_type='OUT_SALES',
-                            reference_type='DeliveryOrder',
-                            reference_id=delivery.id,
-                            project=delivery.so.project,
-                            move_date=delivery.delivery_date,
-                            status='COMPLETED',
-                            created_by=instance.submitter
-                        )
-                        # Update delivered qty on SO line
-                        line.so_line.delivered_qty += line.qty
-                        line.so_line.save()
-                    
-                    delivery.status = 'CONFIRMED'
+                    # 审批通过，进入备货环节（不自动创建出库记录，由仓库确认备货时创建）
+                    delivery.status = 'PREPARING'
                     delivery.save()
-                    
-                    # Check if SO is fully delivered
-                    so = delivery.so
-                    all_delivered = all(
-                        line.delivered_qty >= line.qty
-                        for line in so.lines.filter(is_deleted=False)
-                    )
-                    if all_delivered:
-                        so.status = 'COMPLETED'
-                    else:
-                        so.status = 'PARTIAL'
-                    so.save()
+                    logger.info(f"Delivery order {delivery.delivery_no} approved, entering PREPARING status")
                     
                 elif result == 'REJECTED':
                     delivery.status = 'REJECTED'
