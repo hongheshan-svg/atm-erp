@@ -153,7 +153,9 @@ const isAdmin = computed(() => {
   if (user.is_superuser) return true
   // Check role_info.code (from serializer)
   const roleCode = user.role_info?.code || user.role?.code
-  if (roleCode === 'ADMIN' || roleCode === 'SUPER_ADMIN') return true
+  // Allow ADMIN, SUPER_ADMIN, 系统管理员, 总经理
+  const adminRoles = ['ADMIN', 'SUPER_ADMIN', 'ROLEDC4E40', 'ROLEF8477A']
+  if (roleCode && adminRoles.includes(roleCode)) return true
   return false
 })
 

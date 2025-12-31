@@ -21,7 +21,9 @@ def is_admin(user):
     if user.is_superuser:
         return True
     if hasattr(user, 'role') and user.role:
-        return user.role.code in ['ADMIN', 'SUPER_ADMIN']
+        # Allow ADMIN, SUPER_ADMIN, 系统管理员(ROLEDC4E40), 总经理(ROLEF8477A)
+        admin_roles = ['ADMIN', 'SUPER_ADMIN', 'ROLEDC4E40', 'ROLEF8477A']
+        return user.role.code in admin_roles
     return False
 
 
