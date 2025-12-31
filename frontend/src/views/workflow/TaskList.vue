@@ -132,10 +132,12 @@ import { getMyPendingTasks, getPendingTaskCount, approveTask, rejectTask, delete
 
 const userStore = useUserStore()
 const isAdmin = computed(() => {
-  const user = userStore.user
+  const user = userStore.userInfo
   if (!user) return false
   if (user.is_superuser) return true
-  if (user.role?.code === 'ADMIN' || user.role?.code === 'SUPER_ADMIN') return true
+  // Check role_info.code (from serializer)
+  const roleCode = user.role_info?.code || user.role?.code
+  if (roleCode === 'ADMIN' || roleCode === 'SUPER_ADMIN') return true
   return false
 })
 
