@@ -475,9 +475,36 @@ const submitDelivery = async () => {
       return
     }
 
-    await request.post('/sales/deliveries/', payload)
-    ElMessage.success('发货单创建成功')
+    const response = await request.post('/sales/deliveries/', payload)
+    const newDelivery = response.data || response
+    
     deliveryDialogVisible.value = false
+    
+    // 询问是否立即提交审批
+    try {
+      await ElMessageBox.confirm(
+        '发货单创建成功！是否立即提交审批？',
+        '提交审批',
+        {
+          confirmButtonText: '立即提交',
+          cancelButtonText: '稍后提交',
+          type: 'success'
+        }
+      )
+      
+      // 用户选择立即提交
+      try {
+        await request.post(`/sales/deliveries/${newDelivery.id}/submit/`)
+        ElMessage.success('发货单已提交审批')
+      } catch (submitError) {
+        console.error('提交审批失败:', submitError)
+        ElMessage.warning('发货单已创建，但提交审批失败，请稍后在发货单列表中重新提交')
+      }
+    } catch {
+      // 用户选择稍后提交
+      ElMessage.success('发货单已创建，可在发货单列表中提交审批')
+    }
+    
     loadOrderDetail()
   } catch (error) {
     console.error('创建发货单失败:', error)
@@ -489,9 +516,18 @@ const viewDelivery = (row) => {
   router.push(`/sales/delivery-orders/${row.id}`)
 }
 
-onMounted(() => {
-  loadOrderDetail()
-  loadWarehouses()
+onMounted(async () => {
+  await loadOrderDetail()
+  await loadWarehouses()
+  
+  // 如果带有action=create_delivery参数，自动打开创建发货单对话框
+  if (route.query.action === 'create_delivery') {
+    if (order.value.status === 'CONFIRMED' || order.value.status === 'PARTIAL') {
+      handleCreateDelivery()
+    } else {
+      ElMessage.warning('只有已确认或部分发货状态的订单才能创建发货单')
+    }
+  }
 })
 </script>
 

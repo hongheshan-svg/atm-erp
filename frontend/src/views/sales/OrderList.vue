@@ -545,7 +545,8 @@ const handleCancel = async (row) => {
 }
 
 const createDelivery = (row) => {
-  router.push(`/sales/deliveries?so_id=${row.id}`)
+  // 导航到销售订单详情页面，带上创建发货单参数
+  router.push(`/sales/orders/${row.id}?action=create_delivery`)
 }
 
 const handleViewAttachments = (row) => {
