@@ -49,6 +49,7 @@
     
     <div class="login-footer">
       Copyright © {{ new Date().getFullYear() }} 深圳市奥特迈智能装备有限公司 版权所有
+      <span class="version">v{{ appVersion }}</span>
     </div>
   </div>
 </template>
@@ -59,9 +60,11 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import { APP_VERSION } from '@/config/version'
 
 const router = useRouter()
 const userStore = useUserStore()
+const appVersion = APP_VERSION
 
 const loginFormRef = ref(null)
 const loading = ref(false)
@@ -176,6 +179,12 @@ const handleLogin = async () => {
   color: #909399;
   font-size: 12px;
   z-index: 1;
+}
+
+.login-footer .version {
+  margin-left: 15px;
+  color: #c0c4cc;
+  font-size: 11px;
 }
 </style>
 

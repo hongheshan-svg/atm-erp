@@ -192,6 +192,7 @@
       
       <el-footer class="footer">
         <span>Copyright © {{ new Date().getFullYear() }} 深圳市奥特迈智能装备有限公司 版权所有</span>
+        <span class="version">v{{ appVersion }}</span>
       </el-footer>
     </el-container>
   </el-container>
@@ -206,11 +207,13 @@ import {
   Sell, Goods, Money, TrendCharts, Fold, Expand, UserFilled, DataLine, Checked, Service
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import { APP_VERSION } from '@/config/version'
 
 const router = useRouter()
 const userStore = useUserStore()
 
 const isCollapse = ref(false)
+const appVersion = APP_VERSION
 
 // 检查是否有菜单访问权限
 const hasMenuAccess = (menuId) => {
@@ -395,6 +398,12 @@ onMounted(async () => {
   justify-content: center;
   color: #909399;
   font-size: 12px;
+  gap: 20px;
+}
+
+.footer .version {
+  color: #c0c4cc;
+  font-size: 11px;
 }
 
 .fade-enter-active,
