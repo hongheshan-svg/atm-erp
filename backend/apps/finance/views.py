@@ -338,7 +338,18 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     serializer_class = InvoiceSerializer
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     filterset_fields = ['invoice_type', 'status', 'reference_type', 'is_deleted']
-    search_fields = ['invoice_no', 'party_name']
+    search_fields = ['invoice_no', 'digital_invoice_no', 'party_name']
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        # 支持发票号模糊查询
+        invoice_no = self.request.query_params.get('invoice_no')
+        if invoice_no:
+            queryset = queryset.filter(
+                Q(invoice_no__icontains=invoice_no) | 
+                Q(digital_invoice_no__icontains=invoice_no)
+            )
+        return queryset
     ordering_fields = ['invoice_date', 'total_amount', 'created_at']
     
     @action(detail=True, methods=['post'])
