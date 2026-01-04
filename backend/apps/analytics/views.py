@@ -31,7 +31,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
         kpis = DashboardKPIService.get_all_kpis(start_date, end_date)
         return Response(kpis)
     
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], url_path='cash-flow-forecast')
     def cash_flow_forecast(self, request):
         """Get 30-day cash flow forecast"""
         forecast = CashFlowForecastService.forecast_next_30_days()
