@@ -394,6 +394,138 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         invoice.save()
         return Response(InvoiceSerializer(invoice).data)
     
+    @action(detail=False, methods=['post'], url_path='auto-match')
+    def auto_match(self, request):
+        """自动匹配发票到销售订单/采购订单"""
+        from apps.sales.models import SalesOrder
+        from apps.purchase.models import PurchaseOrder
+        from fuzzywuzzy import fuzz
+        
+        matched_count = 0
+        invoices = Invoice.objects.filter(
+            is_deleted=False,
+            reference_type__isnull=True
+        ).exclude(reference_id__isnull=False)
+        
+        for invoice in invoices:
+            matched = False
+            
+            if invoice.invoice_type == 'OUTPUT':
+                # 销项发票 - 匹配销售订单 (通过购买方/客户名称和金额)
+                buyer_name = invoice.buyer_name or invoice.party_name
+                if buyer_name:
+                    # 查找客户匹配的销售订单
+                    sales_orders = SalesOrder.objects.filter(
+                        is_deleted=False,
+                        status__in=['CONFIRMED', 'PARTIAL', 'COMPLETED']
+                    ).select_related('customer')
+                    
+                    best_match = None
+                    best_score = 0
+                    
+                    for so in sales_orders:
+                        if so.customer:
+                            score = fuzz.ratio(buyer_name, so.customer.name)
+                            # 如果金额也接近，提高分数
+                            if invoice.total_amount and so.total_with_tax:
+                                amount_diff = abs(float(invoice.total_amount) - float(so.total_with_tax))
+                                if amount_diff < 1:  # 完全匹配
+                                    score += 30
+                                elif amount_diff / float(so.total_with_tax) < 0.01:  # 1%以内
+                                    score += 20
+                            
+                            if score > best_score and score >= 70:
+                                best_score = score
+                                best_match = so
+                    
+                    if best_match:
+                        invoice.reference_type = 'SALES_ORDER'
+                        invoice.reference_id = best_match.id
+                        if best_match.project:
+                            invoice.project = best_match.project
+                        invoice.save()
+                        matched = True
+                        matched_count += 1
+            
+            elif invoice.invoice_type == 'INPUT':
+                # 进项发票 - 匹配采购订单 (通过销售方/供应商名称和金额)
+                seller_name = invoice.seller_name or invoice.party_name
+                if seller_name:
+                    # 查找供应商匹配的采购订单
+                    purchase_orders = PurchaseOrder.objects.filter(
+                        is_deleted=False,
+                        status__in=['CONFIRMED', 'PARTIAL', 'COMPLETED']
+                    ).select_related('supplier')
+                    
+                    best_match = None
+                    best_score = 0
+                    
+                    for po in purchase_orders:
+                        if po.supplier:
+                            score = fuzz.ratio(seller_name, po.supplier.name)
+                            # 如果金额也接近，提高分数
+                            if invoice.total_amount and po.total_with_tax:
+                                amount_diff = abs(float(invoice.total_amount) - float(po.total_with_tax))
+                                if amount_diff < 1:  # 完全匹配
+                                    score += 30
+                                elif amount_diff / float(po.total_with_tax) < 0.01:  # 1%以内
+                                    score += 20
+                            
+                            if score > best_score and score >= 70:
+                                best_score = score
+                                best_match = po
+                    
+                    if best_match:
+                        invoice.reference_type = 'PURCHASE_ORDER'
+                        invoice.reference_id = best_match.id
+                        if best_match.project:
+                            invoice.project = best_match.project
+                        invoice.save()
+                        matched = True
+                        matched_count += 1
+        
+        return Response({
+            'matched_count': matched_count,
+            'message': f'成功匹配 {matched_count} 张发票'
+        })
+    
+    @action(detail=True, methods=['post'], url_path='match-order')
+    def match_order(self, request, pk=None):
+        """手动匹配发票到指定订单"""
+        invoice = self.get_object()
+        order_type = request.data.get('order_type')  # 'SALES_ORDER' or 'PURCHASE_ORDER'
+        order_id = request.data.get('order_id')
+        
+        if not order_type or not order_id:
+            return Response({'error': '请指定订单类型和订单ID'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if order_type == 'SALES_ORDER':
+            from apps.sales.models import SalesOrder
+            try:
+                so = SalesOrder.objects.get(id=order_id)
+                invoice.reference_type = 'SALES_ORDER'
+                invoice.reference_id = so.id
+                if so.project:
+                    invoice.project = so.project
+                invoice.save()
+            except SalesOrder.DoesNotExist:
+                return Response({'error': '销售订单不存在'}, status=status.HTTP_400_BAD_REQUEST)
+        elif order_type == 'PURCHASE_ORDER':
+            from apps.purchase.models import PurchaseOrder
+            try:
+                po = PurchaseOrder.objects.get(id=order_id)
+                invoice.reference_type = 'PURCHASE_ORDER'
+                invoice.reference_id = po.id
+                if po.project:
+                    invoice.project = po.project
+                invoice.save()
+            except PurchaseOrder.DoesNotExist:
+                return Response({'error': '采购订单不存在'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            return Response({'error': '无效的订单类型'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response(InvoiceSerializer(invoice).data)
+    
     @action(detail=False, methods=['get'])
     def download_template(self, request):
         """Download invoice import template Excel file."""

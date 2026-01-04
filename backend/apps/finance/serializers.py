@@ -153,6 +153,9 @@ class InvoiceSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
     project_code = serializers.CharField(source='project.code', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
+    # 关联订单号
+    sales_order_no = serializers.SerializerMethodField()
+    purchase_order_no = serializers.SerializerMethodField()
     items = InvoiceItemSerializer(many=True, read_only=True)
     item_count = serializers.SerializerMethodField()
     attachment_count = serializers.SerializerMethodField()
@@ -167,6 +170,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'amount_before_tax', 'tax_amount', 'total_amount',
             'invoice_source', 'invoice_category', 'invoice_category_display',
             'reference_type', 'reference_type_display', 'reference_id',
+            'sales_order_no', 'purchase_order_no',
             'project', 'project_code', 'project_name',
             'status', 'status_display', 'notes', 'created_by_name',
             'items', 'item_count', 'attachment_count',
@@ -180,6 +184,28 @@ class InvoiceSerializer(serializers.ModelSerializer):
     def get_attachment_count(self, obj):
         from apps.core.models import Attachment
         return Attachment.objects.filter(related_model='Invoice', related_id=obj.id).count()
+    
+    def get_sales_order_no(self, obj):
+        """获取关联的销售订单号"""
+        if obj.reference_type == 'SALES_ORDER' and obj.reference_id:
+            from apps.sales.models import SalesOrder
+            try:
+                so = SalesOrder.objects.get(id=obj.reference_id)
+                return so.order_no
+            except SalesOrder.DoesNotExist:
+                pass
+        return None
+    
+    def get_purchase_order_no(self, obj):
+        """获取关联的采购订单号"""
+        if obj.reference_type == 'PURCHASE_ORDER' and obj.reference_id:
+            from apps.purchase.models import PurchaseOrder
+            try:
+                po = PurchaseOrder.objects.get(id=obj.reference_id)
+                return po.order_no
+            except PurchaseOrder.DoesNotExist:
+                pass
+        return None
 
 
 class SharedExpenseAllocationSerializer(serializers.ModelSerializer):

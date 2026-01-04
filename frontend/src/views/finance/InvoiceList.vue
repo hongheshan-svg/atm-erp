@@ -36,6 +36,9 @@
             <el-button @click="handleExport">
               <el-icon><Download /></el-icon> 导出
             </el-button>
+            <el-button type="success" @click="handleAutoMatch">
+              <el-icon><Link /></el-icon> 自动匹配订单
+            </el-button>
             <el-button type="primary" @click="handleCreate">
               <el-icon><Plus /></el-icon> 登记发票
             </el-button>
@@ -120,6 +123,17 @@
             <el-table-column prop="status" label="状态" width="75">
               <template #default="{ row }">
                 <el-tag :type="getInvoiceStatusType(row.status)" size="small">{{ getInvoiceStatusLabel(row.status) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="关联订单" width="130" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span v-if="row.invoice_type === 'OUTPUT' && row.sales_order_no" class="text-success">
+                  {{ row.sales_order_no }}
+                </span>
+                <span v-else-if="row.invoice_type === 'INPUT' && row.purchase_order_no" class="text-primary">
+                  {{ row.purchase_order_no }}
+                </span>
+                <el-button v-else link size="small" type="primary" @click="handleMatchOrder(row)">匹配</el-button>
               </template>
             </el-table-column>
             <el-table-column label="关联项目" width="110" show-overflow-tooltip>
@@ -470,7 +484,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Upload, Download, Document, Files } from '@element-plus/icons-vue'
+import { Plus, Upload, Download, Document, Files, Link } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 const loading = ref(false)
@@ -658,6 +672,77 @@ const handleCreate = () => {
   dialogTitle.value = '登记发票'
   resetForm()
   dialogVisible.value = true
+}
+
+const handleAutoMatch = async () => {
+  try {
+    await ElMessageBox.confirm('系统将自动根据发票金额和对方名称匹配销售订单/采购订单，是否继续？', '自动匹配订单', {
+      type: 'info',
+      confirmButtonText: '开始匹配',
+      cancelButtonText: '取消'
+    })
+    
+    const response = await request.post('/finance/invoices/auto-match/')
+    ElMessage.success(response.message || `成功匹配 ${response.matched_count} 张发票`)
+    loadInvoices()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('自动匹配失败')
+    }
+  }
+}
+
+const handleMatchOrder = async (row) => {
+  // 根据发票类型显示不同的匹配对话框
+  const orderType = row.invoice_type === 'OUTPUT' ? '销售订单' : '采购订单'
+  const orderApiPath = row.invoice_type === 'OUTPUT' ? '/sales/orders/' : '/purchase/orders/'
+  
+  try {
+    // 获取订单列表
+    const response = await request.get(orderApiPath, { params: { page_size: 100, status: 'CONFIRMED' } })
+    const orders = response.results || response || []
+    
+    if (orders.length === 0) {
+      ElMessage.warning(`没有可匹配的${orderType}`)
+      return
+    }
+    
+    // 让用户选择订单
+    const { value: selectedOrderId } = await ElMessageBox.prompt(
+      `请输入要匹配的${orderType}号（可用订单: ${orders.slice(0, 5).map(o => o.order_no).join(', ')}${orders.length > 5 ? '...' : ''}）`,
+      `匹配${orderType}`,
+      {
+        inputPlaceholder: `输入${orderType}号`,
+        confirmButtonText: '确定匹配',
+        cancelButtonText: '取消'
+      }
+    )
+    
+    if (!selectedOrderId) {
+      ElMessage.warning('请输入订单号')
+      return
+    }
+    
+    // 查找订单
+    const matchedOrder = orders.find(o => o.order_no === selectedOrderId.trim())
+    if (!matchedOrder) {
+      ElMessage.error(`未找到${orderType}: ${selectedOrderId}`)
+      return
+    }
+    
+    // 调用匹配接口
+    await request.post(`/finance/invoices/${row.id}/match-order/`, {
+      order_type: row.invoice_type === 'OUTPUT' ? 'SALES_ORDER' : 'PURCHASE_ORDER',
+      order_id: matchedOrder.id
+    })
+    
+    ElMessage.success(`成功匹配到${orderType}: ${matchedOrder.order_no}`)
+    loadInvoices()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.error || '匹配失败')
+    }
+  }
 }
 
 const handleView = async (row) => {
