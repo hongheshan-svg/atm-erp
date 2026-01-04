@@ -871,8 +871,8 @@ const formatDateTime = (dt) => {
   return dt.replace('T', ' ').slice(0, 19)
 }
 
-const getAPStatusType = (s) => ({ 'UNPAID': 'warning', 'PARTIAL': 'primary', 'PAID': 'success', 'OVERDUE': 'danger' }[s] || 'info')
-const getAPStatusLabel = (s) => ({ 'UNPAID': '未付款', 'PARTIAL': '部分付款', 'PAID': '已付款', 'OVERDUE': '已逾期' }[s] || s)
+const getAPStatusType = (s) => ({ 'PENDING': 'warning', 'UNPAID': 'warning', 'PARTIAL': 'primary', 'PAID': 'success', 'OVERDUE': 'danger', 'CANCELLED': 'info' }[s] || 'info')
+const getAPStatusLabel = (s) => ({ 'PENDING': '待付款', 'UNPAID': '未付款', 'PARTIAL': '部分付款', 'PAID': '已付款', 'OVERDUE': '已逾期', 'CANCELLED': '已取消' }[s] || s)
 const getBankStatusType = (s) => ({ 'PENDING': 'warning', 'MATCHED': 'success', 'IGNORED': 'info', 'ERROR': 'danger' }[s] || 'info')
 const getBankStatusLabel = (s) => ({ 'PENDING': '待匹配', 'MATCHED': '已匹配', 'IGNORED': '已忽略', 'ERROR': '匹配错误' }[s] || s)
 

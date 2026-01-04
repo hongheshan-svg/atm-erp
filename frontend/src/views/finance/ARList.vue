@@ -862,8 +862,8 @@ const reconciliationRules = {
 
 const formatNumber = (num) => parseFloat(num || 0).toFixed(2)
 
-const getARStatusType = (s) => ({ 'UNPAID': 'warning', 'PARTIAL': 'primary', 'PAID': 'success', 'OVERDUE': 'danger' }[s] || 'info')
-const getARStatusLabel = (s) => ({ 'UNPAID': '未收款', 'PARTIAL': '部分收款', 'PAID': '已收款', 'OVERDUE': '已逾期' }[s] || s)
+const getARStatusType = (s) => ({ 'PENDING': 'warning', 'UNPAID': 'warning', 'PARTIAL': 'primary', 'PAID': 'success', 'OVERDUE': 'danger', 'CANCELLED': 'info' }[s] || 'info')
+const getARStatusLabel = (s) => ({ 'PENDING': '待收款', 'UNPAID': '未收款', 'PARTIAL': '部分收款', 'PAID': '已收款', 'OVERDUE': '已逾期', 'CANCELLED': '已取消' }[s] || s)
 
 const getPaymentProgress = (row) => {
   const due = parseFloat(row.amount_due || 0)
