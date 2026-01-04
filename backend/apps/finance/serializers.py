@@ -56,10 +56,14 @@ class AccountReceivableSerializer(serializers.ModelSerializer):
     """AccountReceivable serializer."""
     customer_name = serializers.CharField(source='customer.name', read_only=True)
     so_no = serializers.SerializerMethodField()
+    sales_order_no = serializers.SerializerMethodField()  # 前端兼容字段
     project_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     
     def get_so_no(self, obj):
+        return obj.so.order_no if obj.so else None
+    
+    def get_sales_order_no(self, obj):
         return obj.so.order_no if obj.so else None
     
     def get_project_name(self, obj):
@@ -70,10 +74,10 @@ class AccountReceivableSerializer(serializers.ModelSerializer):
     class Meta:
         model = AccountReceivable
         fields = [
-            'id', 'ar_no', 'customer', 'customer_name', 'so', 'so_no', 'project', 'project_name',
-            'invoice_no', 'invoice_date', 'currency', 'currency_code', 'amount_due', 'amount_paid', 
-            'amount_remaining', 'exchange_rate', 'due_date', 'status', 'status_display', 
-            'is_deleted', 'created_at', 'updated_at'
+            'id', 'ar_no', 'customer', 'customer_name', 'so', 'so_no', 'sales_order_no',
+            'project', 'project_name', 'invoice_no', 'invoice_date', 'currency', 'currency_code', 
+            'amount_due', 'amount_paid', 'amount_remaining', 'exchange_rate', 'due_date', 
+            'status', 'status_display', 'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['ar_no', 'amount_paid', 'created_at', 'updated_at']
     
@@ -85,6 +89,8 @@ class AccountPayableSerializer(serializers.ModelSerializer):
     """AccountPayable serializer."""
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
     po_no = serializers.CharField(source='po.order_no', read_only=True)
+    purchase_order_no = serializers.CharField(source='po.order_no', read_only=True)  # 前端兼容字段
+    project_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     currency_code = serializers.CharField(source='currency.code', read_only=True)
     amount_remaining = serializers.SerializerMethodField()
@@ -92,12 +98,17 @@ class AccountPayableSerializer(serializers.ModelSerializer):
     class Meta:
         model = AccountPayable
         fields = [
-            'id', 'ap_no', 'supplier', 'supplier_name', 'po', 'po_no', 'invoice_no',
-            'invoice_date', 'currency', 'currency_code', 'amount_due', 'amount_paid', 
-            'amount_remaining', 'exchange_rate', 'due_date', 'status', 'status_display', 
-            'is_deleted', 'created_at', 'updated_at'
+            'id', 'ap_no', 'supplier', 'supplier_name', 'po', 'po_no', 'purchase_order_no',
+            'project_name', 'invoice_no', 'invoice_date', 'currency', 'currency_code', 
+            'amount_due', 'amount_paid', 'amount_remaining', 'exchange_rate', 'due_date', 
+            'status', 'status_display', 'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['ap_no', 'amount_paid', 'created_at', 'updated_at']
+    
+    def get_project_name(self, obj):
+        if obj.po and obj.po.project:
+            return obj.po.project.name
+        return None
     
     def get_amount_remaining(self, obj):
         return float(obj.amount_remaining)
