@@ -114,7 +114,7 @@
             </el-table-column>
             <el-table-column label="状态" width="80" align="center">
               <template #default="{ row }">
-                <el-tag :type="getBankStatusType(row.status)" size="small">{{ row.status_display }}</el-tag>
+                <el-tag :type="getBankStatusType(row.status)" size="small">{{ row.status_display || getBankStatusLabel(row.status) }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column label="操作" width="150" fixed="right">
@@ -331,7 +331,7 @@
             </el-table-column>
             <el-table-column prop="status" label="状态" width="80" align="center">
               <template #default="{ row }">
-                <el-tag :type="getScheduleStatusType(row.status)" size="small">{{ row.status_display }}</el-tag>
+                <el-tag :type="getScheduleStatusType(row.status)" size="small">{{ row.status_display || getScheduleStatusLabel(row.status) }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column label="操作" width="130" fixed="right">
@@ -424,7 +424,7 @@
             </el-table-column>
             <el-table-column prop="status_display" label="状态" width="100" align="center">
               <template #default="{ row }">
-                <el-tag :type="getReconciliationStatusType(row.status)">{{ row.status_display }}</el-tag>
+                <el-tag :type="getReconciliationStatusType(row.status)">{{ row.status_display || getReconciliationStatusLabel(row.status) }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column label="操作" width="200" fixed="right">
@@ -534,7 +534,7 @@
       <el-descriptions :column="4" border v-if="currentReconciliation">
         <el-descriptions-item label="对账单号">{{ currentReconciliation.reconciliation_no }}</el-descriptions-item>
         <el-descriptions-item label="状态">
-          <el-tag :type="getReconciliationStatusType(currentReconciliation.status)">{{ currentReconciliation.status_display }}</el-tag>
+          <el-tag :type="getReconciliationStatusType(currentReconciliation.status)">{{ currentReconciliation.status_display || getReconciliationStatusLabel(currentReconciliation.status) }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="客户">{{ currentReconciliation.customer_name }}</el-descriptions-item>
         <el-descriptions-item label="期间">{{ currentReconciliation.period_start }} ~ {{ currentReconciliation.period_end }}</el-descriptions-item>
@@ -658,7 +658,7 @@
         <el-descriptions-item label="摘要">{{ currentBankStatement.summary || '-' }}</el-descriptions-item>
         <el-descriptions-item label="附言" :span="2">{{ currentBankStatement.postscript || '-' }}</el-descriptions-item>
         <el-descriptions-item label="匹配状态">
-          <el-tag :type="getBankStatusType(currentBankStatement.status)" size="small">{{ currentBankStatement.status_display }}</el-tag>
+          <el-tag :type="getBankStatusType(currentBankStatement.status)" size="small">{{ currentBankStatement.status_display || getBankStatusLabel(currentBankStatement.status) }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="匹配客户">
           {{ currentBankStatement.customer_name || '-' }}
@@ -887,6 +887,11 @@ const getReconciliationStatusType = (status) => {
   return types[status] || 'info'
 }
 
+const getReconciliationStatusLabel = (status) => {
+  const labels = { DRAFT: '草稿', PENDING: '待确认', CONFIRMED: '已确认', DISPUTED: '有争议', CLOSED: '已关闭' }
+  return labels[status] || status
+}
+
 const getProgressColor = (progress) => {
   const p = Number(progress || 0)
   if (p >= 100) return '#67c23a'
@@ -911,6 +916,11 @@ const formatDateTime = (dt) => {
 const getBankStatusType = (status) => {
   const types = { 'PENDING': 'warning', 'MATCHED': 'success', 'IGNORED': 'info', 'ERROR': 'danger' }
   return types[status] || 'info'
+}
+
+const getBankStatusLabel = (status) => {
+  const labels = { 'PENDING': '待匹配', 'MATCHED': '已匹配', 'IGNORED': '已忽略', 'ERROR': '匹配错误' }
+  return labels[status] || status
 }
 
 const loadBankStatements = async () => {
@@ -1335,6 +1345,11 @@ const handleScheduleSizeChange = (size) => {
 const getScheduleStatusType = (status) => {
   const types = { 'PENDING': 'info', 'PARTIAL': 'warning', 'PAID': 'success', 'OVERDUE': 'danger', 'CANCELLED': '' }
   return types[status] || 'info'
+}
+
+const getScheduleStatusLabel = (status) => {
+  const labels = { 'PENDING': '待收款', 'PARTIAL': '部分收款', 'PAID': '已收款', 'OVERDUE': '已逾期', 'CANCELLED': '已取消' }
+  return labels[status] || status
 }
 
 const handleRecordSchedulePayment = (row) => {
