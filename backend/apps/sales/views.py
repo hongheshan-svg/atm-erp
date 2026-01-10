@@ -5,18 +5,20 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.http import HttpResponse
-from django.db import transaction
+from django.db import models, transaction
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.data_permission import DataPermissionMixin
 from .models import (
     SalesQuotation, SalesQuotationLine,
     SalesOrder, SalesOrderLine,
-    DeliveryOrder, DeliveryOrderLine
+    DeliveryOrder, DeliveryOrderLine,
+    SalesContract
 )
 from .serializers import (
     SalesQuotationSerializer, SalesQuotationLineSerializer,
     SalesOrderSerializer, SalesOrderLineSerializer,
-    DeliveryOrderSerializer, DeliveryOrderLineSerializer
+    DeliveryOrderSerializer, DeliveryOrderLineSerializer,
+    SalesContractSerializer
 )
 
 
@@ -124,6 +126,32 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
     search_fields = ['order_no']
     ordering_fields = ['order_date', 'created_at']
     
+    @action(detail=False, methods=['get'])
+    def for_linking(self, request):
+        """获取可用于关联的销售订单（不受数据权限限制）"""
+        # 直接从基础queryset获取，不应用数据权限过滤
+        queryset = SalesOrder.objects.filter(is_deleted=False).order_by('-created_at')
+        
+        # 支持搜索
+        search = request.query_params.get('search', '')
+        if search:
+            queryset = queryset.filter(
+                models.Q(order_no__icontains=search) |
+                models.Q(customer__name__icontains=search)
+            )
+        
+        # 简化返回数据
+        data = [{
+            'id': so.id,
+            'order_no': so.order_no,
+            'customer': so.customer_id,
+            'customer_name': so.customer.name if so.customer else '',
+            'status': so.status,
+            'total_amount': float(so.total_amount or 0),
+        } for so in queryset[:100]]  # 限制返回数量
+        
+        return Response(data)
+    
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
         """提交销售订单审批 - 审批步骤由流程配置决定"""
@@ -182,20 +210,28 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
         so.status = 'CONFIRMED'
         so.save()
         
-        # Auto-create AR - 使用含税金额
+        # Auto-create AR - 使用含税金额（避免重复创建）
         from apps.finance.models import AccountReceivable, PaymentSchedule
-        AccountReceivable.objects.create(
-            customer=so.customer,
-            so=so,
-            project=so.project,
-            invoice_date=so.order_date,
-            amount_due=so.total_with_tax or so.total_amount,
-            due_date=request.data.get('due_date', so.delivery_date),
-            created_by=request.user
-        )
         
-        # 自动生成付款计划
-        schedules = PaymentSchedule.generate_from_sales_order(so)
+        # 检查是否已存在该SO的应收账款
+        existing_ar = AccountReceivable.objects.filter(so=so, is_deleted=False).first()
+        if not existing_ar:
+            AccountReceivable.objects.create(
+                customer=so.customer,
+                so=so,
+                project=so.project,
+                invoice_date=so.order_date,
+                amount_due=so.total_with_tax or so.total_amount,
+                due_date=request.data.get('due_date', so.delivery_date),
+                created_by=request.user
+            )
+        
+        # 自动生成付款计划（避免重复创建）
+        existing_schedules = PaymentSchedule.objects.filter(sales_order=so, is_deleted=False).exists()
+        if existing_schedules:
+            schedules = []
+        else:
+            schedules = PaymentSchedule.generate_from_sales_order(so)
         
         response_data = SalesOrderSerializer(so).data
         response_data['payment_schedules_count'] = len(schedules)
@@ -233,6 +269,582 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                 {'error': f'发票生成失败: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+    
+    @action(detail=False, methods=['get'], url_path='download-template')
+    def download_template(self, request):
+        """下载销售订单导入模板"""
+        import io
+        import openpyxl
+        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+        from django.http import HttpResponse
+        
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = '销售订单'
+        
+        # 表头样式
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        header_font = Font(color='FFFFFF', bold=True)
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        # 表头
+        headers = [
+            '订单号*', '客户名称*', '订单日期', '交货日期*',
+            '税率(%)', '付款条款', '付款方式', '备注'
+        ]
+        
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center')
+            cell.border = thin_border
+        
+        # 设置列宽
+        widths = [15, 25, 15, 15, 10, 20, 15, 30]
+        for i, width in enumerate(widths, 1):
+            ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
+        
+        # 示例数据
+        sample_data = [
+            'SO2025010001', '示例客户', '2025-01-01', '2025-02-01',
+            13, '30%预付/60%验收/10%质保', '电汇', '示例备注'
+        ]
+        for col, value in enumerate(sample_data, 1):
+            ws.cell(row=2, column=col, value=value)
+        
+        # 创建明细表
+        ws2 = wb.create_sheet(title='订单明细')
+        detail_headers = [
+            '订单号*', '物料编码', '产品名称*', '规格型号',
+            '单位', '数量*', '单价*', '备注'
+        ]
+        
+        for col, header in enumerate(detail_headers, 1):
+            cell = ws2.cell(row=1, column=col, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center')
+            cell.border = thin_border
+        
+        # 设置列宽
+        detail_widths = [15, 15, 25, 20, 10, 12, 12, 25]
+        for i, width in enumerate(detail_widths, 1):
+            ws2.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
+        
+        # 示例数据
+        detail_sample = [
+            'SO2025010001', 'ITEM001', '示例产品', '100x100mm',
+            '件', 10, 1000.00, '备注'
+        ]
+        for col, value in enumerate(detail_sample, 1):
+            ws2.cell(row=2, column=col, value=value)
+        
+        # 创建说明表
+        ws3 = wb.create_sheet(title='填写说明')
+        instructions = [
+            ['字段说明'],
+            [''],
+            ['销售订单表:'],
+            ['- 订单号*: 必填，唯一标识，如SO2025010001'],
+            ['- 客户名称*: 必填，必须与系统中的客户名称完全匹配'],
+            ['- 订单日期: 格式 YYYY-MM-DD，留空则使用当天日期'],
+            ['- 交货日期*: 必填，格式 YYYY-MM-DD'],
+            ['- 税率(%): 可选值 0, 1, 3, 6, 9, 13，默认13'],
+            ['- 付款条款: 全款预付/货到付款/月结30天/月结60天/月结90天等'],
+            ['- 付款方式: 电汇/承兑汇票/支票/现金/信用证/其他'],
+            ['- 备注: 可选'],
+            [''],
+            ['订单明细表:'],
+            ['- 订单号*: 必填，对应销售订单表中的订单号'],
+            ['- 物料编码: 可选，系统中已存在的物料SKU'],
+            ['- 产品名称*: 必填，如无物料编码则手动填写'],
+            ['- 规格型号: 可选'],
+            ['- 单位: 可选，默认"件"'],
+            ['- 数量*: 必填，正数'],
+            ['- 单价*: 必填，不含税单价'],
+            ['- 备注: 可选'],
+            [''],
+            ['注意事项:'],
+            ['1. 带*的字段为必填项'],
+            ['2. 导入时会根据订单号检查重复，已存在的订单会被更新'],
+            ['3. 客户名称必须与系统中已有的客户名称完全一致'],
+        ]
+        for row_idx, row_data in enumerate(instructions, 1):
+            for col_idx, value in enumerate(row_data, 1):
+                ws3.cell(row=row_idx, column=col_idx, value=value)
+        ws3.column_dimensions['A'].width = 60
+        
+        # 输出
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+        
+        response = HttpResponse(
+            buffer.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename="sales_order_template.xlsx"'
+        return response
+    
+    @action(detail=False, methods=['get'], url_path='export')
+    def export_excel(self, request):
+        """导出销售订单到Excel"""
+        import io
+        import openpyxl
+        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+        from django.http import HttpResponse
+        
+        # 获取查询参数过滤的数据
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = '销售订单'
+        
+        # 表头样式
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        header_font = Font(color='FFFFFF', bold=True)
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        # 表头
+        headers = [
+            '订单号', '客户名称', '客户编码', '订单日期', '交货日期',
+            '状态', '税率(%)', '不含税金额', '税额', '含税总额',
+            '付款条款', '付款方式', '备注', '创建时间'
+        ]
+        
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center')
+            cell.border = thin_border
+        
+        # 数据行
+        for row_idx, so in enumerate(queryset, 2):
+            data = [
+                so.order_no,
+                so.customer.name if so.customer else '',
+                so.customer.code if so.customer else '',
+                so.order_date.strftime('%Y-%m-%d') if so.order_date else '',
+                so.delivery_date.strftime('%Y-%m-%d') if so.delivery_date else '',
+                so.get_status_display(),
+                so.tax_rate,
+                float(so.total_amount),
+                float(so.tax_amount),
+                float(so.total_with_tax),
+                so.get_payment_terms_display() if so.payment_terms else '',
+                so.get_payment_method_display() if so.payment_method else '',
+                so.notes or '',
+                so.created_at.strftime('%Y-%m-%d %H:%M') if so.created_at else ''
+            ]
+            for col, value in enumerate(data, 1):
+                cell = ws.cell(row=row_idx, column=col, value=value)
+                cell.border = thin_border
+        
+        # 设置列宽
+        widths = [15, 25, 15, 12, 12, 10, 8, 15, 12, 15, 25, 12, 30, 18]
+        for i, width in enumerate(widths, 1):
+            ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
+        
+        # 创建明细表
+        ws2 = wb.create_sheet(title='订单明细')
+        detail_headers = [
+            '订单号', '物料编码', '物料名称', '产品名称', '规格型号',
+            '单位', '数量', '单价', '行金额', '已发货', '备注'
+        ]
+        
+        for col, header in enumerate(detail_headers, 1):
+            cell = ws2.cell(row=1, column=col, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center')
+            cell.border = thin_border
+        
+        detail_row = 2
+        for so in queryset:
+            for line in so.lines.filter(is_deleted=False):
+                data = [
+                    so.order_no,
+                    line.item.sku if line.item else '',
+                    line.item.name if line.item else '',
+                    line.custom_name or '',
+                    line.custom_spec or (line.item.spec if line.item else ''),
+                    line.custom_unit or (line.item.unit if line.item else '件'),
+                    float(line.qty),
+                    float(line.unit_price),
+                    float(line.line_amount),
+                    float(line.delivered_qty),
+                    line.notes or ''
+                ]
+                for col, value in enumerate(data, 1):
+                    cell = ws2.cell(row=detail_row, column=col, value=value)
+                    cell.border = thin_border
+                detail_row += 1
+        
+        # 设置列宽
+        detail_widths = [15, 15, 20, 20, 20, 8, 12, 12, 15, 12, 25]
+        for i, width in enumerate(detail_widths, 1):
+            ws2.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
+        
+        # 输出
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+        
+        response = HttpResponse(
+            buffer.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename="sales_orders_export.xlsx"'
+        return response
+    
+    @action(detail=False, methods=['post'], url_path='import')
+    def import_excel(self, request):
+        """导入销售订单"""
+        import io
+        import openpyxl
+        from django.db import transaction
+        from decimal import Decimal, InvalidOperation
+        from datetime import datetime
+        from apps.masterdata.models import Customer, Item
+        
+        file = request.FILES.get('file')
+        if not file:
+            return Response({'error': '请上传文件'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not file.name.endswith(('.xlsx', '.xls')):
+            return Response({'error': '只支持Excel文件格式'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        def parse_decimal(value, default=Decimal('0')):
+            if value is None:
+                return default
+            try:
+                return Decimal(str(value).replace(',', ''))
+            except (InvalidOperation, ValueError):
+                return default
+        
+        def parse_date(value):
+            if value is None:
+                return None
+            if isinstance(value, datetime):
+                return value.date()
+            if isinstance(value, str):
+                for fmt in ['%Y-%m-%d', '%Y/%m/%d', '%Y.%m.%d']:
+                    try:
+                        return datetime.strptime(value.strip(), fmt).date()
+                    except ValueError:
+                        continue
+            return None
+        
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(file.read()))
+            
+            success_count = 0
+            update_count = 0
+            skip_count = 0
+            line_count = 0
+            errors = []
+            
+            # 付款条款映射
+            payment_terms_map = {
+                '全款预付': 'FULL_PREPAY',
+                '货到付款': 'COD',
+                '月结30天': 'NET30',
+                '月结60天': 'NET60',
+                '月结90天': 'NET90',
+                '30%预付/70%发货前': 'M_30_70',
+                '30%预付/30%发货前/40%验收后': 'M_30_30_40',
+                '30%预付/30%发货前/30%验收/10%质保': 'M_30_30_30_10',
+                '30%预付/60%验收/10%质保': 'M_30_60_10',
+                '50%预付/40%验收/10%质保': 'M_50_40_10',
+                '40%预付/50%验收/10%质保': 'M_40_50_10',
+                '20%预付/70%验收/10%质保': 'M_20_70_10',
+                '自定义分期': 'CUSTOM',
+                '其他': 'OTHER',
+            }
+            
+            # 付款方式映射
+            payment_method_map = {
+                '电汇': 'WIRE',
+                '承兑汇票': 'ACCEPTANCE',
+                '支票': 'CHECK',
+                '现金': 'CASH',
+                '信用证': 'LC',
+                '其他': 'OTHER',
+            }
+            
+            # 缓存客户和物料
+            customer_cache = {c.name: c for c in Customer.objects.filter(is_deleted=False)}
+            item_cache = {i.sku: i for i in Item.objects.filter(is_deleted=False)}
+            
+            # 跟踪已处理的订单号
+            processed_orders = set()
+            order_map = {}  # order_no -> SalesOrder
+            
+            # Step 1: 导入订单头
+            if '销售订单' in wb.sheetnames:
+                sheet = wb['销售订单']
+            else:
+                sheet = wb.active
+            
+            headers = [str(cell.value).strip() if cell.value else '' for cell in sheet[1]]
+            
+            col_map = {
+                '订单号': 'order_no',
+                '订单号*': 'order_no',
+                '客户名称': 'customer_name',
+                '客户名称*': 'customer_name',
+                '订单日期': 'order_date',
+                '交货日期': 'delivery_date',
+                '交货日期*': 'delivery_date',
+                '税率': 'tax_rate',
+                '税率(%)': 'tax_rate',
+                '付款条款': 'payment_terms',
+                '付款方式': 'payment_method',
+                '备注': 'notes',
+            }
+            
+            header_to_field = {}
+            for idx, header in enumerate(headers):
+                if header in col_map:
+                    header_to_field[idx] = col_map[header]
+            
+            with transaction.atomic():
+                for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
+                    try:
+                        data = {}
+                        for col_idx, cell in enumerate(row):
+                            if col_idx in header_to_field:
+                                field = header_to_field[col_idx]
+                                value = cell.value
+                                if value is not None:
+                                    data[field] = value
+                        
+                        if not data:
+                            continue
+                        
+                        order_no = str(data.get('order_no', '')).strip()
+                        if not order_no:
+                            continue
+                        
+                        # 检查重复
+                        if order_no in processed_orders:
+                            skip_count += 1
+                            continue
+                        processed_orders.add(order_no)
+                        
+                        customer_name = str(data.get('customer_name', '')).strip()
+                        if not customer_name:
+                            errors.append({'row': row_idx, 'error': '客户名称不能为空'})
+                            continue
+                        
+                        customer = customer_cache.get(customer_name)
+                        if not customer:
+                            errors.append({'row': row_idx, 'error': f'客户 "{customer_name}" 不存在'})
+                            continue
+                        
+                        delivery_date = parse_date(data.get('delivery_date'))
+                        if not delivery_date:
+                            errors.append({'row': row_idx, 'error': '交货日期格式错误'})
+                            continue
+                        
+                        order_date = parse_date(data.get('order_date'))
+                        
+                        tax_rate = int(data.get('tax_rate', 13))
+                        if tax_rate not in [0, 1, 3, 6, 9, 13]:
+                            tax_rate = 13
+                        
+                        payment_terms_str = str(data.get('payment_terms', '')).strip()
+                        payment_terms = payment_terms_map.get(payment_terms_str, 'M_30_30_30_10')
+                        
+                        payment_method_str = str(data.get('payment_method', '')).strip()
+                        payment_method = payment_method_map.get(payment_method_str, 'WIRE')
+                        
+                        notes = str(data.get('notes', '')).strip()
+                        
+                        # 检查是否已存在
+                        existing = SalesOrder.objects.filter(order_no=order_no).first()
+                        if existing:
+                            if existing.is_deleted:
+                                existing.is_deleted = False
+                                existing.deleted_at = None
+                            existing.customer = customer
+                            existing.delivery_date = delivery_date
+                            existing.tax_rate = tax_rate
+                            existing.payment_terms = payment_terms
+                            existing.payment_method = payment_method
+                            existing.notes = notes
+                            existing.save()
+                            # 删除旧明细，等待重新导入
+                            existing.lines.all().delete()
+                            order_map[order_no] = existing
+                            update_count += 1
+                        else:
+                            so = SalesOrder.objects.create(
+                                order_no=order_no,
+                                customer=customer,
+                                delivery_date=delivery_date,
+                                tax_rate=tax_rate,
+                                payment_terms=payment_terms,
+                                payment_method=payment_method,
+                                notes=notes,
+                                created_by=request.user
+                            )
+                            # 更新订单日期
+                            if order_date:
+                                SalesOrder.objects.filter(pk=so.pk).update(order_date=order_date)
+                            order_map[order_no] = so
+                            success_count += 1
+                    
+                    except Exception as e:
+                        errors.append({'row': row_idx, 'error': str(e)})
+                
+                # Step 2: 导入订单明细
+                if '订单明细' in wb.sheetnames:
+                    detail_sheet = wb['订单明细']
+                    detail_headers = [str(cell.value).strip() if cell.value else '' for cell in detail_sheet[1]]
+                    
+                    detail_col_map = {
+                        '订单号': 'order_no',
+                        '订单号*': 'order_no',
+                        '物料编码': 'item_sku',
+                        '产品名称': 'product_name',
+                        '产品名称*': 'product_name',
+                        '规格型号': 'spec',
+                        '单位': 'unit',
+                        '数量': 'qty',
+                        '数量*': 'qty',
+                        '单价': 'unit_price',
+                        '单价*': 'unit_price',
+                        '备注': 'notes',
+                    }
+                    
+                    detail_header_to_field = {}
+                    for idx, header in enumerate(detail_headers):
+                        if header in detail_col_map:
+                            detail_header_to_field[idx] = detail_col_map[header]
+                    
+                    for row_idx, row in enumerate(detail_sheet.iter_rows(min_row=2), start=2):
+                        try:
+                            data = {}
+                            for col_idx, cell in enumerate(row):
+                                if col_idx in detail_header_to_field:
+                                    field = detail_header_to_field[col_idx]
+                                    value = cell.value
+                                    if value is not None:
+                                        data[field] = value
+                            
+                            if not data:
+                                continue
+                            
+                            order_no = str(data.get('order_no', '')).strip()
+                            if not order_no:
+                                continue
+                            
+                            so = order_map.get(order_no)
+                            if not so:
+                                so = SalesOrder.objects.filter(order_no=order_no).first()
+                            if not so:
+                                continue
+                            
+                            qty = parse_decimal(data.get('qty'))
+                            unit_price = parse_decimal(data.get('unit_price'))
+                            
+                            if qty <= 0 or unit_price <= 0:
+                                continue
+                            
+                            item_sku = str(data.get('item_sku', '')).strip()
+                            item = item_cache.get(item_sku) if item_sku else None
+                            
+                            product_name = str(data.get('product_name', '')).strip()
+                            spec = str(data.get('spec', '')).strip()
+                            unit = str(data.get('unit', '件')).strip()
+                            notes = str(data.get('notes', '')).strip()
+                            
+                            line_amount = qty * unit_price
+                            
+                            SalesOrderLine.objects.create(
+                                so=so,
+                                item=item,
+                                custom_name=product_name if not item else '',
+                                custom_spec=spec if not item else '',
+                                custom_unit=unit if not item else '',
+                                qty=qty,
+                                unit_price=unit_price,
+                                line_amount=line_amount,
+                                notes=notes,
+                                created_by=request.user
+                            )
+                            line_count += 1
+                        
+                        except Exception as e:
+                            errors.append({'row': row_idx, 'sheet': '订单明细', 'error': str(e)})
+                
+                # 更新订单金额
+                for order_no, so in order_map.items():
+                    total_amount = sum(
+                        line.line_amount for line in so.lines.filter(is_deleted=False)
+                    )
+                    so.total_amount = total_amount
+                    so.tax_amount = total_amount * so.tax_rate / 100
+                    so.total_with_tax = total_amount + so.tax_amount
+                    so.save()
+            
+            return Response({
+                'success_count': success_count,
+                'update_count': update_count,
+                'skip_count': skip_count,
+                'line_count': line_count,
+                'errors': errors[:20] if errors else []
+            })
+        
+        except Exception as e:
+            return Response(
+                {'error': f'导入失败: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['post'], url_path='bulk-delete')
+    def bulk_delete(self, request):
+        """批量删除销售订单"""
+        ids = request.data.get('ids', [])
+        if not ids:
+            return Response({'error': '请选择要删除的订单'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 只删除草稿和已取消状态的订单
+        deletable_orders = SalesOrder.objects.filter(
+            id__in=ids,
+            status__in=['DRAFT', 'CANCELLED', 'REJECTED'],
+            is_deleted=False
+        )
+        
+        delete_count = deletable_orders.count()
+        skip_count = len(ids) - delete_count
+        
+        # 软删除
+        deletable_orders.update(is_deleted=True)
+        
+        message = f'成功删除 {delete_count} 个订单'
+        if skip_count > 0:
+            message += f'，跳过 {skip_count} 个（只能删除草稿/已取消/已拒绝状态的订单）'
+        
+        return Response({
+            'message': message,
+            'delete_count': delete_count,
+            'skip_count': skip_count
+        })
 
 
 class SalesOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
@@ -558,3 +1170,156 @@ class DeliveryOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
     filterset_fields = ['delivery', 'item', 'is_deleted']
     search_fields = ['item__sku', 'item__name']
 
+
+class SalesContractViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+    """
+    ViewSet for SalesContract management.
+    """
+    queryset = SalesContract.objects.all()
+    serializer_class = SalesContractSerializer
+    filterset_fields = ['so', 'customer', 'project', 'status', 'is_deleted']
+    search_fields = ['contract_no', 'title']
+    ordering_fields = ['contract_date', 'created_at']
+    
+    @action(detail=False, methods=['post'])
+    def create_from_so(self, request):
+        """从销售订单创建合同."""
+        so_id = request.data.get('so_id')
+        if not so_id:
+            return Response(
+                {'error': '请选择销售订单'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            so = SalesOrder.objects.get(id=so_id, is_deleted=False)
+        except SalesOrder.DoesNotExist:
+            return Response(
+                {'error': '销售订单不存在'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 检查是否已有合同
+        existing = SalesContract.objects.filter(so=so, is_deleted=False).first()
+        if existing:
+            return Response(
+                {'error': f'该销售订单已存在合同: {existing.contract_no}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        from django.utils import timezone
+        
+        contract = SalesContract.objects.create(
+            so=so,
+            customer=so.customer,
+            project=so.project,
+            title=f'{so.customer.name}销售合同',
+            contract_date=timezone.now().date(),
+            total_amount=so.total_amount,
+            tax_rate=so.tax_rate,
+            tax_amount=so.tax_amount,
+            total_with_tax=so.total_with_tax,
+            payment_terms=self._get_payment_terms_text(so),
+            delivery_terms=f'交货日期：{so.delivery_date}',
+            created_by=request.user
+        )
+        
+        return Response(SalesContractSerializer(contract).data, status=status.HTTP_201_CREATED)
+    
+    def _get_payment_terms_text(self, so):
+        """生成付款条款文本."""
+        terms_map = {
+            'FULL_PREPAY': '全款预付',
+            'COD': '货到付款',
+            'NET30': '月结30天',
+            'NET60': '月结60天',
+            'NET90': '月结90天',
+            'M_30_70': '30%预付/70%发货前',
+            'M_30_30_40': '30%预付/30%发货前/40%验收后',
+            'M_30_30_30_10': '30%预付/30%发货前/30%验收/10%质保',
+            'M_30_60_10': '30%预付/60%验收/10%质保',
+            'M_50_40_10': '50%预付/40%验收/10%质保',
+            'M_40_50_10': '40%预付/50%验收/10%质保',
+            'M_20_70_10': '20%预付/70%验收/10%质保',
+            'CUSTOM': '自定义分期',
+            'OTHER': '其他',
+        }
+        base_text = terms_map.get(so.payment_terms, '30%预付/30%发货前/30%验收/10%质保')
+        if so.payment_terms_detail:
+            base_text += f'（{so.payment_terms_detail}）'
+        return base_text
+    
+    @action(detail=True, methods=['get'])
+    def print_preview(self, request, pk=None):
+        """获取合同打印预览数据."""
+        contract = self.get_object()
+        so = contract.so
+        
+        # 获取公司信息
+        from apps.core.models import SystemConfig
+        company_config = SystemConfig.get_config('company', {})
+        
+        # 获取订单明细
+        lines = []
+        for line in so.lines.filter(is_deleted=False):
+            lines.append({
+                'item_sku': line.item.sku if line.item else '',
+                'item_name': line.item.name if line.item else line.custom_name,
+                'specification': (line.item.spec if line.item else line.custom_spec) or '',
+                'unit': (line.item.get_unit_display() if line.item else line.custom_unit) or '件',
+                'qty': float(line.qty),
+                'unit_price': float(line.unit_price),
+                'line_amount': float(line.line_amount),
+            })
+        
+        return Response({
+            'contract': SalesContractSerializer(contract).data,
+            'company': {
+                'name': company_config.get('name', ''),
+                'address': company_config.get('address', ''),
+                'phone': company_config.get('phone', ''),
+                'fax': company_config.get('fax', ''),
+                'bank_name': company_config.get('bank_name', ''),
+                'bank_account': company_config.get('bank_account', ''),
+            },
+            'customer': {
+                'name': contract.customer.name,
+                'address': contract.customer.address or '',
+                'contact': contract.customer.contact or '',
+                'phone': contract.customer.phone or '',
+            },
+            'lines': lines,
+        })
+    
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        """审批合同."""
+        contract = self.get_object()
+        if contract.status not in ['DRAFT', 'PENDING']:
+            return Response(
+                {'error': '只能审批草稿或待审批状态的合同'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        contract.status = 'APPROVED'
+        contract.save()
+        return Response(SalesContractSerializer(contract).data)
+    
+    @action(detail=True, methods=['post'])
+    def sign(self, request, pk=None):
+        """签署合同."""
+        contract = self.get_object()
+        if contract.status != 'APPROVED':
+            return Response(
+                {'error': '只能签署已审批的合同'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        from django.utils import timezone
+        
+        contract.buyer_signer = request.data.get('buyer_signer', '')
+        contract.seller_signer = request.data.get('seller_signer', '')
+        contract.signed_date = timezone.now().date()
+        contract.status = 'SIGNED'
+        contract.save()
+        return Response(SalesContractSerializer(contract).data)

@@ -11,8 +11,8 @@ WORKDIR /app
 # Copy package files
 COPY frontend/package*.json ./
 
-# Install dependencies
-RUN npm ci --prefer-offline
+# Install dependencies (using npm install for flexibility)
+RUN npm install --legacy-peer-deps
 
 # Copy source code
 COPY frontend/ ./

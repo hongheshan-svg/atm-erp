@@ -55,7 +55,7 @@ class MaterialRequisitionViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermiss
     
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
-        """提交领料申请"""
+        """提交领料申请 - 进入待审批状态"""
         requisition = self.get_object()
         
         if requisition.status != 'DRAFT':
@@ -70,7 +70,25 @@ class MaterialRequisitionViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermiss
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        requisition.status = 'PENDING'
+        requisition.status = 'SUBMITTED'  # 改为待审批状态
+        requisition.save()
+        
+        # TODO: 发送通知给审批人
+        
+        return Response(MaterialRequisitionSerializer(requisition).data)
+    
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        """审批通过领料申请 - 进入待备料状态"""
+        requisition = self.get_object()
+        
+        if requisition.status != 'SUBMITTED':
+            return Response(
+                {'error': '只能审批待审批状态的领料单'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        requisition.status = 'PENDING'  # 审批通过后进入待备料
         requisition.save()
         
         # TODO: 发送通知给仓库人员
@@ -78,8 +96,24 @@ class MaterialRequisitionViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermiss
         return Response(MaterialRequisitionSerializer(requisition).data)
     
     @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        """拒绝领料申请"""
+        requisition = self.get_object()
+        
+        if requisition.status != 'SUBMITTED':
+            return Response(
+                {'error': '只能拒绝待审批状态的领料单'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        requisition.status = 'REJECTED'
+        requisition.save()
+        
+        return Response(MaterialRequisitionSerializer(requisition).data)
+    
+    @action(detail=True, methods=['post'])
     def start_preparing(self, request, pk=None):
-        """开始备料"""
+        """开始备料 - 仓库人员开始备料"""
         requisition = self.get_object()
         
         if requisition.status != 'PENDING':

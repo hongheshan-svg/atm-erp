@@ -363,4 +363,68 @@ class Command(BaseCommand):
             )
             self.stdout.write(f'  Created: {do_workflow_large.name}')
         
+        # 11. ECN Workflow (Small - low cost impact)
+        ecn_workflow_small, created = WorkflowDefinition.objects.get_or_create(
+            code='ECN_SMALL',
+            defaults={
+                'name': '工程变更审批(小额)',
+                'business_type': 'ECN',
+                'description': '成本影响小于10000的工程变更，仅需项目经理审批',
+                'is_active': True,
+                'amount_threshold': None,
+            }
+        )
+        
+        if created:
+            WorkflowStep.objects.create(
+                workflow=ecn_workflow_small,
+                step_order=1,
+                name='项目经理审批',
+                approver_type='PROJECT_MANAGER',
+                action_type='APPROVE',
+                timeout_hours=24,
+            )
+            self.stdout.write(f'  Created: {ecn_workflow_small.name}')
+        
+        # 12. ECN Workflow (Large - high cost impact)
+        ecn_workflow_large, created = WorkflowDefinition.objects.get_or_create(
+            code='ECN_LARGE',
+            defaults={
+                'name': '工程变更审批(大额)',
+                'business_type': 'ECN',
+                'description': '成本影响大于等于10000的工程变更，需项目经理、财务和总经理审批',
+                'is_active': True,
+                'amount_threshold': 10000,
+            }
+        )
+        
+        if created:
+            WorkflowStep.objects.create(
+                workflow=ecn_workflow_large,
+                step_order=1,
+                name='项目经理审批',
+                approver_type='PROJECT_MANAGER',
+                action_type='APPROVE',
+                timeout_hours=24,
+            )
+            WorkflowStep.objects.create(
+                workflow=ecn_workflow_large,
+                step_order=2,
+                name='财务审核',
+                approver_type='ROLE',
+                approver_role=finance_role,
+                action_type='REVIEW',
+                timeout_hours=24,
+            )
+            WorkflowStep.objects.create(
+                workflow=ecn_workflow_large,
+                step_order=3,
+                name='总经理审批',
+                approver_type='ROLE',
+                approver_role=admin_role,
+                action_type='APPROVE',
+                timeout_hours=48,
+            )
+            self.stdout.write(f'  Created: {ecn_workflow_large.name}')
+        
         self.stdout.write(self.style.SUCCESS('Workflow initialization complete!'))

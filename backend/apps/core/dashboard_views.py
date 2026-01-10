@@ -1,169 +1,102 @@
 """
-Dashboard configuration views for customizable widgets.
+仪表盘组件视图
+Dashboard Widget Views
 """
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework import serializers
+
 from .dashboard_config import DashboardWidget, UserDashboard, DashboardDataService
 
 
 class DashboardWidgetSerializer(serializers.ModelSerializer):
-    """Serializer for dashboard widgets."""
+    """仪表盘组件序列化器"""
     widget_type_display = serializers.CharField(source='get_widget_type_display', read_only=True)
     data_source_display = serializers.CharField(source='get_data_source_display', read_only=True)
     
     class Meta:
         model = DashboardWidget
-        fields = [
-            'id', 'name', 'code', 'widget_type', 'widget_type_display',
-            'data_source', 'data_source_display', 'config', 'custom_query',
-            'default_width', 'default_height', 'refresh_interval',
-            'is_active', 'is_system', 'created_at', 'updated_at'
-        ]
-        read_only_fields = ['is_system']
+        fields = '__all__'
 
 
 class UserDashboardSerializer(serializers.ModelSerializer):
-    """Serializer for user dashboard configuration."""
+    """用户仪表盘序列化器"""
+    username = serializers.CharField(source='user.username', read_only=True)
     
     class Meta:
         model = UserDashboard
-        fields = ['id', 'layout', 'theme', 'created_at', 'updated_at']
+        fields = '__all__'
 
 
 class DashboardWidgetViewSet(viewsets.ModelViewSet):
-    """ViewSet for dashboard widgets."""
+    """仪表盘组件管理"""
+    queryset = DashboardWidget.objects.all()
     serializer_class = DashboardWidgetSerializer
-    permission_classes = [IsAuthenticated]
-    queryset = DashboardWidget.objects.filter(is_active=True)
-    
-    def get_permissions(self):
-        if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsAuthenticated(), IsAdminUser()]
-        return super().get_permissions()
-    
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        
-        # Filter by widget type
-        widget_type = self.request.query_params.get('widget_type')
-        if widget_type:
-            queryset = queryset.filter(widget_type=widget_type)
-        
-        # Filter by data source
-        data_source = self.request.query_params.get('data_source')
-        if data_source:
-            queryset = queryset.filter(data_source=data_source)
-        
-        return queryset.order_by('name')
+    filterset_fields = ['widget_type', 'data_source', 'is_active']
+    search_fields = ['name', 'code']
     
     @action(detail=True, methods=['get'])
     def data(self, request, pk=None):
-        """Get data for a specific widget."""
+        """获取组件数据"""
         widget = self.get_object()
-        params = dict(request.query_params)
         
-        # Remove pagination params
-        params.pop('page', None)
-        params.pop('page_size', None)
+        # 使用DashboardDataService获取数据
+        service = DashboardDataService(request.user)
+        data = service.get_widget_data(widget)
         
-        data = DashboardDataService.get_widget_data(widget, params)
-        return Response(data)
+        return Response({
+            'widget': DashboardWidgetSerializer(widget).data,
+            'data': data
+        })
     
     @action(detail=False, methods=['get'])
-    def widget_types(self, request):
-        """Get available widget types."""
-        return Response([
-            {'value': code, 'label': label}
-            for code, label in DashboardWidget.WIDGET_TYPES
-        ])
+    def available(self, request):
+        """获取可用的组件列表"""
+        widgets = self.get_queryset().filter(is_active=True)
+        return Response(DashboardWidgetSerializer(widgets, many=True).data)
+
+
+class UserDashboardViewSet(viewsets.ModelViewSet):
+    """用户仪表盘配置"""
+    queryset = UserDashboard.objects.all()
+    serializer_class = UserDashboardSerializer
+    
+    def get_queryset(self):
+        """只能查看自己的仪表盘配置"""
+        if self.request.user.is_superuser:
+            return UserDashboard.objects.all()
+        return UserDashboard.objects.filter(user=self.request.user)
     
     @action(detail=False, methods=['get'])
-    def data_sources(self, request):
-        """Get available data sources."""
-        return Response([
-            {'value': code, 'label': label}
-            for code, label in DashboardWidget.DATA_SOURCES
-        ])
-
-
-class UserDashboardViewSet(viewsets.ViewSet):
-    """ViewSet for user dashboard configuration."""
-    permission_classes = [IsAuthenticated]
-    
-    def list(self, request):
-        """Get current user's dashboard configuration."""
-        dashboard, created = UserDashboard.objects.get_or_create(
-            user=request.user,
-            defaults={'layout': self._get_default_layout()}
-        )
-        serializer = UserDashboardSerializer(dashboard)
-        return Response(serializer.data)
-    
-    @action(detail=False, methods=['put', 'patch'])
-    def update_layout(self, request):
-        """Update user's dashboard layout."""
+    def my_dashboard(self, request):
+        """获取当前用户的仪表盘配置"""
         dashboard, created = UserDashboard.objects.get_or_create(
             user=request.user,
             defaults={'layout': []}
         )
         
-        layout = request.data.get('layout')
-        if layout is not None:
-            dashboard.layout = layout
+        return Response(UserDashboardSerializer(dashboard).data)
+    
+    @action(detail=False, methods=['post'])
+    def save_layout(self, request):
+        """保存用户仪表盘布局"""
+        dashboard, created = UserDashboard.objects.get_or_create(
+            user=request.user,
+            defaults={'layout': []}
+        )
         
-        theme = request.data.get('theme')
-        if theme:
-            dashboard.theme = theme
-        
+        dashboard.layout = request.data.get('layout', [])
         dashboard.save()
         
-        serializer = UserDashboardSerializer(dashboard)
-        return Response(serializer.data)
+        return Response(UserDashboardSerializer(dashboard).data)
     
     @action(detail=False, methods=['post'])
     def reset(self, request):
-        """Reset user's dashboard to default."""
-        dashboard, created = UserDashboard.objects.get_or_create(
-            user=request.user,
-            defaults={'layout': []}
-        )
-        
-        dashboard.layout = self._get_default_layout()
-        dashboard.theme = 'light'
-        dashboard.save()
-        
-        serializer = UserDashboardSerializer(dashboard)
-        return Response(serializer.data)
-    
-    @action(detail=False, methods=['get'])
-    def all_data(self, request):
-        """Get data for all widgets in user's dashboard."""
-        dashboard, created = UserDashboard.objects.get_or_create(
-            user=request.user,
-            defaults={'layout': self._get_default_layout()}
-        )
-        
-        widget_codes = [item.get('widget') for item in dashboard.layout if item.get('widget')]
-        widgets = DashboardWidget.objects.filter(code__in=widget_codes, is_active=True)
-        
-        params = dict(request.query_params)
-        
-        result = {}
-        for widget in widgets:
-            result[widget.code] = DashboardDataService.get_widget_data(widget, params)
-        
-        return Response(result)
-    
-    def _get_default_layout(self):
-        """Get default dashboard layout."""
-        return [
-            {'widget': 'project_stats', 'x': 0, 'y': 0, 'w': 3, 'h': 1},
-            {'widget': 'sales_stats', 'x': 3, 'y': 0, 'w': 3, 'h': 1},
-            {'widget': 'inventory_stats', 'x': 6, 'y': 0, 'w': 3, 'h': 1},
-            {'widget': 'finance_stats', 'x': 9, 'y': 0, 'w': 3, 'h': 1},
-            {'widget': 'sales_chart', 'x': 0, 'y': 1, 'w': 6, 'h': 2},
-            {'widget': 'ar_aging', 'x': 6, 'y': 1, 'w': 6, 'h': 2},
-        ]
+        """重置为默认布局"""
+        try:
+            dashboard = UserDashboard.objects.get(user=request.user)
+            dashboard.reset_to_default()
+            return Response(UserDashboardSerializer(dashboard).data)
+        except UserDashboard.DoesNotExist:
+            return Response({'error': '仪表盘配置不存在'}, status=status.HTTP_404_NOT_FOUND)

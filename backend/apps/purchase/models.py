@@ -36,6 +36,14 @@ class PurchaseRequest(BaseModel):
         related_name='purchase_requests',
         verbose_name='关联项目'
     )
+    supplier = models.ForeignKey(
+        'masterdata.Supplier',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='purchase_requests',
+        verbose_name='供应商'
+    )
     requestor = models.ForeignKey(
         'accounts.User',
         on_delete=models.PROTECT,
@@ -88,7 +96,7 @@ class PurchaseRequest(BaseModel):
     
     def save(self, *args, **kwargs):
         if not self.request_no:
-            self.request_no = generate_code('PR')
+            self.request_no = generate_code('PR', rule_type='PURCHASE_REQUEST')
         super().save(*args, **kwargs)
 
 
@@ -121,6 +129,7 @@ class PurchaseRequestLine(BaseModel):
         default=0,
         verbose_name='行金额'
     )
+    required_date = models.DateField(null=True, blank=True, verbose_name='交期')
     project = models.ForeignKey(
         'projects.Project',
         on_delete=models.SET_NULL,
@@ -266,7 +275,7 @@ class PurchaseOrder(BaseModel):
     
     def save(self, *args, **kwargs):
         if not self.order_no:
-            self.order_no = generate_code('PO')
+            self.order_no = generate_code('PO', rule_type='PURCHASE_ORDER')
         super().save(*args, **kwargs)
 
 
@@ -359,7 +368,7 @@ class GoodsReceipt(BaseModel):
     
     def save(self, *args, **kwargs):
         if not self.receipt_no:
-            self.receipt_no = generate_code('GR')
+            self.receipt_no = generate_code('GR', rule_type='GOODS_RECEIPT')
         super().save(*args, **kwargs)
 
 
@@ -408,4 +417,85 @@ class GoodsReceiptLine(BaseModel):
     
     def __str__(self):
         return f"{self.receipt.receipt_no} - {self.item.sku}"
+
+
+class PurchaseContract(BaseModel):
+    """
+    Purchase Contract - 采购合同
+    """
+    STATUS_CHOICES = [
+        ('DRAFT', '草稿'),
+        ('PENDING', '待审批'),
+        ('APPROVED', '已审批'),
+        ('SIGNED', '已签署'),
+        ('COMPLETED', '已完成'),
+        ('CANCELLED', '已取消'),
+    ]
+    
+    contract_no = models.CharField(max_length=50, unique=True, verbose_name='合同编号')
+    po = models.ForeignKey(
+        PurchaseOrder,
+        on_delete=models.CASCADE,
+        related_name='contracts',
+        verbose_name='采购订单'
+    )
+    supplier = models.ForeignKey(
+        'masterdata.Supplier',
+        on_delete=models.PROTECT,
+        related_name='purchase_contracts',
+        verbose_name='供应商'
+    )
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='purchase_contracts',
+        verbose_name='关联项目'
+    )
+    
+    # 合同信息
+    title = models.CharField(max_length=200, verbose_name='合同标题')
+    contract_date = models.DateField(verbose_name='合同日期')
+    effective_date = models.DateField(null=True, blank=True, verbose_name='生效日期')
+    expiry_date = models.DateField(null=True, blank=True, verbose_name='到期日期')
+    
+    # 金额
+    total_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='合同金额')
+    tax_rate = models.IntegerField(default=13, verbose_name='税率(%)')
+    tax_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='税额')
+    total_with_tax = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='含税总额')
+    
+    # 付款条款
+    payment_terms = models.TextField(blank=True, verbose_name='付款条款')
+    delivery_terms = models.TextField(blank=True, verbose_name='交货条款')
+    quality_terms = models.TextField(blank=True, verbose_name='质量条款')
+    warranty_terms = models.TextField(blank=True, verbose_name='质保条款')
+    
+    # 签署信息
+    buyer_signer = models.CharField(max_length=100, blank=True, verbose_name='甲方签署人')
+    seller_signer = models.CharField(max_length=100, blank=True, verbose_name='乙方签署人')
+    signed_date = models.DateField(null=True, blank=True, verbose_name='签署日期')
+    
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='DRAFT',
+        verbose_name='状态'
+    )
+    notes = models.TextField(blank=True, verbose_name='备注')
+    
+    class Meta:
+        db_table = 'purchase_contract'
+        verbose_name = '采购合同'
+        verbose_name_plural = verbose_name
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.contract_no}"
+    
+    def save(self, *args, **kwargs):
+        if not self.contract_no:
+            self.contract_no = generate_code('PC', rule_type='PURCHASE_CONTRACT')
+        super().save(*args, **kwargs)
 

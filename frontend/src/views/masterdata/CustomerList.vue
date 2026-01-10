@@ -431,14 +431,22 @@ const handleExport = async () => {
       responseType: 'blob'
     })
     
-    const url = window.URL.createObjectURL(new Blob([response]))
+    const filename = `客户列表_${new Date().toISOString().split('T')[0]}.xlsx`
+    const blob = response.data
+    
+    const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
+    link.style.display = 'none'
     link.href = url
-    link.setAttribute('download', `客户列表_${new Date().toISOString().split('T')[0]}.xlsx`)
+    link.download = filename
     document.body.appendChild(link)
     link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
+    
+    setTimeout(() => {
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    }, 100)
+    
     ElMessage.success('导出成功')
   } catch (error) {
     ElMessage.error('导出失败')
@@ -451,17 +459,49 @@ const downloadTemplate = async () => {
       responseType: 'blob'
     })
     
-    const url = window.URL.createObjectURL(new Blob([response]))
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', '客户导入模板.xlsx')
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
+    // 检查响应是否存在
+    if (!response || !response.data) {
+      ElMessage.error('下载失败：没有收到响应数据')
+      return
+    }
+    
+    // 从响应头获取文件名
+    const contentDisposition = response.headers?.['content-disposition'] || ''
+    let filename = '客户导入模板.xlsx'
+    const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+    if (filenameMatch && filenameMatch[1]) {
+      filename = filenameMatch[1].replace(/['"]/g, '')
+    }
+    
+    // 使用 FileSaver 方式下载
+    const blob = response.data
+    
+    // 检查是否支持 msSaveBlob (IE/Edge)
+    if (window.navigator && window.navigator.msSaveBlob) {
+      window.navigator.msSaveBlob(blob, filename)
+    } else {
+      // 现代浏览器
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.style.display = 'none'
+      link.href = url
+      link.download = filename
+      
+      // 添加到 body 并触发点击
+      document.body.appendChild(link)
+      link.click()
+      
+      // 延迟清理，确保下载开始
+      setTimeout(() => {
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(url)
+      }, 100)
+    }
+    
     ElMessage.success('模板下载成功')
   } catch (error) {
-    ElMessage.error('下载模板失败')
+    console.error('下载模板失败:', error)
+    ElMessage.error('下载模板失败: ' + (error.message || '未知错误'))
   }
 }
 

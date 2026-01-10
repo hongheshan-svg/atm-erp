@@ -42,12 +42,16 @@
               <el-icon><Document /></el-icon>
               生成采购申请
             </el-button>
+            <el-button type="info" @click="handleMaterialCheck" :disabled="!selectedProject || !bomItems.length" style="margin-left: 10px;">
+              <el-icon><Checked /></el-icon>
+              齐套检查
+            </el-button>
           </div>
         </div>
       </template>
       
       <!-- BOM统计 -->
-      <el-row :gutter="20" class="stats-row" v-if="selectedProject">
+      <el-row :gutter="20" class="stats-row" v-if="bomItems.length > 0">
         <el-col :span="6">
           <el-statistic title="物料种类" :value="bomItems.length" suffix="种" />
         </el-col>
@@ -63,7 +67,7 @@
       </el-row>
       
       <!-- 搜索栏 -->
-      <div class="search-bar" v-if="selectedProject">
+      <div class="search-bar" v-if="bomItems.length > 0 || selectedProject">
         <el-input 
           v-model="searchKeyword" 
           placeholder="搜索物料编码/名称/规格" 
@@ -102,6 +106,7 @@
       >
         <el-table-column type="selection" width="50" />
         <el-table-column type="index" label="序号" width="60" />
+        <el-table-column prop="project_name" label="所属项目" width="150" show-overflow-tooltip v-if="!selectedProject" />
         <el-table-column prop="item_code" label="物料编码" width="100" />
         <el-table-column prop="item_name" label="物料名称" width="150" />
         <el-table-column prop="specification" label="规格型号" width="120" show-overflow-tooltip />
@@ -109,16 +114,38 @@
         <el-table-column prop="unit" label="单位" width="60" />
         <el-table-column prop="item_type" label="物料类型" width="80" />
         <el-table-column prop="planned_qty" label="计划数量" width="90" align="right" />
-        <el-table-column prop="actual_qty" label="已领用" width="80" align="right">
+        <el-table-column prop="order_status_display" label="下单状态" width="90" align="center">
           <template #default="{ row }">
-            <span :class="row.actual_qty > row.planned_qty ? 'text-danger' : ''">
-              {{ row.actual_qty || 0 }}
+            <el-tag 
+              :type="row.order_status === 'ORDERED' ? 'success' : row.order_status === 'PARTIAL' ? 'warning' : 'info'" 
+              size="small"
+            >
+              {{ row.order_status_display || '未下单' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="ordered_qty" label="已下单" width="80" align="right">
+          <template #default="{ row }">
+            {{ row.ordered_qty || 0 }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="supplier_name" label="供应商" width="120" show-overflow-tooltip />
+        <el-table-column prop="delivery_date" label="交期" width="100" />
+        <el-table-column prop="received_qty" label="已入库" width="80" align="right">
+          <template #default="{ row }">
+            <span :class="row.received_qty >= row.ordered_qty && row.ordered_qty > 0 ? 'text-success' : ''">
+              {{ row.received_qty || 0 }}
             </span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="issued_qty" label="已出库" width="80" align="right">
+          <template #default="{ row }">
+            {{ row.issued_qty || 0 }}
           </template>
         </el-table-column>
         <el-table-column label="剩余需求" width="80" align="right">
           <template #default="{ row }">
-            {{ Math.max(0, (row.planned_qty || 0) - (row.actual_qty || 0)) }}
+            {{ Math.max(0, (row.planned_qty || 0) - (row.issued_qty || 0)) }}
           </template>
         </el-table-column>
         <el-table-column prop="estimated_cost" label="预估单价" width="90" align="right">
@@ -134,8 +161,6 @@
         <el-table-column prop="has_drawing_display" label="有图/无图" width="80" />
         <el-table-column prop="required_date" label="需求日期" width="100" />
         <el-table-column prop="requester_name" label="申请人" width="80" />
-        <el-table-column prop="notes" label="备注" width="150" show-overflow-tooltip />
-        <el-table-column prop="description" label="说明" min-width="150" show-overflow-tooltip />
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
@@ -237,6 +262,62 @@
             </el-form-item>
           </el-col>
         </el-row>
+        
+        <!-- 采购与库存信息 -->
+        <el-divider content-position="left">采购与库存信息</el-divider>
+        <el-row :gutter="20">
+          <el-col :span="8">
+            <el-form-item label="供应商">
+              <el-select v-model="form.supplier" placeholder="选择供应商" filterable clearable style="width: 100%;">
+                <el-option
+                  v-for="s in suppliers"
+                  :key="s.id"
+                  :label="s.name"
+                  :value="s.id"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="交期">
+              <el-date-picker 
+                v-model="form.delivery_date" 
+                type="date" 
+                placeholder="选择交期"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                style="width: 100%;"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="下单状态">
+              <el-select v-model="form.order_status" style="width: 100%;">
+                <el-option label="未下单" value="NOT_ORDERED" />
+                <el-option label="部分下单" value="PARTIAL" />
+                <el-option label="已下单" value="ORDERED" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="6">
+            <el-form-item label="已下单数量">
+              <el-input-number v-model="form.ordered_qty" :min="0" :precision="2" style="width: 100%;" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="已入库数量">
+              <el-input-number v-model="form.received_qty" :min="0" :precision="2" style="width: 100%;" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="已出库数量">
+              <el-input-number v-model="form.issued_qty" :min="0" :precision="2" style="width: 100%;" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        
         <el-form-item label="备注">
           <el-input v-model="form.notes" type="textarea" :rows="2" placeholder="备注信息" />
         </el-form-item>
@@ -352,6 +433,99 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 齐套检查对话框 -->
+    <el-dialog v-model="materialCheckDialogVisible" title="物料齐套检查" width="1000px">
+      <div v-loading="materialCheckLoading">
+        <!-- 汇总信息 -->
+        <el-row :gutter="20" class="stats-row" v-if="materialCheckData.summary">
+          <el-col :span="4">
+            <el-statistic title="物料总数" :value="materialCheckData.summary.total_items" suffix="种" />
+          </el-col>
+          <el-col :span="4">
+            <el-statistic title="已齐套" :value="materialCheckData.summary.complete_items" suffix="种" />
+          </el-col>
+          <el-col :span="4">
+            <el-statistic title="缺料项">
+              <template #value>
+                <span :class="materialCheckData.summary.shortage_items > 0 ? 'text-danger' : ''">
+                  {{ materialCheckData.summary.shortage_items }}
+                </span>
+              </template>
+            </el-statistic>
+          </el-col>
+          <el-col :span="4">
+            <el-statistic title="齐套率">
+              <template #value>
+                <span :class="materialCheckData.summary.completion_rate < 100 ? 'text-warning' : 'text-success'">
+                  {{ materialCheckData.summary.completion_rate }}%
+                </span>
+              </template>
+            </el-statistic>
+          </el-col>
+          <el-col :span="4">
+            <el-statistic title="需求总值" :value="materialCheckData.summary.total_value" :precision="2" prefix="¥" />
+          </el-col>
+          <el-col :span="4">
+            <el-statistic title="缺料金额">
+              <template #value>
+                <span class="text-danger">¥{{ (materialCheckData.summary.shortage_value || 0).toFixed(2) }}</span>
+              </template>
+            </el-statistic>
+          </el-col>
+        </el-row>
+
+        <!-- 齐套率进度条 -->
+        <div class="progress-section" v-if="materialCheckData.summary">
+          <span>整体齐套进度：</span>
+          <el-progress 
+            :percentage="materialCheckData.summary.completion_rate || 0" 
+            :status="materialCheckData.summary.completion_rate >= 100 ? 'success' : materialCheckData.summary.completion_rate >= 80 ? '' : 'warning'"
+            :stroke-width="20"
+            style="flex: 1; margin-left: 10px;"
+          />
+        </div>
+
+        <!-- 明细表格 -->
+        <el-table :data="materialCheckData.details" border stripe max-height="400" style="margin-top: 15px;">
+          <el-table-column prop="item_sku" label="物料编码" width="120" />
+          <el-table-column prop="item_name" label="物料名称" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="specification" label="规格" width="100" show-overflow-tooltip />
+          <el-table-column prop="unit" label="单位" width="60" align="center" />
+          <el-table-column prop="planned_qty" label="计划数量" width="90" align="right" />
+          <el-table-column prop="issued_qty" label="已出库" width="80" align="right" />
+          <el-table-column prop="net_demand" label="净需求" width="80" align="right" />
+          <el-table-column prop="stock_qty" label="库存" width="80" align="right">
+            <template #default="{ row }">
+              <span :class="row.stock_qty < row.net_demand ? 'text-danger' : ''">{{ row.stock_qty }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="shortage" label="缺料" width="80" align="right">
+            <template #default="{ row }">
+              <span class="text-danger" v-if="row.shortage > 0">{{ row.shortage }}</span>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="shortage_value" label="缺料金额" width="100" align="right">
+            <template #default="{ row }">
+              <span class="text-danger" v-if="row.shortage_value > 0">¥{{ row.shortage_value.toFixed(2) }}</span>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="status_display" label="状态" width="90" align="center">
+            <template #default="{ row }">
+              <el-tag :type="getMaterialCheckStatusType(row.status)" size="small">{{ row.status_display }}</el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+      <template #footer>
+        <el-button @click="materialCheckDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="handleGeneratePR" :disabled="!materialCheckData.summary?.shortage_items">
+          生成缺料采购申请
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -359,7 +533,7 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Document, Download, Upload, ArrowDown, CopyDocument, UploadFilled, Search, Delete, Folder } from '@element-plus/icons-vue'
+import { Plus, Document, Download, Upload, ArrowDown, CopyDocument, UploadFilled, Search, Delete, Folder, Checked } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 const router = useRouter()
@@ -370,6 +544,7 @@ const projects = ref([])
 const bomItems = ref([])
 const items = ref([])
 const users = ref([])
+const suppliers = ref([])
 const dialogVisible = ref(false)
 const formRef = ref(null)
 const tableRef = ref(null)
@@ -381,6 +556,14 @@ const selectedRows = ref([])
 // Import/Export related
 const importDialogVisible = ref(false)
 const copyDialogVisible = ref(false)
+
+// 齐套检查
+const materialCheckDialogVisible = ref(false)
+const materialCheckLoading = ref(false)
+const materialCheckData = ref({
+  summary: {},
+  details: []
+})
 const uploadRef = ref(null)
 const importFile = ref(null)
 const importing = ref(false)
@@ -406,7 +589,14 @@ const form = reactive({
   required_date: null,
   requester: null,
   notes: '',
-  description: ''
+  description: '',
+  // 采购与库存字段
+  order_status: 'NOT_ORDERED',
+  supplier: null,
+  delivery_date: null,
+  ordered_qty: 0,
+  received_qty: 0,
+  issued_qty: 0
 })
 
 const rules = {
@@ -422,15 +612,15 @@ const currentProjectName = computed(() => {
 })
 
 const totalPlannedQty = computed(() => 
-  bomItems.value.reduce((sum, item) => sum + (item.planned_qty || 0), 0)
+  bomItems.value.reduce((sum, item) => sum + parseFloat(item.planned_qty || 0), 0)
 )
 
 const totalActualQty = computed(() => 
-  bomItems.value.reduce((sum, item) => sum + (item.actual_qty || 0), 0)
+  bomItems.value.reduce((sum, item) => sum + parseFloat(item.actual_qty || 0), 0)
 )
 
 const totalEstimatedCost = computed(() => 
-  bomItems.value.reduce((sum, item) => sum + (item.planned_qty || 0) * (item.estimated_cost || 0), 0)
+  bomItems.value.reduce((sum, item) => sum + parseFloat(item.planned_qty || 0) * parseFloat(item.estimated_cost || 0), 0)
 )
 
 // 搜索过滤后的 BOM 列表
@@ -463,17 +653,14 @@ const fetchProjects = async () => {
 }
 
 const fetchBOM = async () => {
-  if (!selectedProject.value) {
-    bomItems.value = []
-    return
-  }
-  
   loading.value = true
   try {
-    // 使用查询参数过滤项目BOM
-    const res = await request.get('/projects/bom/', {
-      params: { project: selectedProject.value }
-    })
+    // 构建查询参数，如果选择了项目则过滤
+    const params = {}
+    if (selectedProject.value) {
+      params.project = selectedProject.value
+    }
+    const res = await request.get('/projects/bom/', { params })
     bomItems.value = res.data?.results || res.results || res.data || res || []
   } catch (error) {
     console.error('获取BOM列表失败:', error)
@@ -506,6 +693,15 @@ const fetchUsers = async () => {
   }
 }
 
+const fetchSuppliers = async () => {
+  try {
+    const res = await request.get('/masterdata/suppliers/')
+    suppliers.value = res.data?.results || res.results || res.data || res || []
+  } catch (error) {
+    console.error('获取供应商列表失败:', error)
+  }
+}
+
 const resetForm = () => {
   form.id = null
   form.item = null
@@ -522,6 +718,13 @@ const resetForm = () => {
   form.requester = null
   form.notes = ''
   form.description = ''
+  // 采购与库存字段
+  form.order_status = 'NOT_ORDERED'
+  form.supplier = null
+  form.delivery_date = null
+  form.ordered_qty = 0
+  form.received_qty = 0
+  form.issued_qty = 0
 }
 
 const handleItemChange = (itemId) => {
@@ -842,6 +1045,39 @@ const handleConfirmCopy = async () => {
   }
 }
 
+// 齐套检查
+const handleMaterialCheck = async () => {
+  if (!selectedProject.value) {
+    ElMessage.warning('请先选择项目')
+    return
+  }
+  
+  materialCheckLoading.value = true
+  materialCheckDialogVisible.value = true
+  
+  try {
+    const response = await request.get('/projects/bom/material_check/', {
+      params: { project: selectedProject.value }
+    })
+    materialCheckData.value = response.data || response
+  } catch (error) {
+    console.error('齐套检查失败:', error)
+    ElMessage.error(error.response?.data?.error || '齐套检查失败')
+  } finally {
+    materialCheckLoading.value = false
+  }
+}
+
+const getMaterialCheckStatusType = (status) => {
+  const types = {
+    'COMPLETE': 'success',
+    'READY': 'success',
+    'PARTIAL': 'warning',
+    'SHORTAGE': 'danger'
+  }
+  return types[status] || 'info'
+}
+
 watch(selectedProject, () => {
   fetchBOM()
 })
@@ -850,6 +1086,8 @@ onMounted(() => {
   fetchProjects()
   fetchItems()
   fetchUsers()
+  fetchSuppliers()
+  fetchBOM()  // 默认加载所有BOM
 })
 </script>
 
@@ -925,6 +1163,23 @@ onMounted(() => {
 .error-item {
   padding: 2px 0;
   font-size: 12px;
+}
+
+.text-warning {
+  color: #e6a23c;
+}
+
+.text-success {
+  color: #67c23a;
+}
+
+.progress-section {
+  display: flex;
+  align-items: center;
+  margin-top: 15px;
+  padding: 10px 15px;
+  background: #f5f7fa;
+  border-radius: 4px;
 }
 </style>
 

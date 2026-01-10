@@ -64,18 +64,35 @@ class AnalyticsViewSet(viewsets.ViewSet):
         from apps.projects.models import Project
         from django.db.models import Sum, F
         
-        projects = Project.objects.filter(is_deleted=False)
+        projects = Project.objects.filter(is_deleted=False).select_related('manager')
+        
+        # Filter by name
+        name = request.query_params.get('name')
+        if name:
+            projects = projects.filter(name__icontains=name)
+        
+        # Filter by status
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            projects = projects.filter(status=status_filter)
         
         # Filter by manager
         manager = request.query_params.get('manager')
         if manager:
             projects = projects.filter(manager_id=manager)
         
+        # Pagination
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 20))
+        total = projects.count()
+        start = (page - 1) * page_size
+        end = start + page_size
+        
         results = []
-        for project in projects[:50]:  # Limit to 50 projects
-            material_cost = project.get_actual_material_cost()
-            labor_cost = float(project.get_actual_labor_cost())
-            expense_cost = float(project.get_actual_expense_cost())
+        for project in projects[start:end]:
+            material_cost = float(project.get_actual_material_cost() or 0)
+            labor_cost = float(project.get_actual_labor_cost() or 0)
+            expense_cost = float(project.get_actual_expense_cost() or 0)
             total_cost = material_cost + labor_cost + expense_cost
             
             # Get revenue from sales orders
@@ -84,27 +101,46 @@ class AnalyticsViewSet(viewsets.ViewSet):
                 project=project,
                 is_deleted=False
             ).aggregate(total=Sum('total_amount'))['total'] or 0
+            revenue = float(revenue)
             
-            profit = float(revenue) - total_cost
-            profit_margin = profit / float(revenue) if revenue else 0
+            profit = revenue - total_cost
+            profit_margin = (profit / revenue * 100) if revenue else 0
+            budget_usage = (total_cost / float(project.budget_total) * 100) if project.budget_total else 0
             
             results.append({
                 'id': project.id,
-                'project_name': project.name,
-                'project_code': project.code,
-                'total_revenue': float(revenue),
+                'name': project.name,
+                'code': project.code,
+                'manager_name': project.manager.username if project.manager else '',
+                'status': project.status,
+                'status_display': project.get_status_display(),
+                'budget_total': float(project.budget_total or 0),
+                'revenue': revenue,
                 'material_cost': material_cost,
                 'labor_cost': labor_cost,
                 'expense_cost': expense_cost,
                 'total_cost': total_cost,
                 'profit': profit,
                 'profit_margin': profit_margin,
+                'budget_usage': budget_usage,
                 'start_date': project.start_date.isoformat() if project.start_date else None,
                 'end_date': project.end_date.isoformat() if project.end_date else None,
-                'status': project.get_status_display(),
             })
         
-        return Response({'results': results, 'total': len(results)})
+        # Calculate summary
+        summary = {
+            'totalProjects': total,
+            'totalBudget': sum(r['budget_total'] for r in results),
+            'totalRevenue': sum(r['revenue'] for r in results),
+            'totalCost': sum(r['total_cost'] for r in results),
+            'totalProfit': sum(r['profit'] for r in results),
+        }
+        
+        return Response({
+            'results': results, 
+            'count': total,
+            'summary': summary
+        })
     
     @action(detail=False, methods=['post'], url_path='recalculate-costs')
     def recalculate_costs(self, request):

@@ -15,14 +15,16 @@ from apps.masterdata.models import Item
 from .models import (
     Project, ProjectMember, ProjectTask, ProjectBOM, TimeLog, 
     ECN, ECNItem, ECNApproval,
-    AfterSalesOrder, ServiceRecord, SparePartUsage
+    AfterSalesOrder, ServiceRecord, SparePartUsage,
+    Drawing, DrawingChangeNotice
 )
 from .serializers import (
     ProjectSerializer, ProjectMemberSerializer,
     ProjectTaskSerializer, ProjectBOMSerializer, TimeLogSerializer,
     ECNSerializer, ECNWriteSerializer, ECNItemSerializer, ECNApprovalSerializer,
     AfterSalesOrderSerializer, AfterSalesOrderListSerializer,
-    ServiceRecordSerializer, SparePartUsageSerializer
+    ServiceRecordSerializer, SparePartUsageSerializer,
+    DrawingSerializer, DrawingChangeNoticeSerializer
 )
 
 
@@ -238,8 +240,9 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
     queryset = ProjectBOM.objects.all()
     serializer_class = ProjectBOMSerializer
     filterset_fields = ['project', 'item', 'is_deleted']
-    search_fields = ['item__sku', 'item__name']
-    ordering_fields = ['created_at']
+    search_fields = ['item__sku', 'item__name', 'project__name', 'project__code']
+    ordering_fields = ['created_at', 'project', 'item']
+    ordering = ['-created_at']  # 默认按创建时间倒序
     parser_classes = [JSONParser, MultiPartParser, FormParser]
     
     def create(self, request, *args, **kwargs):
@@ -794,7 +797,11 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         
         created_count = 0
         updated_count = 0
+        skip_count = 0
         error_rows = []
+        
+        # Track processed SKUs within this import to avoid in-file duplicates
+        processed_skus = set()
         
         for idx, row in df.iterrows():
             row_num = idx + 2  # Excel row number (1-based, plus header)
@@ -807,6 +814,12 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             # Skip example/template rows
             if sku.startswith('MAT00') or sku.startswith('(') or '示例' in sku or '自动' in sku:
                 continue
+            
+            # Check for in-file duplicate
+            if sku in processed_skus:
+                skip_count += 1
+                continue
+            processed_skus.add(sku)
             
             # Find item by SKU
             try:
@@ -927,9 +940,10 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 created_count += 1
         
         return Response({
-            'message': f'导入完成: 新增 {created_count} 条, 更新 {updated_count} 条',
+            'message': f'导入完成: 新增 {created_count} 条, 更新 {updated_count} 条, 跳过重复 {skip_count} 条',
             'created': created_count,
             'updated': updated_count,
+            'skip_count': skip_count,
             'errors': error_rows
         })
     
@@ -1178,6 +1192,191 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             'skipped': skipped_count
         })
 
+    @action(detail=False, methods=['get'])
+    def tree(self, request):
+        """
+        获取项目BOM的树形结构
+        """
+        project_id = request.query_params.get('project')
+        if not project_id:
+            return Response({'error': '请提供project参数'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 获取所有BOM项
+        boms = self.get_queryset().filter(
+            project_id=project_id,
+            is_deleted=False
+        ).select_related('item', 'parent').order_by('level', 'sort_order', 'id')
+        
+        def build_tree(parent_id=None, level=0):
+            result = []
+            items = [b for b in boms if b.parent_id == parent_id]
+            for bom in items:
+                node = ProjectBOMSerializer(bom, context={'request': request}).data
+                node['level'] = level
+                node['children'] = build_tree(bom.id, level + 1)
+                result.append(node)
+            return result
+        
+        tree_data = build_tree()
+        return Response(tree_data)
+
+    @action(detail=False, methods=['get'])
+    def material_check(self, request):
+        """
+        物料齐套检查 - 检查BOM物料的库存是否满足需求
+        返回齐套率和缺料明细
+        """
+        project_id = request.query_params.get('project')
+        if not project_id:
+            return Response({'error': '请提供project参数'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        from apps.inventory.models import Stock
+        from django.db.models import Sum, F
+        from decimal import Decimal
+        
+        boms = self.get_queryset().filter(
+            project_id=project_id,
+            is_deleted=False
+        ).select_related('item')
+        
+        results = []
+        total_items = 0
+        complete_items = 0
+        total_value = Decimal('0')
+        shortage_value = Decimal('0')
+        
+        for bom in boms:
+            # 获取该物料的库存总量
+            stock_qty = Stock.objects.filter(
+                item=bom.item,
+                is_deleted=False
+            ).aggregate(total=Sum('quantity'))['total'] or Decimal('0')
+            
+            # 计算净需求 = 计划数量 - 已出库数量
+            net_demand = bom.planned_qty - bom.issued_qty
+            
+            # 计算缺料数量
+            shortage = max(Decimal('0'), net_demand - stock_qty)
+            
+            # 齐套状态
+            if net_demand <= 0:
+                check_status = 'COMPLETE'  # 已完成
+            elif stock_qty >= net_demand:
+                check_status = 'READY'  # 库存充足
+            elif stock_qty > 0:
+                check_status = 'PARTIAL'  # 部分满足
+            else:
+                check_status = 'SHORTAGE'  # 完全缺料
+            
+            # 计算金额
+            unit_price = bom.estimated_cost or bom.item.standard_cost or Decimal('0')
+            item_value = net_demand * unit_price
+            shortage_item_value = shortage * unit_price
+            
+            total_items += 1
+            if check_status in ['COMPLETE', 'READY']:
+                complete_items += 1
+            
+            total_value += item_value
+            shortage_value += shortage_item_value
+            
+            results.append({
+                'id': bom.id,
+                'item_id': bom.item_id,
+                'item_sku': bom.item.sku,
+                'item_name': bom.item.name,
+                'specification': bom.item.specification or '',
+                'unit': bom.item.get_unit_display(),
+                'planned_qty': float(bom.planned_qty),
+                'issued_qty': float(bom.issued_qty),
+                'net_demand': float(net_demand),
+                'stock_qty': float(stock_qty),
+                'shortage': float(shortage),
+                'unit_price': float(unit_price),
+                'shortage_value': float(shortage_item_value),
+                'status': check_status,
+                'status_display': {
+                    'COMPLETE': '已完成',
+                    'READY': '库存充足',
+                    'PARTIAL': '部分满足',
+                    'SHORTAGE': '完全缺料'
+                }.get(check_status, '未知')
+            })
+        
+        # 计算齐套率
+        completion_rate = round((complete_items / total_items * 100), 2) if total_items > 0 else 0
+        
+        return Response({
+            'summary': {
+                'total_items': total_items,
+                'complete_items': complete_items,
+                'shortage_items': total_items - complete_items,
+                'completion_rate': completion_rate,
+                'total_value': float(total_value),
+                'shortage_value': float(shortage_value)
+            },
+            'details': results
+        })
+
+    @action(detail=True, methods=['post'])
+    def add_child(self, request, pk=None):
+        """
+        为BOM项添加子物料
+        """
+        parent = self.get_object()
+        
+        item_id = request.data.get('item')
+        if not item_id:
+            return Response({'error': '请提供物料ID'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 检查是否已存在相同的子物料
+        if ProjectBOM.objects.filter(
+            project=parent.project,
+            parent=parent,
+            item_id=item_id,
+            is_deleted=False
+        ).exists():
+            return Response({'error': '该子物料已存在'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        child = ProjectBOM.objects.create(
+            project=parent.project,
+            parent=parent,
+            item_id=item_id,
+            level=parent.level + 1,
+            planned_qty=request.data.get('planned_qty', 1),
+            unit_qty=request.data.get('unit_qty', 1),
+            estimated_cost=request.data.get('estimated_cost', 0),
+            notes=request.data.get('notes', ''),
+            created_by=request.user
+        )
+        
+        return Response(ProjectBOMSerializer(child, context={'request': request}).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'])
+    def batch_update_level(self, request):
+        """
+        批量更新BOM物料的层级和排序
+        """
+        items = request.data.get('items', [])
+        if not items:
+            return Response({'error': '请提供要更新的物料列表'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        updated_count = 0
+        for item_data in items:
+            bom_id = item_data.get('id')
+            if bom_id:
+                ProjectBOM.objects.filter(id=bom_id).update(
+                    parent_id=item_data.get('parent'),
+                    level=item_data.get('level', 0),
+                    sort_order=item_data.get('sort_order', 0)
+                )
+                updated_count += 1
+        
+        return Response({
+            'message': f'成功更新 {updated_count} 条记录',
+            'updated_count': updated_count
+        })
+
 
 class TimeLogViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
@@ -1270,7 +1469,7 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewse
     
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
-        """Submit ECN for review."""
+        """Submit ECN for review via workflow."""
         ecn = self.get_object()
         
         if ecn.status != 'DRAFT':
@@ -1279,19 +1478,53 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewse
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        ecn.status = 'PENDING'
-        ecn.save()
+        # 计算成本影响金额作为审批阈值判断依据
+        amount = abs(ecn.cost_impact) if ecn.cost_impact else 0
         
-        # Create approval record
-        ECNApproval.objects.create(
-            ecn=ecn,
-            approver=request.user,
-            action='SUBMIT',
-            comment=request.data.get('comment', ''),
-            created_by=request.user
+        # 尝试启动工作流
+        from apps.core.workflow.services import WorkflowService
+        instance = WorkflowService.start_workflow(
+            business_type='ECN',
+            business_id=ecn.id,
+            business_no=ecn.ecn_no,
+            submitter=request.user,
+            amount=amount
         )
         
-        return Response(ECNSerializer(ecn, context={'request': request}).data)
+        if instance:
+            # 有配置的工作流，使用工作流审批
+            ecn.status = 'PENDING'
+            ecn.save()
+            
+            # Create approval record
+            ECNApproval.objects.create(
+                ecn=ecn,
+                approver=request.user,
+                action='SUBMIT',
+                comment=request.data.get('comment', '已提交工作流审批'),
+                created_by=request.user
+            )
+            
+            return Response({
+                **ECNSerializer(ecn, context={'request': request}).data,
+                'workflow_instance_id': instance.id,
+                'message': '已提交审批流程'
+            })
+        else:
+            # 没有配置工作流，使用原有逻辑
+            ecn.status = 'PENDING'
+            ecn.save()
+            
+            # Create approval record
+            ECNApproval.objects.create(
+                ecn=ecn,
+                approver=request.user,
+                action='SUBMIT',
+                comment=request.data.get('comment', ''),
+                created_by=request.user
+            )
+            
+            return Response(ECNSerializer(ecn, context={'request': request}).data)
     
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
@@ -1781,4 +2014,156 @@ class SparePartUsageViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         )
         order.parts_cost = total['parts_cost'] or 0
         order.save()
+
+
+class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+    """
+    图纸管理视图
+    """
+    queryset = Drawing.objects.all()
+    serializer_class = DrawingSerializer
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
+    filterset_fields = ['project', 'item', 'bom_item', 'file_type', 'status', 'designer']
+    search_fields = ['drawing_no', 'name', 'notes']
+    ordering_fields = ['drawing_no', 'version', 'revision', 'created_at']
+    ordering = ['-created_at']
+    
+    def perform_create(self, serializer):
+        serializer.save(
+            created_by=self.request.user,
+            designer=self.request.user
+        )
+    
+    @action(detail=True, methods=['post'])
+    def submit_review(self, request, pk=None):
+        """提交审核"""
+        drawing = self.get_object()
+        if drawing.status != 'DRAFT':
+            return Response(
+                {'error': '只能提交草稿状态的图纸'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        drawing.status = 'REVIEWING'
+        drawing.save()
+        return Response(DrawingSerializer(drawing).data)
+    
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        """审批图纸"""
+        drawing = self.get_object()
+        if drawing.status != 'REVIEWING':
+            return Response(
+                {'error': '只能审批审核中的图纸'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        from django.utils import timezone
+        
+        drawing.status = 'APPROVED'
+        drawing.approver = request.user
+        drawing.approved_at = timezone.now()
+        drawing.save()
+        return Response(DrawingSerializer(drawing).data)
+    
+    @action(detail=True, methods=['post'])
+    def release(self, request, pk=None):
+        """发布图纸"""
+        drawing = self.get_object()
+        if drawing.status != 'APPROVED':
+            return Response(
+                {'error': '只能发布已批准的图纸'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        from django.utils import timezone
+        
+        drawing.status = 'RELEASED'
+        drawing.released_at = timezone.now()
+        drawing.save()
+        
+        # 创建变更通知
+        notice = DrawingChangeNotice.objects.create(
+            drawing=drawing,
+            change_type='NEW' if drawing.revision == 1 else 'REVISION',
+            new_version=f'{drawing.version}.{drawing.revision}',
+            change_description=drawing.change_description or '图纸发布',
+            created_by=request.user
+        )
+        
+        # 发送邮件通知（异步任务）
+        self._send_change_notification(notice)
+        
+        return Response({
+            **DrawingSerializer(drawing).data,
+            'notice_id': notice.id
+        })
+    
+    @action(detail=True, methods=['post'])
+    def new_revision(self, request, pk=None):
+        """创建新版本"""
+        drawing = self.get_object()
+        if drawing.status not in ['RELEASED', 'APPROVED']:
+            return Response(
+                {'error': '只能为已发布或已批准的图纸创建新版本'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 创建新版本
+        new_drawing = Drawing.objects.create(
+            drawing_no=drawing.drawing_no,
+            name=drawing.name,
+            version=drawing.version,
+            revision=drawing.revision + 1,
+            project=drawing.project,
+            item=drawing.item,
+            bom_item=drawing.bom_item,
+            file_type=drawing.file_type,
+            file_path='',
+            status='DRAFT',
+            designer=request.user,
+            change_description=request.data.get('change_description', ''),
+            created_by=request.user
+        )
+        
+        # 标记旧版本为废弃
+        drawing.status = 'OBSOLETE'
+        drawing.save()
+        
+        return Response(DrawingSerializer(new_drawing).data, status=status.HTTP_201_CREATED)
+    
+    def _send_change_notification(self, notice):
+        """发送变更通知邮件"""
+        try:
+            from apps.core.tasks import send_drawing_change_notification
+            send_drawing_change_notification.delay(notice.id)
+        except Exception:
+            pass  # 邮件发送失败不影响主流程
+
+
+class DrawingChangeNoticeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+    """
+    图纸变更通知视图
+    """
+    queryset = DrawingChangeNotice.objects.all()
+    serializer_class = DrawingChangeNoticeSerializer
+    filterset_fields = ['drawing', 'change_type', 'email_sent']
+    search_fields = ['change_description']
+    ordering_fields = ['created_at']
+    ordering = ['-created_at']
+    
+    @action(detail=True, methods=['post'])
+    def resend_email(self, request, pk=None):
+        """重新发送邮件通知"""
+        notice = self.get_object()
+        
+        try:
+            from apps.core.tasks import send_drawing_change_notification
+            send_drawing_change_notification.delay(notice.id)
+            return Response({'message': '邮件已加入发送队列'})
+        except Exception as e:
+            return Response(
+                {'error': f'发送失败: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 

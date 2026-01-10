@@ -56,6 +56,7 @@ class ItemSerializer(serializers.ModelSerializer):
 class CustomerSerializer(serializers.ModelSerializer):
     """Customer serializer."""
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    code = serializers.CharField(required=False, allow_blank=True)
     
     class Meta:
         model = Customer
@@ -74,6 +75,7 @@ class CustomerSerializer(serializers.ModelSerializer):
 class SupplierSerializer(serializers.ModelSerializer):
     """Supplier serializer."""
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    code = serializers.CharField(required=False, allow_blank=True)
     
     class Meta:
         model = Supplier

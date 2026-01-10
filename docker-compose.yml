@@ -100,9 +100,9 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - ELASTICSEARCH_HOST=elasticsearch:9200
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:80}
-      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-http://localhost,http://localhost:80}
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:80,https://localhost,https://localhost:8443,https://192.168.2.3:8443}
+      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-http://localhost,http://localhost:80,https://localhost,https://localhost:8443,https://192.168.2.3:8443}
+      - FRONTEND_URL=${FRONTEND_URL:-https://192.168.2.3:8443}
     volumes:
       - static_files:/app/staticfiles
       - media_files:/app/uploads
@@ -191,12 +191,13 @@ services:
     container_name: erp-nginx
     restart: unless-stopped
     ports:
-      - "8080:80"   # 使用8080避免与本地Nginx冲突
+      - "8080:80"   # HTTP (自动跳转到HTTPS)
       - "8443:443"  # HTTPS端口
     volumes:
       - static_files:/app/staticfiles:ro
       - media_files:/app/uploads:ro
       - nginx_logs:/var/log/nginx
+      - ./docker/ssl:/etc/nginx/ssl:ro  # SSL证书
     depends_on:
       - backend
     healthcheck:

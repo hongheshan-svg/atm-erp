@@ -24,6 +24,16 @@ from .bank_statement_views import (
     BankStatementViewSet,
     BankStatementImportLogViewSet
 )
+from .collection_views import (
+    CollectionPlanViewSet,
+    CollectionMilestoneViewSet,
+    CollectionRecordViewSet,
+    CollectionReminderViewSet
+)
+from .asset import (
+    AssetCategoryViewSet, FixedAssetViewSet,
+    AssetTransferViewSet, AssetDisposalViewSet, AssetDepreciationViewSet
+)
 
 router = DefaultRouter()
 router.register(r'currencies', CurrencyViewSet, basename='currency')
@@ -48,7 +58,19 @@ router.register(r'bank-statement-logs', BankStatementImportLogViewSet, basename=
 router.register(r'payment-schedules', PaymentScheduleViewSet, basename='payment-schedule')
 router.register(r'purchase-payment-schedules', PurchasePaymentScheduleViewSet, basename='purchase-payment-schedule')
 
+# 回款计划
+router.register(r'collection-plans', CollectionPlanViewSet, basename='collection-plan')
+router.register(r'collection-milestones', CollectionMilestoneViewSet, basename='collection-milestone')
+router.register(r'collection-records', CollectionRecordViewSet, basename='collection-record')
+router.register(r'collection-reminders', CollectionReminderViewSet, basename='collection-reminder')
+
+# 固定资产管理
+router.register(r'asset-categories', AssetCategoryViewSet, basename='asset-category')
+router.register(r'fixed-assets', FixedAssetViewSet, basename='fixed-asset')
+router.register(r'asset-transfers', AssetTransferViewSet, basename='asset-transfer')
+router.register(r'asset-disposals', AssetDisposalViewSet, basename='asset-disposal')
+router.register(r'asset-depreciations', AssetDepreciationViewSet, basename='asset-depreciation')
+
 urlpatterns = [
     path('', include(router.urls)),
 ]
-

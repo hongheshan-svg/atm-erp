@@ -146,7 +146,7 @@ class StockMove(BaseModel):
     
     def save(self, *args, **kwargs):
         if not self.move_no:
-            self.move_no = generate_code('SM')
+            self.move_no = generate_code('SM', rule_type='STOCK_MOVE')
         
         is_new = self.pk is None
         super().save(*args, **kwargs)
@@ -251,7 +251,7 @@ class StockAdjustment(BaseModel):
     
     def save(self, *args, **kwargs):
         if not self.adjustment_no:
-            self.adjustment_no = generate_code('ADJ')
+            self.adjustment_no = generate_code('ADJ', rule_type='STOCK_ADJUSTMENT')
         super().save(*args, **kwargs)
     
     def apply_adjustment(self):
@@ -269,8 +269,7 @@ class StockAdjustment(BaseModel):
                     try:
                         stock = Stock.objects.get(
                             warehouse=self.warehouse,
-                            item=line.item,
-                            is_deleted=False
+                            item=line.item
                         )
                         unit_cost = stock.weighted_avg_cost
                     except Stock.DoesNotExist:
@@ -282,7 +281,7 @@ class StockAdjustment(BaseModel):
                         warehouse_to=warehouse_to,
                         qty=abs(line.qty_diff),
                         unit_cost=unit_cost,
-                        move_type='ADJUST',
+                        move_type='ADJUSTMENT',
                         reference_type='StockAdjustment',
                         reference_id=self.id,
                         move_date=self.adjustment_date,

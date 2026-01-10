@@ -222,6 +222,12 @@ class WorkflowService:
             elif instance.business_type == 'STOCK_ADJUSTMENT':
                 # 库存调整没有项目经理，返回None
                 return None
+            
+            elif instance.business_type == 'ECN':
+                from apps.projects.models import ECN
+                ecn = ECN.objects.get(id=instance.business_id)
+                if ecn.project:
+                    return ecn.project.manager
                 
         except Exception as e:
             logger.error(f"Error getting project manager: {e}")
@@ -397,6 +403,44 @@ class WorkflowService:
                 elif result == 'WITHDRAWN':
                     adjustment.status = 'DRAFT'
                     adjustment.save()
+            
+            elif instance.business_type == 'ECN':
+                from apps.projects.models import ECN, ECNApproval
+                from django.utils import timezone
+                ecn = ECN.objects.get(id=instance.business_id)
+                
+                # 获取最后一个审批任务的审批人（而非提交人）
+                last_task = instance.tasks.filter(
+                    status__in=['APPROVED', 'REJECTED']
+                ).order_by('-action_time').first()
+                approver = last_task.assignee if last_task else instance.submitter
+                
+                if result == 'APPROVED':
+                    ecn.status = 'APPROVED'
+                    ecn.approved_date = timezone.now().date()
+                    ecn.save()
+                    # 记录审批历史
+                    ECNApproval.objects.create(
+                        ecn=ecn,
+                        approver=approver,
+                        action='APPROVE',
+                        comment='审批流程通过',
+                        created_by=approver
+                    )
+                    logger.info(f"ECN {ecn.ecn_no} approved via workflow")
+                elif result == 'REJECTED':
+                    ecn.status = 'REJECTED'
+                    ecn.save()
+                    ECNApproval.objects.create(
+                        ecn=ecn,
+                        approver=approver,
+                        action='REJECT',
+                        comment='审批流程拒绝',
+                        created_by=approver
+                    )
+                elif result == 'WITHDRAWN':
+                    ecn.status = 'DRAFT'
+                    ecn.save()
             
             # Notify submitter
             cls._notify_submitter(instance, result)

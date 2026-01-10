@@ -1008,14 +1008,21 @@ const exportBankStatements = async () => {
       responseType: 'blob'
     })
     
-    const url = window.URL.createObjectURL(new Blob([response]))
+    const filename = `银行流水_${new Date().toISOString().slice(0, 10)}.xlsx`
+    const blob = response.data
+    
+    const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
+    link.style.display = 'none'
     link.href = url
-    link.setAttribute('download', `银行流水_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    link.download = filename
     document.body.appendChild(link)
     link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
+    
+    setTimeout(() => {
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    }, 100)
     
     ElMessage.success('导出成功')
   } catch (error) {

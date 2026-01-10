@@ -222,9 +222,9 @@ const loadUsers = async () => {
 
 const loadSalesOrders = async () => {
   try {
-    // 只加载未关联项目的销售订单，或者当前编辑项目已关联的订单
-    const response = await request.get('/sales/orders/')
-    salesOrders.value = response.results || response || []
+    // 使用专门的接口获取所有可关联的销售订单（不受数据权限限制）
+    const response = await request.get('/sales/orders/for_linking/')
+    salesOrders.value = response.data || response || []
   } catch (error) {
     console.error('Failed to load sales orders')
   }

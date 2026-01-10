@@ -22,11 +22,14 @@ class MaterialRequisition(BaseModel):
     
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
-        ('PENDING', '待备料'),
-        ('PREPARING', '备料中'),
-        ('READY', '备料完成'),
+        ('SUBMITTED', '待审批'),      # 申请物料 - 提交后待审批
+        ('APPROVED', '已批准'),        # 申请物料 - 审批通过
+        ('PENDING', '待备料'),         # 备料确认 - 等待仓库备料
+        ('PREPARING', '备料中'),       # 备料确认 - 仓库正在备料
+        ('READY', '备料完成'),         # 备料确认 - 备料完成待出库
         ('ISSUED', '已出库'),
         ('PARTIAL', '部分出库'),
+        ('REJECTED', '已拒绝'),        # 申请物料 - 审批拒绝
         ('CANCELLED', '已取消'),
     ]
     
@@ -84,7 +87,7 @@ class MaterialRequisition(BaseModel):
         verbose_name='申请人'
     )
     request_date = models.DateField(
-        default=timezone.now,
+        default=timezone.localdate,
         verbose_name='申请日期'
     )
     required_date = models.DateField(
@@ -277,7 +280,7 @@ class MaterialReturn(BaseModel):
         verbose_name='申请人'
     )
     request_date = models.DateField(
-        default=timezone.now,
+        default=timezone.localdate,
         verbose_name='申请日期'
     )
     

@@ -7,7 +7,8 @@ from django.db.models import Sum
 from .models import (
     SalesQuotation, SalesQuotationLine,
     SalesOrder, SalesOrderLine,
-    DeliveryOrder, DeliveryOrderLine
+    DeliveryOrder, DeliveryOrderLine,
+    SalesContract
 )
 
 
@@ -407,3 +408,43 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
         
         return instance
 
+
+class SalesContractSerializer(serializers.ModelSerializer):
+    """SalesContract serializer."""
+    so_no = serializers.CharField(source='so.order_no', read_only=True)
+    customer_name = serializers.CharField(source='customer.name', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    so_lines = SalesOrderLineSerializer(source='so.lines', many=True, read_only=True)
+    
+    class Meta:
+        model = SalesContract
+        fields = [
+            'id', 'contract_no', 'so', 'so_no', 'customer', 'customer_name', 
+            'project', 'project_name', 'title', 'contract_date', 
+            'effective_date', 'expiry_date', 'total_amount', 'tax_rate',
+            'tax_amount', 'total_with_tax', 'payment_terms', 'delivery_terms',
+            'quality_terms', 'warranty_terms', 'buyer_signer', 'seller_signer',
+            'signed_date', 'status', 'status_display', 'notes', 'so_lines',
+            'is_deleted', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['contract_no', 'created_at', 'updated_at']
+    
+    def create(self, validated_data):
+        """Create contract and auto-fill from SO."""
+        so = validated_data.get('so')
+        if so:
+            if not validated_data.get('customer'):
+                validated_data['customer'] = so.customer
+            if not validated_data.get('project'):
+                validated_data['project'] = so.project
+            if not validated_data.get('total_amount'):
+                validated_data['total_amount'] = so.total_amount
+            if not validated_data.get('tax_rate'):
+                validated_data['tax_rate'] = so.tax_rate
+            if not validated_data.get('tax_amount'):
+                validated_data['tax_amount'] = so.tax_amount
+            if not validated_data.get('total_with_tax'):
+                validated_data['total_with_tax'] = so.total_with_tax
+        
+        return super().create(validated_data)

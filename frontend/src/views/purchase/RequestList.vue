@@ -65,8 +65,9 @@
       <el-table :data="requests" v-loading="loading" stripe border>
         <el-table-column prop="request_no" label="采购申请号" width="150" />
         <el-table-column prop="project_name" label="项目" />
-        <el-table-column prop="requestor_name" label="申请人" />
-        <el-table-column prop="required_date" label="需求日期" width="120" />
+        <el-table-column prop="supplier_name" label="供应商" />
+        <el-table-column prop="requestor_name" label="申请人" width="100" />
+        <el-table-column prop="required_date" label="需求日期" width="110" />
         <el-table-column prop="status" label="状态" width="120">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.status)">{{ getStatusLabel(row.status) }}</el-tag>
@@ -78,13 +79,14 @@
           </template>
         </el-table-column>
         <el-table-column prop="created_at" label="创建时间" width="160" />
-        <el-table-column label="操作" width="380" fixed="right">
+        <el-table-column label="操作" width="420" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button size="small" type="warning" @click="handleSubmit(row)" v-if="row.status === 'DRAFT'">提交</el-button>
             <el-button size="small" type="success" @click="handleApprove(row)" v-if="row.status === 'SUBMITTED'">批准</el-button>
             <el-button size="small" type="danger" @click="handleReject(row)" v-if="row.status === 'SUBMITTED'">拒绝</el-button>
+            <el-button size="small" type="info" @click="handleWithdraw(row)" v-if="row.status === 'SUBMITTED' || row.status === 'APPROVED'">撤回</el-button>
             <el-button size="small" type="primary" @click="convertToPO(row)" v-if="row.status === 'APPROVED'">转采购订单</el-button>
             <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
@@ -105,22 +107,29 @@
     </el-card>
 
     <!-- 创建/编辑对话框 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="900px" destroy-on-close>
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="1100px" destroy-on-close>
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
         <el-row :gutter="20">
-          <el-col :span="8">
+          <el-col :span="6">
             <el-form-item label="关联项目" prop="project">
-              <el-select v-model="form.project" placeholder="选择项目" filterable style="width: 100%;">
+              <el-select v-model="form.project" placeholder="选择项目" filterable clearable style="width: 100%;">
                 <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="8">
+          <el-col :span="6">
+            <el-form-item label="供应商">
+              <el-select v-model="form.supplier" placeholder="选择供应商" filterable clearable style="width: 100%;">
+                <el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
             <el-form-item label="需求日期" prop="required_date">
               <el-date-picker v-model="form.required_date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%;" />
             </el-form-item>
           </el-col>
-          <el-col :span="8">
+          <el-col :span="6">
             <el-form-item label="增值税率">
               <el-select v-model="form.tax_rate" placeholder="选择税率" style="width: 100%;">
                 <el-option :value="0" label="0% (免税)" />
@@ -152,22 +161,47 @@
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="数量" width="120">
+          <el-table-column label="数量" width="90">
             <template #default="{ row }">
-              <el-input-number v-model="row.qty" :min="1" :precision="0" size="small" style="width: 100%;" />
+              <el-input-number v-model="row.qty" :min="0.01" :precision="2" size="small" controls-position="right" style="width: 100%;" />
             </template>
           </el-table-column>
-          <el-table-column label="预估单价" width="120">
+          <el-table-column label="单位" width="60" align="center">
             <template #default="{ row }">
-              <el-input-number v-model="row.estimated_price" :min="0" :precision="2" size="small" style="width: 100%;" />
+              {{ getItemUnit(row.item) }}
             </template>
           </el-table-column>
-          <el-table-column label="小计" width="120" align="right">
+          <el-table-column label="单价" width="100">
             <template #default="{ row }">
-              ¥{{ ((row.qty || 0) * (row.estimated_price || 0)).toFixed(2) }}
+              <el-input-number v-model="row.estimated_price" :min="0" :precision="2" size="small" controls-position="right" style="width: 100%;" />
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="80" align="center">
+          <el-table-column label="金额" width="90" align="right">
+            <template #default="{ row }">
+              ¥{{ getLineAmount(row).toFixed(2) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="税额" width="80" align="right">
+            <template #default="{ row }">
+              ¥{{ getLineTax(row).toFixed(2) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="含税价" width="90" align="right">
+            <template #default="{ row }">
+              ¥{{ getLineTotalWithTax(row).toFixed(2) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="交期" width="130">
+            <template #default="{ row }">
+              <el-date-picker v-model="row.required_date" type="date" value-format="YYYY-MM-DD" placeholder="交期" size="small" style="width: 100%;" />
+            </template>
+          </el-table-column>
+          <el-table-column label="备注" min-width="120">
+            <template #default="{ row }">
+              <el-input v-model="row.notes" placeholder="备注" size="small" />
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="50" align="center" fixed="right">
             <template #default="{ $index }">
               <el-button type="danger" size="small" link @click="removeLine($index)">
                 <el-icon><Delete /></el-icon>
@@ -198,34 +232,50 @@
     </el-dialog>
     
     <!-- 查看详情对话框 -->
-    <el-dialog v-model="viewDialogVisible" title="采购申请详情" width="800px">
-      <el-descriptions :column="2" border v-if="currentRequest">
+    <el-dialog v-model="viewDialogVisible" title="采购申请详情" width="900px">
+      <el-descriptions :column="3" border v-if="currentRequest">
         <el-descriptions-item label="申请单号">{{ currentRequest.request_no }}</el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag :type="getStatusType(currentRequest.status)">{{ getStatusLabel(currentRequest.status) }}</el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="关联项目">{{ currentRequest.project_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="申请人">{{ currentRequest.requestor_name }}</el-descriptions-item>
+        <el-descriptions-item label="关联项目">{{ currentRequest.project_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="供应商">{{ currentRequest.supplier_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="需求日期">{{ currentRequest.required_date || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="总金额">¥{{ parseFloat(currentRequest.total_amount || 0).toFixed(2) }}</el-descriptions-item>
-        <el-descriptions-item label="创建时间" :span="2">{{ currentRequest.created_at }}</el-descriptions-item>
-        <el-descriptions-item label="备注" :span="2">{{ currentRequest.notes || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="不含税金额">¥{{ parseFloat(currentRequest.total_amount || 0).toFixed(2) }}</el-descriptions-item>
+        <el-descriptions-item label="税额">¥{{ parseFloat(currentRequest.tax_amount || 0).toFixed(2) }}</el-descriptions-item>
+        <el-descriptions-item label="含税总额">¥{{ parseFloat(currentRequest.total_with_tax || 0).toFixed(2) }}</el-descriptions-item>
+        <el-descriptions-item label="创建时间" :span="3">{{ currentRequest.created_at }}</el-descriptions-item>
+        <el-descriptions-item label="备注" :span="3">{{ currentRequest.notes || '-' }}</el-descriptions-item>
       </el-descriptions>
       
       <el-divider content-position="left">申请明细</el-divider>
       <el-table :data="currentRequest?.lines || []" border size="small">
-        <el-table-column prop="item_name" label="物料" />
-        <el-table-column prop="qty" label="数量" width="100" align="right" />
-        <el-table-column label="预估单价" width="120" align="right">
+        <el-table-column prop="item_name" label="物料" min-width="150" />
+        <el-table-column prop="qty" label="数量" width="70" align="right" />
+        <el-table-column prop="item_unit" label="单位" width="60" align="center" />
+        <el-table-column label="单价" width="90" align="right">
           <template #default="{ row }">
             ¥{{ parseFloat(row.estimated_price || 0).toFixed(2) }}
           </template>
         </el-table-column>
-        <el-table-column label="小计" width="120" align="right">
+        <el-table-column label="金额" width="90" align="right">
           <template #default="{ row }">
             ¥{{ ((row.qty || 0) * (row.estimated_price || 0)).toFixed(2) }}
           </template>
         </el-table-column>
+        <el-table-column label="税额" width="80" align="right">
+          <template #default="{ row }">
+            ¥{{ (((row.qty || 0) * (row.estimated_price || 0)) * (currentRequest?.tax_rate || 0) / 100).toFixed(2) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="含税价" width="90" align="right">
+          <template #default="{ row }">
+            ¥{{ (((row.qty || 0) * (row.estimated_price || 0)) * (1 + (currentRequest?.tax_rate || 0) / 100)).toFixed(2) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="required_date" label="交期" width="100" />
+        <el-table-column prop="notes" label="备注" min-width="100" />
       </el-table>
     </el-dialog>
     
@@ -285,6 +335,7 @@ const pagination = reactive({
 const form = reactive({
   id: null,
   project: null,
+  supplier: null,
   required_date: '',
   tax_rate: 13,
   notes: '',
@@ -405,10 +456,11 @@ const handleAdd = () => {
   Object.assign(form, {
     id: null,
     project: null,
+    supplier: null,
     required_date: '',
     tax_rate: 13,
     notes: '',
-    lines: [{ item: null, qty: 1, estimated_price: 0 }]
+    lines: [{ item: null, qty: 1, estimated_price: 0, required_date: '', notes: '' }]
   })
   dialogVisible.value = true
 }
@@ -425,6 +477,7 @@ const handleEdit = async (row) => {
     Object.assign(form, {
       id: data.id,
       project: data.project,
+      supplier: data.supplier,
       required_date: data.required_date || '',
       tax_rate: data.tax_rate ?? 13,
       notes: data.notes || '',
@@ -432,12 +485,14 @@ const handleEdit = async (row) => {
         id: line.id,
         item: line.item,
         qty: line.qty,
-        estimated_price: parseFloat(line.estimated_price || 0)
+        estimated_price: parseFloat(line.estimated_price || 0),
+        required_date: line.required_date || '',
+        notes: line.notes || ''
       }))
     })
     
     if (form.lines.length === 0) {
-      form.lines = [{ item: null, qty: 1, estimated_price: 0 }]
+      form.lines = [{ item: null, qty: 1, estimated_price: 0, required_date: '', notes: '' }]
     }
     
     dialogVisible.value = true
@@ -457,7 +512,7 @@ const handleView = async (row) => {
 }
 
 const addLine = () => {
-  form.lines.push({ item: null, qty: 1, estimated_price: 0 })
+  form.lines.push({ item: null, qty: 1, estimated_price: 0, required_date: '', notes: '' })
 }
 
 const removeLine = (index) => {
@@ -472,13 +527,35 @@ const onItemChange = (index) => {
   const line = form.lines[index]
   const item = items.value.find(i => i.id === line.item)
   if (item) {
-    line.estimated_price = parseFloat(item.standard_cost || 0)
+    line.estimated_price = parseFloat(item.purchase_price || item.standard_cost || 0)
   }
+}
+
+// 获取物料单位
+const getItemUnit = (itemId) => {
+  if (!itemId) return '-'
+  const item = items.value.find(i => i.id === itemId)
+  return item?.unit_display || item?.unit || '-'
+}
+
+// 计算行金额（不含税）
+const getLineAmount = (row) => {
+  return (row.qty || 0) * (row.estimated_price || 0)
+}
+
+// 计算行税额
+const getLineTax = (row) => {
+  return getLineAmount(row) * (form.tax_rate || 0) / 100
+}
+
+// 计算行含税价
+const getLineTotalWithTax = (row) => {
+  return getLineAmount(row) + getLineTax(row)
 }
 
 const calculateTotal = () => {
   return form.lines.reduce((sum, line) => {
-    return sum + (line.qty || 0) * (line.estimated_price || 0)
+    return sum + getLineAmount(line)
   }, 0)
 }
 
@@ -505,13 +582,16 @@ const handleSave = async () => {
     
     const payload = {
       project: form.project,
+      supplier: form.supplier,
       required_date: form.required_date,
       tax_rate: form.tax_rate,
       notes: form.notes,
       lines: validLines.map(line => ({
         item: line.item,
         qty: line.qty,
-        estimated_price: line.estimated_price
+        estimated_price: line.estimated_price,
+        required_date: line.required_date || null,
+        notes: line.notes || ''
       }))
     }
     
@@ -579,9 +659,23 @@ const handleReject = async (row) => {
   }
 }
 
+const handleWithdraw = async (row) => {
+  try {
+    await ElMessageBox.confirm('确定要撤回该采购申请吗？撤回后将恢复为草稿状态。', '撤回确认', { type: 'warning' })
+    await request.post(`/purchase/requests/${row.id}/withdraw/`)
+    ElMessage.success('已撤回')
+    loadRequests()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.error || '撤回失败')
+    }
+  }
+}
+
 const convertToPO = (row) => {
   currentConvertId.value = row.id
-  convertForm.supplier = null
+  // 预填充采购申请中的供应商
+  convertForm.supplier = row.supplier || null
   convertDialogVisible.value = true
 }
 

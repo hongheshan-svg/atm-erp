@@ -35,6 +35,9 @@ class CodeRule(BaseModel):
         ('STOCK_MOVE', '库存移动'),
         ('STOCK_ADJUSTMENT', '库存调整'),
         ('BUG', 'Bug编号'),
+        ('PRODUCTION_PLAN', '生产计划'),
+        ('DEBUG_RECORD', '调试记录'),
+        ('QUALITY_INSPECTION', '质量检验'),
     ]
     
     RESET_MODE_CHOICES = [

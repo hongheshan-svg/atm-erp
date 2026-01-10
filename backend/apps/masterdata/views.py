@@ -147,7 +147,11 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
             
             created_count = 0
             updated_count = 0
+            skip_count = 0
             error_rows = []
+            
+            # Track processed SKUs within this import
+            processed_skus = set()
             
             for idx, row in df.iterrows():
                 row_num = idx + 2
@@ -162,6 +166,12 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                 # Skip example rows
                 if sku.startswith('MAT00') or '示例' in sku or '示例' in name:
                     continue
+                
+                # Check for in-file duplicate
+                if sku in processed_skus:
+                    skip_count += 1
+                    continue
+                processed_skus.add(sku)
                 
                 # Get optional values
                 def get_val(col, default=''):
@@ -240,9 +250,10 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                     error_rows.append({'row': row_num, 'error': str(e)})
             
             return Response({
-                'message': f'导入完成：新增 {created_count} 条，更新 {updated_count} 条',
+                'message': f'导入完成：新增 {created_count} 条，更新 {updated_count} 条，跳过重复 {skip_count} 条',
                 'created': created_count,
                 'updated': updated_count,
+                'skip_count': skip_count,
                 'errors': error_rows
             })
         
@@ -540,6 +551,15 @@ class CustomerViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
     search_fields = ['code', 'name', 'contact_person', 'phone', 'tax_number']
     ordering_fields = ['code', 'created_at']
     
+    def perform_create(self, serializer):
+        """Auto-generate customer code if not provided."""
+        from apps.core.utils import generate_code
+        
+        code = serializer.validated_data.get('code', '').strip()
+        if not code:
+            code = generate_code('C', rule_type='CUSTOMER')
+        serializer.save(code=code)
+    
     @action(detail=False, methods=['get'])
     def download_template(self, request):
         """Download customer import template Excel file."""
@@ -693,7 +713,11 @@ class CustomerViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
             
             success_count = 0
             update_count = 0
+            skip_count = 0
             errors = []
+            
+            # Track processed codes within this import
+            processed_codes = set()
             
             with transaction.atomic():
                 for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
@@ -708,6 +732,13 @@ class CustomerViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
                         
                         if not data.get('code') or not data.get('name'):
                             continue
+                        
+                        # Check for in-file duplicate
+                        code = str(data.get('code', '')).strip()
+                        if code in processed_codes:
+                            skip_count += 1
+                            continue
+                        processed_codes.add(code)
                         
                         # Handle credit_limit
                         if 'credit_limit' in data:
@@ -741,6 +772,7 @@ class CustomerViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
             return Response({
                 'success_count': success_count,
                 'update_count': update_count,
+                'skip_count': skip_count,
                 'error_count': len(errors),
                 'errors': errors[:10]
             })
@@ -772,6 +804,15 @@ class SupplierViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
     filterset_fields = ['status', 'is_deleted']
     search_fields = ['code', 'name', 'contact_person', 'phone', 'tax_number']
     ordering_fields = ['code', 'created_at']
+    
+    def perform_create(self, serializer):
+        """Auto-generate supplier code if not provided."""
+        from apps.core.utils import generate_code
+        
+        code = serializer.validated_data.get('code', '').strip()
+        if not code:
+            code = generate_code('S', rule_type='SUPPLIER')
+        serializer.save(code=code)
     
     @action(detail=False, methods=['get'])
     def download_template(self, request):
@@ -922,7 +963,11 @@ class SupplierViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
             
             success_count = 0
             update_count = 0
+            skip_count = 0
             errors = []
+            
+            # Track processed codes within this import
+            processed_codes = set()
             
             with transaction.atomic():
                 for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
@@ -937,6 +982,13 @@ class SupplierViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
                         
                         if not data.get('code') or not data.get('name'):
                             continue
+                        
+                        # Check for in-file duplicate
+                        code = str(data.get('code', '')).strip()
+                        if code in processed_codes:
+                            skip_count += 1
+                            continue
+                        processed_codes.add(code)
                         
                         status_map = {'激活': 'ACTIVE', '停用': 'INACTIVE', '潜在供应商': 'POTENTIAL'}
                         if 'status' in data and data['status'] in status_map:
@@ -961,6 +1013,7 @@ class SupplierViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
             return Response({
                 'success_count': success_count,
                 'update_count': update_count,
+                'skip_count': skip_count,
                 'error_count': len(errors),
                 'errors': errors[:10]
             })

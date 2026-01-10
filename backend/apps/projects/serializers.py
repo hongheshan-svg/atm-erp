@@ -5,7 +5,8 @@ from rest_framework import serializers
 from .models import (
     Project, ProjectMember, ProjectTask, ProjectBOM, TimeLog, 
     ECN, ECNItem, ECNApproval,
-    AfterSalesOrder, ServiceRecord, SparePartUsage
+    AfterSalesOrder, ServiceRecord, SparePartUsage,
+    Drawing, DrawingChangeNotice
 )
 
 
@@ -179,7 +180,6 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(source='project.name', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
     item_sku = serializers.CharField(source='item.sku', read_only=True)
-    item_code = serializers.CharField(source='item.sku', read_only=True)  # 别名，兼容前端
     item_specification = serializers.CharField(source='item.specification', read_only=True, allow_blank=True)
     specification = serializers.CharField(source='item.specification', read_only=True, allow_blank=True)  # 别名
     item_unit = serializers.CharField(source='item.get_unit_display', read_only=True)
@@ -191,6 +191,15 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
     item_standard_cost = serializers.DecimalField(source='item.standard_cost', max_digits=15, decimal_places=2, read_only=True)
     requester_name = serializers.CharField(source='requester.get_full_name', read_only=True)
     has_drawing_display = serializers.CharField(source='get_has_drawing_display', read_only=True)
+    # 采购与库存字段
+    order_status_display = serializers.CharField(source='get_order_status_display', read_only=True)
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True, allow_null=True)
+    supplier_code = serializers.CharField(source='supplier.code', read_only=True, allow_null=True)
+    # 多级BOM字段
+    parent_name = serializers.CharField(source='parent.item.name', read_only=True, allow_null=True)
+    children_count = serializers.SerializerMethodField()
+    has_children = serializers.SerializerMethodField()
+    children = serializers.SerializerMethodField()
     
     class Meta:
         model = ProjectBOM
@@ -199,10 +208,17 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
             'item', 'item_sku', 'item_code', 'item_name',
             'item_specification', 'specification', 'item_unit', 'unit', 
             'item_type', 'item_brand', 'item_model', 'item_standard_cost',
-            'planned_qty', 'actual_qty', 'estimated_cost',
+            'planned_qty', 'actual_qty', 'estimated_cost', 'unit_qty',
             'version_brand', 'version_brand_display', 'has_drawing', 'has_drawing_display',
             'required_date', 'requester', 'requester_name',
             'description', 'notes',
+            # 采购与库存跟踪
+            'order_status', 'order_status_display',
+            'supplier', 'supplier_name', 'supplier_code',
+            'delivery_date', 'ordered_qty', 'received_qty', 'issued_qty',
+            # 多级BOM
+            'parent', 'parent_name', 'level', 'sort_order',
+            'children_count', 'has_children', 'children',
             'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
@@ -220,6 +236,22 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
         if brand and model:
             return f'{brand}/{model}'
         return brand or model or ''
+    
+    def get_children_count(self, obj):
+        return obj.children.filter(is_deleted=False).count()
+    
+    def get_has_children(self, obj):
+        return obj.children.filter(is_deleted=False).exists()
+    
+    def get_children(self, obj):
+        """递归获取子BOM项（仅顶层请求时展开）"""
+        request = self.context.get('request')
+        expand = request.query_params.get('expand_children', 'false') if request else 'false'
+        
+        if expand.lower() == 'true':
+            children = obj.children.filter(is_deleted=False).order_by('sort_order', 'id')
+            return ProjectBOMSerializer(children, many=True, context=self.context).data
+        return None
 
 
 class TimeLogSerializer(serializers.ModelSerializer):
@@ -479,3 +511,48 @@ class AfterSalesOrderListSerializer(serializers.ModelSerializer):
     
     def get_service_count(self, obj):
         return obj.service_records.count()
+
+
+class DrawingSerializer(serializers.ModelSerializer):
+    """图纸序列化器"""
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    project_code = serializers.CharField(source='project.code', read_only=True)
+    item_name = serializers.CharField(source='item.name', read_only=True)
+    item_sku = serializers.CharField(source='item.sku', read_only=True)
+    file_type_display = serializers.CharField(source='get_file_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    designer_name = serializers.CharField(source='designer.get_full_name', read_only=True)
+    reviewer_name = serializers.CharField(source='reviewer.get_full_name', read_only=True)
+    approver_name = serializers.CharField(source='approver.get_full_name', read_only=True)
+    
+    class Meta:
+        model = Drawing
+        fields = [
+            'id', 'drawing_no', 'name', 'version', 'revision',
+            'project', 'project_name', 'project_code',
+            'item', 'item_name', 'item_sku', 'bom_item',
+            'file_type', 'file_type_display', 'file_path', 'file_size',
+            'public_share_path', 'status', 'status_display',
+            'designer', 'designer_name', 'reviewer', 'reviewer_name',
+            'approver', 'approver_name', 'approved_at', 'released_at',
+            'change_description', 'notes',
+            'is_deleted', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+
+class DrawingChangeNoticeSerializer(serializers.ModelSerializer):
+    """图纸变更通知序列化器"""
+    drawing_no = serializers.CharField(source='drawing.drawing_no', read_only=True)
+    drawing_name = serializers.CharField(source='drawing.name', read_only=True)
+    change_type_display = serializers.CharField(source='get_change_type_display', read_only=True)
+    
+    class Meta:
+        model = DrawingChangeNotice
+        fields = [
+            'id', 'drawing', 'drawing_no', 'drawing_name',
+            'change_type', 'change_type_display',
+            'old_version', 'new_version', 'change_description',
+            'email_sent', 'email_sent_at',
+            'created_at'
+        ]

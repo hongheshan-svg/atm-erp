@@ -8,9 +8,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from django.utils import timezone
 from django.http import FileResponse
-from .models import AuditLog, SystemNotification, Attachment
+from .models import AuditLog, SystemNotification, Attachment, SystemConfig
 from rest_framework import serializers
-from .serializers import AttachmentSerializer, AttachmentUploadSerializer
+from .serializers import AttachmentSerializer, AttachmentUploadSerializer, SystemConfigSerializer
 
 
 class AuditLogSerializer(serializers.ModelSerializer):
@@ -360,5 +360,36 @@ class NotificationChannelViewSet(viewsets.ViewSet):
         return Response({
             'status': 'completed',
             'results': results
+        })
+
+
+class SystemConfigViewSet(viewsets.ViewSet):
+    """
+    系统配置管理 - 单例模式，只有一条记录
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def list(self, request):
+        """获取系统配置"""
+        config = SystemConfig.get_config()
+        serializer = SystemConfigSerializer(config)
+        return Response(serializer.data)
+    
+    def create(self, request):
+        """更新系统配置（使用POST代替PUT，因为始终操作同一条记录）"""
+        config = SystemConfig.get_config()
+        serializer = SystemConfigSerializer(config, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save(updated_by=request.user)
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['get'])
+    def company_name(self, request):
+        """快速获取公司名称（供其他模块调用）"""
+        config = SystemConfig.get_config()
+        return Response({
+            'company_name': config.company_name,
+            'company_tax_no': config.company_tax_no
         })
 

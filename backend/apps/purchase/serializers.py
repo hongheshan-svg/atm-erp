@@ -7,7 +7,8 @@ from django.db.models import Sum
 from .models import (
     PurchaseRequest, PurchaseRequestLine,
     PurchaseOrder, PurchaseOrderLine,
-    GoodsReceipt, GoodsReceiptLine
+    GoodsReceipt, GoodsReceiptLine,
+    PurchaseContract
 )
 from .services import BudgetValidationService
 
@@ -23,7 +24,7 @@ class PurchaseRequestLineSerializer(serializers.ModelSerializer):
         model = PurchaseRequestLine
         fields = [
             'id', 'pr', 'item', 'item_sku', 'item_name', 'item_unit',
-            'qty', 'estimated_price', 'line_amount', 'project', 'project_name',
+            'qty', 'estimated_price', 'line_amount', 'required_date', 'project', 'project_name',
             'notes', 'is_deleted'
         ]
         read_only_fields = ['line_amount']
@@ -33,7 +34,7 @@ class PurchaseRequestLineCreateSerializer(serializers.ModelSerializer):
     """PurchaseRequestLine serializer for create/update."""
     class Meta:
         model = PurchaseRequestLine
-        fields = ['id', 'item', 'qty', 'estimated_price', 'project', 'notes']
+        fields = ['id', 'item', 'qty', 'estimated_price', 'required_date', 'project', 'notes']
         extra_kwargs = {
             'id': {'required': False}
         }
@@ -42,6 +43,7 @@ class PurchaseRequestLineCreateSerializer(serializers.ModelSerializer):
 class PurchaseRequestSerializer(serializers.ModelSerializer):
     """PurchaseRequest serializer."""
     project_name = serializers.CharField(source='project.name', read_only=True)
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
     requestor_name = serializers.CharField(source='requestor.get_full_name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     tax_rate_display = serializers.CharField(source='get_tax_rate_display', read_only=True)
@@ -51,8 +53,8 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = PurchaseRequest
         fields = [
-            'id', 'request_no', 'project', 'project_name', 'requestor', 'requestor_name',
-            'request_date', 'required_date', 'status', 'status_display',
+            'id', 'request_no', 'project', 'project_name', 'supplier', 'supplier_name',
+            'requestor', 'requestor_name', 'request_date', 'required_date', 'status', 'status_display',
             'tax_rate', 'tax_rate_display', 'total_amount', 'tax_amount', 'total_with_tax',
             'notes', 'lines', 'is_deleted', 'created_at', 'updated_at', 'budget_info'
         ]
@@ -85,6 +87,7 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
                         item_id=line_data['item'],
                         qty=qty,
                         estimated_price=estimated_price,
+                        required_date=line_data.get('required_date'),
                         project_id=line_data.get('project'),
                         notes=line_data.get('notes', ''),
                         created_by=pr.created_by
@@ -121,6 +124,7 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
                         item_id=line_data['item'],
                         qty=qty,
                         estimated_price=estimated_price,
+                        required_date=line_data.get('required_date'),
                         project_id=line_data.get('project'),
                         notes=line_data.get('notes', ''),
                         created_by=instance.created_by
@@ -316,4 +320,45 @@ class GoodsReceiptSerializer(serializers.ModelSerializer):
                     )
         
         return instance
+
+
+class PurchaseContractSerializer(serializers.ModelSerializer):
+    """PurchaseContract serializer."""
+    po_no = serializers.CharField(source='po.order_no', read_only=True)
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    po_lines = PurchaseOrderLineSerializer(source='po.lines', many=True, read_only=True)
+    
+    class Meta:
+        model = PurchaseContract
+        fields = [
+            'id', 'contract_no', 'po', 'po_no', 'supplier', 'supplier_name', 
+            'project', 'project_name', 'title', 'contract_date', 
+            'effective_date', 'expiry_date', 'total_amount', 'tax_rate',
+            'tax_amount', 'total_with_tax', 'payment_terms', 'delivery_terms',
+            'quality_terms', 'warranty_terms', 'buyer_signer', 'seller_signer',
+            'signed_date', 'status', 'status_display', 'notes', 'po_lines',
+            'is_deleted', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['contract_no', 'created_at', 'updated_at']
+    
+    def create(self, validated_data):
+        """Create contract and auto-fill from PO."""
+        po = validated_data.get('po')
+        if po:
+            if not validated_data.get('supplier'):
+                validated_data['supplier'] = po.supplier
+            if not validated_data.get('project'):
+                validated_data['project'] = po.project
+            if not validated_data.get('total_amount'):
+                validated_data['total_amount'] = po.total_amount
+            if not validated_data.get('tax_rate'):
+                validated_data['tax_rate'] = po.tax_rate
+            if not validated_data.get('tax_amount'):
+                validated_data['tax_amount'] = po.tax_amount
+            if not validated_data.get('total_with_tax'):
+                validated_data['total_with_tax'] = po.total_with_tax
+        
+        return super().create(validated_data)
 

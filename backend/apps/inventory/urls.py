@@ -16,6 +16,11 @@ from .material_views import (
     MaterialReturnViewSet,
     MaterialReturnLineViewSet
 )
+from .cost_accounting import (
+    InventoryCostConfigViewSet, ItemCostRecordViewSet, PeriodCostSummaryViewSet
+)
+from .mrp import MRPPlanViewSet, MRPLineViewSet
+from .stock_alert import StockAlertRuleViewSet, StockAlertViewSet
 
 router = DefaultRouter()
 router.register(r'stocks', StockViewSet, basename='stock')
@@ -30,6 +35,19 @@ router.register(r'requisitions', MaterialRequisitionViewSet, basename='requisiti
 router.register(r'requisition-lines', MaterialRequisitionLineViewSet, basename='requisition-line')
 router.register(r'returns', MaterialReturnViewSet, basename='return')
 router.register(r'return-lines', MaterialReturnLineViewSet, basename='return-line')
+
+# 库存成本核算
+router.register(r'cost-configs', InventoryCostConfigViewSet, basename='cost-config')
+router.register(r'cost-records', ItemCostRecordViewSet, basename='cost-record')
+router.register(r'period-summaries', PeriodCostSummaryViewSet, basename='period-summary')
+
+# MRP物料需求计划
+router.register(r'mrp-plans', MRPPlanViewSet, basename='mrp-plan')
+router.register(r'mrp-lines', MRPLineViewSet, basename='mrp-line')
+
+# 库存预警
+router.register(r'stock-alert-rules', StockAlertRuleViewSet, basename='stock-alert-rule')
+router.register(r'stock-alerts', StockAlertViewSet, basename='stock-alert')
 
 urlpatterns = [
     path('', include(router.urls)),

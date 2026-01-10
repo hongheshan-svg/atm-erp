@@ -1,13 +1,10 @@
 """
 Finance models for expenses, receivables, and payables.
+
+注意: 使用字符串引用替代直接导入以避免循环依赖
 """
 from django.db import models
 from apps.core.models import BaseModel
-from apps.accounts.models import User, Department
-from apps.masterdata.models import Customer, Supplier
-from apps.projects.models import Project
-from apps.sales.models import SalesOrder
-from apps.purchase.models import PurchaseOrder
 
 
 class Currency(BaseModel):
@@ -86,7 +83,7 @@ class Expense(BaseModel):
     
     expense_no = models.CharField(max_length=50, unique=True, verbose_name='费用编号')
     project = models.ForeignKey(
-        Project,
+        'projects.Project',
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -94,7 +91,7 @@ class Expense(BaseModel):
         verbose_name='项目'
     )
     department = models.ForeignKey(
-        Department,
+        'accounts.Department',
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -102,7 +99,7 @@ class Expense(BaseModel):
         verbose_name='部门'
     )
     user = models.ForeignKey(
-        User,
+        'accounts.User',
         on_delete=models.PROTECT,
         related_name='expenses',
         verbose_name='申请人'
@@ -180,13 +177,13 @@ class AccountReceivable(BaseModel):
     
     ar_no = models.CharField(max_length=50, unique=True, verbose_name='应收单号')
     customer = models.ForeignKey(
-        Customer,
+        'masterdata.Customer',
         on_delete=models.PROTECT,
         related_name='receivables',
         verbose_name='客户'
     )
     so = models.ForeignKey(
-        SalesOrder,
+        'sales.SalesOrder',
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -194,7 +191,7 @@ class AccountReceivable(BaseModel):
         verbose_name='销售订单'
     )
     project = models.ForeignKey(
-        Project,
+        'projects.Project',
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -273,13 +270,13 @@ class AccountPayable(BaseModel):
     
     ap_no = models.CharField(max_length=50, unique=True, verbose_name='应付单号')
     supplier = models.ForeignKey(
-        Supplier,
+        'masterdata.Supplier',
         on_delete=models.PROTECT,
         related_name='payables',
         verbose_name='供应商'
     )
     po = models.ForeignKey(
-        PurchaseOrder,
+        'purchase.PurchaseOrder',
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -287,7 +284,7 @@ class AccountPayable(BaseModel):
         verbose_name='采购订单'
     )
     project = models.ForeignKey(
-        Project,
+        'projects.Project',
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -473,7 +470,7 @@ class PaymentSchedule(BaseModel):
     
     # 关联销售订单
     sales_order = models.ForeignKey(
-        SalesOrder,
+        'sales.SalesOrder',
         on_delete=models.CASCADE,
         related_name='payment_schedules',
         verbose_name='销售订单'
@@ -481,7 +478,7 @@ class PaymentSchedule(BaseModel):
     
     # 关联项目（可选，从销售订单继承）
     project = models.ForeignKey(
-        Project,
+        'projects.Project',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -761,7 +758,7 @@ class PurchasePaymentSchedule(BaseModel):
     
     # 关联采购订单
     purchase_order = models.ForeignKey(
-        PurchaseOrder,
+        'purchase.PurchaseOrder',
         on_delete=models.CASCADE,
         related_name='payment_schedules',
         verbose_name='采购订单'
@@ -769,7 +766,7 @@ class PurchasePaymentSchedule(BaseModel):
     
     # 关联项目（可选，从采购订单继承）
     project = models.ForeignKey(
-        Project,
+        'projects.Project',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1054,7 +1051,7 @@ class Invoice(BaseModel):
     
     # 项目关联 - 用于成本核算
     project = models.ForeignKey(
-        Project,
+        'projects.Project',
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -1170,7 +1167,7 @@ class SharedExpense(BaseModel):
     
     allocated_at = models.DateTimeField(null=True, blank=True, verbose_name='分摊时间')
     allocated_by = models.ForeignKey(
-        User,
+        'accounts.User',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1215,7 +1212,7 @@ class SharedExpenseAllocation(BaseModel):
         verbose_name='公共费用'
     )
     project = models.ForeignKey(
-        Project,
+        'projects.Project',
         on_delete=models.PROTECT,
         related_name='shared_expense_allocations',
         verbose_name='项目'

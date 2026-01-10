@@ -21,11 +21,14 @@
         <el-form-item label="状态">
           <el-select v-model="searchForm.status" placeholder="全部" clearable style="width: 120px;">
             <el-option label="草稿" value="DRAFT" />
+            <el-option label="待审批" value="SUBMITTED" />
+            <el-option label="已批准" value="APPROVED" />
             <el-option label="待备料" value="PENDING" />
             <el-option label="备料中" value="PREPARING" />
             <el-option label="备料完成" value="READY" />
             <el-option label="已出库" value="ISSUED" />
             <el-option label="部分出库" value="PARTIAL" />
+            <el-option label="已拒绝" value="REJECTED" />
           </el-select>
         </el-form-item>
         <el-form-item label="项目">
@@ -59,13 +62,19 @@
             <el-tag :type="getStatusType(row.status)">{{ row.status_display }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
+            <!-- 草稿状态 -->
             <el-button size="small" type="primary" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
-            <el-button size="small" type="success" @click="handleSubmit(row)" v-if="row.status === 'DRAFT'">提交</el-button>
+            <el-button size="small" type="success" @click="handleSubmit(row)" v-if="row.status === 'DRAFT'">提交申请</el-button>
+            <!-- 审批阶段 -->
+            <el-button size="small" type="success" @click="handleApprove(row)" v-if="row.status === 'SUBMITTED'">批准</el-button>
+            <el-button size="small" type="danger" @click="handleReject(row)" v-if="row.status === 'SUBMITTED'">拒绝</el-button>
+            <!-- 备料阶段 -->
             <el-button size="small" type="warning" @click="handlePrepare(row)" v-if="row.status === 'PENDING'">开始备料</el-button>
             <el-button size="small" type="success" @click="handleReady(row)" v-if="row.status === 'PREPARING'">备料完成</el-button>
+            <!-- 出库阶段 -->
             <el-button size="small" type="primary" @click="handleIssue(row)" v-if="['READY', 'PARTIAL'].includes(row.status)">出库</el-button>
           </template>
         </el-table-column>
@@ -308,12 +317,15 @@ const currentItem = ref(null)
 const getStatusType = (status) => {
   const types = {
     'DRAFT': 'info',
-    'PENDING': 'warning',
-    'PREPARING': 'warning',
-    'READY': 'success',
-    'ISSUED': 'success',
-    'PARTIAL': 'warning',
-    'CANCELLED': 'danger'
+    'SUBMITTED': 'warning',  // 待审批
+    'APPROVED': 'success',   // 已批准
+    'PENDING': 'warning',    // 待备料
+    'PREPARING': '',         // 备料中
+    'READY': 'success',      // 备料完成
+    'ISSUED': 'success',     // 已出库
+    'PARTIAL': 'warning',    // 部分出库
+    'REJECTED': 'danger',    // 已拒绝
+    'CANCELLED': 'info'      // 已取消
   }
   return types[status] || 'info'
 }
@@ -551,13 +563,39 @@ const handleSave = async () => {
 
 const handleSubmit = async (row) => {
   try {
-    await ElMessageBox.confirm('确定提交该领料申请？', '确认')
+    await ElMessageBox.confirm('确定提交该领料申请？提交后将进入审批流程。', '提交申请')
     await request.post(`/inventory/requisitions/${row.id}/submit/`)
-    ElMessage.success('提交成功')
+    ElMessage.success('申请已提交，等待审批')
     loadList()
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('提交失败: ' + (error.response?.data?.error || error.message))
+    }
+  }
+}
+
+const handleApprove = async (row) => {
+  try {
+    await ElMessageBox.confirm('确定批准该领料申请？批准后仓库将开始备料。', '批准申请')
+    await request.post(`/inventory/requisitions/${row.id}/approve/`)
+    ElMessage.success('申请已批准，等待仓库备料')
+    loadList()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('操作失败: ' + (error.response?.data?.error || error.message))
+    }
+  }
+}
+
+const handleReject = async (row) => {
+  try {
+    await ElMessageBox.confirm('确定拒绝该领料申请？', '拒绝申请', { type: 'warning' })
+    await request.post(`/inventory/requisitions/${row.id}/reject/`)
+    ElMessage.success('申请已拒绝')
+    loadList()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('操作失败: ' + (error.response?.data?.error || error.message))
     }
   }
 }
@@ -575,7 +613,7 @@ const handlePrepare = async (row) => {
 const handleReady = async (row) => {
   try {
     await request.post(`/inventory/requisitions/${row.id}/ready/`)
-    ElMessage.success('备料完成')
+    ElMessage.success('备料完成，等待出库')
     loadList()
   } catch (error) {
     ElMessage.error('操作失败: ' + (error.response?.data?.error || error.message))

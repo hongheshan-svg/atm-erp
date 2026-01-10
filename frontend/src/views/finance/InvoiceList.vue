@@ -100,9 +100,14 @@
                 {{ formatDate(row.invoice_date) }}
               </template>
             </el-table-column>
+            <el-table-column prop="seller_name" label="销售方" min-width="150" show-overflow-tooltip>
+              <template #default="{ row }">
+                {{ row.seller_name || '-' }}
+              </template>
+            </el-table-column>
             <el-table-column prop="buyer_name" label="购买方" min-width="150" show-overflow-tooltip>
               <template #default="{ row }">
-                {{ row.buyer_name || row.party_name }}
+                {{ row.buyer_name || '-' }}
               </template>
             </el-table-column>
             <el-table-column label="金额" width="120" align="right">
@@ -1068,17 +1073,36 @@ const downloadTemplate = async () => {
       responseType: 'blob'
     })
     
-    const url = window.URL.createObjectURL(new Blob([response]))
+    if (!response || !response.data) {
+      ElMessage.error('下载失败：没有收到响应数据')
+      return
+    }
+    
+    const contentDisposition = response.headers?.['content-disposition'] || ''
+    let filename = '发票导入模板.xlsx'
+    const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+    if (filenameMatch && filenameMatch[1]) {
+      filename = filenameMatch[1].replace(/['"]/g, '')
+    }
+    
+    const blob = response.data
+    const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
+    link.style.display = 'none'
     link.href = url
-    link.setAttribute('download', '发票导入模板.xlsx')
+    link.download = filename
     document.body.appendChild(link)
     link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
+    
+    setTimeout(() => {
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    }, 100)
+    
     ElMessage.success('模板下载成功')
   } catch (error) {
-    ElMessage.error('下载模板失败')
+    console.error('下载模板失败:', error)
+    ElMessage.error('下载模板失败: ' + (error.message || '未知错误'))
   }
 }
 
@@ -1092,14 +1116,22 @@ const handleExport = async () => {
       responseType: 'blob'
     })
     
-    const url = window.URL.createObjectURL(new Blob([response]))
+    const filename = `发票列表_${new Date().toISOString().split('T')[0]}.xlsx`
+    const blob = response.data
+    
+    const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
+    link.style.display = 'none'
     link.href = url
-    link.setAttribute('download', `发票列表_${new Date().toISOString().split('T')[0]}.xlsx`)
+    link.download = filename
     document.body.appendChild(link)
     link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
+    
+    setTimeout(() => {
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    }, 100)
+    
     ElMessage.success('导出成功')
   } catch (error) {
     ElMessage.error('导出失败')

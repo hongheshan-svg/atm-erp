@@ -182,17 +182,17 @@
 
 以下业务模块需要集成编码规则：
 
-- [ ] 采购合同编号生成
-- [ ] 销售合同编号生成
-- [ ] 采购申请编号生成
-- [ ] 采购订单编号生成
-- [ ] 销售订单编号生成
-- [ ] 销售报价编号生成
-- [ ] 发货单编号生成
-- [ ] 发票编号生成
-- [ ] 收货单编号生成
-- [ ] 库存移动编号生成
-- [ ] 库存调整编号生成
+- [x] 采购合同编号生成 (2025年1月7日完成)
+- [x] 销售合同编号生成 (2025年1月7日完成 - 新增SalesContract模型)
+- [x] 采购申请编号生成 (2025年1月7日完成)
+- [x] 采购订单编号生成 (2025年1月7日完成)
+- [x] 销售订单编号生成 (2025年1月7日完成)
+- [x] 销售报价编号生成 (2025年1月7日完成)
+- [x] 发货单编号生成 (2025年1月7日完成)
+- [ ] 发票编号生成 (发票号由外部系统导入，暂不自动生成)
+- [x] 收货单编号生成 (2025年1月7日完成)
+- [x] 库存移动编号生成 (2025年1月7日完成)
+- [x] 库存调整编号生成 (2025年1月7日完成)
 
 集成方法参考项目模型的实现：
 
@@ -261,7 +261,99 @@ class YourModel(BaseModel):
 - `CODING_RULES_GUIDE.md` - 使用指南
 - `IMPLEMENTATION_SUMMARY.md` - 实施总结（本文档）
 
+---
+
+## 2025年1月7日更新 - 编码规则集成完成
+
+### 更新内容
+
+#### 1. 采购模块集成 (`backend/apps/purchase/models.py`)
+- `PurchaseRequest.save()` - 使用 `rule_type='PURCHASE_REQUEST'`
+- `PurchaseOrder.save()` - 使用 `rule_type='PURCHASE_ORDER'`
+- `GoodsReceipt.save()` - 使用 `rule_type='GOODS_RECEIPT'`
+- `PurchaseContract.save()` - 使用 `rule_type='PURCHASE_CONTRACT'`
+
+#### 2. 销售模块集成 (`backend/apps/sales/models.py`)
+- `SalesQuotation.save()` - 使用 `rule_type='SALES_QUOTE'`
+- `SalesOrder.save()` - 使用 `rule_type='SALES_ORDER'`
+- `DeliveryOrder.save()` - 使用 `rule_type='DELIVERY_ORDER'`
+- **新增 `SalesContract` 模型** - 使用 `rule_type='SALES_CONTRACT'`
+
+#### 3. 库存模块集成 (`backend/apps/inventory/models.py`)
+- `StockMove.save()` - 使用 `rule_type='STOCK_MOVE'`
+- `StockAdjustment.save()` - 使用 `rule_type='STOCK_ADJUSTMENT'`
+
+#### 4. 新增销售合同功能
+- **模型**: `backend/apps/sales/models.py` - `SalesContract`
+- **迁移**: `backend/apps/sales/migrations/0002_add_sales_contract.py`
+- **序列化器**: `backend/apps/sales/serializers.py` - `SalesContractSerializer`
+- **视图**: `backend/apps/sales/views.py` - `SalesContractViewSet`
+- **URL**: `backend/apps/sales/urls.py` - 添加 `contracts` 路由
+
+#### 5. SalesContract API 功能
+- CRUD 基本操作
+- `create_from_so` - 从销售订单创建合同
+- `print_preview` - 获取打印预览数据
+- `approve` - 审批合同
+- `sign` - 签署合同
+
+### 使用说明
+
+所有业务单据在保存时会自动检查对应的编码规则：
+1. 如果系统中配置了对应类型的活动编码规则，则使用配置的规则生成编号
+2. 如果未配置编码规则，则回退到默认编码生成逻辑
+
+要配置编码规则，请访问：系统管理 > 编码规则
+
+### 待办事项
+
+- [ ] 发票编号生成（发票号由外部系统导入，暂不自动生成）
+- [x] 销售合同前端管理页面（2025年1月7日完成）
+
+---
+
+## 2025年1月7日更新 - 销售合同前端页面
+
+### 新增文件
+
+- `frontend/src/views/sales/ContractList.vue` - 销售合同管理页面
+
+### 功能特性
+
+1. **合同列表**
+   - 支持按客户、状态筛选
+   - 分页显示
+   - 显示合同编号、标题、客户、销售订单、状态、金额、日期等信息
+
+2. **创建合同**
+   - 从销售订单创建合同
+   - 自动继承订单信息（客户、项目、金额等）
+
+3. **编辑合同**
+   - 修改合同标题、日期、条款等信息
+   - 仅草稿状态可编辑
+
+4. **合同审批**
+   - 审批草稿/待审批状态的合同
+
+5. **合同签署**
+   - 录入甲乙双方签署人信息
+   - 自动记录签署日期
+
+6. **合同打印**
+   - 生成可打印的合同文档
+   - 包含双方信息、产品明细、条款、签章区域
+
+7. **查看详情**
+   - 显示完整的合同信息
+   - 包含订单明细
+
+### 路由配置
+
+- 路径: `/sales/contracts`
+- 菜单位置: 销售管理 > 销售合同
+- 权限: `sales:contracts`
+
 ## 联系方式
 
 如有问题或建议，请联系开发团队。
-

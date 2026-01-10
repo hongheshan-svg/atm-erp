@@ -332,6 +332,12 @@ class ProjectBOM(BaseModel):
         ('PENDING', '待定'),
     ]
     
+    ORDER_STATUS_CHOICES = [
+        ('NOT_ORDERED', '未下单'),
+        ('PARTIAL', '部分下单'),
+        ('ORDERED', '已下单'),
+    ]
+    
     project = models.ForeignKey(
         Project,
         on_delete=models.CASCADE,
@@ -382,12 +388,67 @@ class ProjectBOM(BaseModel):
     description = models.TextField(blank=True, verbose_name='说明')
     notes = models.TextField(blank=True, verbose_name='备注')
     
+    # 采购与库存跟踪字段
+    order_status = models.CharField(
+        max_length=20,
+        choices=ORDER_STATUS_CHOICES,
+        default='NOT_ORDERED',
+        verbose_name='下单状态'
+    )
+    supplier = models.ForeignKey(
+        'masterdata.Supplier',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='bom_items',
+        verbose_name='供应商'
+    )
+    delivery_date = models.DateField(null=True, blank=True, verbose_name='交期')
+    ordered_qty = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='已下单数量'
+    )
+    received_qty = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='已入库数量'
+    )
+    issued_qty = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='已出库数量'
+    )
+    
+    # 多级BOM结构支持
+    parent = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='children',
+        verbose_name='父级物料'
+    )
+    level = models.IntegerField(default=0, verbose_name='BOM层级')
+    item_code = models.CharField(max_length=50, blank=True, verbose_name='项目物料编码')
+    sort_order = models.IntegerField(default=0, verbose_name='排序')
+    
+    # 单位用量（子件对父件的用量）
+    unit_qty = models.DecimalField(
+        max_digits=15,
+        decimal_places=4,
+        default=1,
+        verbose_name='单位用量'
+    )
+    
     class Meta:
         db_table = 'project_bom'
         verbose_name = '项目BOM'
         verbose_name_plural = verbose_name
-        unique_together = ['project', 'item']
-        ordering = ['-created_at']
+        ordering = ['project', 'level', 'sort_order', '-created_at']
     
     def __str__(self):
         return f"{self.project.code} - {self.item.sku}"
@@ -925,4 +986,180 @@ class SparePartUsage(BaseModel):
     @property
     def total_cost(self):
         return self.qty * self.unit_cost
+
+
+class Drawing(BaseModel):
+    """
+    图纸管理 - 管理项目和物料相关的图纸文件
+    """
+    FILE_TYPE_CHOICES = [
+        ('PDF', 'PDF文件'),
+        ('DWG', 'AutoCAD图纸'),
+        ('DXF', 'DXF文件'),
+        ('STEP', 'STEP 3D文件'),
+        ('STP', 'STP 3D文件'),
+        ('IGES', 'IGES文件'),
+        ('STL', 'STL文件'),
+        ('SOLIDWORKS', 'SolidWorks文件'),
+        ('OTHER', '其他'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('DRAFT', '草稿'),
+        ('REVIEWING', '审核中'),
+        ('APPROVED', '已批准'),
+        ('RELEASED', '已发布'),
+        ('OBSOLETE', '已废弃'),
+    ]
+    
+    drawing_no = models.CharField(max_length=100, verbose_name='图纸号')
+    name = models.CharField(max_length=200, verbose_name='图纸名称')
+    version = models.CharField(max_length=20, default='A0', verbose_name='版本')
+    revision = models.IntegerField(default=1, verbose_name='修订号')
+    
+    # 关联
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='drawings',
+        verbose_name='所属项目'
+    )
+    item = models.ForeignKey(
+        'masterdata.Item',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='drawings',
+        verbose_name='关联物料'
+    )
+    bom_item = models.ForeignKey(
+        'projects.ProjectBOM',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='drawings',
+        verbose_name='关联BOM项'
+    )
+    
+    # 文件信息
+    file_type = models.CharField(
+        max_length=20,
+        choices=FILE_TYPE_CHOICES,
+        default='PDF',
+        verbose_name='文件类型'
+    )
+    file_path = models.CharField(max_length=500, verbose_name='文件路径')
+    file_size = models.BigIntegerField(default=0, verbose_name='文件大小(bytes)')
+    
+    # 公共盘存储路径
+    public_share_path = models.CharField(max_length=500, blank=True, verbose_name='公共盘路径')
+    
+    # 状态
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='DRAFT',
+        verbose_name='状态'
+    )
+    
+    # 审批信息
+    designer = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='designed_drawings',
+        verbose_name='设计者'
+    )
+    reviewer = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_drawings',
+        verbose_name='审核人'
+    )
+    approver = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='approved_drawings',
+        verbose_name='批准人'
+    )
+    
+    approved_at = models.DateTimeField(null=True, blank=True, verbose_name='批准时间')
+    released_at = models.DateTimeField(null=True, blank=True, verbose_name='发布时间')
+    
+    # 变更信息
+    change_description = models.TextField(blank=True, verbose_name='变更说明')
+    
+    notes = models.TextField(blank=True, verbose_name='备注')
+    
+    class Meta:
+        db_table = 'project_drawing'
+        verbose_name = '图纸'
+        verbose_name_plural = verbose_name
+        ordering = ['-created_at']
+        unique_together = [['drawing_no', 'version', 'revision']]
+    
+    def __str__(self):
+        return f"{self.drawing_no} v{self.version}.{self.revision}"
+
+
+class DrawingChangeNotice(BaseModel):
+    """
+    图纸变更通知 - 记录图纸变更并发送邮件提醒
+    """
+    CHANGE_TYPE_CHOICES = [
+        ('NEW', '新增'),
+        ('REVISION', '修订'),
+        ('OBSOLETE', '废弃'),
+    ]
+    
+    drawing = models.ForeignKey(
+        Drawing,
+        on_delete=models.CASCADE,
+        related_name='change_notices',
+        verbose_name='图纸'
+    )
+    change_type = models.CharField(
+        max_length=20,
+        choices=CHANGE_TYPE_CHOICES,
+        default='NEW',
+        verbose_name='变更类型'
+    )
+    old_version = models.CharField(max_length=20, blank=True, verbose_name='原版本')
+    new_version = models.CharField(max_length=20, blank=True, verbose_name='新版本')
+    change_description = models.TextField(verbose_name='变更说明')
+    
+    # 通知
+    notified_users = models.ManyToManyField(
+        'accounts.User',
+        related_name='drawing_notifications',
+        blank=True,
+        verbose_name='通知人员'
+    )
+    email_sent = models.BooleanField(default=False, verbose_name='邮件已发送')
+    email_sent_at = models.DateTimeField(null=True, blank=True, verbose_name='发送时间')
+    
+    class Meta:
+        db_table = 'project_drawing_change_notice'
+        verbose_name = '图纸变更通知'
+        verbose_name_plural = verbose_name
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.drawing.drawing_no} - {self.get_change_type_display()}"
+
+
+# 导入设备和工装模型，使其成为 projects app 的一部分
+from .equipment_models import (
+    Equipment, EquipmentShipment, EquipmentInstallation,
+    InstallationLog, EquipmentAcceptance, MaintenanceSchedule, TrainingRecord
+)
+from .fixture_models import (
+    FixtureCategory, Fixture, FixtureUsageRecord,
+    FixtureCalibration, FixtureMaintenance
+)
 

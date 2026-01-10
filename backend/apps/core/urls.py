@@ -6,7 +6,38 @@ from . import export_views
 from .security_views import LoginLogViewSet, SensitiveOperationLogViewSet, PasswordPolicyViewSet
 from .webhook_views import WebhookEndpointViewSet, WebhookDeliveryViewSet
 from .dashboard_views import DashboardWidgetViewSet, UserDashboardViewSet
+from .dashboard_api import (
+    ExecutiveDashboardView, ProjectManagerDashboardView,
+    SalesDashboardView, ProductionDashboardView, FinanceDashboardView
+)
 from . import health_views
+from .import_export_views import (
+    ItemImportView, ItemExportView, 
+    SupplierImportView, SupplierExportView,
+    CustomerExportView, BOMExportView
+)
+from .print_service import PrintView, BatchPrintView, PrintTemplateListView
+from .backup_service import (
+    BackupListView, BackupCreateView, BackupRestoreView, 
+    BackupDeleteView, BackupCleanupView
+)
+from .audit_analytics import (
+    AuditLogAnalyticsView, AuditLogSecurityView, UserActivityView
+)
+from .import_templates import (
+    ImportTemplateListView, ImportTemplateDownloadView
+)
+from .data_dict import DictTypeViewSet, DictItemViewSet
+from .email_templates import EmailTemplateViewSet, EmailLogViewSet
+from .file_preview import FilePreviewView, FileUploadView, FileListView
+from .custom_fields import CustomFieldDefinitionViewSet, CustomFieldValueViewSet
+from .announcement import AnnouncementViewSet
+from .schedule import (
+    ScheduleViewSet, MeetingViewSet, MeetingRoomViewSet
+)
+from .instant_message import (
+    ConversationViewSet, MessageViewSet, ConversationMemberViewSet
+)
 
 router = DefaultRouter()
 router.register(r'audit-logs', views.AuditLogViewSet, basename='audit-log')
@@ -33,6 +64,34 @@ from .code_rule_views import CodeRuleViewSet, CodeHistoryViewSet
 router.register(r'code-rules', CodeRuleViewSet, basename='code-rule')
 router.register(r'code-history', CodeHistoryViewSet, basename='code-history')
 
+# System Config
+router.register(r'system-config', views.SystemConfigViewSet, basename='system-config')
+
+# Data Dictionary
+router.register(r'dict-types', DictTypeViewSet, basename='dict-type')
+router.register(r'dict-items', DictItemViewSet, basename='dict-item')
+
+# Email Templates
+router.register(r'email-templates', EmailTemplateViewSet, basename='email-template')
+router.register(r'email-logs', EmailLogViewSet, basename='email-log')
+
+# Custom Fields
+router.register(r'custom-field-definitions', CustomFieldDefinitionViewSet, basename='custom-field-definition')
+router.register(r'custom-field-values', CustomFieldValueViewSet, basename='custom-field-value')
+
+# Announcements
+router.register(r'announcements', AnnouncementViewSet, basename='announcement')
+
+# OA - 日程会议
+router.register(r'schedules', ScheduleViewSet, basename='schedule')
+router.register(r'meetings', MeetingViewSet, basename='meeting')
+router.register(r'meeting-rooms', MeetingRoomViewSet, basename='meeting-room')
+
+# IM - 即时通讯
+router.register(r'conversations', ConversationViewSet, basename='conversation')
+router.register(r'messages', MessageViewSet, basename='message')
+router.register(r'conversation-members', ConversationMemberViewSet, basename='conversation-member')
+
 urlpatterns = [
     path('', include(router.urls)),
     path('workflow/', include('apps.core.workflow.urls')),
@@ -52,5 +111,45 @@ urlpatterns = [
     path('health/ready/', health_views.readiness_check, name='readiness-check'),
     path('health/status/', health_views.system_status, name='system-status'),
     path('health/security/', health_views.security_status, name='security-status'),
+    
+    # Dashboard API endpoints
+    path('dashboards/executive/', ExecutiveDashboardView.as_view(), name='dashboard-executive'),
+    path('dashboards/project-manager/', ProjectManagerDashboardView.as_view(), name='dashboard-pm'),
+    path('dashboards/sales/', SalesDashboardView.as_view(), name='dashboard-sales'),
+    path('dashboards/production/', ProductionDashboardView.as_view(), name='dashboard-production'),
+    path('dashboards/finance/', FinanceDashboardView.as_view(), name='dashboard-finance'),
+    
+    # Import/Export endpoints
+    path('import/items/', ItemImportView.as_view(), name='import-items'),
+    path('export/items/', ItemExportView.as_view(), name='export-items'),
+    path('import/suppliers/', SupplierImportView.as_view(), name='import-suppliers'),
+    path('export/suppliers/', SupplierExportView.as_view(), name='export-suppliers'),
+    path('export/customers/', CustomerExportView.as_view(), name='export-customers'),
+    path('export/bom/', BOMExportView.as_view(), name='export-bom'),
+    
+    # Print endpoints
+    path('print/templates/', PrintTemplateListView.as_view(), name='print-templates'),
+    path('print/<str:template_name>/<int:pk>/', PrintView.as_view(), name='print-preview'),
+    path('print/<str:template_name>/batch/', BatchPrintView.as_view(), name='batch-print'),
+    
+    # Backup endpoints
+    path('backups/', BackupListView.as_view(), name='backup-list'),
+    path('backups/create/', BackupCreateView.as_view(), name='backup-create'),
+    path('backups/restore/', BackupRestoreView.as_view(), name='backup-restore'),
+    path('backups/cleanup/', BackupCleanupView.as_view(), name='backup-cleanup'),
+    path('backups/<str:backup_name>/', BackupDeleteView.as_view(), name='backup-delete'),
+    
+    # Audit analytics endpoints
+    path('audit-analytics/', AuditLogAnalyticsView.as_view(), name='audit-analytics'),
+    path('audit-analytics/security/', AuditLogSecurityView.as_view(), name='audit-security'),
+    path('audit-analytics/user-activity/', UserActivityView.as_view(), name='user-activity'),
+    
+    # Import template endpoints
+    path('import-templates/', ImportTemplateListView.as_view(), name='import-template-list'),
+    path('import-templates/<str:template_type>/download/', ImportTemplateDownloadView.as_view(), name='import-template-download'),
+    
+    # File preview endpoints
+    path('files/preview/', FilePreviewView.as_view(), name='file-preview'),
+    path('files/upload/', FileUploadView.as_view(), name='file-upload'),
+    path('files/list/', FileListView.as_view(), name='file-list'),
 ]
-

@@ -10,11 +10,21 @@ from .views import (
     RoleViewSet,
     UserViewSet
 )
+from .attendance import (
+    AttendanceConfigViewSet, AttendanceRecordViewSet,
+    LeaveRequestViewSet, OvertimeRequestViewSet
+)
 
 router = DefaultRouter()
 router.register(r'departments', DepartmentViewSet, basename='department')
 router.register(r'roles', RoleViewSet, basename='role')
 router.register(r'users', UserViewSet, basename='user')
+
+# 考勤管理
+router.register(r'attendance-configs', AttendanceConfigViewSet, basename='attendance-config')
+router.register(r'attendance-records', AttendanceRecordViewSet, basename='attendance-record')
+router.register(r'leave-requests', LeaveRequestViewSet, basename='leave-request')
+router.register(r'overtime-requests', OvertimeRequestViewSet, basename='overtime-request')
 
 urlpatterns = [
     # JWT Authentication

@@ -2,7 +2,7 @@
 Serializers for core app.
 """
 from rest_framework import serializers
-from .models import AuditLog, SystemNotification, Attachment
+from .models import AuditLog, SystemNotification, Attachment, SystemConfig
 
 
 class AuditLogSerializer(serializers.ModelSerializer):
@@ -89,4 +89,21 @@ class AttachmentUploadSerializer(serializers.Serializer):
             uploaded_by=self.context['request'].user
         )
         return attachment
+
+
+class SystemConfigSerializer(serializers.ModelSerializer):
+    """系统配置序列化器"""
+    updated_by_name = serializers.CharField(source='updated_by.username', read_only=True)
+    
+    class Meta:
+        model = SystemConfig
+        fields = [
+            'id', 'company_name', 'company_short_name', 'company_tax_no',
+            'company_address', 'company_phone', 'company_email', 'company_website',
+            'company_logo', 'bank_name', 'bank_account',
+            'legal_representative', 'registered_capital',
+            'default_currency', 'fiscal_year_start',
+            'updated_at', 'updated_by', 'updated_by_name'
+        ]
+        read_only_fields = ['id', 'updated_at', 'updated_by']
 

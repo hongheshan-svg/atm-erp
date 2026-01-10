@@ -1,406 +1,449 @@
 """
-基于业务关联的多维度数据权限系统
+非标自动化行业ERP - 数据权限系统
 
-设计理念：
-1. 功能权限（能否访问菜单/API）与数据权限（能看到哪些数据）分离
-2. 数据权限基于业务关联，而非简单的创建人
-3. 多条件OR：满足任一条件即可访问
-4. 可配置、可扩展，无需硬编码
+核心设计理念：
+1. 项目数据全员可查看 - 促进团队协作和信息透明
+2. 财务敏感数据严格控制 - 保护商业机密
+3. 操作权限和查看权限分离 - 能看不代表能改
+4. 基于角色的权限控制 - 简化管理
 
 使用示例：
-    class SalesOrderViewSet(DataPermissionMixin, viewsets.ModelViewSet):
-        # 配置数据权限规则
-        permission_rules = [
-            {'field': 'created_by', 'type': 'user'},           # 我创建的
-            {'field': 'salesperson', 'type': 'user'},          # 我是销售员
-            {'field': 'project__members', 'type': 'user'},     # 我是项目成员
-            {'field': 'customer__salesperson', 'type': 'user'}, # 我负责的客户
-        ]
+    class ProjectViewSet(DataPermissionMixin, viewsets.ModelViewSet):
+        queryset = Project.objects.all()
+        # 自动应用数据权限
 """
 from django.db.models import Q
-from django.conf import settings
+from rest_framework import permissions
+from .permission_config import (
+    MODULE_VIEW_POLICY,
+    get_module_view_policy,
+    is_finance_allowed,
+    has_operation_permission,
+    get_hidden_fields,
+)
 
 
-class DataPermissionConfig:
+def get_user_view_scope(user, module_name: str, model_name: str = None):
     """
-    数据权限配置
-    可以在数据库中配置，或者在代码中定义
-    """
-    
-    # 模块默认权限规则
-    # key: app_label, value: 权限规则列表
-    MODULE_RULES = {
-        'sales': [
-            {'field': 'created_by', 'type': 'user', 'desc': '创建人'},
-            {'field': 'salesperson', 'type': 'user', 'desc': '销售员'},
-            {'field': 'project__manager', 'type': 'user', 'desc': '项目经理'},
-            {'field': 'project__members__user', 'type': 'user', 'desc': '项目成员'},
-        ],
-        'purchase': [
-            {'field': 'created_by', 'type': 'user', 'desc': '创建人'},
-            {'field': 'project__manager', 'type': 'user', 'desc': '项目经理'},
-            {'field': 'project__members__user', 'type': 'user', 'desc': '项目成员'},
-        ],
-        'projects': [
-            {'field': 'created_by', 'type': 'user', 'desc': '创建人'},
-            {'field': 'manager', 'type': 'user', 'desc': '项目经理'},
-            {'field': 'members__user', 'type': 'user', 'desc': '项目成员'},
-            {'field': 'sales_order__salesperson', 'type': 'user', 'desc': '关联销售员'},
-        ],
-        'inventory': [
-            # 库存通常需要更开放的权限
-            {'field': 'created_by', 'type': 'user', 'desc': '创建人'},
-            # 可通过角色配置 department 或 all 权限
-        ],
-        'finance': [
-            {'field': 'created_by', 'type': 'user', 'desc': '创建人'},
-            {'field': 'user', 'type': 'user', 'desc': '报销人'},
-            {'field': 'project__manager', 'type': 'user', 'desc': '项目经理'},
-        ],
-    }
-    
-    # 角色特殊权限配置
-    # 某些角色对某些模块有特殊权限
-    ROLE_OVERRIDES = {
-        # 角色code: {模块: 权限类型}
-        'admin': {'*': 'all'},  # 管理员所有模块全权限
-        'finance_manager': {
-            'finance': 'all',
-            'sales': 'view_all',    # 只能查看，不能改
-            'purchase': 'view_all',
-        },
-        'warehouse_manager': {
-            'inventory': 'all',
-            'purchase': 'view_all',  # 查看采购单用于收货
-        },
-        'sales_manager': {
-            'sales': 'department',   # 查看部门销售数据
-            'projects': 'related',   # 只看关联项目
-        },
-        'purchase_manager': {
-            'purchase': 'department',
-            'inventory': 'view_all',
-        },
-    }
-
-
-def build_permission_query(user, rules, include_department=False, include_all=False):
-    """
-    根据规则构建权限查询条件
-    
-    Args:
-        user: 当前用户
-        rules: 权限规则列表
-        include_department: 是否包含部门数据
-        include_all: 是否包含所有数据
+    获取用户对指定模块的查看权限范围
     
     Returns:
-        Q对象，用于filter
+        str: 'all' | 'related' | 'department' | 'self' | 'none'
     """
-    if include_all:
-        return Q()  # 空Q表示不过滤
+    # 未认证用户
+    if not user or not user.is_authenticated:
+        return 'none'
     
-    # 构建多条件OR查询
-    q_objects = Q()
-    
-    for rule in rules:
-        field = rule.get('field')
-        rule_type = rule.get('type', 'user')
-        
-        if not field:
-            continue
-        
-        try:
-            if rule_type == 'user':
-                # 字段关联到用户
-                q_objects |= Q(**{field: user})
-            elif rule_type == 'department':
-                # 字段关联到部门
-                if user.department:
-                    q_objects |= Q(**{field: user.department})
-            elif rule_type == 'value':
-                # 固定值匹配
-                value = rule.get('value')
-                if value:
-                    q_objects |= Q(**{field: value})
-        except Exception:
-            # 字段可能不存在，忽略该规则
-            continue
-    
-    # 如果包含部门权限
-    if include_department and user.department:
-        # 尝试添加部门条件（假设有created_by字段）
-        try:
-            q_objects |= Q(created_by__department=user.department)
-        except Exception:
-            pass
-    
-    return q_objects
-
-
-def get_module_rules_from_db(module_name):
-    """从数据库获取模块权限规则"""
-    try:
-        from .permission_models import ModulePermissionRule
-        rules = ModulePermissionRule.objects.filter(
-            module=module_name,
-            is_active=True
-        ).order_by('sort_order')
-        
-        if rules.exists():
-            return [rule.to_rule_dict() for rule in rules]
-    except Exception:
-        pass  # 数据库表可能不存在
-    
-    return None
-
-
-def get_role_module_permission_from_db(role, module_name):
-    """从数据库获取角色模块权限"""
-    try:
-        from .permission_models import RoleModulePermission
-        perm = RoleModulePermission.objects.filter(
-            role=role,
-            module=module_name,
-            is_active=True
-        ).first()
-        
-        if perm:
-            return perm.permission_type
-    except Exception:
-        pass  # 数据库表可能不存在
-    
-    return None
-
-
-def get_user_data_scope(user, module_name):
-    """
-    获取用户对指定模块的数据权限范围
-    
-    Returns:
-        tuple: (scope_type, rules)
-        scope_type: 'all' | 'department' | 'rules' | 'none'
-        rules: 当scope_type为'rules'时的规则列表
-    """
     # 超级管理员
     if user.is_superuser:
-        return ('all', [])
+        return 'all'
     
-    # 检查用户角色
-    if not hasattr(user, 'role') or not user.role:
-        return ('none', [])
+    # 获取模块查看策略
+    policy = get_module_view_policy(module_name, model_name)
     
-    role = user.role
-    role_code = role.code if hasattr(role, 'code') else ''
+    # 财务模块特殊处理
+    if policy == 'restricted':
+        if is_finance_allowed(user):
+            return 'all'
+        # 报销单特殊处理 - 自己的可以看
+        if model_name and model_name.lower() == 'expensereimbursement':
+            return 'self'
+        return 'none'
     
-    # 1. 优先从数据库获取角色模块权限配置
-    db_permission = get_role_module_permission_from_db(role, module_name)
-    if db_permission:
-        if db_permission in ('all', 'view_all'):
-            return ('all', [])
-        elif db_permission == 'department':
-            rules = get_module_rules_from_db(module_name) or \
-                    DataPermissionConfig.MODULE_RULES.get(module_name, [])
-            return ('department', rules)
-        elif db_permission == 'self':
-            rules = get_module_rules_from_db(module_name) or \
-                    DataPermissionConfig.MODULE_RULES.get(module_name, [])
-            return ('rules', rules)
+    # 管理员专用模块
+    if policy == 'admin_only':
+        role_code = getattr(user.role, 'code', '') if hasattr(user, 'role') and user.role else ''
+        if role_code == 'admin' or user.is_superuser:
+            return 'all'
+        return 'none'
     
-    # 2. 检查代码中的角色特殊配置（向后兼容）
-    if role_code in DataPermissionConfig.ROLE_OVERRIDES:
-        overrides = DataPermissionConfig.ROLE_OVERRIDES[role_code]
+    # 全员可见
+    if policy == 'view_all':
+        return 'all'
+    
+    # 相关人员可见
+    if policy == 'view_related':
+        # 根据角色的data_scope决定
+        if hasattr(user, 'role') and user.role:
+            data_scope = getattr(user.role, 'data_scope', 'SELF')
+            if data_scope == 'ALL':
+                return 'all'
+            elif data_scope == 'DEPARTMENT':
+                return 'department'
+        return 'related'
+    
+    # 部门可见
+    if policy == 'view_department':
+        return 'department'
+    
+    # 仅自己可见
+    if policy == 'view_self':
+        return 'self'
+    
+    return 'related'
+
+
+def build_view_filter(user, module_name: str, model_name: str = None, model_class=None):
+    """
+    构建数据查看过滤条件
+    
+    Returns:
+        Q对象用于filter，None表示不过滤，empty Q()表示返回空
+    """
+    scope = get_user_view_scope(user, module_name, model_name)
+    
+    if scope == 'all':
+        return None  # 不过滤
+    
+    if scope == 'none':
+        return Q(pk__isnull=True) & Q(pk__isnull=False)  # 返回空
+    
+    q = Q()
+    
+    if scope == 'self':
+        # 仅自己创建的
+        q = Q(created_by=user)
+        # 如果有user字段（如报销单的报销人）
+        if model_class and hasattr(model_class, 'user'):
+            q |= Q(user=user)
+        return q
+    
+    if scope == 'department':
+        # 部门数据
+        if user.department:
+            q = Q(created_by__department=user.department)
+        else:
+            q = Q(created_by=user)
+        return q
+    
+    if scope == 'related':
+        # 相关人员数据 - 根据模块定义关联规则
+        rules = get_related_rules(module_name, model_name)
+        for rule in rules:
+            try:
+                field = rule['field']
+                rule_type = rule.get('type', 'user')
+                
+                if rule_type == 'user':
+                    q |= Q(**{field: user})
+                elif rule_type == 'department' and user.department:
+                    q |= Q(**{field: user.department})
+            except Exception:
+                continue
         
-        # 检查通配符
-        if '*' in overrides:
-            return (overrides['*'], [])
-        
-        # 检查具体模块
-        if module_name in overrides:
-            scope = overrides[module_name]
-            if scope in ('all', 'view_all'):
-                return ('all', [])
-            elif scope == 'department':
-                return ('department', [])
+        # 确保至少包含自己创建的
+        q |= Q(created_by=user)
+        return q
     
-    # 3. 使用角色默认的data_scope
-    data_scope = getattr(role, 'data_scope', 'SELF')
+    return None
+
+
+def get_related_rules(module_name: str, model_name: str = None):
+    """获取模块的关联规则"""
+    # 通用关联规则
+    rules = [
+        {'field': 'created_by', 'type': 'user'},
+    ]
     
-    # 获取模块规则（优先数据库，其次代码配置）
-    rules = get_module_rules_from_db(module_name) or \
-            DataPermissionConfig.MODULE_RULES.get(module_name, [])
+    # 模块特定规则
+    module_rules = {
+        'sales': [
+            {'field': 'salesperson', 'type': 'user'},
+            {'field': 'project__manager', 'type': 'user'},
+            {'field': 'project__members__user', 'type': 'user'},
+        ],
+        'purchase': [
+            {'field': 'project__manager', 'type': 'user'},
+            {'field': 'project__members__user', 'type': 'user'},
+            {'field': 'buyer', 'type': 'user'},
+        ],
+        'aftersales': [
+            {'field': 'project__manager', 'type': 'user'},
+            {'field': 'project__members__user', 'type': 'user'},
+            {'field': 'assignee', 'type': 'user'},
+        ],
+    }
     
-    if data_scope == 'ALL':
-        return ('all', [])
-    elif data_scope == 'DEPARTMENT':
-        return ('department', rules)
-    else:  # SELF
-        return ('rules', rules)
+    rules.extend(module_rules.get(module_name, []))
+    return rules
 
 
 class DataPermissionMixin:
     """
-    数据权限Mixin - 替代原有的DataScopeMixin
+    数据权限Mixin - 应用于ViewSet
     
-    支持：
-    1. 基于业务关联的多维度权限
-    2. 角色特殊配置
-    3. 可在ViewSet中自定义规则
+    自动根据用户角色和模块配置过滤数据
     """
-    
-    # 可在ViewSet中覆盖
-    permission_rules = None  # 自定义规则，None则使用模块默认规则
-    module_name = None       # 模块名，None则自动检测
-    
-    def get_data_permission_module(self):
-        """获取当前模块名"""
-        if self.module_name:
-            return self.module_name
-        
-        # 从model获取app_label
-        if hasattr(self, 'queryset') and self.queryset is not None:
-            return self.queryset.model._meta.app_label
-        
-        return None
-    
-    def get_permission_rules(self):
-        """获取权限规则"""
-        if self.permission_rules:
-            return self.permission_rules
-        
-        module = self.get_data_permission_module()
-        return DataPermissionConfig.MODULE_RULES.get(module, [
-            {'field': 'created_by', 'type': 'user', 'desc': '创建人'}
-        ])
     
     def get_queryset(self):
         queryset = super().get_queryset()
         user = self.request.user
         
-        if not user.is_authenticated:
+        if not user or not user.is_authenticated:
             return queryset.none()
         
-        module = self.get_data_permission_module()
-        scope_type, rules = get_user_data_scope(user, module)
+        # 获取模块和模型名
+        model = queryset.model
+        module_name = model._meta.app_label
+        model_name = model._meta.model_name
         
-        if scope_type == 'all':
+        # 构建过滤条件
+        filter_q = build_view_filter(user, module_name, model_name, model)
+        
+        if filter_q is None:
             return queryset
-        elif scope_type == 'none':
+        
+        # 空Q检查
+        if str(filter_q) == "(AND: ('pk__isnull', True), ('pk__isnull', False))":
             return queryset.none()
-        elif scope_type == 'department':
-            # 部门权限 + 业务关联规则
-            rules = rules or self.get_permission_rules()
-            q = build_permission_query(user, rules, include_department=True)
-            if q:
-                return queryset.filter(q).distinct()
-            return queryset
-        else:  # rules
-            rules = rules or self.get_permission_rules()
-            q = build_permission_query(user, rules)
-            if q:
-                return queryset.filter(q).distinct()
-            # 如果没有规则匹配，至少返回自己创建的
-            if hasattr(queryset.model, 'created_by'):
+        
+        return queryset.filter(filter_q).distinct()
+
+
+class FinanceDataMixin:
+    """
+    财务数据权限Mixin - 更严格的控制
+    """
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = self.request.user
+        
+        if not user or not user.is_authenticated:
+            return queryset.none()
+        
+        # 检查财务权限
+        if not is_finance_allowed(user):
+            # 只能看自己的数据（如报销单）
+            model = queryset.model
+            if hasattr(model, 'user'):
+                return queryset.filter(Q(user=user) | Q(created_by=user))
+            elif hasattr(model, 'created_by'):
                 return queryset.filter(created_by=user)
             return queryset.none()
-
-
-# ============ 便捷函数 ============
-
-def filter_by_permission(queryset, user, rules=None):
-    """
-    便捷函数：对任意queryset应用数据权限过滤
-    
-    使用示例：
-        orders = SalesOrder.objects.all()
-        orders = filter_by_permission(orders, request.user)
-    """
-    if user.is_superuser:
+        
         return queryset
-    
-    module = queryset.model._meta.app_label
-    scope_type, default_rules = get_user_data_scope(user, module)
-    
-    if scope_type == 'all':
-        return queryset
-    elif scope_type == 'none':
-        return queryset.none()
-    
-    use_rules = rules or default_rules or [
-        {'field': 'created_by', 'type': 'user'}
-    ]
-    
-    include_dept = (scope_type == 'department')
-    q = build_permission_query(user, use_rules, include_department=include_dept)
-    
-    if q:
-        return queryset.filter(q).distinct()
-    return queryset
 
 
-def can_access_object(obj, user, rules=None):
+class OperationPermissionMixin:
     """
-    检查用户是否有权访问某个对象
-    
-    使用示例：
-        if can_access_object(order, request.user):
-            ...
+    操作权限Mixin - 控制创建/编辑/删除等操作
     """
-    if user.is_superuser:
-        return True
     
-    module = obj._meta.app_label
-    scope_type, default_rules = get_user_data_scope(user, module)
-    
-    if scope_type == 'all':
-        return True
-    elif scope_type == 'none':
+    def check_operation_permission(self, operation: str, obj=None):
+        """检查操作权限"""
+        user = self.request.user
+        
+        if not user or not user.is_authenticated:
+            return False
+        
+        if user.is_superuser:
+            return True
+        
+        model = self.get_queryset().model
+        module_name = model._meta.app_label
+        model_name = model._meta.model_name
+        
+        # 检查基本操作权限
+        if has_operation_permission(user, module_name, model_name, operation):
+            return True
+        
+        # 检查 owner 权限
+        if obj and 'owner' in self._get_allowed_roles(module_name, model_name, operation):
+            if hasattr(obj, 'created_by') and obj.created_by == user:
+                return True
+            if hasattr(obj, 'manager') and obj.manager == user:
+                return True
+        
+        # 检查 assignee 权限
+        if obj and 'assignee' in self._get_allowed_roles(module_name, model_name, operation):
+            if hasattr(obj, 'assignee') and obj.assignee == user:
+                return True
+        
         return False
     
-    use_rules = rules or default_rules or [
-        {'field': 'created_by', 'type': 'user'}
-    ]
+    def _get_allowed_roles(self, module_name, model_name, operation):
+        """获取允许的角色列表"""
+        from .permission_config import OPERATION_PERMISSIONS
+        module_perms = OPERATION_PERMISSIONS.get(module_name, {})
+        model_perms = module_perms.get(model_name.lower(), {})
+        return model_perms.get(operation, [])
     
-    # 检查每个规则
-    for rule in use_rules:
-        field = rule.get('field')
-        rule_type = rule.get('type', 'user')
+    def perform_create(self, serializer):
+        if not self.check_operation_permission('create'):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('没有创建权限')
+        super().perform_create(serializer)
+    
+    def perform_update(self, serializer):
+        if not self.check_operation_permission('edit', serializer.instance):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('没有编辑权限')
+        super().perform_update(serializer)
+    
+    def perform_destroy(self, instance):
+        if not self.check_operation_permission('delete', instance):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('没有删除权限')
+        super().perform_destroy(instance)
+
+
+class SensitiveFieldMixin:
+    """
+    敏感字段过滤Mixin - 从序列化器输出中移除敏感字段
+    """
+    
+    def get_serializer(self, *args, **kwargs):
+        serializer = super().get_serializer(*args, **kwargs)
         
-        if not field:
-            continue
+        user = self.request.user
+        if not user or not user.is_authenticated:
+            return serializer
         
-        # 处理关联字段 (如 project__manager)
-        try:
-            value = obj
-            for part in field.split('__'):
-                value = getattr(value, part, None)
+        model = self.get_queryset().model
+        module_name = model._meta.app_label
+        model_name = model._meta.model_name
+        
+        # 获取需要隐藏的字段
+        hidden_fields = get_hidden_fields(user, module_name, model_name)
+        
+        # 从序列化器中移除敏感字段
+        for field_name in hidden_fields:
+            if field_name in serializer.fields:
+                serializer.fields.pop(field_name)
+        
+        return serializer
+
+
+# ============================================================
+# 权限检查装饰器
+# ============================================================
+
+def require_finance_permission(view_func):
+    """要求财务权限的装饰器"""
+    def wrapper(self, request, *args, **kwargs):
+        if not is_finance_allowed(request.user):
+            from rest_framework.response import Response
+            from rest_framework import status
+            return Response(
+                {'detail': '无权访问财务数据'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return view_func(self, request, *args, **kwargs)
+    return wrapper
+
+
+def require_operation_permission(operation: str):
+    """要求操作权限的装饰器"""
+    def decorator(view_func):
+        def wrapper(self, request, *args, **kwargs):
+            if hasattr(self, 'check_operation_permission'):
+                obj = self.get_object() if 'pk' in kwargs else None
+                if not self.check_operation_permission(operation, obj):
+                    from rest_framework.response import Response
+                    from rest_framework import status
+                    return Response(
+                        {'detail': f'没有{operation}权限'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            return view_func(self, request, *args, **kwargs)
+        return wrapper
+    return decorator
+
+
+# ============================================================
+# 便捷函数
+# ============================================================
+
+def filter_queryset_by_permission(queryset, user):
+    """
+    对查询集应用数据权限过滤
+    
+    使用示例：
+        projects = Project.objects.all()
+        projects = filter_queryset_by_permission(projects, request.user)
+    """
+    if not user or not user.is_authenticated:
+        return queryset.none()
+    
+    if user.is_superuser:
+        return queryset
+    
+    model = queryset.model
+    module_name = model._meta.app_label
+    model_name = model._meta.model_name
+    
+    filter_q = build_view_filter(user, module_name, model_name, model)
+    
+    if filter_q is None:
+        return queryset
+    
+    if str(filter_q) == "(AND: ('pk__isnull', True), ('pk__isnull', False))":
+        return queryset.none()
+    
+    return queryset.filter(filter_q).distinct()
+
+
+def can_user_view(obj, user) -> bool:
+    """
+    检查用户是否可以查看某个对象
+    """
+    if not user or not user.is_authenticated:
+        return False
+    
+    if user.is_superuser:
+        return True
+    
+    module_name = obj._meta.app_label
+    model_name = obj._meta.model_name
+    
+    scope = get_user_view_scope(user, module_name, model_name)
+    
+    if scope == 'all':
+        return True
+    
+    if scope == 'none':
+        return False
+    
+    if scope == 'self':
+        if hasattr(obj, 'created_by') and obj.created_by == user:
+            return True
+        if hasattr(obj, 'user') and obj.user == user:
+            return True
+        return False
+    
+    if scope == 'department':
+        if user.department and hasattr(obj, 'created_by') and obj.created_by:
+            return obj.created_by.department == user.department
+        return False
+    
+    if scope == 'related':
+        # 检查关联规则
+        rules = get_related_rules(module_name, model_name)
+        for rule in rules:
+            try:
+                field = rule['field']
+                value = obj
+                for part in field.split('__'):
+                    value = getattr(value, part, None)
+                    if value is None:
+                        break
+                    if hasattr(value, 'all'):
+                        value = list(value.all())
+                
                 if value is None:
-                    break
-                # 处理多对多关系
-                if hasattr(value, 'all'):
-                    value = list(value.all())
-            
-            if value is None:
-                continue
-            
-            # 比较
-            if rule_type == 'user':
+                    continue
+                
                 if isinstance(value, list):
                     if user in value:
                         return True
                 elif value == user:
                     return True
-            elif rule_type == 'department':
-                if user.department and value == user.department:
-                    return True
-        except Exception:
-            continue
-    
-    # 检查部门权限
-    if scope_type == 'department' and user.department:
-        if hasattr(obj, 'created_by') and obj.created_by:
-            if obj.created_by.department == user.department:
-                return True
+            except Exception:
+                continue
+        
+        # 创建人总是可以看
+        if hasattr(obj, 'created_by') and obj.created_by == user:
+            return True
     
     return False
-

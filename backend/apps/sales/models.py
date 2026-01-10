@@ -89,7 +89,7 @@ class SalesQuotation(BaseModel):
     
     def save(self, *args, **kwargs):
         if not self.quote_no:
-            self.quote_no = generate_code('QT')
+            self.quote_no = generate_code('QT', rule_type='SALES_QUOTE')
         super().save(*args, **kwargs)
 
 
@@ -277,7 +277,7 @@ class SalesOrder(BaseModel):
     
     def save(self, *args, **kwargs):
         if not self.order_no:
-            self.order_no = generate_code('SO')
+            self.order_no = generate_code('SO', rule_type='SALES_ORDER')
         super().save(*args, **kwargs)
 
 
@@ -465,7 +465,7 @@ class DeliveryOrder(BaseModel):
     
     def save(self, *args, **kwargs):
         if not self.delivery_no:
-            self.delivery_no = generate_code('DO')
+            self.delivery_no = generate_code('DO', rule_type='DELIVERY_ORDER')
         super().save(*args, **kwargs)
     
     @property
@@ -480,6 +480,7 @@ class DeliveryOrder(BaseModel):
 class DeliveryOrderLine(BaseModel):
     """
     Delivery Order Line - 发货明细
+    NOTE: item 为可选，因为 SalesOrderLine 支持非标产品（item 可为空）
     """
     delivery = models.ForeignKey(
         DeliveryOrder,
@@ -497,7 +498,9 @@ class DeliveryOrderLine(BaseModel):
         'masterdata.Item',
         on_delete=models.PROTECT,
         related_name='delivery_lines',
-        verbose_name='物料'
+        verbose_name='物料',
+        null=True,
+        blank=True
     )
     qty = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='发货数量')
     notes = models.TextField(blank=True, verbose_name='备注')
@@ -509,5 +512,87 @@ class DeliveryOrderLine(BaseModel):
         ordering = ['id']
     
     def __str__(self):
-        return f"{self.delivery.delivery_no} - {self.item.sku}"
+        item_desc = self.item.sku if self.item else self.so_line.display_name
+        return f"{self.delivery.delivery_no} - {item_desc}"
+
+
+class SalesContract(BaseModel):
+    """
+    Sales Contract - 销售合同
+    """
+    STATUS_CHOICES = [
+        ('DRAFT', '草稿'),
+        ('PENDING', '待审批'),
+        ('APPROVED', '已审批'),
+        ('SIGNED', '已签署'),
+        ('COMPLETED', '已完成'),
+        ('CANCELLED', '已取消'),
+    ]
+    
+    contract_no = models.CharField(max_length=50, unique=True, verbose_name='合同编号')
+    so = models.ForeignKey(
+        SalesOrder,
+        on_delete=models.CASCADE,
+        related_name='contracts',
+        verbose_name='销售订单'
+    )
+    customer = models.ForeignKey(
+        'masterdata.Customer',
+        on_delete=models.PROTECT,
+        related_name='sales_contracts',
+        verbose_name='客户'
+    )
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sales_contracts',
+        verbose_name='关联项目'
+    )
+    
+    # 合同信息
+    title = models.CharField(max_length=200, verbose_name='合同标题')
+    contract_date = models.DateField(verbose_name='合同日期')
+    effective_date = models.DateField(null=True, blank=True, verbose_name='生效日期')
+    expiry_date = models.DateField(null=True, blank=True, verbose_name='到期日期')
+    
+    # 金额
+    total_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='合同金额')
+    tax_rate = models.IntegerField(default=13, verbose_name='税率(%)')
+    tax_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='税额')
+    total_with_tax = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='含税总额')
+    
+    # 条款
+    payment_terms = models.TextField(blank=True, verbose_name='付款条款')
+    delivery_terms = models.TextField(blank=True, verbose_name='交货条款')
+    quality_terms = models.TextField(blank=True, verbose_name='质量条款')
+    warranty_terms = models.TextField(blank=True, verbose_name='质保条款')
+    
+    # 签署信息
+    buyer_signer = models.CharField(max_length=100, blank=True, verbose_name='甲方签署人')
+    seller_signer = models.CharField(max_length=100, blank=True, verbose_name='乙方签署人')
+    signed_date = models.DateField(null=True, blank=True, verbose_name='签署日期')
+    
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='DRAFT',
+        verbose_name='状态'
+    )
+    notes = models.TextField(blank=True, verbose_name='备注')
+    
+    class Meta:
+        db_table = 'sales_contract'
+        verbose_name = '销售合同'
+        verbose_name_plural = verbose_name
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.contract_no}"
+    
+    def save(self, *args, **kwargs):
+        if not self.contract_no:
+            self.contract_no = generate_code('SC', rule_type='SALES_CONTRACT')
+        super().save(*args, **kwargs)
 

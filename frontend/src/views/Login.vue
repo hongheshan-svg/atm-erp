@@ -2,7 +2,7 @@
   <div class="login-container">
     <div class="login-box">
       <div class="login-header">
-        <h1>ERP管理系统</h1>
+        <h1>{{ companyName || 'ERP管理系统' }}</h1>
         <p>企业资源计划 · 项目管理 · 进销存 · 成本管控</p>
       </div>
       
@@ -61,10 +61,12 @@ import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { APP_VERSION } from '@/config/version'
+import { useCompanyConfig } from '@/stores/companyConfig'
 
 const router = useRouter()
 const userStore = useUserStore()
 const appVersion = APP_VERSION
+const { companyName, loadCompanyConfig } = useCompanyConfig()
 
 const loginFormRef = ref(null)
 const loading = ref(false)
@@ -75,11 +77,13 @@ const loginForm = reactive({
 })
 
 // 页面加载时读取上次的用户名
-onMounted(() => {
+onMounted(async () => {
   const lastUsername = localStorage.getItem('last_username')
   if (lastUsername) {
     loginForm.username = lastUsername
   }
+  // 加载公司配置用于显示公司名称
+  await loadCompanyConfig()
 })
 
 const loginRules = {

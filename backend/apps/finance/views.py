@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.db import transaction
 from django.db.models import Q, Sum, F, Count
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
-from apps.core.data_permission import DataPermissionMixin
+from apps.core.data_permission import DataPermissionMixin, FinanceDataMixin, require_finance_permission
 from apps.projects.models import Project
 from .models import (
     Currency, ExchangeRateHistory, Expense, Invoice,
@@ -79,9 +79,10 @@ class CurrencyViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class PaymentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class PaymentViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, viewsets.ModelViewSet):
     """
     ViewSet for Payment management.
+    财务敏感数据 - 仅财务人员和管理层可访问
     """
     queryset = Payment.objects.all()
     serializer_class = PaymentSerializer
@@ -191,9 +192,10 @@ class ExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, vi
         return Response(ExpenseSerializer(expense).data)
 
 
-class AccountReceivableViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class AccountReceivableViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, viewsets.ModelViewSet):
     """
     ViewSet for AccountReceivable management.
+    财务敏感数据 - 仅财务人员和管理层可访问
     """
     queryset = AccountReceivable.objects.all()
     serializer_class = AccountReceivableSerializer
@@ -275,9 +277,10 @@ class AccountReceivableViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissio
         return Response(aging_data)
 
 
-class AccountPayableViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class AccountPayableViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, viewsets.ModelViewSet):
     """
     ViewSet for AccountPayable management.
+    财务敏感数据 - 仅财务人员和管理层可访问
     """
     queryset = AccountPayable.objects.all()
     serializer_class = AccountPayableSerializer
@@ -328,9 +331,10 @@ class AccountPayableViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMi
         return Response(serializer.data)
 
 
-class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, viewsets.ModelViewSet):
     """
     ViewSet for Invoice management.
+    财务敏感数据 - 仅财务人员和管理层可访问
     """
     from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
     
@@ -340,8 +344,16 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     filterset_fields = ['invoice_type', 'status', 'reference_type', 'is_deleted']
     search_fields = ['invoice_no', 'digital_invoice_no', 'party_name']
     
+    ordering_fields = ['invoice_date', 'total_amount', 'created_at']
+    
     def get_queryset(self):
         queryset = super().get_queryset()
+        
+        # 支持发票类型过滤
+        invoice_type = self.request.query_params.get('invoice_type')
+        if invoice_type:
+            queryset = queryset.filter(invoice_type=invoice_type)
+        
         # 支持发票号模糊查询
         invoice_no = self.request.query_params.get('invoice_no')
         if invoice_no:
@@ -349,8 +361,13 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                 Q(invoice_no__icontains=invoice_no) | 
                 Q(digital_invoice_no__icontains=invoice_no)
             )
+        
+        # 支持状态过滤
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+        
         return queryset
-    ordering_fields = ['invoice_date', 'total_amount', 'created_at']
     
     @action(detail=True, methods=['post'])
     def certify(self, request, pk=None):
@@ -698,19 +715,35 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
             headers = [str(cell.value).strip() if cell.value else '' for cell in sheet[1]]
             
             # Map headers to fields based on the Excel format
+            # Support multiple column name variations
             col_map = {
                 '发票类型': 'invoice_type_str',
                 '发票代码': 'invoice_code',
                 '发票号码': 'invoice_no',
                 '数电发票号码': 'digital_invoice_no',
+                # 销方/销售方 variations
                 '销方识别号': 'seller_tax_no',
+                '销售方识别号': 'seller_tax_no',
+                '销方纳税人识别号': 'seller_tax_no',
+                '销售方纳税人识别号': 'seller_tax_no',
                 '销方名称': 'seller_name',
+                '销售方名称': 'seller_name',
+                '销售方': 'seller_name',
+                # 购方/购买方 variations
                 '购方识别号': 'buyer_tax_no',
+                '购买方识别号': 'buyer_tax_no',
+                '购方纳税人识别号': 'buyer_tax_no',
+                '购买方纳税人识别号': 'buyer_tax_no',
+                '购方名称': 'buyer_name',
                 '购买方名称': 'buyer_name',
+                '购买方': 'buyer_name',
+                # Other fields
                 '开票日期': 'invoice_date',
                 '金额': 'amount_before_tax',
+                '不含税金额': 'amount_before_tax',
                 '税额': 'tax_amount',
                 '价税合计': 'total_amount',
+                '合计金额': 'total_amount',
                 '发票来源': 'invoice_source',
                 '发票票种': 'invoice_category_str',
                 '发票状态': 'status_str',
@@ -725,6 +758,9 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
             
             # Store created/updated invoices for line item import
             invoice_map = {}  # invoice_no -> Invoice object
+            # Track processed invoices in this import to avoid duplicates within the same file
+            processed_invoice_nos = set()
+            skip_count = 0
             
             with transaction.atomic():
                 for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
@@ -741,11 +777,20 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                         if not data:
                             continue
                         
-                        # Determine invoice number
-                        invoice_no = data.get('digital_invoice_no') or data.get('invoice_no')
+                        # Determine invoice number - prefer digital_invoice_no as unique identifier
+                        digital_invoice_no = str(data.get('digital_invoice_no', '')).strip()
+                        invoice_no_raw = str(data.get('invoice_no', '')).strip()
+                        
+                        # Use digital_invoice_no as primary key if available
+                        invoice_no = digital_invoice_no or invoice_no_raw
                         if not invoice_no:
                             continue
-                        invoice_no = str(invoice_no).strip()
+                        
+                        # Check for duplicates within the same import file
+                        if invoice_no in processed_invoice_nos:
+                            skip_count += 1
+                            continue
+                        processed_invoice_nos.add(invoice_no)
                         
                         # Parse invoice date
                         invoice_date = parse_datetime(data.get('invoice_date'))
@@ -770,16 +815,45 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                         category_str = str(data.get('invoice_category_str', '')).strip()
                         invoice_category = category_map.get(category_str, '')
                         
-                        # Determine invoice type (INPUT/OUTPUT) based on seller
                         seller_name = str(data.get('seller_name', '')).strip()
-                        invoice_type = 'OUTPUT'
-                        
-                        # Determine party_name (the other party)
                         buyer_name = str(data.get('buyer_name', '')).strip()
-                        party_name = buyer_name or seller_name
                         
-                        # Check if invoice exists (including soft-deleted)
-                        existing = Invoice.objects.filter(invoice_no=invoice_no).first()
+                        # 获取系统配置的公司名称
+                        from apps.core.models import SystemConfig
+                        company_config = SystemConfig.get_config()
+                        company_name = company_config.company_name
+                        
+                        # 根据公司名称判断进项/销项发票
+                        # 如果购买方是本公司 → 进项发票
+                        # 如果销方是本公司 → 销项发票
+                        invoice_type_str = str(data.get('invoice_type_str', '')).strip()
+                        
+                        if company_name and buyer_name == company_name:
+                            # 购买方是本公司，说明是进项发票
+                            invoice_type = 'INPUT'
+                            party_name = seller_name  # 对方是销方（供应商）
+                        elif company_name and seller_name == company_name:
+                            # 销方是本公司，说明是销项发票
+                            invoice_type = 'OUTPUT'
+                            party_name = buyer_name  # 对方是购方（客户）
+                        elif '进项' in invoice_type_str or '进' in invoice_type_str:
+                            # 根据发票类型字段判断
+                            invoice_type = 'INPUT'
+                            party_name = seller_name
+                        elif '销项' in invoice_type_str or '销' in invoice_type_str:
+                            invoice_type = 'OUTPUT'
+                            party_name = buyer_name or seller_name
+                        else:
+                            # 默认为销项发票
+                            invoice_type = 'OUTPUT'
+                            party_name = buyer_name or seller_name
+                        
+                        # Check if invoice exists (including soft-deleted) - check both invoice_no and digital_invoice_no
+                        existing = Invoice.objects.filter(
+                            Q(invoice_no=invoice_no) | 
+                            Q(digital_invoice_no=invoice_no) |
+                            (Q(digital_invoice_no=digital_invoice_no) & Q(digital_invoice_no__isnull=False) & ~Q(digital_invoice_no=''))
+                        ).first()
                         if existing:
                             # Restore if was deleted
                             if existing.is_deleted:
@@ -916,6 +990,7 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
             return Response({
                 'success_count': success_count,
                 'update_count': update_count,
+                'skip_count': skip_count,
                 'item_count': item_count,
                 'error_count': len(errors),
                 'errors': errors[:10]

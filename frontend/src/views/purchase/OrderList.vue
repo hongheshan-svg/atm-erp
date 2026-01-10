@@ -49,11 +49,13 @@
         </el-table-column>
         <el-table-column prop="order_date" label="订单日期" width="120" />
         <el-table-column prop="delivery_date" label="交货日期" width="120" />
-        <el-table-column label="操作" width="400" fixed="right">
+        <el-table-column label="操作" width="480" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button size="small" type="warning" @click="handleConfirm(row)" v-if="row.status === 'DRAFT'">确认</el-button>
+            <el-button size="small" type="info" @click="handleWithdraw(row)" v-if="row.status === 'CONFIRMED'">撤回</el-button>
+            <el-button size="small" type="primary" @click="handleContract(row)" v-if="row.status === 'CONFIRMED'">合同</el-button>
             <el-button size="small" type="warning" @click="handleViewAttachments(row)">附件</el-button>
             <el-button size="small" type="success" @click="receiveGoods(row)" v-if="row.status === 'CONFIRMED' || row.status === 'PARTIAL'">收货</el-button>
             <el-button size="small" type="danger" @click="handleCancel(row)" v-if="row.status === 'DRAFT' || row.status === 'CONFIRMED'">取消</el-button>
@@ -518,6 +520,185 @@ const handleCancel = async (row) => {
       ElMessage.error('取消订单失败')
     }
   }
+}
+
+const handleWithdraw = async (row) => {
+  try {
+    await ElMessageBox.confirm('确定要撤回该采购订单吗？撤回后将恢复为草稿状态，关联的应付账款和付款计划将被删除。', '撤回确认', { type: 'warning' })
+    await request.post(`/purchase/orders/${row.id}/withdraw/`)
+    ElMessage.success('订单已撤回')
+    loadOrders()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.error || '撤回失败')
+    }
+  }
+}
+
+const handleContract = async (row) => {
+  try {
+    // 检查是否已有合同
+    const contractRes = await request.get('/purchase/contracts/', { params: { po: row.id } })
+    const contracts = contractRes.results || contractRes || []
+    
+    if (contracts.length > 0) {
+      // 已有合同，打开打印预览
+      const contract = contracts[0]
+      handlePrintContract(contract)
+    } else {
+      // 创建新合同
+      await ElMessageBox.confirm('该订单尚未生成合同，是否现在生成？', '生成合同', { type: 'info' })
+      const res = await request.post('/purchase/contracts/create_from_po/', { po_id: row.id })
+      ElMessage.success(`合同 ${res.contract_no} 创建成功`)
+      handlePrintContract(res)
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.error || '合同操作失败')
+    }
+  }
+}
+
+const handlePrintContract = async (contract) => {
+  try {
+    const res = await request.get(`/purchase/contracts/${contract.id}/print_preview/`)
+    // 打开打印预览窗口
+    const printWindow = window.open('', '_blank')
+    printWindow.document.write(generateContractHtml(res))
+    printWindow.document.close()
+    printWindow.focus()
+  } catch (error) {
+    ElMessage.error('获取合同详情失败')
+  }
+}
+
+const generateContractHtml = (data) => {
+  const { contract, company, supplier, lines } = data
+  const totalAmount = lines.reduce((sum, l) => sum + l.line_amount, 0)
+  const taxAmount = totalAmount * (contract.tax_rate / 100)
+  const totalWithTax = totalAmount + taxAmount
+  
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>采购合同 - ${contract.contract_no}</title>
+      <style>
+        body { font-family: 'SimSun', serif; padding: 40px; font-size: 14px; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .header h1 { font-size: 24px; margin-bottom: 10px; }
+        .header p { color: #666; }
+        .parties { margin-bottom: 20px; }
+        .parties table { width: 100%; border-collapse: collapse; }
+        .parties td { padding: 5px 10px; vertical-align: top; }
+        .items-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        .items-table th, .items-table td { border: 1px solid #333; padding: 8px; text-align: center; }
+        .items-table th { background: #f0f0f0; }
+        .terms { margin: 20px 0; }
+        .terms h3 { font-size: 14px; margin: 15px 0 5px; }
+        .signature { margin-top: 50px; }
+        .signature table { width: 100%; }
+        .signature td { width: 50%; padding: 20px; vertical-align: top; }
+        .amount-row { text-align: right; font-weight: bold; }
+        @media print {
+          body { padding: 20px; }
+          button { display: none; }
+        }
+      </style>
+    </head>
+    <body>
+      <button onclick="window.print()" style="position:fixed;top:10px;right:10px;padding:10px 20px;cursor:pointer;">打印合同</button>
+      
+      <div class="header">
+        <h1>采 购 合 同</h1>
+        <p>合同编号：${contract.contract_no}</p>
+      </div>
+      
+      <div class="parties">
+        <table>
+          <tr>
+            <td width="50%">
+              <strong>甲方（买方）：</strong>${company.name}<br>
+              地址：${company.address}<br>
+              电话：${company.phone}
+            </td>
+            <td width="50%">
+              <strong>乙方（卖方）：</strong>${supplier.name}<br>
+              地址：${supplier.address}<br>
+              联系人：${supplier.contact}　电话：${supplier.phone}
+            </td>
+          </tr>
+        </table>
+      </div>
+      
+      <p>经双方友好协商，就甲方向乙方采购以下货物达成如下协议：</p>
+      
+      <h3>一、货物清单</h3>
+      <table class="items-table">
+        <tr>
+          <th>序号</th>
+          <th>物料编码</th>
+          <th>物料名称</th>
+          <th>规格型号</th>
+          <th>单位</th>
+          <th>数量</th>
+          <th>单价(元)</th>
+          <th>金额(元)</th>
+        </tr>
+        ${lines.map((line, idx) => `
+          <tr>
+            <td>${idx + 1}</td>
+            <td>${line.item_sku}</td>
+            <td>${line.item_name}</td>
+            <td>${line.specification || '-'}</td>
+            <td>${line.unit}</td>
+            <td>${line.qty}</td>
+            <td>${line.unit_price.toFixed(2)}</td>
+            <td>${line.line_amount.toFixed(2)}</td>
+          </tr>
+        `).join('')}
+      </table>
+      
+      <p class="amount-row">
+        不含税金额：¥${totalAmount.toFixed(2)} | 
+        税额(${contract.tax_rate}%)：¥${taxAmount.toFixed(2)} | 
+        <strong>含税总额：¥${totalWithTax.toFixed(2)}</strong>
+      </p>
+      
+      <div class="terms">
+        <h3>二、付款条款</h3>
+        <p>${contract.payment_terms || '按约定付款'}</p>
+        
+        <h3>三、交货条款</h3>
+        <p>${contract.delivery_terms || '按约定交货'}</p>
+        
+        <h3>四、质量条款</h3>
+        <p>${contract.quality_terms || '按国家标准或行业标准验收'}</p>
+        
+        <h3>五、质保条款</h3>
+        <p>${contract.warranty_terms || '按供应商标准质保期'}</p>
+      </div>
+      
+      <div class="signature">
+        <table>
+          <tr>
+            <td>
+              <strong>甲方（盖章）：</strong><br><br><br>
+              授权代表：${contract.buyer_signer || '_____________'}<br><br>
+              日期：${contract.signed_date || '_____年____月____日'}
+            </td>
+            <td>
+              <strong>乙方（盖章）：</strong><br><br><br>
+              授权代表：${contract.seller_signer || '_____________'}<br><br>
+              日期：${contract.signed_date || '_____年____月____日'}
+            </td>
+          </tr>
+        </table>
+      </div>
+    </body>
+    </html>
+  `
 }
 
 const receiveGoods = (row) => {

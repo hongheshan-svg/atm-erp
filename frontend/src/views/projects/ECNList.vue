@@ -89,16 +89,15 @@
         <el-table-column prop="requested_by_name" label="申请人" width="100" />
         <el-table-column prop="requested_date" label="申请日期" width="110" />
         <el-table-column prop="approved_date" label="批准日期" width="110" />
-        <el-table-column label="操作" width="340" fixed="right">
+        <el-table-column label="操作" width="380" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
-            <el-button size="small" type="primary" @click="handleSubmit(row)" v-if="row.status === 'DRAFT'">提交</el-button>
-            <el-button size="small" type="success" @click="handleApprove(row)" v-if="row.status === 'PENDING' || row.status === 'REVIEWING'">批准</el-button>
-            <el-button size="small" type="danger" @click="handleReject(row)" v-if="row.status === 'PENDING' || row.status === 'REVIEWING'">拒绝</el-button>
+            <el-button size="small" type="primary" @click="handleSubmit(row)" v-if="row.status === 'DRAFT'">提交审批</el-button>
+            <el-button size="small" type="info" @click="viewWorkflow(row)" v-if="row.status === 'PENDING' || row.status === 'REVIEWING'">审批进度</el-button>
             <el-button size="small" type="warning" @click="handleImplement(row)" v-if="row.status === 'APPROVED'">开始实施</el-button>
             <el-button size="small" type="success" @click="handleComplete(row)" v-if="row.status === 'IMPLEMENTING'">完成</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button size="small" type="danger" @click="handleDelete(row)" v-if="row.status === 'DRAFT'">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -380,9 +379,12 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+
+const router = useRouter()
 
 // 数据
 const loading = ref(false)
@@ -678,8 +680,25 @@ const handleSubmit = async (row) => {
       cancelButtonText: '取消',
       type: 'info'
     })
-    await request.post(`/projects/ecn/${row.id}/submit/`)
-    ElMessage.success('提交成功')
+    const response = await request.post(`/projects/ecn/${row.id}/submit/`)
+    const data = response.data || response
+    
+    if (data.workflow_instance_id) {
+      ElMessage.success('已提交审批流程')
+      // 询问是否查看审批进度
+      try {
+        await ElMessageBox.confirm('已提交审批流程，是否查看审批进度？', '提交成功', {
+          confirmButtonText: '查看进度',
+          cancelButtonText: '稍后查看',
+          type: 'success'
+        })
+        router.push('/workflow/my-submissions')
+      } catch {
+        // 用户选择稍后查看
+      }
+    } else {
+      ElMessage.success('提交成功')
+    }
     loadECNList()
   } catch (error) {
     if (error !== 'cancel') {
@@ -687,6 +706,11 @@ const handleSubmit = async (row) => {
       ElMessage.error('提交失败')
     }
   }
+}
+
+// 查看审批进度
+const viewWorkflow = (row) => {
+  router.push('/workflow/my-submissions')
 }
 
 // 批准

@@ -4,10 +4,31 @@
       <template #header>
         <div class="card-header">
           <span>销售订单</span>
-          <el-button type="primary" @click="handleAdd">
-            <el-icon><Plus /></el-icon>
-            创建订单
-          </el-button>
+          <div class="header-actions">
+            <el-button @click="downloadTemplate">
+              <el-icon><Download /></el-icon>
+              下载模板
+            </el-button>
+            <el-upload
+              :show-file-list="false"
+              :before-upload="handleImport"
+              accept=".xlsx,.xls"
+              style="display: inline-block; margin: 0 8px;"
+            >
+              <el-button type="success">
+                <el-icon><Upload /></el-icon>
+                导入
+              </el-button>
+            </el-upload>
+            <el-button @click="handleExport">
+              <el-icon><Download /></el-icon>
+              导出
+            </el-button>
+            <el-button type="primary" @click="handleAdd">
+              <el-icon><Plus /></el-icon>
+              创建订单
+            </el-button>
+          </div>
         </div>
       </template>
 
@@ -37,7 +58,19 @@
         </el-form-item>
       </el-form>
 
-      <el-table :data="orders" v-loading="loading" stripe border>
+      <!-- 批量操作 -->
+      <div v-if="selectedOrders.length > 0" style="margin-bottom: 10px;">
+        <el-button type="danger" size="small" @click="handleBulkDelete">
+          <el-icon><Delete /></el-icon>
+          批量删除 ({{ selectedOrders.length }})
+        </el-button>
+        <span style="margin-left: 10px; color: #909399; font-size: 12px;">
+          提示：只能删除草稿/已取消/已拒绝状态的订单
+        </span>
+      </div>
+
+      <el-table :data="orders" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="order_no" label="销售订单号" width="150" />
         <el-table-column prop="customer_name" label="客户" />
         <el-table-column prop="project_name" label="项目" />
@@ -258,7 +291,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Delete } from '@element-plus/icons-vue'
+import { Plus, Delete, Download, Upload } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
 
@@ -268,6 +301,7 @@ const saving = ref(false)
 const orders = ref([])
 const customers = ref([])
 const projects = ref([])
+const selectedOrders = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('创建销售订单')
 const isEdit = ref(false)
@@ -567,6 +601,124 @@ const handleDelete = async (row) => {
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除订单失败')
+    }
+  }
+}
+
+// 下载模板
+const downloadTemplate = async () => {
+  try {
+    const response = await request.get('/sales/orders/download-template/', {
+      responseType: 'blob'
+    })
+    const url = window.URL.createObjectURL(response.data)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'sales_order_template.xlsx'
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    link.click()
+    setTimeout(() => {
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    }, 100)
+  } catch (error) {
+    ElMessage.error('下载模板失败')
+  }
+}
+
+// 导入
+const handleImport = async (file) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  
+  try {
+    const res = await request.post('/sales/orders/import/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    
+    let message = `导入完成！新增 ${res.success_count} 条，更新 ${res.update_count} 条`
+    if (res.skip_count > 0) {
+      message += `，跳过重复 ${res.skip_count} 条`
+    }
+    if (res.line_count > 0) {
+      message += `，明细 ${res.line_count} 条`
+    }
+    
+    if (res.errors && res.errors.length > 0) {
+      ElMessage.warning(`${message}，有 ${res.errors.length} 条错误`)
+      console.error('导入错误:', res.errors)
+    } else {
+      ElMessage.success(message)
+    }
+    
+    loadOrders()
+  } catch (error) {
+    ElMessage.error(error.response?.data?.error || '导入失败')
+  }
+  
+  return false // 阻止默认上传
+}
+
+// 导出
+const handleExport = async () => {
+  try {
+    const params = {
+      customer: searchForm.customer,
+      status: searchForm.status
+    }
+    
+    const response = await request.get('/sales/orders/export/', {
+      params,
+      responseType: 'blob'
+    })
+    
+    const url = window.URL.createObjectURL(response.data)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `sales_orders_${new Date().toISOString().slice(0, 10)}.xlsx`
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    link.click()
+    setTimeout(() => {
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    }, 100)
+    
+    ElMessage.success('导出成功')
+  } catch (error) {
+    ElMessage.error('导出失败')
+  }
+}
+
+// 选择变化
+const handleSelectionChange = (selection) => {
+  selectedOrders.value = selection
+}
+
+// 批量删除
+const handleBulkDelete = async () => {
+  if (selectedOrders.value.length === 0) {
+    ElMessage.warning('请选择要删除的订单')
+    return
+  }
+  
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedOrders.value.length} 个订单吗？只有草稿/已取消/已拒绝状态的订单会被删除。`,
+      '批量删除',
+      { type: 'warning' }
+    )
+    
+    const ids = selectedOrders.value.map(order => order.id)
+    const res = await request.post('/sales/orders/bulk-delete/', { ids })
+    
+    ElMessage.success(res.message || '批量删除成功')
+    selectedOrders.value = []
+    loadOrders()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.error || '批量删除失败')
     }
   }
 }

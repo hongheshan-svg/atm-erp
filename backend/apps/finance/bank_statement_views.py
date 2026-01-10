@@ -157,10 +157,14 @@ class BankStatementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
             records = []
             errors = []
             skipped_count = 0
+            duplicate_count = 0
             success_count = 0
             matched_count = 0
             debit_total = Decimal('0')
             credit_total = Decimal('0')
+            
+            # Track processed transactions within this import to avoid in-file duplicates
+            processed_transactions = set()
             
             with transaction.atomic():
                 for row in range(header_row + 1, sheet.max_row + 1):
@@ -188,19 +192,56 @@ class BankStatementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                             skipped_count += 1
                             continue
                         
+                        voucher_no = str(get_cell('凭证号') or '')
+                        
+                        # Create a unique key for duplicate detection
+                        # Use voucher_no + transaction_time + counterparty_name + amounts
+                        credit_amount_raw = self._parse_amount(get_cell('转入金额'))
+                        debit_amount_raw = self._parse_amount(get_cell('转出金额'))
+                        parsed_time_raw = self._parse_datetime(get_cell('交易时间'))
+                        time_str = parsed_time_raw.strftime('%Y-%m-%d %H:%M:%S') if parsed_time_raw else ''
+                        
+                        duplicate_key = f"{voucher_no}|{time_str}|{counterparty_name}|{credit_amount_raw}|{debit_amount_raw}"
+                        
+                        # Check for in-file duplicate
+                        if duplicate_key in processed_transactions:
+                            duplicate_count += 1
+                            continue
+                        processed_transactions.add(duplicate_key)
+                        
+                        # Check for existing record in database
+                        if voucher_no:
+                            existing = BankStatement.objects.filter(
+                                voucher_no=voucher_no,
+                                is_deleted=False
+                            ).first()
+                            if existing:
+                                duplicate_count += 1
+                                continue
+                        elif parsed_time_raw and counterparty_name:
+                            # Check by time + counterparty + amount for records without voucher_no
+                            existing = BankStatement.objects.filter(
+                                transaction_time=parsed_time_raw,
+                                counterparty_name=str(counterparty_name or ''),
+                                credit_amount=credit_amount_raw,
+                                debit_amount=debit_amount_raw,
+                                is_deleted=False
+                            ).first()
+                            if existing:
+                                duplicate_count += 1
+                                continue
+                        
                         # Parse transaction type
                         debit_credit = get_cell('借贷标志')
                         transaction_type = 'DEBIT' if debit_credit == '借' else 'CREDIT'
                         
-                        # Parse amounts
-                        credit_amount = self._parse_amount(get_cell('转入金额'))
-                        debit_amount = self._parse_amount(get_cell('转出金额'))
+                        # Use already parsed amounts
+                        credit_amount = credit_amount_raw
+                        debit_amount = debit_amount_raw
                         balance = self._parse_amount(get_cell('余额'))
                         
-                        # Parse transaction time
-                        parsed_time = self._parse_datetime(transaction_time)
-                        if not parsed_time:
-                            parsed_time = timezone.now()
+                        # Use already parsed time
+                        parsed_time = parsed_time_raw if parsed_time_raw else timezone.now()
                         
                         # Try to match supplier/customer BEFORE creating record
                         supplier = None
@@ -228,7 +269,7 @@ class BankStatementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                         statement = BankStatement(
                             import_batch=batch_no,
                             source_file=file_name,
-                            voucher_no=str(get_cell('凭证号') or ''),
+                            voucher_no=voucher_no,
                             counterparty_account=str(get_cell('对方账号') or ''),
                             transaction_time=parsed_time,
                             transaction_type=transaction_type,
@@ -277,7 +318,7 @@ class BankStatementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                     debit_total=debit_total,
                     credit_total=credit_total,
                     error_details=errors,
-                    notes=f'跳过{skipped_count}条非业务流水（工资/税费/内部往来等）',
+                    notes=f'跳过{skipped_count}条非业务流水，{duplicate_count}条重复记录',
                     created_by=request.user
                 )
             
@@ -285,6 +326,7 @@ class BankStatementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                 'batch_no': batch_no,
                 'success_count': success_count,
                 'skipped_count': skipped_count,
+                'duplicate_count': duplicate_count,
                 'error_count': len(errors),
                 'matched_count': matched_count,
                 'debit_total': float(debit_total),

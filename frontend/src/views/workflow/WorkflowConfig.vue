@@ -405,7 +405,8 @@ const businessTypeLabels = {
   'SALES_ORDER': '销售订单',
   'PROJECT': '项目立项',
   'STOCK_ADJUSTMENT': '库存调整',
-  'DELIVERY_ORDER': '发货单'
+  'DELIVERY_ORDER': '发货单',
+  'ECN': '工程变更'
 }
 
 const approverTypes = [

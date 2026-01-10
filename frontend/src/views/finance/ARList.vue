@@ -117,11 +117,12 @@
                 <el-tag :type="getBankStatusType(row.status)" size="small">{{ row.status_display || getBankStatusLabel(row.status) }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="150" fixed="right">
+            <el-table-column label="操作" width="180" fixed="right">
               <template #default="{ row }">
                 <el-button size="small" link @click="handleMatchBank(row)" v-if="row.status === 'PENDING'">匹配</el-button>
                 <el-button size="small" link type="warning" @click="handleIgnoreBank(row)" v-if="row.status === 'PENDING'">忽略</el-button>
                 <el-button size="small" link @click="handleViewBank(row)">详情</el-button>
+                <el-button size="small" link type="danger" @click="handleDeleteBankStatement(row)">删除</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -1007,6 +1008,22 @@ const handleBatchDeleteBankStatements = async () => {
   }
 }
 
+const handleDeleteBankStatement = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除这条银行流水吗？\n对方单位: ${row.counterparty_name}\n金额: ¥${formatNumber(row.amount)}`, 
+      '删除银行流水', 
+      { type: 'warning' }
+    )
+    
+    await request.delete(`/finance/bank-statements/${row.id}/`)
+    ElMessage.success('删除成功')
+    loadBankStatements()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error('删除失败')
+  }
+}
+
 const exportBankStatements = async () => {
   try {
     const params = { ...bankSearchForm }
@@ -1017,14 +1034,22 @@ const exportBankStatements = async () => {
       responseType: 'blob'
     })
     
-    const url = window.URL.createObjectURL(new Blob([response]))
+    const filename = `银行流水_${new Date().toISOString().split('T')[0]}.xlsx`
+    const blob = response.data
+    
+    const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
+    link.style.display = 'none'
     link.href = url
-    link.setAttribute('download', `银行流水_${new Date().toISOString().split('T')[0]}.xlsx`)
+    link.download = filename
     document.body.appendChild(link)
     link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
+    
+    setTimeout(() => {
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    }, 100)
+    
     ElMessage.success('导出成功')
   } catch (error) {
     ElMessage.error('导出失败')
@@ -1041,14 +1066,22 @@ const exportAR = async () => {
       responseType: 'blob'
     })
     
-    const url = window.URL.createObjectURL(new Blob([response]))
+    const filename = `应收账款_${new Date().toISOString().split('T')[0]}.xlsx`
+    const blob = response.data
+    
+    const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
+    link.style.display = 'none'
     link.href = url
-    link.setAttribute('download', `应收账款_${new Date().toISOString().split('T')[0]}.xlsx`)
+    link.download = filename
     document.body.appendChild(link)
     link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
+    
+    setTimeout(() => {
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    }, 100)
+    
     ElMessage.success('导出成功')
   } catch (error) {
     ElMessage.error('导出失败')

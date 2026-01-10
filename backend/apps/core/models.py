@@ -196,5 +196,62 @@ class SystemNotification(models.Model):
         return f"{self.user} - {self.title}"
 
 
+class SystemConfig(models.Model):
+    """
+    系统配置 - 存储公司信息和系统级设置
+    使用单例模式，只有一条记录
+    """
+    # 公司基本信息
+    company_name = models.CharField(max_length=200, verbose_name='公司名称', default='')
+    company_short_name = models.CharField(max_length=50, blank=True, verbose_name='公司简称')
+    company_tax_no = models.CharField(max_length=50, blank=True, verbose_name='税号')
+    company_address = models.CharField(max_length=300, blank=True, verbose_name='公司地址')
+    company_phone = models.CharField(max_length=50, blank=True, verbose_name='公司电话')
+    company_email = models.EmailField(blank=True, verbose_name='公司邮箱')
+    company_website = models.URLField(blank=True, verbose_name='公司网站')
+    company_logo = models.ImageField(upload_to='company/', blank=True, null=True, verbose_name='公司Logo')
+    
+    # 银行信息
+    bank_name = models.CharField(max_length=100, blank=True, verbose_name='开户银行')
+    bank_account = models.CharField(max_length=50, blank=True, verbose_name='银行账号')
+    
+    # 法人信息
+    legal_representative = models.CharField(max_length=50, blank=True, verbose_name='法人代表')
+    registered_capital = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True, verbose_name='注册资本')
+    
+    # 系统设置
+    default_currency = models.CharField(max_length=10, default='CNY', verbose_name='默认货币')
+    fiscal_year_start = models.IntegerField(default=1, verbose_name='财年起始月份')
+    
+    # 时间戳
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name='更新人'
+    )
+    
+    class Meta:
+        db_table = 'system_config'
+        verbose_name = '系统配置'
+        verbose_name_plural = verbose_name
+    
+    def __str__(self):
+        return self.company_name or '系统配置'
+    
+    @classmethod
+    def get_config(cls):
+        """获取系统配置（单例模式）"""
+        config, created = cls.objects.get_or_create(pk=1)
+        return config
+    
+    def save(self, *args, **kwargs):
+        # 确保只有一条记录
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+
 # 导入权限配置模型，使其可被迁移系统发现
 from .permission_models import ModulePermissionRule, RoleModulePermission

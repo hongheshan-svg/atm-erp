@@ -13,20 +13,17 @@
         <el-table-column prop="name" label="角色名称" width="150" />
         <el-table-column prop="code" label="角色编码" width="150" />
         <el-table-column prop="description" label="描述" />
-        <el-table-column prop="data_scope" label="数据范围" width="120">
+        <el-table-column label="权限状态" width="180">
           <template #default="{ row }">
-            {{ getDataScopeLabel(row.data_scope) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="菜单权限" width="100">
-          <template #default="{ row }">
-            <el-tag v-if="row.permissions?.menu_ids?.length" type="success" size="small">
-              已配置
+            <el-tag :type="row.permissions?.menu_ids?.length ? 'success' : 'warning'" size="small" style="margin-right: 5px;">
+              菜单: {{ row.permissions?.menu_ids?.length || 0 }}项
             </el-tag>
-            <el-tag v-else type="warning" size="small">未配置</el-tag>
+            <el-tag type="info" size="small">
+              {{ getDataScopeLabel(row.data_scope) }}
+            </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="250" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" type="primary" @click="handlePermission(row)">权限配置</el-button>
@@ -72,12 +69,30 @@
     </el-dialog>
 
     <!-- 权限配置对话框 -->
-    <el-dialog v-model="permDialogVisible" title="权限配置" width="700px">
+    <el-dialog v-model="permDialogVisible" title="权限配置" width="750px">
       <div v-if="currentRole" class="permission-config">
         <div class="role-info">
           <el-tag type="primary" size="large">{{ currentRole.name }}</el-tag>
           <span class="role-desc">{{ currentRole.description }}</span>
         </div>
+        
+        <el-divider content-position="left">数据权限</el-divider>
+        <el-form label-width="100px">
+          <el-form-item label="数据范围">
+            <el-radio-group v-model="permForm.data_scope">
+              <el-radio-button value="ALL">全部数据</el-radio-button>
+              <el-radio-button value="DEPARTMENT">本部门数据</el-radio-button>
+              <el-radio-button value="SELF">仅本人数据</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item>
+            <el-text type="info" size="small">
+              <template v-if="permForm.data_scope === 'ALL'">可查看系统中所有数据</template>
+              <template v-else-if="permForm.data_scope === 'DEPARTMENT'">仅可查看本部门及下级部门的数据</template>
+              <template v-else>仅可查看自己创建或被分配的数据</template>
+            </el-text>
+          </el-form-item>
+        </el-form>
         
         <el-divider content-position="left">菜单权限</el-divider>
         
@@ -85,6 +100,9 @@
           <el-checkbox v-model="checkAll" :indeterminate="isIndeterminate" @change="handleCheckAll">
             全选
           </el-checkbox>
+          <el-text type="info" size="small" style="margin-left: 15px;">
+            勾选的菜单将在侧边栏中显示
+          </el-text>
         </div>
         
         <el-tree
@@ -95,6 +113,7 @@
           :default-checked-keys="checkedMenuIds"
           :props="{ label: 'label', children: 'children' }"
           @check="handleMenuCheck"
+          class="menu-tree"
         />
       </div>
       <template #footer>
@@ -134,6 +153,10 @@ const form = reactive({
   data_scope: 'DEPARTMENT'
 })
 
+const permForm = reactive({
+  data_scope: 'DEPARTMENT'
+})
+
 const rules = {
   name: [{ required: true, message: '请输入角色名称', trigger: 'blur' }]
   // code 不再必填，后端会自动生成
@@ -162,11 +185,13 @@ const menuTree = ref([
       { id: 'system:users', label: '用户管理' },
       { id: 'system:roles', label: '角色管理' },
       { id: 'system:departments', label: '部门管理' },
+      { id: 'system:code-rules', label: '编码规则' },
       { id: 'system:notifications', label: '通知中心' },
       { id: 'system:audit-log', label: '审计日志' },
       { id: 'system:login-logs', label: '登录日志' },
       { id: 'system:webhooks', label: 'Webhook管理' },
-      { id: 'system:dashboard-config', label: '仪表盘配置' }
+      { id: 'system:dashboard-config', label: '仪表盘配置' },
+      { id: 'system:config', label: '系统配置' }
     ]
   },
   {
@@ -198,6 +223,8 @@ const menuTree = ref([
     label: '采购管理',
     children: [
       { id: 'purchase:requests', label: '采购申请' },
+      { id: 'purchase:rfqs', label: '询价管理' },
+      { id: 'purchase:comparisons', label: '比价分析' },
       { id: 'purchase:orders', label: '采购订单' },
       { id: 'purchase:goods-receipts', label: '到货质检' }
     ]
@@ -208,7 +235,15 @@ const menuTree = ref([
     children: [
       { id: 'sales:quotations', label: '销售报价' },
       { id: 'sales:orders', label: '销售订单' },
+      { id: 'sales:contracts', label: '销售合同' },
       { id: 'sales:delivery-orders', label: '发货单' }
+    ]
+  },
+  {
+    id: 'aftersales',
+    label: '售后服务',
+    children: [
+      { id: 'aftersales:orders', label: '售后工单' }
     ]
   },
   {
@@ -220,7 +255,9 @@ const menuTree = ref([
       { id: 'inventory:moves', label: '库存流水' },
       { id: 'inventory:transfer', label: '库存调拨' },
       { id: 'inventory:adjustment', label: '库存盘点' },
-      { id: 'inventory:alert', label: '库存预警' }
+      { id: 'inventory:alert', label: '库存预警' },
+      { id: 'inventory:requisitions', label: '生产领料' },
+      { id: 'inventory:returns', label: '生产退料' }
     ]
   },
   {
@@ -319,6 +356,9 @@ const handlePermission = async (row) => {
   const menuIds = row.permissions?.menu_ids || []
   checkedMenuIds.value = menuIds
   
+  // 设置数据权限
+  permForm.data_scope = row.data_scope || 'DEPARTMENT'
+  
   // 更新全选状态
   checkAll.value = menuIds.length === allMenuIds.value.length
   isIndeterminate.value = menuIds.length > 0 && menuIds.length < allMenuIds.value.length
@@ -409,6 +449,7 @@ const savePermissions = async () => {
     
     const data = {
       ...currentRole.value,
+      data_scope: permForm.data_scope,  // 保存数据权限
       permissions: {
         menu_ids: menuIds,
         permissions: permissions
@@ -461,8 +502,16 @@ onMounted(() => {
 }
 
 .permission-config {
-  max-height: 500px;
+  max-height: 600px;
   overflow-y: auto;
+}
+
+.menu-tree {
+  max-height: 350px;
+  overflow-y: auto;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  padding: 10px;
 }
 
 .role-info {
