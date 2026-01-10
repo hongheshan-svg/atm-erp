@@ -596,3 +596,7 @@ class SalesContract(BaseModel):
             self.contract_no = generate_code('SC', rule_type='SALES_CONTRACT')
         super().save(*args, **kwargs)
 
+
+# Import models from win_loss_analysis
+from .win_loss_analysis import WinLossReason, OpportunityCloseRecord
+

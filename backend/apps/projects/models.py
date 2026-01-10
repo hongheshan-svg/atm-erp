@@ -1163,3 +1163,13 @@ from .fixture_models import (
     FixtureCalibration, FixtureMaintenance
 )
 
+
+# Import models from requirement_review
+from .requirement_review import (
+    ReviewTemplate, ReviewCheckItem, RequirementReview,
+    ReviewParticipant, ReviewItemResult, ReviewActionItem
+)
+
+# Import models from bom_advanced
+from .bom_advanced import BOMSubstitute, BOMVersion, BOMComparison
+

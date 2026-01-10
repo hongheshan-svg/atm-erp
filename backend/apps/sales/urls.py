@@ -22,6 +22,10 @@ from .customer_analysis import CustomerSegmentViewSet, CustomerRFMViewSet
 from .funnel_analysis import (
     SalesFunnelView, OpportunityStageAnalysisView, SalesTrendView, SalespersonRankingView
 )
+from .win_loss_analysis import (
+    WinLossReasonViewSet, OpportunityCloseRecordViewSet,
+    WinLossAnalysisView, WinLossComparisonView
+)
 
 router = DefaultRouter()
 router.register(r'quotations', SalesQuotationViewSet, basename='quotation')
@@ -57,6 +61,10 @@ router.register(r'performance', SalesPerformanceViewSet, basename='performance')
 router.register(r'customer-segments', CustomerSegmentViewSet, basename='customer-segment')
 router.register(r'customer-rfm', CustomerRFMViewSet, basename='customer-rfm')
 
+# 赢单/丢单分析
+router.register(r'win-loss-reasons', WinLossReasonViewSet, basename='win-loss-reason')
+router.register(r'opportunity-closes', OpportunityCloseRecordViewSet, basename='opportunity-close')
+
 urlpatterns = [
     path('', include(router.urls)),
     
@@ -65,5 +73,9 @@ urlpatterns = [
     path('analysis/stages/', OpportunityStageAnalysisView.as_view(), name='opportunity-stages'),
     path('analysis/trend/', SalesTrendView.as_view(), name='sales-trend'),
     path('analysis/ranking/', SalespersonRankingView.as_view(), name='salesperson-ranking'),
+    
+    # 赢单/丢单分析
+    path('analysis/win-loss/', WinLossAnalysisView.as_view(), name='win-loss-analysis'),
+    path('analysis/win-loss-comparison/', WinLossComparisonView.as_view(), name='win-loss-comparison'),
 ]
 

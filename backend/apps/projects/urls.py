@@ -52,6 +52,12 @@ from .configurator import (
     ProductTemplateViewSet, ConfigParameterViewSet, ParameterOptionViewSet,
     ConfigRuleViewSet, ConfigBOMRuleViewSet, ProductConfigurationViewSet
 )
+from .requirement_review import (
+    ReviewTemplateViewSet, RequirementReviewViewSet, ReviewActionItemViewSet
+)
+from .bom_advanced import (
+    BOMSubstituteViewSet, BOMVersionViewSet, BOMComparisonViewSet, BOMCompareView
+)
 
 router = DefaultRouter()
 router.register(r'projects', ProjectViewSet, basename='project')
@@ -150,6 +156,16 @@ router.register(r'config-rules', ConfigRuleViewSet, basename='config-rule')
 router.register(r'config-bom-rules', ConfigBOMRuleViewSet, basename='config-bom-rule')
 router.register(r'product-configurations', ProductConfigurationViewSet, basename='product-configuration')
 
+# PLM - 需求评审
+router.register(r'review-templates', ReviewTemplateViewSet, basename='review-template')
+router.register(r'requirement-reviews', RequirementReviewViewSet, basename='requirement-review')
+router.register(r'review-action-items', ReviewActionItemViewSet, basename='review-action-item')
+
+# PLM - BOM高级功能
+router.register(r'bom-substitutes', BOMSubstituteViewSet, basename='bom-substitute')
+router.register(r'bom-versions', BOMVersionViewSet, basename='bom-version')
+router.register(r'bom-comparisons', BOMComparisonViewSet, basename='bom-comparison')
+
 urlpatterns = [
     path('', include(router.urls)),
     
@@ -157,4 +173,7 @@ urlpatterns = [
     path('maintenance/calendar/', MaintenanceCalendarView.as_view(), name='maintenance-calendar'),
     path('maintenance/statistics/', MaintenanceStatisticsView.as_view(), name='maintenance-statistics'),
     path('maintenance/history/<int:equipment_id>/', EquipmentMaintenanceHistoryView.as_view(), name='maintenance-history'),
+    
+    # BOM对比
+    path('bom/compare/', BOMCompareView.as_view(), name='bom-compare'),
 ]
