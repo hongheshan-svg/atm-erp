@@ -397,8 +397,8 @@ const fetchOptions = async () => {
       request.get('/production/andon-stations/', { params: { is_active: true } }),
       request.get('/production/andon-types/', { params: { is_active: true } })
     ])
-    stations.value = stationsRes.data.results || stationsRes.data
-    andonTypes.value = typesRes.data.results || typesRes.data
+    stations.value = stationsRes.results || stationsRes || []
+    andonTypes.value = typesRes.results || typesRes || []
   } catch (e) {
     console.error(e)
   }
