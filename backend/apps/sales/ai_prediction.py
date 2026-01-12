@@ -365,7 +365,7 @@ class ChurnPredictionView(APIView):
         # 获取所有活跃客户
         customers = Customer.objects.filter(
             is_deleted=False,
-            is_active=True
+            status='ACTIVE'  # 使用status字段而非is_active
         )
         
         risks = []
