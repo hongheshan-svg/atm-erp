@@ -31,32 +31,32 @@ class TimelogStatisticsView(APIView):
             base_qs = base_qs.filter(user=user)
         
         # 今日工时
-        today_hours = base_qs.filter(log_date=today).aggregate(
+        today_hours = base_qs.filter(date=today).aggregate(
             total=Sum('hours')
         )['total'] or 0
         
         # 本周工时
-        week_hours = base_qs.filter(log_date__gte=this_week_start).aggregate(
+        week_hours = base_qs.filter(date__gte=this_week_start).aggregate(
             total=Sum('hours')
         )['total'] or 0
         
         # 本月工时
-        month_hours = base_qs.filter(log_date__gte=this_month_start).aggregate(
+        month_hours = base_qs.filter(date__gte=this_month_start).aggregate(
             total=Sum('hours')
         )['total'] or 0
         
         # 本月工时趋势（按天）
         daily_trend = base_qs.filter(
-            log_date__gte=this_month_start
+            date__gte=this_month_start
         ).annotate(
-            date=TruncDate('log_date')
+            date=TruncDate('date')
         ).values('date').annotate(
             hours=Sum('hours')
         ).order_by('date')
         
         # 按项目分布
         by_project = base_qs.filter(
-            log_date__gte=this_month_start
+            date__gte=this_month_start
         ).values(
             'project__name', 'project__code'
         ).annotate(
@@ -66,7 +66,7 @@ class TimelogStatisticsView(APIView):
         
         # 按任务类型分布
         by_task_type = base_qs.filter(
-            log_date__gte=this_month_start,
+            date__gte=this_month_start,
             task__isnull=False
         ).values(
             'task__task_type'
@@ -101,8 +101,8 @@ class TimelogByUserView(APIView):
         
         qs = TimeLog.objects.filter(
             is_deleted=False,
-            log_date__gte=start_date,
-            log_date__lte=end_date
+            date__gte=start_date,
+            date__lte=end_date
         )
         
         if project_id:
@@ -113,7 +113,7 @@ class TimelogByUserView(APIView):
             'user__id', 'user__username', 'user__first_name', 'user__last_name'
         ).annotate(
             total_hours=Sum('hours'),
-            work_days=Count('log_date', distinct=True),
+            work_days=Count('date', distinct=True),
             avg_hours_per_day=Avg('hours'),
             log_count=Count('id')
         ).order_by('-total_hours')
@@ -149,8 +149,8 @@ class TimelogByProjectView(APIView):
         
         qs = TimeLog.objects.filter(
             is_deleted=False,
-            log_date__gte=start_date,
-            log_date__lte=end_date
+            date__gte=start_date,
+            date__lte=end_date
         )
         
         if user_id:
@@ -196,15 +196,15 @@ class TimelogWeeklyReportView(APIView):
         qs = TimeLog.objects.filter(
             is_deleted=False,
             user_id=user_id,
-            log_date__gte=start_date
+            date__gte=start_date
         )
         
         # 按周统计
         weekly_data = qs.annotate(
-            week=TruncWeek('log_date')
+            week=TruncWeek('date')
         ).values('week').annotate(
             total_hours=Sum('hours'),
-            work_days=Count('log_date', distinct=True),
+            work_days=Count('date', distinct=True),
             projects=Count('project', distinct=True),
             tasks=Count('task', distinct=True)
         ).order_by('week')
@@ -213,8 +213,8 @@ class TimelogWeeklyReportView(APIView):
         weekly_summary = []
         for week in weekly_data:
             week_logs = qs.filter(
-                log_date__gte=week['week'],
-                log_date__lt=week['week'] + timedelta(days=7)
+                date__gte=week['week'],
+                date__lt=week['week'] + timedelta(days=7)
             ).values(
                 'project__name', 'task__name', 'description'
             )[:10]
@@ -248,10 +248,10 @@ class TimelogOvertimeView(APIView):
         # 按用户按天统计
         daily_hours = TimeLog.objects.filter(
             is_deleted=False,
-            log_date__gte=start_date,
-            log_date__lte=end_date
+            date__gte=start_date,
+            date__lte=end_date
         ).values(
-            'user__id', 'user__username', 'log_date'
+            'user__id', 'user__username', 'date'
         ).annotate(
             daily_total=Sum('hours')
         )
