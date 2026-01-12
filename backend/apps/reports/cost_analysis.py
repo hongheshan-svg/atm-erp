@@ -31,19 +31,19 @@ class ProjectCostAnalysisView(APIView):
         # 1. 采购成本
         from apps.purchase.models import PurchaseOrderLine
         purchase_cost = PurchaseOrderLine.objects.filter(
-            order__project_id=project_id,
-            order__is_deleted=False
+            po__project_id=project_id,
+            po__is_deleted=False
         ).aggregate(
-            total=Sum(F('quantity') * F('unit_price'))
+            total=Sum(F('qty') * F('unit_price'))
         )['total'] or Decimal('0')
         
         # 2. 外协成本
         from apps.purchase.outsource_models import OutsourceOrderLine
         outsource_cost = OutsourceOrderLine.objects.filter(
-            order__project_id=project_id,
-            order__is_deleted=False
+            outsource_order__project_id=project_id,
+            outsource_order__is_deleted=False
         ).aggregate(
-            total=Sum(F('quantity') * F('unit_price'))
+            total=Sum(F('qty') * F('unit_price'))
         )['total'] or Decimal('0')
         
         # 3. 人工成本（按工时计算，假设标准工时成本100元/小时）
@@ -149,9 +149,9 @@ class ProjectCostComparisonView(APIView):
             # 计算成本
             from apps.purchase.models import PurchaseOrderLine
             purchase_cost = PurchaseOrderLine.objects.filter(
-                order__project_id=pid,
-                order__is_deleted=False
-            ).aggregate(total=Sum(F('quantity') * F('unit_price')))['total'] or 0
+                po__project_id=pid,
+                po__is_deleted=False
+            ).aggregate(total=Sum(F('qty') * F('unit_price')))['total'] or 0
             
             labor_hours = TimeLog.objects.filter(
                 project_id=pid,
