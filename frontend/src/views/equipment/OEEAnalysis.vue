@@ -162,7 +162,7 @@ const loadData = async () => {
   try {
     // 加载设备列表
     const equipRes = await request.get('/projects/equipment/')
-    equipments.value = equipRes.data.results || equipRes.data
+    equipments.value = equipRes.results || equipRes || []
     
     // TODO: 加载OEE数据
     // 使用模拟数据
