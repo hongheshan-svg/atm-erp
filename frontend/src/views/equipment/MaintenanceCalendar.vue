@@ -189,8 +189,8 @@ const selectedDayMaintenances = computed(() => {
   return getMaintenancesForDate(date)
 })
 
-const getMaintenancesForDate = (date) => {
-  return maintenances.value.filter(m => m.scheduled_date === date)
+const getMaintenancesForDate = (dateStr) => {
+  return maintenances.value.filter(m => m.date === dateStr)
 }
 
 const loadData = async () => {
@@ -201,8 +201,8 @@ const loadData = async () => {
     const res = await request.get('/projects/maintenance/calendar/', {
       params: { year, month }
     })
-    maintenances.value = res.data.maintenances || []
-    statistics.value = res.data.statistics || {}
+    maintenances.value = res.events || []
+    statistics.value = res.summary || {}
   } catch (error) {
     console.error(error)
   }
