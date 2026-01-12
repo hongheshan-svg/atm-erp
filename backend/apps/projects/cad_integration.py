@@ -365,6 +365,81 @@ class CADPropertyMapping(BaseModel):
 # BOM Parser Service
 # =====================
 
+# =====================
+# CAD软件文件格式配置
+# =====================
+
+CAD_FILE_EXTENSIONS = {
+    'SOLIDWORKS': {
+        'part': ['.sldprt'],
+        'assembly': ['.sldasm'],
+        'drawing': ['.slddrw'],
+        'export': ['.step', '.stp', '.iges', '.igs', '.x_t', '.x_b', '.stl'],
+    },
+    'AUTOCAD': {
+        'drawing': ['.dwg', '.dxf'],
+        'export': ['.pdf', '.dwf', '.dwfx'],
+    },
+    'INVENTOR': {
+        'part': ['.ipt'],
+        'assembly': ['.iam'],
+        'drawing': ['.idw', '.dwg'],
+        'export': ['.step', '.stp', '.iges', '.igs', '.stl'],
+    },
+    'CREO': {
+        'part': ['.prt', '.prt.*'],  # Creo零件文件
+        'assembly': ['.asm', '.asm.*'],  # Creo装配体
+        'drawing': ['.drw', '.drw.*'],  # Creo工程图
+        'manufacturing': ['.mfg', '.mfg.*'],  # 制造文件
+        'format': ['.frm'],  # 格式文件
+        'export': ['.step', '.stp', '.iges', '.igs', '.stl', '.jt', '.pvz'],
+        'bom_export': ['.csv', '.xml', '.xlsx', '.bom'],  # BOM导出格式
+    },
+    'CATIA': {
+        'part': ['.catpart'],
+        'assembly': ['.catproduct'],
+        'drawing': ['.catdrawing'],
+        'export': ['.step', '.stp', '.iges', '.igs', '.stl', '.jt'],
+    },
+    'UG': {
+        'part': ['.prt'],
+        'assembly': ['.prt'],  # UG使用相同扩展名
+        'drawing': ['.prt'],
+        'export': ['.step', '.stp', '.iges', '.igs', '.stl', '.jt'],
+    },
+    'FUSION360': {
+        'part': ['.f3d', '.f3z'],
+        'export': ['.step', '.stp', '.iges', '.igs', '.stl', '.obj', '.3mf'],
+    },
+}
+
+# Creo参数属性映射
+CREO_PARAMETER_MAPPING = {
+    # 基本参数
+    'DESCRIPTION': 'part_name',
+    'PART_NUMBER': 'part_number',
+    'MATERIAL': 'material',
+    'MASS': 'weight',
+    'DENSITY': 'density',
+    'VOLUME': 'volume',
+    'SURFACE_AREA': 'surface_area',
+    
+    # 自定义参数
+    'VENDOR': 'vendor',
+    'COST': 'unit_cost',
+    'REVISION': 'revision',
+    'AUTHOR': 'designer',
+    'CREATED_DATE': 'created_date',
+    'MODIFIED_DATE': 'modified_date',
+    
+    # BOM相关
+    'QTY': 'quantity',
+    'UNIT': 'unit',
+    'PROCUREMENT_TYPE': 'procurement_type',  # 自制/外购
+    'MAKE_BUY': 'make_or_buy',
+}
+
+
 class BOMParserService:
     """BOM解析服务"""
     
@@ -392,6 +467,148 @@ class BOMParserService:
         ]
     
     @staticmethod
+    def parse_creo_bom(file_path, bom_format='csv'):
+        """
+        解析Creo/Pro-E BOM
+        
+        支持的格式:
+        - CSV: Creo导出的CSV格式BOM
+        - XML: Creo导出的XML格式BOM
+        - REP: Creo Rep文件(.rep)
+        
+        Creo BOM导出路径: 
+        Info > BOM > Top Level / Indented / Multi-Level
+        """
+        items = []
+        
+        # 模拟Creo BOM数据结构
+        # 实际实现需要根据Creo导出的具体格式解析
+        if bom_format == 'csv':
+            items = BOMParserService._parse_creo_csv(file_path)
+        elif bom_format == 'xml':
+            items = BOMParserService._parse_creo_xml(file_path)
+        else:
+            # 默认模拟数据
+            items = [
+                {
+                    'level': 0,
+                    'part_number': 'CREO-ASM-001',
+                    'part_name': 'Creo主装配体',
+                    'quantity': 1,
+                    'unit': 'PCS',
+                    'file_name': 'main_assembly.asm.1',
+                    'type': 'ASSEMBLY',
+                },
+                {
+                    'level': 1,
+                    'part_number': 'CREO-PRT-001',
+                    'part_name': '底板',
+                    'quantity': 1,
+                    'unit': 'PCS',
+                    'material': 'AL6061-T6',
+                    'file_name': 'base_plate.prt.5',
+                    'type': 'PART',
+                    'weight': 2.5,
+                },
+                {
+                    'level': 1,
+                    'part_number': 'CREO-PRT-002',
+                    'part_name': '支架',
+                    'quantity': 4,
+                    'unit': 'PCS',
+                    'material': 'SUS304',
+                    'file_name': 'bracket.prt.3',
+                    'type': 'PART',
+                    'weight': 0.35,
+                },
+                {
+                    'level': 1,
+                    'part_number': 'CREO-SUB-001',
+                    'part_name': '传动组件',
+                    'quantity': 1,
+                    'unit': 'SET',
+                    'file_name': 'drive_unit.asm.2',
+                    'type': 'SUBASSEMBLY',
+                },
+                {
+                    'level': 2,
+                    'part_number': 'CREO-PRT-003',
+                    'part_name': '主动轴',
+                    'quantity': 1,
+                    'unit': 'PCS',
+                    'material': '45#钢',
+                    'file_name': 'drive_shaft.prt.4',
+                    'type': 'PART',
+                    'weight': 1.2,
+                    'parent_row': 3,
+                },
+            ]
+        
+        return items
+    
+    @staticmethod
+    def _parse_creo_csv(file_path):
+        """解析Creo导出的CSV格式BOM"""
+        items = []
+        # 实际实现:
+        # import csv
+        # with open(file_path, 'r', encoding='utf-8') as f:
+        #     reader = csv.DictReader(f)
+        #     for row in reader:
+        #         items.append({
+        #             'level': int(row.get('Level', 0)),
+        #             'part_number': row.get('Part Number', ''),
+        #             'part_name': row.get('Description', ''),
+        #             'quantity': float(row.get('Qty', 1)),
+        #             'unit': row.get('Unit', 'PCS'),
+        #             'material': row.get('Material', ''),
+        #             'file_name': row.get('File Name', ''),
+        #         })
+        return items
+    
+    @staticmethod
+    def _parse_creo_xml(file_path):
+        """解析Creo导出的XML格式BOM"""
+        items = []
+        # 实际实现:
+        # import xml.etree.ElementTree as ET
+        # tree = ET.parse(file_path)
+        # root = tree.getroot()
+        # for component in root.findall('.//Component'):
+        #     items.append({...})
+        return items
+    
+    @staticmethod
+    def parse_creo_parameters(prt_file_path):
+        """
+        提取Creo零件参数
+        
+        Creo参数来源:
+        - 模型参数 (Model Parameters)
+        - 族表参数 (Family Table)
+        - 关系式 (Relations)
+        """
+        # 模拟提取的参数
+        parameters = {
+            'DESCRIPTION': '示例零件',
+            'PART_NUMBER': 'CREO-PRT-001',
+            'MATERIAL': 'AL6061-T6',
+            'MASS': 2.5,
+            'REVISION': 'A',
+            'AUTHOR': 'Designer',
+            'VENDOR': '',
+            'MAKE_BUY': 'MAKE',
+        }
+        
+        # 转换为系统字段
+        result = {}
+        for creo_param, sys_field in CREO_PARAMETER_MAPPING.items():
+            if creo_param in parameters:
+                result[sys_field] = parameters[creo_param]
+        
+        return result
+    
+    @staticmethod
     def parse_excel_bom(file_path, field_mapping):
         """解析Excel BOM"""
         # 实际使用openpyxl或pandas
@@ -406,6 +623,74 @@ class BOMParserService:
             item['match_score'] = 0
             item['status'] = 'NEW'
         return items
+    
+    @staticmethod
+    def get_supported_extensions(software_type):
+        """获取指定CAD软件支持的文件扩展名"""
+        return CAD_FILE_EXTENSIONS.get(software_type, {})
+
+
+class CreoIntegrationService:
+    """Creo集成服务"""
+    
+    @staticmethod
+    def get_default_config():
+        """获取Creo默认配置"""
+        return {
+            'software_type': 'CREO',
+            'name': 'PTC Creo',
+            'supported_extensions': CAD_FILE_EXTENSIONS['CREO'],
+            'parameter_mapping': CREO_PARAMETER_MAPPING,
+            'bom_export_formats': ['csv', 'xml', 'xlsx'],
+            'supported_versions': [
+                'Creo 10.0',
+                'Creo 9.0',
+                'Creo 8.0',
+                'Creo 7.0',
+                'Creo 6.0',
+                'Creo 5.0',
+                'Creo 4.0',
+                'Creo 3.0',
+                'Pro/ENGINEER Wildfire 5.0',
+                'Pro/ENGINEER Wildfire 4.0',
+            ],
+            'plugin_info': {
+                'name': 'ERP Creo Connector',
+                'description': 'Creo插件，支持BOM导出、参数同步、文件上传',
+                'features': [
+                    '一键导出多级BOM',
+                    '参数自动映射',
+                    '文件版本管理',
+                    '族表实例展开',
+                    '简化表示支持',
+                ],
+            },
+        }
+    
+    @staticmethod
+    def validate_creo_file(file_path):
+        """验证Creo文件格式"""
+        import os
+        ext = os.path.splitext(file_path)[1].lower()
+        
+        all_extensions = []
+        for ext_list in CAD_FILE_EXTENSIONS['CREO'].values():
+            all_extensions.extend(ext_list)
+        
+        # Creo文件可能带版本号，如 .prt.5, .asm.12
+        base_ext = ext.split('.')[0] if '.' in ext else ext
+        
+        return ext in all_extensions or base_ext in ['.prt', '.asm', '.drw', '.mfg']
+    
+    @staticmethod
+    def extract_version_from_filename(filename):
+        """从Creo文件名提取版本号"""
+        import re
+        # Creo文件命名: part_name.prt.5 或 assembly.asm.12
+        match = re.search(r'\.(\d+)$', filename)
+        if match:
+            return int(match.group(1))
+        return 1
 
 
 # =====================
@@ -487,6 +772,61 @@ class CADSoftwareViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
     permission_classes = [IsAuthenticated]
     filterset_fields = ['software_type', 'is_active']
     search_fields = ['name']
+    
+    @action(detail=False, methods=['get'])
+    def supported_extensions(self, request):
+        """获取各CAD软件支持的文件扩展名"""
+        return Response(CAD_FILE_EXTENSIONS)
+    
+    @action(detail=False, methods=['get'])
+    def creo_config(self, request):
+        """获取Creo默认配置"""
+        return Response(CreoIntegrationService.get_default_config())
+    
+    @action(detail=False, methods=['post'])
+    def init_creo(self, request):
+        """初始化Creo软件配置"""
+        config = CreoIntegrationService.get_default_config()
+        version = request.data.get('version', 'Creo 10.0')
+        
+        # 检查是否已存在
+        existing = CADSoftware.objects.filter(
+            software_type='CREO',
+            is_deleted=False
+        ).first()
+        
+        if existing:
+            return Response({
+                'message': 'Creo配置已存在',
+                'data': CADSoftwareSerializer(existing).data
+            })
+        
+        # 创建Creo配置
+        creo = CADSoftware.objects.create(
+            name=f'PTC {version}',
+            software_type='CREO',
+            version=version,
+            supported_extensions=config['supported_extensions'],
+            description=f"PTC {version} - 支持零件(.prt)、装配体(.asm)、工程图(.drw)文件",
+            is_active=True,
+            created_by=request.user
+        )
+        
+        # 创建默认属性映射
+        for creo_prop, sys_field in CREO_PARAMETER_MAPPING.items():
+            CADPropertyMapping.objects.create(
+                software=creo,
+                cad_property=creo_prop,
+                system_field=sys_field,
+                target_model='Material',
+                is_required=creo_prop in ['PART_NUMBER', 'DESCRIPTION'],
+                created_by=request.user
+            )
+        
+        return Response({
+            'message': 'Creo配置初始化成功',
+            'data': CADSoftwareSerializer(creo).data
+        })
 
 
 class CADSessionViewSet(viewsets.ModelViewSet):
@@ -541,7 +881,7 @@ class CADFileViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'])
     def extract_bom(self, request, pk=None):
-        """提取BOM"""
+        """提取BOM（自动识别CAD软件类型）"""
         cad_file = self.get_object()
         
         if cad_file.file_type not in ['ASSEMBLY']:
@@ -556,9 +896,17 @@ class CADFileViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
             created_by=request.user
         )
         
-        # 解析BOM
+        # 根据软件类型选择解析器
         parser = BOMParserService()
-        parsed_items = parser.parse_solidworks_bom(cad_file.file_path)
+        software_type = cad_file.software.software_type
+        bom_format = request.data.get('format', 'csv')
+        
+        if software_type == 'CREO':
+            parsed_items = parser.parse_creo_bom(cad_file.file_path, bom_format)
+        elif software_type == 'SOLIDWORKS':
+            parsed_items = parser.parse_solidworks_bom(cad_file.file_path)
+        else:
+            parsed_items = parser.parse_solidworks_bom(cad_file.file_path)
         
         # 创建BOM项
         for i, item in enumerate(parsed_items):

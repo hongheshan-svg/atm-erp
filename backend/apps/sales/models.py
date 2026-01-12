@@ -608,3 +608,11 @@ from .marketing import MarketingEmailTemplate, MarketingCampaign, CampaignRecipi
 # Import models from ai_prediction
 from .ai_prediction import SalesPrediction, CustomerChurnRisk
 
+# Import models from sms_marketing
+from .sms_marketing import SMSTemplate, SMSCampaign, SMSRecipient, SMSSendLog
+
+# Import models from wechat_marketing
+from .wechat_marketing import (
+    WeChatOfficialAccount, WeChatFollower, WeChatTemplate,
+    WeChatCampaign, WeChatMessageLog
+)
