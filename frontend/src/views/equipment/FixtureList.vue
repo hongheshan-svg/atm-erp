@@ -371,7 +371,7 @@ const fetchData = async () => {
 const fetchStats = async () => {
   try {
     const res = await request.get('/projects/fixtures/statistics/')
-    stats.value = res.data
+    stats.value = res || {}
   } catch (error) {
     console.error('获取统计失败', error)
   }
@@ -380,10 +380,10 @@ const fetchStats = async () => {
 const fetchCategories = async () => {
   try {
     const res = await request.get('/projects/fixture-categories/tree/')
-    categoryTree.value = res.data
+    categoryTree.value = res || []
     
     const flatRes = await request.get('/projects/fixture-categories/')
-    flatCategories.value = flatRes.data.results || flatRes.data
+    flatCategories.value = flatRes.results || flatRes || []
   } catch (error) {
     console.error('获取分类失败', error)
   }
