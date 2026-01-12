@@ -87,8 +87,8 @@ class MaintenanceCalendarView(APIView):
         
         # 添加设备保修到期提醒
         equipments = Equipment.objects.filter(
-            warranty_end__gte=start_date,
-            warranty_end__lte=end_date,
+            warranty_end_date__gte=start_date,
+            warranty_end_date__lte=end_date,
             is_deleted=False
         )
         
@@ -99,11 +99,11 @@ class MaintenanceCalendarView(APIView):
                 'equipment_name': eq.name,
                 'equipment_code': eq.code if hasattr(eq, 'code') else '',
                 'title': f'{eq.name} 保修到期',
-                'date': eq.warranty_end.isoformat(),
+                'date': eq.warranty_end_date.isoformat(),
                 'type': 'warranty',
                 'status': 'warning',
                 'maintenance_type': 'WARRANTY_EXPIRE',
-                'description': f'设备保修将于 {eq.warranty_end} 到期'
+                'description': f'设备保修将于 {eq.warranty_end_date} 到期'
             })
         
         # 按日期排序
