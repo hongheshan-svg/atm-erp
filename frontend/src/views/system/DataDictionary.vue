@@ -223,7 +223,7 @@ const filteredTypes = computed(() => {
 
 const loadTypes = async () => {
   try {
-    const res = await request.get('/api/core/dict-types/')
+    const res = await request.get('/core/dict-types/')
     dictTypes.value = res.results || res || []
   } catch (e) {
     console.error('加载字典类型失败:', e)
@@ -233,7 +233,7 @@ const loadTypes = async () => {
 const selectType = async (type) => {
   selectedType.value = type
   try {
-    const res = await request.get('/api/core/dict-items/', {
+    const res = await request.get('/core/dict-items/', {
       params: { dict_type: type.id }
     })
     dictItems.value = res.results || res || []
@@ -252,10 +252,10 @@ const saveType = async () => {
   saving.value = true
   try {
     if (editingType.value) {
-      await request.put(`/api/core/dict-types/${editingType.value.id}/`, typeForm.value)
+      await request.put(`/core/dict-types/${editingType.value.id}/`, typeForm.value)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/api/core/dict-types/', typeForm.value)
+      await request.post('/core/dict-types/', typeForm.value)
       ElMessage.success('创建成功')
     }
     showTypeDialog.value = false
@@ -276,7 +276,7 @@ const deleteType = async (type) => {
   }
   await ElMessageBox.confirm('确定要删除该字典类型吗？', '确认删除', { type: 'warning' })
   try {
-    await request.delete(`/api/core/dict-types/${type.id}/`)
+    await request.delete(`/core/dict-types/${type.id}/`)
     ElMessage.success('删除成功')
     selectedType.value = null
     dictItems.value = []
@@ -297,10 +297,10 @@ const saveItem = async () => {
   try {
     const data = { ...itemForm.value, dict_type: selectedType.value.id }
     if (editingItem.value) {
-      await request.put(`/api/core/dict-items/${editingItem.value.id}/`, data)
+      await request.put(`/core/dict-items/${editingItem.value.id}/`, data)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/api/core/dict-items/', data)
+      await request.post('/core/dict-items/', data)
       ElMessage.success('创建成功')
     }
     showItemDialog.value = false
@@ -316,7 +316,7 @@ const saveItem = async () => {
 
 const setDefault = async (item) => {
   try {
-    await request.post(`/api/core/dict-items/${item.id}/set_default/`)
+    await request.post(`/core/dict-items/${item.id}/set_default/`)
     ElMessage.success('设置成功')
     selectType(selectedType.value)
   } catch (e) {
@@ -326,7 +326,7 @@ const setDefault = async (item) => {
 
 const toggleItem = async (item) => {
   try {
-    await request.post(`/api/core/dict-items/${item.id}/toggle_enable/`)
+    await request.post(`/core/dict-items/${item.id}/toggle_enable/`)
     ElMessage.success('操作成功')
     selectType(selectedType.value)
   } catch (e) {
@@ -337,7 +337,7 @@ const toggleItem = async (item) => {
 const deleteItem = async (item) => {
   await ElMessageBox.confirm('确定要删除该字典项吗？', '确认删除', { type: 'warning' })
   try {
-    await request.delete(`/api/core/dict-items/${item.id}/`)
+    await request.delete(`/core/dict-items/${item.id}/`)
     ElMessage.success('删除成功')
     selectType(selectedType.value)
   } catch (e) {
@@ -348,8 +348,8 @@ const deleteItem = async (item) => {
 const initSystemDicts = async () => {
   initLoading.value = true
   try {
-    const res = await request.post('/api/core/dict-types/init_system_dicts/')
-    ElMessage.success(res.data.message || '初始化成功')
+    const res = await request.post('/core/dict-types/init_system_dicts/')
+    ElMessage.success(res.message || '初始化成功')
     loadTypes()
   } catch (e) {
     ElMessage.error('初始化失败')
