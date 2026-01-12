@@ -45,7 +45,7 @@ class AuditLogAnalyticsView(APIView):
         ).order_by('-count')[:10]
         
         # 按模块统计
-        by_model = AuditLog.objects.values('content_type').annotate(
+        by_model = AuditLog.objects.values('model_name').annotate(
             count=Count('id')
         ).order_by('-count')[:10]
         
@@ -129,7 +129,6 @@ class AuditLogSecurityView(APIView):
             pass
         
         # 异常操作（短时间内大量操作）
-        from django.db.models import Count
         from django.db.models.functions import TruncMinute
         
         # 找出每分钟操作超过10次的记录
@@ -151,7 +150,7 @@ class AuditLogSecurityView(APIView):
                 'id': log.id,
                 'action': log.action,
                 'user': log.user.username if log.user else 'system',
-                'content_type': log.content_type,
+                'model_name': log.model_name,
                 'object_id': log.object_id,
                 'timestamp': log.timestamp.isoformat(),
                 'ip_address': log.ip_address
@@ -215,7 +214,7 @@ class UserActivityView(APIView):
             {
                 'id': log.id,
                 'action': log.action,
-                'content_type': log.content_type,
+                'model_name': log.model_name,
                 'object_id': log.object_id,
                 'timestamp': log.timestamp.isoformat(),
             }
