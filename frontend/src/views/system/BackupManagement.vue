@@ -143,8 +143,8 @@ const fetchBackups = async () => {
   loading.value = true
   try {
     const res = await request({ url: '/core/backups/', method: 'get' })
-    backups.value = res.data.backups || []
-    backupDir.value = res.data.backup_dir || ''
+    backups.value = res?.backups || []
+    backupDir.value = res?.backup_dir || ''
   } catch (error) {
     ElMessage.error('获取备份列表失败')
   } finally {
@@ -208,7 +208,7 @@ const deleteBackup = async (backup) => {
     )
     
     await request({
-      url: `/api/core/backups/${backup.name}/`,
+      url: `/core/backups/${backup.name}/`,
       method: 'delete'
     })
     ElMessage.success('备份已删除')
@@ -234,7 +234,7 @@ const cleanupBackups = async () => {
       method: 'post',
       data: { keep_days: keepDays.value }
     })
-    ElMessage.success(res.data.message)
+    ElMessage.success(res?.message || '清理成功')
     fetchBackups()
   } catch (error) {
     if (error !== 'cancel') {
