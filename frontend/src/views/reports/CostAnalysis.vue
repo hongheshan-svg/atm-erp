@@ -195,7 +195,7 @@ const fetchCostAnalysis = async () => {
   
   try {
     const res = await request({
-      url: '/api/reports/cost/analysis/',
+      url: '/reports/cost/analysis/',
       method: 'get',
       params: { project: selectedProject.value, hourly_rate: hourlyRate.value }
     })
@@ -210,7 +210,7 @@ const fetchCostAnalysis = async () => {
 const fetchComparison = async () => {
   try {
     const res = await request({
-      url: '/api/reports/cost/comparison/',
+      url: '/reports/cost/comparison/',
       method: 'get'
     })
     comparisonData.value = res.data.comparison || []

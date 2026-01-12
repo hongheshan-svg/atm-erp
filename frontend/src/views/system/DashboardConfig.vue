@@ -211,7 +211,7 @@ const getCategoryType = (category) => {
 
 const fetchConfig = async () => {
   try {
-    const res = await request({ url: '/api/core/user-dashboard/my_dashboard/', method: 'get' })
+    const res = await request({ url: '/core/user-dashboard/my_dashboard/', method: 'get' })
     if (res.data) {
       if (res.data.enabled_widgets) {
         userConfig.value.enabled_widgets = res.data.enabled_widgets
@@ -232,7 +232,7 @@ const saveConfig = async () => {
   saving.value = true
   try {
     await request({
-      url: '/api/core/user-dashboard/',
+      url: '/core/user-dashboard/',
       method: 'post',
       data: {
         enabled_widgets: userConfig.value.enabled_widgets,

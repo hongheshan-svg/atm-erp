@@ -160,7 +160,7 @@ const getActionType = (action) => {
 
 const fetchHealthStatus = async () => {
   try {
-    const res = await request({ url: '/api/core/health/', method: 'get' })
+    const res = await request({ url: '/core/health/', method: 'get' })
     systemHealth.value = res.data
   } catch (error) {
     systemHealth.value = { status: 'error' }
@@ -169,7 +169,7 @@ const fetchHealthStatus = async () => {
 
 const fetchSystemStatus = async () => {
   try {
-    const res = await request({ url: '/api/core/health/status/', method: 'get' })
+    const res = await request({ url: '/core/health/status/', method: 'get' })
     systemStatus.value = res.data
     dataStats.value = res.data.data_stats || {}
     
@@ -187,7 +187,7 @@ const fetchSystemStatus = async () => {
 
 const fetchSecurityStatus = async () => {
   try {
-    const res = await request({ url: '/api/core/health/security/', method: 'get' })
+    const res = await request({ url: '/core/health/security/', method: 'get' })
     securityStatus.value = res.data
   } catch (error) {
     console.error('获取安全状态失败', error)
@@ -196,7 +196,7 @@ const fetchSecurityStatus = async () => {
 
 const fetchRecentLogs = async () => {
   try {
-    const res = await request({ url: '/api/core/audit-logs/', method: 'get', params: { page_size: 10 } })
+    const res = await request({ url: '/core/audit-logs/', method: 'get', params: { page_size: 10 } })
     recentLogs.value = res.results || res || []
   } catch (error) {
     console.error('获取日志失败', error)

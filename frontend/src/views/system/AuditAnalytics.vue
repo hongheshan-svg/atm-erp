@@ -161,7 +161,7 @@ const getActionType = (action) => {
 
 const fetchStats = async () => {
   try {
-    const res = await request({ url: '/api/core/audit-analytics/', method: 'get' })
+    const res = await request({ url: '/core/audit-analytics/', method: 'get' })
     stats.value = res.data
     nextTick(() => {
       renderTrendChart()
@@ -175,7 +175,7 @@ const fetchStats = async () => {
 
 const fetchSecurityData = async () => {
   try {
-    const res = await request({ url: '/api/core/audit-analytics/security/', method: 'get' })
+    const res = await request({ url: '/core/audit-analytics/security/', method: 'get' })
     security.value = res.data
   } catch (error) {
     console.error('获取安全数据失败', error)

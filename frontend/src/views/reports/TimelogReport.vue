@@ -151,7 +151,7 @@ const getPercentage = (hours) => {
 
 const fetchStatistics = async () => {
   try {
-    const res = await request({ url: '/api/reports/timelog/statistics/', method: 'get' })
+    const res = await request({ url: '/reports/timelog/statistics/', method: 'get' })
     statistics.value = res.data
     renderTrendChart()
     renderPieChart()
@@ -189,7 +189,7 @@ const fetchOvertime = async () => {
       params.start_date = dateRange.value[0]
       params.end_date = dateRange.value[1]
     }
-    const res = await request({ url: '/api/reports/timelog/overtime/', method: 'get', params })
+    const res = await request({ url: '/reports/timelog/overtime/', method: 'get', params })
     overtimeData.value = res.data.overtime_by_user || []
   } catch (error) {
     console.error('获取加班数据失败', error)

@@ -142,7 +142,7 @@ const formatDateTime = (dateStr) => {
 const fetchBackups = async () => {
   loading.value = true
   try {
-    const res = await request({ url: '/api/core/backups/', method: 'get' })
+    const res = await request({ url: '/core/backups/', method: 'get' })
     backups.value = res.data.backups || []
     backupDir.value = res.data.backup_dir || ''
   } catch (error) {
@@ -161,7 +161,7 @@ const confirmCreate = async () => {
   creating.value = true
   try {
     const res = await request({
-      url: '/api/core/backups/create/',
+      url: '/core/backups/create/',
       method: 'post',
       data: { name: backupName.value || undefined }
     })
@@ -186,7 +186,7 @@ const confirmRestore = async () => {
   restoring.value = selectedBackup.value.name
   try {
     await request({
-      url: '/api/core/backups/restore/',
+      url: '/core/backups/restore/',
       method: 'post',
       data: { name: selectedBackup.value.name }
     })
@@ -230,7 +230,7 @@ const cleanupBackups = async () => {
     
     cleaning.value = true
     const res = await request({
-      url: '/api/core/backups/cleanup/',
+      url: '/core/backups/cleanup/',
       method: 'post',
       data: { keep_days: keepDays.value }
     })
