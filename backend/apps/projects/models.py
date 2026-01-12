@@ -1173,3 +1173,9 @@ from .requirement_review import (
 # Import models from bom_advanced
 from .bom_advanced import BOMSubstitute, BOMVersion, BOMComparison
 
+
+# Import models from cad_integration
+from .cad_integration import (
+    CADSoftware, CADSession, CADFile,
+    CADBOMImport, CADBOMItem, CADPropertyMapping
+)

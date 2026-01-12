@@ -34,6 +34,13 @@ from .ai_prediction import (
     SalesPredictionViewSet, CustomerChurnRiskViewSet,
     SalesPredictionView, ChurnPredictionView, AIInsightsView
 )
+from .sms_marketing import (
+    SMSTemplateViewSet, SMSCampaignViewSet, SMSSendLogViewSet
+)
+from .wechat_marketing import (
+    WeChatOfficialAccountViewSet, WeChatFollowerViewSet,
+    WeChatTemplateViewSet, WeChatCampaignViewSet, WeChatMessageLogViewSet
+)
 
 router = DefaultRouter()
 router.register(r'quotations', SalesQuotationViewSet, basename='quotation')
@@ -82,6 +89,18 @@ router.register(r'email-logs', EmailSendLogViewSet, basename='email-log')
 # AI预测
 router.register(r'sales-predictions', SalesPredictionViewSet, basename='sales-prediction')
 router.register(r'churn-risks', CustomerChurnRiskViewSet, basename='churn-risk')
+
+# 短信营销
+router.register(r'sms-templates', SMSTemplateViewSet, basename='sms-template')
+router.register(r'sms-campaigns', SMSCampaignViewSet, basename='sms-campaign')
+router.register(r'sms-logs', SMSSendLogViewSet, basename='sms-log')
+
+# 微信营销
+router.register(r'wechat-accounts', WeChatOfficialAccountViewSet, basename='wechat-account')
+router.register(r'wechat-followers', WeChatFollowerViewSet, basename='wechat-follower')
+router.register(r'wechat-templates', WeChatTemplateViewSet, basename='wechat-template')
+router.register(r'wechat-campaigns', WeChatCampaignViewSet, basename='wechat-campaign')
+router.register(r'wechat-message-logs', WeChatMessageLogViewSet, basename='wechat-message-log')
 
 urlpatterns = [
     path('', include(router.urls)),

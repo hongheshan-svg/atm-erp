@@ -58,6 +58,10 @@ from .requirement_review import (
 from .bom_advanced import (
     BOMSubstituteViewSet, BOMVersionViewSet, BOMComparisonViewSet, BOMCompareView
 )
+from .cad_integration import (
+    CADSoftwareViewSet, CADSessionViewSet, CADFileViewSet,
+    CADBOMImportViewSet, CADPropertyMappingViewSet
+)
 
 router = DefaultRouter()
 router.register(r'projects', ProjectViewSet, basename='project')
@@ -165,6 +169,13 @@ router.register(r'review-action-items', ReviewActionItemViewSet, basename='revie
 router.register(r'bom-substitutes', BOMSubstituteViewSet, basename='bom-substitute')
 router.register(r'bom-versions', BOMVersionViewSet, basename='bom-version')
 router.register(r'bom-comparisons', BOMComparisonViewSet, basename='bom-comparison')
+
+# PLM - CAD集成
+router.register(r'cad-software', CADSoftwareViewSet, basename='cad-software')
+router.register(r'cad-sessions', CADSessionViewSet, basename='cad-session')
+router.register(r'cad-files', CADFileViewSet, basename='cad-file')
+router.register(r'cad-bom-imports', CADBOMImportViewSet, basename='cad-bom-import')
+router.register(r'cad-property-mappings', CADPropertyMappingViewSet, basename='cad-property-mapping')
 
 urlpatterns = [
     path('', include(router.urls)),

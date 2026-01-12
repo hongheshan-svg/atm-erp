@@ -1254,3 +1254,9 @@ from .accounting import (
     JournalVoucher, VoucherLine, AccountBalance
 )
 
+
+# Import models from tax_management
+from .tax_management import (
+    TaxType, TaxRate, TaxPeriod,
+    TaxDeclaration, TaxDeclarationItem, TaxInvoice
+)

@@ -38,6 +38,10 @@ from .accounting import (
     AccountCategoryViewSet, ChartOfAccountViewSet, FiscalPeriodViewSet,
     JournalVoucherViewSet, AccountBalanceViewSet
 )
+from .tax_management import (
+    TaxTypeViewSet, TaxRateViewSet, TaxPeriodViewSet,
+    TaxDeclarationViewSet, TaxInvoiceViewSet
+)
 
 router = DefaultRouter()
 router.register(r'currencies', CurrencyViewSet, basename='currency')
@@ -81,6 +85,13 @@ router.register(r'chart-of-accounts', ChartOfAccountViewSet, basename='chart-of-
 router.register(r'fiscal-periods', FiscalPeriodViewSet, basename='fiscal-period')
 router.register(r'journal-vouchers', JournalVoucherViewSet, basename='journal-voucher')
 router.register(r'account-balances', AccountBalanceViewSet, basename='account-balance')
+
+# 税务管理
+router.register(r'tax-types', TaxTypeViewSet, basename='tax-type')
+router.register(r'tax-rates', TaxRateViewSet, basename='tax-rate')
+router.register(r'tax-periods', TaxPeriodViewSet, basename='tax-period')
+router.register(r'tax-declarations', TaxDeclarationViewSet, basename='tax-declaration')
+router.register(r'tax-invoices', TaxInvoiceViewSet, basename='tax-invoice')
 
 urlpatterns = [
     path('', include(router.urls)),
