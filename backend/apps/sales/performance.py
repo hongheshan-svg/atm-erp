@@ -216,7 +216,7 @@ class SalesPerformanceService:
         from apps.sales.models import SalesOrder, SalesQuotation
         from apps.masterdata.models import Customer
         
-        filters = {'salesperson_id': user_id, 'is_deleted': False}
+        filters = {'created_by_id': user_id, 'is_deleted': False}
         date_filters = Q(order_date__year=year)
         
         if month:
@@ -281,7 +281,7 @@ class SalesPerformanceService:
             is_deleted=False,
             status__in=['CONFIRMED', 'COMPLETED']
         ).filter(date_filters).values(
-            'salesperson', 'salesperson__first_name', 'salesperson__last_name'
+            'created_by', 'created_by__first_name', 'created_by__last_name'
         ).annotate(
             order_count=Count('id'),
             total_amount=Sum('total_amount')
@@ -291,8 +291,8 @@ class SalesPerformanceService:
         for i, item in enumerate(ranking, 1):
             result.append({
                 'rank': i,
-                'user_id': item['salesperson'],
-                'name': f"{item['salesperson__first_name'] or ''}{item['salesperson__last_name'] or ''}".strip() or '未知',
+                'user_id': item['created_by'],
+                'name': f"{item['created_by__first_name'] or ''}{item['created_by__last_name'] or ''}".strip() or '未知',
                 'order_count': item['order_count'],
                 'total_amount': float(item['total_amount'] or 0)
             })
