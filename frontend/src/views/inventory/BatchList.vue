@@ -375,11 +375,11 @@ const loadBatches = async () => {
     const response = await request.get(url, { params })
     
     if (viewMode.value === 'all') {
-      batches.value = response.results || []
+      batches.value = response.results || response || []
       pagination.total = response.count || 0
     } else {
-      batches.value = data || []
-      pagination.total = data.length || 0
+      batches.value = response || []
+      pagination.total = Array.isArray(response) ? response.length : 0
     }
   } catch (error) {
     console.error('加载批次失败:', error)
@@ -391,19 +391,19 @@ const loadBatches = async () => {
 const loadSummary = async () => {
   try {
     // Get total
-    const { data: allData } = await request.get('/inventory/batches/', { params: { page_size: 1 } })
+    const allData = await request.get('/inventory/batches/', { params: { page_size: 1 } })
     summary.total = allData.count || 0
     
     // Get expiring
-    const { data: expiringData } = await request.get('/inventory/batches/expiring_soon/', { params: { days: 30 } })
-    summary.expiring = expiringData.length || 0
+    const expiringData = await request.get('/inventory/batches/expiring_soon/', { params: { days: 30 } })
+    summary.expiring = Array.isArray(expiringData) ? expiringData.length : 0
     
     // Get expired
-    const { data: expiredData } = await request.get('/inventory/batches/expired/')
-    summary.expired = expiredData.length || 0
+    const expiredData = await request.get('/inventory/batches/expired/')
+    summary.expired = Array.isArray(expiredData) ? expiredData.length : 0
     
     // Get pending
-    const { data: pendingData } = await request.get('/inventory/batches/', { params: { quality_status: 'PENDING', page_size: 1 } })
+    const pendingData = await request.get('/inventory/batches/', { params: { quality_status: 'PENDING', page_size: 1 } })
     summary.pending = pendingData.count || 0
   } catch (error) {
     console.error('加载统计失败:', error)
@@ -454,7 +454,7 @@ const handleView = async (batch) => {
   // Load move history
   try {
     const response = await request.get('/inventory/batch-moves/by_batch/', { params: { batch_id: batch.id } })
-    batchMoves.value = data || []
+    batchMoves.value = response.results || response || []
   } catch (error) {
     console.error('加载移动历史失败:', error)
     batchMoves.value = []
