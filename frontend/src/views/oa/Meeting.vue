@@ -325,7 +325,7 @@ const fetchRooms = async () => {
 
 const fetchUsers = async () => {
   try {
-    const { data } = await request.get('/accounts/users/')
+    const { data } = await request.get('/auth/users/')
     userList.value = (data.results || data).map(u => ({
       id: u.id,
       name: u.full_name || u.username

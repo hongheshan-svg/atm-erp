@@ -458,11 +458,11 @@ const fetchStats = async () => {
 const fetchOptions = async () => {
   try {
     const [catRes, deptRes, userRes] = await Promise.all([
-      request.get('/finance/asset-categories/tree/'),
-      request.get('/accounts/departments/'),
-      request.get('/accounts/users/')
+      request.get('/finance/asset-categories/'),
+      request.get('/auth/departments/'),
+      request.get('/auth/users/')
     ])
-    categoryTree.value = catRes.data
+    categoryTree.value = catRes.data.results || catRes.data
     departments.value = deptRes.data.results || deptRes.data
     users.value = userRes.data.results || userRes.data
   } catch (e) {

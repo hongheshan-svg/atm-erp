@@ -328,7 +328,7 @@ const createConversation = async () => {
 // 加载用户列表
 const loadUserList = async () => {
   try {
-    const { data } = await request.get('/accounts/users/', { params: { page_size: 200 } })
+    const { data } = await request.get('/auth/users/', { params: { page_size: 200 } })
     userList.value = (data.results || data).filter(u => u.id !== currentUserId.value)
   } catch (e) {
     console.error(e)

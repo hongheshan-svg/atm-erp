@@ -355,7 +355,7 @@ const fetchProjects = async () => {
 
 const fetchUsers = async () => {
   try {
-    const { data } = await request.get('/accounts/users/', { params: { page_size: 200 } })
+    const { data } = await request.get('/auth/users/', { params: { page_size: 200 } })
     users.value = (data.results || data).map(u => ({
       id: u.id,
       name: u.first_name || u.last_name || u.username
