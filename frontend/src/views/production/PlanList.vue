@@ -526,7 +526,7 @@ const loadData = async () => {
     }
     const res = await request.get('/production/plans/', { params })
     planList.value = res.results || res || []
-    pagination.total = res.count || res.data.length
+    pagination.total = res.count || (Array.isArray(planList.value) ? planList.value.length : 0)
   } catch (error) {
     console.error('加载计划列表失败:', error)
   } finally {
@@ -585,7 +585,7 @@ const handlePageChange = (page) => {
 const handleRowClick = async (row) => {
   try {
     const res = await request.get(`/production/plans/${row.id}/`)
-    currentPlan.value = res.data
+    currentPlan.value = res
     detailVisible.value = true
   } catch (error) {
     console.error('加载计划详情失败:', error)
@@ -735,7 +735,7 @@ const handleAddProcessConfirm = async () => {
     
     // 刷新详情
     const res = await request.get(`/production/plans/${currentPlan.value.id}/`)
-    currentPlan.value = res.data
+    currentPlan.value = res
     loadData()
   } catch (error) {
     console.error('添加工序失败:', error)
@@ -752,7 +752,7 @@ const handleStartProcess = async (row) => {
     
     // 刷新详情
     const res = await request.get(`/production/plans/${currentPlan.value.id}/`)
-    currentPlan.value = res.data
+    currentPlan.value = res
     loadData()
   } catch (error) {
     console.error('开始工序失败:', error)
@@ -767,7 +767,7 @@ const handleCompleteProcess = async (row) => {
     
     // 刷新详情
     const res = await request.get(`/production/plans/${currentPlan.value.id}/`)
-    currentPlan.value = res.data
+    currentPlan.value = res
     loadData()
   } catch (error) {
     console.error('完成工序失败:', error)
@@ -795,7 +795,7 @@ const handleProgressConfirm = async () => {
     
     // 刷新详情
     const res = await request.get(`/production/plans/${currentPlan.value.id}/`)
-    currentPlan.value = res.data
+    currentPlan.value = res
     loadData()
   } catch (error) {
     console.error('报工失败:', error)
