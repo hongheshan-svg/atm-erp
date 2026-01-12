@@ -600,3 +600,11 @@ class SalesContract(BaseModel):
 # Import models from win_loss_analysis
 from .win_loss_analysis import WinLossReason, OpportunityCloseRecord
 
+
+
+# Import models from marketing
+from .marketing import MarketingEmailTemplate, MarketingCampaign, CampaignRecipient, EmailSendLog
+
+# Import models from ai_prediction
+from .ai_prediction import SalesPrediction, CustomerChurnRisk
+

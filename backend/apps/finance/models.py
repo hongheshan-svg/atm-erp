@@ -1246,3 +1246,11 @@ from .reconciliation_models import (  # noqa: E402, F401
     SalesReconciliation, SalesReconciliationLine,
     InvoiceReconciliation, InvoiceReconciliationLine
 )
+
+
+# Import models from accounting
+from .accounting import (
+    AccountCategory, ChartOfAccount, FiscalPeriod,
+    JournalVoucher, VoucherLine, AccountBalance
+)
+

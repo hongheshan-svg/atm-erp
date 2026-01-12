@@ -34,6 +34,10 @@ from .asset import (
     AssetCategoryViewSet, FixedAssetViewSet,
     AssetTransferViewSet, AssetDisposalViewSet, AssetDepreciationViewSet
 )
+from .accounting import (
+    AccountCategoryViewSet, ChartOfAccountViewSet, FiscalPeriodViewSet,
+    JournalVoucherViewSet, AccountBalanceViewSet
+)
 
 router = DefaultRouter()
 router.register(r'currencies', CurrencyViewSet, basename='currency')
@@ -70,6 +74,13 @@ router.register(r'fixed-assets', FixedAssetViewSet, basename='fixed-asset')
 router.register(r'asset-transfers', AssetTransferViewSet, basename='asset-transfer')
 router.register(r'asset-disposals', AssetDisposalViewSet, basename='asset-disposal')
 router.register(r'asset-depreciations', AssetDepreciationViewSet, basename='asset-depreciation')
+
+# 总账管理
+router.register(r'account-categories', AccountCategoryViewSet, basename='account-category')
+router.register(r'chart-of-accounts', ChartOfAccountViewSet, basename='chart-of-account')
+router.register(r'fiscal-periods', FiscalPeriodViewSet, basename='fiscal-period')
+router.register(r'journal-vouchers', JournalVoucherViewSet, basename='journal-voucher')
+router.register(r'account-balances', AccountBalanceViewSet, basename='account-balance')
 
 urlpatterns = [
     path('', include(router.urls)),

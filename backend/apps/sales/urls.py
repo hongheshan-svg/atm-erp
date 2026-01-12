@@ -26,6 +26,14 @@ from .win_loss_analysis import (
     WinLossReasonViewSet, OpportunityCloseRecordViewSet,
     WinLossAnalysisView, WinLossComparisonView
 )
+from .marketing import (
+    MarketingEmailTemplateViewSet, MarketingCampaignViewSet,
+    CampaignRecipientViewSet, EmailSendLogViewSet
+)
+from .ai_prediction import (
+    SalesPredictionViewSet, CustomerChurnRiskViewSet,
+    SalesPredictionView, ChurnPredictionView, AIInsightsView
+)
 
 router = DefaultRouter()
 router.register(r'quotations', SalesQuotationViewSet, basename='quotation')
@@ -65,6 +73,16 @@ router.register(r'customer-rfm', CustomerRFMViewSet, basename='customer-rfm')
 router.register(r'win-loss-reasons', WinLossReasonViewSet, basename='win-loss-reason')
 router.register(r'opportunity-closes', OpportunityCloseRecordViewSet, basename='opportunity-close')
 
+# 营销自动化
+router.register(r'marketing-email-templates', MarketingEmailTemplateViewSet, basename='marketing-email-template')
+router.register(r'campaigns', MarketingCampaignViewSet, basename='campaign')
+router.register(r'campaign-recipients', CampaignRecipientViewSet, basename='campaign-recipient')
+router.register(r'email-logs', EmailSendLogViewSet, basename='email-log')
+
+# AI预测
+router.register(r'sales-predictions', SalesPredictionViewSet, basename='sales-prediction')
+router.register(r'churn-risks', CustomerChurnRiskViewSet, basename='churn-risk')
+
 urlpatterns = [
     path('', include(router.urls)),
     
@@ -77,5 +95,10 @@ urlpatterns = [
     # 赢单/丢单分析
     path('analysis/win-loss/', WinLossAnalysisView.as_view(), name='win-loss-analysis'),
     path('analysis/win-loss-comparison/', WinLossComparisonView.as_view(), name='win-loss-comparison'),
+    
+    # AI预测
+    path('ai/sales-prediction/', SalesPredictionView.as_view(), name='ai-sales-prediction'),
+    path('ai/churn-prediction/', ChurnPredictionView.as_view(), name='ai-churn-prediction'),
+    path('ai/insights/', AIInsightsView.as_view(), name='ai-insights'),
 ]
 
