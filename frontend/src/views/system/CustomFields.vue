@@ -271,7 +271,7 @@ const isTextType = computed(() => {
 const loadSupportedModels = async () => {
   try {
     const res = await request.get('/core/custom-field-definitions/supported_models/')
-    supportedModels.value = res.data
+    supportedModels.value = res || []
     if (supportedModels.value.length) {
       selectedModel.value = supportedModels.value[0].value
       loadFields()
@@ -284,7 +284,7 @@ const loadSupportedModels = async () => {
 const loadFieldTypes = async () => {
   try {
     const res = await request.get('/core/custom-field-definitions/field_types/')
-    fieldTypes.value = res.data
+    fieldTypes.value = res || []
   } catch (e) {
     console.error('加载字段类型失败:', e)
   }
