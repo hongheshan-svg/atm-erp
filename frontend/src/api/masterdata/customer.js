@@ -5,7 +5,7 @@ import request from '@/utils/request'
 
 export function getCustomerList(params) {
   return request({
-    url: '/api/masterdata/customers/',
+    url: '/masterdata/customers/',
     method: 'get',
     params
   })
@@ -20,7 +20,7 @@ export function getCustomer(id) {
 
 export function createCustomer(data) {
   return request({
-    url: '/api/masterdata/customers/',
+    url: '/masterdata/customers/',
     method: 'post',
     data
   })

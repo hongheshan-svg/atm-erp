@@ -6,7 +6,7 @@ import request from '@/utils/request'
 // =============== 知识分类 ===============
 export function getKnowledgeCategoryList(params) {
   return request({
-    url: '/api/projects/knowledge-categories/',
+    url: '/projects/knowledge-categories/',
     method: 'get',
     params
   })
@@ -14,14 +14,14 @@ export function getKnowledgeCategoryList(params) {
 
 export function getKnowledgeCategoryTree() {
   return request({
-    url: '/api/projects/knowledge-categories/tree/',
+    url: '/projects/knowledge-categories/tree/',
     method: 'get'
   })
 }
 
 export function createKnowledgeCategory(data) {
   return request({
-    url: '/api/projects/knowledge-categories/',
+    url: '/projects/knowledge-categories/',
     method: 'post',
     data
   })
@@ -45,7 +45,7 @@ export function deleteKnowledgeCategory(id) {
 // =============== 知识文章 ===============
 export function getKnowledgeArticleList(params) {
   return request({
-    url: '/api/projects/knowledge-articles/',
+    url: '/projects/knowledge-articles/',
     method: 'get',
     params
   })
@@ -60,7 +60,7 @@ export function getKnowledgeArticle(id) {
 
 export function createKnowledgeArticle(data) {
   return request({
-    url: '/api/projects/knowledge-articles/',
+    url: '/projects/knowledge-articles/',
     method: 'post',
     data
   })
@@ -83,7 +83,7 @@ export function deleteKnowledgeArticle(id) {
 
 export function getKnowledgeArticleStatistics() {
   return request({
-    url: '/api/projects/knowledge-articles/statistics/',
+    url: '/projects/knowledge-articles/statistics/',
     method: 'get'
   })
 }
@@ -104,7 +104,7 @@ export function likeKnowledgeArticle(id) {
 
 export function searchKnowledgeArticles(keyword) {
   return request({
-    url: '/api/projects/knowledge-articles/search/',
+    url: '/projects/knowledge-articles/search/',
     method: 'get',
     params: { q: keyword }
   })
@@ -113,7 +113,7 @@ export function searchKnowledgeArticles(keyword) {
 // =============== 项目归档 ===============
 export function getProjectArchiveList(params) {
   return request({
-    url: '/api/projects/project-archives/',
+    url: '/projects/project-archives/',
     method: 'get',
     params
   })
@@ -128,7 +128,7 @@ export function getProjectArchive(id) {
 
 export function createProjectArchive(data) {
   return request({
-    url: '/api/projects/project-archives/',
+    url: '/projects/project-archives/',
     method: 'post',
     data
   })
@@ -175,7 +175,7 @@ export function generateKnowledgeFromArchive(id) {
 // =============== 技术问题 ===============
 export function getTechnicalIssueList(params) {
   return request({
-    url: '/api/projects/technical-issues/',
+    url: '/projects/technical-issues/',
     method: 'get',
     params
   })
@@ -190,7 +190,7 @@ export function getTechnicalIssue(id) {
 
 export function createTechnicalIssue(data) {
   return request({
-    url: '/api/projects/technical-issues/',
+    url: '/projects/technical-issues/',
     method: 'post',
     data
   })
@@ -222,7 +222,7 @@ export function convertIssueToKnowledge(id) {
 // =============== 标准部件 ===============
 export function getStandardComponentList(params) {
   return request({
-    url: '/api/projects/standard-components/',
+    url: '/projects/standard-components/',
     method: 'get',
     params
   })
@@ -237,7 +237,7 @@ export function getStandardComponent(id) {
 
 export function createStandardComponent(data) {
   return request({
-    url: '/api/projects/standard-components/',
+    url: '/projects/standard-components/',
     method: 'post',
     data
   })

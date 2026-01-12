@@ -6,7 +6,7 @@ import request from '@/utils/request'
 // 管理层仪表盘
 export function getExecutiveDashboard() {
   return request({
-    url: '/api/core/dashboards/executive/',
+    url: '/core/dashboards/executive/',
     method: 'get'
   })
 }
@@ -14,7 +14,7 @@ export function getExecutiveDashboard() {
 // 项目经理仪表盘
 export function getProjectManagerDashboard() {
   return request({
-    url: '/api/core/dashboards/project-manager/',
+    url: '/core/dashboards/project-manager/',
     method: 'get'
   })
 }
@@ -22,7 +22,7 @@ export function getProjectManagerDashboard() {
 // 销售仪表盘
 export function getSalesDashboard() {
   return request({
-    url: '/api/core/dashboards/sales/',
+    url: '/core/dashboards/sales/',
     method: 'get'
   })
 }
@@ -30,7 +30,7 @@ export function getSalesDashboard() {
 // 生产仪表盘
 export function getProductionDashboard() {
   return request({
-    url: '/api/core/dashboards/production/',
+    url: '/core/dashboards/production/',
     method: 'get'
   })
 }
@@ -38,7 +38,7 @@ export function getProductionDashboard() {
 // 财务仪表盘
 export function getFinanceDashboard() {
   return request({
-    url: '/api/core/dashboards/finance/',
+    url: '/core/dashboards/finance/',
     method: 'get'
   })
 }

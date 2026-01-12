@@ -6,7 +6,7 @@ import request from '@/utils/request'
 // 评价模板
 export function getEvaluationTemplateList(params) {
   return request({
-    url: '/api/purchase/evaluation-templates/',
+    url: '/purchase/evaluation-templates/',
     method: 'get',
     params
   })
@@ -21,7 +21,7 @@ export function getEvaluationTemplate(id) {
 
 export function createEvaluationTemplate(data) {
   return request({
-    url: '/api/purchase/evaluation-templates/',
+    url: '/purchase/evaluation-templates/',
     method: 'post',
     data
   })
@@ -68,7 +68,7 @@ export function copyTemplate(id, data) {
 // 评价指标
 export function getEvaluationCriteriaList(params) {
   return request({
-    url: '/api/purchase/evaluation-criteria/',
+    url: '/purchase/evaluation-criteria/',
     method: 'get',
     params
   })
@@ -76,7 +76,7 @@ export function getEvaluationCriteriaList(params) {
 
 export function createEvaluationCriteria(data) {
   return request({
-    url: '/api/purchase/evaluation-criteria/',
+    url: '/purchase/evaluation-criteria/',
     method: 'post',
     data
   })
@@ -100,7 +100,7 @@ export function deleteEvaluationCriteria(id) {
 // 供应商评价
 export function getEvaluationList(params) {
   return request({
-    url: '/api/purchase/evaluations/',
+    url: '/purchase/evaluations/',
     method: 'get',
     params
   })
@@ -115,7 +115,7 @@ export function getEvaluation(id) {
 
 export function createEvaluation(data) {
   return request({
-    url: '/api/purchase/evaluations/',
+    url: '/purchase/evaluations/',
     method: 'post',
     data
   })
@@ -169,14 +169,14 @@ export function updateEvaluationScores(id, data) {
 
 export function getEvaluationStatistics() {
   return request({
-    url: '/api/purchase/evaluations/statistics/',
+    url: '/purchase/evaluations/statistics/',
     method: 'get'
   })
 }
 
 export function getSupplierRanking() {
   return request({
-    url: '/api/purchase/evaluations/supplier_ranking/',
+    url: '/purchase/evaluations/supplier_ranking/',
     method: 'get'
   })
 }
@@ -184,7 +184,7 @@ export function getSupplierRanking() {
 // 供应商等级历史
 export function getGradeHistoryList(params) {
   return request({
-    url: '/api/purchase/grade-history/',
+    url: '/purchase/grade-history/',
     method: 'get',
     params
   })
@@ -193,7 +193,7 @@ export function getGradeHistoryList(params) {
 // 供应商黑名单
 export function getBlacklistList(params) {
   return request({
-    url: '/api/purchase/blacklist/',
+    url: '/purchase/blacklist/',
     method: 'get',
     params
   })
@@ -201,7 +201,7 @@ export function getBlacklistList(params) {
 
 export function createBlacklist(data) {
   return request({
-    url: '/api/purchase/blacklist/',
+    url: '/purchase/blacklist/',
     method: 'post',
     data
   })
@@ -217,7 +217,7 @@ export function liftBlacklist(id, data) {
 
 export function getActiveBlacklist() {
   return request({
-    url: '/api/purchase/blacklist/active_list/',
+    url: '/purchase/blacklist/active_list/',
     method: 'get'
   })
 }

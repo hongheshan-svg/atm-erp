@@ -6,7 +6,7 @@ import request from '@/utils/request'
 // =============== 线索来源 ===============
 export function getLeadSourceList(params) {
   return request({
-    url: '/api/sales/lead-sources/',
+    url: '/sales/lead-sources/',
     method: 'get',
     params
   })
@@ -14,7 +14,7 @@ export function getLeadSourceList(params) {
 
 export function createLeadSource(data) {
   return request({
-    url: '/api/sales/lead-sources/',
+    url: '/sales/lead-sources/',
     method: 'post',
     data
   })
@@ -38,7 +38,7 @@ export function deleteLeadSource(id) {
 // =============== 销售线索 ===============
 export function getLeadList(params) {
   return request({
-    url: '/api/sales/leads/',
+    url: '/sales/leads/',
     method: 'get',
     params
   })
@@ -53,7 +53,7 @@ export function getLead(id) {
 
 export function createLead(data) {
   return request({
-    url: '/api/sales/leads/',
+    url: '/sales/leads/',
     method: 'post',
     data
   })
@@ -76,7 +76,7 @@ export function deleteLead(id) {
 
 export function getLeadStatistics(params) {
   return request({
-    url: '/api/sales/leads/statistics/',
+    url: '/sales/leads/statistics/',
     method: 'get',
     params
   })
@@ -101,7 +101,7 @@ export function disqualifyLead(id, data) {
 // =============== 销售商机 ===============
 export function getOpportunityList(params) {
   return request({
-    url: '/api/sales/opportunities/',
+    url: '/sales/opportunities/',
     method: 'get',
     params
   })
@@ -116,7 +116,7 @@ export function getOpportunity(id) {
 
 export function createOpportunity(data) {
   return request({
-    url: '/api/sales/opportunities/',
+    url: '/sales/opportunities/',
     method: 'post',
     data
   })
@@ -139,7 +139,7 @@ export function deleteOpportunity(id) {
 
 export function getOpportunityStatistics(params) {
   return request({
-    url: '/api/sales/opportunities/statistics/',
+    url: '/sales/opportunities/statistics/',
     method: 'get',
     params
   })
@@ -147,7 +147,7 @@ export function getOpportunityStatistics(params) {
 
 export function getOpportunityPipeline(params) {
   return request({
-    url: '/api/sales/opportunities/pipeline/',
+    url: '/sales/opportunities/pipeline/',
     method: 'get',
     params
   })
@@ -179,7 +179,7 @@ export function createQuotationFromOpportunity(id) {
 // =============== 商机活动 ===============
 export function getOpportunityActivityList(params) {
   return request({
-    url: '/api/sales/opportunity-activities/',
+    url: '/sales/opportunity-activities/',
     method: 'get',
     params
   })
@@ -188,7 +188,7 @@ export function getOpportunityActivityList(params) {
 // =============== 销售预测 ===============
 export function getSalesForecastList(params) {
   return request({
-    url: '/api/sales/forecasts/',
+    url: '/sales/forecasts/',
     method: 'get',
     params
   })
@@ -196,7 +196,7 @@ export function getSalesForecastList(params) {
 
 export function getSalesForecastSummary(params) {
   return request({
-    url: '/api/sales/forecasts/summary/',
+    url: '/sales/forecasts/summary/',
     method: 'get',
     params
   })
@@ -204,7 +204,7 @@ export function getSalesForecastSummary(params) {
 
 export function recalculateSalesForecast(data) {
   return request({
-    url: '/api/sales/forecasts/recalculate/',
+    url: '/sales/forecasts/recalculate/',
     method: 'post',
     data
   })

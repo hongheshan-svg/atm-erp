@@ -5,7 +5,7 @@ import request from '@/utils/request'
 
 export function getProjectList(params) {
   return request({
-    url: '/api/projects/projects/',
+    url: '/projects/projects/',
     method: 'get',
     params
   })
@@ -20,7 +20,7 @@ export function getProject(id) {
 
 export function createProject(data) {
   return request({
-    url: '/api/projects/projects/',
+    url: '/projects/projects/',
     method: 'post',
     data
   })
@@ -43,7 +43,7 @@ export function deleteProject(id) {
 
 export function getProjectStatistics() {
   return request({
-    url: '/api/projects/projects/statistics/',
+    url: '/projects/projects/statistics/',
     method: 'get'
   })
 }

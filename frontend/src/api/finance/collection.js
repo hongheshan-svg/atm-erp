@@ -6,7 +6,7 @@ import request from '@/utils/request'
 // =============== 回款计划 ===============
 export function getCollectionPlanList(params) {
   return request({
-    url: '/api/finance/collection-plans/',
+    url: '/finance/collection-plans/',
     method: 'get',
     params
   })
@@ -21,7 +21,7 @@ export function getCollectionPlan(id) {
 
 export function createCollectionPlan(data) {
   return request({
-    url: '/api/finance/collection-plans/',
+    url: '/finance/collection-plans/',
     method: 'post',
     data
   })
@@ -44,7 +44,7 @@ export function deleteCollectionPlan(id) {
 
 export function getCollectionPlanStatistics(params) {
   return request({
-    url: '/api/finance/collection-plans/statistics/',
+    url: '/finance/collection-plans/statistics/',
     method: 'get',
     params
   })
@@ -52,7 +52,7 @@ export function getCollectionPlanStatistics(params) {
 
 export function getOverdueCollections(params) {
   return request({
-    url: '/api/finance/collection-plans/overdue/',
+    url: '/finance/collection-plans/overdue/',
     method: 'get',
     params
   })
@@ -60,7 +60,7 @@ export function getOverdueCollections(params) {
 
 export function getUpcomingCollections(params) {
   return request({
-    url: '/api/finance/collection-plans/upcoming/',
+    url: '/finance/collection-plans/upcoming/',
     method: 'get',
     params
   })
@@ -92,7 +92,7 @@ export function createStandardMilestones(id, data) {
 // =============== 回款节点 ===============
 export function getCollectionMilestoneList(params) {
   return request({
-    url: '/api/finance/collection-milestones/',
+    url: '/finance/collection-milestones/',
     method: 'get',
     params
   })
@@ -139,7 +139,7 @@ export function sendMilestoneReminder(id, data) {
 // =============== 收款记录 ===============
 export function getCollectionRecordList(params) {
   return request({
-    url: '/api/finance/collection-records/',
+    url: '/finance/collection-records/',
     method: 'get',
     params
   })
@@ -147,7 +147,7 @@ export function getCollectionRecordList(params) {
 
 export function createCollectionRecord(data) {
   return request({
-    url: '/api/finance/collection-records/',
+    url: '/finance/collection-records/',
     method: 'post',
     data
   })
