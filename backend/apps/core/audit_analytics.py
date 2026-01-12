@@ -26,9 +26,9 @@ class AuditLogAnalyticsView(APIView):
         
         # 基础统计
         total_logs = AuditLog.objects.count()
-        today_logs = AuditLog.objects.filter(created_at__date=today).count()
-        week_logs = AuditLog.objects.filter(created_at__date__gte=this_week_start).count()
-        month_logs = AuditLog.objects.filter(created_at__date__gte=this_month_start).count()
+        today_logs = AuditLog.objects.filter(timestamp__date=today).count()
+        week_logs = AuditLog.objects.filter(timestamp__date__gte=this_week_start).count()
+        month_logs = AuditLog.objects.filter(timestamp__date__gte=this_month_start).count()
         
         # 按操作类型统计
         by_action = AuditLog.objects.values('action').annotate(
@@ -37,7 +37,7 @@ class AuditLogAnalyticsView(APIView):
         
         # 按用户统计（本月）
         by_user = AuditLog.objects.filter(
-            created_at__date__gte=this_month_start
+            timestamp__date__gte=this_month_start
         ).values(
             'user__username'
         ).annotate(
@@ -52,18 +52,18 @@ class AuditLogAnalyticsView(APIView):
         # 每日趋势（近30天）
         thirty_days_ago = today - timedelta(days=30)
         daily_trend = AuditLog.objects.filter(
-            created_at__date__gte=thirty_days_ago
+            timestamp__date__gte=thirty_days_ago
         ).annotate(
-            date=TruncDate('created_at')
+            date=TruncDate('timestamp')
         ).values('date').annotate(
             count=Count('id')
         ).order_by('date')
         
         # 每小时分布（今天）
         hourly_distribution = AuditLog.objects.filter(
-            created_at__date=today
+            timestamp__date=today
         ).annotate(
-            hour=TruncHour('created_at')
+            hour=TruncHour('timestamp')
         ).values('hour').annotate(
             count=Count('id')
         ).order_by('hour')
@@ -100,13 +100,13 @@ class AuditLogSecurityView(APIView):
         sensitive_actions = ['delete', 'export', 'bulk_delete', 'restore', 'approve', 'reject']
         sensitive_logs = AuditLog.objects.filter(
             action__in=sensitive_actions,
-            created_at__date__gte=week_ago
+            timestamp__date__gte=week_ago
         ).count()
         
         # 按敏感操作类型统计
         sensitive_by_action = AuditLog.objects.filter(
             action__in=sensitive_actions,
-            created_at__date__gte=week_ago
+            timestamp__date__gte=week_ago
         ).values('action').annotate(
             count=Count('id')
         ).order_by('-count')
@@ -134,9 +134,9 @@ class AuditLogSecurityView(APIView):
         
         # 找出每分钟操作超过10次的记录
         high_frequency = AuditLog.objects.filter(
-            created_at__date=today
+            timestamp__date=today
         ).annotate(
-            minute=TruncMinute('created_at')
+            minute=TruncMinute('timestamp')
         ).values('user__username', 'minute').annotate(
             count=Count('id')
         ).filter(count__gt=10).order_by('-count')[:10]
@@ -144,7 +144,7 @@ class AuditLogSecurityView(APIView):
         # 最近的敏感操作
         recent_sensitive = AuditLog.objects.filter(
             action__in=sensitive_actions
-        ).select_related('user').order_by('-created_at')[:20]
+        ).select_related('user').order_by('-timestamp')[:20]
         
         recent_sensitive_data = [
             {
@@ -153,7 +153,7 @@ class AuditLogSecurityView(APIView):
                 'user': log.user.username if log.user else 'system',
                 'content_type': log.content_type,
                 'object_id': log.object_id,
-                'created_at': log.created_at.isoformat(),
+                'timestamp': log.timestamp.isoformat(),
                 'ip_address': log.ip_address
             }
             for log in recent_sensitive
@@ -199,25 +199,25 @@ class UserActivityView(APIView):
         user_logs = AuditLog.objects.filter(user=target_user)
         
         total_operations = user_logs.count()
-        month_operations = user_logs.filter(created_at__date__gte=this_month_start).count()
-        today_operations = user_logs.filter(created_at__date=today).count()
+        month_operations = user_logs.filter(timestamp__date__gte=this_month_start).count()
+        today_operations = user_logs.filter(timestamp__date=today).count()
         
         # 按操作类型
         by_action = user_logs.filter(
-            created_at__date__gte=this_month_start
+            timestamp__date__gte=this_month_start
         ).values('action').annotate(
             count=Count('id')
         ).order_by('-count')[:10]
         
         # 最近操作
-        recent = user_logs.order_by('-created_at')[:20]
+        recent = user_logs.order_by('-timestamp')[:20]
         recent_data = [
             {
                 'id': log.id,
                 'action': log.action,
                 'content_type': log.content_type,
                 'object_id': log.object_id,
-                'created_at': log.created_at.isoformat(),
+                'timestamp': log.timestamp.isoformat(),
             }
             for log in recent
         ]
@@ -225,9 +225,9 @@ class UserActivityView(APIView):
         # 每日操作趋势
         thirty_days_ago = today - timedelta(days=30)
         daily_trend = user_logs.filter(
-            created_at__date__gte=thirty_days_ago
+            timestamp__date__gte=thirty_days_ago
         ).annotate(
-            date=TruncDate('created_at')
+            date=TruncDate('timestamp')
         ).values('date').annotate(
             count=Count('id')
         ).order_by('date')
