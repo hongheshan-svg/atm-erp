@@ -306,7 +306,7 @@ const fetchData = async () => {
 const fetchStats = async () => {
   try {
     const res = await request.get('/projects/equipment/statistics/')
-    stats.value = res.data
+    stats.value = res || {}
   } catch (error) {
     console.error('获取统计失败', error)
   }
