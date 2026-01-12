@@ -640,7 +640,7 @@ const loadData = async () => {
     }
     const res = await request.get('/production/debug-records/', { params })
     recordList.value = res.results || res || []
-    pagination.total = res.count || res.data.length
+    pagination.total = res.count || (Array.isArray(recordList.value) ? recordList.value.length : 0)
   } catch (error) {
     console.error('加载调试记录失败:', error)
   } finally {

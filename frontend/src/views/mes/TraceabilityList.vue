@@ -157,7 +157,7 @@ const loadLots = async () => {
       params: { page: pagination.page, page_size: pagination.pageSize }
     })
     lots.value = res.results || res || []
-    pagination.total = res.count || res.data.length
+    pagination.total = res.count || (Array.isArray(lots.value) ? lots.value.length : 0)
   } catch (error) {
     console.error(error)
   } finally {

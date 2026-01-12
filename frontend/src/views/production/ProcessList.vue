@@ -342,7 +342,7 @@ const loadData = async () => {
     }
     const res = await request.get('/production/processes/', { params })
     processList.value = res.results || res || []
-    pagination.total = res.count || res.data.length
+    pagination.total = res.count || (Array.isArray(processList.value) ? processList.value.length : 0)
   } catch (error) {
     console.error('加载工序列表失败:', error)
   } finally {

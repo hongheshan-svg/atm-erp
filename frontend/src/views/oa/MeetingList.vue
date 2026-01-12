@@ -189,7 +189,7 @@ const loadMeetings = async () => {
     if (statusFilter.value) params.status = statusFilter.value
     const res = await request.get('/core/meetings/', { params })
     meetings.value = res.results || res || []
-    pagination.total = res.count || res.data.length
+    pagination.total = res.count || (Array.isArray(meetings.value) ? meetings.value.length : 0)
   } catch (error) {
     console.error(error)
   } finally {
@@ -200,7 +200,7 @@ const loadMeetings = async () => {
 const loadUpcoming = async () => {
   try {
     const res = await request.get('/core/meetings/upcoming/')
-    upcomingMeetings.value = res.data
+    upcomingMeetings.value = res || []
   } catch (error) {
     console.error(error)
   }

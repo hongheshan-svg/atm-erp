@@ -687,7 +687,7 @@ const loadData = async () => {
     }
     const res = await request.get('/production/inspections/', { params })
     inspectionList.value = res.results || res || []
-    pagination.total = res.count || res.data.length
+    pagination.total = res.count || (Array.isArray(inspectionList.value) ? inspectionList.value.length : 0)
   } catch (error) {
     console.error('加载检验单失败:', error)
   } finally {
