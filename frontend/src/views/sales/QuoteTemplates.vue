@@ -298,7 +298,7 @@ const totalAmount = computed(() => {
 
 const loadTemplates = async () => {
   try {
-    const res = await request.get('/api/sales/quote-templates/')
+    const res = await request.get('/sales/quote-templates/')
     templates.value = res.results || res || []
   } catch (e) {
     console.error('加载模板失败:', e)
@@ -342,10 +342,10 @@ const saveTemplate = async () => {
     delete data.footer_config_json
     
     if (editingTemplate.value) {
-      await request.put(`/api/sales/quote-templates/${editingTemplate.value.id}/`, data)
+      await request.put(`/sales/quote-templates/${editingTemplate.value.id}/`, data)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/api/sales/quote-templates/', data)
+      await request.post('/sales/quote-templates/', data)
       ElMessage.success('创建成功')
     }
     showTemplateDialog.value = false
@@ -360,7 +360,7 @@ const saveTemplate = async () => {
 
 const setDefault = async () => {
   try {
-    await request.post(`/api/sales/quote-templates/${selectedTemplate.value.id}/set_default/`)
+    await request.post(`/sales/quote-templates/${selectedTemplate.value.id}/set_default/`)
     ElMessage.success('设置成功')
     loadTemplates()
   } catch (e) {
@@ -396,17 +396,17 @@ const generateQuote = async () => {
   
   generating.value = true
   try {
-    const res = await request.post('/api/sales/quote-templates/generate/', {
+    const res = await request.post('/sales/quote-templates/generate/', {
       template_id: selectedTemplate.value?.id,
       ...quoteForm.value,
       output_format: 'excel'
     })
     
-    if (res.data.success) {
+    if (res.success) {
       ElMessage.success('报价单生成成功')
       // 下载文件
-      if (res.data.download_url) {
-        window.open(res.data.download_url, '_blank')
+      if (res.download_url) {
+        window.open(res.download_url, '_blank')
       }
       showGenerateDialog.value = false
     }
