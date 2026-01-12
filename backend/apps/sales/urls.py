@@ -79,6 +79,7 @@ router.register(r'customer-rfm', CustomerRFMViewSet, basename='customer-rfm')
 # 赢单/丢单分析
 router.register(r'win-loss-reasons', WinLossReasonViewSet, basename='win-loss-reason')
 router.register(r'opportunity-closes', OpportunityCloseRecordViewSet, basename='opportunity-close')
+router.register(r'close-records', OpportunityCloseRecordViewSet, basename='close-record')  # 别名
 
 # 营销自动化
 router.register(r'marketing-email-templates', MarketingEmailTemplateViewSet, basename='marketing-email-template')

@@ -361,7 +361,7 @@ class WorkOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
         ])
     
     @action(detail=True, methods=['post'])
-    def dispatch(self, request, pk=None):
+    def assign_workers(self, request, pk=None):
         """派工"""
         work_order = self.get_object()
         worker_ids = request.data.get('worker_ids', [])

@@ -20,6 +20,7 @@ from .credit_management import (
 
 router = DefaultRouter()
 router.register(r'categories', ItemCategoryViewSet, basename='category')
+router.register(r'item-categories', ItemCategoryViewSet, basename='item-category')  # 别名
 router.register(r'items', ItemViewSet, basename='item')
 router.register(r'customers', CustomerViewSet, basename='customer')
 router.register(r'suppliers', SupplierViewSet, basename='supplier')

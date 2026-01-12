@@ -42,6 +42,7 @@ from .tax_management import (
     TaxTypeViewSet, TaxRateViewSet, TaxPeriodViewSet,
     TaxDeclarationViewSet, TaxInvoiceViewSet
 )
+from apps.purchase.budget import PurchaseBudgetViewSet, BudgetLineViewSet
 
 router = DefaultRouter()
 router.register(r'currencies', CurrencyViewSet, basename='currency')
@@ -92,6 +93,10 @@ router.register(r'tax-rates', TaxRateViewSet, basename='tax-rate')
 router.register(r'tax-periods', TaxPeriodViewSet, basename='tax-period')
 router.register(r'tax-declarations', TaxDeclarationViewSet, basename='tax-declaration')
 router.register(r'tax-invoices', TaxInvoiceViewSet, basename='tax-invoice')
+
+# 预算管理
+router.register(r'budgets', PurchaseBudgetViewSet, basename='budget')
+router.register(r'budget-lines', BudgetLineViewSet, basename='budget-line')
 
 urlpatterns = [
     path('', include(router.urls)),

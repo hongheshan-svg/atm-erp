@@ -25,7 +25,9 @@ from .stock_alert import StockAlertRuleViewSet, StockAlertViewSet
 router = DefaultRouter()
 router.register(r'stocks', StockViewSet, basename='stock')
 router.register(r'moves', StockMoveViewSet, basename='move')
+router.register(r'stock-moves', StockMoveViewSet, basename='stock-move')  # 别名
 router.register(r'adjustments', StockAdjustmentViewSet, basename='adjustment')
+router.register(r'stock-adjustments', StockAdjustmentViewSet, basename='stock-adjustment')  # 别名
 router.register(r'adjustment-lines', StockAdjustmentLineViewSet, basename='adjustment-line')
 router.register(r'batches', BatchViewSet, basename='batch')
 router.register(r'batch-moves', BatchMoveViewSet, basename='batch-move')

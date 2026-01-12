@@ -12,6 +12,9 @@ from .archive import (
 from .electronic_signature import (
     SignatureSealViewSet, SignatureDocumentViewSet, SignatureLogViewSet
 )
+from apps.core.schedule import ScheduleViewSet, MeetingViewSet, MeetingRoomViewSet
+from apps.core.announcement import AnnouncementViewSet
+from apps.accounts.attendance import AttendanceRecordViewSet
 
 router = DefaultRouter()
 router.register(r'conversations', IMConversationViewSet, basename='im-conversation')
@@ -28,6 +31,13 @@ router.register(r'archive-destructions', ArchiveDestructionViewSet, basename='ar
 router.register(r'signature-seals', SignatureSealViewSet, basename='signature-seal')
 router.register(r'signature-documents', SignatureDocumentViewSet, basename='signature-document')
 router.register(r'signature-logs', SignatureLogViewSet, basename='signature-log')
+
+# 日程会议(从core模块引入)
+router.register(r'schedules', ScheduleViewSet, basename='oa-schedule')
+router.register(r'meetings', MeetingViewSet, basename='oa-meeting')
+router.register(r'meeting-rooms', MeetingRoomViewSet, basename='oa-meeting-room')
+router.register(r'announcements', AnnouncementViewSet, basename='oa-announcement')
+router.register(r'attendance-records', AttendanceRecordViewSet, basename='oa-attendance-record')
 
 urlpatterns = [
     path('', include(router.urls)),
