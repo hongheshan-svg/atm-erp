@@ -294,8 +294,8 @@ const fetchData = async () => {
   loading.value = true
   try {
     const res = await getKnowledgeArticleList(queryParams)
-    articles.value = res.data.results || res.data
-    total.value = res.data.count || articles.value.length
+    articles.value = res.results || res || []
+    total.value = res.count || articles.value.length
   } catch (error) {
     console.error('获取数据失败', error)
   } finally {

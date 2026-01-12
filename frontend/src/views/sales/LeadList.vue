@@ -268,9 +268,10 @@ const fetchData = async () => {
       getLeadList(queryParams),
       getLeadStatistics()
     ])
-    leads.value = listRes.data.results || listRes.data
-    total.value = listRes.data.count || leads.value.length
-    Object.assign(statistics, statsRes.data)
+    // request.js已返回response.data，无需再访问.data
+    leads.value = listRes.results || listRes || []
+    total.value = listRes.count || leads.value.length
+    Object.assign(statistics, statsRes || {})
   } catch (error) {
     console.error('获取数据失败', error)
   } finally {
@@ -281,7 +282,8 @@ const fetchData = async () => {
 const fetchSources = async () => {
   try {
     const res = await getLeadSourceList({ is_active: true })
-    sourceOptions.value = res.data.results || res.data
+    // request.js已返回response.data，无需再访问.data
+    sourceOptions.value = res.results || res || []
   } catch (error) {
     console.error('获取来源失败', error)
   }

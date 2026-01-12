@@ -229,8 +229,8 @@ const loadOrders = async () => {
       params.status = orderFilter.value
     }
     const res = await request.get('/production/schedule-orders/', { params })
-    orders.value = res.data.results || res.data
-    pagination.total = res.data.count || res.data.length
+    orders.value = res.results || res || []
+    pagination.total = res.count || res.data.length
   } catch (error) {
     console.error(error)
   } finally {

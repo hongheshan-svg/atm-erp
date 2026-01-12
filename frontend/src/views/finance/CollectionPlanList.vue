@@ -354,8 +354,8 @@ const fetchData = async () => {
       plans.value = []
     } else {
       res = await getCollectionPlanList(queryParams)
-      plans.value = res.data.results || res.data
-      total.value = res.data.count || plans.value.length
+      plans.value = res.results || res || []
+      total.value = res.count || plans.value.length
     }
   } catch (error) {
     console.error('获取数据失败', error)

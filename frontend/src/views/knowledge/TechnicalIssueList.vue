@@ -103,8 +103,8 @@ const fetchData = async () => {
   loading.value = true
   try {
     const res = await getTechnicalIssueList(queryParams)
-    issues.value = res.data.results || res.data
-    total.value = res.data.count || issues.value.length
+    issues.value = res.results || res || []
+    total.value = res.count || issues.value.length
   } catch (error) {
     console.error('获取数据失败', error)
   } finally {

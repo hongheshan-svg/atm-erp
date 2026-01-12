@@ -297,7 +297,7 @@ const loadFields = async () => {
     const res = await request.get('/api/core/custom-field-definitions/', {
       params: { model_name: selectedModel.value }
     })
-    fields.value = res.data.results || res.data
+    fields.value = res.results || res || []
   } catch (e) {
     console.error('加载字段失败:', e)
   } finally {

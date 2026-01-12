@@ -305,8 +305,8 @@ const fetchData = async () => {
   loading.value = true
   try {
     const res = await getEvaluationList(queryParams)
-    evaluations.value = res.data.results || res.data
-    total.value = res.data.count || evaluations.value.length
+    evaluations.value = res.results || res || []
+    total.value = res.count || evaluations.value.length
   } catch (error) {
     console.error('获取数据失败', error)
   } finally {
@@ -335,7 +335,7 @@ const fetchRanking = async () => {
 const fetchTemplates = async () => {
   try {
     const res = await getEvaluationTemplateList({ is_active: true })
-    templates.value = res.data.results || res.data
+    templates.value = res.results || res || []
   } catch (error) {
     console.error('获取模板失败', error)
   }

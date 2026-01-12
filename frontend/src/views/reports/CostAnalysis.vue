@@ -182,7 +182,7 @@ const searchProjects = async (query) => {
   projectLoading.value = true
   try {
     const res = await getProjectList({ search: query, page_size: 20 })
-    projectOptions.value = res.data.results || res.data || []
+    projectOptions.value = res.results || res || [] || []
   } catch (e) {
     console.error(e)
   } finally {

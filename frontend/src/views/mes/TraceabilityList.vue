@@ -156,8 +156,8 @@ const loadLots = async () => {
     const res = await request.get('/production/product-lots/', {
       params: { page: pagination.page, page_size: pagination.pageSize }
     })
-    lots.value = res.data.results || res.data
-    pagination.total = res.data.count || res.data.length
+    lots.value = res.results || res || []
+    pagination.total = res.count || res.data.length
   } catch (error) {
     console.error(error)
   } finally {

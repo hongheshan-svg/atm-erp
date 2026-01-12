@@ -148,8 +148,8 @@ const fetchData = async () => {
   loading.value = true
   try {
     const res = await getBlacklistList(queryParams)
-    blacklist.value = res.data.results || res.data
-    total.value = res.data.count || blacklist.value.length
+    blacklist.value = res.results || res || []
+    total.value = res.count || blacklist.value.length
   } catch (error) {
     console.error('获取数据失败', error)
   } finally {

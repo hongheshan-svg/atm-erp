@@ -264,8 +264,8 @@ const fetchData = async () => {
       getOpportunityList(queryParams),
       getOpportunityStatistics(queryParams)
     ])
-    opportunities.value = listRes.data.results || listRes.data
-    Object.assign(statistics, statsRes.data)
+    opportunities.value = listRes.results || listRes || []
+    Object.assign(statistics, statsRes || {})
   } catch (error) {
     console.error('获取数据失败', error)
   } finally {
@@ -276,7 +276,7 @@ const fetchData = async () => {
 const fetchCustomers = async () => {
   try {
     const res = await getCustomerList({ page_size: 500 })
-    customerOptions.value = res.data.results || res.data
+    customerOptions.value = res.results || res || []
   } catch (error) {
     console.error('获取客户列表失败', error)
   }

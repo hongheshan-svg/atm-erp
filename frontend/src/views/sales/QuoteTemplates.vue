@@ -299,7 +299,7 @@ const totalAmount = computed(() => {
 const loadTemplates = async () => {
   try {
     const res = await request.get('/api/sales/quote-templates/')
-    templates.value = res.data.results || res.data
+    templates.value = res.results || res || []
   } catch (e) {
     console.error('加载模板失败:', e)
   }

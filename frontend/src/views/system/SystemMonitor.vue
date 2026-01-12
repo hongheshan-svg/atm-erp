@@ -197,7 +197,7 @@ const fetchSecurityStatus = async () => {
 const fetchRecentLogs = async () => {
   try {
     const res = await request({ url: '/api/core/audit-logs/', method: 'get', params: { page_size: 10 } })
-    recentLogs.value = res.data.results || res.data
+    recentLogs.value = res.results || res || []
   } catch (error) {
     console.error('获取日志失败', error)
   }

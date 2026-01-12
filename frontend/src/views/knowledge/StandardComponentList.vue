@@ -81,8 +81,8 @@ const fetchData = async () => {
   loading.value = true
   try {
     const res = await getStandardComponentList(queryParams)
-    components.value = res.data.results || res.data
-    total.value = res.data.count || components.value.length
+    components.value = res.results || res || []
+    total.value = res.count || components.value.length
   } catch (error) {
     console.error('获取数据失败', error)
   } finally {

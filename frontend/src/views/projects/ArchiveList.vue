@@ -88,8 +88,8 @@ const fetchData = async () => {
   loading.value = true
   try {
     const res = await getProjectArchiveList(queryParams)
-    archives.value = res.data.results || res.data
-    total.value = res.data.count || archives.value.length
+    archives.value = res.results || res || []
+    total.value = res.count || archives.value.length
   } catch (error) {
     console.error('获取数据失败', error)
   } finally {

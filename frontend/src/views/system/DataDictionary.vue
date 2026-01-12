@@ -224,7 +224,7 @@ const filteredTypes = computed(() => {
 const loadTypes = async () => {
   try {
     const res = await request.get('/api/core/dict-types/')
-    dictTypes.value = res.data.results || res.data
+    dictTypes.value = res.results || res || []
   } catch (e) {
     console.error('加载字典类型失败:', e)
   }
@@ -236,7 +236,7 @@ const selectType = async (type) => {
     const res = await request.get('/api/core/dict-items/', {
       params: { dict_type: type.id }
     })
-    dictItems.value = res.data.results || res.data
+    dictItems.value = res.results || res || []
   } catch (e) {
     console.error('加载字典项失败:', e)
   }

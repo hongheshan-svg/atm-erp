@@ -188,8 +188,8 @@ const loadMeetings = async () => {
     const params = { page: pagination.page, page_size: pagination.pageSize }
     if (statusFilter.value) params.status = statusFilter.value
     const res = await request.get('/core/meetings/', { params })
-    meetings.value = res.data.results || res.data
-    pagination.total = res.data.count || res.data.length
+    meetings.value = res.results || res || []
+    pagination.total = res.count || res.data.length
   } catch (error) {
     console.error(error)
   } finally {

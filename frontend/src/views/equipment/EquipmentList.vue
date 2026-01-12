@@ -294,8 +294,8 @@ const fetchData = async () => {
       ...filters
     }
     const res = await request.get('/projects/equipment/', { params })
-    tableData.value = res.data.results || res.data
-    pagination.total = res.data.count || tableData.value.length
+    tableData.value = res.results || res || []
+    pagination.total = res.count || tableData.value.length
   } catch (error) {
     ElMessage.error('获取设备列表失败')
   } finally {
@@ -315,7 +315,7 @@ const fetchStats = async () => {
 const fetchCustomers = async () => {
   try {
     const res = await request.get('/masterdata/customers/')
-    customers.value = res.data.results || res.data
+    customers.value = res.results || res || []
   } catch (error) {
     console.error('获取客户失败', error)
   }
@@ -324,7 +324,7 @@ const fetchCustomers = async () => {
 const fetchProjects = async () => {
   try {
     const res = await request.get('/projects/projects/')
-    projects.value = res.data.results || res.data
+    projects.value = res.results || res || []
   } catch (error) {
     console.error('获取项目失败', error)
   }

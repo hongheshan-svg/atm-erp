@@ -525,8 +525,8 @@ const loadData = async () => {
       ...filters
     }
     const res = await request.get('/production/plans/', { params })
-    planList.value = res.data.results || res.data
-    pagination.total = res.data.count || res.data.length
+    planList.value = res.results || res || []
+    pagination.total = res.count || res.data.length
   } catch (error) {
     console.error('加载计划列表失败:', error)
   } finally {
@@ -538,7 +538,7 @@ const loadData = async () => {
 const loadProjects = async () => {
   try {
     const res = await request.get('/projects/', { params: { page_size: 1000 } })
-    projects.value = res.data.results || res.data
+    projects.value = res.results || res || []
   } catch (error) {
     console.error('加载项目列表失败:', error)
   }
@@ -548,7 +548,7 @@ const loadProjects = async () => {
 const loadUsers = async () => {
   try {
     const res = await request.get('/auth/users/', { params: { page_size: 1000 } })
-    users.value = res.data.results || res.data
+    users.value = res.results || res || []
   } catch (error) {
     console.error('加载用户列表失败:', error)
   }
@@ -710,7 +710,7 @@ const handleAddProcess = async () => {
     const res = await request.get('/production/processes/', {
       params: { project: currentPlan.value.project, page_size: 1000 }
     })
-    projectProcesses.value = res.data.results || res.data
+    projectProcesses.value = res.results || res || []
     selectedProcessIds.value = []
     processDialogVisible.value = true
   } catch (error) {

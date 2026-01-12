@@ -359,8 +359,8 @@ const fetchData = async () => {
       params.category = filters.category[filters.category.length - 1]
     }
     const res = await request.get('/projects/fixtures/', { params })
-    tableData.value = res.data.results || res.data
-    pagination.total = res.data.count || tableData.value.length
+    tableData.value = res.results || res || []
+    pagination.total = res.count || tableData.value.length
   } catch (error) {
     ElMessage.error('获取工装列表失败')
   } finally {
@@ -392,7 +392,7 @@ const fetchCategories = async () => {
 const fetchUsers = async () => {
   try {
     const res = await request.get('/auth/users/')
-    users.value = res.data.results || res.data
+    users.value = res.results || res || []
   } catch (error) {
     console.error('获取用户失败', error)
   }

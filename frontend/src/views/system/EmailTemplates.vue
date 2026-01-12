@@ -290,8 +290,8 @@ const loadTemplates = async () => {
       ...filters.value
     }
     const res = await request.get('/api/core/email-templates/', { params })
-    templates.value = res.data.results || res.data
-    pagination.value.total = res.data.count || templates.value.length
+    templates.value = res.results || res || []
+    pagination.value.total = res.count || templates.value.length
   } catch (e) {
     console.error('加载模板失败:', e)
   } finally {
