@@ -5,6 +5,7 @@ Equipment Inspection Records
 """
 from datetime import date, datetime, time, timedelta
 from django.db import models
+from django.db.models import Q, Count
 from django.utils import timezone
 from rest_framework import viewsets, serializers, status
 from rest_framework.decorators import action
