@@ -99,7 +99,7 @@
                 />
               </div>
               <div class="wc-hours">
-                {{ wc.scheduled_hours.toFixed(1) }}h / {{ wc.capacity.toFixed(1) }}h
+                {{ (wc.scheduled_hours || 0).toFixed(1) }}h / {{ (wc.capacity || 0).toFixed(1) }}h
               </div>
             </div>
           </div>
