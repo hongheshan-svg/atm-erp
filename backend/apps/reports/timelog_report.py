@@ -64,12 +64,12 @@ class TimelogStatisticsView(APIView):
             count=Count('id')
         ).order_by('-hours')[:10]
         
-        # 按任务类型分布
-        by_task_type = base_qs.filter(
+        # 按任务状态分布
+        by_task_status = base_qs.filter(
             date__gte=this_month_start,
             task__isnull=False
         ).values(
-            'task__task_type'
+            'task__status'
         ).annotate(
             hours=Sum('hours')
         ).order_by('-hours')
@@ -80,7 +80,7 @@ class TimelogStatisticsView(APIView):
             'month_hours': month_hours,
             'daily_trend': list(daily_trend),
             'by_project': list(by_project),
-            'by_task_type': list(by_task_type),
+            'by_task_status': list(by_task_status),
         })
 
 
