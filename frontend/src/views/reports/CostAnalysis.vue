@@ -199,7 +199,7 @@ const fetchCostAnalysis = async () => {
       method: 'get',
       params: { project: selectedProject.value, hourly_rate: hourlyRate.value }
     })
-    costData.value = res.data
+    costData.value = res  // request.js already returns response.data
     nextTick(() => renderPieChart())
   } catch (error) {
     ElMessage.error('获取成本分析失败')
@@ -213,7 +213,7 @@ const fetchComparison = async () => {
       url: '/reports/cost/comparison/',
       method: 'get'
     })
-    comparisonData.value = res.data.comparison || []
+    comparisonData.value = res?.comparison || []  // request.js already returns response.data
     nextTick(() => renderComparisonChart())
   } catch (error) {
     console.error(error)
