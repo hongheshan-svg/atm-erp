@@ -182,11 +182,11 @@ const fetchFunnel = async () => {
 
 const fetchCustomerAnalysis = async () => {
   try {
-    const { data: segData } = await request.get('/sales/customer-rfm/segment_summary/')
-    customerSegments.value = segData.segments || []
+    const segData = await request.get('/sales/customer-rfm/segment_summary/')
+    customerSegments.value = segData?.segments || []
     
-    const { data: topData } = await request.get('/sales/customer-rfm/top_customers/')
-    topCustomers.value = topData || []
+    const topData = await request.get('/sales/customer-rfm/top_customers/')
+    topCustomers.value = topData?.customers || topData || []
   } catch (e) {
     console.error(e)
   }
