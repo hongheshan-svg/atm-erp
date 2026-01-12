@@ -210,9 +210,10 @@ const loadCapacity = async () => {
     const res = await request.get('/production/schedule-orders/capacity/', {
       params: { start_date: startDate, days: 7 }
     })
-    capacityData.value = res.data
+    capacityData.value = res || []
   } catch (error) {
     console.error(error)
+    capacityData.value = []
   } finally {
     loadingCapacity.value = false
   }
@@ -230,7 +231,7 @@ const loadOrders = async () => {
     }
     const res = await request.get('/production/schedule-orders/', { params })
     orders.value = res.results || res || []
-    pagination.total = res.count || res.data.length
+    pagination.total = res.count || (Array.isArray(orders.value) ? orders.value.length : 0)
   } catch (error) {
     console.error(error)
   } finally {
@@ -247,9 +248,10 @@ const loadGantt = async () => {
       params.end_date = ganttDateRange.value[1].toISOString().split('T')[0]
     }
     const res = await request.get('/production/schedule-orders/gantt/', { params })
-    ganttData.value = res.data
+    ganttData.value = res || []
   } catch (error) {
     console.error(error)
+    ganttData.value = []
   } finally {
     loadingGantt.value = false
   }
@@ -260,7 +262,7 @@ const autoSchedule = async () => {
   scheduling.value = true
   try {
     const res = await request.post('/production/schedule-orders/auto_schedule/')
-    ElMessage.success(`排程完成，共处理 ${res.data.scheduled_count} 个工单`)
+    ElMessage.success(`排程完成，共处理 ${res.scheduled_count || 0} 个工单`)
     loadData()
   } catch (error) {
     console.error(error)

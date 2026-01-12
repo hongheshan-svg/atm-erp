@@ -314,7 +314,7 @@ class APSService:
         result = []
         
         for wc in work_centers:
-            daily_capacity = float(wc.daily_capacity)
+            daily_capacity = float(wc.capacity_per_day)
             wc_data = {
                 'work_center_id': wc.id,
                 'work_center_name': wc.name,
