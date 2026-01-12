@@ -99,7 +99,7 @@ class ProjectCostAnalysisView(APIView):
         return Response({
             'project': {
                 'id': project.id,
-                'project_no': project.project_no,
+                'project_no': project.code,
                 'name': project.name,
                 'status': project.status,
                 'contract_amount': float(contract_amount),
@@ -166,7 +166,7 @@ class ProjectCostComparisonView(APIView):
             
             comparison_data.append({
                 'project_id': project.id,
-                'project_no': project.project_no,
+                'project_no': project.code,  # Use code field
                 'project_name': project.name,
                 'status': project.status,
                 'contract_amount': budget_total,  # Use budget_total as contract amount
