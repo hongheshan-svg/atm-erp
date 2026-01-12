@@ -49,10 +49,10 @@ class TimelogStatisticsView(APIView):
         daily_trend = base_qs.filter(
             date__gte=this_month_start
         ).annotate(
-            date=TruncDate('date')
-        ).values('date').annotate(
+            log_date=TruncDate('date')
+        ).values('log_date').annotate(
             hours=Sum('hours')
-        ).order_by('date')
+        ).order_by('log_date')
         
         # 按项目分布
         by_project = base_qs.filter(
