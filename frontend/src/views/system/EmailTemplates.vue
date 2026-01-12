@@ -274,7 +274,7 @@ const testingTemplate = ref(null)
 
 const loadTemplateTypes = async () => {
   try {
-    const res = await request.get('/api/core/email-templates/template_types/')
+    const res = await request.get('/core/email-templates/template_types/')
     templateTypes.value = res.data
   } catch (e) {
     console.error('加载模板类型失败:', e)
@@ -289,7 +289,7 @@ const loadTemplates = async () => {
       page_size: pagination.value.pageSize,
       ...filters.value
     }
-    const res = await request.get('/api/core/email-templates/', { params })
+    const res = await request.get('/core/email-templates/', { params })
     templates.value = res.results || res || []
     pagination.value.total = res.count || templates.value.length
   } catch (e) {
@@ -309,10 +309,10 @@ const saveTemplate = async () => {
   saving.value = true
   try {
     if (editing.value) {
-      await request.put(`/api/core/email-templates/${editing.value.id}/`, form.value)
+      await request.put(`/core/email-templates/${editing.value.id}/`, form.value)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/api/core/email-templates/', form.value)
+      await request.post('/core/email-templates/', form.value)
       ElMessage.success('创建成功')
     }
     showDialog.value = false
@@ -342,7 +342,7 @@ const resetForm = () => {
 
 const toggleTemplate = async (template) => {
   try {
-    await request.post(`/api/core/email-templates/${template.id}/toggle_enable/`)
+    await request.post(`/core/email-templates/${template.id}/toggle_enable/`)
     ElMessage.success('操作成功')
     loadTemplates()
   } catch (e) {
@@ -357,7 +357,7 @@ const deleteTemplate = async (template) => {
   }
   await ElMessageBox.confirm('确定要删除该模板吗？', '确认删除', { type: 'warning' })
   try {
-    await request.delete(`/api/core/email-templates/${template.id}/`)
+    await request.delete(`/core/email-templates/${template.id}/`)
     ElMessage.success('删除成功')
     loadTemplates()
   } catch (e) {
@@ -367,7 +367,7 @@ const deleteTemplate = async (template) => {
 
 const previewTemplate = async (template) => {
   try {
-    const res = await request.post(`/api/core/email-templates/${template.id}/preview/`, {
+    const res = await request.post(`/core/email-templates/${template.id}/preview/`, {
       context: {
         recipient_name: '张三',
         title: '测试标题',
@@ -413,7 +413,7 @@ const doTestSend = async () => {
   
   sending.value = true
   try {
-    const res = await request.post(`/api/core/email-templates/${testingTemplate.value.id}/test_send/`, {
+    const res = await request.post(`/core/email-templates/${testingTemplate.value.id}/test_send/`, {
       email: testForm.value.email,
       context
     })
@@ -433,7 +433,7 @@ const doTestSend = async () => {
 const initSystemTemplates = async () => {
   initLoading.value = true
   try {
-    const res = await request.post('/api/core/email-templates/init_system_templates/')
+    const res = await request.post('/core/email-templates/init_system_templates/')
     ElMessage.success(res.data.message || '初始化成功')
     loadTemplates()
   } catch (e) {
