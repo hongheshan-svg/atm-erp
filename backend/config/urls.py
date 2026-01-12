@@ -30,6 +30,7 @@ urlpatterns = [
     
     # API endpoints
     path('api/auth/', include('apps.accounts.urls')),
+    path('api/accounts/', include('apps.accounts.urls')),  # 别名
     path('api/masterdata/', include('apps.masterdata.urls')),
     path('api/projects/', include('apps.projects.urls')),
     path('api/purchase/', include('apps.purchase.urls')),

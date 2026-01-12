@@ -453,6 +453,26 @@ class AssetCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
     permission_classes = [IsAuthenticated]
     search_fields = ['name', 'code']
 
+    @action(detail=False, methods=['get'])
+    def tree(self, request):
+        """获取分类树形结构"""
+        categories = self.get_queryset().filter(parent__isnull=True)
+        
+        def build_tree(category):
+            node = {
+                'id': category.id,
+                'name': category.name,
+                'code': category.code,
+                'children': []
+            }
+            children = AssetCategory.objects.filter(parent=category, is_deleted=False)
+            for child in children:
+                node['children'].append(build_tree(child))
+            return node
+        
+        tree = [build_tree(cat) for cat in categories]
+        return Response(tree)
+
 
 class FixedAssetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """固定资产管理"""
