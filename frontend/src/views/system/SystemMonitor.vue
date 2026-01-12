@@ -161,7 +161,7 @@ const getActionType = (action) => {
 const fetchHealthStatus = async () => {
   try {
     const res = await request({ url: '/core/health/', method: 'get' })
-    systemHealth.value = res.data
+    systemHealth.value = res || { status: 'unknown' }
   } catch (error) {
     systemHealth.value = { status: 'error' }
   }
@@ -170,13 +170,13 @@ const fetchHealthStatus = async () => {
 const fetchSystemStatus = async () => {
   try {
     const res = await request({ url: '/core/health/status/', method: 'get' })
-    systemStatus.value = res.data
-    dataStats.value = res.data.data_stats || {}
+    systemStatus.value = res || {}
+    dataStats.value = res?.data_stats || {}
     
     // 更新服务状态
-    if (res.data.services) {
+    if (res?.services) {
       services.value = services.value.map(s => {
-        const svcData = res.data.services[s.name.toLowerCase()] || {}
+        const svcData = res.services[s.name.toLowerCase()] || {}
         return { ...s, ...svcData, last_check: new Date().toLocaleTimeString('zh-CN') }
       })
     }
@@ -188,7 +188,7 @@ const fetchSystemStatus = async () => {
 const fetchSecurityStatus = async () => {
   try {
     const res = await request({ url: '/core/health/security/', method: 'get' })
-    securityStatus.value = res.data
+    securityStatus.value = res || {}
   } catch (error) {
     console.error('获取安全状态失败', error)
   }
