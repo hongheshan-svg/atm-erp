@@ -437,8 +437,8 @@ const fetchList = async () => {
       department: queryParams.department
     }
     const data = await request.get('/finance/fixed-assets/', { params })
-    assetList.value = data.results || data
-    pagination.total = data.count || data.length
+    assetList.value = data.results || data || []
+    pagination.total = data.count || (Array.isArray(assetList.value) ? assetList.value.length : 0)
   } catch (e) {
     console.error(e)
   } finally {
@@ -462,9 +462,9 @@ const fetchOptions = async () => {
       request.get('/auth/departments/'),
       request.get('/auth/users/')
     ])
-    categoryTree.value = catRes.data.results || catRes.data
-    departments.value = deptRes.data.results || deptRes.data
-    users.value = userRes.data.results || userRes.data
+    categoryTree.value = catRes.results || catRes || []
+    departments.value = deptRes.results || deptRes || []
+    users.value = userRes.results || userRes || []
   } catch (e) {
     console.error(e)
   }
