@@ -3,7 +3,7 @@
 Equipment Inspection Records
 支持日常点检、定期巡检、异常记录等
 """
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from django.db import models
 from django.utils import timezone
 from rest_framework import viewsets, serializers, status
