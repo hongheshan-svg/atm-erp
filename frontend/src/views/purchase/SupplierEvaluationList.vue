@@ -317,7 +317,7 @@ const fetchData = async () => {
 const fetchStatistics = async () => {
   try {
     const res = await getEvaluationStatistics()
-    statistics.value = res.data
+    statistics.value = res || {}
   } catch (error) {
     console.error('获取统计失败', error)
   }
@@ -326,7 +326,7 @@ const fetchStatistics = async () => {
 const fetchRanking = async () => {
   try {
     const res = await getSupplierRanking()
-    ranking.value = res.data
+    ranking.value = res || []
   } catch (error) {
     console.error('获取排名失败', error)
   }
