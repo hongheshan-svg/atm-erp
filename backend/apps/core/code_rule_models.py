@@ -209,6 +209,85 @@ class CodeRule(BaseModel):
             
             # 使用分隔符连接
             return rule.separator.join(parts) if parts else f'CODE{rule.current_seq}'
+    
+    @classmethod
+    def generate_code_by_rule(cls, rule_type_code):
+        """
+        根据规则类型代码生成编码的类方法
+        用于在模型save方法中调用
+        """
+        import random
+        from datetime import datetime
+        from django.db import transaction
+        
+        try:
+            with transaction.atomic():
+                rule = cls.objects.select_for_update().get(rule_type=rule_type_code, is_active=True)
+                
+                # 检查是否需要重置序列号
+                if rule.should_reset_sequence():
+                    rule.current_seq = rule.seq_start - 1
+                    rule.last_reset_date = datetime.now().date()
+                
+                # 递增序列号
+                rule.current_seq += 1
+                rule.save()
+                
+                # 生成编码
+                parts = []
+                if rule.prefix:
+                    parts.append(rule.prefix)
+                if rule.date_format:
+                    date_str = rule._format_date(datetime.now())
+                    if date_str:
+                        parts.append(date_str)
+                seq_str = str(rule.current_seq).zfill(rule.seq_length)
+                parts.append(seq_str)
+                
+                return rule.separator.join(parts) if parts else f'CODE{rule.current_seq}'
+                
+        except cls.DoesNotExist:
+            # 如果规则不存在，生成一个简单的默认编码
+            timestamp = datetime.now().strftime('%Y%m%d')
+            random_suffix = str(random.randint(100000, 999999))
+            prefix_map = {
+                'LEAD': 'LD',
+                'OPPORTUNITY': 'OP',
+                'CUSTOMER': 'CUS',
+                'QUOTATION': 'QT',
+                'CONTRACT': 'CT',
+                'ORDER': 'SO',
+                'PURCHASE': 'PO',
+                'PROJECT': 'PRJ',
+                'REQUIREMENT': 'REQ',
+            }
+            prefix = prefix_map.get(rule_type_code, rule_type_code[:3].upper() if rule_type_code else 'CODE')
+            return f'{prefix}{timestamp}{random_suffix}'
+
+
+def _generate_code_wrapper(self_or_code):
+    """
+    包装器函数，支持类方法和实例方法两种调用方式
+    - CodeRule.generate_code('LEAD') - 作为类方法调用
+    - rule.generate_code() - 作为实例方法调用
+    """
+    if isinstance(self_or_code, str):
+        # 作为类方法调用: CodeRule.generate_code('LEAD')
+        return CodeRule.generate_code_by_rule(self_or_code)
+    elif isinstance(self_or_code, CodeRule):
+        # 作为实例方法调用: rule.generate_code()
+        return CodeRule.generate_code_by_rule(self_or_code.rule_type)
+    else:
+        # 未知调用方式，使用默认
+        import random
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d')
+        random_suffix = str(random.randint(100000, 999999))
+        return f'CODE{timestamp}{random_suffix}'
+
+
+# 覆盖原始的generate_code方法
+CodeRule.generate_code = _generate_code_wrapper
 
 
 class CodeHistory(models.Model):
