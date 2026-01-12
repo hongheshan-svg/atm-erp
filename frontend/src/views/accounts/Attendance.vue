@@ -309,7 +309,7 @@ const summaryData = computed(() => {
 
 const fetchTodayStatus = async () => {
   try {
-    const { data } = await request.get('/auth/attendance-records/today/')
+    const data = await request.get('/auth/attendance-records/today/')
     todayStatus.value = data
   } catch (e) {
     console.error(e)
@@ -319,7 +319,7 @@ const fetchTodayStatus = async () => {
 const fetchRecords = async () => {
   loading.value = true
   try {
-    const { data } = await request.get('/auth/attendance-records/my_records/', {
+    const data = await request.get('/auth/attendance-records/my_records/', {
       params: { month: queryMonth.value }
     })
     records.value = data
@@ -332,7 +332,7 @@ const fetchRecords = async () => {
 
 const fetchLeaveRequests = async () => {
   try {
-    const { data } = await request.get('/auth/leave-requests/my_requests/')
+    const data = await request.get('/auth/leave-requests/my_requests/')
     leaveRequests.value = data
   } catch (e) {
     console.error(e)
@@ -341,7 +341,7 @@ const fetchLeaveRequests = async () => {
 
 const fetchOvertimeRequests = async () => {
   try {
-    const { data } = await request.get('/auth/overtime-requests/my_requests/')
+    const data = await request.get('/auth/overtime-requests/my_requests/')
     overtimeRequests.value = data
   } catch (e) {
     console.error(e)
@@ -350,7 +350,7 @@ const fetchOvertimeRequests = async () => {
 
 const fetchSummary = async () => {
   try {
-    const { data } = await request.get('/auth/attendance-records/monthly_summary/', {
+    const data = await request.get('/auth/attendance-records/monthly_summary/', {
       params: { month: summaryMonth.value }
     })
     monthlySummary.value = data
@@ -361,7 +361,7 @@ const fetchSummary = async () => {
 
 const fetchLeaveTypes = async () => {
   try {
-    const { data } = await request.get('/auth/leave-requests/leave_types/')
+    const data = await request.get('/auth/leave-requests/leave_types/')
     leaveTypes.value = data
   } catch (e) {
     leaveTypes.value = [
@@ -375,7 +375,7 @@ const fetchLeaveTypes = async () => {
 
 const handleCheckIn = async () => {
   try {
-    const { data } = await request.post('/auth/attendance-records/check_in/', {
+    const data = await request.post('/auth/attendance-records/check_in/', {
       location: '办公室'
     })
     todayStatus.value = data
@@ -388,7 +388,7 @@ const handleCheckIn = async () => {
 
 const handleCheckOut = async () => {
   try {
-    const { data } = await request.post('/auth/attendance-records/check_out/', {
+    const data = await request.post('/auth/attendance-records/check_out/', {
       location: '办公室'
     })
     todayStatus.value = data

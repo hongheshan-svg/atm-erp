@@ -276,7 +276,7 @@ const fetchList = async () => {
       page_size: pagination.size,
       ...queryParams
     }
-    const { data } = await request.get('/masterdata/customer-credits/', { params })
+    const data = await request.get('/masterdata/customer-credits/', { params })
     creditList.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {
@@ -288,7 +288,7 @@ const fetchList = async () => {
 
 const fetchLevels = async () => {
   try {
-    const { data } = await request.get('/masterdata/credit-levels/')
+    const data = await request.get('/masterdata/credit-levels/')
     creditLevels.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -297,7 +297,7 @@ const fetchLevels = async () => {
 
 const fetchWarningList = async () => {
   try {
-    const { data } = await request.get('/masterdata/customer-credits/warning_list/', {
+    const data = await request.get('/masterdata/customer-credits/warning_list/', {
       params: { threshold: 80 }
     })
     warningList.value = data
@@ -308,7 +308,7 @@ const fetchWarningList = async () => {
 
 const fetchStatistics = async () => {
   try {
-    const { data } = await request.get('/masterdata/customer-credits/statistics/')
+    const data = await request.get('/masterdata/customer-credits/statistics/')
     statsData.value = data
   } catch (e) {
     console.error(e)
@@ -317,7 +317,7 @@ const fetchStatistics = async () => {
 
 const handleInitLevels = async () => {
   try {
-    const { data } = await request.post('/masterdata/credit-levels/init_levels/')
+    const data = await request.post('/masterdata/credit-levels/init_levels/')
     ElMessage.success(`初始化完成，新增 ${data.created} 个等级`)
     fetchLevels()
   } catch (e) {

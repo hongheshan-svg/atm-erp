@@ -211,7 +211,7 @@ const getFileColor = (type) => {
 const fetchModels = async () => {
   loading.value = true
   try {
-    const { data } = await request.get('/projects/drawings/', {
+    const data = await request.get('/projects/drawings/', {
       params: { 
         drawing_type: '3D',
         search: searchKeyword.value 

@@ -297,7 +297,7 @@ const rules = {
 const fetchData = async () => {
   loading.value = true
   try {
-    const { data } = await request.get('/projects/work-orders/', { params: queryParams })
+    const data = await request.get('/projects/work-orders/', { params: queryParams })
     tableData.value = data.results || data
     total.value = data.count || data.length
   } catch (e) {
@@ -309,7 +309,7 @@ const fetchData = async () => {
 
 const fetchStats = async () => {
   try {
-    const { data } = await request.get('/projects/work-orders/statistics/')
+    const data = await request.get('/projects/work-orders/statistics/')
     stats.value = data
   } catch (e) {
     console.error(e)
@@ -318,7 +318,7 @@ const fetchStats = async () => {
 
 const fetchProjects = async () => {
   try {
-    const { data } = await request.get('/projects/projects/', { params: { page_size: 500 } })
+    const data = await request.get('/projects/projects/', { params: { page_size: 500 } })
     projects.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -327,7 +327,7 @@ const fetchProjects = async () => {
 
 const fetchUsers = async () => {
   try {
-    const { data } = await request.get('/auth/users/', { params: { page_size: 200 } })
+    const data = await request.get('/auth/users/', { params: { page_size: 200 } })
     users.value = (data.results || data).map(u => ({
       id: u.id,
       name: u.first_name || u.last_name || u.username
@@ -339,7 +339,7 @@ const fetchUsers = async () => {
 
 const fetchOrderTypes = async () => {
   try {
-    const { data } = await request.get('/projects/work-orders/order_types/')
+    const data = await request.get('/projects/work-orders/order_types/')
     orderTypes.value = data
   } catch (e) {
     orderTypes.value = [

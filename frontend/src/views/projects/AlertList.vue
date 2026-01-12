@@ -215,7 +215,7 @@ const fetchList = async () => {
       page_size: pagination.size,
       ...queryParams
     }
-    const { data } = await request.get('/projects/alerts/', { params })
+    const data = await request.get('/projects/alerts/', { params })
     alertList.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {
@@ -227,7 +227,7 @@ const fetchList = async () => {
 
 const fetchSummary = async () => {
   try {
-    const { data } = await request.get('/projects/alerts/summary/')
+    const data = await request.get('/projects/alerts/summary/')
     summaryData.value = data
   } catch (e) {
     console.error(e)
@@ -237,7 +237,7 @@ const fetchSummary = async () => {
 const handleCheckAll = async () => {
   try {
     ElMessage.info('正在检查项目预警...')
-    const { data } = await request.post('/projects/alerts/check_all/')
+    const data = await request.post('/projects/alerts/check_all/')
     ElMessage.success(`检查完成，新增 ${data.alerts_created} 条预警`)
     fetchList()
     fetchSummary()
@@ -248,7 +248,7 @@ const handleCheckAll = async () => {
 
 const handleView = async (row) => {
   try {
-    const { data } = await request.get(`/projects/alerts/${row.id}/`)
+    const data = await request.get(`/projects/alerts/${row.id}/`)
     currentAlert.value = data
     detailDialogVisible.value = true
   } catch (e) {

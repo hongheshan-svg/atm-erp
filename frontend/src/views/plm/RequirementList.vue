@@ -251,7 +251,7 @@ const fetchList = async () => {
       page_size: pagination.size,
       ...queryParams
     }
-    const { data } = await request.get('/projects/requirements/', { params })
+    const data = await request.get('/projects/requirements/', { params })
     requirementList.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {
@@ -263,7 +263,7 @@ const fetchList = async () => {
 
 const fetchStats = async () => {
   try {
-    const { data } = await request.get('/projects/requirements/statistics/')
+    const data = await request.get('/projects/requirements/statistics/')
     stats.value = data
     
     // 计算待处理和实施中数量
@@ -316,7 +316,7 @@ const submitForm = async () => {
 
 const handleView = async (row) => {
   try {
-    const { data } = await request.get(`/projects/requirements/${row.id}/`)
+    const data = await request.get(`/projects/requirements/${row.id}/`)
     currentReq.value = data
     detailDialogVisible.value = true
   } catch (e) {

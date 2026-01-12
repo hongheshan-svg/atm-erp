@@ -295,7 +295,7 @@ const fetchList = async () => {
     if (listFilter.value !== 'all') {
       params.status = listFilter.value
     }
-    const { data } = await request.get('/production/product-lots/', { params })
+    const data = await request.get('/production/product-lots/', { params })
     batchList.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {
@@ -307,7 +307,7 @@ const fetchList = async () => {
 
 const fetchProjects = async () => {
   try {
-    const { data } = await request.get('/projects/projects/', { params: { page_size: 100 } })
+    const data = await request.get('/projects/projects/', { params: { page_size: 100 } })
     projectList.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -316,7 +316,7 @@ const fetchProjects = async () => {
 
 const fetchItems = async () => {
   try {
-    const { data } = await request.get('/masterdata/items/', { params: { page_size: 500 } })
+    const data = await request.get('/masterdata/items/', { params: { page_size: 500 } })
     itemList.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -327,7 +327,7 @@ const handleSearch = async () => {
   if (!searchQuery.value) return
   
   try {
-    const { data } = await request.get('/production/traceability/search/', {
+    const data = await request.get('/production/traceability/search/', {
       params: { q: searchQuery.value, type: searchType.value }
     })
     
@@ -354,7 +354,7 @@ const handleTrace = (row) => {
 
 const fetchTraceData = async (batchId) => {
   try {
-    const { data } = await request.get(`/production/product-lots/${batchId}/trace/`)
+    const data = await request.get(`/production/product-lots/${batchId}/trace/`)
     traceData.value = data
   } catch (e) {
     console.error(e)
@@ -365,7 +365,7 @@ const showFullTrace = async () => {
   if (!selectedBatch.value) return
   
   try {
-    const { data } = await request.get(`/production/product-lots/${selectedBatch.value.id}/trace/`)
+    const data = await request.get(`/production/product-lots/${selectedBatch.value.id}/trace/`)
     fullTraceData.value = data
     fullTraceVisible.value = true
   } catch (e) {

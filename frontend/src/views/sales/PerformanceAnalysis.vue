@@ -231,7 +231,7 @@ const fetchMyPerformance = async () => {
     const params = { year: queryYear.value }
     if (queryMonth.value) params.month = queryMonth.value
     
-    const { data } = await request.get('/sales/performance/my_performance/', { params })
+    const data = await request.get('/sales/performance/my_performance/', { params })
     myPerformance.value = data
   } catch (e) {
     console.error(e)
@@ -243,7 +243,7 @@ const fetchTeamRanking = async () => {
     const params = { year: queryYear.value, limit: 10 }
     if (queryMonth.value) params.month = queryMonth.value
     
-    const { data } = await request.get('/sales/performance/team_ranking/', { params })
+    const data = await request.get('/sales/performance/team_ranking/', { params })
     teamRanking.value = data
   } catch (e) {
     console.error(e)
@@ -252,7 +252,7 @@ const fetchTeamRanking = async () => {
 
 const fetchMonthlyTrend = async () => {
   try {
-    const { data } = await request.get('/sales/performance/monthly_trend/', {
+    const data = await request.get('/sales/performance/monthly_trend/', {
       params: { year: queryYear.value }
     })
     monthlyTrend.value = data
@@ -264,7 +264,7 @@ const fetchMonthlyTrend = async () => {
 
 const fetchCustomerAnalysis = async () => {
   try {
-    const { data } = await request.get('/sales/performance/customer_analysis/', {
+    const data = await request.get('/sales/performance/customer_analysis/', {
       params: { year: queryYear.value }
     })
     customerAnalysis.value = data
@@ -275,7 +275,7 @@ const fetchCustomerAnalysis = async () => {
 
 const fetchPipelineAnalysis = async () => {
   try {
-    const { data } = await request.get('/sales/performance/pipeline_analysis/', {
+    const data = await request.get('/sales/performance/pipeline_analysis/', {
       params: { year: queryYear.value }
     })
     pipelineAnalysis.value = data
@@ -287,7 +287,7 @@ const fetchPipelineAnalysis = async () => {
 
 const fetchMyTargets = async () => {
   try {
-    const { data } = await request.get('/sales/targets/my_targets/')
+    const data = await request.get('/sales/targets/my_targets/')
     myTargets.value = data
   } catch (e) {
     console.error(e)
@@ -296,7 +296,7 @@ const fetchMyTargets = async () => {
 
 const fetchMyCommissions = async () => {
   try {
-    const { data } = await request.get('/sales/commissions/my_commissions/')
+    const data = await request.get('/sales/commissions/my_commissions/')
     myCommissions.value = data
   } catch (e) {
     console.error(e)

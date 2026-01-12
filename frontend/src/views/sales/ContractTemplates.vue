@@ -330,7 +330,7 @@ const contractRules = {
 const fetchTemplates = async () => {
   loading.value = true
   try {
-    const { data } = await request.get('/sales/contract-templates/')
+    const data = await request.get('/sales/contract-templates/')
     templates.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -342,7 +342,7 @@ const fetchTemplates = async () => {
 const fetchClauses = async () => {
   clauseLoading.value = true
   try {
-    const { data } = await request.get('/sales/contract-clauses/')
+    const data = await request.get('/sales/contract-clauses/')
     clauses.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -354,7 +354,7 @@ const fetchClauses = async () => {
 const fetchGeneratedContracts = async () => {
   generatedLoading.value = true
   try {
-    const { data } = await request.get('/sales/generated-contracts/')
+    const data = await request.get('/sales/generated-contracts/')
     generatedContracts.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -365,7 +365,7 @@ const fetchGeneratedContracts = async () => {
 
 const fetchContractTypes = async () => {
   try {
-    const { data } = await request.get('/sales/contract-templates/contract_types/')
+    const data = await request.get('/sales/contract-templates/contract_types/')
     contractTypes.value = data
   } catch (e) {
     contractTypes.value = [
@@ -412,7 +412,7 @@ const handleEditTemplate = (row) => {
 
 const handlePreview = async (row) => {
   try {
-    const { data } = await request.post(`/sales/contract-templates/${row.id}/preview/`)
+    const data = await request.post(`/sales/contract-templates/${row.id}/preview/`)
     previewContent.value = data.html_content
     previewDialogVisible.value = true
   } catch (e) {
@@ -506,7 +506,7 @@ const handleSubmitContract = async () => {
   
   generateLoading.value = true
   try {
-    const { data } = await request.post('/sales/contract-templates/generate/', contractForm)
+    const data = await request.post('/sales/contract-templates/generate/', contractForm)
     ElMessage.success('合同生成成功')
     generateDialogVisible.value = false
     
@@ -525,7 +525,7 @@ const handleSubmitContract = async () => {
 
 const handleViewContract = async (row) => {
   try {
-    const { data } = await request.get(`/sales/generated-contracts/${row.id}/`)
+    const data = await request.get(`/sales/generated-contracts/${row.id}/`)
     previewContent.value = data.contract_content
     previewDialogVisible.value = true
   } catch (e) {

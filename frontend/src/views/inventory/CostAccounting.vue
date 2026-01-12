@@ -268,7 +268,7 @@ const generating = ref(false)
 
 const fetchValuation = async () => {
   try {
-    const { data } = await request.get('/inventory/period-summaries/inventory_valuation/', {
+    const data = await request.get('/inventory/period-summaries/inventory_valuation/', {
       params: queryParams
     })
     valuation.value = data
@@ -284,7 +284,7 @@ const fetchValuation = async () => {
 const fetchRecords = async () => {
   recordLoading.value = true
   try {
-    const { data } = await request.get('/inventory/cost-records/', {
+    const data = await request.get('/inventory/cost-records/', {
       params: { ...recordQuery, page_size: 100 }
     })
     records.value = data.results || data
@@ -297,7 +297,7 @@ const fetchRecords = async () => {
 
 const fetchConfigs = async () => {
   try {
-    const { data } = await request.get('/inventory/cost-configs/')
+    const data = await request.get('/inventory/cost-configs/')
     configs.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -311,7 +311,7 @@ const handleGenerateSummary = () => {
 const confirmGenerate = async () => {
   generating.value = true
   try {
-    const { data } = await request.post('/inventory/period-summaries/generate/', generateForm)
+    const data = await request.post('/inventory/period-summaries/generate/', generateForm)
     ElMessage.success(data.message)
     generateDialogVisible.value = false
     fetchValuation()

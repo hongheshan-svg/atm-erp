@@ -281,7 +281,7 @@ const fetchList = async () => {
       page_size: pagination.size,
       ...queryParams
     }
-    const { data } = await request.get('/projects/proposals/', { params })
+    const data = await request.get('/projects/proposals/', { params })
     proposalList.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {
@@ -293,7 +293,7 @@ const fetchList = async () => {
 
 const fetchStats = async () => {
   try {
-    const { data } = await request.get('/projects/proposals/statistics/')
+    const data = await request.get('/projects/proposals/statistics/')
     stats.value = data
   } catch (e) {
     console.error(e)
@@ -340,7 +340,7 @@ const submitForm = async () => {
 
 const handleView = async (row) => {
   try {
-    const { data } = await request.get(`/projects/proposals/${row.id}/`)
+    const data = await request.get(`/projects/proposals/${row.id}/`)
     currentProposal.value = data
     detailDialogVisible.value = true
   } catch (e) {

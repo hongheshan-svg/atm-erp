@@ -287,7 +287,7 @@ const fetchCalendar = async () => {
   const end = new Date(year, month + 2, 0).toISOString().slice(0, 10)
   
   try {
-    const { data } = await request.get('/core/schedules/calendar/', {
+    const data = await request.get('/core/schedules/calendar/', {
       params: { start, end }
     })
     events.value = data || []
@@ -298,7 +298,7 @@ const fetchCalendar = async () => {
 
 const fetchToday = async () => {
   try {
-    const { data } = await request.get('/core/schedules/today/')
+    const data = await request.get('/core/schedules/today/')
     todaySchedules.value = data || []
   } catch (e) {
     console.error(e)
@@ -307,7 +307,7 @@ const fetchToday = async () => {
 
 const fetchUpcoming = async () => {
   try {
-    const { data } = await request.get('/core/schedules/upcoming/')
+    const data = await request.get('/core/schedules/upcoming/')
     upcomingSchedules.value = data || []
   } catch (e) {
     console.error(e)
@@ -350,7 +350,7 @@ const handleAdd = () => {
 
 const handleView = async (item) => {
   try {
-    const { data } = await request.get(`/core/schedules/${item.id}/`)
+    const data = await request.get(`/core/schedules/${item.id}/`)
     Object.assign(formData, data)
     isEdit.value = true
     dialogVisible.value = true

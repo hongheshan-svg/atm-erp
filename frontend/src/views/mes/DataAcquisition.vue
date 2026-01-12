@@ -440,7 +440,7 @@ const formatDateTime = (time) => {
 const fetchDataSources = async () => {
   loadingSource.value = true
   try {
-    const { data } = await request.get('/production/data-sources/')
+    const data = await request.get('/production/data-sources/')
     dataSources.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -452,7 +452,7 @@ const fetchDataSources = async () => {
 const fetchDataPoints = async (sourceId) => {
   loadingPoints.value = true
   try {
-    const { data } = await request.get('/production/data-points/', {
+    const data = await request.get('/production/data-points/', {
       params: { data_source: sourceId }
     })
     dataPoints.value = data.results || data
@@ -466,7 +466,7 @@ const fetchDataPoints = async (sourceId) => {
 const fetchAlarms = async () => {
   loadingAlarms.value = true
   try {
-    const { data } = await request.get('/production/data-alarms/')
+    const data = await request.get('/production/data-alarms/')
     alarms.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -586,7 +586,7 @@ const fetchHistory = async () => {
       params.end = historyDateRange.value[1].toISOString()
     }
     
-    const { data } = await request.get(`/production/data-points/${selectedPointId.value}/history/`, { params })
+    const data = await request.get(`/production/data-points/${selectedPointId.value}/history/`, { params })
     historyData.value = data
     renderHistoryChart()
   } catch (e) {

@@ -374,7 +374,7 @@ const fetchTemplates = async () => {
   loading.value = true
   try {
     const params = { search: searchQuery.value, is_active: true }
-    const { data } = await request.get('/projects/product-templates/', { params })
+    const data = await request.get('/projects/product-templates/', { params })
     templateList.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -385,7 +385,7 @@ const fetchTemplates = async () => {
 
 const fetchCustomers = async () => {
   try {
-    const { data } = await request.get('/masterdata/customers/')
+    const data = await request.get('/masterdata/customers/')
     customers.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -400,7 +400,7 @@ const selectTemplate = async (template) => {
   selectedTemplate.value = template
   
   try {
-    const { data } = await request.get(`/projects/product-templates/${template.id}/configurator/`)
+    const data = await request.get(`/projects/product-templates/${template.id}/configurator/`)
     configParams.value = data.parameters || []
     
     // 初始化配置值为默认值
@@ -431,7 +431,7 @@ const calculateResult = async () => {
   if (!selectedTemplate.value) return
   
   try {
-    const { data } = await request.post(
+    const data = await request.post(
       `/projects/product-templates/${selectedTemplate.value.id}/calculate/`,
       { config_values: configValues }
     )
@@ -505,7 +505,7 @@ const handleViewConfigs = async () => {
   configListDialogVisible.value = true
   
   try {
-    const { data } = await request.get('/projects/product-configurations/')
+    const data = await request.get('/projects/product-configurations/')
     configList.value = data.results || data
   } catch (e) {
     console.error(e)

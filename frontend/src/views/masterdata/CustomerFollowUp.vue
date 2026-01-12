@@ -255,7 +255,7 @@ const rules = {
 const fetchData = async () => {
   loading.value = true
   try {
-    const { data } = await request.get('/masterdata/customer-followups/', { params: queryParams })
+    const data = await request.get('/masterdata/customer-followups/', { params: queryParams })
     tableData.value = data.results || data
     total.value = data.count || data.length
   } catch (e) {
@@ -267,7 +267,7 @@ const fetchData = async () => {
 
 const fetchCustomers = async () => {
   try {
-    const { data } = await request.get('/masterdata/customers/', { params: { page_size: 1000 } })
+    const data = await request.get('/masterdata/customers/', { params: { page_size: 1000 } })
     customers.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -276,7 +276,7 @@ const fetchCustomers = async () => {
 
 const fetchFollowTypes = async () => {
   try {
-    const { data } = await request.get('/masterdata/customer-followups/follow_types/')
+    const data = await request.get('/masterdata/customer-followups/follow_types/')
     followTypes.value = data
   } catch (e) {
     followTypes.value = [
@@ -292,7 +292,7 @@ const fetchFollowTypes = async () => {
 
 const fetchStats = async () => {
   try {
-    const { data } = await request.get('/masterdata/customer-followups/statistics/')
+    const data = await request.get('/masterdata/customer-followups/statistics/')
     stats.value = data
   } catch (e) {
     console.error(e)

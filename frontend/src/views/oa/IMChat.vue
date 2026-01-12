@@ -206,7 +206,7 @@ const creatingConversation = ref(false)
 const loadConversations = async () => {
   loadingConversations.value = true
   try {
-    const { data } = await request.get('/core/conversations/')
+    const data = await request.get('/core/conversations/')
     conversations.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -226,7 +226,7 @@ const selectConversation = async (conv) => {
 const loadMessages = async (convId) => {
   loadingMessages.value = true
   try {
-    const { data } = await request.get('/core/messages/', {
+    const data = await request.get('/core/messages/', {
       params: { conversation: convId, page_size: 50 }
     })
     messages.value = (data.results || data).reverse()
@@ -245,7 +245,7 @@ const sendMessage = async () => {
   
   sendingMessage.value = true
   try {
-    const { data } = await request.post('/core/messages/', {
+    const data = await request.post('/core/messages/', {
       conversation: currentConversation.value.id,
       content: messageInput.value.trim(),
       message_type: 'TEXT'
@@ -276,7 +276,7 @@ const handleFileUpload = async (file) => {
   formData.append('content', file.name)
   
   try {
-    const { data } = await request.post('/core/messages/', formData, {
+    const data = await request.post('/core/messages/', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     messages.value.push(data)
@@ -309,7 +309,7 @@ const createConversation = async () => {
   
   creatingConversation.value = true
   try {
-    const { data } = await request.post('/core/conversations/', {
+    const data = await request.post('/core/conversations/', {
       type: newConvType.value,
       name: newConvType.value === 'GROUP' ? newConvName.value : null,
       members: selectedMembers.value
@@ -328,7 +328,7 @@ const createConversation = async () => {
 // 加载用户列表
 const loadUserList = async () => {
   try {
-    const { data } = await request.get('/auth/users/', { params: { page_size: 200 } })
+    const data = await request.get('/auth/users/', { params: { page_size: 200 } })
     userList.value = (data.results || data).filter(u => u.id !== currentUserId.value)
   } catch (e) {
     console.error(e)

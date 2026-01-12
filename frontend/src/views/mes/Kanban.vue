@@ -181,7 +181,7 @@ const todaySchedules = ref([])
 const refreshData = async () => {
   loading.value = true
   try {
-    const { data } = await request.get('/production/kanban/')
+    const data = await request.get('/production/kanban/')
     production.value = data.production || {}
     projects.value = data.projects || []
     workCenters.value = data.work_centers || []

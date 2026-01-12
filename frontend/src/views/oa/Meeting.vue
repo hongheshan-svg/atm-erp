@@ -295,7 +295,7 @@ const fetchList = async () => {
       search: queryParams.search,
       status: queryParams.status
     }
-    const { data } = await request.get('/core/meetings/', { params })
+    const data = await request.get('/core/meetings/', { params })
     meetingList.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {
@@ -307,7 +307,7 @@ const fetchList = async () => {
 
 const fetchToday = async () => {
   try {
-    const { data } = await request.get('/core/meetings/today/')
+    const data = await request.get('/core/meetings/today/')
     todayMeetings.value = data || []
   } catch (e) {
     console.error(e)
@@ -316,7 +316,7 @@ const fetchToday = async () => {
 
 const fetchRooms = async () => {
   try {
-    const { data } = await request.get('/core/meeting-rooms/')
+    const data = await request.get('/core/meeting-rooms/')
     meetingRooms.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -325,7 +325,7 @@ const fetchRooms = async () => {
 
 const fetchUsers = async () => {
   try {
-    const { data } = await request.get('/auth/users/')
+    const data = await request.get('/auth/users/')
     userList.value = (data.results || data).map(u => ({
       id: u.id,
       name: u.full_name || u.username
@@ -354,7 +354,7 @@ const handleAdd = () => {
 
 const handleView = async (row) => {
   try {
-    const { data } = await request.get(`/core/meetings/${row.id}/`)
+    const data = await request.get(`/core/meetings/${row.id}/`)
     currentMeeting.value = data
     detailDialogVisible.value = true
   } catch (e) {

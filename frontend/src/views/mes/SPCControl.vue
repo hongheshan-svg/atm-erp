@@ -470,7 +470,7 @@ const fetchChartList = async () => {
       page_size: pagination.size,
       search: searchQuery.value
     }
-    const { data } = await request.get('/production/control-charts/', { params })
+    const data = await request.get('/production/control-charts/', { params })
     chartList.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {
@@ -544,7 +544,7 @@ const handleViewChart = async (row) => {
   chartDialogVisible.value = true
   
   try {
-    const { data } = await request.get(`/production/control-charts/${row.id}/chart_data/`)
+    const data = await request.get(`/production/control-charts/${row.id}/chart_data/`)
     chartData.value = data
     
     await nextTick()
@@ -681,7 +681,7 @@ const submitAlarmHandle = async () => {
 
 const handleCalculateCapability = async () => {
   try {
-    const { data } = await request.post(`/production/control-charts/${currentChart.value.id}/calculate_capability/`, {
+    const data = await request.post(`/production/control-charts/${currentChart.value.id}/calculate_capability/`, {
       days: 30
     })
     capabilityData.value = data

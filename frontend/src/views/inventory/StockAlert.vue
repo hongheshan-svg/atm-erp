@@ -193,7 +193,7 @@ const fetchAlerts = async () => {
       page_size: pagination.size,
       ...queryParams
     }
-    const { data } = await request.get('/inventory/stock-alerts/', { params })
+    const data = await request.get('/inventory/stock-alerts/', { params })
     alertList.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {
@@ -205,7 +205,7 @@ const fetchAlerts = async () => {
 
 const fetchRules = async () => {
   try {
-    const { data } = await request.get('/inventory/stock-alert-rules/')
+    const data = await request.get('/inventory/stock-alert-rules/')
     rules.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -214,7 +214,7 @@ const fetchRules = async () => {
 
 const fetchSummary = async () => {
   try {
-    const { data } = await request.get('/inventory/stock-alerts/summary/')
+    const data = await request.get('/inventory/stock-alerts/summary/')
     summaryData.value = data
   } catch (e) {
     console.error(e)
@@ -223,7 +223,7 @@ const fetchSummary = async () => {
 
 const handleInitRules = async () => {
   try {
-    const { data } = await request.post('/inventory/stock-alert-rules/init_rules/')
+    const data = await request.post('/inventory/stock-alert-rules/init_rules/')
     ElMessage.success(`初始化完成，新增 ${data.created} 条规则`)
     fetchRules()
   } catch (e) {
@@ -234,7 +234,7 @@ const handleInitRules = async () => {
 const handleCheckAll = async () => {
   try {
     ElMessage.info('正在检查预警...')
-    const { data } = await request.post('/inventory/stock-alerts/check_all/')
+    const data = await request.post('/inventory/stock-alerts/check_all/')
     ElMessage.success(`检查完成，新增 ${data.alerts_created} 条预警`)
     fetchAlerts()
     fetchSummary()

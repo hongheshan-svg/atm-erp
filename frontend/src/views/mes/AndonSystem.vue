@@ -365,7 +365,7 @@ const fetchCalls = async () => {
       page_size: pagination.size
     } : {}
     
-    const { data } = await request.get(url, { params })
+    const data = await request.get(url, { params })
     callList.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {
@@ -377,7 +377,7 @@ const fetchCalls = async () => {
 
 const fetchStations = async () => {
   try {
-    const { data } = await request.get('/production/andon-stations/status_board/')
+    const data = await request.get('/production/andon-stations/status_board/')
     stationList.value = data.stations || []
     
     // 计算状态统计
@@ -406,7 +406,7 @@ const fetchOptions = async () => {
 
 const fetchStats = async () => {
   try {
-    const { data } = await request.get('/production/andon-calls/statistics/', { params: { days: 1 } })
+    const data = await request.get('/production/andon-calls/statistics/', { params: { days: 1 } })
     
     const byStatus = {}
     data.by_status?.forEach(s => {
@@ -487,7 +487,7 @@ const submitCall = async () => {
 
 const handleViewCall = async (row) => {
   try {
-    const { data } = await request.get(`/production/andon-calls/${row.id}/`)
+    const data = await request.get(`/production/andon-calls/${row.id}/`)
     currentCall.value = data
     detailDialogVisible.value = true
   } catch (e) {

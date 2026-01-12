@@ -436,7 +436,7 @@ const fetchList = async () => {
       status: queryParams.status,
       department: queryParams.department
     }
-    const { data } = await request.get('/finance/fixed-assets/', { params })
+    const data = await request.get('/finance/fixed-assets/', { params })
     assetList.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {
@@ -448,7 +448,7 @@ const fetchList = async () => {
 
 const fetchStats = async () => {
   try {
-    const { data } = await request.get('/finance/fixed-assets/statistics/')
+    const data = await request.get('/finance/fixed-assets/statistics/')
     stats.value = data.totals || {}
   } catch (e) {
     console.error(e)
@@ -513,7 +513,7 @@ const submitForm = async () => {
 
 const handleView = async (row) => {
   try {
-    const { data } = await request.get(`/finance/fixed-assets/${row.id}/`)
+    const data = await request.get(`/finance/fixed-assets/${row.id}/`)
     currentAsset.value = data
     detailDialogVisible.value = true
   } catch (e) {
@@ -600,7 +600,7 @@ const handleDepreciate = () => {
 const submitDepreciate = async () => {
   submitLoading.value = true
   try {
-    const { data } = await request.post('/finance/fixed-assets/depreciate/', {
+    const data = await request.post('/finance/fixed-assets/depreciate/', {
       year: depreciateForm.year,
       month: depreciateForm.month
     })

@@ -219,7 +219,7 @@ const fetchList = async () => {
       page_size: pagination.size,
       ...queryParams
     }
-    const { data } = await request.get('/inventory/mrp-plans/', { params })
+    const data = await request.get('/inventory/mrp-plans/', { params })
     planList.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {
@@ -263,7 +263,7 @@ const submitForm = async () => {
 
 const handleView = async (row) => {
   try {
-    const { data } = await request.get(`/inventory/mrp-plans/${row.id}/`)
+    const data = await request.get(`/inventory/mrp-plans/${row.id}/`)
     currentPlan.value = data
     detailDialogVisible.value = true
   } catch (e) {
@@ -276,7 +276,7 @@ const handleCalculate = async (row) => {
     await ElMessageBox.confirm('确定要执行MRP计算吗？', '提示', { type: 'warning' })
     
     ElMessage.info('正在计算...')
-    const { data } = await request.post(`/inventory/mrp-plans/${row.id}/calculate/`)
+    const data = await request.post(`/inventory/mrp-plans/${row.id}/calculate/`)
     ElMessage.success(`计算完成，共 ${data.total_items} 个物料，${data.shortage_items} 个缺料`)
     fetchList()
   } catch (e) {
@@ -300,7 +300,7 @@ const handleGeneratePR = async (row) => {
   try {
     await ElMessageBox.confirm('确定要生成采购申请吗？', '提示', { type: 'warning' })
     
-    const { data } = await request.post(`/inventory/mrp-plans/${row.id}/generate_pr/`)
+    const data = await request.post(`/inventory/mrp-plans/${row.id}/generate_pr/`)
     ElMessage.success(`已生成采购申请: ${data.purchase_request_no}`)
     fetchList()
   } catch (e) {

@@ -272,7 +272,7 @@ const handleForm = reactive({
 const fetchData = async () => {
   loading.value = true
   try {
-    const { data } = await request.get('/projects/inspection-records/', { params: queryParams })
+    const data = await request.get('/projects/inspection-records/', { params: queryParams })
     tableData.value = data.results || data
     total.value = data.count || data.length
   } catch (e) {
@@ -284,7 +284,7 @@ const fetchData = async () => {
 
 const fetchTemplates = async () => {
   try {
-    const { data } = await request.get('/projects/inspection-templates/', { params: { page_size: 100 } })
+    const data = await request.get('/projects/inspection-templates/', { params: { page_size: 100 } })
     templates.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -293,7 +293,7 @@ const fetchTemplates = async () => {
 
 const fetchEquipments = async () => {
   try {
-    const { data } = await request.get('/projects/equipment/', { params: { page_size: 500 } })
+    const data = await request.get('/projects/equipment/', { params: { page_size: 500 } })
     equipments.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -302,7 +302,7 @@ const fetchEquipments = async () => {
 
 const fetchStats = async () => {
   try {
-    const { data } = await request.get('/projects/inspection-records/statistics/')
+    const data = await request.get('/projects/inspection-records/statistics/')
     todayStats.value = data.today || {}
   } catch (e) {
     console.error(e)
@@ -311,7 +311,7 @@ const fetchStats = async () => {
 
 const fetchUnhandledAbnormal = async () => {
   try {
-    const { data } = await request.get('/projects/inspection-results/unhandled_abnormal/')
+    const data = await request.get('/projects/inspection-results/unhandled_abnormal/')
     unhandledAbnormal.value = data
   } catch (e) {
     console.error(e)

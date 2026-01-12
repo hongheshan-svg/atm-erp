@@ -334,7 +334,7 @@ const stats = computed(() => {
 const fetchData = async () => {
   loading.value = true
   try {
-    const { data } = await request.get('/projects/milestones/', { params: queryParams })
+    const data = await request.get('/projects/milestones/', { params: queryParams })
     tableData.value = data.results || data
     total.value = data.count || data.length
   } catch (e) {
@@ -346,7 +346,7 @@ const fetchData = async () => {
 
 const fetchProjects = async () => {
   try {
-    const { data } = await request.get('/projects/projects/', { params: { page_size: 500 } })
+    const data = await request.get('/projects/projects/', { params: { page_size: 500 } })
     projects.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -355,7 +355,7 @@ const fetchProjects = async () => {
 
 const fetchUsers = async () => {
   try {
-    const { data } = await request.get('/auth/users/', { params: { page_size: 200 } })
+    const data = await request.get('/auth/users/', { params: { page_size: 200 } })
     users.value = (data.results || data).map(u => ({
       id: u.id,
       name: u.first_name || u.last_name || u.username
@@ -367,7 +367,7 @@ const fetchUsers = async () => {
 
 const fetchMilestoneTypes = async () => {
   try {
-    const { data } = await request.get('/projects/milestones/milestone_types/')
+    const data = await request.get('/projects/milestones/milestone_types/')
     milestoneTypes.value = data
   } catch (e) {
     milestoneTypes.value = [
@@ -504,7 +504,7 @@ const confirmInit = async () => {
   
   initLoading.value = true
   try {
-    const { data } = await request.post('/projects/milestones/init_template/', initForm)
+    const data = await request.post('/projects/milestones/init_template/', initForm)
     ElMessage.success(`成功创建${data.created}个里程碑`)
     initDialogVisible.value = false
     queryParams.project = initForm.project_id

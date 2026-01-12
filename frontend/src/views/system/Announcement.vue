@@ -210,7 +210,7 @@ const fetchList = async () => {
       page_size: pagination.size,
       ...queryParams
     }
-    const { data } = await request.get('/core/announcements/', { params })
+    const data = await request.get('/core/announcements/', { params })
     announcements.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {

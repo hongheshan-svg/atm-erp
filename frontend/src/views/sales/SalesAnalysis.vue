@@ -167,7 +167,7 @@ const fetchFunnel = async () => {
       params.start_date = dateRange.value[0]
       params.end_date = dateRange.value[1]
     }
-    const { data } = await request.get('/sales/analysis/funnel/', { params })
+    const data = await request.get('/sales/analysis/funnel/', { params })
     funnelData.value = data.funnel || []
     funnelSummary.value = {
       total_leads: data.total_leads,
@@ -195,7 +195,7 @@ const fetchCustomerAnalysis = async () => {
 const handleRFMAnalyze = async () => {
   try {
     ElMessage.info('正在执行RFM分析...')
-    const { data } = await request.post('/sales/customer-rfm/analyze/')
+    const data = await request.post('/sales/customer-rfm/analyze/')
     ElMessage.success(`分析完成，共分析 ${data.analyzed_count} 个客户`)
     fetchCustomerAnalysis()
   } catch (e) {
@@ -205,7 +205,7 @@ const handleRFMAnalyze = async () => {
 
 const fetchTrend = async () => {
   try {
-    const { data } = await request.get('/sales/analysis/trend/', {
+    const data = await request.get('/sales/analysis/trend/', {
       params: { period: 'month', months: 12 }
     })
     trendData.value = data.trend || []
@@ -266,7 +266,7 @@ const fetchRanking = async () => {
       params.start_date = dateRange.value[0]
       params.end_date = dateRange.value[1]
     }
-    const { data } = await request.get('/sales/analysis/ranking/', { params })
+    const data = await request.get('/sales/analysis/ranking/', { params })
     ranking.value = data.ranking || []
   } catch (e) {
     console.error(e)

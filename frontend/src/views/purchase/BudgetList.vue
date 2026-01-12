@@ -294,7 +294,7 @@ const rules = {
 const fetchData = async () => {
   loading.value = true
   try {
-    const { data } = await request.get('/purchase/budgets/', { params: queryParams })
+    const data = await request.get('/purchase/budgets/', { params: queryParams })
     tableData.value = data.results || data
     total.value = data.count || data.length
   } catch (e) {
@@ -306,7 +306,7 @@ const fetchData = async () => {
 
 const fetchStats = async () => {
   try {
-    const { data } = await request.get('/purchase/budgets/statistics/', { 
+    const data = await request.get('/purchase/budgets/statistics/', { 
       params: { year: queryParams.year } 
     })
     stats.value = data
@@ -350,7 +350,7 @@ const handleEdit = (row) => {
 
 const handleView = async (row) => {
   try {
-    const { data } = await request.get(`/purchase/budgets/${row.id}/`)
+    const data = await request.get(`/purchase/budgets/${row.id}/`)
     currentBudget.value = data
     
     const usageRes = await request.get(`/purchase/budgets/${row.id}/usage_records/`)
