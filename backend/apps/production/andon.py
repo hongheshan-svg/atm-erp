@@ -60,6 +60,7 @@ class AndonType(BaseModel):
     description = models.TextField(blank=True, verbose_name='描述')
     
     class Meta:
+        app_label = 'production'
         db_table = 'mes_andon_type'
         verbose_name = '安灯类型'
         verbose_name_plural = verbose_name
@@ -109,6 +110,7 @@ class AndonStation(BaseModel):
     is_active = models.BooleanField(default=True, verbose_name='启用')
     
     class Meta:
+        app_label = 'production'
         db_table = 'mes_andon_station'
         verbose_name = '安灯工位'
         verbose_name_plural = verbose_name
@@ -227,6 +229,7 @@ class AndonCall(BaseModel):
     attachments = models.JSONField(default=list, blank=True, verbose_name='附件')
     
     class Meta:
+        app_label = 'production'
         db_table = 'mes_andon_call'
         verbose_name = '安灯呼叫'
         verbose_name_plural = verbose_name
@@ -291,6 +294,7 @@ class AndonEscalation(BaseModel):
     reason = models.TextField(blank=True, verbose_name='升级原因')
     
     class Meta:
+        app_label = 'production'
         db_table = 'mes_andon_escalation'
         verbose_name = '安灯升级'
         verbose_name_plural = verbose_name
@@ -331,6 +335,7 @@ class AndonAction(BaseModel):
     content = models.TextField(blank=True, verbose_name='操作内容')
     
     class Meta:
+        app_label = 'production'
         db_table = 'mes_andon_action'
         verbose_name = '安灯操作'
         verbose_name_plural = verbose_name

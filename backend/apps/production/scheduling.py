@@ -60,6 +60,7 @@ class WorkCenter(BaseModel):
     description = models.TextField(blank=True, verbose_name='描述')
     
     class Meta:
+        app_label = 'production'
         db_table = 'mes_work_center'
         verbose_name = '工作中心'
         verbose_name_plural = verbose_name
@@ -143,6 +144,7 @@ class ProductionSchedule(BaseModel):
     remarks = models.TextField(blank=True, verbose_name='备注')
     
     class Meta:
+        app_label = 'production'
         db_table = 'mes_production_schedule'
         verbose_name = '生产排程'
         verbose_name_plural = verbose_name
@@ -171,7 +173,9 @@ class ScheduleTask(BaseModel):
         ProductionSchedule,
         on_delete=models.CASCADE,
         related_name='tasks',
-        verbose_name='排程'
+        verbose_name='排程',
+        null=True,
+        blank=True
     )
     
     # 工序信息
@@ -216,6 +220,7 @@ class ScheduleTask(BaseModel):
     progress = models.IntegerField(default=0, verbose_name='进度(%)')
     
     class Meta:
+        app_label = 'production'
         db_table = 'mes_schedule_task'
         verbose_name = '排程任务'
         verbose_name_plural = verbose_name

@@ -10,8 +10,9 @@ from .views import (
     QualityInspectionViewSet, InspectionItemViewSet
 )
 from .aps import (
-    WorkCenterViewSet, ScheduleOrderViewSet, ScheduleTaskViewSet
+    ScheduleOrderViewSet, APSScheduleTaskViewSet
 )
+from .scheduling import WorkCenterViewSet
 from .kanban import (
     ProductionKanbanView, WorkCenterKanbanView,
     ProductionTrendView, AndonAlertView
@@ -43,7 +44,7 @@ router.register(r'inspection-items', InspectionItemViewSet, basename='inspection
 # APS 高级排程
 router.register(r'work-centers', WorkCenterViewSet, basename='work-center')
 router.register(r'schedule-orders', ScheduleOrderViewSet, basename='schedule-order')
-router.register(r'schedule-tasks', ScheduleTaskViewSet, basename='schedule-task')
+router.register(r'schedule-tasks', APSScheduleTaskViewSet, basename='schedule-task')
 
 # 追溯管理
 router.register(r'product-lots', ProductBatchViewSet, basename='product-lot')

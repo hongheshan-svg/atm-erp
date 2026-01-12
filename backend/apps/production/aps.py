@@ -17,49 +17,8 @@ from rest_framework.views import APIView
 from apps.core.models import BaseModel
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 
-
-class WorkCenter(BaseModel):
-    """工作中心"""
-    code = models.CharField(max_length=50, unique=True, verbose_name='工作中心编码')
-    name = models.CharField(max_length=100, verbose_name='工作中心名称')
-    
-    # 产能
-    daily_capacity = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=8,
-        verbose_name='日产能(工时)'
-    )
-    efficiency = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=100,
-        verbose_name='效率(%)'
-    )
-    
-    # 排程参数
-    setup_time = models.IntegerField(default=30, verbose_name='换型时间(分钟)')
-    min_batch_size = models.IntegerField(default=1, verbose_name='最小批量')
-    
-    # 人员
-    operators = models.ManyToManyField(
-        'accounts.User',
-        blank=True,
-        related_name='work_centers',
-        verbose_name='操作人员'
-    )
-    
-    is_active = models.BooleanField(default=True, verbose_name='启用')
-    description = models.TextField(blank=True, verbose_name='描述')
-    
-    class Meta:
-        db_table = 'mes_work_center'
-        verbose_name = '工作中心'
-        verbose_name_plural = verbose_name
-        ordering = ['code']
-    
-    def __str__(self):
-        return f'{self.code} - {self.name}'
+# 从scheduling导入WorkCenter，避免重复定义
+from .scheduling import WorkCenter
 
 
 class ScheduleOrder(BaseModel):
@@ -170,8 +129,8 @@ class ScheduleOrder(BaseModel):
         super().save(*args, **kwargs)
 
 
-class ScheduleTask(BaseModel):
-    """排程任务"""
+class APSScheduleTask(BaseModel):
+    """APS排程任务"""
     STATUS_CHOICES = [
         ('PENDING', '待开始'),
         ('IN_PROGRESS', '进行中'),
@@ -194,7 +153,7 @@ class ScheduleTask(BaseModel):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='schedule_tasks',
+        related_name='aps_schedule_tasks',
         verbose_name='工作中心'
     )
     
@@ -223,7 +182,7 @@ class ScheduleTask(BaseModel):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='schedule_tasks',
+        related_name='aps_schedule_tasks',
         verbose_name='操作人'
     )
     
@@ -237,10 +196,13 @@ class ScheduleTask(BaseModel):
     progress = models.IntegerField(default=0, verbose_name='进度(%)')
     
     class Meta:
-        db_table = 'mes_schedule_task'
-        verbose_name = '排程任务'
+        app_label = 'production'
+        db_table = 'mes_aps_schedule_task'
+        verbose_name = 'APS排程任务'
         verbose_name_plural = verbose_name
         ordering = ['order', 'sequence']
+
+
 
 
 class APSService:
@@ -391,25 +353,17 @@ class APSService:
 # Serializers
 # =====================
 
-class WorkCenterSerializer(serializers.ModelSerializer):
-    operator_names = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = WorkCenter
-        fields = '__all__'
-        read_only_fields = ['created_by', 'updated_by']
-    
-    def get_operator_names(self, obj):
-        return [u.get_full_name() or u.username for u in obj.operators.all()]
+# 导入scheduling中的WorkCenterSerializer
+from .scheduling import WorkCenterSerializer
 
 
-class ScheduleTaskSerializer(serializers.ModelSerializer):
+class APSScheduleTaskSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     work_center_name = serializers.CharField(source='work_center.name', read_only=True)
     operator_name = serializers.CharField(source='operator.get_full_name', read_only=True)
     
     class Meta:
-        model = ScheduleTask
+        model = APSScheduleTask
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by']
 
@@ -420,7 +374,7 @@ class ScheduleOrderSerializer(serializers.ModelSerializer):
     work_center_name = serializers.CharField(source='work_center.name', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
-    tasks = ScheduleTaskSerializer(many=True, read_only=True)
+    tasks = APSScheduleTaskSerializer(many=True, read_only=True)
     
     class Meta:
         model = ScheduleOrder
@@ -448,13 +402,8 @@ class ScheduleOrderListSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
-class WorkCenterViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
-    """工作中心管理"""
-    queryset = WorkCenter.objects.filter(is_deleted=False)
-    serializer_class = WorkCenterSerializer
-    permission_classes = [IsAuthenticated]
-    filterset_fields = ['is_active']
-    search_fields = ['code', 'name']
+# WorkCenterViewSet已在scheduling.py中定义
+from .scheduling import WorkCenterViewSet
 
 
 class ScheduleOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
@@ -529,10 +478,10 @@ class ScheduleOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         return Response(data)
 
 
-class ScheduleTaskViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
-    """排程任务管理"""
-    queryset = ScheduleTask.objects.filter(is_deleted=False)
-    serializer_class = ScheduleTaskSerializer
+class APSScheduleTaskViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+    """APS排程任务管理"""
+    queryset = APSScheduleTask.objects.filter(is_deleted=False)
+    serializer_class = APSScheduleTaskSerializer
     permission_classes = [IsAuthenticated]
     filterset_fields = ['order', 'work_center', 'operator', 'status']
     

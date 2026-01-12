@@ -65,6 +65,7 @@ class DataSource(BaseModel):
     last_error = models.TextField(blank=True, verbose_name='最后错误信息')
     
     class Meta:
+        app_label = 'production'
         db_table = 'mes_data_source'
         verbose_name = '数据源'
         verbose_name_plural = verbose_name
@@ -147,6 +148,7 @@ class DataPoint(BaseModel):
     description = models.TextField(blank=True, verbose_name='描述')
     
     class Meta:
+        app_label = 'production'
         db_table = 'mes_data_point'
         verbose_name = '数据点'
         verbose_name_plural = verbose_name
@@ -208,6 +210,7 @@ class DataRecord(models.Model):
     alarm_status = models.CharField(max_length=20, blank=True, verbose_name='告警状态')
     
     class Meta:
+        app_label = 'production'
         db_table = 'mes_data_record'
         verbose_name = '数据记录'
         verbose_name_plural = verbose_name
@@ -272,6 +275,7 @@ class DataAlarm(BaseModel):
     resolution = models.TextField(blank=True, verbose_name='解决措施')
     
     class Meta:
+        app_label = 'production'
         db_table = 'mes_data_alarm'
         verbose_name = '数据告警'
         verbose_name_plural = verbose_name

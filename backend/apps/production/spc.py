@@ -76,6 +76,7 @@ class ControlChart(BaseModel):
     is_active = models.BooleanField(default=True, verbose_name='启用')
     
     class Meta:
+        app_label = 'production'
         db_table = 'mes_control_chart'
         verbose_name = '控制图'
         verbose_name_plural = verbose_name
@@ -125,6 +126,7 @@ class SPCDataPoint(BaseModel):
     remarks = models.CharField(max_length=500, blank=True, verbose_name='备注')
     
     class Meta:
+        app_label = 'production'
         db_table = 'mes_spc_data_point'
         verbose_name = 'SPC数据点'
         verbose_name_plural = verbose_name
@@ -154,6 +156,7 @@ class SubgroupStatistics(BaseModel):
     violation_rules = models.JSONField(default=list, blank=True, verbose_name='违反规则')
     
     class Meta:
+        app_label = 'production'
         db_table = 'mes_subgroup_statistics'
         verbose_name = '子组统计'
         verbose_name_plural = verbose_name
@@ -193,6 +196,7 @@ class ProcessCapability(BaseModel):
     remarks = models.TextField(blank=True, verbose_name='分析说明')
     
     class Meta:
+        app_label = 'production'
         db_table = 'mes_process_capability'
         verbose_name = '过程能力'
         verbose_name_plural = verbose_name
@@ -244,6 +248,7 @@ class SPCAlarm(BaseModel):
     action_taken = models.TextField(blank=True, verbose_name='处理措施')
     
     class Meta:
+        app_label = 'production'
         db_table = 'mes_spc_alarm'
         verbose_name = 'SPC报警'
         verbose_name_plural = verbose_name
