@@ -367,7 +367,7 @@ const fetchData = async () => {
 const fetchStatistics = async () => {
   try {
     const res = await getCollectionPlanStatistics()
-    Object.assign(statistics, res.data)
+    Object.assign(statistics, res || {})
   } catch (error) {
     console.error('获取统计失败', error)
   }
@@ -379,8 +379,8 @@ const fetchOptions = async () => {
       getCustomerList({ page_size: 500 }),
       getProjectList({ page_size: 500 })
     ])
-    customerOptions.value = customerRes.data.results || customerRes.data
-    projectOptions.value = projectRes.data.results || projectRes.data
+    customerOptions.value = customerRes.results || customerRes || []
+    projectOptions.value = projectRes.results || projectRes || []
   } catch (error) {
     console.error('获取选项失败', error)
   }
@@ -410,7 +410,7 @@ const handleEdit = (row) => {
 const handleView = async (row) => {
   try {
     const res = await getCollectionPlan(row.id)
-    currentPlan.value = res.data
+    currentPlan.value = res
     detailVisible.value = true
   } catch (error) {
     ElMessage.error('获取详情失败')
@@ -460,7 +460,7 @@ const submitRecord = async () => {
     // 刷新详情
     if (currentPlan.value) {
       const res = await getCollectionPlan(currentPlan.value.id)
-      currentPlan.value = res.data
+      currentPlan.value = res
     }
     fetchStatistics()
   } catch (error) {
