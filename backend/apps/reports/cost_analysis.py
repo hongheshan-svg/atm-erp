@@ -77,8 +77,8 @@ class ProjectCostAnalysisView(APIView):
         # 总成本
         total_cost = purchase_cost + outsource_cost + labor_cost + material_cost
         
-        # 项目合同金额
-        contract_amount = project.contract_amount or Decimal('0')
+        # 项目预算金额（作为合同金额）
+        contract_amount = project.budget_total or Decimal('0')
         
         # 毛利分析
         gross_profit = contract_amount - total_cost
@@ -161,18 +161,18 @@ class ProjectCostComparisonView(APIView):
             labor_cost = float(labor_hours) * 100  # 默认100元/小时
             
             total_cost = float(purchase_cost) + labor_cost
-            contract_amount = float(project.contract_amount or 0)
-            gross_profit = contract_amount - total_cost
+            budget_total = float(project.budget_total or 0)
+            gross_profit = budget_total - total_cost
             
             comparison_data.append({
                 'project_id': project.id,
                 'project_no': project.project_no,
                 'project_name': project.name,
                 'status': project.status,
-                'contract_amount': contract_amount,
+                'contract_amount': budget_total,  # Use budget_total as contract amount
                 'total_cost': total_cost,
                 'gross_profit': gross_profit,
-                'gross_margin': round((gross_profit / contract_amount * 100), 1) if contract_amount > 0 else 0,
+                'gross_margin': round((gross_profit / budget_total * 100), 1) if budget_total > 0 else 0,
                 'labor_hours': float(labor_hours),
             })
         
