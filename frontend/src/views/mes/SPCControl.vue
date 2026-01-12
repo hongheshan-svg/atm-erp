@@ -486,11 +486,12 @@ const fetchStats = async () => {
     const [alarmsRes] = await Promise.all([
       request.get('/production/spc-alarms/unhandled/')
     ])
-    unhandledAlarms.value = alarmsRes.data.slice(0, 10)
+    const alarms = alarmsRes.results || alarmsRes || []
+    unhandledAlarms.value = alarms.slice(0, 10)
     
     stats.value = {
       total_charts: chartList.value.length || 0,
-      unhandled_alarms: alarmsRes.data.length,
+      unhandled_alarms: alarms.length || 0,
       avg_cpk: null,
       data_points_today: 0
     }
