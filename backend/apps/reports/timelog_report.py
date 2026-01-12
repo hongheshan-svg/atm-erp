@@ -58,7 +58,7 @@ class TimelogStatisticsView(APIView):
         by_project = base_qs.filter(
             log_date__gte=this_month_start
         ).values(
-            'project__name', 'project__project_no'
+            'project__name', 'project__code'
         ).annotate(
             hours=Sum('hours'),
             count=Count('id')
@@ -158,7 +158,7 @@ class TimelogByProjectView(APIView):
         
         # 按项目统计
         by_project = qs.values(
-            'project__id', 'project__project_no', 'project__name', 'project__status'
+            'project__id', 'project__code', 'project__name', 'project__status'
         ).annotate(
             total_hours=Sum('hours'),
             unique_users=Count('user', distinct=True),
