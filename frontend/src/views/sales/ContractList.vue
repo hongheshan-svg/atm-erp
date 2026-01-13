@@ -276,7 +276,7 @@ const { canDelete } = usePermission()
 // 批量删除功能
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
   '/sales/contracts/',
-  { onSuccess: loadContracts, confirmTitle: '删除合同', confirmMessage: '确定要删除该合同吗？' }
+  { onSuccess: () => loadContracts(), confirmTitle: '删除合同', confirmMessage: '确定要删除该合同吗？' }
 )
 
 const loading = ref(false)

@@ -282,7 +282,7 @@ const { canDelete } = usePermission()
 // 批量删除功能
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
   '/production/processes/',
-  { onSuccess: loadData, confirmTitle: '删除工序', confirmMessage: '确定要删除该工序吗？' }
+  { onSuccess: () => loadData(), confirmTitle: '删除工序', confirmMessage: '确定要删除该工序吗？' }
 )
 
 // 状态
@@ -372,7 +372,7 @@ const loadData = async () => {
 // 加载项目列表
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/', { params: { page_size: 1000 } })
+    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
     projects.value = res.results || res || []
   } catch (error) {
     console.error('加载项目列表失败:', error)

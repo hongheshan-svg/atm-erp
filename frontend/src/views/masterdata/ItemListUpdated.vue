@@ -153,7 +153,7 @@ import { usePermission } from '@/composables/usePermission'
 // 权限检查
 const { canDelete, isAdmin } = usePermission()
 
-// 批量删除功能
+// 批量删除功能 - 使用箭头函数包装避免 TDZ 错误
 const { selectedRows, loading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
   '/masterdata/items/',
   {
@@ -161,7 +161,7 @@ const { selectedRows, loading, handleSelectionChange, batchDelete, deleteRow } =
     confirmMessage: '此操作将永久删除选中的物料记录，是否继续？',
     successMessage: '删除物料成功',
     errorMessage: '删除物料失败',
-    onSuccess: loadItems
+    onSuccess: () => loadItems()
   }
 )
 

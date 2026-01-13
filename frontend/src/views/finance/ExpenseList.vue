@@ -241,7 +241,7 @@ const { canDelete } = usePermission()
 // 批量删除功能
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
   '/finance/expenses/',
-  { onSuccess: loadExpenses, confirmTitle: '删除费用', confirmMessage: '确定要删除该费用报销吗？' }
+  { onSuccess: () => loadExpenses(), confirmTitle: '删除费用', confirmMessage: '确定要删除该费用报销吗？' }
 )
 
 const attachmentRef = ref(null)

@@ -348,7 +348,7 @@ const { canDelete } = usePermission()
 // 批量删除功能
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
   '/projects/bugs/',
-  { onSuccess: loadBugs, confirmTitle: '删除Bug', confirmMessage: '确定要删除该Bug吗？' }
+  { onSuccess: () => loadBugs(), confirmTitle: '删除Bug', confirmMessage: '确定要删除该Bug吗？' }
 )
 
 const loading = ref(false)

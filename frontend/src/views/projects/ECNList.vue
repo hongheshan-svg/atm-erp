@@ -401,7 +401,7 @@ const { canDelete } = usePermission()
 // 批量删除功能
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
   '/projects/ecns/',
-  { onSuccess: loadECNList, confirmTitle: '删除ECN', confirmMessage: '确定要删除该ECN吗？' }
+  { onSuccess: () => loadECNList(), confirmTitle: '删除ECN', confirmMessage: '确定要删除该ECN吗？' }
 )
 
 // 数据

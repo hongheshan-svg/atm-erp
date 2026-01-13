@@ -629,6 +629,61 @@ class ProjectBOM(BaseModel):
     is_long_lead = models.BooleanField(default=False, verbose_name='长周期件',
                                        help_text='采购周期较长需要提前采购')
     
+    # ==================== 询价信息 ====================
+    QUOTE_STATUS_CHOICES = [
+        ('NOT_QUOTED', '未询价'),
+        ('QUOTING', '询价中'),
+        ('QUOTED', '已询价'),
+    ]
+    
+    quote_status = models.CharField(
+        max_length=20,
+        choices=QUOTE_STATUS_CHOICES,
+        default='NOT_QUOTED',
+        verbose_name='询价状态'
+    )
+    quote_supplier = models.ForeignKey(
+        'masterdata.Supplier',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='quoted_bom_items',
+        verbose_name='询价供应商'
+    )
+    price_with_tax = models.DecimalField(
+        max_digits=15,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        verbose_name='含税单价'
+    )
+    price_without_tax = models.DecimalField(
+        max_digits=15,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        verbose_name='未税单价'
+    )
+    tax_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='税率(%)',
+        help_text='如13表示13%'
+    )
+    quote_delivery_days = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name='报价交期(天)'
+    )
+    quote_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='询价日期'
+    )
+    quote_notes = models.TextField(blank=True, verbose_name='询价备注')
+    
     # ==================== 扩展字段 ====================
     extra_fields = models.JSONField(
         default=dict,

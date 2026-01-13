@@ -204,7 +204,7 @@ const { canDelete } = usePermission()
 // 批量删除功能
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
   '/projects/drawings/',
-  { onSuccess: loadDrawings, confirmTitle: '删除图纸', confirmMessage: '确定要删除该图纸吗？' }
+  { onSuccess: () => loadDrawings(), confirmTitle: '删除图纸', confirmMessage: '确定要删除该图纸吗？' }
 )
 
 const loading = ref(false)

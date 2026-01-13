@@ -227,7 +227,7 @@ const { canDelete } = usePermission()
 // 批量删除功能
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
   '/system/code-rules/',
-  { onSuccess: fetchRules, confirmTitle: '删除编码规则', confirmMessage: '确定要删除该编码规则吗？' }
+  { onSuccess: () => fetchRules(), confirmTitle: '删除编码规则', confirmMessage: '确定要删除该编码规则吗？' }
 )
 
 const loading = ref(false)

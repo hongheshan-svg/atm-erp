@@ -52,17 +52,23 @@
       
       <!-- BOM统计 -->
       <el-row :gutter="20" class="stats-row" v-if="bomItems.length > 0">
-        <el-col :span="6">
+        <el-col :span="4">
           <el-statistic title="物料种类" :value="bomItems.length" suffix="种" />
         </el-col>
-        <el-col :span="6">
+        <el-col :span="4">
           <el-statistic title="计划总量" :value="totalPlannedQty" />
         </el-col>
-        <el-col :span="6">
+        <el-col :span="4">
           <el-statistic title="已领用" :value="totalActualQty" />
         </el-col>
-        <el-col :span="6">
+        <el-col :span="4">
           <el-statistic title="预估成本" :value="totalEstimatedCost" :precision="2" prefix="¥" />
+        </el-col>
+        <el-col :span="4">
+          <el-statistic title="待询价" :value="pendingQuoteCount" suffix="项" />
+        </el-col>
+        <el-col :span="4">
+          <el-statistic title="已询价" :value="bomItems.length - pendingQuoteCount" suffix="项" />
         </el-col>
       </el-row>
       
@@ -114,6 +120,22 @@
         <el-table-column prop="unit" label="单位" width="60" />
         <el-table-column prop="item_type" label="物料类型" width="80" />
         <el-table-column prop="planned_qty" label="计划数量" width="90" align="right" />
+        <el-table-column prop="quote_status_display" label="询价状态" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag 
+              :type="row.quote_status === 'QUOTED' ? 'success' : row.quote_status === 'QUOTING' ? 'warning' : 'info'" 
+              size="small"
+            >
+              {{ row.quote_status_display || '未询价' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="price_with_tax" label="含税单价" width="100" align="right">
+          <template #default="{ row }">
+            <span v-if="row.price_with_tax">¥{{ parseFloat(row.price_with_tax).toFixed(4) }}</span>
+            <span v-else class="text-muted">-</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="order_status_display" label="下单状态" width="90" align="center">
           <template #default="{ row }">
             <el-tag 
@@ -403,6 +425,52 @@
       </template>
     </el-dialog>
     
+    <!-- 导入已报价BOM对话框 -->
+    <el-dialog v-model="quoteImportDialogVisible" title="导入已报价BOM" width="550px">
+      <el-alert
+        title="导入说明"
+        type="warning"
+        show-icon
+        :closable="false"
+        class="mb-15"
+      >
+        <template #default>
+          <div>1. 请先导出询价BOM清单，将报价信息填写完整后再导入</div>
+          <div>2. 物料编码必须与项目BOM清单中的物料编码一致</div>
+          <div>3. 含税单价或未税单价至少填写一项</div>
+          <div>4. 导入成功后，物料将标记为"已询价"状态</div>
+        </template>
+      </el-alert>
+      
+      <el-upload
+        ref="quoteUploadRef"
+        class="upload-area"
+        drag
+        action="#"
+        :auto-upload="false"
+        :limit="1"
+        :on-change="handleQuoteFileChange"
+        :on-exceed="handleExceed"
+        accept=".xlsx,.xls"
+      >
+        <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+        <div class="el-upload__text">
+          将已报价的Excel文件拖到此处，或 <em>点击上传</em>
+        </div>
+        <template #tip>
+          <div class="el-upload__tip">只支持 .xlsx 或 .xls 格式文件</div>
+        </template>
+      </el-upload>
+      
+      <template #footer>
+        <el-button @click="handleExportQuoteBOM">导出询价BOM</el-button>
+        <el-button @click="quoteImportDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleConfirmQuoteImport" :loading="quoteImporting" :disabled="!quoteImportFile">
+          开始导入
+        </el-button>
+      </template>
+    </el-dialog>
+    
     <!-- 从其他项目复制对话框 -->
     <el-dialog v-model="copyDialogVisible" title="从其他项目复制BOM" width="450px">
       <el-form label-width="100px">
@@ -622,6 +690,26 @@ const totalActualQty = computed(() =>
 const totalEstimatedCost = computed(() => 
   bomItems.value.reduce((sum, item) => sum + parseFloat(item.planned_qty || 0) * parseFloat(item.estimated_cost || 0), 0)
 )
+
+// 待询价物料数量
+const pendingQuoteCount = ref(0)
+
+// 获取待询价数量
+const fetchPendingQuoteCount = async () => {
+  if (!selectedProject.value) {
+    pendingQuoteCount.value = 0
+    return
+  }
+  try {
+    const res = await request.get('/projects/bom/pending_quote_count/', {
+      params: { project: selectedProject.value }
+    })
+    pendingQuoteCount.value = res.data?.count || res.count || 0
+  } catch (error) {
+    console.error('获取待询价数量失败:', error)
+    pendingQuoteCount.value = 0
+  }
+}
 
 // 搜索过滤后的 BOM 列表
 const filteredBomItems = computed(() => {
@@ -962,6 +1050,104 @@ const handleDownloadTemplate = async () => {
   }
 }
 
+// ========== 询价BOM导出/导入功能 ==========
+
+const handleExportQuoteBOM = async () => {
+  if (!selectedProject.value) {
+    ElMessage.warning('请先选择项目')
+    return
+  }
+  
+  if (!pendingQuoteCount.value) {
+    ElMessage.warning('没有待询价的物料')
+    return
+  }
+  
+  try {
+    const response = await request.get('/projects/bom/export_quote_bom/', {
+      params: { project: selectedProject.value },
+      responseType: 'blob'
+    })
+    
+    const blobData = response.data || response
+    const blob = new Blob([blobData], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    })
+    
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `询价BOM_${currentProjectName.value.split(' - ')[0]}.xlsx`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
+    ElMessage.success(`导出成功，共 ${pendingQuoteCount.value} 项待询价物料`)
+  } catch (error) {
+    console.error('导出询价BOM失败:', error)
+    ElMessage.error('导出询价BOM失败')
+  }
+}
+
+// 询价BOM导入对话框
+const quoteImportDialogVisible = ref(false)
+const quoteImportFile = ref(null)
+const quoteImporting = ref(false)
+const quoteUploadRef = ref(null)
+
+const handleImportQuoteBOM = () => {
+  if (!selectedProject.value) {
+    ElMessage.warning('请先选择项目')
+    return
+  }
+  quoteImportFile.value = null
+  if (quoteUploadRef.value) {
+    quoteUploadRef.value.clearFiles()
+  }
+  quoteImportDialogVisible.value = true
+}
+
+const handleQuoteFileChange = (file) => {
+  quoteImportFile.value = file.raw
+}
+
+const handleConfirmQuoteImport = async () => {
+  if (!quoteImportFile.value) {
+    ElMessage.warning('请选择要导入的文件')
+    return
+  }
+  
+  quoteImporting.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', quoteImportFile.value)
+    formData.append('project', selectedProject.value)
+    
+    const response = await request.post('/projects/bom/import_quote_bom/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    
+    const data = response.data || response
+    
+    ElMessage.success(data.message || `询价导入成功，已更新 ${data.updated} 条物料`)
+    quoteImportDialogVisible.value = false
+    fetchBOM()
+    fetchPendingQuoteCount()
+  } catch (error) {
+    console.error('询价导入失败:', error)
+    const errData = error.response?.data
+    if (errData?.errors?.length) {
+      const preview = errData.errors.slice(0, 3).map(e => `行${e.row}: ${e.error}`).join('；')
+      ElMessage.error(`导入失败: ${errData.error || preview}`)
+    } else {
+      ElMessage.error(errData?.error || '询价导入失败')
+    }
+  } finally {
+    quoteImporting.value = false
+  }
+}
+
 const handleImport = () => {
   importFile.value = null
   importResult.value = null
@@ -1009,7 +1195,17 @@ const handleConfirmImport = async () => {
     }
   } catch (error) {
     console.error('导入失败:', error)
-    ElMessage.error(error.response?.data?.error || '导入失败')
+    const errData = error.response?.data
+    if (errData?.errors?.length) {
+      const preview = errData.errors
+        .slice(0, 3)
+        .map(e => `行${e.row}: ${e.error}`)
+        .join('；')
+      ElMessage.error(errData.error ? `${errData.error}（${preview}）` : preview)
+      importResult.value = errData
+    } else {
+      ElMessage.error(errData?.error || '导入失败')
+    }
   } finally {
     importing.value = false
   }
@@ -1080,6 +1276,7 @@ const getMaterialCheckStatusType = (status) => {
 
 watch(selectedProject, () => {
   fetchBOM()
+  fetchPendingQuoteCount()  // 同时获取待询价数量
 })
 
 onMounted(() => {
@@ -1088,6 +1285,7 @@ onMounted(() => {
   fetchUsers()
   fetchSuppliers()
   fetchBOM()  // 默认加载所有BOM
+  fetchPendingQuoteCount()  // 获取待询价数量
 })
 </script>
 

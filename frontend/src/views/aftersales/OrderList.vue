@@ -457,7 +457,7 @@ const { canDelete } = usePermission()
 // 批量删除功能
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
   '/projects/aftersales/',
-  { onSuccess: loadOrders, confirmTitle: '删除工单', confirmMessage: '确定要删除该工单吗？' }
+  { onSuccess: () => loadOrders(), confirmTitle: '删除工单', confirmMessage: '确定要删除该工单吗？' }
 )
 
 const loading = ref(false)

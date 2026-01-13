@@ -93,11 +93,11 @@ const formRef = ref(null)
 // 权限检查
 const { canDelete } = usePermission()
 
-// 批量删除功能
+// 批量删除功能 - 使用箭头函数包装避免 TDZ 错误
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
   '/masterdata/warehouses/',
   {
-    onSuccess: loadWarehouses,
+    onSuccess: () => loadWarehouses(),
     confirmTitle: '删除仓库',
     confirmMessage: '确定要删除该仓库吗？删除后不可恢复！'
   }

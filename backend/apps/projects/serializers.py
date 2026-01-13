@@ -212,6 +212,11 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
     supplier_code = serializers.CharField(source='supplier.code', read_only=True, allow_null=True)
     purchase_order_no = serializers.CharField(source='purchase_order.po_no', read_only=True, allow_null=True)
     
+    # ===== 询价字段 =====
+    quote_status_display = serializers.CharField(source='get_quote_status_display', read_only=True)
+    quote_supplier_name = serializers.CharField(source='quote_supplier.name', read_only=True, allow_null=True)
+    quote_supplier_code = serializers.CharField(source='quote_supplier.code', read_only=True, allow_null=True)
+    
     # ===== 工位与工序 =====
     work_center_name = serializers.CharField(source='work_center.name', read_only=True, allow_null=True)
     process_name = serializers.CharField(source='process.name', read_only=True, allow_null=True)
@@ -274,6 +279,11 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
             'children_count', 'has_children', 'children',
             # 关键件标识
             'is_critical', 'is_long_lead',
+            # 询价信息
+            'quote_status', 'quote_status_display',
+            'quote_supplier', 'quote_supplier_name', 'quote_supplier_code',
+            'price_with_tax', 'price_without_tax', 'tax_rate',
+            'quote_delivery_days', 'quote_date', 'quote_notes',
             # 扩展字段
             'extra_fields',
             'is_deleted', 'created_at', 'updated_at'

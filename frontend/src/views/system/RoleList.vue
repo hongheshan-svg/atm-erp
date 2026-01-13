@@ -145,7 +145,7 @@ const { canDelete } = usePermission()
 // 批量删除功能
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
   '/accounts/roles/',
-  { onSuccess: loadRoles, confirmTitle: '删除角色', confirmMessage: '确定要删除该角色吗？删除后相关用户将失去此角色权限！' }
+  { onSuccess: () => loadRoles(), confirmTitle: '删除角色', confirmMessage: '确定要删除该角色吗？删除后相关用户将失去此角色权限！' }
 )
 
 const loading = ref(false)

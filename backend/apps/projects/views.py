@@ -5,6 +5,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
+from django.db import transaction
 from django.db.models import Sum, F, Q
 from django.http import HttpResponse
 import pandas as pd
@@ -239,9 +240,9 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
     """
     queryset = ProjectBOM.objects.all()
     serializer_class = ProjectBOMSerializer
-    filterset_fields = ['project', 'item', 'is_deleted']
+    filterset_fields = ['project', 'item', 'is_deleted', 'quote_status', 'order_status']
     search_fields = ['item__sku', 'item__name', 'project__name', 'project__code']
-    ordering_fields = ['created_at', 'project', 'item']
+    ordering_fields = ['created_at', 'project', 'item', 'quote_status']
     ordering = ['-created_at']  # 默认按创建时间倒序
     parser_classes = [JSONParser, MultiPartParser, FormParser]
     
@@ -850,22 +851,19 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 error_rows.append({'row': row_num, 'error': '需求日期为空'})
                 continue
 
-            # 申请人必填且必须匹配用户
+            # 申请人必填但不再强制匹配系统用户
             if not requester_column:
                 error_rows.append({'row': row_num, 'error': 'Excel文件必须包含“申请人”列'})
                 continue
-            requester = None
-            if pd.notna(row.get(requester_column)):
-                requester_name = str(row[requester_column]).strip()
-                if requester_name:
-                    requester = User.objects.filter(
-                        Q(username=requester_name) |
-                        Q(first_name__icontains=requester_name) |
-                        Q(last_name__icontains=requester_name)
-                    ).first()
-            if not requester:
-                error_rows.append({'row': row_num, 'error': '申请人为空或未在系统中找到匹配用户'})
+            requester_name = str(row[requester_column]).strip() if pd.notna(row.get(requester_column)) else ''
+            if not requester_name:
+                error_rows.append({'row': row_num, 'error': '申请人为空'})
                 continue
+            requester = User.objects.filter(
+                Q(username=requester_name) |
+                Q(first_name__icontains=requester_name) |
+                Q(last_name__icontains=requester_name)
+            ).first() or None
 
             prechecked_rows.append((row_num, row, sku, item, planned_qty, required_date, requester))
         
@@ -1119,6 +1117,414 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             'errors': error_rows
         })
     
+    @action(detail=False, methods=['get'])
+    def export_quote_bom(self, request):
+        """
+        导出询价BOM清单（只导出未报价的物料）
+        包含：物料编号、有图/无图、物料类型、物料名称、规格型号、版本/品牌、单位、数量、
+              供应商名称、含税单价、未税单价、税率、交期
+        """
+        project_id = request.query_params.get('project')
+        
+        if not project_id:
+            return Response(
+                {'error': '请提供project参数'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            project = Project.objects.get(id=project_id)
+        except Project.DoesNotExist:
+            return Response(
+                {'error': '项目不存在'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 只获取未报价的物料（quote_status = 'NOT_QUOTED'）
+        bom_items = self.get_queryset().filter(
+            project_id=project_id,
+            is_deleted=False,
+            quote_status='NOT_QUOTED'
+        ).select_related('item', 'quote_supplier')
+        
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            workbook = writer.book
+            worksheet = workbook.add_worksheet('询价BOM清单')
+            
+            # Define formats
+            title_format = workbook.add_format({
+                'bold': True,
+                'font_size': 14,
+                'align': 'left',
+                'valign': 'vcenter'
+            })
+            header_format = workbook.add_format({
+                'bold': True,
+                'bg_color': '#4472C4',
+                'font_color': 'white',
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter'
+            })
+            readonly_header = workbook.add_format({
+                'bold': True,
+                'bg_color': '#808080',
+                'font_color': 'white',
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter'
+            })
+            input_header = workbook.add_format({
+                'bold': True,
+                'bg_color': '#FFC000',
+                'font_color': 'black',
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter'
+            })
+            data_format = workbook.add_format({
+                'border': 1,
+                'align': 'left',
+                'valign': 'vcenter'
+            })
+            number_format = workbook.add_format({
+                'border': 1,
+                'align': 'right',
+                'valign': 'vcenter',
+                'num_format': '#,##0.00'
+            })
+            money_format = workbook.add_format({
+                'border': 1,
+                'align': 'right',
+                'valign': 'vcenter',
+                'num_format': '#,##0.0000'
+            })
+            
+            # Write title
+            from datetime import datetime
+            headers = [
+                ('序号', 6, 'readonly'),
+                ('物料编码', 15, 'readonly'),
+                ('有图/无图', 10, 'readonly'),
+                ('物料类型', 10, 'readonly'),
+                ('物料名称', 25, 'readonly'),
+                ('规格型号', 20, 'readonly'),
+                ('版本/品牌', 15, 'readonly'),
+                ('单位', 8, 'readonly'),
+                ('数量', 12, 'readonly'),
+                ('供应商名称', 20, 'input'),
+                ('含税单价', 12, 'input'),
+                ('未税单价', 12, 'input'),
+                ('税率(%)', 10, 'input'),
+                ('交期(天)', 10, 'input'),
+            ]
+            
+            last_col = len(headers) - 1
+            worksheet.merge_range(0, 0, 0, last_col, f'询价BOM清单 - {project.name} ({project.code})', title_format)
+            worksheet.write(1, 0, f'导出时间: {datetime.now().strftime("%Y-%m-%d %H:%M")}')
+            worksheet.write(2, 0, '说明: 灰色列为只读信息，橙色列需要填写报价信息', data_format)
+            
+            # Write headers (row 4)
+            for col, (header, width, htype) in enumerate(headers):
+                if htype == 'readonly':
+                    fmt = readonly_header
+                else:
+                    fmt = input_header
+                worksheet.write(4, col, header, fmt)
+                worksheet.set_column(col, col, width)
+            
+            # Write data
+            row = 5
+            for idx, bom in enumerate(bom_items, 1):
+                planned = float(bom.planned_qty)
+                
+                # 物料类型
+                item_type_display = bom.item.get_item_type_display()
+                # 有图/无图
+                has_drawing_display = bom.get_has_drawing_display()
+                
+                col = 0
+                worksheet.write(row, col, idx, data_format); col += 1
+                worksheet.write(row, col, bom.item.sku, data_format); col += 1
+                worksheet.write(row, col, has_drawing_display, data_format); col += 1
+                worksheet.write(row, col, item_type_display, data_format); col += 1
+                worksheet.write(row, col, bom.item.name, data_format); col += 1
+                worksheet.write(row, col, bom.item.specification or '', data_format); col += 1
+                worksheet.write(row, col, bom.version_brand or f"{bom.item.brand or ''}/{bom.item.model or ''}".strip('/'), data_format); col += 1
+                worksheet.write(row, col, bom.item.get_unit_display(), data_format); col += 1
+                worksheet.write(row, col, planned, number_format); col += 1
+                # 以下为待填写的报价信息（留空）
+                worksheet.write(row, col, '', data_format); col += 1  # 供应商名称
+                worksheet.write(row, col, '', money_format); col += 1  # 含税单价
+                worksheet.write(row, col, '', money_format); col += 1  # 未税单价
+                worksheet.write(row, col, '', data_format); col += 1  # 税率
+                worksheet.write(row, col, '', data_format); col += 1  # 交期
+                row += 1
+            
+            # Set row heights
+            worksheet.set_row(0, 25)
+            worksheet.set_row(4, 22)
+            
+            # Freeze panes
+            worksheet.freeze_panes(5, 2)
+        
+        output.seek(0)
+        
+        response = HttpResponse(
+            output.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename=Quote_BOM_{project.code}.xlsx'
+        return response
+    
+    @action(detail=False, methods=['post'])
+    def import_quote_bom(self, request):
+        """
+        导入已报价BOM
+        校验物料编码是否与项目BOM匹配，不匹配则拒绝导入
+        导入成功后将物料标记为已询价状态
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        file = request.FILES.get('file')
+        project_id = request.data.get('project') or request.POST.get('project')
+        
+        logger.info(f"import_quote_bom called: file={file}, project_id={project_id}")
+        logger.info(f"request.data keys: {list(request.data.keys())}")
+        logger.info(f"request.FILES keys: {list(request.FILES.keys())}")
+        
+        if not file:
+            return Response(
+                {'error': '请上传Excel文件'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not project_id:
+            return Response(
+                {'error': '请选择项目'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            project = Project.objects.get(id=project_id)
+        except Project.DoesNotExist:
+            return Response(
+                {'error': '项目不存在'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # 先读取Excel文件，尝试找到正确的列标题行
+            # 导出的询价BOM清单有前4行是标题和说明，列标题在第5行（index=4）
+            df_raw = pd.read_excel(file, header=None)
+            
+            # 查找包含"物料编码"的行作为列标题行
+            header_row = None
+            for idx, row in df_raw.iterrows():
+                row_values = [str(v) for v in row.values if pd.notna(v)]
+                if any('物料编码' in v for v in row_values):
+                    header_row = idx
+                    break
+            
+            if header_row is not None:
+                # 重新读取，指定header行
+                file.seek(0)  # 重置文件指针
+                df = pd.read_excel(file, header=header_row)
+            else:
+                # 没找到物料编码行，使用默认方式读取
+                file.seek(0)
+                df = pd.read_excel(file)
+                
+            logger.info(f"Excel columns: {list(df.columns)}")
+        except Exception as e:
+            logger.error(f"Excel读取失败: {str(e)}")
+            return Response(
+                {'error': f'Excel文件读取失败: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Find columns
+        def find_column(df, keywords):
+            for col in df.columns:
+                col_str = str(col)
+                for keyword in keywords:
+                    if keyword in col_str:
+                        return col
+            return None
+        
+        sku_column = find_column(df, ['物料编码', 'SKU', '编码'])
+        supplier_column = find_column(df, ['供应商名称', '供应商'])
+        price_with_tax_column = find_column(df, ['含税单价', '含税价'])
+        price_without_tax_column = find_column(df, ['未税单价', '未税价', '不含税单价'])
+        tax_rate_column = find_column(df, ['税率'])
+        delivery_days_column = find_column(df, ['交期', '交货天数'])
+        
+        if not sku_column:
+            return Response(
+                {'error': 'Excel文件必须包含"物料编码"列'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 获取项目所有BOM物料编码
+        project_bom_skus = set(
+            ProjectBOM.objects.filter(
+                project=project,
+                is_deleted=False
+            ).values_list('item__sku', flat=True)
+        )
+        
+        # 第一遍校验：检查所有物料编码是否在项目BOM中
+        error_rows = []
+        valid_rows = []
+        
+        for idx, row in df.iterrows():
+            row_num = idx + 2  # Excel row number
+            sku = str(row[sku_column]).strip() if pd.notna(row[sku_column]) else ''
+            
+            if not sku:
+                continue  # 跳过空行
+            
+            # 跳过示例行
+            if sku.startswith('(') or '示例' in sku or '自动' in sku:
+                continue
+            
+            # 检查物料编码是否在项目BOM中
+            if sku not in project_bom_skus:
+                error_rows.append({
+                    'row': row_num,
+                    'sku': sku,
+                    'error': f'物料编码 {sku} 不在该项目的BOM清单中'
+                })
+                continue
+            
+            # 检查是否有报价信息（至少要有供应商或价格）
+            supplier_name = str(row[supplier_column]).strip() if supplier_column and pd.notna(row.get(supplier_column)) else ''
+            price_with_tax = None
+            price_without_tax = None
+            tax_rate = None
+            delivery_days = None
+            
+            if price_with_tax_column and pd.notna(row.get(price_with_tax_column)):
+                try:
+                    price_with_tax = float(row[price_with_tax_column])
+                except (ValueError, TypeError):
+                    pass
+            
+            if price_without_tax_column and pd.notna(row.get(price_without_tax_column)):
+                try:
+                    price_without_tax = float(row[price_without_tax_column])
+                except (ValueError, TypeError):
+                    pass
+            
+            if tax_rate_column and pd.notna(row.get(tax_rate_column)):
+                try:
+                    tax_rate = float(row[tax_rate_column])
+                except (ValueError, TypeError):
+                    pass
+            
+            if delivery_days_column and pd.notna(row.get(delivery_days_column)):
+                try:
+                    delivery_days = int(row[delivery_days_column])
+                except (ValueError, TypeError):
+                    pass
+            
+            # 必须至少有含税单价或未税单价
+            if price_with_tax is None and price_without_tax is None:
+                error_rows.append({
+                    'row': row_num,
+                    'sku': sku,
+                    'error': f'物料 {sku} 缺少价格信息（含税单价或未税单价至少填写一项）'
+                })
+                continue
+            
+            valid_rows.append({
+                'row_num': row_num,
+                'sku': sku,
+                'supplier_name': supplier_name,
+                'price_with_tax': price_with_tax,
+                'price_without_tax': price_without_tax,
+                'tax_rate': tax_rate,
+                'delivery_days': delivery_days
+            })
+        
+        # 如果有错误，拒绝整个导入
+        if error_rows:
+            preview = '; '.join([f"行{e['row']}: {e['error']}" for e in error_rows[:5]])
+            return Response(
+                {
+                    'error': f'校验失败，未导入任何数据。问题示例：{preview}',
+                    'errors': error_rows,
+                    'total_errors': len(error_rows)
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not valid_rows:
+            return Response(
+                {'error': '没有找到有效的报价数据'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 校验通过，开始更新BOM
+        from apps.masterdata.models import Supplier
+        from datetime import date
+        
+        updated_count = 0
+        with transaction.atomic():
+            for row_data in valid_rows:
+                sku = row_data['sku']
+                
+                # 查找供应商
+                quote_supplier = None
+                if row_data['supplier_name']:
+                    quote_supplier = Supplier.objects.filter(
+                        Q(name__icontains=row_data['supplier_name']) |
+                        Q(code__icontains=row_data['supplier_name'])
+                    ).first()
+                
+                # 更新BOM项
+                bom_item = ProjectBOM.objects.filter(
+                    project=project,
+                    item__sku=sku,
+                    is_deleted=False
+                ).first()
+                
+                if bom_item:
+                    bom_item.quote_status = 'QUOTED'
+                    bom_item.quote_supplier = quote_supplier
+                    bom_item.price_with_tax = row_data['price_with_tax']
+                    bom_item.price_without_tax = row_data['price_without_tax']
+                    bom_item.tax_rate = row_data['tax_rate']
+                    bom_item.quote_delivery_days = row_data['delivery_days']
+                    bom_item.quote_date = date.today()
+                    bom_item.save()
+                    updated_count += 1
+        
+        return Response({
+            'message': f'询价导入成功: 已更新 {updated_count} 条物料的报价信息',
+            'updated': updated_count,
+            'total_rows': len(valid_rows)
+        })
+    
+    @action(detail=False, methods=['get'])
+    def pending_quote_count(self, request):
+        """获取待询价物料数量"""
+        project_id = request.query_params.get('project')
+        
+        queryset = self.get_queryset().filter(
+            is_deleted=False,
+            quote_status='NOT_QUOTED'
+        )
+        
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        
+        return Response({
+            'count': queryset.count()
+        })
+    
     @action(detail=False, methods=['post'])
     def generate_purchase_request(self, request):
         """
@@ -1126,7 +1532,6 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         PRD requirement: BOM清单推送到采购模块
         """
         from apps.purchase.models import PurchaseRequest, PurchaseRequestLine
-        from django.db import transaction
         
         project_id = request.data.get('project')
         item_ids = request.data.get('item_ids', [])  # Optional: specific items
@@ -1146,14 +1551,30 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Get BOM items to convert
+        # Get BOM items to convert - 只获取已询价的物料
         bom_queryset = ProjectBOM.objects.filter(
             project=project,
-            is_deleted=False
-        ).select_related('item')
+            is_deleted=False,
+            quote_status='QUOTED'  # 只允许已询价的物料
+        ).select_related('item', 'quote_supplier')
         
         if item_ids:
             bom_queryset = bom_queryset.filter(item_id__in=item_ids)
+        
+        # 检查是否有未询价的物料被选中
+        if item_ids:
+            not_quoted_items = ProjectBOM.objects.filter(
+                project=project,
+                is_deleted=False,
+                item_id__in=item_ids
+            ).exclude(quote_status='QUOTED')
+            
+            if not_quoted_items.exists():
+                not_quoted_skus = list(not_quoted_items.values_list('item__sku', flat=True)[:5])
+                return Response(
+                    {'error': f'以下物料尚未询价，无法生成采购申请: {", ".join(not_quoted_skus)}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         
         # Filter items that need to be purchased (planned > actual)
         bom_items = []
@@ -1167,7 +1588,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         
         if not bom_items:
             return Response(
-                {'error': '没有需要采购的物料（计划数量已满足）'},
+                {'error': '没有需要采购的物料（计划数量已满足或物料未询价）'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -1185,8 +1606,12 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             for item_data in bom_items:
                 bom = item_data['bom']
                 needed_qty = item_data['needed_qty']
-                estimated_price = bom.item.standard_cost
-                line_amount = needed_qty * estimated_price
+                # 优先使用询价信息中的价格（未税单价 > 含税单价 > 标准成本）
+                estimated_price = bom.price_without_tax or bom.price_with_tax or bom.item.standard_cost or 0
+                line_amount = needed_qty * float(estimated_price)
+                
+                # 获取询价供应商
+                supplier = bom.quote_supplier or bom.supplier
                 
                 PurchaseRequestLine.objects.create(
                     pr=pr,
@@ -1194,7 +1619,8 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                     qty=needed_qty,
                     estimated_price=estimated_price,
                     project=project,
-                    notes=f'BOM计划: {bom.planned_qty}, 已用: {bom.actual_qty}',
+                    supplier=supplier,
+                    notes=f'BOM计划: {bom.planned_qty}, 已用: {bom.actual_qty}, 询价交期: {bom.quote_delivery_days or "-"}天',
                     created_by=request.user
                 )
                 total_amount += line_amount
@@ -1281,6 +1707,56 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 'total_shortage_cost': total_shortage_cost
             },
             'items': shortage_list
+        })
+    
+    @action(detail=False, methods=['get'])
+    def purchasable_items(self, request):
+        """
+        获取可采购物料列表 - 只返回已询价且需要采购的物料
+        用于待采购申请列表
+        """
+        project_id = request.query_params.get('project')
+        
+        queryset = ProjectBOM.objects.filter(
+            is_deleted=False,
+            quote_status='QUOTED'  # 只返回已询价的物料
+        ).select_related('item', 'project', 'quote_supplier')
+        
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        
+        # 只返回需要采购的物料（计划数量 > 已用数量）
+        purchasable_items = []
+        for bom in queryset:
+            needed_qty = float(bom.planned_qty) - float(bom.actual_qty)
+            if needed_qty > 0:
+                purchasable_items.append({
+                    'id': bom.id,
+                    'project_id': bom.project.id,
+                    'project_code': bom.project.code,
+                    'project_name': bom.project.name,
+                    'item_id': bom.item.id,
+                    'item_sku': bom.item.sku,
+                    'item_name': bom.item.name,
+                    'specification': bom.item.specification or '',
+                    'version_brand': bom.version_brand or f"{bom.item.brand or ''}/{bom.item.model or ''}".strip('/'),
+                    'unit': bom.item.get_unit_display(),
+                    'planned_qty': float(bom.planned_qty),
+                    'actual_qty': float(bom.actual_qty),
+                    'needed_qty': needed_qty,
+                    'quote_supplier_id': bom.quote_supplier.id if bom.quote_supplier else None,
+                    'quote_supplier_name': bom.quote_supplier.name if bom.quote_supplier else '',
+                    'price_with_tax': float(bom.price_with_tax) if bom.price_with_tax else None,
+                    'price_without_tax': float(bom.price_without_tax) if bom.price_without_tax else None,
+                    'tax_rate': float(bom.tax_rate) if bom.tax_rate else None,
+                    'quote_delivery_days': bom.quote_delivery_days,
+                    'quote_date': bom.quote_date.strftime('%Y-%m-%d') if bom.quote_date else None,
+                    'required_date': bom.required_date.strftime('%Y-%m-%d') if bom.required_date else None,
+                })
+        
+        return Response({
+            'count': len(purchasable_items),
+            'items': purchasable_items
         })
     
     @action(detail=False, methods=['post'])

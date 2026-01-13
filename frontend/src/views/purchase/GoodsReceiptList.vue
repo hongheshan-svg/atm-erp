@@ -224,11 +224,11 @@ const route = useRoute()
 // 权限检查
 const { canDelete } = usePermission()
 
-// 批量删除功能
+// 批量删除功能 - 使用箭头函数包装避免 TDZ 错误
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
   '/purchase/receipts/',
   {
-    onSuccess: loadReceipts,
+    onSuccess: () => loadReceipts(),
     confirmTitle: '删除收货单',
     confirmMessage: '确定要删除该收货单吗？删除后不可恢复！'
   }

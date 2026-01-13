@@ -422,7 +422,7 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'])
     def export_excel(self, request):
-        """Export items to Excel file with all fields matching import template."""
+        """Export items to Excel file with fields matching import template."""
         items = self.filter_queryset(self.get_queryset())
         
         output = BytesIO()
@@ -430,10 +430,26 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
             workbook = writer.book
             worksheet = workbook.add_worksheet('物料主数据')
             
-            # Define formats
-            header_format = workbook.add_format({
+            # Define formats - 与模板保持一致的颜色
+            required_format = workbook.add_format({
                 'bold': True,
-                'bg_color': '#4472C4',
+                'bg_color': '#C00000',  # 红色 - 必填
+                'font_color': 'white',
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter'
+            })
+            conditional_format = workbook.add_format({
+                'bold': True,
+                'bg_color': '#ED7D31',  # 橙色 - 条件必填
+                'font_color': 'white',
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter'
+            })
+            optional_format = workbook.add_format({
+                'bold': True,
+                'bg_color': '#4472C4',  # 蓝色 - 选填
                 'font_color': 'white',
                 'border': 1,
                 'align': 'center',
@@ -448,47 +464,46 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                 'border': 1,
                 'align': 'right',
                 'valign': 'vcenter',
-                'num_format': '¥#,##0.00'
+                'num_format': '#,##0.00'
             })
             number_format = workbook.add_format({
                 'border': 1,
                 'align': 'right',
                 'valign': 'vcenter',
-                'num_format': '#,##0.00'
+                'num_format': '#,##0'
             })
             
-            # Column headers matching import template
+            # Column headers matching import template exactly
+            # (name, width, format_type)
             headers = [
-                ('序号', 6),
-                ('物料编码', 12),
-                ('有图/无图', 10),
-                ('物料分类', 10),
-                ('物料名称', 20),
-                ('规格型号', 15),
-                ('版本/品牌', 12),
-                ('单位', 8),
-                ('物料属性', 10),
-                ('采购单价', 10),
-                ('销售单价', 10),
-                ('标准成本', 10),
-                ('税率(%)', 8),
-                ('生产厂家', 15),
-                ('产地', 10),
-                ('安全库存', 10),
-                ('采购周期(天)', 10),
-                ('最小库存', 10),
-                ('最大库存', 10),
-                ('重量(kg)', 10),
-                ('体积(m³)', 10),
-                ('保质期(天)', 10),
-                ('条形码', 15),
-                ('状态', 8),
-                ('描述', 25),
+                ('物料编码', 12, 'optional'),
+                ('有图/无图', 10, 'conditional'),
+                ('物料分类', 10, 'conditional'),
+                ('物料名称*', 20, 'required'),
+                ('规格型号', 15, 'optional'),
+                ('版本/品牌', 12, 'optional'),
+                ('单位', 8, 'optional'),
+                ('物料属性', 10, 'optional'),
+                ('采购单价', 10, 'optional'),
+                ('销售单价', 10, 'optional'),
+                ('标准成本', 10, 'optional'),
+                ('税率(%)', 8, 'optional'),
+                ('生产厂家', 15, 'optional'),
+                ('产地', 10, 'optional'),
+                ('安全库存', 10, 'optional'),
+                ('采购周期(天)', 12, 'optional'),
+                ('状态', 8, 'optional'),
             ]
             
-            # Write headers
-            for col, (header, width) in enumerate(headers):
-                worksheet.write(0, col, header, header_format)
+            # Write headers with matching format
+            format_map = {
+                'required': required_format,
+                'conditional': conditional_format,
+                'optional': optional_format
+            }
+            for col, (header, width, format_type) in enumerate(headers):
+                fmt = format_map[format_type]
+                worksheet.write(0, col, header, fmt)
                 worksheet.set_column(col, col, width)
             
             # Write data
@@ -504,32 +519,28 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                     level1_display = code_info.get('level1_name', '')  # 有图/无图
                     level2_display = code_info.get('level2_name', '')  # 机加/钣金等（物料分类）
                 
-                worksheet.write(row_idx, 0, row_idx, data_format)
-                worksheet.write(row_idx, 1, item.sku, data_format)
-                worksheet.write(row_idx, 2, level1_display, data_format)
-                worksheet.write(row_idx, 3, level2_display, data_format)
-                worksheet.write(row_idx, 4, item.name, data_format)
-                worksheet.write(row_idx, 5, item.specification or '', data_format)
-                worksheet.write(row_idx, 6, version_brand, data_format)
-                worksheet.write(row_idx, 7, item.get_unit_display(), data_format)
-                worksheet.write(row_idx, 8, item.get_item_type_display(), data_format)  # 物料属性
-                worksheet.write(row_idx, 9, float(item.purchase_price), money_format)
-                worksheet.write(row_idx, 10, float(item.sale_price), money_format)
-                worksheet.write(row_idx, 11, float(item.standard_cost), money_format)
-                worksheet.write(row_idx, 12, item.tax_rate, data_format)
-                worksheet.write(row_idx, 13, item.manufacturer or '', data_format)
-                worksheet.write(row_idx, 14, item.origin_country or '', data_format)
-                worksheet.write(row_idx, 15, float(item.safety_stock), number_format)
-                worksheet.write(row_idx, 16, item.lead_time, data_format)
-                worksheet.write(row_idx, 17, float(item.min_stock), number_format)
-                worksheet.write(row_idx, 18, float(item.max_stock), number_format)
-                worksheet.write(row_idx, 19, float(item.weight), number_format)
-                worksheet.write(row_idx, 20, float(item.volume), number_format)
-                worksheet.write(row_idx, 21, item.shelf_life, data_format)
-                worksheet.write(row_idx, 22, item.barcode or '', data_format)
-                worksheet.write(row_idx, 23, '启用' if item.is_active else '禁用', data_format)
-                worksheet.write(row_idx, 24, item.description or '', data_format)
+                # 状态显示
+                status_display = '启用' if item.is_active else '禁用'
+                
+                worksheet.write(row_idx, 0, item.sku, data_format)
+                worksheet.write(row_idx, 1, level1_display, data_format)
+                worksheet.write(row_idx, 2, level2_display, data_format)
+                worksheet.write(row_idx, 3, item.name, data_format)
+                worksheet.write(row_idx, 4, item.specification or '', data_format)
+                worksheet.write(row_idx, 5, version_brand, data_format)
+                worksheet.write(row_idx, 6, item.get_unit_display(), data_format)
+                worksheet.write(row_idx, 7, item.get_item_type_display(), data_format)
+                worksheet.write(row_idx, 8, float(item.purchase_price), money_format)
+                worksheet.write(row_idx, 9, float(item.sale_price), money_format)
+                worksheet.write(row_idx, 10, float(item.standard_cost), money_format)
+                worksheet.write(row_idx, 11, item.tax_rate, data_format)
+                worksheet.write(row_idx, 12, item.manufacturer or '', data_format)
+                worksheet.write(row_idx, 13, item.origin_country or '', data_format)
+                worksheet.write(row_idx, 14, float(item.safety_stock), number_format)
+                worksheet.write(row_idx, 15, item.lead_time, number_format)
+                worksheet.write(row_idx, 16, status_display, data_format)
             
+            worksheet.set_row(0, 25)  # 表头行高
             worksheet.freeze_panes(1, 0)
         
         output.seek(0)

@@ -245,7 +245,7 @@ const { canDelete } = usePermission()
 // 批量删除功能
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
   '/finance/shared-expenses/',
-  { onSuccess: loadData, confirmTitle: '删除公共费用', confirmMessage: '确定要删除该公共费用吗？' }
+  { onSuccess: () => loadData(), confirmTitle: '删除公共费用', confirmMessage: '确定要删除该公共费用吗？' }
 )
 
 const loading = ref(false)
@@ -326,7 +326,7 @@ const loadData = async () => {
 
 const loadProjects = async () => {
   try {
-    const response = await request.get('/projects/', { params: { is_deleted: false, page_size: 100 } })
+    const response = await request.get('/projects/projects/', { params: { is_deleted: false, page_size: 100 } })
     projects.value = response.results || response || [] || []
   } catch (error) {
     console.error('加载项目失败:', error)

@@ -168,7 +168,7 @@ const { canDelete } = usePermission()
 // 批量删除功能
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
   '/projects/time-logs/',
-  { onSuccess: fetchData, confirmTitle: '删除工时', confirmMessage: '确定要删除该工时记录吗？' }
+  { onSuccess: () => fetchData(), confirmTitle: '删除工时', confirmMessage: '确定要删除该工时记录吗？' }
 )
 
 const loading = ref(false)

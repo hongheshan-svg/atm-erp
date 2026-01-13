@@ -127,11 +127,11 @@ import { usePermission } from '@/composables/usePermission'
 // 权限检查
 const { canDelete } = usePermission()
 
-// 批量删除功能
+// 批量删除功能 - 使用箭头函数包装避免 TDZ 错误
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
   '/inventory/adjustments/',
   {
-    onSuccess: loadAdjustments,
+    onSuccess: () => loadAdjustments(),
     confirmTitle: '删除盘点单',
     confirmMessage: '确定要删除该盘点单吗？删除后不可恢复！'
   }
