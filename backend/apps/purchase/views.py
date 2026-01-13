@@ -290,6 +290,7 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
         """
         导入采购申请（从物料需求清单导入，直接生成采购申请）
         支持按供应商自动拆分成多个采购申请
+        增加项目校验：检查Excel中的项目号是否与用户选择的项目一致
         """
         import pandas as pd
         from io import BytesIO
@@ -302,6 +303,18 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
                 {'error': '请上传Excel文件'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        # 获取用户选择的项目ID（可选，但建议选择）
+        selected_project_id = request.data.get('project')
+        selected_project = None
+        if selected_project_id:
+            try:
+                selected_project = Project.objects.get(id=selected_project_id, is_deleted=False)
+            except Project.DoesNotExist:
+                return Response(
+                    {'error': '选择的项目不存在'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         
         try:
             # 读取Excel，智能识别列标题行
@@ -357,6 +370,49 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # 第一遍：校验项目号
+        project_mismatch_rows = []
+        excel_project_codes = set()  # 收集Excel中的所有项目号
+        
+        if selected_project and project_column:
+            for idx, row in df.iterrows():
+                row_num = idx + 2 + (header_row or 0)
+                
+                sku = str(row[sku_column]).strip() if pd.notna(row[sku_column]) else ''
+                if not sku or sku.startswith('(') or '示例' in sku:
+                    continue
+                
+                excel_project_code = str(row[project_column]).strip() if pd.notna(row.get(project_column)) else ''
+                if excel_project_code:
+                    excel_project_codes.add(excel_project_code)
+                    
+                    # 检查项目号是否匹配
+                    if excel_project_code != selected_project.code and excel_project_code != selected_project.name:
+                        project_mismatch_rows.append({
+                            'row': row_num,
+                            'sku': sku,
+                            'excel_project': excel_project_code,
+                            'selected_project': f'{selected_project.code} ({selected_project.name})'
+                        })
+        
+        # 如果有项目号不匹配，返回详细错误
+        if project_mismatch_rows:
+            mismatch_count = len(project_mismatch_rows)
+            # 显示前5条不匹配记录
+            sample_errors = project_mismatch_rows[:5]
+            error_details = [
+                f"行{e['row']}: 物料{e['sku']}的项目号是「{e['excel_project']}」，但您选择的是「{e['selected_project']}」"
+                for e in sample_errors
+            ]
+            
+            return Response({
+                'error': f'项目号不匹配：Excel中有 {mismatch_count} 条记录的项目号与您选择的项目不一致',
+                'details': error_details,
+                'excel_projects': list(excel_project_codes),
+                'selected_project': f'{selected_project.code} ({selected_project.name})' if selected_project else None,
+                'suggestion': f'Excel中包含的项目号有：{", ".join(excel_project_codes)}。请确认选择正确的项目后重新导入。'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         # 按供应商分组数据
         supplier_groups = {}  # {supplier_name: [lines]}
         error_rows = []
@@ -400,14 +456,15 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
             except (ValueError, TypeError):
                 price = 0
             
-            # 获取项目号
-            project_code = str(row[project_column]).strip() if project_column and pd.notna(row.get(project_column)) else ''
-            project = None
-            if project_code:
-                project = Project.objects.filter(
-                    Q(code=project_code) | Q(name__icontains=project_code),
-                    is_deleted=False
-                ).first()
+            # 项目：优先使用用户选择的项目，否则从Excel中读取
+            project = selected_project
+            if not project and project_column:
+                project_code = str(row[project_column]).strip() if pd.notna(row.get(project_column)) else ''
+                if project_code:
+                    project = Project.objects.filter(
+                        Q(code=project_code) | Q(name__icontains=project_code),
+                        is_deleted=False
+                    ).first()
             
             # 获取备注
             notes = str(row[notes_column]).strip() if notes_column and pd.notna(row.get(notes_column)) else ''
@@ -488,6 +545,7 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
                     'id': pr.id,
                     'request_no': pr.request_no,
                     'supplier_name': supplier_name,
+                    'project_name': group_data['project'].name if group_data['project'] else '无项目',
                     'lines_count': len(group_data['lines']),
                     'total_amount': float(pr.total_with_tax)
                 })
@@ -496,7 +554,8 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
             'message': f'导入成功，共创建 {len(created_prs)} 个采购申请',
             'created_count': len(created_prs),
             'purchase_requests': created_prs,
-            'errors': error_rows
+            'errors': error_rows,
+            'project': selected_project.name if selected_project else None
         })
     
     @action(detail=False, methods=['get'])

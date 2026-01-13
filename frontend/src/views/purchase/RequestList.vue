@@ -437,7 +437,7 @@
     </el-dialog>
 
     <!-- 导入采购申请对话框 -->
-    <el-dialog v-model="importDialogVisible" title="导入采购申请" width="600px">
+    <el-dialog v-model="importDialogVisible" title="导入采购申请" width="700px">
       <div class="import-content">
         <el-alert 
           title="导入说明" 
@@ -447,12 +447,33 @@
         >
           <template #default>
             <div style="line-height: 1.8;">
-              <p>1. 请使用从"项目BOM"页面导出的物料需求清单</p>
-              <p>2. 系统会按供应商自动拆分成多个采购申请</p>
-              <p>3. 必填列：物料编码、数量；选填：供应商、单价、付款方式、账期</p>
+              <p>1. 请使用从上方"物料需求清单"导出的Excel文件</p>
+              <p>2. 系统会校验Excel中的项目号是否与选择的项目一致</p>
+              <p>3. 系统会按供应商自动拆分成多个采购申请</p>
             </div>
           </template>
         </el-alert>
+        
+        <!-- 项目选择 -->
+        <el-form-item label="关联项目" label-width="80px" style="margin-bottom: 20px;">
+          <el-select 
+            v-model="importProject" 
+            placeholder="选择项目（用于校验Excel中的项目号）" 
+            clearable 
+            filterable
+            style="width: 100%;"
+          >
+            <el-option 
+              v-for="p in projects" 
+              :key="p.id" 
+              :label="`${p.code} - ${p.name}`" 
+              :value="p.id" 
+            />
+          </el-select>
+          <div class="el-form-item__tip" style="color: #909399; font-size: 12px; margin-top: 5px;">
+            选择项目后，系统会校验Excel中的项目号是否匹配
+          </div>
+        </el-form-item>
         
         <el-upload
           ref="importUploadRef"
@@ -473,6 +494,28 @@
           </template>
         </el-upload>
         
+        <!-- 项目号不匹配错误 -->
+        <div v-if="importError && importError.type === 'project_mismatch'" class="import-error" style="margin-top: 20px;">
+          <el-alert type="error" :closable="false">
+            <template #title>
+              <strong>{{ importError.title }}</strong>
+            </template>
+            <template #default>
+              <div style="margin-top: 10px;">
+                <p><strong>您选择的项目：</strong>{{ importError.selectedProject }}</p>
+                <p><strong>Excel中的项目号：</strong>{{ importError.excelProjects }}</p>
+                <p style="margin-top: 10px;"><strong>不匹配的记录示例：</strong></p>
+                <ul style="margin-left: 20px;">
+                  <li v-for="(detail, idx) in importError.details" :key="idx">{{ detail }}</li>
+                </ul>
+                <p style="margin-top: 10px; color: #E6A23C;">
+                  <strong>建议：</strong>{{ importError.suggestion }}
+                </p>
+              </div>
+            </template>
+          </el-alert>
+        </div>
+        
         <!-- 导入结果 -->
         <div v-if="importResult" class="import-result" style="margin-top: 20px;">
           <el-alert 
@@ -483,10 +526,11 @@
           <div v-if="importResult.purchase_requests && importResult.purchase_requests.length > 0" style="margin-top: 10px;">
             <p><strong>已创建的采购申请：</strong></p>
             <el-table :data="importResult.purchase_requests" border size="small">
-              <el-table-column prop="request_no" label="申请单号" width="150" />
+              <el-table-column prop="request_no" label="申请单号" width="140" />
+              <el-table-column prop="project_name" label="项目" width="120" />
               <el-table-column prop="supplier_name" label="供应商" />
-              <el-table-column prop="lines_count" label="物料数" width="80" align="center" />
-              <el-table-column prop="total_amount" label="金额" width="120" align="right">
+              <el-table-column prop="lines_count" label="物料数" width="70" align="center" />
+              <el-table-column prop="total_amount" label="金额" width="100" align="right">
                 <template #default="{ row }">¥{{ row.total_amount.toFixed(2) }}</template>
               </el-table-column>
             </el-table>
@@ -583,6 +627,8 @@ const importFile = ref(null)
 const importFileList = ref([])
 const importUploadRef = ref(null)
 const importResult = ref(null)
+const importProject = ref(null)  // 导入时选择的项目
+const importError = ref(null)    // 项目号不匹配等错误
 
 // BOM物料筛选相关
 const bomProject = ref(null)
@@ -1130,6 +1176,9 @@ const handleImport = () => {
   importFile.value = null
   importFileList.value = []
   importResult.value = null
+  importError.value = null
+  // 如果已选择BOM项目，自动填充
+  importProject.value = bomProject.value || null
   if (importUploadRef.value) {
     importUploadRef.value.clearFiles()
   }
@@ -1139,6 +1188,7 @@ const handleImport = () => {
 const handleImportFileChange = (file) => {
   importFile.value = file.raw
   importResult.value = null
+  importError.value = null
 }
 
 const handleImportExceed = () => {
@@ -1152,9 +1202,16 @@ const handleConfirmImport = async () => {
   }
   
   importing.value = true
+  importError.value = null
+  importResult.value = null
+  
   try {
     const formData = new FormData()
     formData.append('file', importFile.value)
+    // 传递选择的项目ID
+    if (importProject.value) {
+      formData.append('project', importProject.value)
+    }
     
     const response = await request.post('/purchase/requests/import_excel/', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
@@ -1175,12 +1232,25 @@ const handleConfirmImport = async () => {
   } catch (error) {
     console.error('导入失败:', error)
     const errData = error.response?.data
-    importResult.value = {
-      success: false,
-      message: errData?.error || '导入失败',
-      errors: errData?.errors || []
+    
+    // 检查是否是项目号不匹配错误
+    if (errData?.excel_projects || errData?.details) {
+      importError.value = {
+        type: 'project_mismatch',
+        title: errData.error || '项目号不匹配',
+        selectedProject: errData.selected_project || '未选择',
+        excelProjects: errData.excel_projects?.join(', ') || '无',
+        details: errData.details || [],
+        suggestion: errData.suggestion || '请选择正确的项目后重新导入'
+      }
+    } else {
+      importResult.value = {
+        success: false,
+        message: errData?.error || '导入失败',
+        errors: errData?.errors || []
+      }
+      ElMessage.error(errData?.error || '导入失败')
     }
-    ElMessage.error(errData?.error || '导入失败')
   } finally {
     importing.value = false
   }
