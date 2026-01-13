@@ -72,6 +72,7 @@
       <el-table :data="orders" v-loading="loading" stripe border @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="order_no" label="销售订单号" width="150" />
+        <el-table-column prop="customer_order_no" label="客户订单号" width="140" />
         <el-table-column prop="customer_name" label="客户" />
         <el-table-column prop="project_name" label="项目" />
         <el-table-column prop="status" label="状态" width="120">
@@ -114,8 +115,18 @@
     
     <!-- 创建/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="950px" destroy-on-close>
-      <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
+      <el-form :model="form" :rules="rules" ref="formRef" label-width="110px">
         <el-row :gutter="20">
+          <el-col :span="8">
+            <el-form-item label="销售订单号">
+              <el-input v-model="form.order_no" placeholder="留空则自动生成" :disabled="isEdit" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="客户订单号">
+              <el-input v-model="form.customer_order_no" placeholder="客户的订单编号（可选）" />
+            </el-form-item>
+          </el-col>
           <el-col :span="8">
             <el-form-item label="客户" prop="customer">
               <el-select v-model="form.customer" placeholder="选择客户" filterable style="width: 100%;">
@@ -123,6 +134,8 @@
               </el-select>
             </el-form-item>
           </el-col>
+        </el-row>
+        <el-row :gutter="20">
           <el-col :span="8">
             <el-form-item label="关联项目">
               <el-select v-model="form.project" placeholder="可选，后续可关联" filterable clearable style="width: 100%;">
@@ -135,8 +148,6 @@
               <el-date-picker v-model="form.delivery_date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%;" />
             </el-form-item>
           </el-col>
-        </el-row>
-        <el-row :gutter="20">
           <el-col :span="8">
             <el-form-item label="增值税率">
               <el-select v-model="form.tax_rate" placeholder="选择税率" style="width: 100%;">
@@ -149,6 +160,8 @@
               </el-select>
             </el-form-item>
           </el-col>
+        </el-row>
+        <el-row :gutter="20">
           <el-col :span="8">
             <el-form-item label="付款条款">
               <el-select v-model="form.payment_terms" placeholder="选择付款条款" style="width: 100%;">
@@ -322,6 +335,8 @@ const pagination = reactive({
 
 const form = reactive({
   id: null,
+  order_no: '',
+  customer_order_no: '',
   customer: null,
   project: null,
   delivery_date: '',
@@ -418,6 +433,8 @@ const handleAdd = () => {
   isEdit.value = false
   Object.assign(form, {
     id: null,
+    order_no: '',
+    customer_order_no: '',
     customer: null,
     project: null,
     delivery_date: '',
@@ -441,6 +458,8 @@ const handleEdit = async (row) => {
     
     Object.assign(form, {
       id: data.id,
+      order_no: data.order_no || '',
+      customer_order_no: data.customer_order_no || '',
       customer: data.customer,
       project: data.project,
       delivery_date: data.delivery_date || '',
@@ -515,6 +534,7 @@ const handleSave = async () => {
     
     const payload = {
       customer: form.customer,
+      customer_order_no: form.customer_order_no || '',
       project: form.project,
       delivery_date: form.delivery_date,
       tax_rate: form.tax_rate,
@@ -530,6 +550,11 @@ const handleSave = async () => {
         qty: line.qty,
         unit_price: line.unit_price
       }))
+    }
+    
+    // 创建时如果用户填写了销售订单号，则使用用户输入的
+    if (!isEdit.value && form.order_no) {
+      payload.order_no = form.order_no
     }
     
     if (isEdit.value) {

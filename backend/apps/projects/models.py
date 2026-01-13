@@ -325,19 +325,55 @@ class ProjectTask(BaseModel):
 class ProjectBOM(BaseModel):
     """
     Project Bill of Materials - planning material requirements.
+    针对非标自动化行业优化，支持工位装配、需求追溯、成本管理等
     """
+    # ==================== 图纸状态 ====================
     HAS_DRAWING_CHOICES = [
         ('YES', '有图'),
         ('NO', '无图'),
         ('PENDING', '待定'),
+        ('DESIGNING', '设计中'),
     ]
     
+    # ==================== 下单状态 ====================
     ORDER_STATUS_CHOICES = [
         ('NOT_ORDERED', '未下单'),
         ('PARTIAL', '部分下单'),
         ('ORDERED', '已下单'),
+        ('IN_TRANSIT', '在途'),
+        ('RECEIVED', '已收货'),
     ]
     
+    # ==================== 物料属性(可覆盖Item默认值) ====================
+    ITEM_PROPERTY_CHOICES = [
+        ('', '继承物料属性'),
+        ('STANDARD', '标准件'),
+        ('PURCHASED', '外购件'),
+        ('OUTSOURCED', '外协件'),
+        ('SELF_MADE', '自制件'),
+        ('CONSUMABLE', '易耗品'),
+        ('VIRTUAL', '虚拟件'),
+        ('ASSEMBLY', '组件'),
+    ]
+    
+    # ==================== 优先级 ====================
+    PRIORITY_CHOICES = [
+        ('LOW', '低'),
+        ('NORMAL', '普通'),
+        ('HIGH', '高'),
+        ('URGENT', '紧急'),
+    ]
+    
+    # ==================== 状态 ====================
+    STATUS_CHOICES = [
+        ('DRAFT', '草稿'),
+        ('CONFIRMED', '已确认'),
+        ('RELEASED', '已下发'),
+        ('COMPLETED', '已完成'),
+        ('CANCELLED', '已取消'),
+    ]
+    
+    # ==================== 基础信息 ====================
     project = models.ForeignKey(
         Project,
         on_delete=models.CASCADE,
@@ -350,6 +386,35 @@ class ProjectBOM(BaseModel):
         related_name='project_boms',
         verbose_name='物料'
     )
+    
+    # 项目内物料编码(可自定义)
+    item_code = models.CharField(max_length=50, blank=True, verbose_name='项目物料编码')
+    
+    # 物料属性覆盖
+    item_property = models.CharField(
+        max_length=20,
+        choices=ITEM_PROPERTY_CHOICES,
+        blank=True,
+        default='',
+        verbose_name='物料属性',
+        help_text='留空则继承物料主数据的属性'
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='DRAFT',
+        verbose_name='状态'
+    )
+    
+    priority = models.CharField(
+        max_length=20,
+        choices=PRIORITY_CHOICES,
+        default='NORMAL',
+        verbose_name='优先级'
+    )
+    
+    # ==================== 数量信息 ====================
     planned_qty = models.DecimalField(
         max_digits=15,
         decimal_places=2,
@@ -362,13 +427,53 @@ class ProjectBOM(BaseModel):
         default=0,
         verbose_name='实际使用数量'
     )
+    
+    # 单位用量（子件对父件的用量）
+    unit_qty = models.DecimalField(
+        max_digits=15,
+        decimal_places=4,
+        default=1,
+        verbose_name='单位用量'
+    )
+    
+    # 损耗率(百分比)
+    scrap_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        verbose_name='损耗率(%)'
+    )
+    
+    # ==================== 成本信息 ====================
     estimated_cost = models.DecimalField(
         max_digits=15,
         decimal_places=2,
         default=0,
         verbose_name='预估单价'
     )
-    # 新增字段
+    target_cost = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='目标成本',
+        help_text='该物料的目标采购成本'
+    )
+    actual_cost = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='实际成本'
+    )
+    total_cost = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        default=0,
+        verbose_name='总成本',
+        help_text='实际成本 × 实际数量'
+    )
+    
+    # ==================== 图纸与技术资料 ====================
     version_brand = models.CharField(max_length=100, blank=True, verbose_name='版本/品牌')
     has_drawing = models.CharField(
         max_length=10,
@@ -376,7 +481,65 @@ class ProjectBOM(BaseModel):
         default='PENDING',
         verbose_name='有图/无图'
     )
+    
+    # 图纸关联
+    drawing = models.ForeignKey(
+        'projects.Drawing',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='bom_items',
+        verbose_name='关联图纸'
+    )
+    drawing_no = models.CharField(max_length=100, blank=True, verbose_name='图纸号')
+    drawing_version = models.CharField(max_length=50, blank=True, verbose_name='图纸版本')
+    
+    # 技术规格覆盖
+    material_spec = models.CharField(max_length=200, blank=True, verbose_name='材质规格',
+                                     help_text='可覆盖物料主数据中的材质要求')
+    surface_treatment = models.CharField(max_length=100, blank=True, verbose_name='表面处理')
+    technical_requirement = models.TextField(blank=True, verbose_name='技术要求')
+    
+    # ==================== 装配与工艺(非标自动化专用) ====================
+    work_center = models.ForeignKey(
+        'production.WorkCenter',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='project_bom_items',
+        verbose_name='装配工位'
+    )
+    process = models.ForeignKey(
+        'production.ProductionProcess',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='project_bom_items',
+        verbose_name='工序'
+    )
+    assembly_sequence = models.IntegerField(default=0, verbose_name='装配顺序',
+                                            help_text='在工位上的装配先后顺序')
+    
+    # 装配说明
+    assembly_instruction = models.TextField(blank=True, verbose_name='装配说明')
+    
+    # ==================== 需求追溯 ====================
+    requirement_id_ref = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name='关联需求ID',
+        help_text='该物料对应的客户需求ID'
+    )
+    
+    # 功能模块标识
+    function_module = models.CharField(max_length=100, blank=True, verbose_name='功能模块',
+                                       help_text='如：上料机构、定位机构、检测模块')
+    
+    # ==================== 日期与时间 ====================
     required_date = models.DateField(null=True, blank=True, verbose_name='需求日期')
+    latest_order_date = models.DateField(null=True, blank=True, verbose_name='最晚下单日期',
+                                         help_text='根据需求日期和采购周期自动计算')
+    
     requester = models.ForeignKey(
         'accounts.User',
         on_delete=models.SET_NULL,
@@ -385,10 +548,11 @@ class ProjectBOM(BaseModel):
         related_name='requested_boms',
         verbose_name='申请人'
     )
+    
     description = models.TextField(blank=True, verbose_name='说明')
     notes = models.TextField(blank=True, verbose_name='备注')
     
-    # 采购与库存跟踪字段
+    # ==================== 采购与库存跟踪 ====================
     order_status = models.CharField(
         max_length=20,
         choices=ORDER_STATUS_CHOICES,
@@ -403,7 +567,9 @@ class ProjectBOM(BaseModel):
         related_name='bom_items',
         verbose_name='供应商'
     )
-    delivery_date = models.DateField(null=True, blank=True, verbose_name='交期')
+    delivery_date = models.DateField(null=True, blank=True, verbose_name='预计交期')
+    actual_delivery_date = models.DateField(null=True, blank=True, verbose_name='实际到货日期')
+    
     ordered_qty = models.DecimalField(
         max_digits=15,
         decimal_places=2,
@@ -422,8 +588,30 @@ class ProjectBOM(BaseModel):
         default=0,
         verbose_name='已出库数量'
     )
+    reserved_qty = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='预留数量',
+        help_text='从库存预留的数量'
+    )
     
-    # 多级BOM结构支持
+    # 采购订单关联
+    purchase_order = models.ForeignKey(
+        'purchase.PurchaseOrder',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='bom_items',
+        verbose_name='采购订单'
+    )
+    
+    # ==================== 质量与检验 ====================
+    inspection_required = models.BooleanField(default=True, verbose_name='需要检验')
+    inspection_passed = models.BooleanField(null=True, blank=True, verbose_name='检验通过')
+    inspection_notes = models.TextField(blank=True, verbose_name='检验备注')
+    
+    # ==================== 多级BOM结构 ====================
     parent = models.ForeignKey(
         'self',
         on_delete=models.CASCADE,
@@ -433,15 +621,20 @@ class ProjectBOM(BaseModel):
         verbose_name='父级物料'
     )
     level = models.IntegerField(default=0, verbose_name='BOM层级')
-    item_code = models.CharField(max_length=50, blank=True, verbose_name='项目物料编码')
     sort_order = models.IntegerField(default=0, verbose_name='排序')
     
-    # 单位用量（子件对父件的用量）
-    unit_qty = models.DecimalField(
-        max_digits=15,
-        decimal_places=4,
-        default=1,
-        verbose_name='单位用量'
+    # 关键件标识
+    is_critical = models.BooleanField(default=False, verbose_name='关键件',
+                                      help_text='影响项目关键路径的物料')
+    is_long_lead = models.BooleanField(default=False, verbose_name='长周期件',
+                                       help_text='采购周期较长需要提前采购')
+    
+    # ==================== 扩展字段 ====================
+    extra_fields = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name='扩展字段',
+        help_text='用户自定义的扩展字段'
     )
     
     class Meta:
@@ -449,9 +642,48 @@ class ProjectBOM(BaseModel):
         verbose_name = '项目BOM'
         verbose_name_plural = verbose_name
         ordering = ['project', 'level', 'sort_order', '-created_at']
+        indexes = [
+            models.Index(fields=['project', 'status']),
+            models.Index(fields=['order_status']),
+            models.Index(fields=['is_critical']),
+            models.Index(fields=['required_date']),
+            models.Index(fields=['function_module']),
+        ]
     
     def __str__(self):
         return f"{self.project.code} - {self.item.sku}"
+    
+    @property
+    def effective_item_property(self):
+        """获取有效的物料属性(优先使用BOM上的覆盖值)"""
+        return self.item_property or self.item.item_property
+    
+    @property
+    def shortage_qty(self):
+        """缺料数量"""
+        return max(0, self.planned_qty - self.received_qty - self.reserved_qty)
+    
+    @property
+    def is_overdue(self):
+        """是否延期"""
+        from datetime import date
+        if self.required_date and self.order_status not in ['RECEIVED', 'COMPLETED']:
+            return date.today() > self.required_date
+        return False
+    
+    def calculate_latest_order_date(self):
+        """计算最晚下单日期"""
+        from datetime import timedelta
+        if self.required_date and self.item:
+            lead_time = self.item.lead_time or 0
+            self.latest_order_date = self.required_date - timedelta(days=lead_time)
+            return self.latest_order_date
+        return None
+    
+    def update_total_cost(self):
+        """更新总成本"""
+        self.total_cost = self.actual_cost * self.actual_qty
+        return self.total_cost
 
 
 class TimeLog(BaseModel):

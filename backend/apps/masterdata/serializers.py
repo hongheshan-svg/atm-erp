@@ -23,12 +23,19 @@ class ItemCategorySerializer(serializers.ModelSerializer):
 
 
 class ItemSerializer(serializers.ModelSerializer):
-    """Item serializer."""
+    """
+    Item serializer - 针对非标自动化行业优化
+    """
     category_name = serializers.CharField(source='category.name', read_only=True)
     default_supplier_name = serializers.CharField(source='default_supplier.name', read_only=True)
+    default_warehouse_name = serializers.CharField(source='default_warehouse.name', read_only=True, allow_null=True)
     item_type_display = serializers.CharField(source='get_item_type_display', read_only=True)
+    item_property_display = serializers.CharField(source='get_item_property_display', read_only=True)
+    abc_class_display = serializers.CharField(source='get_abc_class_display', read_only=True)
+    inspection_type_display = serializers.CharField(source='get_inspection_type_display', read_only=True)
     unit_display = serializers.CharField(source='get_unit_display', read_only=True)
     tax_rate_display = serializers.SerializerMethodField()
+    full_specification = serializers.CharField(read_only=True)
     
     class Meta:
         model = Item
@@ -38,19 +45,57 @@ class ItemSerializer(serializers.ModelSerializer):
             'brand', 'model', 'manufacturer', 'origin_country',
             'category', 'category_name', 'item_type', 'item_type_display', 
             'unit', 'unit_display',
+            # ===== 非标自动化行业专用字段 =====
+            'item_property', 'item_property_display',  # 物料属性(标准件/外购件/外协件/自制件)
+            'abc_class', 'abc_class_display',  # ABC分类
+            # 图纸与技术资料
+            'drawing_no', 'drawing_version',
+            # 材质与表面处理
+            'material', 'surface_treatment', 'heat_treatment',
+            # 尺寸规格
+            'length', 'width', 'height', 'diameter',
+            # 技术参数(JSON)
+            'technical_params',
+            # 检验要求
+            'inspection_type', 'inspection_type_display', 'inspection_standard',
+            # 关键件标识
+            'is_critical', 'is_long_lead',
+            # 替代品信息
+            'can_substitute', 'alternate_items',
+            'full_specification',  # 完整规格描述(计算属性)
+            # ===== END =====
             # 价格税率
-            'standard_cost', 'purchase_price', 'sale_price', 'tax_rate', 'tax_rate_display',
+            'standard_cost', 'purchase_price', 'sale_price', 'last_purchase_price',
+            'tax_rate', 'tax_rate_display',
             'default_supplier', 'default_supplier_name',
             # 库存
-            'min_stock', 'max_stock', 'safety_stock', 'lead_time',
+            'min_stock', 'max_stock', 'safety_stock', 'reorder_point', 'economic_order_qty',
+            'lead_time', 'default_warehouse', 'default_warehouse_name', 'default_location',
             # 其他
-            'description', 'image', 'barcode', 'weight', 'volume', 'shelf_life',
-            'is_active', 'is_deleted', 'created_at', 'updated_at'
+            'description', 'image', 'barcode', 'qr_code', 'weight', 'volume', 'shelf_life',
+            'is_active', 'is_deleted', 'created_at', 'updated_at',
+            # 扩展字段
+            'extra_fields'
         ]
-        read_only_fields = ['created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at', 'full_specification']
     
     def get_tax_rate_display(self, obj):
         return f"{obj.tax_rate}%"
+
+
+class ItemSimpleSerializer(serializers.ModelSerializer):
+    """Item简洁序列化器 - 用于下拉选择等场景"""
+    item_property_display = serializers.CharField(source='get_item_property_display', read_only=True)
+    unit_display = serializers.CharField(source='get_unit_display', read_only=True)
+    
+    class Meta:
+        model = Item
+        fields = [
+            'id', 'sku', 'name', 'specification', 'brand', 'model',
+            'item_property', 'item_property_display', 'unit', 'unit_display',
+            'material', 'drawing_no', 'is_critical', 'lead_time',
+            'purchase_price', 'standard_cost'
+        ]
 
 
 class CustomerSerializer(serializers.ModelSerializer):

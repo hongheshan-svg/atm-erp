@@ -43,12 +43,25 @@ class DataScopeMixin:
 
 class SoftDeleteMixin:
     """
-    Mixin for ViewSet - 现在执行物理删除。
-    保留名称以兼容现有代码，但行为已改为物理删除。
+    Mixin for ViewSet - 智能删除。
+    先尝试物理删除，如果遇到外键保护错误则自动使用软删除。
     """
     def perform_destroy(self, instance):
-        # 物理删除
-        instance.delete()
+        from django.db.models.deletion import ProtectedError
+        from django.utils import timezone
+        
+        try:
+            # 先尝试物理删除
+            instance.delete()
+        except ProtectedError:
+            # 如果遇到外键保护错误，使用软删除
+            if hasattr(instance, 'is_deleted') and hasattr(instance, 'deleted_at'):
+                instance.is_deleted = True
+                instance.deleted_at = timezone.now()
+                instance.save(update_fields=['is_deleted', 'deleted_at'])
+            else:
+                # 如果模型不支持软删除，则抛出原始错误
+                raise
     
     def get_queryset(self):
         queryset = super().get_queryset()

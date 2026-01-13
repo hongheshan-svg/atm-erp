@@ -35,7 +35,9 @@ class ItemCategory(BaseModel):
 class Item(BaseModel):
     """
     Item master data (物料主数据).
+    针对非标自动化行业优化，支持标准件/外购件/外协件/自制件等分类
     """
+    # ==================== 物料类型 ====================
     ITEM_TYPE_CHOICES = [
         ('MATERIAL', '原材料'),
         ('PRODUCT', '产成品'),
@@ -43,16 +45,48 @@ class Item(BaseModel):
         ('SERVICE', '服务'),
     ]
     
+    # ==================== 物料属性(非标自动化行业专用) ====================
+    ITEM_PROPERTY_CHOICES = [
+        ('STANDARD', '标准件'),       # 标准螺丝、轴承、密封圈等
+        ('PURCHASED', '外购件'),      # 电机、PLC、传感器、气缸等
+        ('OUTSOURCED', '外协件'),     # 外协加工的结构件
+        ('SELF_MADE', '自制件'),      # 自制加工的零部件
+        ('CONSUMABLE', '易耗品'),     # 焊丝、切削液、砂纸等
+        ('VIRTUAL', '虚拟件'),        # 仅用于BOM层级结构，不实际采购
+        ('ASSEMBLY', '组件'),         # 由多个零件组成的装配件
+    ]
+    
+    # ==================== ABC分类(库存管理) ====================
+    ABC_CLASS_CHOICES = [
+        ('A', 'A类-高价值'),
+        ('B', 'B类-中价值'),
+        ('C', 'C类-低价值'),
+    ]
+    
+    # ==================== 检验方式 ====================
+    INSPECTION_TYPE_CHOICES = [
+        ('NONE', '免检'),
+        ('INCOMING', '来料检验'),
+        ('SAMPLE', '抽检'),
+        ('FULL', '全检'),
+    ]
+    
     UNIT_CHOICES = [
         ('PCS', '个'),
         ('KG', '千克'),
+        ('G', '克'),
         ('M', '米'),
+        ('MM', '毫米'),
         ('M2', '平方米'),
         ('M3', '立方米'),
         ('SET', '套'),
         ('BOX', '箱'),
         ('PACK', '包'),
         ('HOUR', '小时'),
+        ('L', '升'),
+        ('ML', '毫升'),
+        ('ROLL', '卷'),
+        ('PAIR', '对'),
     ]
     
     TAX_RATE_CHOICES = [
@@ -64,6 +98,7 @@ class Item(BaseModel):
         (13, '13%'),
     ]
     
+    # ==================== 基础信息 ====================
     sku = models.CharField(max_length=100, unique=True, verbose_name='SKU编码')
     name = models.CharField(max_length=200, verbose_name='物料名称')
     specification = models.CharField(max_length=200, blank=True, verbose_name='规格型号')
@@ -88,9 +123,77 @@ class Item(BaseModel):
         default='MATERIAL',
         verbose_name='物料类型'
     )
+    
+    # ==================== 非标自动化行业专用字段 ====================
+    item_property = models.CharField(
+        max_length=20,
+        choices=ITEM_PROPERTY_CHOICES,
+        default='PURCHASED',
+        verbose_name='物料属性',
+        help_text='标准件/外购件/外协件/自制件等'
+    )
+    
+    abc_class = models.CharField(
+        max_length=1,
+        choices=ABC_CLASS_CHOICES,
+        default='C',
+        verbose_name='ABC分类'
+    )
+    
+    # 图纸与技术资料
+    drawing_no = models.CharField(max_length=100, blank=True, verbose_name='图纸号')
+    drawing_version = models.CharField(max_length=50, blank=True, verbose_name='图纸版本')
+    
+    # 材质与表面处理(非标件常用)
+    material = models.CharField(max_length=100, blank=True, verbose_name='材质', 
+                                help_text='如：45#钢、SUS304、6061铝合金等')
+    surface_treatment = models.CharField(max_length=100, blank=True, verbose_name='表面处理',
+                                         help_text='如：镀锌、发黑、阳极氧化、喷涂等')
+    heat_treatment = models.CharField(max_length=100, blank=True, verbose_name='热处理',
+                                      help_text='如：调质HRC28-32、渗碳淬火等')
+    
+    # 尺寸规格
+    length = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name='长度(mm)')
+    width = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name='宽度(mm)')
+    height = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name='高度(mm)')
+    diameter = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name='直径(mm)')
+    
+    # 技术参数(JSON格式，支持灵活扩展)
+    technical_params = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name='技术参数',
+        help_text='如：{"电压":"24V", "功率":"100W", "精度":"0.01mm"}'
+    )
+    
+    # 检验要求
+    inspection_type = models.CharField(
+        max_length=20,
+        choices=INSPECTION_TYPE_CHOICES,
+        default='INCOMING',
+        verbose_name='检验方式'
+    )
+    inspection_standard = models.TextField(blank=True, verbose_name='检验标准')
+    
+    # 是否关键件
+    is_critical = models.BooleanField(default=False, verbose_name='关键件',
+                                      help_text='影响产品关键性能或交期的核心部件')
+    is_long_lead = models.BooleanField(default=False, verbose_name='长周期件',
+                                       help_text='采购周期超过项目标准周期')
+    
+    # 替代品信息
+    can_substitute = models.BooleanField(default=False, verbose_name='允许替代')
+    alternate_items = models.ManyToManyField(
+        'self',
+        blank=True,
+        symmetrical=False,
+        related_name='alternate_for',
+        verbose_name='可替代物料'
+    )
+    
     unit = models.CharField(max_length=20, choices=UNIT_CHOICES, default='PCS', verbose_name='单位')
     
-    # 价格和税率相关
+    # ==================== 价格和税率 ====================
     standard_cost = models.DecimalField(
         max_digits=15,
         decimal_places=2,
@@ -109,6 +212,12 @@ class Item(BaseModel):
         default=0,
         verbose_name='销售单价'
     )
+    last_purchase_price = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='最近采购价'
+    )
     tax_rate = models.IntegerField(
         choices=TAX_RATE_CHOICES,
         default=13,
@@ -124,7 +233,7 @@ class Item(BaseModel):
         verbose_name='默认供应商'
     )
     
-    # 库存相关
+    # ==================== 库存相关 ====================
     min_stock = models.DecimalField(
         max_digits=15,
         decimal_places=2,
@@ -143,25 +252,73 @@ class Item(BaseModel):
         default=0,
         verbose_name='安全库存'
     )
+    reorder_point = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='再订货点'
+    )
+    economic_order_qty = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='经济订货批量'
+    )
     lead_time = models.IntegerField(default=0, verbose_name='采购周期(天)')
     
-    # 其他信息
+    # 默认仓库和库位
+    default_warehouse = models.ForeignKey(
+        'Warehouse',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='default_items',
+        verbose_name='默认仓库'
+    )
+    default_location = models.CharField(max_length=100, blank=True, verbose_name='默认库位')
+    
+    # ==================== 其他信息 ====================
     description = models.TextField(blank=True, verbose_name='描述')
     image = models.ImageField(upload_to='items/', blank=True, verbose_name='图片')
     barcode = models.CharField(max_length=100, blank=True, verbose_name='条形码')
+    qr_code = models.CharField(max_length=200, blank=True, verbose_name='二维码')
     weight = models.DecimalField(max_digits=10, decimal_places=3, default=0, verbose_name='重量(kg)')
     volume = models.DecimalField(max_digits=10, decimal_places=3, default=0, verbose_name='体积(m³)')
     shelf_life = models.IntegerField(default=0, verbose_name='保质期(天)')
     is_active = models.BooleanField(default=True, verbose_name='激活状态')
+    
+    # 扩展字段(JSON格式，支持用户自定义字段)
+    extra_fields = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name='扩展字段',
+        help_text='用户自定义的扩展字段'
+    )
     
     class Meta:
         db_table = 'item'
         verbose_name = '物料'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['item_property']),
+            models.Index(fields=['abc_class']),
+            models.Index(fields=['is_critical']),
+            models.Index(fields=['drawing_no']),
+        ]
     
     def __str__(self):
         return f"{self.sku} - {self.name}"
+    
+    @property
+    def full_specification(self):
+        """完整规格描述"""
+        parts = [self.specification]
+        if self.material:
+            parts.append(f"材质:{self.material}")
+        if self.surface_treatment:
+            parts.append(f"表面:{self.surface_treatment}")
+        return ' | '.join(filter(None, parts))
 
 
 class Customer(BaseModel):

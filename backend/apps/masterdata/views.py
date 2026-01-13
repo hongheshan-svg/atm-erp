@@ -56,6 +56,16 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     search_fields = ['sku', 'name', 'specification', 'barcode']
     ordering_fields = ['sku', 'created_at', 'standard_cost']
     
+    def perform_destroy(self, instance):
+        """
+        重写删除方法，使用软删除。
+        物料可能被项目BOM、采购单、入库单等引用，不能直接硬删除。
+        """
+        from django.utils import timezone
+        instance.is_deleted = True
+        instance.deleted_at = timezone.now()
+        instance.save(update_fields=['is_deleted', 'deleted_at'])
+    
     @action(detail=False, methods=['post'])
     def generate_code(self, request):
         """
@@ -95,7 +105,21 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     
     @action(detail=False, methods=['post'])
     def import_excel(self, request):
-        """Import items from Excel file with all fields."""
+        """
+        Import items from Excel file with all fields.
+        
+        智能导入逻辑（查缺补漏）：
+        1. 如果文件中的物料编码与系统中已存在的相同，则跳过该物料（不导入也不更新）
+        2. 如果没有物料编码，先根据"规格型号+版本/品牌"在数据库中查找是否已存在相同物料
+           - 如果找到匹配的，使用已有的编码（复用已有物料，跳过创建）
+           - 如果没找到，根据"有图/无图"和"物料类型"自动生成新编码
+        
+        编码规则：有图/无图(1位) + 物料类型(1位) + 年份(2位) + 三级流水号(6位)
+        - 有图/无图: 1=有图, 2=无图
+        - 物料类型: 1=机加, 2=钣金, 3=特殊工艺, 4=其他, 5=机械类, 6=电气类, 7=耗材辅料, 8=办公用品
+        - 年份: 有图=当前年份后两位, 无图=99
+        - 三级流水号: 按年份循环累加(000001-999999)
+        """
         file = request.FILES.get('file')
         if not file:
             return Response(
@@ -114,23 +138,29 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                             return col
                 return None
             
-            # Find required columns
+            # Find required columns - 物料名称是必须的
             sku_col = find_column(df, ['物料编码', 'SKU', 'sku', '编码'])
             name_col = find_column(df, ['物料名称', '名称', 'name'])
             
-            if not sku_col or not name_col:
+            if not name_col:
                 return Response(
-                    {'error': 'Excel文件必须包含"物料编码"和"物料名称"列'},
+                    {'error': 'Excel文件必须包含"物料名称"列'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
+            # Find code generation columns (用于自动生成编码)
+            # 有图/无图列 (一级代码)
+            level1_col = find_column(df, ['有图/无图', '有图无图', '一级代码', 'level1'])
+            # 物料分类列 (二级代码) - 用于编码生成，不是物料属性(item_type)
+            level2_col = find_column(df, ['物料分类', '二级代码', 'level2'])
+            
             # Find optional columns
-            spec_col = find_column(df, ['规格型号', '规格', 'specification'])
+            spec_col = find_column(df, ['规格型号', '规格', 'specification', '图号/型号', '图号'])
             brand_col = find_column(df, ['品牌', 'brand'])
             model_col = find_column(df, ['型号', 'model'])
             version_brand_col = find_column(df, ['版本/品牌'])
             unit_col = find_column(df, ['单位', 'unit'])
-            type_col = find_column(df, ['物料类型', '类型', 'item_type'])
+            item_type_col = find_column(df, ['物料属性', 'item_type'])  # 原材料/产成品/半成品/服务
             purchase_col = find_column(df, ['采购单价', '采购价', 'purchase'])
             sale_col = find_column(df, ['销售单价', '销售价', 'sale'])
             cost_col = find_column(df, ['标准成本', 'standard_cost'])
@@ -146,34 +176,56 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
             status_col = find_column(df, ['状态', 'status', 'is_active'])
             
             created_count = 0
-            updated_count = 0
-            skip_count = 0
+            matched_count = 0     # 匹配到已有物料的计数
+            skip_exist_count = 0  # 系统中已存在的跳过计数
+            skip_dup_count = 0    # 文件内重复的跳过计数
             error_rows = []
+            
+            # 有图/无图映射 (文字 -> 代码)
+            level1_map = {
+                '1': '1', '有图': '1', '有': '1',
+                '2': '2', '无图': '2', '无': '2',
+            }
+            
+            # 物料类型映射 (文字 -> 代码)
+            level2_map = {
+                '1': '1', '机加': '1',
+                '2': '2', '钣金': '2',
+                '3': '3', '特殊工艺': '3',
+                '4': '4', '其他': '4',
+                '5': '5', '机械类': '5',
+                '6': '6', '电气类': '6',
+                '7': '7', '耗材辅料': '7',
+                '8': '8', '办公用品': '8',
+            }
             
             # Track processed SKUs within this import
             processed_skus = set()
+            # Track processed spec+brand combinations within this import
+            processed_spec_brand = set()
             
             for idx, row in df.iterrows():
                 row_num = idx + 2
                 
-                sku = str(row[sku_col]).strip() if pd.notna(row[sku_col]) else ''
+                # 获取物料编码（可以为空）
+                sku = ''
+                if sku_col and pd.notna(row.get(sku_col)):
+                    sku = str(row[sku_col]).strip()
+                
                 name = str(row[name_col]).strip() if pd.notna(row[name_col]) else ''
                 
-                if not sku or not name:
-                    error_rows.append({'row': row_num, 'error': '物料编码或名称为空'})
+                # 物料名称是必须的
+                if not name:
+                    error_rows.append({'row': row_num, 'error': '物料名称为空'})
                     continue
                 
                 # Skip example rows
-                if sku.startswith('MAT00') or '示例' in sku or '示例' in name:
+                if sku and (sku.startswith('MAT00') or '示例' in sku):
+                    continue
+                if '示例' in name:
                     continue
                 
-                # Check for in-file duplicate
-                if sku in processed_skus:
-                    skip_count += 1
-                    continue
-                processed_skus.add(sku)
-                
-                # Get optional values
+                # Get optional values helper functions
                 def get_val(col, default=''):
                     if col and pd.notna(row.get(col)):
                         return str(row[col]).strip()
@@ -196,7 +248,7 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                     return default
                 
                 try:
-                    # Parse version/brand to brand/model if provided and brand/model not provided
+                    # Parse version/brand to brand/model first (需要用于匹配)
                     vb = get_val(version_brand_col)
                     parsed_brand = get_val(brand_col)
                     parsed_model = get_val(model_col)
@@ -207,53 +259,158 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                             parsed_model = parts[1] if len(parts) > 1 else ''
                         else:
                             parsed_brand = vb
+                    
+                    # 获取规格型号
+                    specification = get_val(spec_col, '')
+                    
+                    # 组合版本/品牌用于匹配
+                    version_brand = f"{parsed_brand}/{parsed_model}".strip('/') if parsed_brand or parsed_model else ''
+                    
+                    # 如果没有物料编码，需要智能匹配或自动生成
+                    if not sku:
+                        # 先尝试根据"规格型号+版本/品牌"在数据库中查找已有物料
+                        existing_item = None
+                        if specification or version_brand:
+                            # 构建查询条件
+                            query = Item.objects.filter(is_deleted=False)
+                            if specification:
+                                query = query.filter(specification=specification)
+                            if version_brand:
+                                # 匹配 brand/model 组合
+                                if parsed_brand and parsed_model:
+                                    query = query.filter(brand=parsed_brand, model=parsed_model)
+                                elif parsed_brand:
+                                    query = query.filter(brand=parsed_brand)
+                            
+                            # 如果有匹配条件，尝试查找
+                            if specification or (parsed_brand or parsed_model):
+                                existing_item = query.first()
+                        
+                        if existing_item:
+                            # 找到匹配的已有物料，使用其编码
+                            sku = existing_item.sku
+                            matched_count += 1
+                            # 跳过创建，因为物料已存在
+                            skip_exist_count += 1
+                            continue
+                        else:
+                            # 没有找到匹配的物料，需要生成新编码
+                            # 获取有图/无图和物料类型
+                            level1_raw = get_val(level1_col, '')
+                            level2_raw = get_val(level2_col, '')
+                            
+                            if not level1_raw or not level2_raw:
+                                error_rows.append({
+                                    'row': row_num, 
+                                    'error': '物料编码为空且无法匹配已有物料时，必须提供"有图/无图"和"物料类型"用于自动生成编码'
+                                })
+                                continue
+                            
+                            # 转换为标准代码
+                            level1_code = level1_map.get(str(level1_raw).strip(), '')
+                            level2_code = level2_map.get(str(level2_raw).strip(), '')
+                            
+                            if not level1_code:
+                                error_rows.append({
+                                    'row': row_num, 
+                                    'error': f'无效的"有图/无图": {level1_raw}，应为"有图"或"无图"'
+                                })
+                                continue
+                            
+                            if not level2_code:
+                                error_rows.append({
+                                    'row': row_num, 
+                                    'error': f'无效的"物料类型": {level2_raw}，应为: 机加/钣金/特殊工艺/其他/机械类/电气类/耗材辅料/办公用品'
+                                })
+                                continue
+                            
+                            # 使用编码生成器生成编码
+                            sku = ItemCodeGenerator.generate_code(level1_code, level2_code)
+                    
+                    # 检查文件内重复（按编码）
+                    if sku in processed_skus:
+                        skip_dup_count += 1
+                        continue
+                    processed_skus.add(sku)
+                    
+                    # 检查文件内重复（按规格型号+版本/品牌）
+                    spec_brand_key = f"{specification}|{version_brand}"
+                    if spec_brand_key in processed_spec_brand and spec_brand_key != '|':
+                        skip_dup_count += 1
+                        continue
+                    if spec_brand_key != '|':
+                        processed_spec_brand.add(spec_brand_key)
+                    
+                    # 检查系统中是否已存在该物料编码 - 如果存在则跳过
+                    if Item.objects.filter(sku=sku, is_deleted=False).exists():
+                        skip_exist_count += 1
+                        continue
 
                     # Parse status
                     status_val = get_val(status_col, '启用')
                     is_active = status_val not in ['禁用', '停用', 'false', 'False', '0', 'INACTIVE']
+                    
+                    # Parse item_type (物料属性)
+                    item_type_val = get_val(item_type_col, '原材料')
+                    item_type_map = {
+                        '原材料': 'MATERIAL', 'MATERIAL': 'MATERIAL',
+                        '产成品': 'PRODUCT', 'PRODUCT': 'PRODUCT',
+                        '半成品': 'SEMI', 'SEMI': 'SEMI',
+                        '服务': 'SERVICE', 'SERVICE': 'SERVICE',
+                    }
+                    item_type = item_type_map.get(item_type_val, 'MATERIAL')
+                    
+                    # Parse unit (单位) - 支持中文和英文
+                    unit_val = get_val(unit_col, '个')
+                    unit_map = {
+                        '个': 'PCS', 'PCS': 'PCS', 'pcs': 'PCS',
+                        '千克': 'KG', 'KG': 'KG', 'kg': 'KG', '公斤': 'KG',
+                        '米': 'M', 'M': 'M', 'm': 'M',
+                        '平方米': 'M2', 'M2': 'M2', 'm2': 'M2', '㎡': 'M2',
+                        '立方米': 'M3', 'M3': 'M3', 'm3': 'M3', '㎥': 'M3',
+                        '套': 'SET', 'SET': 'SET', 'set': 'SET',
+                        '箱': 'BOX', 'BOX': 'BOX', 'box': 'BOX',
+                        '包': 'PACK', 'PACK': 'PACK', 'pack': 'PACK',
+                        '小时': 'HOUR', 'HOUR': 'HOUR', 'hour': 'HOUR', 'H': 'HOUR', 'h': 'HOUR',
+                    }
+                    unit = unit_map.get(unit_val, 'PCS')
 
-                    # Check if item exists
-                    item, created = Item.objects.update_or_create(
+                    # 创建新物料（不更新已有物料）
+                    item = Item.objects.create(
                         sku=sku,
-                        defaults={
-                            'name': name,
-                            'specification': get_val(spec_col),
-                            'brand': parsed_brand,
-                            'model': parsed_model,
-                            'unit': get_val(unit_col, 'PCS'),
-                            'item_type': get_val(type_col, 'MATERIAL'),
-                            'purchase_price': get_num(purchase_col),
-                            'sale_price': get_num(sale_col),
-                            'standard_cost': get_num(cost_col),
-                            'tax_rate': get_int(tax_col, 13),
-                            'manufacturer': get_val(mfr_col),
-                            'origin_country': get_val(origin_col),
-                            'safety_stock': get_num(safety_col),
-                            'lead_time': get_int(lead_col),
-                            'min_stock': get_num(min_col),
-                            'max_stock': get_num(max_col),
-                            'is_active': is_active,
-                            'barcode': get_val(barcode_col),
-                            'description': get_val(desc_col),
-                            'updated_by': request.user,
-                        }
+                        name=name,
+                        specification=specification,
+                        brand=parsed_brand,
+                        model=parsed_model,
+                        unit=unit,
+                        item_type=item_type,
+                        purchase_price=get_num(purchase_col),
+                        sale_price=get_num(sale_col),
+                        standard_cost=get_num(cost_col),
+                        tax_rate=get_int(tax_col, 13),
+                        manufacturer=get_val(mfr_col),
+                        origin_country=get_val(origin_col),
+                        safety_stock=get_num(safety_col),
+                        lead_time=get_int(lead_col),
+                        min_stock=get_num(min_col),
+                        max_stock=get_num(max_col),
+                        is_active=is_active,
+                        barcode=get_val(barcode_col),
+                        description=get_val(desc_col),
+                        created_by=request.user,
+                        updated_by=request.user,
                     )
-                    # created_by 只在创建时赋值，避免把历史 created_by 覆盖为 None
-                    if created and hasattr(item, 'created_by') and item.created_by_id is None:
-                        item.created_by = request.user
-                        item.save(update_fields=['created_by'])
-                    if created:
-                        created_count += 1
-                    else:
-                        updated_count += 1
+                    created_count += 1
+                    
                 except Exception as e:
                     error_rows.append({'row': row_num, 'error': str(e)})
             
             return Response({
-                'message': f'导入完成：新增 {created_count} 条，更新 {updated_count} 条，跳过重复 {skip_count} 条',
+                'message': f'导入完成：新增 {created_count} 条，匹配已有 {matched_count} 条，跳过已存在 {skip_exist_count} 条，跳过重复 {skip_dup_count} 条',
                 'created': created_count,
-                'updated': updated_count,
-                'skip_count': skip_count,
+                'matched_count': matched_count,
+                'skip_exist_count': skip_exist_count,
+                'skip_dup_count': skip_dup_count,
                 'errors': error_rows
             })
         
@@ -265,7 +422,7 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'])
     def export_excel(self, request):
-        """Export items to Excel file with all fields matching BOM template."""
+        """Export items to Excel file with all fields matching import template."""
         items = self.filter_queryset(self.get_queryset())
         
         output = BytesIO()
@@ -300,15 +457,17 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                 'num_format': '#,##0.00'
             })
             
-            # Column headers matching BOM template
+            # Column headers matching import template
             headers = [
                 ('序号', 6),
                 ('物料编码', 12),
+                ('有图/无图', 10),
+                ('物料分类', 10),
                 ('物料名称', 20),
                 ('规格型号', 15),
                 ('版本/品牌', 12),
                 ('单位', 8),
-                ('物料类型', 10),
+                ('物料属性', 10),
                 ('采购单价', 10),
                 ('销售单价', 10),
                 ('标准成本', 10),
@@ -337,29 +496,39 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                 version_brand = f"{item.brand or ''}/{item.model or ''}" if item.brand or item.model else ''
                 version_brand = version_brand.strip('/')
                 
+                # 解析物料编码获取有图/无图和物料分类
+                code_info = ItemCodeGenerator.parse_code(item.sku)
+                level1_display = ''
+                level2_display = ''
+                if code_info.get('valid'):
+                    level1_display = code_info.get('level1_name', '')  # 有图/无图
+                    level2_display = code_info.get('level2_name', '')  # 机加/钣金等（物料分类）
+                
                 worksheet.write(row_idx, 0, row_idx, data_format)
                 worksheet.write(row_idx, 1, item.sku, data_format)
-                worksheet.write(row_idx, 2, item.name, data_format)
-                worksheet.write(row_idx, 3, item.specification or '', data_format)
-                worksheet.write(row_idx, 4, version_brand, data_format)
-                worksheet.write(row_idx, 5, item.get_unit_display(), data_format)
-                worksheet.write(row_idx, 6, item.get_item_type_display(), data_format)
-                worksheet.write(row_idx, 7, float(item.purchase_price), money_format)
-                worksheet.write(row_idx, 8, float(item.sale_price), money_format)
-                worksheet.write(row_idx, 9, float(item.standard_cost), money_format)
-                worksheet.write(row_idx, 10, item.tax_rate, data_format)
-                worksheet.write(row_idx, 11, item.manufacturer or '', data_format)
-                worksheet.write(row_idx, 12, item.origin_country or '', data_format)
-                worksheet.write(row_idx, 13, float(item.safety_stock), number_format)
-                worksheet.write(row_idx, 14, item.lead_time, data_format)
-                worksheet.write(row_idx, 15, float(item.min_stock), number_format)
-                worksheet.write(row_idx, 16, float(item.max_stock), number_format)
-                worksheet.write(row_idx, 17, float(item.weight), number_format)
-                worksheet.write(row_idx, 18, float(item.volume), number_format)
-                worksheet.write(row_idx, 19, item.shelf_life, data_format)
-                worksheet.write(row_idx, 20, item.barcode or '', data_format)
-                worksheet.write(row_idx, 21, '启用' if item.is_active else '禁用', data_format)
-                worksheet.write(row_idx, 22, item.description or '', data_format)
+                worksheet.write(row_idx, 2, level1_display, data_format)
+                worksheet.write(row_idx, 3, level2_display, data_format)
+                worksheet.write(row_idx, 4, item.name, data_format)
+                worksheet.write(row_idx, 5, item.specification or '', data_format)
+                worksheet.write(row_idx, 6, version_brand, data_format)
+                worksheet.write(row_idx, 7, item.get_unit_display(), data_format)
+                worksheet.write(row_idx, 8, item.get_item_type_display(), data_format)  # 物料属性
+                worksheet.write(row_idx, 9, float(item.purchase_price), money_format)
+                worksheet.write(row_idx, 10, float(item.sale_price), money_format)
+                worksheet.write(row_idx, 11, float(item.standard_cost), money_format)
+                worksheet.write(row_idx, 12, item.tax_rate, data_format)
+                worksheet.write(row_idx, 13, item.manufacturer or '', data_format)
+                worksheet.write(row_idx, 14, item.origin_country or '', data_format)
+                worksheet.write(row_idx, 15, float(item.safety_stock), number_format)
+                worksheet.write(row_idx, 16, item.lead_time, data_format)
+                worksheet.write(row_idx, 17, float(item.min_stock), number_format)
+                worksheet.write(row_idx, 18, float(item.max_stock), number_format)
+                worksheet.write(row_idx, 19, float(item.weight), number_format)
+                worksheet.write(row_idx, 20, float(item.volume), number_format)
+                worksheet.write(row_idx, 21, item.shelf_life, data_format)
+                worksheet.write(row_idx, 22, item.barcode or '', data_format)
+                worksheet.write(row_idx, 23, '启用' if item.is_active else '禁用', data_format)
+                worksheet.write(row_idx, 24, item.description or '', data_format)
             
             worksheet.freeze_panes(1, 0)
         
@@ -373,7 +542,15 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'])
     def export_template(self, request):
-        """Export item import template with headers and example data."""
+        """
+        Export item import template with headers and example data.
+        
+        智能导入规则（查缺补漏）：
+        1. 如果提供物料编码，且系统中已存在相同编码，则跳过该行（不导入）
+        2. 如果物料编码为空，先根据"规格型号+版本/品牌"匹配已有物料
+           - 如果匹配到，复用已有物料编码（跳过创建）
+           - 如果没匹配到，根据"有图/无图"和"物料类型"自动生成编码
+        """
         output = BytesIO()
         
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -384,6 +561,15 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
             required_format = workbook.add_format({
                 'bold': True,
                 'bg_color': '#C00000',
+                'font_color': 'white',
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter',
+                'text_wrap': True
+            })
+            conditional_format = workbook.add_format({
+                'bold': True,
+                'bg_color': '#ED7D31',  # 橙色表示条件必填
                 'font_color': 'white',
                 'border': 1,
                 'align': 'center',
@@ -406,39 +592,49 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                 'font_color': '#666666'
             })
             
-            # Column headers: (name, width, required) - 与列表页面对应
+            # Column headers: (name, width, format_type) 
+            # format_type: 'required', 'conditional', 'optional'
             headers = [
-                ('物料编码*', 12, True),
-                ('物料名称*', 20, True),
-                ('规格型号', 15, False),
-                ('版本/品牌', 12, False),
-                ('单位', 8, False),
-                ('物料类型', 10, False),
-                ('采购单价', 10, False),
-                ('销售单价', 10, False),
-                ('标准成本', 10, False),
-                ('税率(%)', 8, False),
-                ('生产厂家', 15, False),
-                ('产地', 10, False),
-                ('安全库存', 10, False),
-                ('采购周期(天)', 12, False),
-                ('状态', 8, False),
+                ('物料编码', 12, 'optional'),           # 可选，为空时自动匹配或生成
+                ('有图/无图', 10, 'conditional'),       # 物料编码为空且无法匹配时必填
+                ('物料分类', 10, 'conditional'),        # 物料编码为空且无法匹配时必填（机加/钣金/机械类等）
+                ('物料名称*', 20, 'required'),
+                ('规格型号', 15, 'optional'),           # 用于智能匹配已有物料
+                ('版本/品牌', 12, 'optional'),          # 用于智能匹配已有物料
+                ('单位', 8, 'optional'),
+                ('物料属性', 10, 'optional'),           # 原材料/产成品/半成品/服务
+                ('采购单价', 10, 'optional'),
+                ('销售单价', 10, 'optional'),
+                ('标准成本', 10, 'optional'),
+                ('税率(%)', 8, 'optional'),
+                ('生产厂家', 15, 'optional'),
+                ('产地', 10, 'optional'),
+                ('安全库存', 10, 'optional'),
+                ('采购周期(天)', 12, 'optional'),
+                ('状态', 8, 'optional'),
             ]
             
             # Write headers
-            for col, (header, width, required) in enumerate(headers):
-                fmt = required_format if required else optional_format
+            format_map = {
+                'required': required_format,
+                'conditional': conditional_format,
+                'optional': optional_format
+            }
+            for col, (header, width, format_type) in enumerate(headers):
+                fmt = format_map[format_type]
                 worksheet.write(0, col, header, fmt)
                 worksheet.set_column(col, col, width)
             
-            # Write example data
-            example_data = [
-                'MAT001',
-                '示例物料',
-                '100x50x25mm',
+            # Write example data - 示例1：有物料编码
+            example_data1 = [
+                '1126000001',     # 物料编码（有值时直接使用）
+                '',               # 有图/无图（物料编码有值时可不填）
+                '',               # 物料分类（物料编码有值时可不填）
+                '示例物料A',
+                'ABC-100-50',     # 规格型号/图号
                 '品牌A/V1.0',
                 'PCS',
-                'MATERIAL',
+                '原材料',         # 物料属性
                 '100.00',
                 '150.00',
                 '100.00',
@@ -449,41 +645,91 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                 '7',
                 '启用',
             ]
-            for col, value in enumerate(example_data):
+            for col, value in enumerate(example_data1):
                 worksheet.write(1, col, value, example_format)
             
-            worksheet.set_row(0, 25)
+            # Write example data - 示例2：无物料编码，智能匹配或自动生成
+            example_data2 = [
+                '',               # 物料编码（为空，先匹配后生成）
+                '有图',           # 有图/无图
+                '机械类',         # 物料分类
+                '示例物料B',
+                'XYZ-200',        # 规格型号/图号（用于匹配已有物料）
+                '品牌B',          # 版本/品牌（用于匹配已有物料）
+                'SET',
+                '原材料',         # 物料属性
+                '200.00',
+                '300.00',
+                '180.00',
+                '13',
+                '',
+                '',
+                '5',
+                '14',
+                '启用',
+            ]
+            for col, value in enumerate(example_data2):
+                worksheet.write(2, col, value, example_format)
+            
+            worksheet.set_row(0, 30)
             worksheet.freeze_panes(1, 0)
             
             # Help sheet
             help_sheet = workbook.add_worksheet('填写说明')
             title_format = workbook.add_format({'bold': True, 'font_size': 16, 'font_color': '#4472C4'})
             section_format = workbook.add_format({'bold': True, 'font_size': 12, 'font_color': '#C00000'})
+            orange_text = workbook.add_format({'bold': True, 'font_color': '#ED7D31'})
+            green_text = workbook.add_format({'bold': True, 'font_color': '#00B050'})
             
             help_content = [
                 ('物料导入模板填写说明', title_format),
                 ('', None),
-                ('【必填字段】', section_format),
-                ('  • 物料编码*：唯一标识，不可重复', None),
+                ('【智能导入规则 - 查缺补漏】', section_format),
+                ('  1. 如果填写了物料编码，且系统中已存在相同编码，则跳过该行（不导入）', None),
+                ('  2. 如果物料编码为空：', None),
+                ('     a) 先根据"规格型号+版本/品牌"在数据库中查找匹配的已有物料', None),
+                ('     b) 如果找到匹配的物料，则复用其编码（跳过创建，避免重复）', None),
+                ('     c) 如果没找到匹配的物料，根据"有图/无图"和"物料分类"自动生成新编码', None),
+                ('', None),
+                ('【必填字段】红色标题', section_format),
                 ('  • 物料名称*：物料的名称', None),
                 ('', None),
-                ('【选填字段】', section_format),
-                ('  • 规格型号：物料规格描述', None),
-                ('  • 版本/品牌：品牌和产品版本，如"品牌A/V1.0"', None),
-                ('  • 单位：PCS/KG/M/M2/M3/SET/BOX/PACK/HOUR', None),
-                ('  • 物料类型：MATERIAL(原材料)/PRODUCT(产成品)/SEMI(半成品)/SERVICE(服务)', None),
-                ('  • 采购单价/销售单价/标准成本：数字', None),
-                ('  • 税率(%)：增值税率，如13', None),
+                ('【条件必填字段】橙色标题', orange_text),
+                ('  当物料编码为空且无法匹配已有物料时，以下字段必填：', None),
+                ('  • 有图/无图：填"有图"或"无图"', None),
+                ('  • 物料分类：机加/钣金/特殊工艺/其他/机械类/电气类/耗材辅料/办公用品（用于生成编码）', None),
+                ('', None),
+                ('【智能匹配字段】', green_text),
+                ('  以下字段用于智能匹配已有物料（查缺补漏）：', None),
+                ('  • 规格型号：物料的图号/型号，用于匹配数据库中已有物料', None),
+                ('  • 版本/品牌：品牌和版本信息，用于匹配数据库中已有物料', None),
+                ('', None),
+                ('【编码生成规则】', section_format),
+                ('  编码格式：有图/无图(1位) + 物料分类(1位) + 年份(2位) + 流水号(6位)', None),
+                ('  • 有图/无图：有图=1，无图=2', None),
+                ('  • 物料分类：1=机加，2=钣金，3=特殊工艺，4=其他，5=机械类，6=电气类，7=耗材辅料，8=办公用品', None),
+                ('  • 年份："有图"使用当前年份后两位；"无图"固定为99', None),
+                ('  • 流水号：同一年份内自动累加，范围000001-999999', None),
+                ('  • 示例：1526000001 表示 有图+机械类+26年+第1个', None),
+                ('', None),
+                ('【选填字段】蓝色标题', section_format),
+                ('  • 物料编码：可不填，系统自动匹配或生成', None),
+                ('  • 物料属性：原材料/产成品/半成品/服务，默认原材料', None),
+                ('  • 单位：个/套/千克/米/平方米/立方米/箱/包/小时（或PCS/SET/KG等英文），默认个', None),
+                ('  • 采购单价/销售单价/标准成本：数字，默认0', None),
+                ('  • 税率(%)：增值税率，默认13', None),
                 ('  • 生产厂家/产地：文本', None),
-                ('  • 安全库存/采购周期(天)：数字', None),
-                ('  • 状态：启用/禁用', None),
+                ('  • 安全库存/采购周期(天)：数字，默认0', None),
+                ('  • 状态：启用/禁用，默认启用', None),
                 ('', None),
                 ('【注意事项】', section_format),
-                ('  • 编码重复时将更新现有物料', None),
-                ('  • 删除示例行后再导入', None),
+                ('  • 系统会自动根据规格型号和版本/品牌匹配已有物料，避免重复创建', None),
+                ('  • 系统中已存在的物料编码不会被更新，会直接跳过', None),
+                ('  • 导入前请删除示例行', None),
+                ('  • 建议先少量导入测试，确认无误后再批量导入', None),
             ]
             
-            help_sheet.set_column(0, 0, 60)
+            help_sheet.set_column(0, 0, 80)
             for row, (text, fmt) in enumerate(help_content):
                 if fmt:
                     help_sheet.write(row, 0, text, fmt)
@@ -500,12 +746,18 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     
     @action(detail=False, methods=['post'])
     def bulk_delete(self, request):
-        """批量删除物料"""
+        """批量删除物料（软删除）"""
+        from django.utils import timezone
+        
         ids = request.data.get('ids', [])
         if not ids:
             return Response({'error': '请选择要删除的物料'}, status=status.HTTP_400_BAD_REQUEST)
         
-        deleted_count = Item.objects.filter(id__in=ids).delete()[0]
+        # 使用软删除，因为物料可能被其他业务数据引用
+        deleted_count = Item.objects.filter(id__in=ids, is_deleted=False).update(
+            is_deleted=True,
+            deleted_at=timezone.now()
+        )
         return Response({
             'message': f'成功删除 {deleted_count} 条物料',
             'deleted_count': deleted_count

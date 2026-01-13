@@ -201,7 +201,8 @@ class SalesOrder(BaseModel):
         ('OTHER', '其他'),
     ]
     
-    order_no = models.CharField(max_length=50, unique=True, verbose_name='订单号')
+    order_no = models.CharField(max_length=50, unique=True, verbose_name='销售订单号')
+    customer_order_no = models.CharField(max_length=100, blank=True, default='', verbose_name='客户订单号')
     customer = models.ForeignKey(
         'masterdata.Customer',
         on_delete=models.PROTECT,

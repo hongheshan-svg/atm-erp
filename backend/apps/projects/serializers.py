@@ -175,9 +175,14 @@ class ProjectTaskSerializer(serializers.ModelSerializer):
 
 
 class ProjectBOMSerializer(serializers.ModelSerializer):
-    """ProjectBOM serializer."""
+    """
+    ProjectBOM serializer - 针对非标自动化行业优化
+    """
+    # ===== 项目信息 =====
     project_code = serializers.CharField(source='project.code', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
+    
+    # ===== 物料信息 =====
     item_name = serializers.CharField(source='item.name', read_only=True)
     item_sku = serializers.CharField(source='item.sku', read_only=True)
     item_specification = serializers.CharField(source='item.specification', read_only=True, allow_blank=True)
@@ -187,19 +192,44 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
     item_type = serializers.CharField(source='item.get_item_type_display', read_only=True)
     item_brand = serializers.CharField(source='item.brand', read_only=True, allow_blank=True)
     item_model = serializers.CharField(source='item.model', read_only=True, allow_blank=True)
+    item_material = serializers.CharField(source='item.material', read_only=True, allow_blank=True)
+    item_lead_time = serializers.IntegerField(source='item.lead_time', read_only=True)
     version_brand_display = serializers.SerializerMethodField()
     item_standard_cost = serializers.DecimalField(source='item.standard_cost', max_digits=15, decimal_places=2, read_only=True)
+    
+    # ===== 显示字段 =====
     requester_name = serializers.CharField(source='requester.get_full_name', read_only=True)
     has_drawing_display = serializers.CharField(source='get_has_drawing_display', read_only=True)
-    # 采购与库存字段
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+    item_property_display = serializers.SerializerMethodField()
+    
+    # ===== 采购与库存字段 =====
     order_status_display = serializers.CharField(source='get_order_status_display', read_only=True)
     supplier_name = serializers.CharField(source='supplier.name', read_only=True, allow_null=True)
     supplier_code = serializers.CharField(source='supplier.code', read_only=True, allow_null=True)
-    # 多级BOM字段
+    purchase_order_no = serializers.CharField(source='purchase_order.po_no', read_only=True, allow_null=True)
+    
+    # ===== 工位与工序 =====
+    work_center_name = serializers.CharField(source='work_center.name', read_only=True, allow_null=True)
+    process_name = serializers.CharField(source='process.name', read_only=True, allow_null=True)
+    
+    # ===== 需求追溯 =====
+    # requirement_id_ref用于存储需求ID，避免循环引用
+    
+    # ===== 图纸关联 =====
+    drawing_name = serializers.CharField(source='drawing.name', read_only=True, allow_null=True)
+    
+    # ===== 多级BOM字段 =====
     parent_name = serializers.CharField(source='parent.item.name', read_only=True, allow_null=True)
     children_count = serializers.SerializerMethodField()
     has_children = serializers.SerializerMethodField()
     children = serializers.SerializerMethodField()
+    
+    # ===== 计算属性 =====
+    shortage_qty = serializers.DecimalField(read_only=True, max_digits=15, decimal_places=2)
+    is_overdue = serializers.BooleanField(read_only=True)
+    effective_item_property = serializers.CharField(read_only=True)
     
     class Meta:
         model = ProjectBOM
@@ -207,21 +237,53 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
             'id', 'project', 'project_code', 'project_name', 
             'item', 'item_sku', 'item_code', 'item_name',
             'item_specification', 'specification', 'item_unit', 'unit', 
-            'item_type', 'item_brand', 'item_model', 'item_standard_cost',
-            'planned_qty', 'actual_qty', 'estimated_cost', 'unit_qty',
+            'item_type', 'item_brand', 'item_model', 'item_material',
+            'item_lead_time', 'item_standard_cost',
+            # 物料属性与状态
+            'item_property', 'item_property_display', 'effective_item_property',
+            'status', 'status_display', 'priority', 'priority_display',
+            # 数量
+            'planned_qty', 'actual_qty', 'unit_qty', 'scrap_rate',
+            # 成本
+            'estimated_cost', 'target_cost', 'actual_cost', 'total_cost',
+            # 图纸与技术
             'version_brand', 'version_brand_display', 'has_drawing', 'has_drawing_display',
-            'required_date', 'requester', 'requester_name',
+            'drawing', 'drawing_name', 'drawing_no', 'drawing_version',
+            'material_spec', 'surface_treatment', 'technical_requirement',
+            # 装配与工艺
+            'work_center', 'work_center_name', 'process', 'process_name',
+            'assembly_sequence', 'assembly_instruction',
+            # 需求追溯
+            'requirement_id_ref', 'function_module',
+            # 日期与时间
+            'required_date', 'latest_order_date', 'requester', 'requester_name',
             'description', 'notes',
             # 采购与库存跟踪
             'order_status', 'order_status_display',
             'supplier', 'supplier_name', 'supplier_code',
-            'delivery_date', 'ordered_qty', 'received_qty', 'issued_qty',
+            'delivery_date', 'actual_delivery_date',
+            'ordered_qty', 'received_qty', 'issued_qty', 'reserved_qty',
+            'purchase_order', 'purchase_order_no',
+            'shortage_qty', 'is_overdue',
+            # 质量与检验
+            'inspection_required', 'inspection_passed', 'inspection_notes',
             # 多级BOM
             'parent', 'parent_name', 'level', 'sort_order',
             'children_count', 'has_children', 'children',
+            # 关键件标识
+            'is_critical', 'is_long_lead',
+            # 扩展字段
+            'extra_fields',
             'is_deleted', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at', 'shortage_qty', 'is_overdue', 
+                          'effective_item_property', 'total_cost']
+    
+    def get_item_property_display(self, obj):
+        """获取物料属性显示值"""
+        if obj.item_property:
+            return obj.get_item_property_display()
+        return f"[继承]{obj.item.get_item_property_display()}" if obj.item else ''
 
     def get_version_brand_display(self, obj):
         """

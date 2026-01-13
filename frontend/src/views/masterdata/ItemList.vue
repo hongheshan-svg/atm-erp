@@ -653,7 +653,18 @@ const handleImport = () => {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
       const data = res.data || res
-      ElMessage.success(`导入完成：新增 ${data.created || 0} 条，更新 ${data.updated || 0} 条`)
+      // 构建导入结果提示
+      let successMsg = `导入完成：新增 ${data.created || 0} 条`
+      if (data.matched_count > 0) {
+        successMsg += `，匹配已有 ${data.matched_count} 条`
+      }
+      if (data.skip_exist_count > 0) {
+        successMsg += `，跳过已存在 ${data.skip_exist_count} 条`
+      }
+      if (data.skip_dup_count > 0) {
+        successMsg += `，跳过重复 ${data.skip_dup_count} 条`
+      }
+      ElMessage.success(successMsg)
       if (data.errors && data.errors.length > 0) {
         ElMessage.warning(`有 ${data.errors.length} 行导入失败，请检查数据`)
       }

@@ -224,13 +224,13 @@ class SalesOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = SalesOrder
         fields = [
-            'id', 'order_no', 'customer', 'customer_name', 'project', 'project_name',
+            'id', 'order_no', 'customer_order_no', 'customer', 'customer_name', 'project', 'project_name',
             'order_date', 'delivery_date', 'status', 'status_display',
             'tax_rate', 'tax_rate_display', 'total_amount', 'tax_amount', 'total_with_tax',
             'payment_terms', 'payment_terms_display', 'payment_method', 'payment_method_display',
             'payment_terms_detail', 'notes', 'lines', 'is_deleted', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['order_no', 'order_date', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
+        read_only_fields = ['order_date', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
     
     def create(self, validated_data):
         """Create SO with lines."""
