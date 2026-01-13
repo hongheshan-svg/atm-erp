@@ -52,8 +52,15 @@
         </template>
       </el-alert>
 
+      <!-- 批量操作工具栏 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+      </div>
+
       <!-- 数据表格 -->
-      <el-table :data="drawings" v-loading="loading" stripe border>
+      <el-table :data="drawings" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="drawing_no" label="图纸号" width="120" />
         <el-table-column prop="name" label="图纸名称" min-width="150" show-overflow-tooltip />
         <el-table-column label="版本" width="80" align="center">
@@ -84,7 +91,7 @@
             <el-button size="small" link type="success" @click="handleApprove(row)" v-if="row.status === 'REVIEWING'">批准</el-button>
             <el-button size="small" link type="primary" @click="handleRelease(row)" v-if="row.status === 'APPROVED'">发布</el-button>
             <el-button size="small" link type="info" @click="handleNewRevision(row)" v-if="row.status === 'RELEASED'">新版本</el-button>
-            <el-button size="small" link type="danger" @click="handleDelete(row)" v-if="row.status === 'DRAFT'">删除</el-button>
+            <el-button v-if="canDelete && row.status === 'DRAFT'" size="small" link type="danger" @click="deleteRow(row)" :loading="deleteLoading">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -188,6 +195,17 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/projects/drawings/',
+  { onSuccess: loadDrawings, confirmTitle: '删除图纸', confirmMessage: '确定要删除该图纸吗？' }
+)
 
 const loading = ref(false)
 const saving = ref(false)
@@ -440,18 +458,7 @@ const submitNewRevision = async () => {
   }
 }
 
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm('确定要删除该图纸吗？', '删除确认', { type: 'warning' })
-    await request.delete(`/projects/drawings/${row.id}/`)
-    ElMessage.success('删除成功')
-    loadDrawings()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除失败')
-    }
-  }
-}
+// handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 onMounted(() => {
   loadProjects()

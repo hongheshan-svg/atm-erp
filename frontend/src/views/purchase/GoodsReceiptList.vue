@@ -33,7 +33,21 @@
         </el-form-item>
       </el-form>
 
-      <el-table :data="receipts" v-loading="loading" border stripe>
+      <!-- 批量操作工具栏 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button 
+          type="danger" 
+          size="small" 
+          @click="batchDelete"
+          :loading="deleteLoading"
+        >
+          批量删除
+        </el-button>
+      </div>
+
+      <el-table :data="receipts" v-loading="loading" border stripe @selection-change="handleSelectionChange">
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="receipt_no" label="收货单号" width="150" />
         <el-table-column prop="purchase_order_no" label="采购订单号" width="150" />
         <el-table-column prop="supplier_name" label="供应商" min-width="150" />
@@ -50,7 +64,15 @@
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" type="primary" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button size="small" type="success" @click="handleConfirm(row)" v-if="row.status === 'DRAFT'">确认入库</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button 
+              v-if="canDelete"
+              size="small" 
+              type="danger" 
+              @click="deleteRow(row)"
+              :loading="deleteLoading"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -194,8 +216,24 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
 
 const route = useRoute()
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/purchase/receipts/',
+  {
+    onSuccess: loadReceipts,
+    confirmTitle: '删除收货单',
+    confirmMessage: '确定要删除该收货单吗？删除后不可恢复！'
+  }
+)
+
 const loading = ref(false)
 const saving = ref(false)
 const receipts = ref([])
@@ -430,22 +468,7 @@ const handleConfirm = async (row) => {
   }
 }
 
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除收货单 ${row.receipt_no} 吗？此操作不可恢复！`, 
-      '删除收货单', 
-      { type: 'warning' }
-    )
-    await request.delete(`/purchase/receipts/${row.id}/`)
-    ElMessage.success('收货单已删除')
-    loadReceipts()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除收货单失败')
-    }
-  }
-}
+// handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 // 处理从采购订单页面跳转过来的情况
 const handleUrlParams = () => {
@@ -482,6 +505,22 @@ onMounted(() => {
   display: flex; 
   justify-content: space-between; 
   align-items: center; 
+}
+
+.table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  border: 1px solid #e4e7ed;
+}
+
+.table-toolbar span {
+  font-size: 14px;
+  color: #606266;
 }
 
 .search-form { 

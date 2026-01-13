@@ -66,6 +66,12 @@
 
     <!-- 计划列表 -->
     <el-card class="table-card" shadow="never">
+      <!-- 批量操作工具栏 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+      </div>
+
       <el-table
         v-loading="loading"
         :data="planList"
@@ -73,7 +79,9 @@
         border
         style="width: 100%"
         @row-click="handleRowClick"
+        @selection-change="handleSelectionChange"
       >
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="plan_no" label="计划编号" width="140" />
         <el-table-column prop="title" label="计划名称" min-width="180" />
         <el-table-column prop="project_code" label="项目编号" width="130" />
@@ -133,11 +141,12 @@
               完成
             </el-button>
             <el-button
-              v-if="row.status === 'DRAFT'"
+              v-if="canDelete && row.status === 'DRAFT'"
               type="danger"
               size="small"
               link
-              @click.stop="handleDelete(row)"
+              @click.stop="deleteRow(row)"
+              :loading="deleteLoading"
             >
               删除
             </el-button>
@@ -434,6 +443,17 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, Refresh } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/production/plans/',
+  { onSuccess: loadData, confirmTitle: '删除生产计划', confirmMessage: '确定要删除该生产计划吗？' }
+)
 
 // 状态
 const loading = ref(false)
@@ -625,18 +645,7 @@ const handleEdit = (row) => {
 }
 
 // 删除
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm('确定要删除该计划吗？', '确认删除', { type: 'warning' })
-    await request.delete(`/production/plans/${row.id}/`)
-    ElMessage.success('删除成功')
-    loadData()
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('删除失败:', error)
-    }
-  }
-}
+// handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 // 确认计划
 const handleConfirm = async (row) => {

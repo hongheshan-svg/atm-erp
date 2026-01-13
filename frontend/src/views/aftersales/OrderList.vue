@@ -94,8 +94,15 @@
         </el-form-item>
       </el-form>
 
+      <!-- 批量操作工具栏 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+      </div>
+
       <!-- 工单列表 -->
-      <el-table :data="orders" border stripe v-loading="loading" @row-click="handleRowClick" style="cursor: pointer;">
+      <el-table :data="orders" border stripe v-loading="loading" @row-click="handleRowClick" @selection-change="handleSelectionChange" style="cursor: pointer;">
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="order_no" label="工单号" width="140" fixed />
         <el-table-column prop="title" label="问题标题" min-width="200" show-overflow-tooltip />
         <el-table-column prop="project_name" label="项目" width="150" show-overflow-tooltip />
@@ -151,7 +158,7 @@
             <el-button size="small" type="info" @click.stop="handleAttachments(row)">附件</el-button>
             <el-button size="small" @click.stop="handleEdit(row)" v-if="['PENDING', 'ASSIGNED'].includes(row.status)">编辑</el-button>
             <el-button size="small" type="success" @click.stop="handleAssign(row)" v-if="row.status === 'PENDING'">派单</el-button>
-            <el-button size="small" type="danger" @click.stop="handleDelete(row)">删除</el-button>
+            <el-button v-if="canDelete" size="small" type="danger" @click.stop="deleteRow(row)" :loading="deleteLoading">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -439,8 +446,20 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Upload, VideoPlay, Document } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
 
 const router = useRouter()
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/projects/aftersales/',
+  { onSuccess: loadOrders, confirmTitle: '删除工单', confirmMessage: '确定要删除该工单吗？' }
+)
+
 const loading = ref(false)
 const submitting = ref(false)
 const orders = ref([])
@@ -768,21 +787,7 @@ const confirmAssign = async () => {
   }
 }
 
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm(`确定要删除工单 ${row.order_no} 吗？此操作不可恢复！`, '删除工单', {
-      type: 'warning'
-    })
-    await request.delete(`/projects/aftersales/${row.id}/`)
-    ElMessage.success('删除成功')
-    loadOrders()
-    loadStatistics()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除失败')
-    }
-  }
-}
+// handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 // ========== 附件相关函数 ==========
 const handleAttachments = async (row) => {

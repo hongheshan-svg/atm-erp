@@ -8,7 +8,21 @@
         </div>
       </template>
 
-      <el-table :data="warehouses" v-loading="loading" stripe border>
+      <!-- 批量操作工具栏 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button 
+          type="danger" 
+          size="small" 
+          @click="batchDelete"
+          :loading="deleteLoading"
+        >
+          批量删除
+        </el-button>
+      </div>
+
+      <el-table :data="warehouses" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="code" label="编码" width="120" />
         <el-table-column prop="name" label="仓库名称" />
         <el-table-column prop="address" label="地址" />
@@ -17,10 +31,18 @@
             {{ getTypeLabel(row.warehouse_type) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" :width="canDelete ? 200 : 100" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button 
+              v-if="canDelete"
+              size="small" 
+              type="danger" 
+              @click="deleteRow(row)"
+              :loading="deleteLoading"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -56,8 +78,10 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
 
 const loading = ref(false)
 const warehouses = ref([])
@@ -65,6 +89,19 @@ const dialogVisible = ref(false)
 const dialogTitle = ref('新增仓库')
 const isEdit = ref(false)
 const formRef = ref(null)
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/masterdata/warehouses/',
+  {
+    onSuccess: loadWarehouses,
+    confirmTitle: '删除仓库',
+    confirmMessage: '确定要删除该仓库吗？删除后不可恢复！'
+  }
+)
 
 const form = reactive({
   id: null,
@@ -79,7 +116,7 @@ const getTypeLabel = (type) => {
   return labels[type] || type
 }
 
-const loadWarehouses = async () => {
+async function loadWarehouses() {
   loading.value = true
   try {
     const response = await request.get('/masterdata/warehouses/')
@@ -103,17 +140,6 @@ const handleEdit = (row) => {
   isEdit.value = true
   Object.assign(form, row)
   dialogVisible.value = true
-}
-
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm('确定要删除该仓库吗？', '警告', { type: 'warning' })
-    await request.delete(`/masterdata/warehouses/${row.id}/`)
-    ElMessage.success('删除仓库成功')
-    loadWarehouses()
-  } catch (error) {
-    if (error !== 'cancel') ElMessage.error('删除仓库失败')
-  }
 }
 
 const handleSubmit = async () => {
@@ -143,5 +169,20 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
 }
-</style>
 
+.table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  border: 1px solid #e4e7ed;
+}
+
+.table-toolbar span {
+  font-size: 14px;
+  color: #606266;
+}
+</style>

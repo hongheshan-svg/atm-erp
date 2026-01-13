@@ -28,8 +28,23 @@
         </el-form-item>
       </el-form>
 
+      <!-- 批量操作工具栏 - 仅管理员可见 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button 
+          type="danger" 
+          size="small" 
+          @click="batchDelete"
+          :loading="deleteLoading"
+        >
+          批量删除
+        </el-button>
+      </div>
+
       <!-- Data Table -->
-      <el-table :data="users" v-loading="loading" stripe border>
+      <el-table :data="users" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <!-- 仅管理员显示选择列 -->
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="id" label="编号" width="80" />
         <el-table-column prop="username" label="用户名" />
         <el-table-column prop="email" label="邮箱" />
@@ -43,10 +58,19 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" :width="canDelete ? 180 : 80" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <!-- 仅管理员显示删除按钮 -->
+            <el-button 
+              v-if="canDelete"
+              size="small" 
+              type="danger" 
+              @click="deleteRow(row)"
+              :loading="deleteLoading"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -126,6 +150,23 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/auth/users/',
+  {
+    confirmTitle: '确认删除用户',
+    confirmMessage: '删除用户将同时删除其关联的所有数据，此操作不可恢复！',
+    successMessage: '删除用户成功',
+    errorMessage: '删除用户失败',
+    onSuccess: () => loadUsers()
+  }
+)
 
 const loading = ref(false)
 const users = ref([])
@@ -257,20 +298,7 @@ const handleEdit = (row) => {
   dialogVisible.value = true
 }
 
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm('确定要删除该用户吗？', '警告', {
-      type: 'warning'
-    })
-    await request.delete(`/auth/users/${row.id}/`)
-    ElMessage.success('删除成功')
-    loadUsers()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除失败')
-    }
-  }
-}
+// 删除功能已迁移到 useBatchDelete composable
 
 const handleSubmit = async () => {
   try {
@@ -357,5 +385,21 @@ onMounted(() => {
 
 .search-form {
   margin-bottom: 20px;
+}
+
+.table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  border: 1px solid #e4e7ed;
+}
+
+.table-toolbar span {
+  font-size: 14px;
+  color: #606266;
 }
 </style>

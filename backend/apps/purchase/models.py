@@ -103,6 +103,7 @@ class PurchaseRequest(BaseModel):
 class PurchaseRequestLine(BaseModel):
     """
     Purchase Request Line - 采购申请明细
+    支持从BOM生成采购申请
     """
     pr = models.ForeignKey(
         PurchaseRequest,
@@ -138,6 +139,24 @@ class PurchaseRequestLine(BaseModel):
         related_name='pr_lines',
         verbose_name='关联项目'
     )
+    
+    # ===== BOM关联字段(非标自动化行业) =====
+    bom_item = models.ForeignKey(
+        'projects.ProjectBOM',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pr_lines',
+        verbose_name='BOM项',
+        help_text='从BOM生成的采购申请关联'
+    )
+    # 是否关键件(从BOM继承)
+    is_critical = models.BooleanField(default=False, verbose_name='关键件')
+    # 是否长周期件(从BOM继承)
+    is_long_lead = models.BooleanField(default=False, verbose_name='长周期件')
+    # 功能模块(从BOM继承)
+    function_module = models.CharField(max_length=100, blank=True, verbose_name='功能模块')
+    
     notes = models.TextField(blank=True, verbose_name='备注')
     
     class Meta:
@@ -145,6 +164,9 @@ class PurchaseRequestLine(BaseModel):
         verbose_name = '采购申请明细'
         verbose_name_plural = verbose_name
         ordering = ['id']
+        indexes = [
+            models.Index(fields=['is_critical', 'is_long_lead']),
+        ]
     
     def __str__(self):
         return f"{self.pr.request_no} - {self.item.sku}"
@@ -282,6 +304,7 @@ class PurchaseOrder(BaseModel):
 class PurchaseOrderLine(BaseModel):
     """
     Purchase Order Line - 采购订单明细
+    支持从BOM生成采购订单
     """
     po = models.ForeignKey(
         PurchaseOrder,
@@ -309,6 +332,28 @@ class PurchaseOrderLine(BaseModel):
         default=0,
         verbose_name='已收货数量'
     )
+    
+    # ===== BOM关联字段(非标自动化行业) =====
+    bom_item = models.ForeignKey(
+        'projects.ProjectBOM',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='po_lines',
+        verbose_name='BOM项',
+        help_text='从BOM生成的采购订单关联'
+    )
+    # 是否关键件(从BOM继承)
+    is_critical = models.BooleanField(default=False, verbose_name='关键件')
+    # 是否长周期件(从BOM继承)  
+    is_long_lead = models.BooleanField(default=False, verbose_name='长周期件')
+    # 功能模块(从BOM继承)
+    function_module = models.CharField(max_length=100, blank=True, verbose_name='功能模块')
+    # 图纸号(从BOM继承)
+    drawing_no = models.CharField(max_length=100, blank=True, verbose_name='图纸号')
+    # 技术要求(从BOM继承)
+    technical_requirement = models.TextField(blank=True, verbose_name='技术要求')
+    
     notes = models.TextField(blank=True, verbose_name='备注')
     
     class Meta:
@@ -316,6 +361,10 @@ class PurchaseOrderLine(BaseModel):
         verbose_name = '采购订单明细'
         verbose_name_plural = verbose_name
         ordering = ['id']
+        indexes = [
+            models.Index(fields=['bom_item']),
+            models.Index(fields=['is_critical', 'is_long_lead']),
+        ]
     
     def __str__(self):
         return f"{self.po.order_no} - {self.item.sku}"

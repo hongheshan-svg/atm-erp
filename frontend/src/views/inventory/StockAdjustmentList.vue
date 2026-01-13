@@ -11,7 +11,21 @@
         </div>
       </template>
 
-      <el-table :data="adjustments" v-loading="loading" border stripe>
+      <!-- 批量操作工具栏 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button 
+          type="danger" 
+          size="small" 
+          @click="batchDelete"
+          :loading="deleteLoading"
+        >
+          批量删除
+        </el-button>
+      </div>
+
+      <el-table :data="adjustments" v-loading="loading" border stripe @selection-change="handleSelectionChange">
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="adjustment_no" label="盘点单号" width="150" />
         <el-table-column prop="warehouse_name" label="仓库" width="150" />
         <el-table-column prop="adjustment_date" label="盘点日期" width="120" />
@@ -35,7 +49,15 @@
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" type="success" @click="handleConfirm(row)" v-if="row.status === 'DRAFT'">确认盘点</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button 
+              v-if="canDelete"
+              size="small" 
+              type="danger" 
+              @click="deleteRow(row)"
+              :loading="deleteLoading"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -99,6 +121,21 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/inventory/adjustments/',
+  {
+    onSuccess: loadAdjustments,
+    confirmTitle: '删除盘点单',
+    confirmMessage: '确定要删除该盘点单吗？删除后不可恢复！'
+  }
+)
 
 const loading = ref(false)
 const adjustments = ref([])
@@ -251,22 +288,7 @@ const resetForm = () => {
   adjustmentForm.lines = []
 }
 
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除此库存盘点记录吗？此操作不可恢复！`, 
-      '删除库存盘点', 
-      { type: 'warning' }
-    )
-    await request.delete(`/inventory/adjustments/${row.id}/`)
-    ElMessage.success('库存盘点记录已删除')
-    loadAdjustments()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除库存盘点记录失败')
-    }
-  }
-}
+// handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 onMounted(() => {
   loadAdjustments()
@@ -277,5 +299,16 @@ onMounted(() => {
 <style scoped>
 .stock-adjustment-list { padding: 20px; }
 .card-header { display: flex; justify-content: space-between; align-items: center; }
+.table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  border: 1px solid #e4e7ed;
+}
+.table-toolbar span { font-size: 14px; color: #606266; }
 </style>
 

@@ -8,7 +8,14 @@
         </div>
       </template>
 
-      <el-table :data="roles" v-loading="loading" stripe border>
+      <!-- 批量操作工具栏 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+      </div>
+
+      <el-table :data="roles" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="id" label="编号" width="80" />
         <el-table-column prop="name" label="角色名称" width="150" />
         <el-table-column prop="code" label="角色编码" width="150" />
@@ -27,7 +34,7 @@
           <template #default="{ row }">
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" type="primary" @click="handlePermission(row)">权限配置</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="canDelete" size="small" type="danger" @click="deleteRow(row)" :loading="deleteLoading">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -129,6 +136,17 @@ import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/accounts/roles/',
+  { onSuccess: loadRoles, confirmTitle: '删除角色', confirmMessage: '确定要删除该角色吗？删除后相关用户将失去此角色权限！' }
+)
 
 const loading = ref(false)
 const saving = ref(false)
@@ -371,20 +389,7 @@ const handlePermission = async (row) => {
   }
 }
 
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm('确定要删除该角色吗？', '警告', {
-      type: 'warning'
-    })
-    await request.delete(`/auth/roles/${row.id}/`)
-    ElMessage.success('删除成功')
-    loadRoles()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除角色失败')
-    }
-  }
-}
+// handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 const handleSubmit = async () => {
   try {

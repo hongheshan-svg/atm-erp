@@ -95,8 +95,15 @@
         </el-row>
       </div>
 
+      <!-- 批量操作工具栏 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+      </div>
+
       <!-- Bug列表 -->
-      <el-table :data="bugs" v-loading="loading" stripe border @row-click="handleRowClick" class="bug-table">
+      <el-table :data="bugs" v-loading="loading" stripe border @row-click="handleRowClick" @selection-change="handleSelectionChange" class="bug-table">
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="bug_number" label="编号" width="140" fixed="left">
           <template #default="{ row }">
             <el-link type="primary" @click.stop="handleView(row)">{{ row.bug_number }}</el-link>
@@ -330,8 +337,20 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, ArrowDown } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
 
 const router = useRouter()
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/projects/bugs/',
+  { onSuccess: loadBugs, confirmTitle: '删除Bug', confirmMessage: '确定要删除该Bug吗？' }
+)
+
 const loading = ref(false)
 const saving = ref(false)
 const assigning = ref(false)
@@ -682,25 +701,11 @@ const handleCommand = (command, row) => {
     statusForm.solution = row.solution || ''
     statusDialogVisible.value = true
   } else if (command === 'delete') {
-    handleDelete(row)
+    deleteRow(row)
   }
 }
 
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm(`确定要删除Bug "${row.bug_number}" 吗？`, '警告', {
-      type: 'warning'
-    })
-    await request.delete(`/projects/bugs/${row.id}/`)
-    ElMessage.success('删除成功')
-    loadBugs()
-    loadStats()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除失败')
-    }
-  }
-}
+// handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 const handleAssignSubmit = async () => {
   if (!assignForm.assignee) {

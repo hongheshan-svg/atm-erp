@@ -59,8 +59,15 @@
         </el-form-item>
       </el-form>
 
+      <!-- 批量操作工具栏 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+      </div>
+
       <!-- 表格 -->
-      <el-table :data="ecnList" v-loading="loading" border stripe>
+      <el-table :data="ecnList" v-loading="loading" border stripe @selection-change="handleSelectionChange">
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="ecn_no" label="ECN编号" width="160" fixed />
         <el-table-column prop="title" label="变更标题" min-width="200" show-overflow-tooltip />
         <el-table-column prop="project_code" label="项目编号" width="120" />
@@ -97,7 +104,7 @@
             <el-button size="small" type="info" @click="viewWorkflow(row)" v-if="row.status === 'PENDING' || row.status === 'REVIEWING'">审批进度</el-button>
             <el-button size="small" type="warning" @click="handleImplement(row)" v-if="row.status === 'APPROVED'">开始实施</el-button>
             <el-button size="small" type="success" @click="handleComplete(row)" v-if="row.status === 'IMPLEMENTING'">完成</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)" v-if="row.status === 'DRAFT'">删除</el-button>
+            <el-button v-if="canDelete && row.status === 'DRAFT'" size="small" type="danger" @click="deleteRow(row)" :loading="deleteLoading">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -383,8 +390,19 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
 
 const router = useRouter()
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/projects/ecns/',
+  { onSuccess: loadECNList, confirmTitle: '删除ECN', confirmMessage: '确定要删除该ECN吗？' }
+)
 
 // 数据
 const loading = ref(false)
@@ -841,22 +859,7 @@ const getItemChangeTypeTagType = (type) => {
   return types[type] || 'info'
 }
 
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除ECN ${row.ecn_no} 吗？此操作不可恢复！`, 
-      '删除ECN', 
-      { type: 'warning' }
-    )
-    await request.delete(`/projects/ecn/${row.id}/`)
-    ElMessage.success('ECN已删除')
-    loadECNList()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除ECN失败')
-    }
-  }
-}
+// handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 // 初始化
 onMounted(() => {

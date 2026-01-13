@@ -23,8 +23,15 @@
         </el-form-item>
       </el-form>
 
+      <!-- 批量操作工具栏 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+      </div>
+
       <!-- 发货单列表 -->
-      <el-table :data="deliveryOrders" v-loading="loading" border stripe>
+      <el-table :data="deliveryOrders" v-loading="loading" border stripe @selection-change="handleSelectionChange">
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="delivery_no" label="发货单号" width="150" />
         <el-table-column prop="so_no" label="销售订单" width="150" />
         <el-table-column prop="customer_name" label="客户" width="180" />
@@ -85,8 +92,13 @@
             </el-button>
             
             <!-- 草稿/已拒绝: 可删除 -->
-            <el-button size="small" type="danger" @click="handleDelete(row)" 
-                       v-if="['DRAFT', 'REJECTED'].includes(row.status)">
+            <el-button 
+              v-if="canDelete && ['DRAFT', 'REJECTED'].includes(row.status)"
+              size="small" 
+              type="danger" 
+              @click="deleteRow(row)" 
+              :loading="deleteLoading"
+            >
               删除
             </el-button>
           </template>
@@ -283,8 +295,20 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
 
 const router = useRouter()
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/sales/delivery-orders/',
+  { onSuccess: loadDeliveryOrders, confirmTitle: '删除发货单', confirmMessage: '确定要删除该发货单吗？' }
+)
+
 const loading = ref(false)
 const submitting = ref(false)
 const deliveryOrders = ref([])
@@ -566,22 +590,7 @@ const submitReject = async () => {
 }
 
 // 删除
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除发货单 ${row.delivery_no} 吗？此操作不可恢复！`, 
-      '删除发货单', 
-      { type: 'warning' }
-    )
-    await request.delete(`/sales/deliveries/${row.id}/`)
-    ElMessage.success('发货单已删除')
-    loadDeliveryOrders()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除发货单失败')
-    }
-  }
-}
+// handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 // 打印
 const handlePrint = (row) => {

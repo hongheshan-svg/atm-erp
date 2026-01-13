@@ -35,8 +35,15 @@
         </el-form-item>
       </el-form>
 
+      <!-- 批量操作工具栏 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+      </div>
+
       <!-- Data Table -->
-      <el-table :data="expenses" border v-loading="loading">
+      <el-table :data="expenses" border v-loading="loading" @selection-change="handleSelectionChange">
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="expense_no" label="费用编号" width="140" />
         <el-table-column prop="name" label="费用名称" min-width="150" />
         <el-table-column prop="category_display" label="类别" width="100" />
@@ -62,7 +69,7 @@
             <el-button type="primary" link @click="handleView(row)">详情</el-button>
             <el-button v-if="row.status === 'DRAFT' || row.status === 'PENDING'" type="success" link @click="handleAllocate(row)">分摊</el-button>
             <el-button v-if="row.status === 'ALLOCATED'" type="warning" link @click="handleCancelAllocation(row)">撤销</el-button>
-            <el-button v-if="row.status === 'DRAFT'" type="danger" link @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="canDelete && row.status === 'DRAFT'" type="danger" link @click="deleteRow(row)" :loading="deleteLoading">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -229,6 +236,17 @@ import { ref, reactive, onMounted, watch } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/finance/shared-expenses/',
+  { onSuccess: loadData, confirmTitle: '删除公共费用', confirmMessage: '确定要删除该公共费用吗？' }
+)
 
 const loading = ref(false)
 const expenses = ref([])
@@ -462,20 +480,7 @@ const handleCancelAllocation = async (expense) => {
   }
 }
 
-const handleDelete = async (expense) => {
-  try {
-    await ElMessageBox.confirm('确定要删除该费用吗？', '确认删除', { type: 'warning' })
-    
-    await request.delete(`/finance/shared-expenses/${expense.id}/`)
-    ElMessage.success('删除成功')
-    loadData()
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('删除失败:', error)
-      ElMessage.error('删除失败')
-    }
-  }
-}
+// handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 // Reset preview when project selection changes
 watch(selectedProjectIds, () => {

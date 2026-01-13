@@ -49,15 +49,22 @@
         </el-form-item>
       </el-form>
 
-      <div class="table-toolbar" v-if="selectedItems.length > 0">
-        <span>已选择 {{ selectedItems.length }} 项</span>
-        <el-button type="danger" size="small" @click="handleBatchDelete">
+      <!-- 批量操作工具栏 - 仅管理员可见 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button 
+          type="danger" 
+          size="small" 
+          @click="batchDelete"
+          :loading="deleteLoading"
+        >
           批量删除
         </el-button>
       </div>
       
       <el-table :data="customers" v-loading="loading" stripe border @selection-change="handleSelectionChange">
-        <el-table-column type="selection" width="45" />
+        <!-- 仅管理员显示选择列 -->
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="code" label="编码" width="120" />
         <el-table-column prop="name" label="客户名称" min-width="180" show-overflow-tooltip />
         <el-table-column prop="contact_person" label="联系人" width="100" />
@@ -70,11 +77,20 @@
             <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ row.status === 'ACTIVE' ? '激活' : '停用' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="250" fixed="right">
+        <el-table-column label="操作" :width="canDelete ? 280 : 200" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" type="success" @click="handleViewAttachments(row)">附件</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <!-- 仅管理员显示删除按钮 -->
+            <el-button 
+              v-if="canDelete"
+              size="small" 
+              type="danger" 
+              @click="deleteRow(row)"
+              :loading="deleteLoading"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -238,11 +254,27 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Upload, Download, Document } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/masterdata/customers/',
+  {
+    confirmTitle: '确认删除客户',
+    confirmMessage: '此操作将永久删除选中的客户记录，是否继续？',
+    successMessage: '删除客户成功',
+    errorMessage: '删除客户失败',
+    onSuccess: () => loadCustomers()
+  }
+)
 
 const loading = ref(false)
 const submitting = ref(false)
 const customers = ref([])
-const selectedItems = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增客户')
 const isEdit = ref(false)
@@ -340,41 +372,7 @@ const handleEdit = (row) => {
   dialogVisible.value = true
 }
 
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm('确定要删除该客户吗？', '警告', { type: 'warning' })
-    await request.delete(`/masterdata/customers/${row.id}/`)
-    ElMessage.success('删除客户成功')
-    loadCustomers()
-  } catch (error) {
-    if (error !== 'cancel') ElMessage.error('删除客户失败')
-  }
-}
-
-const handleSelectionChange = (selection) => {
-  selectedItems.value = selection
-}
-
-const handleBatchDelete = async () => {
-  if (selectedItems.value.length === 0) {
-    ElMessage.warning('请选择要删除的客户')
-    return
-  }
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除选中的 ${selectedItems.value.length} 个客户吗？`,
-      '批量删除',
-      { type: 'warning' }
-    )
-    const ids = selectedItems.value.map(item => item.id)
-    await request.post('/masterdata/customers/bulk_delete/', { ids })
-    ElMessage.success(`成功删除 ${selectedItems.value.length} 个客户`)
-    selectedItems.value = []
-    loadCustomers()
-  } catch (error) {
-    if (error !== 'cancel') ElMessage.error('批量删除失败')
-  }
-}
+// 删除功能已迁移到 useBatchDelete composable
 
 const handleSubmit = async () => {
   try {

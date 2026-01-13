@@ -77,10 +77,20 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" :width="canDelete ? 250 : 180" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" type="success" @click="handleConvert(row)" v-if="row.status !== 'CONVERTED' && row.status !== 'DISQUALIFIED'">转化</el-button>
+            <!-- 仅管理员显示删除按钮 -->
+            <el-button 
+              v-if="canDelete"
+              size="small" 
+              type="danger" 
+              @click="deleteRow(row)"
+              :loading="deleteLoading"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -199,6 +209,23 @@ import {
   updateLead,
   convertLead
 } from '@/api/sales/crm'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/sales/leads/',
+  {
+    confirmTitle: '确认删除销售线索',
+    confirmMessage: '此操作将永久删除选中的线索记录，是否继续？',
+    successMessage: '删除线索成功',
+    errorMessage: '删除线索失败',
+    onSuccess: () => fetchData()
+  }
+)
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -418,4 +445,20 @@ onMounted(() => {
   gap: 12px;
   flex-wrap: wrap;
 }
+
+.table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  border: 1px solid #e4e7ed;
+}
+.table-toolbar span {
+  font-size: 14px;
+  color: #606266;
+}
+
 </style>

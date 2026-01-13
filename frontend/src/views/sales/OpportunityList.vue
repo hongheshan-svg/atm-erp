@@ -165,6 +165,8 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
 import { ElMessage } from 'element-plus'
 import { Search, Plus, Opportunity } from '@element-plus/icons-vue'
 import {
@@ -188,6 +190,22 @@ const statistics = reactive({
   weighted_amount: 0,
   win_rate: 0
 })
+
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/sales/opportunities/',
+  {
+    confirmTitle: '确认删除销售商机',
+    confirmMessage: '此操作将永久删除选中的商机记录，是否继续？',
+    successMessage: '删除成功',
+    errorMessage: '删除失败',
+    onSuccess: () => fetchData()
+  }
+)
 
 const queryParams = reactive({
   search: '',
@@ -461,4 +479,20 @@ onMounted(() => {
     color: #67C23A;
   }
 }
+
+.table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  border: 1px solid #e4e7ed;
+}
+.table-toolbar span {
+  font-size: 14px;
+  color: #606266;
+}
+
 </style>

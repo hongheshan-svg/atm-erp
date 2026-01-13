@@ -231,6 +231,12 @@ class SalesOrderSerializer(serializers.ModelSerializer):
             'payment_terms_detail', 'notes', 'lines', 'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['order_date', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
+        extra_kwargs = {
+            # 创建时可填写，留空则后端自动生成；更新时不提交也不报错
+            'order_no': {'required': False, 'allow_blank': True},
+            # 客户订单号可选
+            'customer_order_no': {'required': False, 'allow_blank': True},
+        }
     
     def create(self, validated_data):
         """Create SO with lines."""

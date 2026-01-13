@@ -41,8 +41,22 @@
         </el-form-item>
       </el-form>
 
+      <!-- 批量操作工具栏 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button 
+          type="danger" 
+          size="small" 
+          @click="batchDelete"
+          :loading="deleteLoading"
+        >
+          批量删除
+        </el-button>
+      </div>
+
       <!-- 报价列表 -->
-      <el-table :data="quotations" v-loading="loading" border stripe>
+      <el-table :data="quotations" v-loading="loading" border stripe @selection-change="handleSelectionChange">
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="quote_no" label="报价编号" width="150" />
         <el-table-column prop="customer_name" label="客户" width="200" />
         <el-table-column prop="project_name" label="关联项目" width="150" show-overflow-tooltip />
@@ -71,7 +85,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="created_by_name" label="创建人" width="100" />
-        <el-table-column label="操作" width="340" fixed="right">
+        <el-table-column label="操作" :width="canDelete ? 380 : 320" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
@@ -86,7 +100,16 @@
             >
               转销售订单
             </el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <!-- 仅管理员显示删除按钮 -->
+            <el-button 
+              v-if="canDelete"
+              size="small" 
+              type="danger" 
+              @click="deleteRow(row)"
+              :loading="deleteLoading"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -164,12 +187,30 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 
 const router = useRouter()
+
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/sales/quotations/',
+  {
+    confirmTitle: '确认删除报价单',
+    confirmMessage: '此操作将永久删除选中的报价单，是否继续？',
+    successMessage: '删除成功',
+    errorMessage: '删除失败',
+    onSuccess: () => fetchData()
+  }
+)
 
 const loading = ref(false)
 const quotations = ref([])
@@ -350,7 +391,23 @@ const handlePrint = (row) => {
           body { padding: 0; }
           .no-print { display: none; }
         }
-      </style>
+      
+.table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  border: 1px solid #e4e7ed;
+}
+.table-toolbar span {
+  font-size: 14px;
+  color: #606266;
+}
+
+</style>
     </head>
     <body>
       <div class="header">
@@ -432,22 +489,7 @@ const handlePrint = (row) => {
   printWindow.focus()
 }
 
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除报价单 ${row.quotation_no} 吗？此操作不可恢复！`, 
-      '删除报价单', 
-      { type: 'warning' }
-    )
-    await request.delete(`/sales/quotations/${row.id}/`)
-    ElMessage.success('报价单已删除')
-    loadQuotations()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除报价单失败')
-    }
-  }
-}
+// 删除功能已迁移到 useBatchDelete composable
 
 onMounted(() => {
   loadQuotations()
@@ -469,5 +511,21 @@ onMounted(() => {
 .search-form {
   margin-bottom: 20px;
 }
+
+.table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  border: 1px solid #e4e7ed;
+}
+.table-toolbar span {
+  font-size: 14px;
+  color: #606266;
+}
+
 </style>
 

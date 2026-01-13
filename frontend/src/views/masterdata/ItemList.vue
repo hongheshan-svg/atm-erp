@@ -41,15 +41,22 @@
         </el-form-item>
       </el-form>
 
-      <div class="table-toolbar" v-if="selectedItems.length > 0">
-        <span>已选择 {{ selectedItems.length }} 项</span>
-        <el-button type="danger" size="small" @click="handleBatchDelete">
+      <!-- 批量操作工具栏 - 仅管理员可见 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button 
+          type="danger" 
+          size="small" 
+          @click="batchDelete"
+          :loading="loading"
+        >
           批量删除
         </el-button>
       </div>
       
       <el-table :data="items" v-loading="loading" stripe border @selection-change="handleSelectionChange">
-        <el-table-column type="selection" width="45" fixed />
+        <!-- 仅管理员显示选择列 -->
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column type="index" label="序号" width="60" fixed />
         <el-table-column prop="sku" label="物料编码" width="100" fixed />
         <el-table-column prop="name" label="物料名称" width="150" show-overflow-tooltip />
@@ -96,10 +103,19 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column label="操作" :width="canDelete ? 180 : 80" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <!-- 仅管理员显示删除按钮 -->
+            <el-button 
+              v-if="canDelete"
+              size="small" 
+              type="danger" 
+              @click="deleteRow(row)"
+              :loading="loading"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -385,14 +401,29 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Download, Document, ArrowDown, Setting } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
+
+// 权限检查
+const { canDelete, isAdmin } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/masterdata/items/',
+  {
+    confirmTitle: '确认删除物料',
+    confirmMessage: '此操作将永久删除选中的物料记录，是否继续？',
+    successMessage: '删除物料成功',
+    errorMessage: '删除物料失败',
+    onSuccess: () => loadItems()
+  }
+)
 
 const attachmentRef = ref(null)
 const tempUploadRef = ref(null)
 const tempFiles = ref([])
 
-const loading = ref(false)
 const items = ref([])
-const selectedItems = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增物料')
 const isEdit = ref(false)
@@ -555,47 +586,7 @@ const handleEdit = (row) => {
   dialogVisible.value = true
 }
 
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm('确定要删除该物料吗？', '警告', {
-      type: 'warning'
-    })
-    await request.delete(`/masterdata/items/${row.id}/`)
-    ElMessage.success('删除物料成功')
-    loadItems()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除物料失败')
-    }
-  }
-}
-
-const handleSelectionChange = (selection) => {
-  selectedItems.value = selection
-}
-
-const handleBatchDelete = async () => {
-  if (selectedItems.value.length === 0) {
-    ElMessage.warning('请选择要删除的物料')
-    return
-  }
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除选中的 ${selectedItems.value.length} 条物料吗？`,
-      '批量删除',
-      { type: 'warning' }
-    )
-    const ids = selectedItems.value.map(item => item.id)
-    await request.post('/masterdata/items/bulk_delete/', { ids })
-    ElMessage.success(`成功删除 ${selectedItems.value.length} 条物料`)
-    selectedItems.value = []
-    loadItems()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('批量删除失败')
-    }
-  }
-}
+// 删除功能已迁移到 useBatchDelete composable
 
 // 导出Excel
 const handleExport = async () => {

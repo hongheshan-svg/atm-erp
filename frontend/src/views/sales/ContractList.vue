@@ -36,7 +36,14 @@
         </el-form-item>
       </el-form>
 
-      <el-table :data="contracts" v-loading="loading" stripe border>
+      <!-- 批量操作工具栏 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+      </div>
+
+      <el-table :data="contracts" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="contract_no" label="合同编号" width="150" />
         <el-table-column prop="title" label="合同标题" min-width="180" />
         <el-table-column prop="customer_name" label="客户" width="150" />
@@ -61,7 +68,7 @@
             <el-button size="small" type="warning" @click="handleApprove(row)" v-if="row.status === 'DRAFT' || row.status === 'PENDING'">审批</el-button>
             <el-button size="small" type="success" @click="handleSign(row)" v-if="row.status === 'APPROVED'">签署</el-button>
             <el-button size="small" type="info" @click="handlePrint(row)">打印</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)" v-if="row.status === 'DRAFT'">删除</el-button>
+            <el-button v-if="canDelete && row.status === 'DRAFT'" size="small" type="danger" @click="deleteRow(row)" :loading="deleteLoading">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -260,6 +267,17 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/sales/contracts/',
+  { onSuccess: loadContracts, confirmTitle: '删除合同', confirmMessage: '确定要删除该合同吗？' }
+)
 
 const loading = ref(false)
 const saving = ref(false)
@@ -676,22 +694,7 @@ const handlePrint = async (row) => {
   }
 }
 
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除合同 ${row.contract_no} 吗？此操作不可恢复！`, 
-      '删除合同', 
-      { type: 'warning' }
-    )
-    await request.delete(`/sales/contracts/${row.id}/`)
-    ElMessage.success('合同已删除')
-    loadContracts()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除合同失败')
-    }
-  }
-}
+// handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 onMounted(() => {
   loadContracts()

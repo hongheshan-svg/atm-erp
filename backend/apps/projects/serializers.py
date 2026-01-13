@@ -2,6 +2,8 @@
 Serializers for projects app.
 """
 from rest_framework import serializers
+from django.db import transaction
+from django.db.models import F
 from .models import (
     Project, ProjectMember, ProjectTask, ProjectBOM, TimeLog, 
     ECN, ECNItem, ECNApproval,
@@ -331,13 +333,29 @@ class TimeLogSerializer(serializers.ModelSerializer):
             'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['user', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'project': {'required': False},
+            'task': {'required': False},
+        }
     
     def get_task_name(self, obj):
         return obj.task.name if obj.task else None
     
     def create(self, validated_data):
+        # 如果未显式传project，但提供了task，则自动关联task的project
+        task = validated_data.get('task')
+        if task and not validated_data.get('project'):
+            validated_data['project'] = task.project
         validated_data['user'] = self.context['request'].user
-        return super().create(validated_data)
+        # 工时默认直接通过，并累计到任务的实际工时
+        validated_data.setdefault('status', 'APPROVED')
+        with transaction.atomic():
+            instance = super().create(validated_data)
+            if instance.task:
+                ProjectTask.objects.filter(id=instance.task_id).update(
+                    actual_hours=F('actual_hours') + instance.hours
+                )
+        return instance
 
 
 class ECNItemSerializer(serializers.ModelSerializer):

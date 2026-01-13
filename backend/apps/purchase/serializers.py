@@ -14,29 +14,40 @@ from .services import BudgetValidationService
 
 
 class PurchaseRequestLineSerializer(serializers.ModelSerializer):
-    """PurchaseRequestLine serializer."""
+    """PurchaseRequestLine serializer - 支持BOM关联."""
     item_name = serializers.CharField(source='item.name', read_only=True)
     item_sku = serializers.CharField(source='item.sku', read_only=True)
     item_unit = serializers.CharField(source='item.get_unit_display', read_only=True)
+    item_property = serializers.CharField(source='item.get_item_property_display', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
+    # BOM关联信息
+    bom_item_id = serializers.IntegerField(source='bom_item.id', read_only=True, allow_null=True)
+    bom_planned_qty = serializers.DecimalField(source='bom_item.planned_qty', max_digits=15, decimal_places=2, read_only=True, allow_null=True)
     
     class Meta:
         model = PurchaseRequestLine
         fields = [
-            'id', 'pr', 'item', 'item_sku', 'item_name', 'item_unit',
+            'id', 'pr', 'item', 'item_sku', 'item_name', 'item_unit', 'item_property',
             'qty', 'estimated_price', 'line_amount', 'required_date', 'project', 'project_name',
+            # BOM关联字段
+            'bom_item', 'bom_item_id', 'bom_planned_qty',
+            'is_critical', 'is_long_lead', 'function_module',
             'notes', 'is_deleted'
         ]
-        read_only_fields = ['line_amount']
+        read_only_fields = ['line_amount', 'bom_item_id', 'bom_planned_qty']
 
 
 class PurchaseRequestLineCreateSerializer(serializers.ModelSerializer):
-    """PurchaseRequestLine serializer for create/update."""
+    """PurchaseRequestLine serializer for create/update - 支持BOM关联."""
     class Meta:
         model = PurchaseRequestLine
-        fields = ['id', 'item', 'qty', 'estimated_price', 'required_date', 'project', 'notes']
+        fields = [
+            'id', 'item', 'qty', 'estimated_price', 'required_date', 'project',
+            'bom_item', 'is_critical', 'is_long_lead', 'function_module', 'notes'
+        ]
         extra_kwargs = {
-            'id': {'required': False}
+            'id': {'required': False},
+            'bom_item': {'required': False},
         }
 
 
@@ -140,20 +151,29 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
 
 
 class PurchaseOrderLineSerializer(serializers.ModelSerializer):
-    """PurchaseOrderLine serializer."""
+    """PurchaseOrderLine serializer - 支持BOM关联."""
     item_name = serializers.CharField(source='item.name', read_only=True)
     item_sku = serializers.CharField(source='item.sku', read_only=True)
     item_unit = serializers.CharField(source='item.get_unit_display', read_only=True)
+    item_property = serializers.CharField(source='item.get_item_property_display', read_only=True)
     remaining_qty = serializers.SerializerMethodField()
+    # BOM关联信息
+    bom_item_id = serializers.IntegerField(source='bom_item.id', read_only=True, allow_null=True)
+    bom_planned_qty = serializers.DecimalField(source='bom_item.planned_qty', max_digits=15, decimal_places=2, read_only=True, allow_null=True)
+    bom_project_code = serializers.CharField(source='bom_item.project.code', read_only=True, allow_null=True)
     
     class Meta:
         model = PurchaseOrderLine
         fields = [
-            'id', 'po', 'item', 'item_sku', 'item_name', 'item_unit',
+            'id', 'po', 'item', 'item_sku', 'item_name', 'item_unit', 'item_property',
             'qty', 'unit_price', 'line_amount', 'received_qty', 'remaining_qty',
+            # BOM关联字段
+            'bom_item', 'bom_item_id', 'bom_planned_qty', 'bom_project_code',
+            'is_critical', 'is_long_lead', 'function_module',
+            'drawing_no', 'technical_requirement',
             'notes', 'is_deleted'
         ]
-        read_only_fields = ['line_amount', 'received_qty']
+        read_only_fields = ['line_amount', 'received_qty', 'bom_item_id', 'bom_planned_qty', 'bom_project_code']
     
     def get_remaining_qty(self, obj):
         return float(obj.qty - obj.received_qty)

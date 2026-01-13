@@ -43,7 +43,14 @@
         </el-form-item>
       </el-form>
 
-      <el-table :data="expenses" v-loading="loading" stripe border>
+      <!-- 批量操作工具栏 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+      </div>
+
+      <el-table :data="expenses" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="expense_no" label="费用编号" width="150" />
         <el-table-column prop="user_name" label="提交人" width="100" />
         <el-table-column prop="project_name" label="项目" />
@@ -73,7 +80,7 @@
             <el-button size="small" type="success" @click="handleApprove(row)" v-if="row.status === 'SUBMITTED'">批准</el-button>
             <el-button size="small" type="danger" @click="handleReject(row)" v-if="row.status === 'SUBMITTED'">拒绝</el-button>
             <el-button size="small" type="primary" @click="handleReimburse(row)" v-if="row.status === 'APPROVED'">报销</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="canDelete" size="small" type="danger" @click="deleteRow(row)" :loading="deleteLoading">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -225,6 +232,17 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Upload } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/finance/expenses/',
+  { onSuccess: loadExpenses, confirmTitle: '删除费用', confirmMessage: '确定要删除该费用报销吗？' }
+)
 
 const attachmentRef = ref(null)
 const tempUploadRef = ref(null)
@@ -528,22 +546,7 @@ const handleReimburse = async (row) => {
   }
 }
 
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除费用报销单 ${row.expense_no} 吗？此操作不可恢复！`, 
-      '删除费用报销单', 
-      { type: 'warning' }
-    )
-    await request.delete(`/finance/expenses/${row.id}/`)
-    ElMessage.success('费用报销单已删除')
-    loadExpenses()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除费用报销单失败')
-    }
-  }
-}
+// handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 onMounted(() => {
   loadExpenses()

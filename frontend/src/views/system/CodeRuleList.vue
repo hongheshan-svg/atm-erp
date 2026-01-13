@@ -34,8 +34,15 @@
         </el-form-item>
       </el-form>
 
+      <!-- 批量操作工具栏 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+      </div>
+
       <!-- 数据表格 -->
-      <el-table :data="rules" v-loading="loading" stripe border>
+      <el-table :data="rules" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="rule_type_display" label="规则类型" width="140" />
         <el-table-column prop="rule_name" label="规则名称" width="150" />
         <el-table-column label="编码格式" min-width="200">
@@ -66,7 +73,7 @@
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" type="warning" @click="handleResetSeq(row)">重置序号</el-button>
             <el-button size="small" type="info" @click="handleViewHistory(row)">历史</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="canDelete" size="small" type="danger" @click="deleteRow(row)" :loading="deleteLoading">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -211,6 +218,17 @@ import { ref, reactive, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Setting } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/system/code-rules/',
+  { onSuccess: fetchRules, confirmTitle: '删除编码规则', confirmMessage: '确定要删除该编码规则吗？' }
+)
 
 const loading = ref(false)
 const saving = ref(false)
@@ -380,23 +398,7 @@ const handleViewHistory = async (row) => {
   }
 }
 
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除编码规则 ${row.rule_name} 吗？删除后无法恢复！`,
-      '删除规则',
-      { type: 'warning' }
-    )
-    
-    await request.delete(`/core/code-rules/${row.id}/`)
-    ElMessage.success('删除成功')
-    fetchRules()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除失败')
-    }
-  }
-}
+// handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 const handleInitDefault = async () => {
   try {

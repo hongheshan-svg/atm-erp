@@ -129,8 +129,13 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
     @action(detail=False, methods=['get'])
     def for_linking(self, request):
         """获取可用于关联的销售订单（不受数据权限限制）"""
-        # 直接从基础queryset获取，不应用数据权限过滤
-        queryset = SalesOrder.objects.filter(is_deleted=False).order_by('-created_at')
+        # 仅返回：已确认/部分发货，且未关联项目的订单
+        allowed_status = ['CONFIRMED', 'PARTIAL']  # 已确认且未完成
+        queryset = SalesOrder.objects.filter(
+            is_deleted=False,
+            project__isnull=True,
+            status__in=allowed_status
+        ).order_by('-created_at')
         
         # 支持搜索
         search = request.query_params.get('search', '')

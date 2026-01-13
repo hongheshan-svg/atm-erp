@@ -34,8 +34,15 @@
         </el-form-item>
       </el-form>
 
+      <!-- 批量操作工具栏 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+      </div>
+
       <!-- 数据表格 -->
-      <el-table :data="tableData" v-loading="loading" stripe border>
+      <el-table :data="tableData" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="rfq_no" label="询价单号" width="160" />
         <el-table-column prop="project_name" label="项目" min-width="150">
           <template #default="{ row }">
@@ -91,9 +98,10 @@
               比价分析
             </el-button>
             <el-button 
-              v-if="row.status === 'DRAFT'" 
+              v-if="canDelete && row.status === 'DRAFT'" 
               type="danger" size="small" link 
-              @click="handleDelete(row)"
+              @click="deleteRow(row)"
+              :loading="deleteLoading"
             >
               删除
             </el-button>
@@ -244,8 +252,19 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
 
 const router = useRouter()
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/purchase/rfqs/',
+  { onSuccess: loadData, confirmTitle: '删除询价单', confirmMessage: '确定要删除该询价单吗？' }
+)
 
 // 状态
 const loading = ref(false)
@@ -464,18 +483,7 @@ const handleStartComparison = (row) => {
 }
 
 // 删除
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm('确定删除此询价单？', '确认删除', { type: 'warning' })
-    await request.delete(`/purchase/rfqs/${row.id}/`)
-    ElMessage.success('删除成功')
-    loadData()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除失败')
-    }
-  }
-}
+// handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 onMounted(() => {
   loadData()

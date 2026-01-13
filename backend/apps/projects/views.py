@@ -298,7 +298,10 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         bom_items = self.get_queryset().filter(
             project_id=project_id,
             is_deleted=False
-        ).select_related('item', 'item__category', 'requester')
+        ).select_related(
+            'item', 'item__category', 'requester',
+            'work_center', 'process', 'drawing', 'purchase_order'
+        )
         
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -370,28 +373,23 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             
             # Write title
             from datetime import datetime
-            worksheet.merge_range(0, 0, 0, 16, f'项目BOM清单 - {project.name} ({project.code})', title_format)
+            last_col = len(headers) - 1
+            worksheet.merge_range(0, 0, 0, last_col, f'项目BOM清单 - {project.name} ({project.code})', title_format)
             worksheet.write(1, 0, f'导出时间: {datetime.now().strftime("%Y-%m-%d %H:%M")}')
             
-            # Column headers: (name, width, format_type) - 与表格和导入模板保持一致
+            # Column headers: 精简为用户要求的字段
             headers = [
                 ('序号', 6, 'normal'),
                 ('物料编码', 15, 'required'),
+                ('有图/无图', 10, 'normal'),
+                ('物料类型', 10, 'normal'),
                 ('物料名称', 20, 'normal'),
                 ('规格型号', 15, 'normal'),
                 ('版本/品牌', 12, 'normal'),
                 ('单位', 8, 'normal'),
-                ('物料类型', 10, 'normal'),
-                ('计划数量', 12, 'required'),
-                ('已领用', 10, 'normal'),
-                ('剩余需求', 10, 'normal'),
-                ('预估单价', 12, 'yellow'),
-                ('预估成本', 12, 'green'),
-                ('有图/无图', 10, 'normal'),
+                ('数量', 12, 'required'),
                 ('需求日期', 12, 'normal'),
                 ('申请人', 10, 'normal'),
-                ('备注', 20, 'normal'),
-                ('说明', 25, 'normal'),
             ]
             
             # Write headers (row 3)
@@ -410,37 +408,28 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             # Write data
             row = 4
             total_planned = 0
-            total_actual = 0
-            total_cost = 0
             
             for idx, bom in enumerate(bom_items, 1):
                 planned = float(bom.planned_qty)
-                actual = float(bom.actual_qty)
-                remaining = max(0, planned - actual)
-                price = float(bom.estimated_cost) if bom.estimated_cost else float(bom.item.standard_cost)
-                cost = planned * price
-                
                 total_planned += planned
-                total_actual += actual
-                total_cost += cost
                 
-                worksheet.write(row, 0, idx, data_format)
-                worksheet.write(row, 1, bom.item.sku, data_format)
-                worksheet.write(row, 2, bom.item.name, data_format)
-                worksheet.write(row, 3, bom.item.specification or '', data_format)
-                worksheet.write(row, 4, bom.version_brand or bom.item.brand or '', data_format)
-                worksheet.write(row, 5, bom.item.get_unit_display(), data_format)
-                worksheet.write(row, 6, bom.item.get_item_type_display(), data_format)
-                worksheet.write(row, 7, planned, number_format)
-                worksheet.write(row, 8, actual, number_format)
-                worksheet.write(row, 9, remaining, number_format)
-                worksheet.write(row, 10, price, money_format)
-                worksheet.write(row, 11, cost, money_format)
-                worksheet.write(row, 12, bom.get_has_drawing_display(), data_format)
-                worksheet.write(row, 13, bom.required_date.strftime('%Y-%m-%d') if bom.required_date else '', data_format)
-                worksheet.write(row, 14, bom.requester.get_full_name() if bom.requester else '', data_format)
-                worksheet.write(row, 15, bom.notes or '', data_format)
-                worksheet.write(row, 16, bom.description or '', data_format)
+                # 物料类型：使用物料主数据分类显示
+                item_type_display = bom.item.get_item_type_display()
+                # 有图/无图
+                has_drawing_display = bom.get_has_drawing_display()
+                
+                col = 0
+                worksheet.write(row, col, idx, data_format); col += 1
+                worksheet.write(row, col, bom.item.sku, data_format); col += 1
+                worksheet.write(row, col, has_drawing_display, data_format); col += 1
+                worksheet.write(row, col, item_type_display, data_format); col += 1
+                worksheet.write(row, col, bom.item.name, data_format); col += 1
+                worksheet.write(row, col, bom.item.specification or '', data_format); col += 1
+                worksheet.write(row, col, bom.version_brand or bom.item.brand or '', data_format); col += 1
+                worksheet.write(row, col, bom.item.get_unit_display(), data_format); col += 1
+                worksheet.write(row, col, planned, number_format); col += 1
+                worksheet.write(row, col, bom.required_date.strftime('%Y-%m-%d') if bom.required_date else '', data_format); col += 1
+                worksheet.write(row, col, bom.requester.get_full_name() if bom.requester else '', data_format); col += 1
                 row += 1
             
             # Write totals
@@ -450,20 +439,9 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 'bg_color': '#E2EFDA',
                 'align': 'right'
             })
-            total_money_format = workbook.add_format({
-                'bold': True,
-                'border': 1,
-                'bg_color': '#E2EFDA',
-                'align': 'right',
-                'num_format': '¥#,##0.00'
-            })
-            worksheet.write(row, 6, '合计:', total_format)
-            worksheet.write(row, 7, total_planned, total_format)
-            worksheet.write(row, 8, total_actual, total_format)
-            worksheet.write(row, 9, max(0, total_planned - total_actual), total_format)
-            worksheet.write(row, 10, '', total_format)
-            worksheet.write(row, 11, total_cost, total_money_format)
-            for col in range(12, 17):
+            worksheet.write(row, 6, '合计:', total_format)  # 位于数量列前一列
+            worksheet.write(row, 7, total_planned, total_format)  # 数量合计
+            for col in range(8, len(headers)):
                 worksheet.write(row, col, '', total_format)
             
             # Set row heights
@@ -552,26 +530,19 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 'font_color': '#999999'
             })
             
-            # Column headers: (name, width, type: 'required'/'optional'/'readonly'/'yellow'/'green')
-            # 顺序与表格和导出Excel保持一致
+            # Column headers: 精简版导入模板（与用户需求一致）
             headers = [
                 ('序号', 8, 'readonly'),
                 ('物料编码*', 15, 'required'),
+                ('有图/无图', 10, 'optional'),
+                ('物料类型', 10, 'optional'),
                 ('物料名称', 20, 'readonly'),
                 ('规格型号', 15, 'readonly'),
                 ('版本/品牌', 12, 'optional'),
                 ('单位', 8, 'readonly'),
-                ('物料类型', 10, 'readonly'),
-                ('计划数量*', 12, 'required'),
-                ('已领用', 10, 'readonly'),
-                ('剩余需求', 10, 'readonly'),
-                ('预估单价', 12, 'yellow'),
-                ('预估成本', 12, 'green'),
-                ('有图/无图', 10, 'optional'),
+                ('数量*', 12, 'required'),
                 ('需求日期', 12, 'optional'),
                 ('申请人', 10, 'optional'),
-                ('备注', 20, 'optional'),
-                ('说明', 25, 'optional'),
             ]
             
             # Write headers
@@ -589,48 +560,36 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 worksheet.write(0, col, header, fmt)
                 worksheet.set_column(col, col, width)
             
-            # Write example data (row 1)
+            # Write example data (row 1) - 精简列
             example_data = [
-                (1, readonly_example_format),
-                ('MAT001', example_format),
-                ('(系统自动填充)', readonly_example_format),
-                ('(系统自动填充)', readonly_example_format),
-                ('V1.0', example_format),
-                ('(自动)', readonly_example_format),
-                ('(自动)', readonly_example_format),
-                (100, example_format),
-                ('(自动)', readonly_example_format),
-                ('(自动)', readonly_example_format),
-                (10, example_format),
-                ('(自动计算)', readonly_example_format),
-                ('有图', example_format),
-                ('2025-01-15', example_format),
-                ('张三', example_format),
-                ('示例，请删除', example_format),
-                ('', example_format),
+                (1, readonly_example_format),                    # 序号
+                ('MAT001', example_format),                      # 物料编码*
+                ('有图', example_format),                        # 有图/无图
+                ('机械类', example_format),                      # 物料类型
+                ('(系统自动填充)', readonly_example_format),      # 物料名称
+                ('(系统自动填充)', readonly_example_format),      # 规格型号
+                ('V1.0', example_format),                        # 版本/品牌
+                ('(自动)', readonly_example_format),             # 单位
+                (100, example_format),                           # 数量*
+                ('2026-01-15', example_format),                  # 需求日期
+                ('张三', example_format),                        # 申请人
             ]
             for col, (value, fmt) in enumerate(example_data):
                 worksheet.write(1, col, value, fmt)
             
             # Write second example row
             example_data2 = [
-                (2, readonly_example_format),
-                ('MAT002', example_format),
-                ('(系统自动填充)', readonly_example_format),
-                ('(系统自动填充)', readonly_example_format),
-                ('', example_format),
-                ('(自动)', readonly_example_format),
-                ('(自动)', readonly_example_format),
-                (50, example_format),
-                ('(自动)', readonly_example_format),
-                ('(自动)', readonly_example_format),
-                (25.5, example_format),
-                ('(自动计算)', readonly_example_format),
-                ('无图', example_format),
-                ('', example_format),
-                ('', example_format),
-                ('', example_format),
-                ('', example_format),
+                (2, readonly_example_format),                    # 序号
+                ('MAT002', example_format),                      # 物料编码*
+                ('无图', example_format),                        # 有图/无图
+                ('电气类', example_format),                      # 物料类型
+                ('(系统自动填充)', readonly_example_format),      # 物料名称
+                ('(系统自动填充)', readonly_example_format),      # 规格型号
+                ('V2.0', example_format),                        # 版本/品牌
+                ('(自动)', readonly_example_format),             # 单位
+                (50, example_format),                            # 数量*
+                ('2026-01-20', example_format),                  # 需求日期
+                ('李四', example_format),                        # 申请人
             ]
             for col, (value, fmt) in enumerate(example_data2):
                 worksheet.write(2, col, value, fmt)
@@ -657,21 +616,32 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             bold_format = workbook.add_format({'bold': True})
             
             help_content = [
-                ('BOM导入模板填写说明', title_format),
+                ('BOM导入模板填写说明（非标自动化行业版）', title_format),
                 ('', None),
                 ('【列说明】', section_format),
                 ('', None),
                 ('红色表头 = 必填字段（导入时必须填写）', bold_format),
                 ('  • 物料编码*：必须与系统中物料管理的SKU完全一致', None),
-                ('  • 计划数量*：正整数，表示该物料在项目中的计划使用数量', None),
+                ('  • 计划数量*：正数，表示该物料在项目中的计划使用数量', None),
                 ('', None),
                 ('黄色表头 = 价格字段（可选填）', bold_format),
                 ('  • 预估单价：物料的预估采购单价，不填则使用物料的标准成本', None),
                 ('', None),
                 ('蓝色表头 = 选填字段（可以为空）', bold_format),
                 ('  • 版本/品牌：物料的版本号或品牌信息', None),
+                ('  • 物料属性：标准件/外购件/外协件/自制件/易耗品/虚拟件/组件', None),
+                ('  • BOM状态：草稿/已确认/已下发/已完成/已取消', None),
+                ('  • 优先级：低/普通/高/紧急', None),
+                ('  • 关键件/长周期件：填写"是"或"否"', None),
+                ('  • 图纸号/图纸版本：图纸编号和版本信息', None),
+                ('  • 材质规格/表面处理：物料的材质和表面处理工艺', None),
+                ('  • 工作中心/工序：装配工位和工序名称（需系统中已存在）', None),
+                ('  • 装配顺序：数字，表示装配顺序', None),
+                ('  • 功能模块：物料所属的功能模块名称', None),
+                ('  • 目标成本：目标采购单价', None),
+                ('  • 损耗率%：物料损耗百分比，如5表示5%', None),
                 ('  • 有图/无图：填写"有图"、"无图"或"待定"', None),
-                ('  • 需求日期：格式YYYY-MM-DD，如2025-01-15', None),
+                ('  • 需求日期/最晚下单：日期格式YYYY-MM-DD，如2026-01-15', None),
                 ('  • 申请人：填写申请人姓名（系统会自动匹配）', None),
                 ('  • 备注/说明：备注和详细说明信息', None),
                 ('', None),
@@ -686,16 +656,19 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 ('', None),
                 ('1. 删除示例数据行（黄色背景的行）', None),
                 ('2. 必填字段：物料编码、计划数量', None),
-                ('3. 选填字段：版本/品牌、预估单价、有图/无图、需求日期、申请人、备注、说明', None),
-                ('4. 灰色列可以留空或删除，系统会自动忽略', None),
-                ('5. 保存文件并在系统中导入', None),
+                ('3. 非标行业选填：物料属性、优先级、关键件、图纸号、工作中心、功能模块等', None),
+                ('4. 其他选填：版本/品牌、预估单价、有图/无图、需求日期、申请人、备注、说明', None),
+                ('5. 灰色列可以留空或删除，系统会自动忽略', None),
+                ('6. 保存文件并在系统中导入', None),
                 ('', None),
                 ('【常见错误】', section_format),
                 ('', None),
                 ('• 物料编码不存在：请先在"物料管理"中创建该物料', None),
-                ('• 数量格式错误：请输入正整数', None),
+                ('• 数量格式错误：请输入正数', None),
                 ('• 日期格式错误：请使用YYYY-MM-DD格式', None),
                 ('• 物料已存在：勾选"更新已存在的物料"可覆盖', None),
+                ('• 工作中心/工序不存在：请先在生产管理中创建', None),
+                ('• 物料属性/优先级/状态：必须使用规定的值，详见示例', None),
             ]
             
             help_sheet.set_column(0, 0, 70)
@@ -783,6 +756,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                         return col
             return None
         
+        # 原有字段
         price_column = find_column(df, ['预估单价', '单价'])
         notes_column = find_column(df, ['备注'])
         description_column = find_column(df, ['说明'])
@@ -790,6 +764,25 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         has_drawing_column = find_column(df, ['有图/无图', '有图', '无图'])
         required_date_column = find_column(df, ['需求日期', '日期'])
         requester_column = find_column(df, ['申请人'])
+        unit_column = find_column(df, ['单位'])
+        
+        # 新增字段（非标自动化行业专用）
+        item_property_column = find_column(df, ['物料属性'])
+        status_column = find_column(df, ['BOM状态', '状态'])
+        priority_column = find_column(df, ['优先级'])
+        is_critical_column = find_column(df, ['关键件'])
+        is_long_lead_column = find_column(df, ['长周期件'])
+        drawing_no_column = find_column(df, ['图纸号'])
+        drawing_version_column = find_column(df, ['图纸版本'])
+        material_spec_column = find_column(df, ['材质规格', '材质'])
+        surface_treatment_column = find_column(df, ['表面处理'])
+        work_center_column = find_column(df, ['工作中心', '工位'])
+        process_column = find_column(df, ['工序'])
+        assembly_sequence_column = find_column(df, ['装配顺序'])
+        function_module_column = find_column(df, ['功能模块', '模块'])
+        target_cost_column = find_column(df, ['目标成本'])
+        scrap_rate_column = find_column(df, ['损耗率'])
+        latest_order_date_column = find_column(df, ['最晚下单'])
         
         # Import User model for requester lookup
         from apps.accounts.models import User
@@ -800,67 +793,126 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         skip_count = 0
         error_rows = []
         
-        # Track processed SKUs within this import to avoid in-file duplicates
+        # 先校验所有关键字段，若有任一行缺失/无效则拒绝全部导入
         processed_skus = set()
-        
+        prechecked_rows = []
         for idx, row in df.iterrows():
             row_num = idx + 2  # Excel row number (1-based, plus header)
-            
             sku = str(row[sku_column]).strip() if pd.notna(row[sku_column]) else ''
             if not sku:
                 error_rows.append({'row': row_num, 'error': '物料编码为空'})
                 continue
-            
-            # Skip example/template rows
             if sku.startswith('MAT00') or sku.startswith('(') or '示例' in sku or '自动' in sku:
                 continue
-            
-            # Check for in-file duplicate
             if sku in processed_skus:
                 skip_count += 1
                 continue
             processed_skus.add(sku)
-            
-            # Find item by SKU
             try:
                 item = Item.objects.get(sku=sku)
             except Item.DoesNotExist:
-                error_rows.append({'row': row_num, 'error': f'物料编码 {sku} 不存在'})
+                error_rows.append({'row': row_num, 'error': f'物料编码 {sku} 不存在于物料主数据'})
                 continue
-            
-            # Get quantity
+            # 数量校验（保持原逻辑）
             try:
                 planned_qty = float(row[qty_column]) if pd.notna(row[qty_column]) else 0
             except (ValueError, TypeError):
                 error_rows.append({'row': row_num, 'error': '计划数量格式错误'})
                 continue
-            
             if planned_qty <= 0:
                 error_rows.append({'row': row_num, 'error': '计划数量必须大于0'})
                 continue
-            
-            # Get price (optional)
-            unit_price = item.standard_cost
-            if price_column and pd.notna(row.get(price_column)):
+            # 单位必填
+            if not unit_column:
+                error_rows.append({'row': row_num, 'error': 'Excel文件必须包含“单位”列'})
+                continue
+            unit_val = str(row[unit_column]).strip() if pd.notna(row.get(unit_column)) else ''
+            if not unit_val:
+                error_rows.append({'row': row_num, 'error': '单位为空'})
+                continue
+
+            # 需求日期必填
+            if not required_date_column:
+                error_rows.append({'row': row_num, 'error': 'Excel文件必须包含“需求日期”列'})
+                continue
+            required_date = None
+            if pd.notna(row.get(required_date_column)):
                 try:
-                    unit_price = float(row[price_column])
+                    date_val = row[required_date_column]
+                    if isinstance(date_val, str):
+                        required_date = datetime.strptime(date_val, '%Y-%m-%d').date()
+                    else:
+                        required_date = pd.to_datetime(date_val).date()
                 except (ValueError, TypeError):
-                    pass  # Use item's standard cost
+                    error_rows.append({'row': row_num, 'error': '需求日期格式错误，应为YYYY-MM-DD'})
+                    continue
+            if not required_date:
+                error_rows.append({'row': row_num, 'error': '需求日期为空'})
+                continue
+
+            # 申请人必填且必须匹配用户
+            if not requester_column:
+                error_rows.append({'row': row_num, 'error': 'Excel文件必须包含“申请人”列'})
+                continue
+            requester = None
+            if pd.notna(row.get(requester_column)):
+                requester_name = str(row[requester_column]).strip()
+                if requester_name:
+                    requester = User.objects.filter(
+                        Q(username=requester_name) |
+                        Q(first_name__icontains=requester_name) |
+                        Q(last_name__icontains=requester_name)
+                    ).first()
+            if not requester:
+                error_rows.append({'row': row_num, 'error': '申请人为空或未在系统中找到匹配用户'})
+                continue
+
+            prechecked_rows.append((row_num, row, sku, item, planned_qty, required_date, requester))
+        
+        # 若有错误，拒绝全部导入
+        if error_rows:
+            # 拼接前若干条错误，便于前端直接展示
+            preview = '; '.join([f"行{e['row']}: {e['error']}" for e in error_rows[:5]])
+            return Response(
+                {
+                    'error': f'校验失败，未导入任何数据。问题示例：{preview}',
+                    'errors': error_rows,
+                    'required_columns': ['物料编码', '有图/无图', '物料类型', '物料名称', '规格型号', '版本/品牌', '单位', '数量', '需求日期', '申请人']
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 通过校验后再处理写入
+        processed_skus = set()
+        with transaction.atomic():
+            for row_num, row, sku, item, planned_qty, required_date, requester in prechecked_rows:
+                if sku in processed_skus:
+                    skip_count += 1
+                    continue
+                processed_skus.add(sku)
             
-            # Get notes (optional)
-            notes = ''
-            if notes_column and pd.notna(row.get(notes_column)):
-                notes = str(row[notes_column])
+                # Get price (optional)
+                unit_price = item.standard_cost
+                if price_column and pd.notna(row.get(price_column)):
+                    try:
+                        unit_price = float(row[price_column])
+                    except (ValueError, TypeError):
+                        pass  # Use item's standard cost
             
-            # Get description (optional)
-            description = ''
-            if description_column and pd.notna(row.get(description_column)):
-                description = str(row[description_column])
+                # Get notes (optional)
+                notes = ''
+                if notes_column and pd.notna(row.get(notes_column)):
+                    notes = str(row[notes_column])
             
-            # Get version/brand (optional)
-            version_brand = ''
-            if version_brand_column and pd.notna(row.get(version_brand_column)):
-                version_brand = str(row[version_brand_column])
+                # Get description (optional)
+                description = ''
+                if description_column and pd.notna(row.get(description_column)):
+                    description = str(row[description_column])
+            
+            # 版本/品牌：始终以物料主数据为准，忽略文件中的差异
+            brand = item.brand or ''
+            model = getattr(item, 'model', '') or ''
+            version_brand = f"{brand}/{model}".strip('/ ')
             
             # Get has_drawing (optional)
             has_drawing = 'PENDING'
@@ -871,28 +923,102 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 elif '无图' in drawing_val:
                     has_drawing = 'NO'
             
-            # Get required_date (optional)
-            required_date = None
-            if required_date_column and pd.notna(row.get(required_date_column)):
-                try:
-                    date_val = row[required_date_column]
-                    if isinstance(date_val, str):
-                        required_date = datetime.strptime(date_val, '%Y-%m-%d').date()
-                    else:
-                        required_date = pd.to_datetime(date_val).date()
-                except (ValueError, TypeError):
-                    pass  # Ignore invalid date
+                # required_date / requester 已在预校验阶段解析
             
-            # Get requester (optional)
-            requester = None
-            if requester_column and pd.notna(row.get(requester_column)):
-                requester_name = str(row[requester_column]).strip()
-                # Try to find user by name
-                requester = User.objects.filter(
-                    Q(username=requester_name) |
-                    Q(first_name__icontains=requester_name) |
-                    Q(last_name__icontains=requester_name)
-                ).first()
+            # ===== 新增字段处理 =====
+            # 物料属性
+            item_property = None
+            if item_property_column and pd.notna(row.get(item_property_column)):
+                prop_map = {
+                    '标准件': 'STANDARD', '外购件': 'PURCHASED', '外协件': 'OUTSOURCED',
+                    '自制件': 'SELF_MADE', '易耗品': 'CONSUMABLE', '虚拟件': 'VIRTUAL', '组件': 'ASSEMBLY'
+                }
+                prop_val = str(row[item_property_column]).strip()
+                item_property = prop_map.get(prop_val, None)
+            
+            # BOM状态
+            bom_status = 'DRAFT'
+            if status_column and pd.notna(row.get(status_column)):
+                status_map = {
+                    '草稿': 'DRAFT', '已确认': 'CONFIRMED', '已下发': 'ISSUED',
+                    '已完成': 'COMPLETED', '已取消': 'CANCELLED'
+                }
+                status_val = str(row[status_column]).strip()
+                bom_status = status_map.get(status_val, 'DRAFT')
+            
+            # 优先级
+            priority = 'NORMAL'
+            if priority_column and pd.notna(row.get(priority_column)):
+                priority_map = {'低': 'LOW', '普通': 'NORMAL', '高': 'HIGH', '紧急': 'URGENT'}
+                priority_val = str(row[priority_column]).strip()
+                priority = priority_map.get(priority_val, 'NORMAL')
+            
+            # 关键件
+            is_critical = False
+            if is_critical_column and pd.notna(row.get(is_critical_column)):
+                val = str(row[is_critical_column]).strip()
+                is_critical = val in ['是', 'Y', 'Yes', 'TRUE', 'True', '1']
+            
+            # 长周期件
+            is_long_lead = False
+            if is_long_lead_column and pd.notna(row.get(is_long_lead_column)):
+                val = str(row[is_long_lead_column]).strip()
+                is_long_lead = val in ['是', 'Y', 'Yes', 'TRUE', 'True', '1']
+            
+            # 简单字符串字段
+            drawing_no = str(row[drawing_no_column]).strip() if drawing_no_column and pd.notna(row.get(drawing_no_column)) else ''
+            drawing_version = str(row[drawing_version_column]).strip() if drawing_version_column and pd.notna(row.get(drawing_version_column)) else ''
+            material_spec = str(row[material_spec_column]).strip() if material_spec_column and pd.notna(row.get(material_spec_column)) else ''
+            surface_treatment = str(row[surface_treatment_column]).strip() if surface_treatment_column and pd.notna(row.get(surface_treatment_column)) else ''
+            function_module = str(row[function_module_column]).strip() if function_module_column and pd.notna(row.get(function_module_column)) else ''
+            
+            # 工作中心和工序（查找对象）
+            work_center = None
+            if work_center_column and pd.notna(row.get(work_center_column)):
+                from apps.production.scheduling import WorkCenter as WC
+                wc_name = str(row[work_center_column]).strip()
+                work_center = WC.objects.filter(name=wc_name).first()
+            
+            process = None
+            if process_column and pd.notna(row.get(process_column)):
+                from apps.production.models import ProductionProcess as PP
+                process_name = str(row[process_column]).strip()
+                process = PP.objects.filter(name=process_name, project=project).first()
+            
+            # 数值字段
+            assembly_sequence = 0
+            if assembly_sequence_column and pd.notna(row.get(assembly_sequence_column)):
+                try:
+                    assembly_sequence = int(row[assembly_sequence_column])
+                except (ValueError, TypeError):
+                    pass
+            
+            target_cost = None
+            if target_cost_column and pd.notna(row.get(target_cost_column)):
+                try:
+                    target_cost = float(row[target_cost_column])
+                except (ValueError, TypeError):
+                    pass
+            
+            scrap_rate = 0
+            if scrap_rate_column and pd.notna(row.get(scrap_rate_column)):
+                try:
+                    scrap_rate = float(row[scrap_rate_column])
+                except (ValueError, TypeError):
+                    pass
+            
+            # 最晚下单日期
+            latest_order_date = None
+            if latest_order_date_column and pd.notna(row.get(latest_order_date_column)):
+                try:
+                    date_val = row[latest_order_date_column]
+                    if isinstance(date_val, str):
+                        latest_order_date = datetime.strptime(date_val, '%Y-%m-%d').date()
+                    else:
+                        latest_order_date = pd.to_datetime(date_val).date()
+                except (ValueError, TypeError):
+                    pass
+            # ===== 新增字段处理结束 =====
             
             # Check if BOM item exists
             existing_bom = ProjectBOM.objects.filter(
@@ -916,6 +1042,35 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                         existing_bom.required_date = required_date
                     if requester:
                         existing_bom.requester = requester
+                    
+                    # 更新新增字段
+                    if item_property:
+                        existing_bom.item_property = item_property
+                    existing_bom.status = bom_status
+                    existing_bom.priority = priority
+                    existing_bom.is_critical = is_critical
+                    existing_bom.is_long_lead = is_long_lead
+                    if drawing_no:
+                        existing_bom.drawing_no = drawing_no
+                    if drawing_version:
+                        existing_bom.drawing_version = drawing_version
+                    if material_spec:
+                        existing_bom.material_spec = material_spec
+                    if surface_treatment:
+                        existing_bom.surface_treatment = surface_treatment
+                    if work_center:
+                        existing_bom.work_center = work_center
+                    if process:
+                        existing_bom.process = process
+                    existing_bom.assembly_sequence = assembly_sequence
+                    if function_module:
+                        existing_bom.function_module = function_module
+                    if target_cost is not None:
+                        existing_bom.target_cost = target_cost
+                    existing_bom.scrap_rate = scrap_rate
+                    if latest_order_date:
+                        existing_bom.latest_order_date = latest_order_date
+                    
                     existing_bom.save()
                     updated_count += 1
                 else:
@@ -935,6 +1090,23 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                     has_drawing=has_drawing,
                     required_date=required_date,
                     requester=requester,
+                    # 新增字段
+                    item_property=item_property,
+                    status=bom_status,
+                    priority=priority,
+                    is_critical=is_critical,
+                    is_long_lead=is_long_lead,
+                    drawing_no=drawing_no,
+                    drawing_version=drawing_version,
+                    material_spec=material_spec,
+                    surface_treatment=surface_treatment,
+                    work_center=work_center,
+                    process=process,
+                    assembly_sequence=assembly_sequence,
+                    function_module=function_module,
+                    target_cost=target_cost,
+                    scrap_rate=scrap_rate,
+                    latest_order_date=latest_order_date,
                     created_by=request.user
                 )
                 created_count += 1

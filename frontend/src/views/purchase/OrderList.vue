@@ -33,7 +33,21 @@
         </el-form-item>
       </el-form>
 
-      <el-table :data="orders" v-loading="loading" stripe border>
+      <!-- 批量操作工具栏 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button 
+          type="danger" 
+          size="small" 
+          @click="batchDelete"
+          :loading="deleteLoading"
+        >
+          批量删除
+        </el-button>
+      </div>
+
+      <el-table :data="orders" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="order_no" label="采购订单号" width="150" />
         <el-table-column prop="supplier_name" label="供应商" />
         <el-table-column prop="project_name" label="项目" />
@@ -236,8 +250,25 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
 
 const router = useRouter()
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/purchase/orders/',
+  {
+    confirmTitle: '确认删除采购订单',
+    confirmMessage: '此操作将永久删除选中的采购订单，是否继续？',
+    successMessage: '删除成功',
+    errorMessage: '删除失败',
+    onSuccess: () => loadOrders()
+  }
+)
 const loading = ref(false)
 const saving = ref(false)
 const orders = ref([])
@@ -781,5 +812,21 @@ onMounted(() => {
   color: #f56c6c;
   font-weight: bold;
   font-size: 18px;
+}
+
+.table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  border: 1px solid #e4e7ed;
+}
+
+.table-toolbar span {
+  font-size: 14px;
+  color: #606266;
 }
 </style>

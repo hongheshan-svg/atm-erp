@@ -87,7 +87,14 @@
         </div>
       </template>
 
-      <el-table :data="tableData" stripe v-loading="loading" @row-click="handleRowClick">
+      <!-- 批量操作工具栏 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+      </div>
+
+      <el-table :data="tableData" stripe v-loading="loading" @row-click="handleRowClick" @selection-change="handleSelectionChange">
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="equipment_no" label="设备编号" width="140" />
         <el-table-column prop="name" label="设备名称" min-width="180" show-overflow-tooltip />
         <el-table-column prop="model" label="规格型号" width="120" show-overflow-tooltip />
@@ -240,6 +247,17 @@ import {
   Search, Refresh, Plus, ArrowDown, Tools, OfficeBuilding, CircleCheck, Warning
 } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/projects/equipment/',
+  { onSuccess: () => { fetchData(); fetchStats() }, confirmTitle: '删除设备', confirmMessage: '确定要删除该设备吗？' }
+)
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -395,13 +413,11 @@ const handleCommand = async (command, row) => {
       ElMessage.info('验收功能开发中')
       break
     case 'delete':
-      try {
-        await ElMessageBox.confirm('确定删除该设备？', '警告', { type: 'warning' })
-        await request.delete(`/projects/equipment/${row.id}/`)
-        ElMessage.success('删除成功')
-        fetchData()
-        fetchStats()
-      } catch {}
+      if (canDelete.value) {
+        deleteRow(row)
+      } else {
+        ElMessage.warning('您没有删除权限')
+      }
       break
   }
 }

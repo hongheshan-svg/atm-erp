@@ -66,8 +66,15 @@
         </el-col>
       </el-row>
       
+      <!-- 批量操作工具栏 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+      </div>
+
       <!-- 工时列表 -->
-      <el-table :data="timeLogs" border stripe v-loading="loading">
+      <el-table :data="timeLogs" border stripe v-loading="loading" @selection-change="handleSelectionChange">
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="date" label="日期" width="110" />
         <el-table-column prop="project_name" label="项目" width="180" />
         <el-table-column prop="task_name" label="任务" min-width="200" />
@@ -88,7 +95,7 @@
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleEdit(row)" :disabled="row.status !== 'PENDING'">编辑</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="canDelete" type="danger" link size="small" @click="deleteRow(row)" :loading="deleteLoading">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -152,6 +159,17 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/projects/time-logs/',
+  { onSuccess: fetchData, confirmTitle: '删除工时', confirmMessage: '确定要删除该工时记录吗？' }
+)
 
 const loading = ref(false)
 const projects = ref([])
@@ -329,19 +347,7 @@ const handleEdit = (row) => {
   dialogVisible.value = true
 }
 
-const handleDelete = (row) => {
-  ElMessageBox.confirm('确定要删除该工时记录吗？', '提示', {
-    type: 'warning'
-  }).then(async () => {
-    try {
-      await request.delete(`/projects/time-logs/${row.id}/`)
-      ElMessage.success('删除成功')
-      fetchData()
-    } catch (error) {
-      ElMessage.error('删除失败')
-    }
-  }).catch(() => {})
-}
+// handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 const handleSubmit = async () => {
   try {

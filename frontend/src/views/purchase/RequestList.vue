@@ -62,7 +62,21 @@
         style="margin-bottom: 15px;"
       />
 
-      <el-table :data="requests" v-loading="loading" stripe border>
+      <!-- 批量操作工具栏 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button 
+          type="danger" 
+          size="small" 
+          @click="batchDelete"
+          :loading="deleteLoading"
+        >
+          批量删除
+        </el-button>
+      </div>
+
+      <el-table :data="requests" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="request_no" label="采购申请号" width="150" />
         <el-table-column prop="project_name" label="项目" />
         <el-table-column prop="supplier_name" label="供应商" />
@@ -88,7 +102,15 @@
             <el-button size="small" type="danger" @click="handleReject(row)" v-if="row.status === 'SUBMITTED'">拒绝</el-button>
             <el-button size="small" type="info" @click="handleWithdraw(row)" v-if="row.status === 'SUBMITTED' || row.status === 'APPROVED'">撤回</el-button>
             <el-button size="small" type="primary" @click="convertToPO(row)" v-if="row.status === 'APPROVED'">转采购订单</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button 
+              v-if="canDelete"
+              size="small" 
+              type="danger" 
+              @click="deleteRow(row)"
+              :loading="deleteLoading"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -302,8 +324,23 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete, Search, RefreshLeft } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
 
 const route = useRoute()
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/purchase/requests/',
+  {
+    onSuccess: loadRequests,
+    confirmTitle: '删除采购申请',
+    confirmMessage: '确定要删除该采购申请吗？删除后不可恢复！'
+  }
+)
 
 const loading = ref(false)
 const saving = ref(false)
@@ -734,22 +771,7 @@ const handleBomData = () => {
   }
 }
 
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除采购申请 ${row.request_no} 吗？此操作不可恢复！`, 
-      '删除申请', 
-      { type: 'warning' }
-    )
-    await request.delete(`/purchase/requests/${row.id}/`)
-    ElMessage.success('采购申请已删除')
-    loadRequests()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除采购申请失败')
-    }
-  }
-}
+// handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 onMounted(async () => {
   // 首先加载项目和其他数据
@@ -786,6 +808,22 @@ onMounted(async () => {
 
 .search-form {
   margin-bottom: 20px;
+}
+
+.table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  border: 1px solid #e4e7ed;
+}
+
+.table-toolbar span {
+  font-size: 14px;
+  color: #606266;
 }
 
 .total-section {

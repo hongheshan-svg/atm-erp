@@ -62,6 +62,7 @@ from .cad_integration import (
     CADSoftwareViewSet, CADSessionViewSet, CADFileViewSet,
     CADBOMImportViewSet, CADPropertyMappingViewSet
 )
+from .bom_integration import BOMIntegrationViewSet
 
 router = DefaultRouter()
 router.register(r'projects', ProjectViewSet, basename='project')
@@ -176,6 +177,9 @@ router.register(r'cad-sessions', CADSessionViewSet, basename='cad-session')
 router.register(r'cad-files', CADFileViewSet, basename='cad-file')
 router.register(r'cad-bom-imports', CADBOMImportViewSet, basename='cad-bom-import')
 router.register(r'cad-property-mappings', CADPropertyMappingViewSet, basename='cad-property-mapping')
+
+# BOM集成(采购/生产)
+router.register(r'bom-integration', BOMIntegrationViewSet, basename='bom-integration')
 
 urlpatterns = [
     path('', include(router.urls)),

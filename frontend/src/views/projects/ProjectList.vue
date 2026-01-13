@@ -14,7 +14,22 @@
         </div>
       </template>
 
-      <el-table :data="projects" v-loading="loading" stripe border>
+      <!-- 批量操作工具栏 - 仅管理员可见 -->
+      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button 
+          type="danger" 
+          size="small" 
+          @click="batchDelete"
+          :loading="deleteLoading"
+        >
+          批量删除
+        </el-button>
+      </div>
+
+      <el-table :data="projects" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <!-- 仅管理员显示选择列 -->
+        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="code" label="项目编号" width="150" />
         <el-table-column prop="name" label="项目名称" />
         <el-table-column prop="sales_order_no" label="关联订单" width="140">
@@ -32,12 +47,21 @@
         </el-table-column>
         <el-table-column prop="start_date" label="开始日期" width="120" />
         <el-table-column prop="end_date" label="结束日期" width="120" />
-        <el-table-column label="操作" width="300" fixed="right">
+        <el-table-column label="操作" :width="canDelete ? 320 : 260" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" type="warning" @click="handleViewAttachments(row)">附件</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <!-- 仅管理员显示删除按钮 -->
+            <el-button 
+              v-if="canDelete"
+              size="small" 
+              type="danger" 
+              @click="deleteRow(row)"
+              :loading="deleteLoading"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -124,6 +148,23 @@ import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
 import { exportProjects } from '@/api/export'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/projects/projects/',
+  {
+    confirmTitle: '确认删除项目',
+    confirmMessage: '此操作将永久删除选中的项目及其所有关联数据（任务、BOM、图纸等），此操作不可恢复！',
+    successMessage: '删除项目成功',
+    errorMessage: '删除项目失败',
+    onSuccess: () => fetchProjects()
+  }
+)
 
 const router = useRouter()
 const loading = ref(false)
@@ -258,16 +299,7 @@ const handleEdit = (row) => {
   dialogVisible.value = true
 }
 
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm('确定要删除该项目吗？', '警告', { type: 'warning' })
-    await request.delete(`/projects/projects/${row.id}/`)
-    ElMessage.success('删除项目成功')
-    loadProjects()
-  } catch (error) {
-    if (error !== 'cancel') ElMessage.error('删除项目失败')
-  }
-}
+// 删除功能已迁移到 useBatchDelete composable
 
 const handleSubmit = async () => {
   // 验证必填字段
@@ -341,6 +373,20 @@ onMounted(() => {
 .header-actions {
   display: flex;
   gap: 10px;
+}
+.table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  border: 1px solid #e4e7ed;
+}
+.table-toolbar span {
+  font-size: 14px;
+  color: #606266;
 }
 </style>
 
