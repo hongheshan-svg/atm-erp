@@ -72,33 +72,91 @@
         </el-col>
       </el-row>
       
-      <!-- 搜索栏 -->
-      <div class="search-bar" v-if="bomItems.length > 0 || selectedProject">
-        <el-input 
-          v-model="searchKeyword" 
-          placeholder="搜索物料编码/名称/规格" 
-          clearable 
-          style="width: 300px; margin-right: 15px;"
-          @input="handleSearch"
-        >
-          <template #prefix>
-            <el-icon><Search /></el-icon>
-          </template>
-        </el-input>
-        <span v-if="selectedRows.length > 0" class="selection-info">
-          已选择 <el-tag type="primary" size="small">{{ selectedRows.length }}</el-tag> 项
-          <el-button type="warning" size="small" @click="handleGeneratePRFromSelected" style="margin-left: 10px;">
-            <el-icon><Document /></el-icon>
-            生成选中项采购申请
+      <!-- 筛选和搜索栏 -->
+      <div class="filter-bar" v-if="bomItems.length > 0 || selectedProject">
+        <el-row :gutter="15" style="margin-bottom: 15px;">
+          <el-col :span="4">
+            <el-select v-model="filterHasDrawing" placeholder="有图/无图" clearable style="width: 100%;">
+              <el-option label="全部" value="" />
+              <el-option label="有图" value="HAS_DRAWING" />
+              <el-option label="无图" value="NO_DRAWING" />
+              <el-option label="待定" value="PENDING" />
+            </el-select>
+          </el-col>
+          <el-col :span="5">
+            <el-select v-model="filterItemType" placeholder="物料类型" clearable style="width: 100%;">
+              <el-option label="全部" value="" />
+              <el-option label="机加" value="机加" />
+              <el-option label="钣金" value="钣金" />
+              <el-option label="特殊工艺" value="特殊工艺" />
+              <el-option label="其他" value="其他" />
+              <el-option label="机械类" value="机械类" />
+              <el-option label="电气类" value="电气类" />
+              <el-option label="耗材辅料" value="耗材辅料" />
+              <el-option label="办公用品" value="办公用品" />
+            </el-select>
+          </el-col>
+          <el-col :span="5">
+            <el-input 
+              v-model="filterBrand" 
+              placeholder="版本/品牌筛选" 
+              clearable
+            />
+          </el-col>
+          <el-col :span="6">
+            <el-input 
+              v-model="searchKeyword" 
+              placeholder="搜索物料编码/名称/规格" 
+              clearable 
+              @input="handleSearch"
+            >
+              <template #prefix>
+                <el-icon><Search /></el-icon>
+              </template>
+            </el-input>
+          </el-col>
+          <el-col :span="4">
+            <el-button @click="resetFilters">
+              <el-icon><Refresh /></el-icon>
+              重置筛选
+            </el-button>
+          </el-col>
+        </el-row>
+        
+        <!-- 筛选结果提示和操作 -->
+        <div class="filter-actions">
+          <span class="filter-result">
+            筛选结果: <el-tag type="info">{{ filteredBomItems.length }}</el-tag> / {{ bomItems.length }} 项
+          </span>
+          <el-button 
+            type="success" 
+            size="small" 
+            @click="handleExportFiltered" 
+            :disabled="filteredBomItems.length === 0"
+            style="margin-left: 15px;"
+          >
+            <el-icon><Download /></el-icon>
+            导出筛选结果(询价用)
           </el-button>
-          <el-button type="danger" size="small" @click="handleBatchDelete" style="margin-left: 5px;">
-            <el-icon><Delete /></el-icon>
-            批量删除
-          </el-button>
-          <el-button size="small" @click="clearSelection" style="margin-left: 5px;">
-            取消选择
-          </el-button>
-        </span>
+          <span v-if="selectedRows.length > 0" class="selection-info" style="margin-left: 15px;">
+            已选择 <el-tag type="primary" size="small">{{ selectedRows.length }}</el-tag> 项
+            <el-button type="success" size="small" @click="handleExportSelected" style="margin-left: 10px;">
+              <el-icon><Download /></el-icon>
+              导出选中(询价用)
+            </el-button>
+            <el-button type="warning" size="small" @click="handleGeneratePRFromSelected" style="margin-left: 5px;">
+              <el-icon><Document /></el-icon>
+              生成采购申请
+            </el-button>
+            <el-button type="danger" size="small" @click="handleBatchDelete" style="margin-left: 5px;">
+              <el-icon><Delete /></el-icon>
+              批量删除
+            </el-button>
+            <el-button size="small" @click="clearSelection" style="margin-left: 5px;">
+              取消选择
+            </el-button>
+          </span>
+        </div>
       </div>
       
       <!-- BOM列表 -->
@@ -601,7 +659,7 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Document, Download, Upload, ArrowDown, CopyDocument, UploadFilled, Search, Delete, Folder, Checked } from '@element-plus/icons-vue'
+import { Plus, Document, Download, Upload, ArrowDown, CopyDocument, UploadFilled, Search, Delete, Folder, Checked, Refresh } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 const router = useRouter()
@@ -617,8 +675,11 @@ const dialogVisible = ref(false)
 const formRef = ref(null)
 const tableRef = ref(null)
 
-// 搜索和多选
+// 搜索、筛选和多选
 const searchKeyword = ref('')
+const filterHasDrawing = ref('')  // 有图/无图筛选
+const filterItemType = ref('')    // 物料类型筛选
+const filterBrand = ref('')       // 版本/品牌筛选
 const selectedRows = ref([])
 
 // Import/Export related
@@ -711,18 +772,57 @@ const fetchPendingQuoteCount = async () => {
   }
 }
 
-// 搜索过滤后的 BOM 列表
+// 搜索和筛选后的 BOM 列表
 const filteredBomItems = computed(() => {
-  if (!searchKeyword.value.trim()) {
-    return bomItems.value
+  let result = bomItems.value
+  
+  // 1. 有图/无图筛选
+  if (filterHasDrawing.value) {
+    result = result.filter(item => item.has_drawing === filterHasDrawing.value)
   }
-  const keyword = searchKeyword.value.toLowerCase().trim()
-  return bomItems.value.filter(item => {
-    return (item.item_code && item.item_code.toLowerCase().includes(keyword)) ||
-           (item.item_name && item.item_name.toLowerCase().includes(keyword)) ||
-           (item.specification && item.specification.toLowerCase().includes(keyword))
-  })
+  
+  // 2. 物料类型筛选（根据物料编码解析或item_type字段）
+  if (filterItemType.value) {
+    result = result.filter(item => {
+      // 尝试从item_type_display或物料编码解析
+      const itemType = item.item_type_display || item.item_type || ''
+      return itemType.includes(filterItemType.value)
+    })
+  }
+  
+  // 3. 版本/品牌筛选
+  if (filterBrand.value.trim()) {
+    const brandKeyword = filterBrand.value.toLowerCase().trim()
+    result = result.filter(item => {
+      const versionBrand = (item.version_brand_display || item.version_brand || '').toLowerCase()
+      return versionBrand.includes(brandKeyword)
+    })
+  }
+  
+  // 4. 关键字搜索
+  if (searchKeyword.value.trim()) {
+    const keyword = searchKeyword.value.toLowerCase().trim()
+    result = result.filter(item => {
+      return (item.item_code && item.item_code.toLowerCase().includes(keyword)) ||
+             (item.item_name && item.item_name.toLowerCase().includes(keyword)) ||
+             (item.specification && item.specification.toLowerCase().includes(keyword))
+    })
+  }
+  
+  return result
 })
+
+// 重置筛选条件
+const resetFilters = () => {
+  filterHasDrawing.value = ''
+  filterItemType.value = ''
+  filterBrand.value = ''
+  searchKeyword.value = ''
+  selectedRows.value = []
+  if (tableRef.value) {
+    tableRef.value.clearSelection()
+  }
+}
 
 const getProgressStatus = (row) => {
   const percentage = ((row.actual_qty || 0) / (row.planned_qty || 1)) * 100
@@ -1016,6 +1116,62 @@ const handleExportExcel = async () => {
     window.URL.revokeObjectURL(url)
     
     ElMessage.success('导出成功')
+  } catch (error) {
+    console.error('导出失败:', error)
+    ElMessage.error('导出失败')
+  }
+}
+
+// 导出筛选结果（用于询价）
+const handleExportFiltered = async () => {
+  if (!selectedProject.value || filteredBomItems.value.length === 0) {
+    ElMessage.warning('没有可导出的数据')
+    return
+  }
+  
+  // 获取筛选后的物料ID列表
+  const itemIds = filteredBomItems.value.map(item => item.id)
+  await exportForQuote(itemIds, '筛选结果')
+}
+
+// 导出选中项（用于询价）
+const handleExportSelected = async () => {
+  if (selectedRows.value.length === 0) {
+    ElMessage.warning('请先选择要导出的物料')
+    return
+  }
+  
+  // 获取选中的物料ID列表
+  const itemIds = selectedRows.value.map(item => item.id)
+  await exportForQuote(itemIds, '选中项')
+}
+
+// 通用导出函数（带历史价格）
+const exportForQuote = async (bomIds, exportName) => {
+  try {
+    const response = await request.post('/projects/bom/export_for_quote/', {
+      project: selectedProject.value,
+      bom_ids: bomIds
+    }, {
+      responseType: 'blob'
+    })
+    
+    const blobData = response.data || response
+    const blob = new Blob([blobData], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    })
+    
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    const projectName = currentProjectName.value.split(' - ')[0] || '项目'
+    link.setAttribute('download', `物料需求清单_${projectName}_${exportName}.xlsx`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
+    ElMessage.success(`导出${exportName}成功，共${bomIds.length}项`)
   } catch (error) {
     console.error('导出失败:', error)
     ElMessage.error('导出失败')

@@ -3,153 +3,34 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>询价管理</span>
+          <span>询价单管理</span>
           <div class="header-actions">
-            <el-select 
-              v-model="selectedProject" 
-              placeholder="选择项目" 
-              clearable 
-              filterable 
-              style="width: 200px; margin-right: 10px;"
-              @change="handleProjectChange"
-            >
-              <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
-            </el-select>
-            <el-dropdown style="margin-right: 10px;" :disabled="!selectedProject">
-              <el-button type="success">
-                询价BOM <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item @click="handleExportQuoteBOM" :disabled="!pendingQuoteCount">
-                    <el-icon><Download /></el-icon> 导出询价BOM ({{ pendingQuoteCount }}项待询价)
-                  </el-dropdown-item>
-                  <el-dropdown-item @click="handleImportQuoteBOM">
-                    <el-icon><Upload /></el-icon> 导入已报价BOM
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
             <el-button type="primary" @click="handleCreate">
               <el-icon><Plus /></el-icon>
-              新建询价
+              新建询价单
             </el-button>
           </div>
         </div>
       </template>
 
-      <!-- 待询价物料区域 -->
-      <el-collapse v-model="activeCollapse" style="margin-bottom: 20px;">
-        <el-collapse-item name="pending">
-          <template #title>
-            <span style="font-weight: bold; font-size: 15px;">
-              <el-icon><List /></el-icon>
-              待询价物料
-              <el-tag type="danger" size="small" style="margin-left: 10px;">{{ pendingQuoteItems.length }} 项</el-tag>
-            </span>
-          </template>
-          
-          <div v-if="!selectedProject" class="tip-box">
-            <el-alert title="请先选择项目以查看待询价的物料" type="info" :closable="false" />
+      <!-- 操作提示 -->
+      <el-alert 
+        type="info" 
+        :closable="false" 
+        style="margin-bottom: 20px;"
+      >
+        <template #title>
+          <strong>新询价流程说明</strong>
+        </template>
+        <template #default>
+          <div style="line-height: 1.8;">
+            <p>1. 在<strong>「项目BOM」</strong>页面筛选物料，导出物料需求清单</p>
+            <p>2. 线下向供应商询价，填写单价、供应商、付款方式等信息</p>
+            <p>3. 在<strong>「采购申请」</strong>页面导入已询价的清单，自动生成采购申请</p>
           </div>
-          
-          <div v-else-if="pendingQuoteItems.length === 0" class="tip-box">
-            <el-alert title="该项目暂无待询价的物料（所有物料已询价）" type="success" :closable="false" />
-          </div>
-          
-          <template v-else>
-            <el-table 
-              :data="pendingQuoteItems" 
-              v-loading="pendingQuoteLoading" 
-              stripe 
-              border 
-              size="small"
-              max-height="300"
-            >
-              <el-table-column prop="item_sku" label="物料编码" width="130" />
-              <el-table-column prop="item_name" label="物料名称" min-width="150" show-overflow-tooltip />
-              <el-table-column prop="specification" label="规格型号" width="120" show-overflow-tooltip />
-              <el-table-column prop="version_brand" label="版本/品牌" width="100" show-overflow-tooltip />
-              <el-table-column prop="unit" label="单位" width="60" align="center" />
-              <el-table-column prop="planned_qty" label="需求数量" width="90" align="right" />
-              <el-table-column prop="required_date" label="需求日期" width="100" />
-            </el-table>
-            <div style="margin-top: 10px; text-align: right;">
-              <el-button type="success" @click="handleExportQuoteBOM">
-                <el-icon><Download /></el-icon>
-                导出询价清单
-              </el-button>
-            </div>
-          </template>
-        </el-collapse-item>
-        
-        <el-collapse-item name="purchasable">
-          <template #title>
-            <span style="font-weight: bold; font-size: 15px;">
-              <el-icon><ShoppingCart /></el-icon>
-              待采购申请物料（已询价）
-              <el-tag type="warning" size="small" style="margin-left: 10px;">{{ purchasableItems.length }} 项</el-tag>
-            </span>
-          </template>
-          
-          <div v-if="!selectedProject" class="tip-box">
-            <el-alert title="请先选择项目以查看待采购申请的物料" type="info" :closable="false" />
-          </div>
-          
-          <div v-else-if="purchasableItems.length === 0" class="tip-box">
-            <el-alert title="该项目暂无已询价且待采购申请的物料" type="info" :closable="false" />
-          </div>
-          
-          <template v-else>
-            <div style="margin-bottom: 10px;">
-              <el-checkbox v-model="selectAllPurchasable" @change="handleSelectAllPurchasable">全选</el-checkbox>
-              <el-button 
-                type="primary" 
-                size="small" 
-                style="margin-left: 15px;"
-                :disabled="selectedPurchasableItems.length === 0"
-                @click="handleGeneratePR"
-              >
-                <el-icon><Document /></el-icon>
-                生成采购申请 ({{ selectedPurchasableItems.length }})
-              </el-button>
-            </div>
-            
-            <el-table 
-              :data="purchasableItems" 
-              v-loading="purchasableLoading" 
-              stripe 
-              border 
-              size="small"
-              max-height="300"
-              @selection-change="handlePurchasableSelectionChange"
-            >
-              <el-table-column type="selection" width="45" />
-              <el-table-column prop="item_sku" label="物料编码" width="120" />
-              <el-table-column prop="item_name" label="物料名称" min-width="150" show-overflow-tooltip />
-              <el-table-column prop="specification" label="规格型号" width="100" show-overflow-tooltip />
-              <el-table-column prop="unit" label="单位" width="60" align="center" />
-              <el-table-column prop="needed_qty" label="需求数量" width="80" align="right" />
-              <el-table-column prop="quote_supplier_name" label="询价供应商" width="100" show-overflow-tooltip />
-              <el-table-column prop="price_with_tax" label="含税单价" width="90" align="right">
-                <template #default="{ row }">
-                  <span v-if="row.price_with_tax">¥{{ parseFloat(row.price_with_tax).toFixed(2) }}</span>
-                  <span v-else class="text-muted">-</span>
-                </template>
-              </el-table-column>
-              <el-table-column prop="quote_delivery_days" label="交期(天)" width="70" align="center">
-                <template #default="{ row }">
-                  {{ row.quote_delivery_days || '-' }}
-                </template>
-              </el-table-column>
-              <el-table-column prop="required_date" label="需求日期" width="100" />
-            </el-table>
-          </template>
-        </el-collapse-item>
-      </el-collapse>
+        </template>
+      </el-alert>
       
-      <el-divider content-position="left">询价单管理</el-divider>
-
       <!-- 搜索表单 -->
       <el-form :inline="true" :model="searchForm" class="search-form">
         <el-form-item label="询价单号">

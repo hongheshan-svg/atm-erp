@@ -284,6 +284,301 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
             pr.save()
         
         return Response(PurchaseOrderSerializer(po).data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=False, methods=['post'])
+    def import_excel(self, request):
+        """
+        导入采购申请（从物料需求清单导入，直接生成采购申请）
+        支持按供应商自动拆分成多个采购申请
+        """
+        import pandas as pd
+        from io import BytesIO
+        from apps.masterdata.models import Item, Supplier
+        from django.db.models import Q
+        
+        file = request.FILES.get('file')
+        if not file:
+            return Response(
+                {'error': '请上传Excel文件'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # 读取Excel，智能识别列标题行
+            df_raw = pd.read_excel(file, header=None)
+            
+            # 查找包含"物料编码"的行作为列标题行
+            header_row = None
+            for idx, row in df_raw.iterrows():
+                row_values = [str(v) for v in row.values if pd.notna(v)]
+                if any('物料编码' in v for v in row_values):
+                    header_row = idx
+                    break
+            
+            if header_row is not None:
+                file.seek(0)
+                df = pd.read_excel(file, header=header_row)
+            else:
+                file.seek(0)
+                df = pd.read_excel(file)
+        except Exception as e:
+            return Response(
+                {'error': f'Excel文件读取失败: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 查找列
+        def find_column(df, keywords):
+            for col in df.columns:
+                col_str = str(col)
+                for keyword in keywords:
+                    if keyword in col_str:
+                        return col
+            return None
+        
+        sku_column = find_column(df, ['物料编码', 'SKU', '编码'])
+        qty_column = find_column(df, ['数量'])
+        supplier_column = find_column(df, ['供应商'])
+        price_column = find_column(df, ['单价'])
+        payment_method_column = find_column(df, ['付款方式'])
+        payment_terms_column = find_column(df, ['账期'])
+        project_column = find_column(df, ['项目号', '项目'])
+        notes_column = find_column(df, ['备注'])
+        
+        if not sku_column:
+            return Response(
+                {'error': 'Excel文件必须包含"物料编码"列'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not qty_column:
+            return Response(
+                {'error': 'Excel文件必须包含"数量"列'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 按供应商分组数据
+        supplier_groups = {}  # {supplier_name: [lines]}
+        error_rows = []
+        
+        for idx, row in df.iterrows():
+            row_num = idx + 2 + (header_row or 0)
+            
+            sku = str(row[sku_column]).strip() if pd.notna(row[sku_column]) else ''
+            if not sku:
+                continue  # 跳过空行
+            
+            # 跳过示例行
+            if sku.startswith('(') or '示例' in sku:
+                continue
+            
+            # 查找物料
+            try:
+                item = Item.objects.get(sku=sku, is_deleted=False)
+            except Item.DoesNotExist:
+                error_rows.append({'row': row_num, 'sku': sku, 'error': f'物料 {sku} 不存在'})
+                continue
+            
+            # 获取数量
+            try:
+                qty = float(row[qty_column]) if pd.notna(row[qty_column]) else 0
+                if qty <= 0:
+                    error_rows.append({'row': row_num, 'sku': sku, 'error': '数量必须大于0'})
+                    continue
+            except (ValueError, TypeError):
+                error_rows.append({'row': row_num, 'sku': sku, 'error': '数量格式错误'})
+                continue
+            
+            # 获取供应商
+            supplier_name = str(row[supplier_column]).strip() if supplier_column and pd.notna(row.get(supplier_column)) else ''
+            if not supplier_name:
+                supplier_name = '未指定供应商'
+            
+            # 获取单价
+            try:
+                price = float(row[price_column]) if price_column and pd.notna(row.get(price_column)) else 0
+            except (ValueError, TypeError):
+                price = 0
+            
+            # 获取项目号
+            project_code = str(row[project_column]).strip() if project_column and pd.notna(row.get(project_column)) else ''
+            project = None
+            if project_code:
+                project = Project.objects.filter(
+                    Q(code=project_code) | Q(name__icontains=project_code),
+                    is_deleted=False
+                ).first()
+            
+            # 获取备注
+            notes = str(row[notes_column]).strip() if notes_column and pd.notna(row.get(notes_column)) else ''
+            
+            # 获取付款方式和账期
+            payment_method = str(row[payment_method_column]).strip() if payment_method_column and pd.notna(row.get(payment_method_column)) else ''
+            payment_terms = str(row[payment_terms_column]).strip() if payment_terms_column and pd.notna(row.get(payment_terms_column)) else ''
+            
+            # 加入分组
+            if supplier_name not in supplier_groups:
+                supplier_groups[supplier_name] = {
+                    'supplier_name': supplier_name,
+                    'project': project,
+                    'payment_method': payment_method,
+                    'payment_terms': payment_terms,
+                    'lines': []
+                }
+            
+            supplier_groups[supplier_name]['lines'].append({
+                'item': item,
+                'qty': qty,
+                'price': price,
+                'notes': notes
+            })
+        
+        if not supplier_groups:
+            return Response(
+                {'error': '没有可导入的有效数据', 'errors': error_rows},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 创建采购申请
+        created_prs = []
+        with transaction.atomic():
+            from datetime import date, timedelta
+            
+            for supplier_name, group_data in supplier_groups.items():
+                # 查找供应商
+                supplier = None
+                if supplier_name != '未指定供应商':
+                    supplier = Supplier.objects.filter(
+                        Q(name__icontains=supplier_name) | Q(code__icontains=supplier_name),
+                        is_deleted=False
+                    ).first()
+                
+                # 创建采购申请
+                pr = PurchaseRequest.objects.create(
+                    project=group_data['project'],
+                    supplier=supplier,
+                    requestor=request.user,
+                    required_date=date.today() + timedelta(days=14),
+                    status='DRAFT',
+                    notes=f"从Excel导入，供应商: {supplier_name}",
+                    created_by=request.user
+                )
+                
+                # 创建采购申请明细
+                total_amount = 0
+                for line_data in group_data['lines']:
+                    line = PurchaseRequestLine.objects.create(
+                        pr=pr,
+                        item=line_data['item'],
+                        qty=line_data['qty'],
+                        estimated_price=line_data['price'],
+                        project=group_data['project'],
+                        notes=line_data['notes'],
+                        created_by=request.user
+                    )
+                    total_amount += line.line_amount
+                
+                # 更新采购申请总金额
+                pr.total_amount = total_amount
+                pr.tax_amount = total_amount * pr.tax_rate / 100
+                pr.total_with_tax = total_amount + pr.tax_amount
+                pr.save()
+                
+                created_prs.append({
+                    'id': pr.id,
+                    'request_no': pr.request_no,
+                    'supplier_name': supplier_name,
+                    'lines_count': len(group_data['lines']),
+                    'total_amount': float(pr.total_with_tax)
+                })
+        
+        return Response({
+            'message': f'导入成功，共创建 {len(created_prs)} 个采购申请',
+            'created_count': len(created_prs),
+            'purchase_requests': created_prs,
+            'errors': error_rows
+        })
+    
+    @action(detail=False, methods=['get'])
+    def export_template(self, request):
+        """
+        导出采购申请导入模板
+        """
+        import pandas as pd
+        from io import BytesIO
+        from django.http import HttpResponse
+        
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            workbook = writer.book
+            worksheet = workbook.add_worksheet('采购申请导入模板')
+            
+            # Define formats
+            required_format = workbook.add_format({
+                'bold': True,
+                'bg_color': '#C00000',
+                'font_color': 'white',
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter'
+            })
+            optional_format = workbook.add_format({
+                'bold': True,
+                'bg_color': '#4472C4',
+                'font_color': 'white',
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter'
+            })
+            example_format = workbook.add_format({
+                'bg_color': '#FFF2CC',
+                'border': 1,
+                'italic': True,
+                'font_color': '#666666'
+            })
+            
+            headers = [
+                ('项目号', 12, 'optional'),
+                ('物料编码*', 15, 'required'),
+                ('物料名称', 20, 'optional'),
+                ('规格型号', 15, 'optional'),
+                ('单位', 8, 'optional'),
+                ('数量*', 10, 'required'),
+                ('供应商', 18, 'optional'),
+                ('单价', 12, 'optional'),
+                ('付款方式', 12, 'optional'),
+                ('账期', 12, 'optional'),
+                ('备注', 25, 'optional'),
+            ]
+            
+            format_map = {
+                'required': required_format,
+                'optional': optional_format
+            }
+            
+            for col, (header, width, htype) in enumerate(headers):
+                fmt = format_map[htype]
+                worksheet.write(0, col, header, fmt)
+                worksheet.set_column(col, col, width)
+            
+            # 示例数据
+            example = [
+                'PJ2601', '1126000001', '示例物料', 'ABC-100', 'PCS', 
+                10, '示例供应商', 100.00, '电汇', '月结30天', '备注信息'
+            ]
+            for col, val in enumerate(example):
+                worksheet.write(1, col, val, example_format)
+            
+            worksheet.set_row(0, 25)
+            worksheet.freeze_panes(1, 0)
+        
+        output.seek(0)
+        response = HttpResponse(
+            output.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename=purchase_request_import_template.xlsx'
+        return response
 
 
 class PurchaseRequestLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):

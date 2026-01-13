@@ -4,10 +4,27 @@
       <template #header>
         <div class="card-header">
           <span>采购申请</span>
-          <el-button type="primary" @click="handleAdd">
-            <el-icon><Plus /></el-icon>
-            创建申请
-          </el-button>
+          <div class="header-actions">
+            <el-button type="primary" @click="handleAdd">
+              <el-icon><Plus /></el-icon>
+              创建申请
+            </el-button>
+            <el-dropdown style="margin-left: 10px;">
+              <el-button type="success">
+                导入/导出 <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item @click="handleImport">
+                    <el-icon><Upload /></el-icon> 导入采购申请
+                  </el-dropdown-item>
+                  <el-dropdown-item divided @click="handleDownloadTemplate">
+                    <el-icon><Document /></el-icon> 下载导入模板
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </div>
       </template>
 
@@ -315,6 +332,79 @@
         <el-button type="primary" @click="doConvertToPO" :loading="converting">确定转换</el-button>
       </template>
     </el-dialog>
+
+    <!-- 导入采购申请对话框 -->
+    <el-dialog v-model="importDialogVisible" title="导入采购申请" width="600px">
+      <div class="import-content">
+        <el-alert 
+          title="导入说明" 
+          type="info" 
+          :closable="false" 
+          style="margin-bottom: 20px;"
+        >
+          <template #default>
+            <div style="line-height: 1.8;">
+              <p>1. 请使用从"项目BOM"页面导出的物料需求清单</p>
+              <p>2. 系统会按供应商自动拆分成多个采购申请</p>
+              <p>3. 必填列：物料编码、数量；选填：供应商、单价、付款方式、账期</p>
+            </div>
+          </template>
+        </el-alert>
+        
+        <el-upload
+          ref="importUploadRef"
+          drag
+          :auto-upload="false"
+          accept=".xlsx,.xls"
+          :limit="1"
+          :on-change="handleImportFileChange"
+          :on-exceed="handleImportExceed"
+          :file-list="importFileList"
+        >
+          <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+          <div class="el-upload__text">
+            将文件拖到此处，或<em>点击上传</em>
+          </div>
+          <template #tip>
+            <div class="el-upload__tip">只能上传Excel文件(.xlsx/.xls)</div>
+          </template>
+        </el-upload>
+        
+        <!-- 导入结果 -->
+        <div v-if="importResult" class="import-result" style="margin-top: 20px;">
+          <el-alert 
+            :title="importResult.message" 
+            :type="importResult.success ? 'success' : 'warning'" 
+            :closable="false"
+          />
+          <div v-if="importResult.purchase_requests && importResult.purchase_requests.length > 0" style="margin-top: 10px;">
+            <p><strong>已创建的采购申请：</strong></p>
+            <el-table :data="importResult.purchase_requests" border size="small">
+              <el-table-column prop="request_no" label="申请单号" width="150" />
+              <el-table-column prop="supplier_name" label="供应商" />
+              <el-table-column prop="lines_count" label="物料数" width="80" align="center" />
+              <el-table-column prop="total_amount" label="金额" width="120" align="right">
+                <template #default="{ row }">¥{{ row.total_amount.toFixed(2) }}</template>
+              </el-table-column>
+            </el-table>
+          </div>
+          <div v-if="importResult.errors && importResult.errors.length > 0" style="margin-top: 10px;">
+            <p class="text-danger"><strong>导入错误（{{ importResult.errors.length }}条）：</strong></p>
+            <ul style="max-height: 150px; overflow-y: auto;">
+              <li v-for="err in importResult.errors.slice(0, 10)" :key="err.row" class="text-danger">
+                行{{ err.row }}: {{ err.sku }} - {{ err.error }}
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="importDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="handleConfirmImport" :loading="importing" :disabled="!importFile">
+          开始导入
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -322,7 +412,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Delete, Search, RefreshLeft } from '@element-plus/icons-vue'
+import { Plus, Delete, Search, RefreshLeft, ArrowDown, Upload, Download, Document, UploadFilled } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
@@ -382,6 +472,14 @@ const form = reactive({
 const convertForm = reactive({
   supplier: null
 })
+
+// 导入相关
+const importDialogVisible = ref(false)
+const importing = ref(false)
+const importFile = ref(null)
+const importFileList = ref([])
+const importUploadRef = ref(null)
+const importResult = ref(null)
 
 const rules = {
   required_date: [{ required: true, message: '请选择需求日期', trigger: 'change' }]
@@ -772,6 +870,94 @@ const handleBomData = () => {
 }
 
 // handleDelete 已被 useBatchDelete 的 deleteRow 替代
+
+// ========== 导入功能 ==========
+const handleImport = () => {
+  importFile.value = null
+  importFileList.value = []
+  importResult.value = null
+  if (importUploadRef.value) {
+    importUploadRef.value.clearFiles()
+  }
+  importDialogVisible.value = true
+}
+
+const handleImportFileChange = (file) => {
+  importFile.value = file.raw
+  importResult.value = null
+}
+
+const handleImportExceed = () => {
+  ElMessage.warning('只能上传一个文件，请先删除已选文件')
+}
+
+const handleConfirmImport = async () => {
+  if (!importFile.value) {
+    ElMessage.warning('请选择要导入的文件')
+    return
+  }
+  
+  importing.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', importFile.value)
+    
+    const response = await request.post('/purchase/requests/import_excel/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    
+    const data = response.data || response
+    importResult.value = {
+      success: data.created_count > 0,
+      message: data.message,
+      purchase_requests: data.purchase_requests || [],
+      errors: data.errors || []
+    }
+    
+    if (data.created_count > 0) {
+      ElMessage.success(data.message)
+      loadRequests()
+    }
+  } catch (error) {
+    console.error('导入失败:', error)
+    const errData = error.response?.data
+    importResult.value = {
+      success: false,
+      message: errData?.error || '导入失败',
+      errors: errData?.errors || []
+    }
+    ElMessage.error(errData?.error || '导入失败')
+  } finally {
+    importing.value = false
+  }
+}
+
+const handleDownloadTemplate = async () => {
+  try {
+    const response = await request.get('/purchase/requests/export_template/', {
+      responseType: 'blob'
+    })
+    
+    const blobData = response.data || response
+    const blob = new Blob([blobData], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    })
+    
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', '采购申请导入模板.xlsx')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
+    ElMessage.success('模板下载成功')
+  } catch (error) {
+    console.error('下载模板失败:', error)
+    ElMessage.error('下载模板失败')
+  }
+}
 
 onMounted(async () => {
   // 首先加载项目和其他数据

@@ -1117,6 +1117,190 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             'errors': error_rows
         })
     
+    @action(detail=False, methods=['post'])
+    def export_for_quote(self, request):
+        """
+        导出物料需求清单（用于线下询价）
+        包含历史采购价格和供应商参考
+        """
+        project_id = request.data.get('project')
+        bom_ids = request.data.get('bom_ids', [])
+        
+        if not project_id:
+            return Response(
+                {'error': '请提供project参数'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            project = Project.objects.get(id=project_id)
+        except Project.DoesNotExist:
+            return Response(
+                {'error': '项目不存在'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 获取BOM物料
+        if bom_ids:
+            bom_items = self.get_queryset().filter(
+                id__in=bom_ids,
+                project_id=project_id,
+                is_deleted=False
+            ).select_related('item')
+        else:
+            bom_items = self.get_queryset().filter(
+                project_id=project_id,
+                is_deleted=False
+            ).select_related('item')
+        
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            workbook = writer.book
+            worksheet = workbook.add_worksheet('物料需求清单')
+            
+            # Define formats
+            title_format = workbook.add_format({
+                'bold': True,
+                'font_size': 14,
+                'align': 'left',
+                'valign': 'vcenter'
+            })
+            readonly_header = workbook.add_format({
+                'bold': True,
+                'bg_color': '#808080',
+                'font_color': 'white',
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter'
+            })
+            ref_header = workbook.add_format({
+                'bold': True,
+                'bg_color': '#92D050',  # 绿色 - 参考信息
+                'font_color': 'black',
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter'
+            })
+            input_header = workbook.add_format({
+                'bold': True,
+                'bg_color': '#FFC000',  # 橙色 - 需要填写
+                'font_color': 'black',
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter'
+            })
+            data_format = workbook.add_format({
+                'border': 1,
+                'align': 'left',
+                'valign': 'vcenter'
+            })
+            number_format = workbook.add_format({
+                'border': 1,
+                'align': 'right',
+                'valign': 'vcenter',
+                'num_format': '#,##0.00'
+            })
+            
+            # Headers
+            from datetime import datetime
+            headers = [
+                ('序号', 6, 'readonly'),
+                ('项目号', 12, 'readonly'),
+                ('物料编码', 15, 'readonly'),
+                ('有图/无图', 10, 'readonly'),
+                ('物料类型', 10, 'readonly'),
+                ('物料名称', 25, 'readonly'),
+                ('规格型号', 20, 'readonly'),
+                ('版本/品牌', 15, 'readonly'),
+                ('单位', 8, 'readonly'),
+                ('数量', 10, 'readonly'),
+                ('历史单价(参考)', 14, 'ref'),
+                ('历史供应商(参考)', 18, 'ref'),
+                ('供应商', 18, 'input'),
+                ('单价', 12, 'input'),
+                ('付款方式', 12, 'input'),
+                ('账期', 12, 'input'),
+                ('备注', 20, 'input'),
+            ]
+            
+            # Write title
+            last_col = len(headers) - 1
+            worksheet.merge_range(0, 0, 0, last_col, f'物料需求清单 - {project.name} ({project.code})', title_format)
+            worksheet.write(1, 0, f'导出时间: {datetime.now().strftime("%Y-%m-%d %H:%M")}')
+            worksheet.write(2, 0, '说明: 灰色=只读, 绿色=历史参考, 橙色=需要填写', data_format)
+            
+            # Write headers
+            format_map = {
+                'readonly': readonly_header,
+                'ref': ref_header,
+                'input': input_header
+            }
+            for col, (header, width, htype) in enumerate(headers):
+                fmt = format_map[htype]
+                worksheet.write(4, col, header, fmt)
+                worksheet.set_column(col, col, width)
+            
+            # Write data
+            row = 5
+            for idx, bom in enumerate(bom_items, 1):
+                # 查找历史采购记录（最近一次）
+                from apps.purchase.models import PurchaseOrderLine
+                last_po_line = PurchaseOrderLine.objects.filter(
+                    item=bom.item,
+                    po__status__in=['CONFIRMED', 'COMPLETED', 'PARTIAL']
+                ).select_related('po__supplier').order_by('-po__order_date').first()
+                
+                history_price = ''
+                history_supplier = ''
+                if last_po_line:
+                    history_price = float(last_po_line.unit_price)
+                    history_supplier = last_po_line.po.supplier.name if last_po_line.po.supplier else ''
+                
+                # 有图/无图显示
+                has_drawing_display = bom.get_has_drawing_display() if hasattr(bom, 'get_has_drawing_display') else ''
+                
+                # 物料类型
+                item_type_display = bom.item.get_item_type_display() if bom.item else ''
+                
+                # 版本/品牌
+                brand = bom.item.brand or '' if bom.item else ''
+                model = bom.item.model or '' if bom.item else ''
+                version_brand = f"{brand}/{model}" if brand or model else ''
+                version_brand = version_brand.strip('/')
+                
+                col = 0
+                worksheet.write(row, col, idx, data_format); col += 1
+                worksheet.write(row, col, project.code, data_format); col += 1
+                worksheet.write(row, col, bom.item.sku if bom.item else '', data_format); col += 1
+                worksheet.write(row, col, has_drawing_display, data_format); col += 1
+                worksheet.write(row, col, item_type_display, data_format); col += 1
+                worksheet.write(row, col, bom.item.name if bom.item else '', data_format); col += 1
+                worksheet.write(row, col, bom.item.specification if bom.item else '', data_format); col += 1
+                worksheet.write(row, col, version_brand, data_format); col += 1
+                worksheet.write(row, col, bom.item.get_unit_display() if bom.item else '', data_format); col += 1
+                worksheet.write(row, col, float(bom.planned_qty), number_format); col += 1
+                worksheet.write(row, col, history_price, number_format); col += 1
+                worksheet.write(row, col, history_supplier, data_format); col += 1
+                # 以下是需要填写的列，留空
+                worksheet.write(row, col, '', data_format); col += 1  # 供应商
+                worksheet.write(row, col, '', number_format); col += 1  # 单价
+                worksheet.write(row, col, '', data_format); col += 1  # 付款方式
+                worksheet.write(row, col, '', data_format); col += 1  # 账期
+                worksheet.write(row, col, '', data_format)  # 备注
+                
+                row += 1
+            
+            worksheet.set_row(0, 25)
+            worksheet.freeze_panes(5, 3)  # 冻结前5行和前3列
+        
+        output.seek(0)
+        response = HttpResponse(
+            output.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename=Material_Request_{project.code}.xlsx'
+        return response
+    
     @action(detail=False, methods=['get'])
     def export_quote_bom(self, request):
         """
