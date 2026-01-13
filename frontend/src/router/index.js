@@ -194,12 +194,13 @@ const routes = [
         component: () => import('@/views/purchase/GoodsReceiptList.vue'),
         meta: { title: '到货质检', icon: 'Box', menuId: 'purchase:goods-receipts' }
       },
-      {
-        path: 'purchase/rfqs',
-        name: 'RFQList',
-        component: () => import('@/views/purchase/RFQList.vue'),
-        meta: { title: '询价管理', icon: 'ChatDotSquare', menuId: 'purchase:rfqs' }
-      },
+      // 询价管理已移除，询价功能整合到采购申请页面
+      // {
+      //   path: 'purchase/rfqs',
+      //   name: 'RFQList',
+      //   component: () => import('@/views/purchase/RFQList.vue'),
+      //   meta: { title: '询价管理', icon: 'ChatDotSquare', menuId: 'purchase:rfqs' }
+      // },
       {
         path: 'purchase/outsource',
         name: 'OutsourceList',

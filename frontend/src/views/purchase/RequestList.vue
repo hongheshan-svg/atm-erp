@@ -1,9 +1,112 @@
 <template>
   <div class="purchase-request-list">
+    <!-- 物料需求清单区域 -->
+    <el-card style="margin-bottom: 20px;">
+      <template #header>
+        <div class="card-header">
+          <span>
+            <el-icon><List /></el-icon>
+            物料需求清单（导出询价用）
+          </span>
+          <el-select 
+            v-model="bomProject" 
+            placeholder="选择项目查看BOM" 
+            clearable 
+            filterable
+            style="width: 280px;"
+            @change="loadBomItems"
+          >
+            <el-option v-for="p in projects" :key="p.id" :label="`${p.code} - ${p.name}`" :value="p.id" />
+          </el-select>
+        </div>
+      </template>
+      
+      <div v-if="!bomProject" class="tip-box">
+        <el-alert title="请选择项目以查看需要采购的物料" type="info" :closable="false" />
+      </div>
+      
+      <template v-else>
+        <!-- 筛选条件 -->
+        <el-row :gutter="15" style="margin-bottom: 15px;">
+          <el-col :span="4">
+            <el-select v-model="bomFilter.hasDrawing" placeholder="有图/无图" clearable style="width: 100%;">
+              <el-option label="全部" value="" />
+              <el-option label="有图" value="HAS_DRAWING" />
+              <el-option label="无图" value="NO_DRAWING" />
+            </el-select>
+          </el-col>
+          <el-col :span="5">
+            <el-select v-model="bomFilter.itemType" placeholder="物料类型" clearable style="width: 100%;">
+              <el-option label="全部" value="" />
+              <el-option label="机加" value="机加" />
+              <el-option label="钣金" value="钣金" />
+              <el-option label="特殊工艺" value="特殊工艺" />
+              <el-option label="其他" value="其他" />
+              <el-option label="机械类" value="机械类" />
+              <el-option label="电气类" value="电气类" />
+              <el-option label="耗材辅料" value="耗材辅料" />
+              <el-option label="办公用品" value="办公用品" />
+            </el-select>
+          </el-col>
+          <el-col :span="5">
+            <el-input v-model="bomFilter.brand" placeholder="版本/品牌筛选" clearable />
+          </el-col>
+          <el-col :span="5">
+            <el-input v-model="bomFilter.keyword" placeholder="搜索编码/名称/规格" clearable />
+          </el-col>
+          <el-col :span="5">
+            <el-button @click="resetBomFilters">
+              <el-icon><Refresh /></el-icon>
+              重置
+            </el-button>
+            <el-button type="success" @click="handleExportBomForQuote" :disabled="filteredBomItems.length === 0">
+              <el-icon><Download /></el-icon>
+              导出询价清单
+            </el-button>
+          </el-col>
+        </el-row>
+        
+        <!-- 筛选结果统计 -->
+        <div style="margin-bottom: 10px; color: #666;">
+          筛选结果: <el-tag type="info">{{ filteredBomItems.length }}</el-tag> / {{ bomItems.length }} 项
+          <span v-if="selectedBomRows.length > 0" style="margin-left: 20px;">
+            已选择: <el-tag type="primary">{{ selectedBomRows.length }}</el-tag> 项
+            <el-button type="success" size="small" @click="handleExportSelectedBom" style="margin-left: 10px;">
+              导出选中
+            </el-button>
+          </span>
+        </div>
+        
+        <!-- BOM物料列表 -->
+        <el-table 
+          :data="filteredBomItems" 
+          v-loading="bomLoading" 
+          stripe 
+          border 
+          size="small"
+          max-height="350"
+          ref="bomTableRef"
+          @selection-change="handleBomSelectionChange"
+        >
+          <el-table-column type="selection" width="40" />
+          <el-table-column prop="item_code" label="物料编码" width="120" />
+          <el-table-column prop="has_drawing_display" label="有图/无图" width="80" />
+          <el-table-column prop="item_type_display" label="物料类型" width="80" />
+          <el-table-column prop="item_name" label="物料名称" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="specification" label="规格型号" width="120" show-overflow-tooltip />
+          <el-table-column prop="version_brand" label="版本/品牌" width="100" show-overflow-tooltip />
+          <el-table-column prop="unit" label="单位" width="50" align="center" />
+          <el-table-column prop="planned_qty" label="需求数量" width="80" align="right" />
+          <el-table-column prop="required_date" label="需求日期" width="100" />
+        </el-table>
+      </template>
+    </el-card>
+
+    <!-- 采购申请列表 -->
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>采购申请</span>
+          <span>采购申请列表</span>
           <div class="header-actions">
             <el-button type="primary" @click="handleAdd">
               <el-icon><Plus /></el-icon>
@@ -11,7 +114,7 @@
             </el-button>
             <el-dropdown style="margin-left: 10px;">
               <el-button type="success">
-                导入/导出 <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+                导入 <el-icon class="el-icon--right"><ArrowDown /></el-icon>
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
@@ -412,7 +515,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Delete, Search, RefreshLeft, ArrowDown, Upload, Download, Document, UploadFilled } from '@element-plus/icons-vue'
+import { Plus, Delete, Search, RefreshLeft, ArrowDown, Upload, Download, Document, UploadFilled, List, Refresh } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
@@ -480,6 +583,58 @@ const importFile = ref(null)
 const importFileList = ref([])
 const importUploadRef = ref(null)
 const importResult = ref(null)
+
+// BOM物料筛选相关
+const bomProject = ref(null)
+const bomItems = ref([])
+const bomLoading = ref(false)
+const bomTableRef = ref(null)
+const selectedBomRows = ref([])
+const bomFilter = reactive({
+  hasDrawing: '',
+  itemType: '',
+  brand: '',
+  keyword: ''
+})
+
+// 筛选后的BOM列表
+const filteredBomItems = computed(() => {
+  let result = bomItems.value
+  
+  // 有图/无图筛选
+  if (bomFilter.hasDrawing) {
+    result = result.filter(item => item.has_drawing === bomFilter.hasDrawing)
+  }
+  
+  // 物料类型筛选
+  if (bomFilter.itemType) {
+    result = result.filter(item => {
+      const itemType = item.item_type_display || item.item_type || ''
+      return itemType.includes(bomFilter.itemType)
+    })
+  }
+  
+  // 版本/品牌筛选
+  if (bomFilter.brand.trim()) {
+    const brandKeyword = bomFilter.brand.toLowerCase().trim()
+    result = result.filter(item => {
+      const versionBrand = (item.version_brand || '').toLowerCase()
+      return versionBrand.includes(brandKeyword)
+    })
+  }
+  
+  // 关键字搜索
+  if (bomFilter.keyword.trim()) {
+    const keyword = bomFilter.keyword.toLowerCase().trim()
+    result = result.filter(item => {
+      return (item.item_code && item.item_code.toLowerCase().includes(keyword)) ||
+             (item.item_name && item.item_name.toLowerCase().includes(keyword)) ||
+             (item.specification && item.specification.toLowerCase().includes(keyword))
+    })
+  }
+  
+  return result
+})
 
 const rules = {
   required_date: [{ required: true, message: '请选择需求日期', trigger: 'change' }]
@@ -870,6 +1025,105 @@ const handleBomData = () => {
 }
 
 // handleDelete 已被 useBatchDelete 的 deleteRow 替代
+
+// ========== BOM物料筛选和导出功能 ==========
+const loadBomItems = async () => {
+  if (!bomProject.value) {
+    bomItems.value = []
+    return
+  }
+  
+  bomLoading.value = true
+  try {
+    const res = await request.get('/projects/bom/', {
+      params: { project: bomProject.value, is_deleted: false }
+    })
+    const items = res.data?.results || res.results || res.data || res || []
+    bomItems.value = items.map(item => ({
+      ...item,
+      item_code: item.item_code || item.item?.sku || '',
+      item_name: item.item_name || item.item?.name || '',
+      specification: item.specification || item.item?.specification || '',
+      unit: item.unit || item.item?.unit_display || '',
+      has_drawing_display: item.has_drawing === 'HAS_DRAWING' ? '有图' : item.has_drawing === 'NO_DRAWING' ? '无图' : '待定',
+      item_type_display: item.item_type_display || item.item?.item_type_display || '',
+      version_brand: item.version_brand_display || item.version_brand || ''
+    }))
+  } catch (error) {
+    console.error('加载BOM物料失败:', error)
+    bomItems.value = []
+    ElMessage.error('加载BOM物料失败')
+  } finally {
+    bomLoading.value = false
+  }
+}
+
+const resetBomFilters = () => {
+  bomFilter.hasDrawing = ''
+  bomFilter.itemType = ''
+  bomFilter.brand = ''
+  bomFilter.keyword = ''
+  selectedBomRows.value = []
+  if (bomTableRef.value) {
+    bomTableRef.value.clearSelection()
+  }
+}
+
+const handleBomSelectionChange = (rows) => {
+  selectedBomRows.value = rows
+}
+
+const handleExportBomForQuote = async () => {
+  if (filteredBomItems.value.length === 0) {
+    ElMessage.warning('没有可导出的数据')
+    return
+  }
+  
+  const bomIds = filteredBomItems.value.map(item => item.id)
+  await exportBomForQuote(bomIds, '筛选结果')
+}
+
+const handleExportSelectedBom = async () => {
+  if (selectedBomRows.value.length === 0) {
+    ElMessage.warning('请先选择要导出的物料')
+    return
+  }
+  
+  const bomIds = selectedBomRows.value.map(item => item.id)
+  await exportBomForQuote(bomIds, '选中项')
+}
+
+const exportBomForQuote = async (bomIds, exportName) => {
+  try {
+    const response = await request.post('/projects/bom/export_for_quote/', {
+      project: bomProject.value,
+      bom_ids: bomIds
+    }, {
+      responseType: 'blob'
+    })
+    
+    const blobData = response.data || response
+    const blob = new Blob([blobData], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    })
+    
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    const project = projects.value.find(p => p.id === bomProject.value)
+    const projectCode = project?.code || bomProject.value
+    link.setAttribute('download', `物料需求清单_${projectCode}_${exportName}.xlsx`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
+    ElMessage.success(`导出${exportName}成功，共${bomIds.length}项物料`)
+  } catch (error) {
+    console.error('导出失败:', error)
+    ElMessage.error('导出失败: ' + (error.response?.data?.error || '未知错误'))
+  }
+}
 
 // ========== 导入功能 ==========
 const handleImport = () => {

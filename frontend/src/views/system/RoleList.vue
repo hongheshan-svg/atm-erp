@@ -241,7 +241,6 @@ const menuTree = ref([
     label: '采购管理',
     children: [
       { id: 'purchase:requests', label: '采购申请' },
-      { id: 'purchase:rfqs', label: '询价管理' },
       { id: 'purchase:comparisons', label: '比价分析' },
       { id: 'purchase:orders', label: '采购订单' },
       { id: 'purchase:goods-receipts', label: '到货质检' }

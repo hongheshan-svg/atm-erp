@@ -90,7 +90,6 @@
           </template>
           <el-menu-item index="/inventory/mrp" v-if="hasMenuAccess('inventory:mrp') || hasMenuAccess('purchase')">MRP需求计划</el-menu-item>
           <el-menu-item index="/purchase/requests" v-if="hasMenuAccess('purchase:requests')">采购申请</el-menu-item>
-          <el-menu-item index="/purchase/rfqs" v-if="hasMenuAccess('purchase:rfqs')">询价管理</el-menu-item>
           <el-menu-item index="/purchase/comparisons" v-if="hasMenuAccess('purchase:comparisons')">比价分析</el-menu-item>
           <el-menu-item index="/purchase/orders" v-if="hasMenuAccess('purchase:orders')">采购订单</el-menu-item>
           <el-menu-item index="/purchase/goods-receipts" v-if="hasMenuAccess('purchase:goods-receipts')">到货质检</el-menu-item>
