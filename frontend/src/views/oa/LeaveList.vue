@@ -32,7 +32,9 @@
         </el-form-item>
       </el-form>
       
-      <el-table :data="list" v-loading="loading" stripe border>
+      <el-empty v-if="!loading && list.length === 0" description="暂无请假记录" />
+      
+      <el-table v-else :data="list" v-loading="loading" stripe border>
         <el-table-column prop="leave_type_display" label="请假类型" width="100" />
         <el-table-column prop="start_date" label="开始日期" width="110" />
         <el-table-column prop="end_date" label="结束日期" width="110" />
@@ -186,10 +188,17 @@ const loadData = async () => {
       page_size: pagination.pageSize,
       ...searchForm
     }
-    const res = await request.get('/oa/leave-requests/my_requests/', { params })
-    list.value = res.data.results || res.data
-    pagination.total = res.data.count || res.data.length
+    const res = await request.get('/oa/leave-requests/', { params })
+    console.log('Leave requests response:', res.data)
+    if (Array.isArray(res.data)) {
+      list.value = res.data
+      pagination.total = res.data.length
+    } else {
+      list.value = res.data.results || []
+      pagination.total = res.data.count || 0
+    }
   } catch (error) {
+    console.error('加载请假数据失败:', error)
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
