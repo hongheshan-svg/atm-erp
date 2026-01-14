@@ -254,7 +254,7 @@
         <el-row :gutter="20">
           <el-col :span="6">
             <el-form-item label="关联项目" prop="project">
-              <el-select v-model="form.project" placeholder="选择项目" filterable clearable style="width: 100%;">
+              <el-select v-model="form.project" placeholder="选择项目" filterable clearable style="width: 100%;" @change="onProjectChange">
                 <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
               </el-select>
             </el-form-item>
@@ -299,8 +299,11 @@
           <el-table-column label="物料" min-width="200">
             <template #default="{ row, $index }">
               <el-select v-model="row.item" placeholder="选择物料" filterable style="width: 100%;" @change="onItemChange($index)">
-                <el-option v-for="item in items" :key="item.id" :label="`${item.sku} - ${item.name}`" :value="item.id" />
+                <el-option v-for="item in availableItems" :key="item.id" :label="`${item.sku} - ${item.name}`" :value="item.id" />
               </el-select>
+              <div v-if="form.project && projectItems.length === 0" style="color: #E6A23C; font-size: 12px;">
+                该项目无未申请物料
+              </div>
             </template>
           </el-table-column>
           <el-table-column label="数量" width="90">
@@ -585,6 +588,7 @@ const converting = ref(false)
 const requests = ref([])
 const projects = ref([])
 const items = ref([])
+const projectItems = ref([])  // 项目中未申请的物料
 const suppliers = ref([])
 const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
@@ -746,6 +750,55 @@ const loadItems = async () => {
   } catch (error) {
     console.error('加载物料失败:', error)
   }
+}
+
+// 加载项目中未申请的物料
+const loadProjectItems = async (projectId) => {
+  if (!projectId) {
+    projectItems.value = []
+    return
+  }
+  
+  try {
+    const res = await request.get('/projects/bom/', {
+      params: { 
+        project: projectId, 
+        is_deleted: false,
+        order_status: 'NOT_ORDERED'  // 只加载未申请的物料
+      }
+    })
+    const bomItems = res.data?.results || res.results || res.data || res || []
+    // 从BOM中提取物料信息
+    projectItems.value = bomItems.map(bom => ({
+      id: bom.item,
+      sku: bom.item_sku || bom.item_code || '',
+      name: bom.item_name || '',
+      specification: bom.specification || bom.item_specification || '',
+      planned_qty: bom.planned_qty,
+      bom_id: bom.id
+    })).filter(item => item.id)  // 过滤掉没有item的
+  } catch (error) {
+    console.error('加载项目物料失败:', error)
+    projectItems.value = []
+  }
+}
+
+// 可选物料：如果选了项目则显示项目未申请物料，否则显示所有物料
+const availableItems = computed(() => {
+  if (form.project && projectItems.value.length > 0) {
+    return projectItems.value
+  }
+  return items.value
+})
+
+// 项目变化时重新加载可选物料
+const onProjectChange = (projectId) => {
+  loadProjectItems(projectId)
+  // 清空已选的物料（因为可能不在新项目的BOM中）
+  form.lines.forEach(line => {
+    line.item = null
+    line.estimated_price = 0
+  })
 }
 
 const loadSuppliers = async () => {
@@ -937,6 +990,8 @@ const handleSave = async () => {
     } else {
       await request.post('/purchase/requests/', payload)
       ElMessage.success('创建采购申请成功')
+      // 刷新物料需求清单（已采购的物料会被过滤掉）
+      loadBomItems()
     }
     
     dialogVisible.value = false

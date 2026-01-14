@@ -52,11 +52,29 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
     
     def perform_create(self, serializer):
-        """Auto-set requestor to current user."""
-        serializer.save(
-            created_by=self.request.user,
-            requestor=self.request.user
-        )
+        """Auto-set requestor to current user and update BOM status."""
+        with transaction.atomic():
+            instance = serializer.save(
+                created_by=self.request.user,
+                requestor=self.request.user
+            )
+            
+            # 更新BOM状态：NOT_ORDERED -> PR_PENDING
+            if instance.project:
+                from apps.projects.models import ProjectBOM
+                # 获取采购申请行
+                for pr_line in instance.lines.filter(is_deleted=False):
+                    bom_items = ProjectBOM.objects.filter(
+                        project=instance.project,
+                        item=pr_line.item,
+                        is_deleted=False,
+                        order_status='NOT_ORDERED'  # 只更新未下单的
+                    )
+                    for bom in bom_items:
+                        bom.order_status = 'PR_PENDING'
+                        bom.purchase_request = instance
+                        bom.pr_qty = (bom.pr_qty or 0) + pr_line.qty
+                        bom.save(update_fields=['order_status', 'purchase_request', 'pr_qty'])
     
     def perform_destroy(self, instance):
         """删除采购申请时回退BOM状态"""
