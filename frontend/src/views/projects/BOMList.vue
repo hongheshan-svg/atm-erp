@@ -194,10 +194,10 @@
             <span v-else class="text-muted">-</span>
           </template>
         </el-table-column>
-        <el-table-column prop="order_status_display" label="下单状态" width="90" align="center">
+        <el-table-column prop="order_status_display" label="采购状态" width="100" align="center">
           <template #default="{ row }">
             <el-tag 
-              :type="row.order_status === 'ORDERED' ? 'success' : row.order_status === 'PARTIAL' ? 'warning' : 'info'" 
+              :type="getOrderStatusType(row.order_status)" 
               size="small"
             >
               {{ row.order_status_display || '未下单' }}
@@ -371,11 +371,18 @@
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="下单状态">
-              <el-select v-model="form.order_status" style="width: 100%;">
+            <el-form-item label="采购状态">
+              <el-select v-model="form.order_status" style="width: 100%;" disabled>
                 <el-option label="未下单" value="NOT_ORDERED" />
+                <el-option label="采购申请中" value="PR_PENDING" />
+                <el-option label="申请已批准" value="PR_APPROVED" />
                 <el-option label="部分下单" value="PARTIAL" />
                 <el-option label="已下单" value="ORDERED" />
+                <el-option label="在途" value="IN_TRANSIT" />
+                <el-option label="部分收货" value="PARTIAL_RECEIVED" />
+                <el-option label="已收货" value="RECEIVED" />
+                <el-option label="已退货" value="RETURNED" />
+                <el-option label="已取消" value="CANCELLED" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -1084,6 +1091,25 @@ const generatePurchaseRequest = (itemsToOrder) => {
     // 跳转到采购申请页面
     router.push('/purchase/requests?from_bom=1')
   }).catch(() => {})
+}
+
+// ========== 状态显示辅助函数 ==========
+
+// 获取采购状态标签类型
+const getOrderStatusType = (status) => {
+  const statusTypeMap = {
+    'NOT_ORDERED': 'info',       // 未下单 - 灰色
+    'PR_PENDING': 'warning',     // 采购申请中 - 橙色
+    'PR_APPROVED': '',           // 申请已批准 - 蓝色（默认）
+    'PARTIAL': 'warning',        // 部分下单 - 橙色
+    'ORDERED': 'success',        // 已下单 - 绿色
+    'IN_TRANSIT': '',            // 在途 - 蓝色
+    'PARTIAL_RECEIVED': 'warning', // 部分收货 - 橙色
+    'RECEIVED': 'success',       // 已收货 - 绿色
+    'RETURNED': 'danger',        // 已退货 - 红色
+    'CANCELLED': 'danger',       // 已取消 - 红色
+  }
+  return statusTypeMap[status] || 'info'
 }
 
 // ========== 导入导出功能 ==========
