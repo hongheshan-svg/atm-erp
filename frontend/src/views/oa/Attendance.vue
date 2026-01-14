@@ -123,7 +123,9 @@
         </div>
       </template>
       
-      <el-table :data="records" v-loading="loading" stripe border>
+      <el-empty v-if="!loading && records.length === 0" description="本月暂无考勤记录，点击上方按钮开始打卡" />
+      
+      <el-table v-else :data="records" v-loading="loading" stripe border>
         <el-table-column prop="attendance_date" label="日期" width="120" />
         <el-table-column label="签到时间" width="100">
           <template #default="{ row }">
@@ -209,20 +211,29 @@ const loadTodayStatus = async () => {
   try {
     const res = await request.get('/oa/attendance-records/today/')
     todayRecord.value = res.data
+    console.log('Today status:', res.data)
   } catch (error) {
     console.error('加载今日状态失败', error)
+    // 设置默认值
+    todayRecord.value = { check_in_time: null, check_out_time: null, status: 'NOT_CHECKED' }
   }
 }
 
 const loadRecords = async () => {
   loading.value = true
   try {
-    const res = await request.get('/oa/attendance-records/my_records/', {
+    const res = await request.get('/oa/attendance-records/', {
       params: { month: selectedMonth.value }
     })
-    records.value = res.data
+    console.log('Attendance records:', res.data)
+    if (Array.isArray(res.data)) {
+      records.value = res.data
+    } else {
+      records.value = res.data.results || []
+    }
   } catch (error) {
-    ElMessage.error('加载考勤记录失败')
+    console.error('加载考勤记录失败', error)
+    records.value = []
   } finally {
     loading.value = false
   }
@@ -233,11 +244,15 @@ const loadMonthlySummary = async () => {
     const res = await request.get('/oa/attendance-records/monthly_summary/', {
       params: { month: selectedMonth.value }
     })
+    console.log('Monthly summary:', res.data)
     if (res.data && res.data.length > 0) {
       monthSummary.value = res.data[0]
+    } else {
+      monthSummary.value = {}
     }
   } catch (error) {
     console.error('加载月度统计失败', error)
+    monthSummary.value = {}
   }
 }
 
