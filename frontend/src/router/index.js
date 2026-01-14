@@ -845,8 +845,10 @@ const hasMenuAccess = (menuId, userStore) => {
   // 获取用户的菜单权限列表
   const menuIds = userStore.menuIds
   
-  // 如果 menuIds 为空或未定义，表示没有配置权限，不允许访问
-  if (!menuIds || menuIds.length === 0) return false
+  // 如果 menuIds 为空或未定义，允许访问仪表盘
+  if (!menuIds || menuIds.length === 0) {
+    return menuId === 'dashboard'
+  }
   
   // 检查是否在权限列表中
   // 对于父菜单，检查是否有任何子菜单的权限

@@ -65,8 +65,11 @@ export const useUserStore = defineStore('user', () => {
     if (userInfo.value?.is_superuser) return true
     // 如果有通配符权限
     if (permissions.value?.includes('*:*:*')) return true
-    // 如果没有配置菜单权限，则无权限访问
-    if (!menuIds.value || menuIds.value.length === 0) return false
+    // 如果没有配置菜单权限，允许访问基础页面（dashboard）
+    if (!menuIds.value || menuIds.value.length === 0) {
+      // 默认允许访问仪表盘
+      return menuId === 'dashboard'
+    }
     return menuIds.value.includes(menuId)
   }
 
