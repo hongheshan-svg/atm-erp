@@ -784,7 +784,7 @@ const routes = [
       // OA - 考勤管理
       {
         path: 'oa/attendance',
-        name: 'Attendance',
+        name: 'OaAttendance',
         component: () => import('@/views/oa/Attendance.vue'),
         meta: { title: '考勤打卡', icon: 'Clock', menuId: 'oa:attendance' }
       },
