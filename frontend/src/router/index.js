@@ -781,6 +781,46 @@ const routes = [
         component: () => import('@/views/oa/IMChat.vue'),
         meta: { title: '即时通讯', icon: 'ChatDotRound', menuId: 'oa:im' }
       },
+      // OA - 考勤管理
+      {
+        path: 'oa/attendance',
+        name: 'Attendance',
+        component: () => import('@/views/oa/Attendance.vue'),
+        meta: { title: '考勤打卡', icon: 'Clock', menuId: 'oa:attendance' }
+      },
+      {
+        path: 'oa/leave',
+        name: 'LeaveRequest',
+        component: () => import('@/views/oa/LeaveList.vue'),
+        meta: { title: '请假申请', icon: 'Document', menuId: 'oa:leave' }
+      },
+      // OA - 公告通知
+      {
+        path: 'oa/announcement',
+        name: 'Announcement',
+        component: () => import('@/views/oa/AnnouncementList.vue'),
+        meta: { title: '公告通知', icon: 'Bell', menuId: 'oa:announcement' }
+      },
+      // OA - 车辆管理
+      {
+        path: 'oa/vehicles',
+        name: 'VehicleList',
+        component: () => import('@/views/oa/VehicleList.vue'),
+        meta: { title: '车辆管理', icon: 'Van', menuId: 'oa:vehicles' }
+      },
+      {
+        path: 'oa/vehicle-request',
+        name: 'VehicleRequest',
+        component: () => import('@/views/oa/VehicleRequestList.vue'),
+        meta: { title: '用车申请', icon: 'Tickets', menuId: 'oa:vehicle-request' }
+      },
+      // OA - 资产管理
+      {
+        path: 'oa/assets',
+        name: 'OAAssetList',
+        component: () => import('@/views/oa/AssetList.vue'),
+        meta: { title: '资产管理', icon: 'Box', menuId: 'oa:assets' }
+      },
       // 固定资产
       {
         path: 'finance/assets',

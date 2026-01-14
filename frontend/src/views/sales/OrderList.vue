@@ -297,6 +297,41 @@
       />
     </el-dialog>
 
+    <!-- 导入错误对话框 -->
+    <el-dialog v-model="importErrorDialogVisible" title="导入失败 - 数据校验错误" width="800px">
+      <el-alert type="error" :closable="false" show-icon style="margin-bottom: 15px;">
+        <template #title>
+          共 {{ importErrors.length }} 处错误，请修正Excel文件后重新导入
+        </template>
+      </el-alert>
+      <el-table :data="importErrors" max-height="400" border size="small">
+        <el-table-column prop="row" label="行号" width="80" align="center" />
+        <el-table-column prop="sheet" label="工作表" width="100">
+          <template #default="{ row }">
+            {{ row.sheet || '销售订单' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="order_no" label="订单号" width="120">
+          <template #default="{ row }">
+            {{ row.order_no || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="customer" label="客户" width="150">
+          <template #default="{ row }">
+            {{ row.customer || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="error" label="错误信息" min-width="250">
+          <template #default="{ row }">
+            <span style="color: #f56c6c;">{{ row.error }}</span>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button type="primary" @click="importErrorDialogVisible = false">我知道了</el-button>
+      </template>
+    </el-dialog>
+
   </div>
 </template>
 
@@ -652,6 +687,10 @@ const downloadTemplate = async () => {
   }
 }
 
+// 导入错误对话框
+const importErrorDialogVisible = ref(false)
+const importErrors = ref([])
+
 // 导入
 const handleImport = async (file) => {
   const formData = new FormData()
@@ -662,24 +701,17 @@ const handleImport = async (file) => {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     
-    let message = `导入完成！新增 ${res.success_count} 条，更新 ${res.update_count} 条`
-    if (res.skip_count > 0) {
-      message += `，跳过重复 ${res.skip_count} 条`
-    }
-    if (res.line_count > 0) {
-      message += `，明细 ${res.line_count} 条`
-    }
-    
-    if (res.errors && res.errors.length > 0) {
-      ElMessage.warning(`${message}，有 ${res.errors.length} 条错误`)
-      console.error('导入错误:', res.errors)
-    } else {
-      ElMessage.success(message)
-    }
-    
+    ElMessage.success(res.message || `导入完成！新增 ${res.success_count} 条，更新 ${res.update_count} 条`)
     loadOrders()
   } catch (error) {
-    ElMessage.error(error.response?.data?.error || '导入失败')
+    const errData = error.response?.data
+    if (errData?.errors && errData.errors.length > 0) {
+      // 有详细错误信息，显示错误对话框
+      importErrors.value = errData.errors
+      importErrorDialogVisible.value = true
+    } else {
+      ElMessage.error(errData?.error || '导入失败')
+    }
   }
   
   return false // 阻止默认上传

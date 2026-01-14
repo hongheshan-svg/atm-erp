@@ -12,6 +12,11 @@ from .archive import (
 from .electronic_signature import (
     SignatureSealViewSet, SignatureDocumentViewSet, SignatureLogViewSet
 )
+from .vehicle import VehicleViewSet, VehicleRequestViewSet, VehicleMaintenanceViewSet
+from .asset import (
+    AssetCategoryViewSet, AssetViewSet, AssetBorrowViewSet,
+    AssetTransferViewSet, AssetMaintenanceViewSet
+)
 from apps.core.schedule import ScheduleViewSet, MeetingViewSet, MeetingRoomViewSet
 from apps.core.announcement import AnnouncementViewSet
 from apps.accounts.attendance import (
@@ -46,6 +51,18 @@ router.register(r'attendance-records', AttendanceRecordViewSet, basename='oa-att
 router.register(r'attendance-configs', AttendanceConfigViewSet, basename='oa-attendance-config')
 router.register(r'leave-requests', LeaveRequestViewSet, basename='oa-leave-request')
 router.register(r'overtime-requests', OvertimeRequestViewSet, basename='oa-overtime-request')
+
+# 车辆管理
+router.register(r'vehicles', VehicleViewSet, basename='oa-vehicle')
+router.register(r'vehicle-requests', VehicleRequestViewSet, basename='oa-vehicle-request')
+router.register(r'vehicle-maintenance', VehicleMaintenanceViewSet, basename='oa-vehicle-maintenance')
+
+# 资产管理
+router.register(r'asset-categories', AssetCategoryViewSet, basename='oa-asset-category')
+router.register(r'assets', AssetViewSet, basename='oa-asset')
+router.register(r'asset-borrows', AssetBorrowViewSet, basename='oa-asset-borrow')
+router.register(r'asset-transfers', AssetTransferViewSet, basename='oa-asset-transfer')
+router.register(r'asset-maintenance', AssetMaintenanceViewSet, basename='oa-asset-maintenance')
 
 urlpatterns = [
     path('', include(router.urls)),
