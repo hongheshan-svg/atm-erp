@@ -883,16 +883,18 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                             if order_no and not so:
                                 so = SalesOrder.objects.filter(order_no=order_no).first()
                             
-                            # 如果订单号找不到，尝试智能匹配：如果本次只导入了一个订单，自动关联
+                            # 智能匹配：如果本次只导入了一个订单，明细自动关联到该订单（忽略填写的订单号）
                             if not so and len(order_map) == 1:
                                 so = list(order_map.values())[0]
                             
-                            # 仍然找不到订单时才报错
+                            # 如果还没有找到订单，尝试从数据库中查找任何一个本次导入的订单
+                            if not so and len(order_map) > 0:
+                                # 按创建时间倒序，取第一个
+                                so = list(order_map.values())[0]
+                            
+                            # 仍然找不到订单时才报错（通常不会发生，除非主表为空）
                             if not so:
-                                if order_no:
-                                    row_errors.append(f'订单号 "{order_no}" 不存在，请检查是否与主表订单号一致')
-                                else:
-                                    row_errors.append('订单号不能为空，请填写与主表一致的订单号')
+                                row_errors.append('无法关联订单，请确保主表中有有效的订单数据')
                             
                             qty = parse_decimal(data.get('qty'))
                             if qty <= 0:

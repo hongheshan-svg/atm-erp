@@ -376,6 +376,11 @@ const menuTree = ref([
     children: [
       { id: 'oa:schedule', label: '日程管理' },
       { id: 'oa:meeting', label: '会议管理' },
+      { id: 'oa:leave', label: '请假申请' },
+      { id: 'oa:announcement', label: '公告管理' },
+      { id: 'oa:vehicles', label: '车辆管理' },
+      { id: 'oa:vehicle-request', label: '用车申请' },
+      { id: 'oa:assets', label: '资产管理' },
       { id: 'oa:im', label: '即时通讯' }
     ]
   },
@@ -383,7 +388,7 @@ const menuTree = ref([
     id: 'accounts',
     label: '人事管理',
     children: [
-      { id: 'accounts:attendance', label: '考勤管理' }
+      { id: 'accounts:attendance', label: '考勤打卡' }
     ]
   },
   {

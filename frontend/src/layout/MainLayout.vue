@@ -178,7 +178,7 @@
         </el-sub-menu>
         
         <!-- ==================== OA 协同办公 ==================== -->
-        <el-sub-menu index="oa" v-if="hasMenuAccess('workflow') || hasMenuAccess('system')">
+        <el-sub-menu index="oa" v-if="hasMenuAccess('workflow') || hasMenuAccess('system') || hasMenuAccess('oa')">
           <template #title>
             <el-icon><Coordinate /></el-icon>
             <span>OA协同办公</span>
@@ -188,15 +188,27 @@
             <el-menu-item index="/workflow/my-submissions" v-if="hasMenuAccess('workflow:my-submissions')">我的提交</el-menu-item>
             <el-menu-item index="/workflow/config" v-if="hasMenuAccess('workflow:config')">流程配置</el-menu-item>
           </el-menu-item-group>
-          <el-menu-item-group title="日常办公">
-            <el-menu-item index="/oa/schedule" v-if="hasMenuAccess('oa:schedule') || hasMenuAccess('workflow')">日程管理</el-menu-item>
-            <el-menu-item index="/oa/meeting" v-if="hasMenuAccess('oa:meeting') || hasMenuAccess('workflow')">会议管理</el-menu-item>
-            <el-menu-item index="/attendance" v-if="hasMenuAccess('accounts:attendance') || hasMenuAccess('system')">考勤管理</el-menu-item>
-            <el-menu-item index="/system/announcements" v-if="hasMenuAccess('system:announcements') || hasMenuAccess('system')">公告通知</el-menu-item>
+          <el-menu-item-group title="考勤管理">
+            <el-menu-item index="/attendance" v-if="hasMenuAccess('accounts:attendance') || hasMenuAccess('oa')">考勤打卡</el-menu-item>
+            <el-menu-item index="/oa/leave" v-if="hasMenuAccess('oa:leave') || hasMenuAccess('oa')">请假申请</el-menu-item>
+          </el-menu-item-group>
+          <el-menu-item-group title="日程会议">
+            <el-menu-item index="/oa/schedule" v-if="hasMenuAccess('oa:schedule') || hasMenuAccess('oa')">日程管理</el-menu-item>
+            <el-menu-item index="/oa/meeting" v-if="hasMenuAccess('oa:meeting') || hasMenuAccess('oa')">会议管理</el-menu-item>
+          </el-menu-item-group>
+          <el-menu-item-group title="公告通知">
+            <el-menu-item index="/oa/announcement" v-if="hasMenuAccess('oa:announcement') || hasMenuAccess('oa')">公告管理</el-menu-item>
+            <el-menu-item index="/system/notifications" v-if="hasMenuAccess('system:notifications')">消息中心</el-menu-item>
+          </el-menu-item-group>
+          <el-menu-item-group title="车辆管理">
+            <el-menu-item index="/oa/vehicles" v-if="hasMenuAccess('oa:vehicles') || hasMenuAccess('oa')">车辆信息</el-menu-item>
+            <el-menu-item index="/oa/vehicle-request" v-if="hasMenuAccess('oa:vehicle-request') || hasMenuAccess('oa')">用车申请</el-menu-item>
+          </el-menu-item-group>
+          <el-menu-item-group title="资产管理">
+            <el-menu-item index="/oa/assets" v-if="hasMenuAccess('oa:assets') || hasMenuAccess('oa')">资产台账</el-menu-item>
           </el-menu-item-group>
           <el-menu-item-group title="协作沟通">
-            <el-menu-item index="/oa/im" v-if="hasMenuAccess('oa:im') || hasMenuAccess('workflow')">即时通讯</el-menu-item>
-            <el-menu-item index="/system/notifications" v-if="hasMenuAccess('system:notifications')">消息中心</el-menu-item>
+            <el-menu-item index="/oa/im" v-if="hasMenuAccess('oa:im') || hasMenuAccess('oa')">即时通讯</el-menu-item>
           </el-menu-item-group>
         </el-sub-menu>
         
