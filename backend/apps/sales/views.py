@@ -297,10 +297,11 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
             bottom=Side(style='thin')
         )
         
-        # 表头
+        # 表头 - 与创建表单保持一致
         headers = [
-            '订单号*', '客户名称*', '订单日期', '交货日期*',
-            '税率(%)', '付款条款', '付款方式', '备注'
+            '销售订单号', '客户订单号', '客户名称*', '关联项目',
+            '订单日期', '交货日期*', '税率(%)', 
+            '付款条款', '付款方式', '付款说明', '备注'
         ]
         
         for col, header in enumerate(headers, 1):
@@ -311,14 +312,15 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
             cell.border = thin_border
         
         # 设置列宽
-        widths = [15, 25, 15, 15, 10, 20, 15, 30]
+        widths = [15, 15, 25, 20, 12, 12, 10, 25, 12, 25, 30]
         for i, width in enumerate(widths, 1):
             ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
         
         # 示例数据
         sample_data = [
-            'SO2025010001', '示例客户', '2025-01-01', '2025-02-01',
-            13, '30%预付/60%验收/10%质保', '电汇', '示例备注'
+            '', 'CUST-001', '示例客户', '示例项目',
+            '2025-01-01', '2025-02-01', 13, 
+            '30%预付/60%验收/10%质保', '电汇', '分3期付款', '示例备注'
         ]
         for col, value in enumerate(sample_data, 1):
             ws.cell(row=2, column=col, value=value)
@@ -356,13 +358,16 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
             ['字段说明'],
             [''],
             ['销售订单表:'],
-            ['- 订单号*: 必填，唯一标识，如SO2025010001'],
+            ['- 销售订单号: 可选，留空则系统自动生成，如SO2025010001'],
+            ['- 客户订单号: 可选，客户的订单编号，用于对账'],
             ['- 客户名称*: 必填，必须与系统中的客户名称完全匹配'],
+            ['- 关联项目: 可选，项目名称或项目编号，必须与系统中已有项目匹配'],
             ['- 订单日期: 格式 YYYY-MM-DD，留空则使用当天日期'],
             ['- 交货日期*: 必填，格式 YYYY-MM-DD'],
             ['- 税率(%): 可选值 0, 1, 3, 6, 9, 13，默认13'],
             ['- 付款条款: 全款预付/货到付款/月结30天/月结60天/月结90天等'],
             ['- 付款方式: 电汇/承兑汇票/支票/现金/信用证/其他'],
+            ['- 付款说明: 可选，付款条款的补充说明（自定义分期时填写）'],
             ['- 备注: 可选'],
             [''],
             ['订单明细表:'],
@@ -377,8 +382,9 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
             [''],
             ['注意事项:'],
             ['1. 带*的字段为必填项'],
-            ['2. 导入时会根据订单号检查重复，已存在的订单会被更新'],
-            ['3. 客户名称必须与系统中已有的客户名称完全一致'],
+            ['2. 销售订单号留空时系统自动生成'],
+            ['3. 导入时会根据订单号检查重复，已存在的订单会被更新'],
+            ['4. 客户名称和项目名称必须与系统中已有数据完全一致'],
         ]
         for row_idx, row_data in enumerate(instructions, 1):
             for col_idx, value in enumerate(row_data, 1):
@@ -422,11 +428,12 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
             bottom=Side(style='thin')
         )
         
-        # 表头
+        # 表头 - 与创建表单保持一致
         headers = [
-            '订单号', '客户名称', '客户编码', '订单日期', '交货日期',
-            '状态', '税率(%)', '不含税金额', '税额', '含税总额',
-            '付款条款', '付款方式', '备注', '创建时间'
+            '销售订单号', '客户订单号', '客户名称', '客户编码', '关联项目',
+            '订单日期', '交货日期', '状态', '税率(%)', 
+            '不含税金额', '税额', '含税总额',
+            '付款条款', '付款方式', '付款说明', '备注', '创建时间'
         ]
         
         for col, header in enumerate(headers, 1):
@@ -440,8 +447,10 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
         for row_idx, so in enumerate(queryset, 2):
             data = [
                 so.order_no,
+                so.customer_order_no or '',
                 so.customer.name if so.customer else '',
                 so.customer.code if so.customer else '',
+                so.project.name if so.project else '',
                 so.order_date.strftime('%Y-%m-%d') if so.order_date else '',
                 so.delivery_date.strftime('%Y-%m-%d') if so.delivery_date else '',
                 so.get_status_display(),
@@ -451,6 +460,7 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                 float(so.total_with_tax),
                 so.get_payment_terms_display() if so.payment_terms else '',
                 so.get_payment_method_display() if so.payment_method else '',
+                so.payment_terms_detail or '',
                 so.notes or '',
                 so.created_at.strftime('%Y-%m-%d %H:%M') if so.created_at else ''
             ]
@@ -459,7 +469,7 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                 cell.border = thin_border
         
         # 设置列宽
-        widths = [15, 25, 15, 12, 12, 10, 8, 15, 12, 15, 25, 12, 30, 18]
+        widths = [15, 15, 25, 15, 20, 12, 12, 10, 8, 15, 12, 15, 25, 12, 20, 30, 18]
         for i, width in enumerate(widths, 1):
             ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
         
@@ -590,9 +600,17 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                 '其他': 'OTHER',
             }
             
-            # 缓存客户和物料
+            # 缓存客户、项目和物料
             customer_cache = {c.name: c for c in Customer.objects.filter(is_deleted=False)}
             item_cache = {i.sku: i for i in Item.objects.filter(is_deleted=False)}
+            
+            # 项目缓存（按名称和编码）
+            from apps.projects.models import Project
+            project_cache = {}
+            for p in Project.objects.filter(is_deleted=False):
+                project_cache[p.name] = p
+                if p.code:
+                    project_cache[p.code] = p
             
             # 跟踪已处理的订单号
             processed_orders = set()
@@ -607,10 +625,13 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
             headers = [str(cell.value).strip() if cell.value else '' for cell in sheet[1]]
             
             col_map = {
+                '销售订单号': 'order_no',
                 '订单号': 'order_no',
                 '订单号*': 'order_no',
+                '客户订单号': 'customer_order_no',
                 '客户名称': 'customer_name',
                 '客户名称*': 'customer_name',
+                '关联项目': 'project_name',
                 '订单日期': 'order_date',
                 '交货日期': 'delivery_date',
                 '交货日期*': 'delivery_date',
@@ -618,6 +639,7 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                 '税率(%)': 'tax_rate',
                 '付款条款': 'payment_terms',
                 '付款方式': 'payment_method',
+                '付款说明': 'payment_terms_detail',
                 '备注': 'notes',
             }
             
@@ -679,6 +701,14 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                         
                         notes = str(data.get('notes', '')).strip()
                         
+                        # 新增字段
+                        customer_order_no = str(data.get('customer_order_no', '')).strip()
+                        payment_terms_detail = str(data.get('payment_terms_detail', '')).strip()
+                        
+                        # 关联项目
+                        project_name = str(data.get('project_name', '')).strip()
+                        project = project_cache.get(project_name) if project_name else None
+                        
                         # 检查是否已存在
                         existing = SalesOrder.objects.filter(order_no=order_no).first()
                         if existing:
@@ -686,10 +716,13 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                                 existing.is_deleted = False
                                 existing.deleted_at = None
                             existing.customer = customer
+                            existing.customer_order_no = customer_order_no
+                            existing.project = project
                             existing.delivery_date = delivery_date
                             existing.tax_rate = tax_rate
                             existing.payment_terms = payment_terms
                             existing.payment_method = payment_method
+                            existing.payment_terms_detail = payment_terms_detail
                             existing.notes = notes
                             existing.save()
                             # 删除旧明细，等待重新导入
@@ -699,11 +732,14 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                         else:
                             so = SalesOrder.objects.create(
                                 order_no=order_no,
+                                customer_order_no=customer_order_no,
                                 customer=customer,
+                                project=project,
                                 delivery_date=delivery_date,
                                 tax_rate=tax_rate,
                                 payment_terms=payment_terms,
                                 payment_method=payment_method,
+                                payment_terms_detail=payment_terms_detail,
                                 notes=notes,
                                 created_by=request.user
                             )
