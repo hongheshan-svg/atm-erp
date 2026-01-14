@@ -737,22 +737,12 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                     customer_order_no = str(data.get('customer_order_no', '')).strip()
                     payment_terms_detail = str(data.get('payment_terms_detail', '')).strip()
                     
-                    # 关联项目校验（可选，但如果填写了必须存在）
+                    # 关联项目（可选，不存在也不报错，后续可由项目管理关联）
                     project_name = str(data.get('project_name', '')).strip()
                     project = None
                     if project_name:
                         project = project_cache.get(project_name)
-                        if not project:
-                            # 模糊搜索类似的项目
-                            similar_projects = [
-                                name for name in project_cache.keys() 
-                                if project_name.lower() in name.lower() or name.lower() in project_name.lower()
-                            ][:5]
-                            
-                            error_msg = f'项目 "{project_name}" 在系统中不存在'
-                            if similar_projects:
-                                error_msg += f'，您是否要找：{", ".join(similar_projects)}'
-                            row_errors.append(error_msg)
+                        # 项目不存在时不报错，只是不关联
                     
                     # 如果有错误，记录并继续校验下一行
                     if row_errors:

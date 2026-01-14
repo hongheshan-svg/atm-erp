@@ -14,7 +14,10 @@ from .electronic_signature import (
 )
 from apps.core.schedule import ScheduleViewSet, MeetingViewSet, MeetingRoomViewSet
 from apps.core.announcement import AnnouncementViewSet
-from apps.accounts.attendance import AttendanceRecordViewSet
+from apps.accounts.attendance import (
+    AttendanceRecordViewSet, AttendanceConfigViewSet,
+    LeaveRequestViewSet, OvertimeRequestViewSet
+)
 
 router = DefaultRouter()
 router.register(r'conversations', IMConversationViewSet, basename='im-conversation')
@@ -37,7 +40,12 @@ router.register(r'schedules', ScheduleViewSet, basename='oa-schedule')
 router.register(r'meetings', MeetingViewSet, basename='oa-meeting')
 router.register(r'meeting-rooms', MeetingRoomViewSet, basename='oa-meeting-room')
 router.register(r'announcements', AnnouncementViewSet, basename='oa-announcement')
+
+# 考勤管理
 router.register(r'attendance-records', AttendanceRecordViewSet, basename='oa-attendance-record')
+router.register(r'attendance-configs', AttendanceConfigViewSet, basename='oa-attendance-config')
+router.register(r'leave-requests', LeaveRequestViewSet, basename='oa-leave-request')
+router.register(r'overtime-requests', OvertimeRequestViewSet, basename='oa-overtime-request')
 
 urlpatterns = [
     path('', include(router.urls)),
