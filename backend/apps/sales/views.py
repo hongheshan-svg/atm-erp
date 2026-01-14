@@ -328,8 +328,7 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
         # 创建明细表
         ws2 = wb.create_sheet(title='订单明细')
         detail_headers = [
-            '订单号*', '物料编码', '产品名称*', '规格型号',
-            '单位', '数量*', '单价*', '备注'
+            '产品名称*', '规格型号', '单位', '数量*', '单价*', '备注'
         ]
         
         for col, header in enumerate(detail_headers, 1):
@@ -340,14 +339,13 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
             cell.border = thin_border
         
         # 设置列宽
-        detail_widths = [15, 15, 25, 20, 10, 12, 12, 25]
+        detail_widths = [30, 25, 10, 12, 12, 30]
         for i, width in enumerate(detail_widths, 1):
             ws2.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
         
-        # 示例数据
+        # 示例数据（非标定制产品，无需物料编码）
         detail_sample = [
-            'SO2025010001', 'ITEM001', '示例产品', '100x100mm',
-            '件', 10, 1000.00, '备注'
+            '定制产品A', '按图纸加工', '件', 1, 50000.00, ''
         ]
         for col, value in enumerate(detail_sample, 1):
             ws2.cell(row=2, column=col, value=value)
