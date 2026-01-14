@@ -335,13 +335,18 @@ class ProjectBOM(BaseModel):
         ('DESIGNING', '设计中'),
     ]
     
-    # ==================== 下单状态 ====================
+    # ==================== 下单/采购状态 ====================
     ORDER_STATUS_CHOICES = [
-        ('NOT_ORDERED', '未下单'),
-        ('PARTIAL', '部分下单'),
-        ('ORDERED', '已下单'),
-        ('IN_TRANSIT', '在途'),
-        ('RECEIVED', '已收货'),
+        ('NOT_ORDERED', '未下单'),         # 初始状态
+        ('PR_PENDING', '采购申请中'),      # 已创建采购申请（草稿/待审批）
+        ('PR_APPROVED', '申请已批准'),     # 采购申请已批准，待转订单
+        ('PARTIAL', '部分下单'),           # 部分数量已下单
+        ('ORDERED', '已下单'),             # 全部数量已下单
+        ('IN_TRANSIT', '在途'),            # 供应商已发货
+        ('PARTIAL_RECEIVED', '部分收货'),  # 部分数量已收货
+        ('RECEIVED', '已收货'),            # 全部数量已收货
+        ('RETURNED', '已退货'),            # 退货
+        ('CANCELLED', '已取消'),           # 采购取消
     ]
     
     # ==================== 物料属性(可覆盖Item默认值) ====================
@@ -596,6 +601,23 @@ class ProjectBOM(BaseModel):
         help_text='从库存预留的数量'
     )
     
+    # 采购申请关联
+    purchase_request = models.ForeignKey(
+        'purchase.PurchaseRequest',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='bom_items',
+        verbose_name='采购申请'
+    )
+    pr_qty = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='采购申请数量',
+        help_text='已创建采购申请的数量'
+    )
+    
     # 采购订单关联
     purchase_order = models.ForeignKey(
         'purchase.PurchaseOrder',
@@ -604,6 +626,21 @@ class ProjectBOM(BaseModel):
         blank=True,
         related_name='bom_items',
         verbose_name='采购订单'
+    )
+    
+    # 发货和退货数量
+    shipped_qty = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='已发货数量',
+        help_text='供应商已发货的数量（在途）'
+    )
+    returned_qty = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='退货数量'
     )
     
     # ==================== 质量与检验 ====================

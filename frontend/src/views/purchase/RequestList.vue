@@ -1082,17 +1082,21 @@ const loadBomItems = async () => {
   bomLoading.value = true
   try {
     const res = await request.get('/projects/bom/', {
-      params: { project: bomProject.value, is_deleted: false }
+      params: { 
+        project: bomProject.value, 
+        is_deleted: false,
+        order_status: 'NOT_ORDERED'  // 只加载未采购的物料
+      }
     })
     const items = res.data?.results || res.results || res.data || res || []
     bomItems.value = items.map(item => ({
       ...item,
-      item_code: item.item_code || item.item?.sku || '',
+      item_code: item.item_code || item.item?.sku || item.item_sku || '',
       item_name: item.item_name || item.item?.name || '',
-      specification: item.specification || item.item?.specification || '',
-      unit: item.unit || item.item?.unit_display || '',
-      has_drawing_display: item.has_drawing === 'HAS_DRAWING' ? '有图' : item.has_drawing === 'NO_DRAWING' ? '无图' : '待定',
-      item_type_display: item.item_type_display || item.item?.item_type_display || '',
+      specification: item.specification || item.item?.specification || item.item_specification || '',
+      unit: item.unit || item.item?.unit_display || item.item_unit || '',
+      has_drawing_display: item.has_drawing_display || (item.has_drawing === 'HAS_DRAWING' ? '有图' : item.has_drawing === 'NO_DRAWING' ? '无图' : '待定'),
+      item_type_display: item.item_type_display || item.item?.item_type_display || item.item_type || '',
       version_brand: item.version_brand_display || item.version_brand || ''
     }))
   } catch (error) {

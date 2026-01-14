@@ -58,6 +58,38 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
             requestor=self.request.user
         )
     
+    def perform_destroy(self, instance):
+        """删除采购申请时回退BOM状态"""
+        from apps.projects.models import ProjectBOM
+        
+        # 回退关联BOM的状态：PR_PENDING/PR_APPROVED -> NOT_ORDERED
+        with transaction.atomic():
+            # 获取采购申请行中的物料
+            pr_lines = instance.lines.filter(is_deleted=False)
+            
+            for pr_line in pr_lines:
+                # 找到关联的BOM并回退状态
+                if instance.project:
+                    bom_items = ProjectBOM.objects.filter(
+                        project=instance.project,
+                        item=pr_line.item,
+                        purchase_request=instance,
+                        is_deleted=False,
+                        order_status__in=['PR_PENDING', 'PR_APPROVED']
+                    )
+                    for bom in bom_items:
+                        # 回退数量
+                        bom.pr_qty = max(0, (bom.pr_qty or 0) - pr_line.qty)
+                        # 如果没有其他采购申请，回退状态
+                        if bom.pr_qty <= 0:
+                            bom.order_status = 'NOT_ORDERED'
+                            bom.purchase_request = None
+                            bom.pr_qty = 0
+                        bom.save(update_fields=['order_status', 'purchase_request', 'pr_qty'])
+            
+            # 调用父类的软删除
+            super().perform_destroy(instance)
+    
     @action(detail=False, methods=['get'])
     def check_budget(self, request):
         """
@@ -186,8 +218,18 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        pr.status = 'APPROVED'
-        pr.save()
+        with transaction.atomic():
+            pr.status = 'APPROVED'
+            pr.save()
+            
+            # 更新BOM状态：PR_PENDING -> PR_APPROVED
+            from apps.projects.models import ProjectBOM
+            ProjectBOM.objects.filter(
+                purchase_request=pr,
+                is_deleted=False,
+                order_status='PR_PENDING'
+            ).update(order_status='PR_APPROVED')
+        
         return Response(PurchaseRequestSerializer(pr).data)
     
     @action(detail=True, methods=['post'])
@@ -221,18 +263,27 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        pr.status = 'DRAFT'
-        pr.save()
-        
-        # 尝试取消工作流
-        try:
-            from apps.core.workflow.services import WorkflowService
-            WorkflowService.cancel_workflow(
-                business_type='PURCHASE_REQUEST',
-                business_id=pr.id
-            )
-        except Exception:
-            pass
+        with transaction.atomic():
+            pr.status = 'DRAFT'
+            pr.save()
+            
+            # 回退BOM状态：PR_APPROVED -> PR_PENDING
+            from apps.projects.models import ProjectBOM
+            ProjectBOM.objects.filter(
+                purchase_request=pr,
+                is_deleted=False,
+                order_status='PR_APPROVED'
+            ).update(order_status='PR_PENDING')
+            
+            # 尝试取消工作流
+            try:
+                from apps.core.workflow.services import WorkflowService
+                WorkflowService.cancel_workflow(
+                    business_type='PURCHASE_REQUEST',
+                    business_id=pr.id
+                )
+            except Exception:
+                pass
         
         return Response({
             **PurchaseRequestSerializer(pr).data,
@@ -272,6 +323,21 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
                     unit_price=pr_line.estimated_price,
                     created_by=request.user
                 )
+                
+                # 更新BOM状态：PR_APPROVED -> ORDERED
+                if pr.project:
+                    from apps.projects.models import ProjectBOM
+                    bom_items = ProjectBOM.objects.filter(
+                        project=pr.project,
+                        item=pr_line.item,
+                        is_deleted=False,
+                        order_status__in=['PR_PENDING', 'PR_APPROVED']
+                    )
+                    for bom in bom_items:
+                        bom.order_status = 'ORDERED'
+                        bom.purchase_order = po
+                        bom.ordered_qty = (bom.ordered_qty or 0) + pr_line.qty
+                        bom.save(update_fields=['order_status', 'purchase_order', 'ordered_qty'])
             
             # Update total amount and tax
             total = po.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
@@ -523,6 +589,7 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
                 
                 # 创建采购申请明细
                 total_amount = 0
+                updated_bom_ids = []
                 for line_data in group_data['lines']:
                     line = PurchaseRequestLine.objects.create(
                         pr=pr,
@@ -534,6 +601,22 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
                         created_by=request.user
                     )
                     total_amount += line.line_amount
+                    
+                    # 更新对应BOM的采购状态
+                    if group_data['project']:
+                        from apps.projects.models import ProjectBOM
+                        bom_items = ProjectBOM.objects.filter(
+                            project=group_data['project'],
+                            item=line_data['item'],
+                            is_deleted=False,
+                            order_status='NOT_ORDERED'  # 只更新未下单的
+                        )
+                        for bom in bom_items:
+                            bom.order_status = 'PR_PENDING'
+                            bom.purchase_request = pr
+                            bom.pr_qty = (bom.pr_qty or 0) + line_data['qty']
+                            bom.save(update_fields=['order_status', 'purchase_request', 'pr_qty'])
+                            updated_bom_ids.append(bom.id)
                 
                 # 更新采购申请总金额
                 pr.total_amount = total_amount
@@ -547,7 +630,8 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
                     'supplier_name': supplier_name,
                     'project_name': group_data['project'].name if group_data['project'] else '无项目',
                     'lines_count': len(group_data['lines']),
-                    'total_amount': float(pr.total_with_tax)
+                    'total_amount': float(pr.total_with_tax),
+                    'updated_bom_count': len(updated_bom_ids)
                 })
         
         return Response({
@@ -740,8 +824,18 @@ class PurchaseOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        po.status = 'CANCELLED'
-        po.save()
+        with transaction.atomic():
+            po.status = 'CANCELLED'
+            po.save()
+            
+            # 回退BOM状态：ORDERED -> CANCELLED
+            from apps.projects.models import ProjectBOM
+            ProjectBOM.objects.filter(
+                purchase_order=po,
+                is_deleted=False,
+                order_status='ORDERED'
+            ).update(order_status='CANCELLED')
+        
         return Response(PurchaseOrderSerializer(po).data)
     
     @action(detail=True, methods=['post'])
@@ -770,6 +864,22 @@ class PurchaseOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
             
             # 删除付款计划
             PurchasePaymentSchedule.objects.filter(po=po, is_deleted=False).update(is_deleted=True)
+            
+            # 回退BOM状态：ORDERED -> PR_APPROVED (有采购申请) 或 NOT_ORDERED (无采购申请)
+            from apps.projects.models import ProjectBOM
+            bom_items = ProjectBOM.objects.filter(
+                purchase_order=po,
+                is_deleted=False,
+                order_status='ORDERED'
+            )
+            for bom in bom_items:
+                if bom.purchase_request:
+                    bom.order_status = 'PR_APPROVED'
+                else:
+                    bom.order_status = 'NOT_ORDERED'
+                bom.purchase_order = None
+                bom.ordered_qty = 0
+                bom.save(update_fields=['order_status', 'purchase_order', 'ordered_qty'])
             
             po.status = 'DRAFT'
             po.save()
@@ -812,9 +922,11 @@ class GoodsReceiptViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixi
         
         with transaction.atomic():
             from apps.inventory.models import StockMove
+            from apps.projects.models import ProjectBOM
             from django.conf import settings
             
             costing_method = getattr(settings, 'INVENTORY_COSTING_METHOD', 'WEIGHTED_AVG')
+            po = receipt.po
             
             for line in receipt.lines.filter(is_deleted=False):
                 # Create stock move for receipt
@@ -845,12 +957,29 @@ class GoodsReceiptViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixi
                 # Update received qty on PO line
                 line.po_line.received_qty += line.qty
                 line.po_line.save()
+                
+                # 更新BOM的收货数量和状态
+                if po.project:
+                    bom_items = ProjectBOM.objects.filter(
+                        project=po.project,
+                        item=line.item,
+                        purchase_order=po,
+                        is_deleted=False,
+                        order_status__in=['ORDERED', 'IN_TRANSIT', 'PARTIAL_RECEIVED']
+                    )
+                    for bom in bom_items:
+                        bom.received_qty = (bom.received_qty or 0) + line.qty
+                        # 根据收货数量更新状态
+                        if bom.received_qty >= bom.planned_qty:
+                            bom.order_status = 'RECEIVED'
+                        else:
+                            bom.order_status = 'PARTIAL_RECEIVED'
+                        bom.save(update_fields=['received_qty', 'order_status'])
             
             receipt.status = 'CONFIRMED'
             receipt.save()
             
             # Check if PO is fully received
-            po = receipt.po
             all_received = all(
                 line.received_qty >= line.qty
                 for line in po.lines.filter(is_deleted=False)

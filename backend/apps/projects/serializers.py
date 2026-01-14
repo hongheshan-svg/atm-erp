@@ -210,7 +210,8 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
     order_status_display = serializers.CharField(source='get_order_status_display', read_only=True)
     supplier_name = serializers.CharField(source='supplier.name', read_only=True, allow_null=True)
     supplier_code = serializers.CharField(source='supplier.code', read_only=True, allow_null=True)
-    purchase_order_no = serializers.CharField(source='purchase_order.po_no', read_only=True, allow_null=True)
+    purchase_request_no = serializers.CharField(source='purchase_request.request_no', read_only=True, allow_null=True)
+    purchase_order_no = serializers.CharField(source='purchase_order.order_no', read_only=True, allow_null=True)
     
     # ===== 询价字段 =====
     quote_status_display = serializers.CharField(source='get_quote_status_display', read_only=True)
@@ -269,7 +270,9 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
             'order_status', 'order_status_display',
             'supplier', 'supplier_name', 'supplier_code',
             'delivery_date', 'actual_delivery_date',
-            'ordered_qty', 'received_qty', 'issued_qty', 'reserved_qty',
+            'purchase_request', 'purchase_request_no', 'pr_qty',
+            'ordered_qty', 'shipped_qty', 'received_qty', 'returned_qty',
+            'issued_qty', 'reserved_qty',
             'purchase_order', 'purchase_order_no',
             'shortage_qty', 'is_overdue',
             # 质量与检验
