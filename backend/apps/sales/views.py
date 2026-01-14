@@ -878,11 +878,21 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                             if not order_no:
                                 row_errors.append('订单号不能为空')
                             
+                            # 订单号：先从本次导入的订单中查找，再从数据库查找
                             so = order_map.get(order_no) if order_no else None
                             if order_no and not so:
                                 so = SalesOrder.objects.filter(order_no=order_no).first()
-                            if order_no and not so:
-                                row_errors.append(f'订单号 "{order_no}" 不存在')
+                            
+                            # 如果订单号找不到，尝试智能匹配：如果本次只导入了一个订单，自动关联
+                            if not so and len(order_map) == 1:
+                                so = list(order_map.values())[0]
+                            
+                            # 仍然找不到订单时才报错
+                            if not so:
+                                if order_no:
+                                    row_errors.append(f'订单号 "{order_no}" 不存在，请检查是否与主表订单号一致')
+                                else:
+                                    row_errors.append('订单号不能为空，请填写与主表一致的订单号')
                             
                             qty = parse_decimal(data.get('qty'))
                             if qty <= 0:
@@ -894,11 +904,8 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                             
                             product_name = str(data.get('product_name', '')).strip()
                             item_sku = str(data.get('item_sku', '')).strip()
+                            # 物料编码可选，不存在时不报错，作为自定义产品处理
                             item = item_cache.get(item_sku) if item_sku else None
-                            
-                            # 如果填了物料编码但不存在
-                            if item_sku and not item:
-                                row_errors.append(f'物料编码 "{item_sku}" 在系统中不存在')
                             
                             # 如果没有物料编码也没有产品名称
                             if not item and not product_name:

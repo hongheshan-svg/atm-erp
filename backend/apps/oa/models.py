@@ -9,4 +9,7 @@ from .electronic_signature import SignatureSeal, SignatureDocument, SignaturePar
 from .vehicle import Vehicle, VehicleRequest, VehicleMaintenance
 
 # Import models from asset
-from .asset import AssetCategory, Asset, AssetBorrow, AssetTransfer, AssetMaintenance
+from .asset import OAAssetCategory, Asset, AssetBorrow, OAAssetTransfer, AssetMaintenance
+# Aliases
+AssetCategory = OAAssetCategory
+AssetTransfer = OAAssetTransfer

@@ -16,9 +16,9 @@ from apps.core.models import BaseModel
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 
 
-class AssetCategory(BaseModel):
+class OAAssetCategory(BaseModel):
     """
-    资产分类
+    办公资产分类
     """
     name = models.CharField(max_length=100, verbose_name='分类名称')
     code = models.CharField(max_length=20, unique=True, verbose_name='分类编码')
@@ -36,12 +36,15 @@ class AssetCategory(BaseModel):
     
     class Meta:
         db_table = 'oa_asset_category'
-        verbose_name = '资产分类'
+        verbose_name = '办公资产分类'
         verbose_name_plural = verbose_name
         ordering = ['sort_order', 'name']
     
     def __str__(self):
         return self.name
+
+# Alias for backwards compatibility
+AssetCategory = OAAssetCategory
 
 
 class Asset(BaseModel):
@@ -60,11 +63,11 @@ class Asset(BaseModel):
     name = models.CharField(max_length=200, verbose_name='资产名称')
     
     category = models.ForeignKey(
-        AssetCategory,
+        OAAssetCategory,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='assets',
+        related_name='oa_assets',
         verbose_name='资产分类'
     )
     
@@ -87,7 +90,7 @@ class Asset(BaseModel):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='supplied_assets',
+        related_name='oa_supplied_assets',
         verbose_name='供应商'
     )
     warranty_expire_date = models.DateField(null=True, blank=True, verbose_name='保修到期')
@@ -114,14 +117,7 @@ class Asset(BaseModel):
     
     # 位置
     location = models.CharField(max_length=200, blank=True, verbose_name='存放位置')
-    department = models.ForeignKey(
-        'masterdata.Department',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='assets',
-        verbose_name='所属部门'
-    )
+    department_name = models.CharField(max_length=100, blank=True, verbose_name='所属部门')
     
     # 使用人
     current_user = models.ForeignKey(
@@ -249,9 +245,9 @@ class AssetBorrow(BaseModel):
         super().save(*args, **kwargs)
 
 
-class AssetTransfer(BaseModel):
+class OAAssetTransfer(BaseModel):
     """
-    资产调拨/转移
+    办公资产调拨/转移
     """
     STATUS_CHOICES = [
         ('PENDING', '待审批'),
@@ -266,43 +262,29 @@ class AssetTransfer(BaseModel):
     asset = models.ForeignKey(
         Asset,
         on_delete=models.CASCADE,
-        related_name='transfers',
+        related_name='oa_transfers',
         verbose_name='资产'
     )
     
     # 调出
-    from_department = models.ForeignKey(
-        'masterdata.Department',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='asset_transfers_out',
-        verbose_name='调出部门'
-    )
+    from_department_name = models.CharField(max_length=100, blank=True, verbose_name='调出部门')
     from_user = models.ForeignKey(
         'accounts.User',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='asset_transfers_out',
+        related_name='oa_asset_transfers_out',
         verbose_name='调出人'
     )
     
     # 调入
-    to_department = models.ForeignKey(
-        'masterdata.Department',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='asset_transfers_in',
-        verbose_name='调入部门'
-    )
+    to_department_name = models.CharField(max_length=100, blank=True, verbose_name='调入部门')
     to_user = models.ForeignKey(
         'accounts.User',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='asset_transfers_in',
+        related_name='oa_asset_transfers_in',
         verbose_name='调入人'
     )
     
@@ -321,14 +303,14 @@ class AssetTransfer(BaseModel):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='approved_asset_transfers',
+        related_name='oa_approved_asset_transfers',
         verbose_name='审批人'
     )
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name='审批时间')
     
     class Meta:
         db_table = 'oa_asset_transfer'
-        verbose_name = '资产调拨'
+        verbose_name = '办公资产调拨'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
     
@@ -338,8 +320,11 @@ class AssetTransfer(BaseModel):
     def save(self, *args, **kwargs):
         if not self.transfer_no:
             from apps.core.utils import generate_code
-            self.transfer_no = generate_code('AT')
+            self.transfer_no = generate_code('OAT')
         super().save(*args, **kwargs)
+
+# Alias for backwards compatibility
+AssetTransfer = OAAssetTransfer
 
 
 class AssetMaintenance(BaseModel):
@@ -429,7 +414,7 @@ class AssetCategorySerializer(serializers.ModelSerializer):
     children = serializers.SerializerMethodField()
     
     class Meta:
-        model = AssetCategory
+        model = OAAssetCategory
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by']
     
@@ -441,7 +426,6 @@ class AssetCategorySerializer(serializers.ModelSerializer):
 class AssetSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     category_name = serializers.CharField(source='category.name', read_only=True)
-    department_name = serializers.CharField(source='department.name', read_only=True)
     current_user_name = serializers.CharField(source='current_user.get_full_name', read_only=True)
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
     
@@ -483,13 +467,11 @@ class AssetTransferSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     asset_name = serializers.CharField(source='asset.name', read_only=True)
     asset_no = serializers.CharField(source='asset.asset_no', read_only=True)
-    from_department_name = serializers.CharField(source='from_department.name', read_only=True)
     from_user_name = serializers.CharField(source='from_user.get_full_name', read_only=True)
-    to_department_name = serializers.CharField(source='to_department.name', read_only=True)
     to_user_name = serializers.CharField(source='to_user.get_full_name', read_only=True)
     
     class Meta:
-        model = AssetTransfer
+        model = OAAssetTransfer
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by', 'transfer_no', 'approver', 'approved_at']
 
@@ -513,8 +495,8 @@ class AssetMaintenanceSerializer(serializers.ModelSerializer):
 # =====================
 
 class AssetCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
-    """资产分类管理"""
-    queryset = AssetCategory.objects.filter(is_deleted=False)
+    """办公资产分类管理"""
+    queryset = OAAssetCategory.objects.filter(is_deleted=False)
     serializer_class = AssetCategorySerializer
     permission_classes = [IsAuthenticated]
     filterset_fields = ['parent']
@@ -528,11 +510,11 @@ class AssetCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
 
 
 class AssetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
-    """资产管理"""
+    """办公资产管理"""
     queryset = Asset.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
-    filterset_fields = ['status', 'category', 'department', 'current_user']
-    search_fields = ['asset_no', 'name', 'brand', 'model', 'serial_no']
+    filterset_fields = ['status', 'category', 'current_user']
+    search_fields = ['asset_no', 'name', 'brand', 'model', 'serial_no', 'department_name']
     ordering_fields = ['asset_no', 'purchase_date', 'purchase_price', 'created_at']
     
     def get_serializer_class(self):
@@ -718,11 +700,11 @@ class AssetBorrowViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
 
 
 class AssetTransferViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
-    """资产调拨管理"""
-    queryset = AssetTransfer.objects.filter(is_deleted=False)
+    """办公资产调拨管理"""
+    queryset = OAAssetTransfer.objects.filter(is_deleted=False)
     serializer_class = AssetTransferSerializer
     permission_classes = [IsAuthenticated]
-    filterset_fields = ['status', 'asset', 'from_department', 'to_department']
+    filterset_fields = ['status', 'asset']
     search_fields = ['transfer_no', 'reason']
     ordering_fields = ['transfer_date', 'created_at']
     
@@ -751,7 +733,7 @@ class AssetTransferViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         transfer.save()
         
         # 更新资产信息
-        transfer.asset.department = transfer.to_department
+        transfer.asset.department_name = transfer.to_department_name
         transfer.asset.current_user = transfer.to_user
         transfer.asset.save()
         
