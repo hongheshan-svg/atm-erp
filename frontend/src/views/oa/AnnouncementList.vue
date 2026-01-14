@@ -223,8 +223,17 @@ const loadData = async () => {
       ...searchForm
     }
     const res = await request.get('/oa/announcements/published/', { params })
-    list.value = res.data.results || res.data
-    pagination.total = res.data.count || res.data.length
+    // res 已经是 response.data
+    if (Array.isArray(res)) {
+      list.value = res
+      pagination.total = res.length
+    } else if (res && res.results) {
+      list.value = res.results
+      pagination.total = res.count || 0
+    } else {
+      list.value = []
+      pagination.total = 0
+    }
   } catch (error) {
     ElMessage.error('加载数据失败')
   } finally {
@@ -313,10 +322,12 @@ const handleSaveAndPublish = async () => {
     
     if (isEdit.value) {
       const res = await request.put(`/oa/announcements/${form.id}/`, data)
-      announcement = res.data
+      // res 已经是 response.data
+      announcement = res
     } else {
       const res = await request.post('/oa/announcements/', data)
-      announcement = res.data
+      // res 已经是 response.data
+      announcement = res
     }
     
     // 再发布

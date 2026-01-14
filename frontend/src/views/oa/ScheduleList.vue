@@ -301,7 +301,8 @@ const loadData = async () => {
     const res = await request.get('/core/schedules/calendar/', {
       params: { start, end }
     })
-    schedules.value = res.data
+    // res 已经是 response.data
+    schedules.value = Array.isArray(res) ? res : (res.results || [])
   } catch (error) {
     console.error(error)
   } finally {

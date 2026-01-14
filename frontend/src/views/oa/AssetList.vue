@@ -279,7 +279,14 @@ const formatNumber = (num) => {
 const loadCategories = async () => {
   try {
     const res = await request.get('/oa/asset-categories/')
-    categories.value = res.data.results || res.data
+    // res 已经是 response.data
+    if (Array.isArray(res)) {
+      categories.value = res
+    } else if (res && res.results) {
+      categories.value = res.results
+    } else {
+      categories.value = []
+    }
   } catch (error) {
     console.error('加载分类失败', error)
   }
@@ -288,7 +295,9 @@ const loadCategories = async () => {
 const loadUsers = async () => {
   try {
     const res = await request.get('/auth/users/', { params: { page_size: 1000 } })
-    users.value = (res.data.results || res.data).map(u => ({
+    // res 已经是 response.data
+    const userData = Array.isArray(res) ? res : (res.results || [])
+    users.value = userData.map(u => ({
       id: u.id,
       name: u.name || `${u.last_name}${u.first_name}` || u.username
     }))
@@ -300,7 +309,8 @@ const loadUsers = async () => {
 const loadStats = async () => {
   try {
     const res = await request.get('/oa/assets/statistics/')
-    stats.value = res.data
+    // res 已经是 response.data
+    stats.value = res || {}
   } catch (error) {
     console.error('加载统计失败', error)
   }
@@ -315,8 +325,17 @@ const loadData = async () => {
       ...searchForm
     }
     const res = await request.get('/oa/assets/', { params })
-    list.value = res.data.results || res.data
-    pagination.total = res.data.count || res.data.length
+    // res 已经是 response.data
+    if (Array.isArray(res)) {
+      list.value = res
+      pagination.total = res.length
+    } else if (res && res.results) {
+      list.value = res.results
+      pagination.total = res.count || 0
+    } else {
+      list.value = []
+      pagination.total = 0
+    }
   } catch (error) {
     ElMessage.error('加载数据失败')
   } finally {

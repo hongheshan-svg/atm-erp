@@ -245,7 +245,8 @@ const formatDateTime = (datetime) => {
 const loadVehicles = async () => {
   try {
     const res = await request.get('/oa/vehicles/available/')
-    availableVehicles.value = res.data
+    // res 已经是 response.data
+    availableVehicles.value = Array.isArray(res) ? res : (res.results || [])
   } catch (error) {
     console.error('加载车辆失败', error)
   }
@@ -259,9 +260,18 @@ const loadData = async () => {
       page_size: pagination.pageSize,
       ...searchForm
     }
-    const res = await request.get('/oa/vehicle-requests/my_requests/', { params })
-    list.value = res.data.results || res.data
-    pagination.total = res.data.count || res.data.length
+    const res = await request.get('/oa/vehicle-requests/', { params })
+    // res 已经是 response.data
+    if (Array.isArray(res)) {
+      list.value = res
+      pagination.total = res.length
+    } else if (res && res.results) {
+      list.value = res.results
+      pagination.total = res.count || 0
+    } else {
+      list.value = []
+      pagination.total = 0
+    }
   } catch (error) {
     ElMessage.error('加载数据失败')
   } finally {

@@ -238,8 +238,17 @@ const loadData = async () => {
       ...searchForm
     }
     const res = await request.get('/oa/vehicles/', { params })
-    list.value = res.data.results || res.data
-    pagination.total = res.data.count || res.data.length
+    // res 已经是 response.data
+    if (Array.isArray(res)) {
+      list.value = res
+      pagination.total = res.length
+    } else if (res && res.results) {
+      list.value = res.results
+      pagination.total = res.count || 0
+    } else {
+      list.value = []
+      pagination.total = 0
+    }
   } catch (error) {
     ElMessage.error('加载数据失败')
   } finally {

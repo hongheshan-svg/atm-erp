@@ -210,8 +210,9 @@ const getStatusType = (status) => {
 const loadTodayStatus = async () => {
   try {
     const res = await request.get('/oa/attendance-records/today/')
-    todayRecord.value = res.data
-    console.log('Today status:', res.data)
+    // res 已经是 response.data
+    todayRecord.value = res
+    console.log('Today status:', res)
   } catch (error) {
     console.error('加载今日状态失败', error)
     // 设置默认值
@@ -225,11 +226,14 @@ const loadRecords = async () => {
     const res = await request.get('/oa/attendance-records/', {
       params: { month: selectedMonth.value }
     })
-    console.log('Attendance records:', res.data)
-    if (Array.isArray(res.data)) {
-      records.value = res.data
+    console.log('Attendance records:', res)
+    // res 已经是 response.data
+    if (Array.isArray(res)) {
+      records.value = res
+    } else if (res && res.results) {
+      records.value = res.results
     } else {
-      records.value = res.data.results || []
+      records.value = []
     }
   } catch (error) {
     console.error('加载考勤记录失败', error)
@@ -244,9 +248,12 @@ const loadMonthlySummary = async () => {
     const res = await request.get('/oa/attendance-records/monthly_summary/', {
       params: { month: selectedMonth.value }
     })
-    console.log('Monthly summary:', res.data)
-    if (res.data && res.data.length > 0) {
-      monthSummary.value = res.data[0]
+    console.log('Monthly summary:', res)
+    // res 已经是 response.data
+    if (Array.isArray(res) && res.length > 0) {
+      monthSummary.value = res[0]
+    } else if (res && typeof res === 'object' && !Array.isArray(res)) {
+      monthSummary.value = res
     } else {
       monthSummary.value = {}
     }
@@ -262,7 +269,8 @@ const handleCheckIn = async () => {
     const res = await request.post('/oa/attendance-records/check_in/', {
       location: '办公室'
     })
-    todayRecord.value = res.data
+    // res 已经是 response.data
+    todayRecord.value = res
     ElMessage.success('签到成功')
     loadRecords()
   } catch (error) {
@@ -278,7 +286,8 @@ const handleCheckOut = async () => {
     const res = await request.post('/oa/attendance-records/check_out/', {
       location: '办公室'
     })
-    todayRecord.value = res.data
+    // res 已经是 response.data
+    todayRecord.value = res
     ElMessage.success('签退成功')
     loadRecords()
     loadMonthlySummary()

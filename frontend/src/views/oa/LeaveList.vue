@@ -174,7 +174,8 @@ const getStatusType = (status) => {
 const loadLeaveTypes = async () => {
   try {
     const res = await request.get('/oa/leave-requests/leave_types/')
-    leaveTypes.value = res.data
+    // res 已经是 response.data，因为响应拦截器返回的是 response.data
+    leaveTypes.value = Array.isArray(res) ? res : (res.data || res)
   } catch (error) {
     console.error('加载请假类型失败', error)
   }
@@ -189,13 +190,17 @@ const loadData = async () => {
       ...searchForm
     }
     const res = await request.get('/oa/leave-requests/', { params })
-    console.log('Leave requests response:', res.data)
-    if (Array.isArray(res.data)) {
-      list.value = res.data
-      pagination.total = res.data.length
+    console.log('Leave requests response:', res)
+    // res 已经是 response.data，因为响应拦截器返回的是 response.data
+    if (Array.isArray(res)) {
+      list.value = res
+      pagination.total = res.length
+    } else if (res && res.results) {
+      list.value = res.results
+      pagination.total = res.count || 0
     } else {
-      list.value = res.data.results || []
-      pagination.total = res.data.count || 0
+      list.value = []
+      pagination.total = 0
     }
   } catch (error) {
     console.error('加载请假数据失败:', error)
