@@ -178,22 +178,6 @@
         <el-table-column prop="unit" label="单位" width="60" />
         <el-table-column prop="item_type" label="物料类型" width="80" />
         <el-table-column prop="planned_qty" label="计划数量" width="90" align="right" />
-        <el-table-column prop="quote_status_display" label="询价状态" width="90" align="center">
-          <template #default="{ row }">
-            <el-tag 
-              :type="row.quote_status === 'QUOTED' ? 'success' : row.quote_status === 'QUOTING' ? 'warning' : 'info'" 
-              size="small"
-            >
-              {{ row.quote_status_display || '未询价' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="price_with_tax" label="含税单价" width="100" align="right">
-          <template #default="{ row }">
-            <span v-if="row.price_with_tax">¥{{ parseFloat(row.price_with_tax).toFixed(4) }}</span>
-            <span v-else class="text-muted">-</span>
-          </template>
-        </el-table-column>
         <el-table-column prop="order_status_display" label="采购状态" width="100" align="center">
           <template #default="{ row }">
             <el-tag 

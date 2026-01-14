@@ -341,10 +341,11 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
                     unit_price=pr_line.estimated_price,
                     created_by=request.user
                 )
-                
-                # 更新BOM状态：PR_APPROVED -> ORDERED
-                if pr.project:
-                    from apps.projects.models import ProjectBOM
+            
+            # 关联BOM到采购订单（但状态保持PR_APPROVED，等订单确认时再变为ORDERED）
+            if pr.project:
+                from apps.projects.models import ProjectBOM
+                for pr_line in pr.lines.filter(is_deleted=False):
                     bom_items = ProjectBOM.objects.filter(
                         project=pr.project,
                         item=pr_line.item,
@@ -352,10 +353,8 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
                         order_status__in=['PR_PENDING', 'PR_APPROVED']
                     )
                     for bom in bom_items:
-                        bom.order_status = 'ORDERED'
-                        bom.purchase_order = po
-                        bom.ordered_qty = (bom.ordered_qty or 0) + pr_line.qty
-                        bom.save(update_fields=['order_status', 'purchase_order', 'ordered_qty'])
+                        bom.purchase_order = po  # 先关联订单，但状态不变
+                        bom.save(update_fields=['purchase_order'])
             
             # Update total amount and tax
             total = po.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
@@ -793,7 +792,7 @@ class PurchaseOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
     
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
-        """Confirm PO."""
+        """Confirm PO - 确认采购订单，此时BOM状态才变为已下单."""
         po = self.get_object()
         if po.status != 'DRAFT':
             return Response(
@@ -801,31 +800,48 @@ class PurchaseOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        po.status = 'CONFIRMED'
-        po.save()
-        
-        # Auto-create AP - 使用含税金额（避免重复创建）
-        from apps.finance.models import AccountPayable, PurchasePaymentSchedule
-        
-        # 检查是否已存在该PO的应付账款
-        existing_ap = AccountPayable.objects.filter(po=po, is_deleted=False).first()
-        if not existing_ap:
-            AccountPayable.objects.create(
-                supplier=po.supplier,
-                po=po,
-                project=po.project,
-                invoice_date=po.order_date,
-                amount_due=po.total_with_tax or po.total_amount,  # 优先使用含税金额
-                due_date=request.data.get('due_date', po.delivery_date),
-                created_by=request.user
-            )
-        
-        # 自动生成付款计划（避免重复创建）
-        existing_schedules = PurchasePaymentSchedule.objects.filter(po=po, is_deleted=False).exists()
-        if existing_schedules:
-            schedules = []
-        else:
-            schedules = PurchasePaymentSchedule.generate_from_purchase_order(po)
+        with transaction.atomic():
+            po.status = 'CONFIRMED'
+            po.save()
+            
+            # 更新BOM状态：PR_APPROVED -> ORDERED（订单确认时才真正"已下单"）
+            from apps.projects.models import ProjectBOM
+            if po.project:
+                for po_line in po.lines.filter(is_deleted=False):
+                    bom_items = ProjectBOM.objects.filter(
+                        project=po.project,
+                        item=po_line.item,
+                        purchase_order=po,
+                        is_deleted=False,
+                        order_status__in=['PR_PENDING', 'PR_APPROVED']
+                    )
+                    for bom in bom_items:
+                        bom.order_status = 'ORDERED'
+                        bom.ordered_qty = (bom.ordered_qty or 0) + po_line.qty
+                        bom.save(update_fields=['order_status', 'ordered_qty'])
+            
+            # Auto-create AP - 使用含税金额（避免重复创建）
+            from apps.finance.models import AccountPayable, PurchasePaymentSchedule
+            
+            # 检查是否已存在该PO的应付账款
+            existing_ap = AccountPayable.objects.filter(po=po, is_deleted=False).first()
+            if not existing_ap:
+                AccountPayable.objects.create(
+                    supplier=po.supplier,
+                    po=po,
+                    project=po.project,
+                    invoice_date=po.order_date,
+                    amount_due=po.total_with_tax or po.total_amount,  # 优先使用含税金额
+                    due_date=request.data.get('due_date', po.delivery_date),
+                    created_by=request.user
+                )
+            
+            # 自动生成付款计划（避免重复创建）
+            existing_schedules = PurchasePaymentSchedule.objects.filter(po=po, is_deleted=False).exists()
+            if existing_schedules:
+                schedules = []
+            else:
+                schedules = PurchasePaymentSchedule.generate_from_purchase_order(po)
         
         response_data = PurchaseOrderSerializer(po).data
         response_data['payment_schedules_count'] = len(schedules)
@@ -855,6 +871,61 @@ class PurchaseOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
             ).update(order_status='CANCELLED')
         
         return Response(PurchaseOrderSerializer(po).data)
+    
+    @action(detail=True, methods=['post'])
+    def mark_shipped(self, request, pk=None):
+        """标记为已发货 - 供应商发货通知，更新BOM为在途状态."""
+        po = self.get_object()
+        if po.status not in ['CONFIRMED', 'PARTIAL']:
+            return Response(
+                {'error': '只能标记已确认或部分收货状态的订单为已发货'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 获取发货数量（可选，默认为订单全部数量）
+        shipped_items = request.data.get('items', [])
+        
+        with transaction.atomic():
+            from apps.projects.models import ProjectBOM
+            
+            if shipped_items:
+                # 按明细发货
+                for item_data in shipped_items:
+                    item_id = item_data.get('item')
+                    shipped_qty = item_data.get('qty', 0)
+                    
+                    if po.project and item_id and shipped_qty > 0:
+                        bom_items = ProjectBOM.objects.filter(
+                            project=po.project,
+                            item_id=item_id,
+                            purchase_order=po,
+                            is_deleted=False,
+                            order_status='ORDERED'
+                        )
+                        for bom in bom_items:
+                            bom.order_status = 'IN_TRANSIT'
+                            bom.shipped_qty = (bom.shipped_qty or 0) + shipped_qty
+                            bom.save(update_fields=['order_status', 'shipped_qty'])
+            else:
+                # 整单发货
+                if po.project:
+                    for po_line in po.lines.filter(is_deleted=False):
+                        bom_items = ProjectBOM.objects.filter(
+                            project=po.project,
+                            item=po_line.item,
+                            purchase_order=po,
+                            is_deleted=False,
+                            order_status='ORDERED'
+                        )
+                        for bom in bom_items:
+                            bom.order_status = 'IN_TRANSIT'
+                            bom.shipped_qty = (bom.shipped_qty or 0) + po_line.qty
+                            bom.save(update_fields=['order_status', 'shipped_qty'])
+        
+        return Response({
+            'message': '已标记为发货',
+            **PurchaseOrderSerializer(po).data
+        })
     
     @action(detail=True, methods=['post'])
     def withdraw(self, request, pk=None):
@@ -1009,6 +1080,82 @@ class GoodsReceiptViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixi
             po.save()
         
         return Response(GoodsReceiptSerializer(receipt).data)
+    
+    @action(detail=True, methods=['post'])
+    def return_goods(self, request, pk=None):
+        """退货 - 创建退货记录并更新BOM状态."""
+        receipt = self.get_object()
+        if receipt.status != 'CONFIRMED':
+            return Response(
+                {'error': '只能对已确认的收货单进行退货'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 获取退货明细
+        return_items = request.data.get('items', [])
+        return_reason = request.data.get('reason', '')
+        
+        if not return_items:
+            return Response(
+                {'error': '请提供退货明细'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        with transaction.atomic():
+            from apps.projects.models import ProjectBOM
+            from apps.inventory.models import StockMove
+            
+            po = receipt.po
+            returned_count = 0
+            
+            for item_data in return_items:
+                item_id = item_data.get('item')
+                return_qty = item_data.get('qty', 0)
+                
+                if not item_id or return_qty <= 0:
+                    continue
+                
+                # 创建退货库存移动
+                StockMove.objects.create(
+                    item_id=item_id,
+                    warehouse_from=receipt.warehouse,
+                    qty=return_qty,
+                    move_type='OUT_RETURN',
+                    reference_type='GoodsReceipt',
+                    reference_id=receipt.id,
+                    move_date=request.data.get('return_date') or receipt.receipt_date,
+                    status='COMPLETED',
+                    notes=f'退货原因: {return_reason}',
+                    created_by=request.user
+                )
+                
+                # 更新BOM的退货数量和状态
+                if po and po.project:
+                    bom_items = ProjectBOM.objects.filter(
+                        project=po.project,
+                        item_id=item_id,
+                        purchase_order=po,
+                        is_deleted=False,
+                        order_status__in=['RECEIVED', 'PARTIAL_RECEIVED']
+                    )
+                    for bom in bom_items:
+                        bom.returned_qty = (bom.returned_qty or 0) + return_qty
+                        bom.received_qty = max(0, (bom.received_qty or 0) - return_qty)
+                        # 如果全部退货，状态变为已退货
+                        if bom.received_qty <= 0:
+                            bom.order_status = 'RETURNED'
+                        bom.save(update_fields=['returned_qty', 'received_qty', 'order_status'])
+                
+                returned_count += 1
+            
+            # 更新收货单状态
+            receipt.notes = f"{receipt.notes}\n退货记录: {return_reason}" if receipt.notes else f"退货记录: {return_reason}"
+            receipt.save()
+        
+        return Response({
+            'message': f'退货成功，共处理 {returned_count} 种物料',
+            'returned_count': returned_count
+        })
 
 
 class GoodsReceiptLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
