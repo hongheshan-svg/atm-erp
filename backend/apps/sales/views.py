@@ -942,7 +942,10 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                             detail_errors.append({'row': row_idx, 'sheet': '订单明细', 'error': f'解析错误: {str(e)}'})
                     
                     # 如果明细有错误，回滚并返回错误
+                    print(f"DEBUG: validated_lines数量: {len(validated_lines)}")
+                    print(f"DEBUG: detail_errors数量: {len(detail_errors)}")
                     if detail_errors:
+                        print(f"DEBUG: detail_errors: {detail_errors[:5]}")
                         raise ValueError('明细数据校验失败')
                     
                     # 导入明细
