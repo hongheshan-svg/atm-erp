@@ -826,8 +826,19 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                 detail_errors = []
                 validated_lines = []
                 
-                if '订单明细' in wb.sheetnames:
-                    detail_sheet = wb['订单明细']
+                # 兼容多种工作表名称
+                detail_sheet_names = ['订单明细', 'Sheet2', '明细', 'Details', 'Lines']
+                detail_sheet = None
+                for sheet_name in detail_sheet_names:
+                    if sheet_name in wb.sheetnames:
+                        detail_sheet = wb[sheet_name]
+                        break
+                
+                # 如果没找到明细表，检查是否只有一个工作表（可能主表和明细在同一个工作表）
+                if not detail_sheet and len(wb.sheetnames) == 1:
+                    # 只有一个工作表，跳过明细导入
+                    pass
+                elif detail_sheet:
                     detail_headers = [str(cell.value).strip() if cell.value else '' for cell in detail_sheet[1]]
                     
                     detail_col_map = {
