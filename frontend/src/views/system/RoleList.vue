@@ -209,7 +209,14 @@ const menuTree = ref([
       { id: 'system:login-logs', label: '登录日志' },
       { id: 'system:webhooks', label: 'Webhook管理' },
       { id: 'system:dashboard-config', label: '仪表盘配置' },
-      { id: 'system:config', label: '系统配置' }
+      { id: 'system:config', label: '系统配置' },
+      { id: 'system:monitor', label: '系统监控' },
+      { id: 'system:backup', label: '数据备份' },
+      { id: 'system:audit-analytics', label: '操作日志分析' },
+      { id: 'system:data-dictionary', label: '数据字典' },
+      { id: 'system:email-templates', label: '邮件模板' },
+      { id: 'system:custom-fields', label: '自定义字段' },
+      { id: 'system:announcements', label: '系统公告' }
     ]
   },
   {
@@ -220,7 +227,9 @@ const menuTree = ref([
       { id: 'masterdata:customers', label: '客户管理' },
       { id: 'masterdata:suppliers', label: '供应商管理' },
       { id: 'masterdata:warehouses', label: '仓库管理' },
-      { id: 'masterdata:locations', label: '库位管理' }
+      { id: 'masterdata:locations', label: '库位管理' },
+      { id: 'masterdata:customer-followups', label: '客户跟进' },
+      { id: 'masterdata:credit', label: '客户信用' }
     ]
   },
   {
@@ -233,7 +242,22 @@ const menuTree = ref([
       { id: 'projects:bom', label: 'BOM清单' },
       { id: 'projects:time-logs', label: '工时填报' },
       { id: 'projects:gantt', label: '甘特图' },
-      { id: 'projects:bugs', label: 'Bug跟踪' }
+      { id: 'projects:bugs', label: 'Bug跟踪' },
+      { id: 'projects:drawings', label: '图纸管理' },
+      { id: 'projects:archives', label: '项目归档' },
+      { id: 'projects:milestones', label: '项目里程碑' },
+      { id: 'projects:work-orders', label: '工单管理' },
+      { id: 'projects:alerts', label: '项目预警' }
+    ]
+  },
+  {
+    id: 'plm',
+    label: 'PLM产品研发',
+    children: [
+      { id: 'plm:requirements', label: '需求管理' },
+      { id: 'plm:proposals', label: '方案设计' },
+      { id: 'plm:configurator', label: '产品配置器' },
+      { id: 'plm:model-viewer', label: '3D模型预览' }
     ]
   },
   {
@@ -243,17 +267,27 @@ const menuTree = ref([
       { id: 'purchase:requests', label: '采购申请' },
       { id: 'purchase:comparisons', label: '比价分析' },
       { id: 'purchase:orders', label: '采购订单' },
-      { id: 'purchase:goods-receipts', label: '到货质检' }
+      { id: 'purchase:goods-receipts', label: '到货质检' },
+      { id: 'purchase:outsource', label: '外协加工' },
+      { id: 'purchase:evaluations', label: '供应商评价' },
+      { id: 'purchase:blacklist', label: '供应商黑名单' },
+      { id: 'purchase:budgets', label: '采购预算' }
     ]
   },
   {
     id: 'sales',
     label: '销售管理',
     children: [
+      { id: 'sales:leads', label: '销售线索' },
+      { id: 'sales:opportunities', label: '销售商机' },
       { id: 'sales:quotations', label: '销售报价' },
       { id: 'sales:orders', label: '销售订单' },
       { id: 'sales:contracts', label: '销售合同' },
-      { id: 'sales:delivery-orders', label: '发货单' }
+      { id: 'sales:delivery-orders', label: '发货单' },
+      { id: 'sales:quote-templates', label: '报价单模板' },
+      { id: 'sales:contract-templates', label: '合同模板' },
+      { id: 'sales:performance', label: '销售业绩' },
+      { id: 'sales:analysis', label: '销售分析' }
     ]
   },
   {
@@ -274,7 +308,43 @@ const menuTree = ref([
       { id: 'inventory:adjustment', label: '库存盘点' },
       { id: 'inventory:alert', label: '库存预警' },
       { id: 'inventory:requisitions', label: '生产领料' },
-      { id: 'inventory:returns', label: '生产退料' }
+      { id: 'inventory:returns', label: '生产退料' },
+      { id: 'inventory:cost-accounting', label: '库存成本' },
+      { id: 'inventory:mrp', label: 'MRP计划' },
+      { id: 'inventory:alerts', label: '库存预警' }
+    ]
+  },
+  {
+    id: 'production',
+    label: '生产管理',
+    children: [
+      { id: 'production:processes', label: '生产工序' },
+      { id: 'production:plans', label: '生产计划' },
+      { id: 'production:debug-records', label: '调试记录' },
+      { id: 'production:inspections', label: '质量检验' }
+    ]
+  },
+  {
+    id: 'mes',
+    label: 'MES制造执行',
+    children: [
+      { id: 'mes:scheduling', label: 'APS排程' },
+      { id: 'mes:kanban', label: '电子看板' },
+      { id: 'mes:traceability', label: '追溯管理' },
+      { id: 'mes:spc', label: 'SPC统计过程控制' },
+      { id: 'mes:andon', label: '安灯系统' },
+      { id: 'mes:data-acquisition', label: '数据采集' }
+    ]
+  },
+  {
+    id: 'equipment',
+    label: '设备管理',
+    children: [
+      { id: 'equipment:list', label: '设备台账' },
+      { id: 'equipment:fixtures', label: '工装夹具' },
+      { id: 'equipment:inspection', label: '设备点检' },
+      { id: 'equipment:maintenance', label: '维护日历' },
+      { id: 'equipment:oee', label: 'OEE分析' }
     ]
   },
   {
@@ -286,7 +356,34 @@ const menuTree = ref([
       { id: 'finance:ar', label: '应收账款' },
       { id: 'finance:ap', label: '应付账款' },
       { id: 'finance:invoices', label: '发票管理' },
-      { id: 'finance:project-costs', label: '项目成本核算' }
+      { id: 'finance:project-costs', label: '项目成本核算' },
+      { id: 'finance:collection', label: '回款计划' },
+      { id: 'finance:assets', label: '固定资产' }
+    ]
+  },
+  {
+    id: 'knowledge',
+    label: '知识库',
+    children: [
+      { id: 'knowledge:articles', label: '知识文章' },
+      { id: 'knowledge:issues', label: '技术问题' },
+      { id: 'knowledge:components', label: '标准部件库' }
+    ]
+  },
+  {
+    id: 'oa',
+    label: '协同办公',
+    children: [
+      { id: 'oa:schedule', label: '日程管理' },
+      { id: 'oa:meeting', label: '会议管理' },
+      { id: 'oa:im', label: '即时通讯' }
+    ]
+  },
+  {
+    id: 'accounts',
+    label: '人事管理',
+    children: [
+      { id: 'accounts:attendance', label: '考勤管理' }
     ]
   },
   {
@@ -298,7 +395,9 @@ const menuTree = ref([
       { id: 'reports:aging', label: '账龄分析' },
       { id: 'reports:purchase-price-trend', label: '采购价格趋势' },
       { id: 'reports:cash-flow', label: '现金流预测' },
-      { id: 'reports:slow-moving', label: '呆滞物料分析' }
+      { id: 'reports:slow-moving', label: '呆滞物料分析' },
+      { id: 'reports:timelog', label: '工时统计' },
+      { id: 'reports:cost-analysis', label: '项目成本分析' }
     ]
   },
   {
