@@ -1232,6 +1232,8 @@ const handleConfirmImport = async () => {
     if (data.created_count > 0) {
       ElMessage.success(data.message)
       loadRequests()
+      // 刷新物料需求清单（已采购的物料会被过滤掉）
+      loadBomItems()
     }
   } catch (error) {
     console.error('导入失败:', error)
