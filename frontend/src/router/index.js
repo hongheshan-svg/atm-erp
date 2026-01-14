@@ -831,6 +831,21 @@ const router = createRouter({
   routes
 })
 
+// 需要管理员权限的菜单列表
+const adminOnlyMenus = [
+  'system:users',
+  'system:roles',
+  'system:config',
+  'system:backup',
+  'system:monitor',
+  'system:audit-log',
+  'system:audit-analytics',
+  'system:webhooks',
+  'system:data-dictionary',
+  'system:email-templates',
+  'system:custom-fields'
+]
+
 // 检查用户是否有访问某个菜单的权限
 const hasMenuAccess = (menuId, userStore) => {
   // 如果没有menuId或者是公共页面，允许访问
@@ -842,15 +857,21 @@ const hasMenuAccess = (menuId, userStore) => {
   // 如果权限列表包含 *:*:* 则有所有权限
   if (userStore.permissions?.includes('*:*:*')) return true
   
+  // 检查是否是仅管理员可访问的菜单
+  if (adminOnlyMenus.includes(menuId)) {
+    // 只有超级管理员或 is_staff 可以访问
+    return userStore.userInfo?.is_staff === true
+  }
+  
   // 获取用户的菜单权限列表
   const menuIds = userStore.menuIds
   
-  // 如果 menuIds 为空或未定义，允许访问仪表盘
+  // 如果 menuIds 为空或未定义，允许访问所有非管理员菜单
   if (!menuIds || menuIds.length === 0) {
-    return menuId === 'dashboard'
+    return true  // 默认允许访问
   }
   
-  // 检查是否在权限列表中
+  // 如果配置了 menuIds，则检查权限
   // 对于父菜单，检查是否有任何子菜单的权限
   if (!menuId.includes(':')) {
     return menuIds.some(id => id === menuId || id.startsWith(menuId + ':'))

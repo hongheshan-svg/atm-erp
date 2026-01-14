@@ -58,6 +58,21 @@ export const useUserStore = defineStore('user', () => {
     return permissions.value.includes(permission)
   }
 
+  // 需要管理员权限的菜单列表
+  const adminOnlyMenus = [
+    'system:users',
+    'system:roles',
+    'system:config',
+    'system:backup',
+    'system:monitor',
+    'system:audit-log',
+    'system:audit-analytics',
+    'system:webhooks',
+    'system:data-dictionary',
+    'system:email-templates',
+    'system:custom-fields'
+  ]
+
   // Check menu access
   function hasMenu(menuId) {
     if (!menuId) return true
@@ -65,10 +80,13 @@ export const useUserStore = defineStore('user', () => {
     if (userInfo.value?.is_superuser) return true
     // 如果有通配符权限
     if (permissions.value?.includes('*:*:*')) return true
-    // 如果没有配置菜单权限，允许访问基础页面（dashboard）
+    // 检查是否是仅管理员可访问的菜单
+    if (adminOnlyMenus.includes(menuId)) {
+      return userInfo.value?.is_staff === true
+    }
+    // 如果没有配置菜单权限，允许访问所有非管理员菜单
     if (!menuIds.value || menuIds.value.length === 0) {
-      // 默认允许访问仪表盘
-      return menuId === 'dashboard'
+      return true  // 默认允许访问
     }
     return menuIds.value.includes(menuId)
   }
