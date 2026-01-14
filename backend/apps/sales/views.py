@@ -353,36 +353,32 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
         # 创建说明表
         ws3 = wb.create_sheet(title='填写说明')
         instructions = [
-            ['字段说明'],
+            ['销售订单导入模板说明（适用于非标定制企业）'],
             [''],
-            ['销售订单表:'],
-            ['- 销售订单号: 可选，留空则系统自动生成，如SO2025010001'],
+            ['【销售订单表】'],
+            ['- 销售订单号: 可选，留空则系统自动生成'],
             ['- 客户订单号: 可选，客户的订单编号，用于对账'],
             ['- 客户名称*: 必填，必须与系统中的客户名称完全匹配'],
-            ['- 关联项目: 可选，项目名称或项目编号，必须与系统中已有项目匹配'],
-            ['- 订单日期: 格式 YYYY-MM-DD，留空则使用当天日期'],
+            ['- 关联项目: 可选，后续可通过项目管理关联'],
+            ['- 订单日期: 格式 YYYY-MM-DD，留空使用当天'],
             ['- 交货日期*: 必填，格式 YYYY-MM-DD'],
-            ['- 税率(%): 可选值 0, 1, 3, 6, 9, 13，默认13'],
-            ['- 付款条款: 全款预付/货到付款/月结30天/月结60天/月结90天等'],
-            ['- 付款方式: 电汇/承兑汇票/支票/现金/信用证/其他'],
-            ['- 付款说明: 可选，付款条款的补充说明（自定义分期时填写）'],
+            ['- 税率(%): 0/1/3/6/9/13，默认13'],
+            ['- 付款条款/付款方式/付款说明: 可选'],
             ['- 备注: 可选'],
             [''],
-            ['订单明细表:'],
-            ['- 订单号*: 必填，对应销售订单表中的订单号'],
-            ['- 物料编码: 可选，系统中已存在的物料SKU'],
-            ['- 产品名称*: 必填，如无物料编码则手动填写'],
-            ['- 规格型号: 可选'],
+            ['【订单明细表】'],
+            ['- 产品名称*: 必填，定制产品名称'],
+            ['- 规格型号: 可选，如"按图纸加工"'],
             ['- 单位: 可选，默认"件"'],
             ['- 数量*: 必填，正数'],
             ['- 单价*: 必填，不含税单价'],
             ['- 备注: 可选'],
             [''],
-            ['注意事项:'],
-            ['1. 带*的字段为必填项'],
-            ['2. 销售订单号留空时系统自动生成'],
-            ['3. 导入时会根据订单号检查重复，已存在的订单会被更新'],
-            ['4. 客户名称和项目名称必须与系统中已有数据完全一致'],
+            ['【非标定制企业使用说明】'],
+            ['1. 销售订单阶段无需物料编码，直接填写产品名称'],
+            ['2. 订单号留空，系统自动生成'],
+            ['3. 后续流程：销售订单 → 创建项目 → 项目BOM → 采购申请'],
+            ['4. 只需填写客户名称、交货日期、产品明细即可'],
         ]
         for row_idx, row_data in enumerate(instructions, 1):
             for col_idx, value in enumerate(row_data, 1):
@@ -872,25 +868,21 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                             
                             row_errors = []
                             
+                            # 订单号：可选，如果有则按订单号匹配，否则自动关联到主表订单
                             order_no = str(data.get('order_no', '')).strip()
-                            if not order_no:
-                                row_errors.append('订单号不能为空')
+                            so = None
                             
-                            # 订单号：先从本次导入的订单中查找，再从数据库查找
-                            so = order_map.get(order_no) if order_no else None
-                            if order_no and not so:
-                                so = SalesOrder.objects.filter(order_no=order_no).first()
+                            if order_no:
+                                # 先从本次导入的订单中查找
+                                so = order_map.get(order_no)
+                                if not so:
+                                    so = SalesOrder.objects.filter(order_no=order_no).first()
                             
-                            # 智能匹配：如果本次只导入了一个订单，明细自动关联到该订单（忽略填写的订单号）
-                            if not so and len(order_map) == 1:
-                                so = list(order_map.values())[0]
-                            
-                            # 如果还没有找到订单，尝试从数据库中查找任何一个本次导入的订单
+                            # 如果没有订单号或找不到，自动关联到主表中的订单
                             if not so and len(order_map) > 0:
-                                # 按创建时间倒序，取第一个
                                 so = list(order_map.values())[0]
                             
-                            # 仍然找不到订单时才报错（通常不会发生，除非主表为空）
+                            # 仍然找不到订单时才报错（主表为空的情况）
                             if not so:
                                 row_errors.append('无法关联订单，请确保主表中有有效的订单数据')
                             
