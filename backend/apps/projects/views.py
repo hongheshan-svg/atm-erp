@@ -889,23 +889,23 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                     continue
                 processed_skus.add(sku)
             
-                # Get price (optional)
-                unit_price = item.standard_cost
-                if price_column and pd.notna(row.get(price_column)):
-                    try:
-                        unit_price = float(row[price_column])
-                    except (ValueError, TypeError):
-                        pass  # Use item's standard cost
+            # Get price (optional)
+            unit_price = item.standard_cost
+            if price_column and pd.notna(row.get(price_column)):
+                try:
+                    unit_price = float(row[price_column])
+                except (ValueError, TypeError):
+                    pass  # Use item's standard cost
             
-                # Get notes (optional)
-                notes = ''
-                if notes_column and pd.notna(row.get(notes_column)):
-                    notes = str(row[notes_column])
+            # Get notes (optional)
+            notes = ''
+            if notes_column and pd.notna(row.get(notes_column)):
+                notes = str(row[notes_column])
             
-                # Get description (optional)
-                description = ''
-                if description_column and pd.notna(row.get(description_column)):
-                    description = str(row[description_column])
+            # Get description (optional)
+            description = ''
+            if description_column and pd.notna(row.get(description_column)):
+                description = str(row[description_column])
             
             # 版本/品牌：始终以物料主数据为准，忽略文件中的差异
             brand = item.brand or ''

@@ -129,12 +129,23 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
     @action(detail=False, methods=['get'])
     def for_linking(self, request):
         """获取可用于关联的销售订单（不受数据权限限制）"""
+        from apps.projects.models import Project
+        
         # 仅返回：已确认/部分发货，且未关联项目的订单
         allowed_status = ['CONFIRMED', 'PARTIAL']  # 已确认且未完成
+        
+        # 排除已被项目关联的订单
+        linked_order_ids = Project.objects.filter(
+            is_deleted=False,
+            sales_order__isnull=False,
+            status__in=['DRAFT', 'PLANNING', 'PENDING', 'IN_PROGRESS', 'ACTIVE', 'PAUSED', 'COMPLETED']  # 非取消状态
+        ).values_list('sales_order_id', flat=True)
+        
         queryset = SalesOrder.objects.filter(
             is_deleted=False,
-            project__isnull=True,
             status__in=allowed_status
+        ).exclude(
+            id__in=linked_order_ids
         ).order_by('-created_at')
         
         # 支持搜索
@@ -145,15 +156,34 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                 models.Q(customer__name__icontains=search)
             )
         
-        # 简化返回数据
-        data = [{
-            'id': so.id,
-            'order_no': so.order_no,
-            'customer': so.customer_id,
-            'customer_name': so.customer.name if so.customer else '',
-            'status': so.status,
-            'total_amount': float(so.total_amount or 0),
-        } for so in queryset[:100]]  # 限制返回数量
+        # 返回详细数据，包含明细信息供项目经理参考
+        data = []
+        for so in queryset[:100]:  # 限制返回数量
+            # 获取订单明细
+            lines = []
+            for line in so.lines.filter(is_deleted=False):
+                lines.append({
+                    'id': line.id,
+                    'product_name': line.item.name if line.item else line.custom_name,
+                    'spec': line.item.spec if line.item else line.custom_spec,
+                    'qty': float(line.qty),
+                    'unit_price': float(line.unit_price),
+                    'line_amount': float(line.line_amount),
+                })
+            
+            data.append({
+                'id': so.id,
+                'order_no': so.order_no,
+                'customer_order_no': so.customer_order_no or '',
+                'customer': so.customer_id,
+                'customer_name': so.customer.name if so.customer else '',
+                'status': so.status,
+                'order_date': so.order_date.strftime('%Y-%m-%d') if so.order_date else '',
+                'delivery_date': so.delivery_date.strftime('%Y-%m-%d') if so.delivery_date else '',
+                'total_amount': float(so.total_amount or 0),
+                'total_with_tax': float(so.total_with_tax or 0),
+                'lines': lines,
+            })
         
         return Response(data)
     
@@ -328,7 +358,7 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
         # 创建明细表
         ws2 = wb.create_sheet(title='订单明细')
         detail_headers = [
-            '产品名称*', '规格型号', '单位', '数量*', '单价*', '备注'
+            '行号', '产品名称*', '规格型号', '单位', '数量*', '单价*', '备注'
         ]
         
         for col, header in enumerate(detail_headers, 1):
@@ -339,13 +369,13 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
             cell.border = thin_border
         
         # 设置列宽
-        detail_widths = [30, 25, 10, 12, 12, 30]
+        detail_widths = [8, 30, 25, 10, 12, 12, 30]
         for i, width in enumerate(detail_widths, 1):
             ws2.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
         
         # 示例数据（非标定制产品，无需物料编码）
         detail_sample = [
-            '定制产品A', '按图纸加工', '件', 1, 50000.00, ''
+            1, '定制产品A', '按图纸加工', '件', 1, 50000.00, ''
         ]
         for col, value in enumerate(detail_sample, 1):
             ws2.cell(row=2, column=col, value=value)
@@ -367,6 +397,9 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
             ['- 备注: 可选'],
             [''],
             ['【订单明细表】'],
+            ['- 行号: 可选，用于一次导入多个订单时区分明细归属'],
+            ['  * 如果主表只有1个订单：可不填，所有明细自动关联'],
+            ['  * 如果主表有多个订单：按主表行号对应填写(1,2,3...)'],
             ['- 产品名称*: 必填，定制产品名称'],
             ['- 规格型号: 可选，如"按图纸加工"'],
             ['- 单位: 可选，默认"件"'],
@@ -379,6 +412,7 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
             ['2. 订单号留空，系统自动生成'],
             ['3. 后续流程：销售订单 → 创建项目 → 项目BOM → 采购申请'],
             ['4. 只需填写客户名称、交货日期、产品明细即可'],
+            ['5. 一次导入多个订单时，明细表用"行号"区分归属'],
         ]
         for row_idx, row_data in enumerate(instructions, 1):
             for col_idx, value in enumerate(row_data, 1):
@@ -646,35 +680,35 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
             # ========== 第一阶段：数据校验（先校验所有数据，有错误则拒绝整个导入） ==========
             validated_orders = []  # 存储校验通过的订单数据
             
-            for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
-                try:
-                    data = {}
-                    for col_idx, cell in enumerate(row):
-                        if col_idx in header_to_field:
-                            field = header_to_field[col_idx]
-                            value = cell.value
-                            if value is not None:
-                                data[field] = value
-                    
+                for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
+                    try:
+                        data = {}
+                        for col_idx, cell in enumerate(row):
+                            if col_idx in header_to_field:
+                                field = header_to_field[col_idx]
+                                value = cell.value
+                                if value is not None:
+                                    data[field] = value
+                        
                     # 跳过空行
                     if not data or all(v is None or str(v).strip() == '' for v in data.values()):
-                        continue
-                    
+                            continue
+                        
                     row_errors = []  # 当前行的所有错误
                     
                     # 订单号校验（可选，留空自动生成）
-                    order_no = str(data.get('order_no', '')).strip()
-                    
-                    # 检查重复
+                        order_no = str(data.get('order_no', '')).strip()
+                        
+                        # 检查重复
                     if order_no and order_no in processed_orders:
                         row_errors.append(f'订单号 "{order_no}" 在文件中重复')
                     if order_no:
                         processed_orders.add(order_no)
-                    
+                        
                     # 客户名称校验（必填）
-                    customer_name = str(data.get('customer_name', '')).strip()
+                        customer_name = str(data.get('customer_name', '')).strip()
                     customer = None
-                    if not customer_name:
+                        if not customer_name:
                         row_errors.append('客户名称不能为空')
                     else:
                         customer = customer_cache.get(customer_name)
@@ -696,8 +730,8 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                             row_errors.append(error_msg)
                     
                     # 交货日期校验（必填）
-                    delivery_date = parse_date(data.get('delivery_date'))
-                    if not delivery_date:
+                        delivery_date = parse_date(data.get('delivery_date'))
+                        if not delivery_date:
                         delivery_date_raw = data.get('delivery_date', '')
                         if delivery_date_raw:
                             row_errors.append(f'交货日期 "{delivery_date_raw}" 格式错误，请使用YYYY-MM-DD格式')
@@ -705,8 +739,8 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                             row_errors.append('交货日期不能为空')
                     
                     # 订单日期（可选）
-                    order_date = parse_date(data.get('order_date'))
-                    
+                        order_date = parse_date(data.get('order_date'))
+                        
                     # 税率校验
                     try:
                         tax_rate = int(data.get('tax_rate', 13))
@@ -715,17 +749,17 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                             tax_rate = 13
                     except (ValueError, TypeError):
                         row_errors.append(f'税率格式错误')
-                        tax_rate = 13
-                    
+                            tax_rate = 13
+                        
                     # 付款条款
-                    payment_terms_str = str(data.get('payment_terms', '')).strip()
-                    payment_terms = payment_terms_map.get(payment_terms_str, 'M_30_30_30_10')
-                    
+                        payment_terms_str = str(data.get('payment_terms', '')).strip()
+                        payment_terms = payment_terms_map.get(payment_terms_str, 'M_30_30_30_10')
+                        
                     # 付款方式
-                    payment_method_str = str(data.get('payment_method', '')).strip()
-                    payment_method = payment_method_map.get(payment_method_str, 'WIRE')
-                    
-                    notes = str(data.get('notes', '')).strip()
+                        payment_method_str = str(data.get('payment_method', '')).strip()
+                        payment_method = payment_method_map.get(payment_method_str, 'WIRE')
+                        
+                        notes = str(data.get('notes', '')).strip()
                     
                     # 新增字段
                     customer_order_no = str(data.get('customer_order_no', '')).strip()
@@ -777,8 +811,11 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             # ========== 第二阶段：执行导入（所有数据校验通过后） ==========
+            # 用于按主表行号索引订单（支持明细表用行号关联）
+            order_by_row_idx = {}
+            
             with transaction.atomic():
-                for order_data in validated_orders:
+                for idx, order_data in enumerate(validated_orders, start=1):
                     order_no = order_data['order_no']
                     
                     # 检查是否已存在
@@ -800,7 +837,8 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                         existing.save()
                         # 删除旧明细，等待重新导入
                         existing.lines.all().delete()
-                        order_map[order_no] = existing
+                        order_map[existing.order_no] = existing
+                        order_by_row_idx[idx] = existing
                         update_count += 1
                     else:
                         so = SalesOrder.objects.create(
@@ -820,8 +858,9 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                         if order_data['order_date']:
                             SalesOrder.objects.filter(pk=so.pk).update(order_date=order_data['order_date'])
                         order_map[so.order_no] = so
+                        order_by_row_idx[idx] = so
                         success_count += 1
-                
+                    
                 # Step 2: 校验并导入订单明细
                 detail_errors = []
                 validated_lines = []
@@ -842,6 +881,7 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                     detail_headers = [str(cell.value).strip() if cell.value else '' for cell in detail_sheet[1]]
                     
                     detail_col_map = {
+                        '行号': 'line_no',
                         '订单号': 'order_no',
                         '订单号*': 'order_no',
                         '销售订单号': 'order_no',
@@ -879,22 +919,38 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                             
                             row_errors = []
                             
-                            # 订单号：可选，如果有则按订单号匹配，否则自动关联到主表订单
+                            # 获取关联订单的方法：
+                            # 1. 优先使用"行号"关联（对应主表行号）
+                            # 2. 其次使用"订单号"关联
+                            # 3. 最后默认关联到第一个订单
+                            line_no_str = str(data.get('line_no', '')).strip()
                             order_no = str(data.get('order_no', '')).strip()
                             so = None
                             
-                            if order_no:
-                                # 先从本次导入的订单中查找
+                            # 方法1：按行号关联
+                            if line_no_str:
+                                try:
+                                    line_no = int(line_no_str)
+                                    so = order_by_row_idx.get(line_no)
+                                except ValueError:
+                                    pass
+                            
+                            # 方法2：按订单号关联
+                            if not so and order_no:
                                 so = order_map.get(order_no)
                                 if not so:
                                     so = SalesOrder.objects.filter(order_no=order_no).first()
                             
-                            # 如果没有订单号或找不到，自动关联到主表中的订单
-                            if not so and len(order_map) > 0:
+                            # 方法3：默认关联到第一个订单（仅当只有一个订单时）
+                            if not so and len(order_map) == 1:
                                 so = list(order_map.values())[0]
                             
+                            # 如果有多个订单但没有指定关联
+                            if not so and len(order_map) > 1:
+                                row_errors.append(f'导入了多个订单，请在"行号"列填写对应的主表行号(1,2,3...)以关联明细')
+                            
                             # 仍然找不到订单时才报错（主表为空的情况）
-                            if not so:
+                            if not so and len(order_map) == 0:
                                 row_errors.append('无法关联订单，请确保主表中有有效的订单数据')
                             
                             qty = parse_decimal(data.get('qty'))
@@ -923,10 +979,10 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                                         'error': err
                                     })
                             else:
-                                spec = str(data.get('spec', '')).strip()
-                                unit = str(data.get('unit', '件')).strip()
-                                notes = str(data.get('notes', '')).strip()
-                                
+                            spec = str(data.get('spec', '')).strip()
+                            unit = str(data.get('unit', '件')).strip()
+                            notes = str(data.get('notes', '')).strip()
+                            
                                 validated_lines.append({
                                     'so': so,
                                     'item': item,
@@ -942,17 +998,14 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                             detail_errors.append({'row': row_idx, 'sheet': '订单明细', 'error': f'解析错误: {str(e)}'})
                     
                     # 如果明细有错误，回滚并返回错误
-                    print(f"DEBUG: validated_lines数量: {len(validated_lines)}")
-                    print(f"DEBUG: detail_errors数量: {len(detail_errors)}")
                     if detail_errors:
-                        print(f"DEBUG: detail_errors: {detail_errors[:5]}")
                         raise ValueError('明细数据校验失败')
                     
                     # 导入明细
                     for line_data in validated_lines:
                         line_amount = line_data['qty'] * line_data['unit_price']
-                        
-                        SalesOrderLine.objects.create(
+                            
+                            SalesOrderLine.objects.create(
                             so=line_data['so'],
                             item=line_data['item'],
                             custom_name=line_data['product_name'] if not line_data['item'] else '',
@@ -960,11 +1013,11 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                             custom_unit=line_data['unit'] if not line_data['item'] else '',
                             qty=line_data['qty'],
                             unit_price=line_data['unit_price'],
-                            line_amount=line_amount,
+                                line_amount=line_amount,
                             notes=line_data['notes'],
-                            created_by=request.user
-                        )
-                        line_count += 1
+                                created_by=request.user
+                            )
+                            line_count += 1
                 
                 # 更新订单金额
                 for order_no, so in order_map.items():

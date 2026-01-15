@@ -30,7 +30,7 @@
           </div>
         </template>
       </el-alert>
-      
+
       <!-- 搜索表单 -->
       <el-form :inline="true" :model="searchForm" class="search-form">
         <el-form-item label="询价单号">

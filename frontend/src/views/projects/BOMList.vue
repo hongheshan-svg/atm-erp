@@ -104,16 +104,16 @@
             />
           </el-col>
           <el-col :span="6">
-            <el-input 
-              v-model="searchKeyword" 
-              placeholder="搜索物料编码/名称/规格" 
-              clearable 
-              @input="handleSearch"
-            >
-              <template #prefix>
-                <el-icon><Search /></el-icon>
-              </template>
-            </el-input>
+        <el-input 
+          v-model="searchKeyword" 
+          placeholder="搜索物料编码/名称/规格" 
+          clearable 
+          @input="handleSearch"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
           </el-col>
           <el-col :span="4">
             <el-button @click="resetFilters">
@@ -139,23 +139,23 @@
             导出筛选结果(询价用)
           </el-button>
           <span v-if="selectedRows.length > 0" class="selection-info" style="margin-left: 15px;">
-            已选择 <el-tag type="primary" size="small">{{ selectedRows.length }}</el-tag> 项
+          已选择 <el-tag type="primary" size="small">{{ selectedRows.length }}</el-tag> 项
             <el-button type="success" size="small" @click="handleExportSelected" style="margin-left: 10px;">
               <el-icon><Download /></el-icon>
               导出选中(询价用)
             </el-button>
             <el-button type="warning" size="small" @click="handleGeneratePRFromSelected" style="margin-left: 5px;">
-              <el-icon><Document /></el-icon>
+            <el-icon><Document /></el-icon>
               生成采购申请
-            </el-button>
-            <el-button type="danger" size="small" @click="handleBatchDelete" style="margin-left: 5px;">
-              <el-icon><Delete /></el-icon>
-              批量删除
-            </el-button>
-            <el-button size="small" @click="clearSelection" style="margin-left: 5px;">
-              取消选择
-            </el-button>
-          </span>
+          </el-button>
+          <el-button type="danger" size="small" @click="handleBatchDelete" style="margin-left: 5px;">
+            <el-icon><Delete /></el-icon>
+            批量删除
+          </el-button>
+          <el-button size="small" @click="clearSelection" style="margin-left: 5px;">
+            取消选择
+          </el-button>
+        </span>
         </div>
       </div>
       
@@ -792,12 +792,12 @@ const filteredBomItems = computed(() => {
   
   // 4. 关键字搜索
   if (searchKeyword.value.trim()) {
-    const keyword = searchKeyword.value.toLowerCase().trim()
+  const keyword = searchKeyword.value.toLowerCase().trim()
     result = result.filter(item => {
-      return (item.item_code && item.item_code.toLowerCase().includes(keyword)) ||
-             (item.item_name && item.item_name.toLowerCase().includes(keyword)) ||
-             (item.specification && item.specification.toLowerCase().includes(keyword))
-    })
+    return (item.item_code && item.item_code.toLowerCase().includes(keyword)) ||
+           (item.item_name && item.item_name.toLowerCase().includes(keyword)) ||
+           (item.specification && item.specification.toLowerCase().includes(keyword))
+  })
   }
   
   return result

@@ -68,7 +68,7 @@
     </el-card>
 
     <!-- 新增/编辑对话框 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="800px">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="900px">
       <el-form :model="form" ref="formRef" label-width="150px">
         <el-form-item label="关联销售订单">
           <el-select 
@@ -77,20 +77,68 @@
             clearable
             placeholder="选择销售订单 (可选)"
             @change="handleSalesOrderChange"
+            style="width: 100%"
           >
             <el-option 
               v-for="so in salesOrders" 
               :key="so.id" 
-              :label="`${so.order_no} - ${so.customer_name}`" 
+              :label="`${so.order_no} - ${so.customer_name} (¥${so.total_with_tax?.toLocaleString()})`" 
               :value="so.id"
             />
           </el-select>
         </el-form-item>
+        
+        <!-- 选中订单后显示订单详情 -->
+        <el-form-item v-if="selectedOrder" label="订单详情">
+          <el-card shadow="never" class="order-detail-card">
+            <el-descriptions :column="3" border size="small">
+              <el-descriptions-item label="订单号">{{ selectedOrder.order_no }}</el-descriptions-item>
+              <el-descriptions-item label="客户订单号">{{ selectedOrder.customer_order_no || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="客户">{{ selectedOrder.customer_name }}</el-descriptions-item>
+              <el-descriptions-item label="订单日期">{{ selectedOrder.order_date }}</el-descriptions-item>
+              <el-descriptions-item label="交货日期">
+                <span style="color: #E6A23C; font-weight: bold">{{ selectedOrder.delivery_date }}</span>
+              </el-descriptions-item>
+              <el-descriptions-item label="含税金额">
+                <span style="color: #67C23A; font-weight: bold">¥{{ selectedOrder.total_with_tax?.toLocaleString() }}</span>
+              </el-descriptions-item>
+            </el-descriptions>
+            
+            <div style="margin-top: 12px">
+              <div style="font-weight: bold; margin-bottom: 8px; color: #606266">📦 产品明细</div>
+              <el-table :data="selectedOrder.lines" size="small" border stripe max-height="200">
+                <el-table-column prop="product_name" label="产品名称" />
+                <el-table-column prop="spec" label="规格型号" width="150" />
+                <el-table-column prop="qty" label="数量" width="80" align="right" />
+                <el-table-column prop="unit_price" label="单价" width="100" align="right">
+                  <template #default="{ row }">¥{{ row.unit_price?.toLocaleString() }}</template>
+                </el-table-column>
+                <el-table-column prop="line_amount" label="金额" width="120" align="right">
+                  <template #default="{ row }">¥{{ row.line_amount?.toLocaleString() }}</template>
+                </el-table-column>
+              </el-table>
+            </div>
+            
+            <el-alert 
+              type="info" 
+              :closable="false" 
+              style="margin-top: 12px"
+              show-icon
+            >
+              <template #title>
+                建议：根据交货日期 <b>{{ selectedOrder.delivery_date }}</b> 设置项目结束日期，项目名称可参考产品名称
+              </template>
+            </el-alert>
+          </el-card>
+        </el-form-item>
+        
+        <el-divider v-if="selectedOrder" />
+        
         <el-form-item label="项目编号">
-          <el-input v-model="form.code" />
+          <el-input v-model="form.code" placeholder="留空自动生成" />
         </el-form-item>
         <el-form-item label="项目名称">
-          <el-input v-model="form.name" />
+          <el-input v-model="form.name" :placeholder="selectedOrder ? `建议：${selectedOrder.customer_name} - ${selectedOrder.lines?.[0]?.product_name || '定制产品'}` : '请输入项目名称'" />
         </el-form-item>
         <el-form-item label="客户">
           <el-select v-model="form.customer" filterable placeholder="请选择客户">
@@ -106,7 +154,7 @@
           <el-date-picker v-model="form.start_date" type="date" value-format="YYYY-MM-DD" />
         </el-form-item>
         <el-form-item label="结束日期">
-          <el-date-picker v-model="form.end_date" type="date" value-format="YYYY-MM-DD" />
+          <el-date-picker v-model="form.end_date" type="date" value-format="YYYY-MM-DD" :placeholder="selectedOrder ? `建议：${selectedOrder.delivery_date}` : ''" />
         </el-form-item>
         <el-form-item label="总预算">
           <el-input-number v-model="form.budget_total" :min="0" :precision="2" />
@@ -141,7 +189,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
@@ -162,7 +210,7 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
     confirmMessage: '此操作将永久删除选中的项目及其所有关联数据（任务、BOM、图纸等），此操作不可恢复！',
     successMessage: '删除项目成功',
     errorMessage: '删除项目失败',
-    onSuccess: () => fetchProjects()
+    onSuccess: () => { loadProjects(); loadSalesOrders() }
   }
 )
 
@@ -271,13 +319,37 @@ const loadSalesOrders = async () => {
   }
 }
 
-// 当选择销售订单时，自动填充客户
+// 计算选中的订单详情
+const selectedOrder = computed(() => {
+  if (!form.sales_order) return null
+  return salesOrders.value.find(so => so.id === form.sales_order)
+})
+
+// 当选择销售订单时，自动填充相关信息
 const handleSalesOrderChange = (soId) => {
   if (soId) {
-    const selectedOrder = salesOrders.value.find(so => so.id === soId)
-    if (selectedOrder) {
-      form.customer = selectedOrder.customer
+    const order = salesOrders.value.find(so => so.id === soId)
+    if (order) {
+      // 自动填充客户
+      form.customer = order.customer
+      
+      // 自动填充预算（使用含税金额）
+      form.budget_total = order.total_with_tax || 0
+      
+      // 自动设置结束日期为交货日期
+      if (order.delivery_date) {
+        form.end_date = order.delivery_date
+      }
+      
+      // 自动设置开始日期为今天
+      if (!form.start_date) {
+        const today = new Date()
+        form.start_date = today.toISOString().split('T')[0]
+      }
     }
+  } else {
+    // 清空关联时重置
+    form.budget_total = 0
   }
 }
 
@@ -302,16 +374,15 @@ const handleEdit = (row) => {
 // 删除功能已迁移到 useBatchDelete composable
 
 const handleSubmit = async () => {
-  // 验证必填字段
-  if (!form.code || !form.name || !form.customer || !form.manager || !form.start_date || !form.end_date) {
-    ElMessage.warning('请填写所有必填字段（项目编号、名称、客户、项目经理、开始日期、结束日期）')
+  // 验证必填字段（项目编号可留空自动生成）
+  if (!form.name || !form.customer || !form.manager || !form.start_date || !form.end_date) {
+    ElMessage.warning('请填写所有必填字段（项目名称、客户、项目经理、开始日期、结束日期）')
     return
   }
   
   try {
     // 构建提交数据，只发送需要的字段
     const payload = {
-      code: form.code,
       name: form.name,
       customer: form.customer,
       manager: form.manager,
@@ -321,12 +392,18 @@ const handleSubmit = async () => {
       budget_total: form.budget_total || 0
     }
     
-    // 可选字段
+    // 项目编号（可选，留空自动生成）
+    if (form.code) {
+      payload.code = form.code
+    }
+    
+    // 关联销售订单（可选）
     if (form.sales_order) {
       payload.sales_order = form.sales_order
     }
     
     if (isEdit.value) {
+      payload.code = form.code  // 编辑时必须有编号
       await request.put(`/projects/projects/${form.id}/`, payload)
       ElMessage.success('更新项目成功')
     } else {
@@ -335,6 +412,8 @@ const handleSubmit = async () => {
     }
     dialogVisible.value = false
     loadProjects()
+    // 刷新销售订单列表（关联订单后，该订单不再可选）
+    loadSalesOrders()
   } catch (error) {
     console.error('保存项目失败:', error)
     ElMessage.error(error.response?.data?.detail || '保存项目失败')
@@ -387,6 +466,12 @@ onMounted(() => {
 .table-toolbar span {
   font-size: 14px;
   color: #606266;
+}
+.order-detail-card {
+  background-color: #fafafa;
+}
+.order-detail-card :deep(.el-card__body) {
+  padding: 12px;
 }
 </style>
 

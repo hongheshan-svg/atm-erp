@@ -108,10 +108,10 @@
         <div class="card-header">
           <span>采购申请列表</span>
           <div class="header-actions">
-            <el-button type="primary" @click="handleAdd">
-              <el-icon><Plus /></el-icon>
-              创建申请
-            </el-button>
+          <el-button type="primary" @click="handleAdd">
+            <el-icon><Plus /></el-icon>
+            创建申请
+          </el-button>
             <el-dropdown style="margin-left: 10px;">
               <el-button type="success">
                 导入 <el-icon class="el-icon--right"><ArrowDown /></el-icon>

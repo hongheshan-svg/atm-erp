@@ -349,7 +349,7 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                     # Parse status
                     status_val = get_val(status_col, '启用')
                     is_active = status_val not in ['禁用', '停用', 'false', 'False', '0', 'INACTIVE']
-                    
+
                     # Parse item_type (物料属性)
                     item_type_val = get_val(item_type_col, '原材料')
                     item_type_map = {
@@ -400,7 +400,7 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                         created_by=request.user,
                         updated_by=request.user,
                     )
-                    created_count += 1
+                        created_count += 1
                     
                 except Exception as e:
                     error_rows.append({'row': row_num, 'error': str(e)})

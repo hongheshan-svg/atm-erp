@@ -55,9 +55,9 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
         """Auto-set requestor to current user and update BOM status."""
         with transaction.atomic():
             instance = serializer.save(
-                created_by=self.request.user,
-                requestor=self.request.user
-            )
+            created_by=self.request.user,
+            requestor=self.request.user
+        )
             
             # 更新BOM状态：NOT_ORDERED -> PR_PENDING
             if instance.project:
@@ -237,8 +237,8 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
             )
         
         with transaction.atomic():
-            pr.status = 'APPROVED'
-            pr.save()
+        pr.status = 'APPROVED'
+        pr.save()
             
             # 更新BOM状态：PR_PENDING -> PR_APPROVED
             from apps.projects.models import ProjectBOM
@@ -282,8 +282,8 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
             )
         
         with transaction.atomic():
-            pr.status = 'DRAFT'
-            pr.save()
+        pr.status = 'DRAFT'
+        pr.save()
             
             # 回退BOM状态：PR_APPROVED -> PR_PENDING
             from apps.projects.models import ProjectBOM
@@ -292,16 +292,16 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
                 is_deleted=False,
                 order_status='PR_APPROVED'
             ).update(order_status='PR_PENDING')
-            
-            # 尝试取消工作流
-            try:
-                from apps.core.workflow.services import WorkflowService
-                WorkflowService.cancel_workflow(
-                    business_type='PURCHASE_REQUEST',
-                    business_id=pr.id
-                )
-            except Exception:
-                pass
+        
+        # 尝试取消工作流
+        try:
+            from apps.core.workflow.services import WorkflowService
+            WorkflowService.cancel_workflow(
+                business_type='PURCHASE_REQUEST',
+                business_id=pr.id
+            )
+        except Exception:
+            pass
         
         return Response({
             **PurchaseRequestSerializer(pr).data,
@@ -801,9 +801,9 @@ class PurchaseOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
             )
         
         with transaction.atomic():
-            po.status = 'CONFIRMED'
-            po.save()
-            
+        po.status = 'CONFIRMED'
+        po.save()
+        
             # 更新BOM状态：PR_APPROVED -> ORDERED（订单确认时才真正"已下单"）
             from apps.projects.models import ProjectBOM
             if po.project:
@@ -820,28 +820,28 @@ class PurchaseOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
                         bom.ordered_qty = (bom.ordered_qty or 0) + po_line.qty
                         bom.save(update_fields=['order_status', 'ordered_qty'])
             
-            # Auto-create AP - 使用含税金额（避免重复创建）
-            from apps.finance.models import AccountPayable, PurchasePaymentSchedule
-            
-            # 检查是否已存在该PO的应付账款
-            existing_ap = AccountPayable.objects.filter(po=po, is_deleted=False).first()
-            if not existing_ap:
-                AccountPayable.objects.create(
-                    supplier=po.supplier,
-                    po=po,
-                    project=po.project,
-                    invoice_date=po.order_date,
-                    amount_due=po.total_with_tax or po.total_amount,  # 优先使用含税金额
-                    due_date=request.data.get('due_date', po.delivery_date),
-                    created_by=request.user
-                )
-            
-            # 自动生成付款计划（避免重复创建）
-            existing_schedules = PurchasePaymentSchedule.objects.filter(po=po, is_deleted=False).exists()
-            if existing_schedules:
-                schedules = []
-            else:
-                schedules = PurchasePaymentSchedule.generate_from_purchase_order(po)
+        # Auto-create AP - 使用含税金额（避免重复创建）
+        from apps.finance.models import AccountPayable, PurchasePaymentSchedule
+        
+        # 检查是否已存在该PO的应付账款
+        existing_ap = AccountPayable.objects.filter(po=po, is_deleted=False).first()
+        if not existing_ap:
+            AccountPayable.objects.create(
+                supplier=po.supplier,
+                po=po,
+                project=po.project,
+                invoice_date=po.order_date,
+                amount_due=po.total_with_tax or po.total_amount,  # 优先使用含税金额
+                due_date=request.data.get('due_date', po.delivery_date),
+                created_by=request.user
+            )
+        
+        # 自动生成付款计划（避免重复创建）
+        existing_schedules = PurchasePaymentSchedule.objects.filter(po=po, is_deleted=False).exists()
+        if existing_schedules:
+            schedules = []
+        else:
+            schedules = PurchasePaymentSchedule.generate_from_purchase_order(po)
         
         response_data = PurchaseOrderSerializer(po).data
         response_data['payment_schedules_count'] = len(schedules)
@@ -859,8 +859,8 @@ class PurchaseOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
             )
         
         with transaction.atomic():
-            po.status = 'CANCELLED'
-            po.save()
+        po.status = 'CANCELLED'
+        po.save()
             
             # 回退BOM状态：ORDERED -> CANCELLED
             from apps.projects.models import ProjectBOM
