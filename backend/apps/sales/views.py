@@ -131,14 +131,14 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
         """获取可用于关联的销售订单（不受数据权限限制）"""
         from apps.projects.models import Project
         
-        # 仅返回：已确认/部分发货，且未关联项目的订单
+        # 仅返回：已确认/部分发货的订单
         allowed_status = ['CONFIRMED', 'PARTIAL']  # 已确认且未完成
         
-        # 排除已被项目关联的订单
+        # 排除已被项目关联的订单（非取消状态的项目）
         linked_order_ids = Project.objects.filter(
             is_deleted=False,
             sales_order__isnull=False,
-            status__in=['DRAFT', 'PLANNING', 'PENDING', 'IN_PROGRESS', 'ACTIVE', 'PAUSED', 'COMPLETED']  # 非取消状态
+            status__in=['DRAFT', 'PLANNING', 'PENDING', 'IN_PROGRESS', 'ACTIVE', 'PAUSED', 'COMPLETED']
         ).values_list('sales_order_id', flat=True)
         
         queryset = SalesOrder.objects.filter(
@@ -599,7 +599,6 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
             skip_count = 0
             line_count = 0
             errors = []
-            detail_errors = []  # 明细表的错误
             
             # 付款条款映射
             payment_terms_map = {
@@ -677,9 +676,11 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                 if header in col_map:
                     header_to_field[idx] = col_map[header]
             
-            # ========== 第一阶段：数据校验（先校验所有数据，有错误则拒绝整个导入） ==========
-            validated_orders = []  # 存储校验通过的订单数据
+            # 用于按主表行号索引订单（支持明细表用行号关联）
+            order_by_row_idx = {}
+            main_row_counter = 0
             
+            with transaction.atomic():
                 for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
                     try:
                         data = {}
@@ -690,181 +691,105 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                                 if value is not None:
                                     data[field] = value
                         
-                    # 跳过空行
-                    if not data or all(v is None or str(v).strip() == '' for v in data.values()):
+                        # 跳过空行
+                        if not data or all(v is None or str(v).strip() == '' for v in data.values()):
                             continue
                         
-                    row_errors = []  # 当前行的所有错误
-                    
-                    # 订单号校验（可选，留空自动生成）
+                        main_row_counter += 1  # 记录有效行号
+                        
                         order_no = str(data.get('order_no', '')).strip()
                         
-                        # 检查重复
-                    if order_no and order_no in processed_orders:
-                        row_errors.append(f'订单号 "{order_no}" 在文件中重复')
-                    if order_no:
-                        processed_orders.add(order_no)
+                        # 订单号可选，留空则后面自动生成
+                        # 检查重复（只在有订单号时检查）
+                        if order_no and order_no in processed_orders:
+                            skip_count += 1
+                            continue
+                        if order_no:
+                            processed_orders.add(order_no)
                         
-                    # 客户名称校验（必填）
                         customer_name = str(data.get('customer_name', '')).strip()
-                    customer = None
                         if not customer_name:
-                        row_errors.append('客户名称不能为空')
-                    else:
+                            errors.append({'row': row_idx, 'error': '客户名称不能为空'})
+                            continue
+                        
                         customer = customer_cache.get(customer_name)
                         if not customer:
-                            # 模糊搜索类似的客户名称
-                            similar_customers = [
-                                name for name in customer_cache.keys() 
-                                if customer_name.lower() in name.lower() or name.lower() in customer_name.lower()
-                            ][:5]  # 最多显示5个
-                            
-                            error_msg = f'客户 "{customer_name}" 在系统中不存在'
-                            if similar_customers:
-                                error_msg += f'，您是否要找：{", ".join(similar_customers)}'
-                            else:
-                                # 显示系统中部分客户供参考
-                                sample_customers = list(customer_cache.keys())[:5]
-                                if sample_customers:
-                                    error_msg += f'。系统中的客户示例：{", ".join(sample_customers)}'
-                            row_errors.append(error_msg)
-                    
-                    # 交货日期校验（必填）
+                            errors.append({'row': row_idx, 'error': f'客户 "{customer_name}" 不存在'})
+                            continue
+                        
                         delivery_date = parse_date(data.get('delivery_date'))
                         if not delivery_date:
-                        delivery_date_raw = data.get('delivery_date', '')
-                        if delivery_date_raw:
-                            row_errors.append(f'交货日期 "{delivery_date_raw}" 格式错误，请使用YYYY-MM-DD格式')
-                        else:
-                            row_errors.append('交货日期不能为空')
-                    
-                    # 订单日期（可选）
+                            errors.append({'row': row_idx, 'error': '交货日期格式错误'})
+                            continue
+                        
                         order_date = parse_date(data.get('order_date'))
                         
-                    # 税率校验
-                    try:
                         tax_rate = int(data.get('tax_rate', 13))
                         if tax_rate not in [0, 1, 3, 6, 9, 13]:
-                            row_errors.append(f'税率 "{tax_rate}" 无效，可选值：0, 1, 3, 6, 9, 13')
-                            tax_rate = 13
-                    except (ValueError, TypeError):
-                        row_errors.append(f'税率格式错误')
                             tax_rate = 13
                         
-                    # 付款条款
                         payment_terms_str = str(data.get('payment_terms', '')).strip()
                         payment_terms = payment_terms_map.get(payment_terms_str, 'M_30_30_30_10')
                         
-                    # 付款方式
                         payment_method_str = str(data.get('payment_method', '')).strip()
                         payment_method = payment_method_map.get(payment_method_str, 'WIRE')
                         
                         notes = str(data.get('notes', '')).strip()
+                        
+                        # 新增字段
+                        customer_order_no = str(data.get('customer_order_no', '')).strip()
+                        payment_terms_detail = str(data.get('payment_terms_detail', '')).strip()
+                        
+                        # 关联项目
+                        project_name = str(data.get('project_name', '')).strip()
+                        project = project_cache.get(project_name) if project_name else None
+                        
+                        # 检查是否已存在（只在有订单号时检查）
+                        existing = SalesOrder.objects.filter(order_no=order_no).first() if order_no else None
+                        if existing:
+                            if existing.is_deleted:
+                                existing.is_deleted = False
+                                existing.deleted_at = None
+                            existing.customer = customer
+                            existing.customer_order_no = customer_order_no
+                            existing.project = project
+                            existing.delivery_date = delivery_date
+                            existing.tax_rate = tax_rate
+                            existing.payment_terms = payment_terms
+                            existing.payment_method = payment_method
+                            existing.payment_terms_detail = payment_terms_detail
+                            existing.notes = notes
+                            existing.save()
+                            # 删除旧明细，等待重新导入
+                            existing.lines.all().delete()
+                            order_map[existing.order_no] = existing
+                            order_by_row_idx[main_row_counter] = existing
+                            update_count += 1
+                        else:
+                            so = SalesOrder.objects.create(
+                                order_no=order_no if order_no else None,  # 留空自动生成
+                                customer_order_no=customer_order_no,
+                                customer=customer,
+                                project=project,
+                                delivery_date=delivery_date,
+                                tax_rate=tax_rate,
+                                payment_terms=payment_terms,
+                                payment_method=payment_method,
+                                payment_terms_detail=payment_terms_detail,
+                                notes=notes,
+                                created_by=request.user
+                            )
+                            # 更新订单日期
+                            if order_date:
+                                SalesOrder.objects.filter(pk=so.pk).update(order_date=order_date)
+                            order_map[so.order_no] = so
+                            order_by_row_idx[main_row_counter] = so
+                            success_count += 1
                     
-                    # 新增字段
-                    customer_order_no = str(data.get('customer_order_no', '')).strip()
-                    payment_terms_detail = str(data.get('payment_terms_detail', '')).strip()
-                    
-                    # 关联项目（可选，不存在也不报错，后续可由项目管理关联）
-                    project_name = str(data.get('project_name', '')).strip()
-                    project = None
-                    if project_name:
-                        project = project_cache.get(project_name)
-                        # 项目不存在时不报错，只是不关联
-                    
-                    # 如果有错误，记录并继续校验下一行
-                    if row_errors:
-                        for err in row_errors:
-                            errors.append({
-                                'row': row_idx, 
-                                'order_no': order_no or '(无订单号)',
-                                'customer': customer_name or '(未填写)',
-                                'error': err
-                            })
-                    else:
-                        # 校验通过，保存数据等待导入
-                        validated_orders.append({
-                            'row_idx': row_idx,
-                            'order_no': order_no,
-                            'customer': customer,
-                            'customer_order_no': customer_order_no,
-                            'project': project,
-                            'delivery_date': delivery_date,
-                            'order_date': order_date,
-                            'tax_rate': tax_rate,
-                            'payment_terms': payment_terms,
-                            'payment_method': payment_method,
-                            'payment_terms_detail': payment_terms_detail,
-                            'notes': notes,
-                        })
+                    except Exception as e:
+                        errors.append({'row': row_idx, 'error': str(e)})
                 
-                except Exception as e:
-                    errors.append({'row': row_idx, 'error': f'解析错误: {str(e)}'})
-            
-            # ========== 如果有任何校验错误，拒绝整个导入 ==========
-            if errors:
-                return Response({
-                    'error': f'数据校验失败，共 {len(errors)} 处错误，请修正后重新导入',
-                    'errors': errors,
-                    'valid_count': len(validated_orders),
-                    'error_count': len(errors)
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # ========== 第二阶段：执行导入（所有数据校验通过后） ==========
-            # 用于按主表行号索引订单（支持明细表用行号关联）
-            order_by_row_idx = {}
-            
-            with transaction.atomic():
-                for idx, order_data in enumerate(validated_orders, start=1):
-                    order_no = order_data['order_no']
-                    
-                    # 检查是否已存在
-                    existing = SalesOrder.objects.filter(order_no=order_no).first() if order_no else None
-                    
-                    if existing:
-                        if existing.is_deleted:
-                            existing.is_deleted = False
-                            existing.deleted_at = None
-                        existing.customer = order_data['customer']
-                        existing.customer_order_no = order_data['customer_order_no']
-                        existing.project = order_data['project']
-                        existing.delivery_date = order_data['delivery_date']
-                        existing.tax_rate = order_data['tax_rate']
-                        existing.payment_terms = order_data['payment_terms']
-                        existing.payment_method = order_data['payment_method']
-                        existing.payment_terms_detail = order_data['payment_terms_detail']
-                        existing.notes = order_data['notes']
-                        existing.save()
-                        # 删除旧明细，等待重新导入
-                        existing.lines.all().delete()
-                        order_map[existing.order_no] = existing
-                        order_by_row_idx[idx] = existing
-                        update_count += 1
-                    else:
-                        so = SalesOrder.objects.create(
-                            order_no=order_no if order_no else None,  # 留空自动生成
-                            customer_order_no=order_data['customer_order_no'],
-                            customer=order_data['customer'],
-                            project=order_data['project'],
-                            delivery_date=order_data['delivery_date'],
-                            tax_rate=order_data['tax_rate'],
-                            payment_terms=order_data['payment_terms'],
-                            payment_method=order_data['payment_method'],
-                            payment_terms_detail=order_data['payment_terms_detail'],
-                            notes=order_data['notes'],
-                            created_by=request.user
-                        )
-                        # 更新订单日期
-                        if order_data['order_date']:
-                            SalesOrder.objects.filter(pk=so.pk).update(order_date=order_data['order_date'])
-                        order_map[so.order_no] = so
-                        order_by_row_idx[idx] = so
-                        success_count += 1
-                    
-                # Step 2: 校验并导入订单明细
-                detail_errors = []
-                validated_lines = []
-                
+                # Step 2: 导入订单明细
                 # 兼容多种工作表名称
                 detail_sheet_names = ['订单明细', 'Sheet2', '明细', 'Details', 'Lines']
                 detail_sheet = None
@@ -873,11 +798,7 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                         detail_sheet = wb[sheet_name]
                         break
                 
-                # 如果没找到明细表，检查是否只有一个工作表（可能主表和明细在同一个工作表）
-                if not detail_sheet and len(wb.sheetnames) == 1:
-                    # 只有一个工作表，跳过明细导入
-                    pass
-                elif detail_sheet:
+                if detail_sheet:
                     detail_headers = [str(cell.value).strip() if cell.value else '' for cell in detail_sheet[1]]
                     
                     detail_col_map = {
@@ -902,7 +823,6 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                         if header in detail_col_map:
                             detail_header_to_field[idx] = detail_col_map[header]
                     
-                    # 先校验所有明细行
                     for row_idx, row in enumerate(detail_sheet.iter_rows(min_row=2), start=2):
                         try:
                             data = {}
@@ -913,16 +833,10 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                                     if value is not None:
                                         data[field] = value
                             
-                            # 跳过空行
                             if not data or all(v is None or str(v).strip() == '' for v in data.values()):
                                 continue
                             
-                            row_errors = []
-                            
-                            # 获取关联订单的方法：
-                            # 1. 优先使用"行号"关联（对应主表行号）
-                            # 2. 其次使用"订单号"关联
-                            # 3. 最后默认关联到第一个订单
+                            # 获取关联订单：优先行号，其次订单号，最后默认第一个
                             line_no_str = str(data.get('line_no', '')).strip()
                             order_no = str(data.get('order_no', '')).strip()
                             so = None
@@ -945,79 +859,46 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                             if not so and len(order_map) == 1:
                                 so = list(order_map.values())[0]
                             
-                            # 如果有多个订单但没有指定关联
-                            if not so and len(order_map) > 1:
-                                row_errors.append(f'导入了多个订单，请在"行号"列填写对应的主表行号(1,2,3...)以关联明细')
-                            
-                            # 仍然找不到订单时才报错（主表为空的情况）
-                            if not so and len(order_map) == 0:
-                                row_errors.append('无法关联订单，请确保主表中有有效的订单数据')
+                            if not so:
+                                errors.append({'row': row_idx, 'sheet': '订单明细', 'error': '无法关联订单，请填写行号或订单号'})
+                                continue
                             
                             qty = parse_decimal(data.get('qty'))
-                            if qty <= 0:
-                                row_errors.append(f'数量必须大于0，当前值: {data.get("qty", "")}')
-                            
                             unit_price = parse_decimal(data.get('unit_price'))
-                            if unit_price <= 0:
-                                row_errors.append(f'单价必须大于0，当前值: {data.get("unit_price", "")}')
                             
-                            product_name = str(data.get('product_name', '')).strip()
+                            if qty <= 0 or unit_price <= 0:
+                                continue
+                            
                             item_sku = str(data.get('item_sku', '')).strip()
-                            # 物料编码可选，不存在时不报错，作为自定义产品处理
                             item = item_cache.get(item_sku) if item_sku else None
                             
-                            # 如果没有物料编码也没有产品名称
-                            if not item and not product_name:
-                                row_errors.append('请填写物料编码或产品名称')
-                            
-                            if row_errors:
-                                for err in row_errors:
-                                    detail_errors.append({
-                                        'row': row_idx,
-                                        'sheet': '订单明细',
-                                        'order_no': order_no or '(未填写)',
-                                        'error': err
-                                    })
-                            else:
+                            product_name = str(data.get('product_name', '')).strip()
                             spec = str(data.get('spec', '')).strip()
                             unit = str(data.get('unit', '件')).strip()
                             notes = str(data.get('notes', '')).strip()
                             
-                                validated_lines.append({
-                                    'so': so,
-                                    'item': item,
-                                    'product_name': product_name,
-                                    'spec': spec,
-                                    'unit': unit,
-                                    'qty': qty,
-                                    'unit_price': unit_price,
-                                    'notes': notes,
-                                })
-                        
-                        except Exception as e:
-                            detail_errors.append({'row': row_idx, 'sheet': '订单明细', 'error': f'解析错误: {str(e)}'})
-                    
-                    # 如果明细有错误，回滚并返回错误
-                    if detail_errors:
-                        raise ValueError('明细数据校验失败')
-                    
-                    # 导入明细
-                    for line_data in validated_lines:
-                        line_amount = line_data['qty'] * line_data['unit_price']
+                            # 如果没有物料也没有产品名称，跳过
+                            if not item and not product_name:
+                                continue
+                            
+                            line_amount = qty * unit_price
                             
                             SalesOrderLine.objects.create(
-                            so=line_data['so'],
-                            item=line_data['item'],
-                            custom_name=line_data['product_name'] if not line_data['item'] else '',
-                            custom_spec=line_data['spec'] if not line_data['item'] else '',
-                            custom_unit=line_data['unit'] if not line_data['item'] else '',
-                            qty=line_data['qty'],
-                            unit_price=line_data['unit_price'],
+                                so=so,
+                                item=item,
+                                custom_name=product_name if not item else '',
+                                custom_spec=spec if not item else '',
+                                custom_unit=unit if not item else '',
+                                qty=qty,
+                                unit_price=unit_price,
                                 line_amount=line_amount,
-                            notes=line_data['notes'],
+                                notes=notes,
                                 created_by=request.user
                             )
                             line_count += 1
+                        
+                        except Exception as e:
+                            errors.append({'row': row_idx, 'sheet': '订单明细', 'error': str(e)})
                 
                 # 更新订单金额
                 for order_no, so in order_map.items():
@@ -1030,30 +911,16 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                     so.save()
             
             return Response({
-                'message': f'导入成功！新建 {success_count} 个订单，更新 {update_count} 个订单，共 {line_count} 条明细',
                 'success_count': success_count,
                 'update_count': update_count,
                 'skip_count': skip_count,
                 'line_count': line_count,
+                'errors': errors[:20] if errors else []
             })
         
-        except ValueError as e:
-            # 明细校验失败
-            if detail_errors:
-                return Response({
-                    'error': f'订单明细数据校验失败，共 {len(detail_errors)} 处错误，请修正后重新导入',
-                    'errors': detail_errors,
-                    'error_count': len(detail_errors)
-                }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
             return Response(
                 {'error': f'导入失败: {str(e)}'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        except Exception as e:
-            import traceback
-            return Response(
-                {'error': f'导入失败: {str(e)}', 'detail': traceback.format_exc()},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     

@@ -52,7 +52,7 @@ class SoftDeleteMixin:
         
         try:
             # 先尝试物理删除
-        instance.delete()
+            instance.delete()
         except ProtectedError:
             # 如果遇到外键保护错误，使用软删除
             if hasattr(instance, 'is_deleted') and hasattr(instance, 'deleted_at'):
@@ -69,4 +69,3 @@ class SoftDeleteMixin:
         if hasattr(queryset.model, 'is_deleted'):
             return queryset.filter(is_deleted=False)
         return queryset
-

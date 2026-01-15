@@ -237,8 +237,8 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
             )
         
         with transaction.atomic():
-        pr.status = 'APPROVED'
-        pr.save()
+            pr.status = 'APPROVED'
+            pr.save()
             
             # 更新BOM状态：PR_PENDING -> PR_APPROVED
             from apps.projects.models import ProjectBOM
@@ -282,8 +282,8 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
             )
         
         with transaction.atomic():
-        pr.status = 'DRAFT'
-        pr.save()
+            pr.status = 'DRAFT'
+            pr.save()
             
             # 回退BOM状态：PR_APPROVED -> PR_PENDING
             from apps.projects.models import ProjectBOM
@@ -801,8 +801,8 @@ class PurchaseOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
             )
         
         with transaction.atomic():
-        po.status = 'CONFIRMED'
-        po.save()
+            po.status = 'CONFIRMED'
+            po.save()
         
             # 更新BOM状态：PR_APPROVED -> ORDERED（订单确认时才真正"已下单"）
             from apps.projects.models import ProjectBOM
@@ -859,8 +859,8 @@ class PurchaseOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
             )
         
         with transaction.atomic():
-        po.status = 'CANCELLED'
-        po.save()
+            po.status = 'CANCELLED'
+            po.save()
             
             # 回退BOM状态：ORDERED -> CANCELLED
             from apps.projects.models import ProjectBOM

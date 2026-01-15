@@ -400,7 +400,7 @@ class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                         created_by=request.user,
                         updated_by=request.user,
                     )
-                        created_count += 1
+                    created_count += 1
                     
                 except Exception as e:
                     error_rows.append({'row': row_num, 'error': str(e)})
