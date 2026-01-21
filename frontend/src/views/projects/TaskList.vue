@@ -33,7 +33,7 @@
           <el-statistic title="已完成" :value="stats.completed" :value-style="{ color: '#67c23a' }" />
         </el-col>
         <el-col :span="6">
-          <el-statistic title="总工期" :value="stats.totalHours" suffix="天" />
+          <el-statistic title="计划工期" :value="stats.totalPlannedDays" suffix="天" />
         </el-col>
       </el-row>
       
@@ -128,13 +128,16 @@
         </el-form-item>
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="计划工期(天)" prop="planned_hours">
-              <el-input-number v-model="form.planned_hours" :min="0" :step="0.5" :max="3650" style="width: 100%;" />
+            <el-form-item label="计划工期(天)" prop="planned_days">
+              <el-input-number v-model="form.planned_days" :min="0" :step="1" :max="365" style="width: 100%;" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="实际工时" prop="actual_hours">
-              <el-input-number v-model="form.actual_hours" :min="0" :max="1000" style="width: 100%;" />
+            <el-form-item label="实际工时(小时)">
+              <el-input-number v-model="form.actual_hours" :min="0" :max="10000" style="width: 100%;" disabled />
+              <div class="form-tip">
+                <el-text type="info" size="small">工时从"填报工时"自动汇总</el-text>
+              </div>
             </el-form-item>
           </el-col>
         </el-row>
@@ -226,7 +229,8 @@ const stats = reactive({
   total: 0,
   inProgress: 0,
   completed: 0,
-  totalHours: 0
+  totalPlannedDays: 0,
+  totalActualHours: 0
 })
 
 const form = reactive({
@@ -237,8 +241,8 @@ const form = reactive({
   assignee: null,
   status: 'TODO',
   progress_percent: 0,
-  planned_hours: 0, // 单位：天
-  actual_hours: 0,
+  planned_days: 0, // 计划工期（天）
+  actual_hours: 0, // 实际工时（小时）- 只读，从工时填报汇总
   start_date: '',
   end_date: '',
   description: ''
@@ -253,7 +257,7 @@ const timeLogForm = reactive({
 const rules = {
   name: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
   status: [{ required: true, message: '请选择状态', trigger: 'change' }],
-  planned_hours: [{ required: true, message: '请输入计划工期（天）', trigger: 'change' }],
+  planned_days: [{ required: true, message: '请输入计划工期（天）', trigger: 'change' }],
   start_date: [{ required: true, message: '请选择开始日期', trigger: 'change' }],
   end_date: [{ required: true, message: '请选择结束日期', trigger: 'change' }]
 }
@@ -375,7 +379,8 @@ const fetchTasks = async () => {
     stats.total = 0
     stats.inProgress = 0
     stats.completed = 0
-    stats.totalHours = 0
+    stats.totalPlannedDays = 0
+    stats.totalActualHours = 0
     return
   }
   
@@ -394,7 +399,8 @@ const fetchTasks = async () => {
     stats.total = 0
     stats.inProgress = 0
     stats.completed = 0
-    stats.totalHours = 0
+    stats.totalPlannedDays = 0
+    stats.totalActualHours = 0
   } finally {
     loading.value = false
   }
@@ -416,7 +422,10 @@ const calculateStats = (tasks) => {
   stats.total = tasks.length
   stats.inProgress = tasks.filter(t => t.status === 'IN_PROGRESS').length
   stats.completed = tasks.filter(t => t.status === 'COMPLETED').length
-  stats.totalHours = tasks.reduce((sum, t) => sum + (t.actual_hours || 0), 0)
+  // 计划工期汇总（天）
+  stats.totalPlannedDays = tasks.reduce((sum, t) => sum + (parseFloat(t.planned_hours) || 0), 0)
+  // 实际工时汇总（小时）
+  stats.totalActualHours = tasks.reduce((sum, t) => sum + (parseFloat(t.actual_hours) || 0), 0)
 }
 
 const fetchProjectMembers = async () => {
@@ -452,7 +461,7 @@ const resetForm = () => {
   form.assignee = null
   form.status = 'TODO'
   form.progress_percent = 0
-  form.planned_hours = 0
+  form.planned_days = 0
   form.actual_hours = 0
   form.start_date = ''
   form.end_date = ''
@@ -486,7 +495,8 @@ const handleEdit = (row) => {
   form.assignee = row.assignee || null
   form.status = row.status || 'TODO'
   form.progress_percent = row.progress_percent || row.progress || 0
-  form.planned_hours = row.planned_hours || 0
+  // 后端存储的是 planned_hours，但我们用 planned_days 显示
+  form.planned_days = row.planned_hours || row.planned_days || 0
   form.actual_hours = row.actual_hours || 0
   form.start_date = row.start_date || ''
   form.end_date = row.end_date || ''
@@ -563,8 +573,9 @@ const handleSubmit = async () => {
       name: form.name,
       status: form.status,
       progress_percent: form.progress_percent || 0,
-      planned_hours: form.planned_hours || 0,
-      actual_hours: form.actual_hours || 0,
+      // 计划工期存储为 planned_hours 字段（后端字段名）
+      planned_hours: form.planned_days || 0,
+      // 实际工时不在这里提交，由工时填报自动汇总
     }
     
     // 新增时自动生成编号，并设置排序到最后
@@ -667,6 +678,11 @@ onMounted(() => {
   padding: 15px;
   background-color: #f5f7fa;
   border-radius: 8px;
+}
+
+.form-tip {
+  margin-top: 4px;
+  font-size: 12px;
 }
 </style>
 
