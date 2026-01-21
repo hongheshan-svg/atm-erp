@@ -14,13 +14,14 @@ from apps.projects.models import Project
 from .models import (
     Currency, ExchangeRateHistory, Expense, Invoice,
     AccountReceivable, AccountPayable, Payment, PaymentSchedule, PurchasePaymentSchedule,
-    SharedExpense, SharedExpenseAllocation
+    SharedExpense, SharedExpenseAllocation, PaymentRequest
 )
 from .serializers import (
     CurrencySerializer, ExchangeRateHistorySerializer,
     ExpenseSerializer, InvoiceSerializer, AccountReceivableSerializer,
     AccountPayableSerializer, PaymentSerializer, PaymentScheduleSerializer,
-    PurchasePaymentScheduleSerializer, SharedExpenseSerializer, SharedExpenseAllocationSerializer
+    PurchasePaymentScheduleSerializer, SharedExpenseSerializer, SharedExpenseAllocationSerializer,
+    PaymentRequestSerializer
 )
 
 
@@ -1977,3 +1978,149 @@ class PurchasePaymentScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewset
             'schedule': PurchasePaymentScheduleSerializer(schedule).data,
             'message': f'成功匹配付款 ¥{amount}，当前进度 {schedule.payment_progress}%'
         })
+
+
+class PaymentRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+    """
+    ViewSet for PaymentRequest management - 付款申请管理.
+    """
+    queryset = PaymentRequest.objects.all()
+    serializer_class = PaymentRequestSerializer
+    filterset_fields = ['supplier', 'project', 'status', 'payment_type', 'applicant', 'is_deleted']
+    search_fields = ['request_no', 'title', 'reason']
+    ordering_fields = ['expected_date', 'amount', 'created_at']
+    data_scope_field = 'applicant'
+    
+    def perform_create(self, serializer):
+        """创建时自动设置申请人"""
+        serializer.save(applicant=self.request.user)
+    
+    @action(detail=True, methods=['post'])
+    def submit(self, request, pk=None):
+        """提交付款申请审批 - 审批步骤由流程配置决定"""
+        payment_req = self.get_object()
+        if payment_req.status not in ['DRAFT', 'REJECTED']:
+            return Response(
+                {'error': '只能提交草稿或已拒绝状态的付款申请'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        amount = payment_req.amount or 0
+        
+        try:
+            from apps.core.workflow.services import WorkflowService
+            
+            instance, error = WorkflowService.start_workflow(
+                business_type='PAYMENT',
+                business_id=payment_req.id,
+                business_no=payment_req.request_no,
+                submitter=request.user,
+                amount=amount
+            )
+            
+            if instance:
+                payment_req.status = 'PENDING'
+                payment_req.save()
+                return Response({
+                    **PaymentRequestSerializer(payment_req).data,
+                    'workflow_started': True,
+                    'workflow_id': instance.id,
+                    'message': '已提交审批，请在审批中心查看审批进度'
+                })
+            else:
+                # 未配置审批流程，直接批准
+                payment_req.status = 'APPROVED'
+                payment_req.approved_by = request.user
+                payment_req.approved_at = timezone.now()
+                payment_req.save()
+                return Response({
+                    **PaymentRequestSerializer(payment_req).data,
+                    'workflow_started': False,
+                    'message': error or '未配置审批流程，付款申请已直接批准'
+                })
+                
+        except Exception as e:
+            # 审批模块不可用，直接批准
+            payment_req.status = 'APPROVED'
+            payment_req.approved_by = request.user
+            payment_req.approved_at = timezone.now()
+            payment_req.save()
+            return Response({
+                **PaymentRequestSerializer(payment_req).data,
+                'workflow_started': False,
+                'message': f'付款申请已批准，但工作流服务异常: {e}'
+            })
+    
+    @action(detail=True, methods=['post'])
+    def pay(self, request, pk=None):
+        """执行付款 - 审批通过后可执行"""
+        payment_req = self.get_object()
+        if payment_req.status != 'APPROVED':
+            return Response(
+                {'error': '只能对已批准的付款申请执行付款'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        with transaction.atomic():
+            # 创建付款记录
+            payment = Payment.objects.create(
+                payment_no=f'P{payment_req.request_no[3:]}',
+                payment_type='AP',
+                ap=payment_req.ap,
+                amount=payment_req.amount,
+                payment_date=timezone.now().date(),
+                payment_method=request.data.get('payment_method', 'BANK_TRANSFER'),
+                reference=request.data.get('reference', ''),
+                notes=request.data.get('notes', f'付款申请: {payment_req.request_no}'),
+                created_by=request.user
+            )
+            
+            # 更新付款申请状态
+            payment_req.status = 'PAID'
+            payment_req.paid_at = timezone.now()
+            payment_req.payment = payment
+            payment_req.save()
+            
+            # 更新应付账款
+            if payment_req.ap:
+                payment_req.ap.amount_paid = (payment_req.ap.amount_paid or 0) + payment_req.amount
+                if payment_req.ap.amount_paid >= payment_req.ap.amount_due:
+                    payment_req.ap.status = 'PAID'
+                else:
+                    payment_req.ap.status = 'PARTIAL'
+                payment_req.ap.save()
+        
+        return Response({
+            **PaymentRequestSerializer(payment_req).data,
+            'payment': PaymentSerializer(payment).data,
+            'message': '付款成功'
+        })
+    
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        """取消付款申请"""
+        payment_req = self.get_object()
+        if payment_req.status in ['PAID', 'CANCELLED']:
+            return Response(
+                {'error': '已付款或已取消的申请无法取消'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        payment_req.status = 'CANCELLED'
+        payment_req.save()
+        
+        return Response(PaymentRequestSerializer(payment_req).data)
+    
+    @action(detail=False, methods=['get'])
+    def my_requests(self, request):
+        """获取我的付款申请"""
+        queryset = self.get_queryset().filter(applicant=request.user)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def pending_approval(self, request):
+        """获取待审批的付款申请（供审批人使用）"""
+        queryset = self.get_queryset().filter(status='PENDING')
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)

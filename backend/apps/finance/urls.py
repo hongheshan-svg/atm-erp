@@ -13,7 +13,8 @@ from .views import (
     SharedExpenseViewSet,
     SharedExpenseAllocationViewSet,
     PaymentScheduleViewSet,
-    PurchasePaymentScheduleViewSet
+    PurchasePaymentScheduleViewSet,
+    PaymentRequestViewSet
 )
 from .reconciliation_views import (
     PurchaseReconciliationViewSet,
@@ -66,6 +67,9 @@ router.register(r'bank-statement-logs', BankStatementImportLogViewSet, basename=
 # 付款计划
 router.register(r'payment-schedules', PaymentScheduleViewSet, basename='payment-schedule')
 router.register(r'purchase-payment-schedules', PurchasePaymentScheduleViewSet, basename='purchase-payment-schedule')
+
+# 付款申请
+router.register(r'payment-requests', PaymentRequestViewSet, basename='payment-request')
 
 # 回款计划
 router.register(r'collection-plans', CollectionPlanViewSet, basename='collection-plan')

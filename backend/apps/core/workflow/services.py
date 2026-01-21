@@ -210,8 +210,10 @@ class WorkflowService:
                     return expense.project.manager
             
             elif instance.business_type == 'PAYMENT':
-                # 付款申请可能关联项目
-                return None
+                from apps.finance.models import PaymentRequest
+                payment_req = PaymentRequest.objects.get(id=instance.business_id)
+                if payment_req.project:
+                    return payment_req.project.manager
             
             elif instance.business_type == 'QUOTATION':
                 from apps.sales.models import Quotation
@@ -515,18 +517,18 @@ class WorkflowService:
                     contract.save()
             
             elif instance.business_type == 'PAYMENT':
-                from apps.finance.models import PaymentApplication
-                payment = PaymentApplication.objects.get(id=instance.business_id)
+                from apps.finance.models import PaymentRequest
+                payment_req = PaymentRequest.objects.get(id=instance.business_id)
                 if result == 'APPROVED':
-                    payment.status = 'APPROVED'
-                    payment.save()
-                    logger.info(f"Payment application {payment.id} approved")
+                    payment_req.status = 'APPROVED'
+                    payment_req.save()
+                    logger.info(f"Payment request {payment_req.request_no} approved")
                 elif result == 'REJECTED':
-                    payment.status = 'REJECTED'
-                    payment.save()
+                    payment_req.status = 'REJECTED'
+                    payment_req.save()
                 elif result == 'WITHDRAWN':
-                    payment.status = 'DRAFT'
-                    payment.save()
+                    payment_req.status = 'DRAFT'
+                    payment_req.save()
             
             elif instance.business_type == 'LEAVE_REQUEST':
                 from apps.accounts.attendance import LeaveRequest

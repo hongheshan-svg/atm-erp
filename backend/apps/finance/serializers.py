@@ -5,7 +5,7 @@ from rest_framework import serializers
 from .models import (
     Currency, ExchangeRateHistory, Expense, Invoice, InvoiceItem,
     AccountReceivable, AccountPayable, Payment, PaymentSchedule, PurchasePaymentSchedule,
-    SharedExpense, SharedExpenseAllocation
+    SharedExpense, SharedExpenseAllocation, PaymentRequest
 )
 
 
@@ -333,4 +333,36 @@ class PurchasePaymentScheduleSerializer(serializers.ModelSerializer):
             'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['schedule_no', 'created_at', 'updated_at']
+
+
+
+class PaymentRequestSerializer(serializers.ModelSerializer):
+    """PaymentRequest serializer for payment approval workflow."""
+    
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    payment_type_display = serializers.CharField(source='get_payment_type_display', read_only=True)
+    
+    # 关联对象信息
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    po_no = serializers.CharField(source='po.order_no', read_only=True)
+    project_code = serializers.CharField(source='project.code', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    applicant_name = serializers.CharField(source='applicant.get_full_name', read_only=True)
+    approved_by_name = serializers.CharField(source='approved_by.get_full_name', read_only=True)
+    currency_code = serializers.CharField(source='currency.code', read_only=True)
+    
+    class Meta:
+        model = PaymentRequest
+        fields = [
+            'id', 'request_no', 'title', 'payment_type', 'payment_type_display',
+            'supplier', 'supplier_name', 'po', 'po_no', 'ap',
+            'project', 'project_code', 'project_name',
+            'amount', 'currency', 'currency_code',
+            'bank_account', 'bank_name', 'expected_date', 'reason',
+            'attachments', 'status', 'status_display',
+            'applicant', 'applicant_name', 'approved_by', 'approved_by_name',
+            'approved_at', 'paid_at', 'payment', 'notes',
+            'is_deleted', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['request_no', 'approved_at', 'paid_at', 'created_at', 'updated_at']
 

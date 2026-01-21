@@ -791,12 +791,64 @@ class PurchaseOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
         return Response(data)
     
     @action(detail=True, methods=['post'])
+    def submit(self, request, pk=None):
+        """提交采购订单审批 - 审批步骤由流程配置决定"""
+        po = self.get_object()
+        if po.status not in ['DRAFT', 'REJECTED']:
+            return Response(
+                {'error': '只能提交草稿或已拒绝状态的采购订单'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        amount = po.total_with_tax or po.total_amount or 0
+        
+        try:
+            from apps.core.workflow.services import WorkflowService
+            
+            instance, error = WorkflowService.start_workflow(
+                business_type='PURCHASE_ORDER',
+                business_id=po.id,
+                business_no=po.order_no,
+                submitter=request.user,
+                amount=amount
+            )
+            
+            if instance:
+                po.status = 'PENDING'
+                po.save()
+                return Response({
+                    **PurchaseOrderSerializer(po).data,
+                    'workflow_started': True,
+                    'workflow_id': instance.id,
+                    'message': '已提交审批，请在审批中心查看审批进度'
+                })
+            else:
+                # 未配置审批流程，直接确认
+                po.status = 'CONFIRMED'
+                po.save()
+                return Response({
+                    **PurchaseOrderSerializer(po).data,
+                    'workflow_started': False,
+                    'message': error or '未配置审批流程，采购订单已直接确认'
+                })
+                
+        except Exception as e:
+            # 审批模块不可用，直接确认
+            po.status = 'CONFIRMED'
+            po.save()
+            return Response({
+                **PurchaseOrderSerializer(po).data,
+                'workflow_started': False,
+                'message': f'采购订单已确认，但工作流服务异常: {e}'
+            })
+    
+    @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
         """Confirm PO - 确认采购订单，此时BOM状态才变为已下单."""
         po = self.get_object()
-        if po.status != 'DRAFT':
+        if po.status not in ['DRAFT', 'APPROVED']:
             return Response(
-                {'error': '只能确认草稿状态的订单'},
+                {'error': '只能确认草稿或已审批状态的订单'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         

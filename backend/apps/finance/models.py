@@ -1239,6 +1239,134 @@ class SharedExpenseAllocation(BaseModel):
         return f"{self.shared_expense.expense_no} -> {self.project.code}"
 
 
+class PaymentRequest(BaseModel):
+    """
+    付款申请 - 用于申请向供应商付款，需经审批流程
+    """
+    STATUS_CHOICES = [
+        ('DRAFT', '草稿'),
+        ('PENDING', '审批中'),
+        ('APPROVED', '已批准'),
+        ('REJECTED', '已拒绝'),
+        ('PAID', '已付款'),
+        ('CANCELLED', '已取消'),
+    ]
+    
+    PAYMENT_TYPE_CHOICES = [
+        ('PREPAY', '预付款'),
+        ('PROGRESS', '进度款'),
+        ('FINAL', '尾款'),
+        ('URGENT', '紧急付款'),
+        ('OTHER', '其他'),
+    ]
+    
+    request_no = models.CharField(max_length=50, unique=True, verbose_name='申请单号')
+    title = models.CharField(max_length=200, verbose_name='申请标题')
+    payment_type = models.CharField(
+        max_length=20, 
+        choices=PAYMENT_TYPE_CHOICES, 
+        default='OTHER',
+        verbose_name='付款类型'
+    )
+    supplier = models.ForeignKey(
+        'masterdata.Supplier',
+        on_delete=models.PROTECT,
+        related_name='payment_requests',
+        verbose_name='供应商'
+    )
+    po = models.ForeignKey(
+        'purchase.PurchaseOrder',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='payment_requests',
+        verbose_name='关联采购订单'
+    )
+    ap = models.ForeignKey(
+        AccountPayable,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='payment_requests',
+        verbose_name='关联应付账款'
+    )
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='payment_requests',
+        verbose_name='关联项目'
+    )
+    amount = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='申请金额')
+    currency = models.ForeignKey(
+        Currency,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        verbose_name='币种'
+    )
+    bank_account = models.CharField(max_length=100, blank=True, verbose_name='收款账户')
+    bank_name = models.CharField(max_length=100, blank=True, verbose_name='开户银行')
+    expected_date = models.DateField(null=True, blank=True, verbose_name='期望付款日期')
+    reason = models.TextField(verbose_name='付款原因')
+    attachments = models.JSONField(default=list, blank=True, verbose_name='附件')
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='DRAFT',
+        verbose_name='状态'
+    )
+    applicant = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.PROTECT,
+        related_name='payment_requests_applied',
+        verbose_name='申请人'
+    )
+    approved_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='payment_requests_approved',
+        verbose_name='审批人'
+    )
+    approved_at = models.DateTimeField(null=True, blank=True, verbose_name='审批时间')
+    paid_at = models.DateTimeField(null=True, blank=True, verbose_name='付款时间')
+    payment = models.ForeignKey(
+        Payment,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='payment_requests',
+        verbose_name='付款记录'
+    )
+    notes = models.TextField(blank=True, verbose_name='备注')
+    
+    class Meta:
+        db_table = 'payment_request'
+        verbose_name = '付款申请'
+        verbose_name_plural = verbose_name
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.request_no} - {self.supplier.name if self.supplier else ''} - {self.amount}"
+    
+    def save(self, *args, **kwargs):
+        if not self.request_no:
+            from django.utils import timezone
+            today = timezone.now().strftime('%Y%m%d')
+            last = PaymentRequest.objects.filter(
+                request_no__startswith=f'PAY{today}'
+            ).order_by('-request_no').first()
+            if last:
+                seq = int(last.request_no[-4:]) + 1
+            else:
+                seq = 1
+            self.request_no = f'PAY{today}{seq:04d}'
+        super().save(*args, **kwargs)
+
+
 # Import additional models for Django discovery
 from .bank_statement_models import BankStatement, BankStatementImportLog  # noqa: E402, F401
 from .reconciliation_models import (  # noqa: E402, F401
