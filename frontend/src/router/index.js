@@ -718,6 +718,34 @@ const routes = [
         component: () => import('@/views/plm/ProductConfigurator.vue'),
         meta: { title: '产品配置器', icon: 'Setting', menuId: 'plm:configurator' }
       },
+      // PLM - 技术协议
+      {
+        path: 'plm/agreements',
+        name: 'TechnicalAgreements',
+        component: () => import('@/views/plm/TechnicalAgreementList.vue'),
+        meta: { title: '技术协议', icon: 'Document', menuId: 'plm:agreements' }
+      },
+      // 项目 - 设备档案
+      {
+        path: 'projects/equipment-archives',
+        name: 'EquipmentArchives',
+        component: () => import('@/views/projects/EquipmentArchiveList.vue'),
+        meta: { title: '设备档案', icon: 'Files', menuId: 'projects:equipment-archives' }
+      },
+      // 项目 - 验收管理
+      {
+        path: 'projects/acceptances',
+        name: 'Acceptances',
+        component: () => import('@/views/projects/AcceptanceList.vue'),
+        meta: { title: '验收管理', icon: 'Finished', menuId: 'projects:acceptances' }
+      },
+      // 生产 - 序列号管理
+      {
+        path: 'production/serial-numbers',
+        name: 'SerialNumbers',
+        component: () => import('@/views/production/SerialNumberList.vue'),
+        meta: { title: '序列号管理', icon: 'List', menuId: 'production:serial-numbers' }
+      },
       // MES - APS排程
       {
         path: 'mes/scheduling',

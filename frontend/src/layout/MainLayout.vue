@@ -46,6 +46,7 @@
             <el-menu-item index="/plm/requirements" v-if="hasMenuAccess('plm:requirements') || hasMenuAccess('projects')">需求管理</el-menu-item>
             <el-menu-item index="/plm/proposals" v-if="hasMenuAccess('plm:proposals') || hasMenuAccess('projects')">方案设计</el-menu-item>
             <el-menu-item index="/plm/configurator" v-if="hasMenuAccess('plm:configurator') || hasMenuAccess('projects')">产品配置器</el-menu-item>
+            <el-menu-item index="/plm/agreements" v-if="hasMenuAccess('plm:agreements') || hasMenuAccess('projects')">技术协议</el-menu-item>
           </el-menu-item-group>
           <el-menu-item-group title="项目管理">
             <el-menu-item index="/projects" v-if="hasMenuAccess('projects:list')">项目列表</el-menu-item>
@@ -54,6 +55,8 @@
             <el-menu-item index="/projects/gantt" v-if="hasMenuAccess('projects:gantt')">甘特图</el-menu-item>
             <el-menu-item index="/projects/time-logs" v-if="hasMenuAccess('projects:time-logs')">工时填报</el-menu-item>
             <el-menu-item index="/projects/alerts" v-if="hasMenuAccess('projects:alerts') || hasMenuAccess('projects')">项目预警</el-menu-item>
+            <el-menu-item index="/projects/equipment-archives" v-if="hasMenuAccess('projects:equipment-archives') || hasMenuAccess('projects')">设备档案</el-menu-item>
+            <el-menu-item index="/projects/acceptances" v-if="hasMenuAccess('projects:acceptances') || hasMenuAccess('projects')">验收管理(FAT/SAT)</el-menu-item>
           </el-menu-item-group>
           <el-menu-item-group title="技术文档">
             <el-menu-item index="/projects/bom" v-if="hasMenuAccess('projects:bom')">BOM管理</el-menu-item>
@@ -148,6 +151,7 @@
           <el-menu-item-group title="生产执行">
             <el-menu-item index="/production/processes" v-if="hasMenuAccess('production:processes')">生产工序</el-menu-item>
             <el-menu-item index="/production/debug-records" v-if="hasMenuAccess('production:debug-records')">调试记录</el-menu-item>
+            <el-menu-item index="/production/serial-numbers" v-if="hasMenuAccess('production:serial-numbers') || hasMenuAccess('production')">序列号管理</el-menu-item>
             <el-menu-item index="/inventory/requisitions" v-if="hasMenuAccess('inventory:requisitions')">生产领料</el-menu-item>
             <el-menu-item index="/inventory/returns" v-if="hasMenuAccess('inventory:returns')">生产退料</el-menu-item>
             <el-menu-item index="/mes/kanban" v-if="hasMenuAccess('mes:kanban') || hasMenuAccess('production')">电子看板</el-menu-item>
