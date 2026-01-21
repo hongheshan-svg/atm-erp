@@ -382,10 +382,11 @@ class WorkflowService:
                     project.save()
                     logger.info(f"Project {project.code} approved, status changed to IN_PROGRESS")
                 elif result == 'REJECTED':
-                    project.status = 'CANCELLED'
+                    project.status = 'REJECTED'  # 审批拒绝，可重新提交
                     project.save()
+                    logger.info(f"Project {project.code} rejected, status changed to REJECTED")
                 elif result == 'WITHDRAWN':
-                    project.status = 'PLANNING'
+                    project.status = 'DRAFT'  # 撤回后回到草稿状态
                     project.save()
             
             elif instance.business_type == 'STOCK_ADJUSTMENT':

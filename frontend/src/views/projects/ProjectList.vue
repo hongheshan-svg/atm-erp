@@ -47,11 +47,30 @@
         </el-table-column>
         <el-table-column prop="start_date" label="开始日期" width="120" />
         <el-table-column prop="end_date" label="结束日期" width="120" />
-        <el-table-column label="操作" :width="canDelete ? 320 : 260" fixed="right">
+        <el-table-column label="操作" :width="canDelete ? 400 : 340" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" type="warning" @click="handleViewAttachments(row)">附件</el-button>
+            <!-- 提交审批按钮 - 仅草稿/规划中/已拒绝状态可见 -->
+            <el-button 
+              v-if="['DRAFT', 'PLANNING', 'REJECTED'].includes(row.status)"
+              size="small" 
+              type="success"
+              @click="handleSubmitApproval(row)"
+              :loading="submitLoading === row.id"
+            >
+              提交审批
+            </el-button>
+            <!-- 查看审批流程 - 审批中状态可见 -->
+            <el-button 
+              v-if="row.status === 'PENDING'"
+              size="small" 
+              type="info"
+              @click="handleViewWorkflow(row)"
+            >
+              审批进度
+            </el-button>
             <!-- 仅管理员显示删除按钮 -->
             <el-button 
               v-if="canDelete"
@@ -160,14 +179,19 @@
           <el-input-number v-model="form.budget_total" :min="0" :precision="2" />
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="form.status">
+          <el-select v-model="form.status" :disabled="['PENDING'].includes(form.status)">
             <el-option label="草稿" value="DRAFT" />
             <el-option label="规划中" value="PLANNING" />
-            <el-option label="进行中" value="ACTIVE" />
+            <el-option v-if="['PENDING', 'REJECTED'].includes(form.status)" label="审批中" value="PENDING" disabled />
+            <el-option v-if="form.status === 'REJECTED'" label="已拒绝" value="REJECTED" disabled />
+            <el-option label="进行中" value="IN_PROGRESS" />
             <el-option label="暂停" value="PAUSED" />
             <el-option label="已完成" value="COMPLETED" />
             <el-option label="已取消" value="CANCELLED" />
           </el-select>
+          <div v-if="form.status === 'PENDING'" class="el-form-item__help">
+            项目正在审批中，不可手动修改状态
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -226,6 +250,7 @@ const isEdit = ref(false)
 const formRef = ref(null)
 const attachmentDialogVisible = ref(false)
 const currentProject = ref(null)
+const submitLoading = ref(null)  // 提交审批loading状态
 
 const form = reactive({
   id: null,
@@ -247,6 +272,7 @@ const getStatusType = (status) => {
     REJECTED: 'danger',
     PLANNING: 'info',
     ACTIVE: 'success',
+    IN_PROGRESS: 'success',
     PAUSED: 'warning',
     COMPLETED: '',
     CANCELLED: 'danger',
@@ -262,6 +288,7 @@ const getStatusLabel = (status) => {
     REJECTED: '已拒绝',
     PLANNING: '规划中',
     ACTIVE: '进行中',
+    IN_PROGRESS: '进行中',
     PAUSED: '暂停',
     COMPLETED: '已完成',
     CANCELLED: '已取消',
@@ -432,6 +459,59 @@ const handleExport = async () => {
     ElMessage.success('导出成功')
   } catch (error) {
     ElMessage.error('导出失败')
+  }
+}
+
+// 提交项目审批
+const handleSubmitApproval = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要提交项目「${row.name}」进行审批吗？提交后将按照流程配置中的"项目立项"流程进行审批。`,
+      '提交审批确认',
+      { type: 'info', confirmButtonText: '确认提交', cancelButtonText: '取消' }
+    )
+    
+    submitLoading.value = row.id
+    const response = await request.post(`/projects/projects/${row.id}/submit/`)
+    
+    if (response.workflow_started) {
+      ElMessage.success(response.message || '已成功提交审批，请等待审批人处理')
+    } else {
+      ElMessage.warning(response.message || '未配置审批流程，项目已直接启动')
+    }
+    
+    loadProjects()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('提交审批失败:', error)
+      ElMessage.error(error.response?.data?.error || error.response?.data?.detail || '提交审批失败')
+    }
+  } finally {
+    submitLoading.value = null
+  }
+}
+
+// 查看审批流程进度
+const handleViewWorkflow = async (row) => {
+  try {
+    // 查询该项目的审批实例
+    const response = await request.get('/workflow/instances/', {
+      params: { business_type: 'PROJECT', business_id: row.id }
+    })
+    
+    const instances = response.results || response || []
+    if (instances.length > 0) {
+      // 跳转到审批中心查看详情
+      router.push({
+        name: 'ApprovalCenter',
+        query: { instance_id: instances[0].id }
+      })
+    } else {
+      ElMessage.info('暂无审批记录')
+    }
+  } catch (error) {
+    console.error('查询审批进度失败:', error)
+    ElMessage.error('查询审批进度失败')
   }
 }
 
