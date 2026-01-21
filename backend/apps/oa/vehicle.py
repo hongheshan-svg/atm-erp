@@ -394,18 +394,52 @@ class VehicleRequestViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
     
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
-        """提交申请"""
+        """提交申请 - 走流程配置的审批流程"""
         req = self.get_object()
-        if req.status != 'DRAFT':
-            return Response({'error': '只能提交草稿状态的申请'}, status=400)
+        if req.status not in ['DRAFT', 'REJECTED']:
+            return Response({'error': '只能提交草稿或已拒绝状态的申请'}, status=400)
         
-        req.status = 'PENDING'
-        req.save()
-        return Response(self.get_serializer(req).data)
+        try:
+            from apps.core.workflow.services import WorkflowService
+            
+            instance, error = WorkflowService.start_workflow(
+                business_type='VEHICLE_REQUEST',
+                business_id=req.id,
+                business_no=req.request_no or f'VR-{req.id}',
+                submitter=request.user,
+                amount=None
+            )
+            
+            if instance:
+                req.status = 'PENDING'
+                req.save()
+                return Response({
+                    **self.get_serializer(req).data,
+                    'workflow_started': True,
+                    'workflow_id': instance.id,
+                    'message': '已提交审批，请在审批中心查看审批进度'
+                })
+            else:
+                req.status = 'PENDING'
+                req.save()
+                return Response({
+                    **self.get_serializer(req).data,
+                    'workflow_started': False,
+                    'message': error or '未配置审批流程，请等待人工审批'
+                })
+                
+        except Exception as e:
+            req.status = 'PENDING'
+            req.save()
+            return Response({
+                **self.get_serializer(req).data,
+                'workflow_started': False,
+                'message': f'已提交，但工作流服务异常: {e}'
+            })
     
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
-        """审批通过"""
+        """审批通过（手动审批，用于未配置流程时）"""
         req = self.get_object()
         if req.status != 'PENDING':
             return Response({'error': '只能审批待审批的申请'}, status=400)

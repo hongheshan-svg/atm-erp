@@ -188,6 +188,7 @@ class WorkflowService:
     def _get_project_manager(cls, instance):
         """
         Get project manager from the business object.
+        Returns None if no project manager is associated.
         """
         try:
             if instance.business_type == 'PURCHASE_REQUEST':
@@ -196,22 +197,44 @@ class WorkflowService:
                 if pr.project:
                     return pr.project.manager
             
+            elif instance.business_type == 'PURCHASE_ORDER':
+                from apps.purchase.models import PurchaseOrder
+                po = PurchaseOrder.objects.get(id=instance.business_id)
+                if hasattr(po, 'project') and po.project:
+                    return po.project.manager
+            
             elif instance.business_type == 'EXPENSE':
                 from apps.finance.models import Expense
                 expense = Expense.objects.get(id=instance.business_id)
                 if expense.project:
                     return expense.project.manager
             
+            elif instance.business_type == 'PAYMENT':
+                # 付款申请可能关联项目
+                return None
+            
+            elif instance.business_type == 'QUOTATION':
+                from apps.sales.models import Quotation
+                quot = Quotation.objects.get(id=instance.business_id)
+                if hasattr(quot, 'project') and quot.project:
+                    return quot.project.manager
+            
             elif instance.business_type == 'SALES_ORDER':
                 from apps.sales.models import SalesOrder
                 so = SalesOrder.objects.get(id=instance.business_id)
-                if so.project:
+                if hasattr(so, 'project') and so.project:
                     return so.project.manager
+            
+            elif instance.business_type == 'SALES_CONTRACT':
+                from apps.sales.models import SalesContract
+                contract = SalesContract.objects.get(id=instance.business_id)
+                if hasattr(contract, 'project') and contract.project:
+                    return contract.project.manager
             
             elif instance.business_type == 'DELIVERY_ORDER':
                 from apps.sales.models import DeliveryOrder
                 delivery = DeliveryOrder.objects.get(id=instance.business_id)
-                if delivery.so.project:
+                if delivery.so and hasattr(delivery.so, 'project') and delivery.so.project:
                     return delivery.so.project.manager
             
             elif instance.business_type == 'PROJECT':
@@ -228,6 +251,10 @@ class WorkflowService:
                 ecn = ECN.objects.get(id=instance.business_id)
                 if ecn.project:
                     return ecn.project.manager
+            
+            # OA模块没有项目经理
+            elif instance.business_type in ['LEAVE_REQUEST', 'OVERTIME_REQUEST', 'VEHICLE_REQUEST', 'ASSET_BORROW']:
+                return None
                 
         except Exception as e:
             logger.error(f"Error getting project manager: {e}")
@@ -442,6 +469,120 @@ class WorkflowService:
                 elif result == 'WITHDRAWN':
                     ecn.status = 'DRAFT'
                     ecn.save()
+            
+            # ============ 新增业务类型处理 ============
+            
+            elif instance.business_type == 'PURCHASE_ORDER':
+                from apps.purchase.models import PurchaseOrder
+                po = PurchaseOrder.objects.get(id=instance.business_id)
+                if result == 'APPROVED':
+                    po.status = 'CONFIRMED'
+                    po.save()
+                    logger.info(f"Purchase order {po.order_no} approved")
+                elif result == 'REJECTED':
+                    po.status = 'REJECTED'
+                    po.save()
+                elif result == 'WITHDRAWN':
+                    po.status = 'DRAFT'
+                    po.save()
+            
+            elif instance.business_type == 'QUOTATION':
+                from apps.sales.models import Quotation
+                quot = Quotation.objects.get(id=instance.business_id)
+                if result == 'APPROVED':
+                    quot.status = 'APPROVED'
+                    quot.save()
+                    logger.info(f"Quotation {quot.quotation_no} approved")
+                elif result == 'REJECTED':
+                    quot.status = 'REJECTED'
+                    quot.save()
+                elif result == 'WITHDRAWN':
+                    quot.status = 'DRAFT'
+                    quot.save()
+            
+            elif instance.business_type == 'SALES_CONTRACT':
+                from apps.sales.models import SalesContract
+                contract = SalesContract.objects.get(id=instance.business_id)
+                if result == 'APPROVED':
+                    contract.status = 'ACTIVE'  # 合同生效
+                    contract.save()
+                    logger.info(f"Sales contract {contract.contract_no} approved")
+                elif result == 'REJECTED':
+                    contract.status = 'REJECTED'
+                    contract.save()
+                elif result == 'WITHDRAWN':
+                    contract.status = 'DRAFT'
+                    contract.save()
+            
+            elif instance.business_type == 'PAYMENT':
+                from apps.finance.models import PaymentApplication
+                payment = PaymentApplication.objects.get(id=instance.business_id)
+                if result == 'APPROVED':
+                    payment.status = 'APPROVED'
+                    payment.save()
+                    logger.info(f"Payment application {payment.id} approved")
+                elif result == 'REJECTED':
+                    payment.status = 'REJECTED'
+                    payment.save()
+                elif result == 'WITHDRAWN':
+                    payment.status = 'DRAFT'
+                    payment.save()
+            
+            elif instance.business_type == 'LEAVE_REQUEST':
+                from apps.accounts.attendance import LeaveRequest
+                leave = LeaveRequest.objects.get(id=instance.business_id)
+                if result == 'APPROVED':
+                    leave.status = 'APPROVED'
+                    leave.save()
+                    logger.info(f"Leave request {leave.id} approved")
+                elif result == 'REJECTED':
+                    leave.status = 'REJECTED'
+                    leave.save()
+                elif result == 'WITHDRAWN':
+                    leave.status = 'DRAFT'
+                    leave.save()
+            
+            elif instance.business_type == 'OVERTIME_REQUEST':
+                from apps.accounts.attendance import OvertimeRequest
+                overtime = OvertimeRequest.objects.get(id=instance.business_id)
+                if result == 'APPROVED':
+                    overtime.status = 'APPROVED'
+                    overtime.save()
+                    logger.info(f"Overtime request {overtime.id} approved")
+                elif result == 'REJECTED':
+                    overtime.status = 'REJECTED'
+                    overtime.save()
+                elif result == 'WITHDRAWN':
+                    overtime.status = 'DRAFT'
+                    overtime.save()
+            
+            elif instance.business_type == 'VEHICLE_REQUEST':
+                from apps.oa.vehicle import VehicleRequest
+                vehicle_req = VehicleRequest.objects.get(id=instance.business_id)
+                if result == 'APPROVED':
+                    vehicle_req.status = 'APPROVED'
+                    vehicle_req.save()
+                    logger.info(f"Vehicle request {vehicle_req.id} approved")
+                elif result == 'REJECTED':
+                    vehicle_req.status = 'REJECTED'
+                    vehicle_req.save()
+                elif result == 'WITHDRAWN':
+                    vehicle_req.status = 'PENDING'
+                    vehicle_req.save()
+            
+            elif instance.business_type == 'ASSET_BORROW':
+                from apps.oa.asset import AssetBorrow
+                borrow = AssetBorrow.objects.get(id=instance.business_id)
+                if result == 'APPROVED':
+                    borrow.status = 'APPROVED'
+                    borrow.save()
+                    logger.info(f"Asset borrow {borrow.id} approved")
+                elif result == 'REJECTED':
+                    borrow.status = 'REJECTED'
+                    borrow.save()
+                elif result == 'WITHDRAWN':
+                    borrow.status = 'PENDING'
+                    borrow.save()
             
             # Notify submitter
             cls._notify_submitter(instance, result)

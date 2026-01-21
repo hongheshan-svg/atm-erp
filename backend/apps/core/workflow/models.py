@@ -11,13 +11,27 @@ class WorkflowDefinition(BaseModel):
     Workflow definition - defines the approval process template.
     """
     BUSINESS_TYPE_CHOICES = [
+        # 采购管理
         ('PURCHASE_REQUEST', '采购申请'),
-        ('EXPENSE', '费用报销'),
+        ('PURCHASE_ORDER', '采购订单'),
+        # 销售管理
+        ('QUOTATION', '销售报价'),
         ('SALES_ORDER', '销售订单'),
-        ('PROJECT', '项目立项'),
-        ('STOCK_ADJUSTMENT', '库存调整'),
+        ('SALES_CONTRACT', '销售合同'),
         ('DELIVERY_ORDER', '发货单'),
+        # 财务管理
+        ('EXPENSE', '费用报销'),
+        ('PAYMENT', '付款申请'),
+        # 项目管理
+        ('PROJECT', '项目立项'),
         ('ECN', '工程变更'),
+        # 库存管理
+        ('STOCK_ADJUSTMENT', '库存调整'),
+        # OA办公
+        ('LEAVE_REQUEST', '请假申请'),
+        ('OVERTIME_REQUEST', '加班申请'),
+        ('VEHICLE_REQUEST', '用车申请'),
+        ('ASSET_BORROW', '资产借用'),
     ]
     
     name = models.CharField(max_length=100, verbose_name='流程名称')

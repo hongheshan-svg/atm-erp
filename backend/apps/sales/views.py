@@ -65,6 +65,56 @@ class SalesQuotationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMi
         return Response(SalesQuotationSerializer(new_quotation).data, status=status.HTTP_201_CREATED)
     
     @action(detail=True, methods=['post'])
+    def submit(self, request, pk=None):
+        """提交报价单审批 - 审批步骤由流程配置决定"""
+        quotation = self.get_object()
+        if quotation.status not in ['DRAFT', 'REJECTED']:
+            return Response(
+                {'error': '只能提交草稿或已拒绝状态的报价单'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        amount = quotation.total_amount or 0
+        
+        try:
+            from apps.core.workflow.services import WorkflowService
+            
+            instance, error = WorkflowService.start_workflow(
+                business_type='QUOTATION',
+                business_id=quotation.id,
+                business_no=quotation.quote_no,
+                submitter=request.user,
+                amount=amount
+            )
+            
+            if instance:
+                quotation.status = 'PENDING'
+                quotation.save()
+                return Response({
+                    **SalesQuotationSerializer(quotation).data,
+                    'workflow_started': True,
+                    'workflow_id': instance.id,
+                    'message': '已提交审批，请在审批中心查看审批进度'
+                })
+            else:
+                quotation.status = 'APPROVED'
+                quotation.save()
+                return Response({
+                    **SalesQuotationSerializer(quotation).data,
+                    'workflow_started': False,
+                    'message': error or '未配置审批流程，报价单已直接通过'
+                })
+                
+        except Exception as e:
+            quotation.status = 'APPROVED'
+            quotation.save()
+            return Response({
+                **SalesQuotationSerializer(quotation).data,
+                'workflow_started': False,
+                'message': f'报价单已通过，但工作流服务异常: {e}'
+            })
+    
+    @action(detail=True, methods=['post'])
     def convert_to_so(self, request, pk=None):
         """Convert quotation to sales order."""
         quotation = self.get_object()
@@ -1356,6 +1406,56 @@ class SalesContractViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         if so.payment_terms_detail:
             base_text += f'（{so.payment_terms_detail}）'
         return base_text
+    
+    @action(detail=True, methods=['post'])
+    def submit(self, request, pk=None):
+        """提交合同审批 - 审批步骤由流程配置决定"""
+        contract = self.get_object()
+        if contract.status not in ['DRAFT', 'REJECTED']:
+            return Response(
+                {'error': '只能提交草稿或已拒绝状态的合同'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        amount = contract.total_with_tax or contract.total_amount or 0
+        
+        try:
+            from apps.core.workflow.services import WorkflowService
+            
+            instance, error = WorkflowService.start_workflow(
+                business_type='SALES_CONTRACT',
+                business_id=contract.id,
+                business_no=contract.contract_no,
+                submitter=request.user,
+                amount=amount
+            )
+            
+            if instance:
+                contract.status = 'PENDING'
+                contract.save()
+                return Response({
+                    **SalesContractSerializer(contract).data,
+                    'workflow_started': True,
+                    'workflow_id': instance.id,
+                    'message': '已提交审批，请在审批中心查看审批进度'
+                })
+            else:
+                contract.status = 'ACTIVE'
+                contract.save()
+                return Response({
+                    **SalesContractSerializer(contract).data,
+                    'workflow_started': False,
+                    'message': error or '未配置审批流程，合同已直接生效'
+                })
+                
+        except Exception as e:
+            contract.status = 'ACTIVE'
+            contract.save()
+            return Response({
+                **SalesContractSerializer(contract).data,
+                'workflow_started': False,
+                'message': f'合同已生效，但工作流服务异常: {e}'
+            })
     
     @action(detail=True, methods=['get'])
     def print_preview(self, request, pk=None):

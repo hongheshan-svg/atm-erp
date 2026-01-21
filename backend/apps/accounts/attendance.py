@@ -585,18 +585,55 @@ class LeaveRequestViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
     
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
-        """提交申请"""
+        """提交申请 - 走流程配置的审批流程"""
         leave = self.get_object()
-        if leave.status != 'DRAFT':
-            return Response({'error': '只能提交草稿状态的申请'}, status=400)
+        if leave.status not in ['DRAFT', 'REJECTED']:
+            return Response({'error': '只能提交草稿或已拒绝状态的申请'}, status=400)
         
-        leave.status = 'PENDING'
-        leave.save()
-        return Response(self.get_serializer(leave).data)
+        # 计算请假天数用于流程路由
+        days = (leave.end_date - leave.start_date).days + 1
+        
+        try:
+            from apps.core.workflow.services import WorkflowService
+            
+            instance, error = WorkflowService.start_workflow(
+                business_type='LEAVE_REQUEST',
+                business_id=leave.id,
+                business_no=f'LEAVE-{leave.id}',
+                submitter=request.user,
+                amount=days  # 使用天数作为金额阈值
+            )
+            
+            if instance:
+                leave.status = 'PENDING'
+                leave.save()
+                return Response({
+                    **self.get_serializer(leave).data,
+                    'workflow_started': True,
+                    'workflow_id': instance.id,
+                    'message': '已提交审批，请在审批中心查看审批进度'
+                })
+            else:
+                leave.status = 'PENDING'
+                leave.save()
+                return Response({
+                    **self.get_serializer(leave).data,
+                    'workflow_started': False,
+                    'message': error or '未配置审批流程，请等待人工审批'
+                })
+                
+        except Exception as e:
+            leave.status = 'PENDING'
+            leave.save()
+            return Response({
+                **self.get_serializer(leave).data,
+                'workflow_started': False,
+                'message': f'已提交，但工作流服务异常: {e}'
+            })
     
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
-        """审批通过"""
+        """审批通过（手动审批，用于未配置流程时）"""
         leave = self.get_object()
         if leave.status != 'PENDING':
             return Response({'error': '只能审批待审批的申请'}, status=400)
@@ -685,18 +722,52 @@ class OvertimeRequestViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
     
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
-        """提交申请"""
+        """提交申请 - 走流程配置的审批流程"""
         overtime = self.get_object()
-        if overtime.status != 'DRAFT':
-            return Response({'error': '只能提交草稿状态的申请'}, status=400)
+        if overtime.status not in ['DRAFT', 'REJECTED']:
+            return Response({'error': '只能提交草稿或已拒绝状态的申请'}, status=400)
         
-        overtime.status = 'PENDING'
-        overtime.save()
-        return Response(self.get_serializer(overtime).data)
+        try:
+            from apps.core.workflow.services import WorkflowService
+            
+            instance, error = WorkflowService.start_workflow(
+                business_type='OVERTIME_REQUEST',
+                business_id=overtime.id,
+                business_no=f'OT-{overtime.id}',
+                submitter=request.user,
+                amount=overtime.hours  # 使用小时数作为参数
+            )
+            
+            if instance:
+                overtime.status = 'PENDING'
+                overtime.save()
+                return Response({
+                    **self.get_serializer(overtime).data,
+                    'workflow_started': True,
+                    'workflow_id': instance.id,
+                    'message': '已提交审批，请在审批中心查看审批进度'
+                })
+            else:
+                overtime.status = 'PENDING'
+                overtime.save()
+                return Response({
+                    **self.get_serializer(overtime).data,
+                    'workflow_started': False,
+                    'message': error or '未配置审批流程，请等待人工审批'
+                })
+                
+        except Exception as e:
+            overtime.status = 'PENDING'
+            overtime.save()
+            return Response({
+                **self.get_serializer(overtime).data,
+                'workflow_started': False,
+                'message': f'已提交，但工作流服务异常: {e}'
+            })
     
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
-        """审批通过"""
+        """审批通过（手动审批，用于未配置流程时）"""
         overtime = self.get_object()
         if overtime.status != 'PENDING':
             return Response({'error': '只能审批待审批的申请'}, status=400)
