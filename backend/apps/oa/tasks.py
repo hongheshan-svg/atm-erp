@@ -180,6 +180,68 @@ def generate_daily_attendance_report():
 
 
 @shared_task
+def sync_wechat_work_attendance():
+    """
+    同步企业微信考勤数据
+    """
+    from .wechat_work import WechatWorkConfig, WechatWorkService, WechatSyncLog
+    from datetime import date, timedelta
+    
+    configs = WechatWorkConfig.objects.filter(
+        is_deleted=False,
+        is_active=True,
+        sync_enabled=True
+    )
+    
+    results = []
+    for config in configs:
+        # 检查是否需要同步
+        if config.last_sync_time:
+            next_sync = config.last_sync_time + timedelta(seconds=config.sync_interval)
+            if timezone.now() < next_sync:
+                continue
+        
+        try:
+            date_to = date.today()
+            date_from = date_to - timedelta(days=config.sync_days - 1)
+            
+            # 创建同步日志
+            sync_log = WechatSyncLog.objects.create(
+                config=config,
+                sync_date_from=date_from,
+                sync_date_to=date_to
+            )
+            
+            service = WechatWorkService(config)
+            result = service.sync_checkin_data(date_from, date_to)
+            
+            sync_log.total_records = result['total']
+            sync_log.new_records = result['new']
+            sync_log.processed_records = result['processed']
+            sync_log.error_count = len(result['errors'])
+            sync_log.error_message = '\n'.join(result['errors'][:10])
+            sync_log.status = 'SUCCESS' if not result['errors'] else 'PARTIAL'
+            sync_log.end_time = timezone.now()
+            sync_log.save()
+            
+            results.append({
+                'config': config.name,
+                'new_records': result['new']
+            })
+            
+            logger.info(f"企业微信同步完成: {config.name}, 新增 {result['new']} 条")
+            
+        except Exception as e:
+            logger.error(f"企业微信同步失败 {config.name}: {e}")
+            results.append({
+                'config': config.name,
+                'error': str(e)
+            })
+    
+    return results
+
+
+@shared_task
 def cleanup_old_device_logs(days=90):
     """
     清理旧的设备同步日志

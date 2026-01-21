@@ -142,4 +142,11 @@ app.conf.beat_schedule = {
         'schedule': crontab(hour=4, minute=0, day_of_week=0),
         'kwargs': {'days': 90},
     },
+    
+    # ============ 企业微信考勤同步任务 ============
+    # 自动同步企业微信考勤数据 - 每15分钟
+    'sync-wechat-work-attendance': {
+        'task': 'apps.oa.tasks.sync_wechat_work_attendance',
+        'schedule': crontab(minute='*/15'),
+    },
 }

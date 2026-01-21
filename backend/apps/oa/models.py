@@ -18,3 +18,8 @@ AssetTransfer = OAAssetTransfer
 from .attendance_device import (
     AttendanceDevice, DeviceUserMapping, DeviceAttendanceLog, DeviceSyncLog
 )
+
+# Import models from wechat_work
+from .wechat_work import (
+    WechatWorkConfig, WechatUserMapping, WechatCheckinRecord, WechatSyncLog
+)

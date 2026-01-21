@@ -27,6 +27,10 @@ from .attendance_device import (
     AttendanceDeviceViewSet, DeviceUserMappingViewSet,
     DeviceAttendanceLogViewSet, DeviceSyncLogViewSet
 )
+from .wechat_work import (
+    WechatWorkConfigViewSet, WechatUserMappingViewSet,
+    WechatCheckinRecordViewSet, WechatSyncLogViewSet
+)
 from .attendance_sync_service import ZKTECOWebhookHandler
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -79,6 +83,12 @@ router.register(r'attendance-devices', AttendanceDeviceViewSet, basename='oa-att
 router.register(r'device-user-mappings', DeviceUserMappingViewSet, basename='oa-device-user-mapping')
 router.register(r'device-attendance-logs', DeviceAttendanceLogViewSet, basename='oa-device-attendance-log')
 router.register(r'device-sync-logs', DeviceSyncLogViewSet, basename='oa-device-sync-log')
+
+# 企业微信考勤同步
+router.register(r'wechat-configs', WechatWorkConfigViewSet, basename='oa-wechat-config')
+router.register(r'wechat-user-mappings', WechatUserMappingViewSet, basename='oa-wechat-user-mapping')
+router.register(r'wechat-checkin-records', WechatCheckinRecordViewSet, basename='oa-wechat-checkin-record')
+router.register(r'wechat-sync-logs', WechatSyncLogViewSet, basename='oa-wechat-sync-log')
 
 
 # Webhook接收考勤机推送数据
