@@ -415,12 +415,12 @@ class AttendanceSyncService:
             try:
                 with transaction.atomic():
                     # 获取或创建当天的考勤记录
+                    # 注意: AttendanceRecord 使用 attendance_date 字段
                     attendance, created = AttendanceRecord.objects.get_or_create(
                         user_id=employee_id,
-                        date=punch_date,
+                        attendance_date=punch_date,
                         defaults={
                             'status': 'NORMAL',
-                            'source': 'DEVICE',
                         }
                     )
                     
@@ -451,7 +451,12 @@ class AttendanceSyncService:
                     if last_out and (not attendance.check_out_time or last_out > attendance.check_out_time):
                         attendance.check_out_time = last_out
                     
-                    attendance.source = 'DEVICE'
+                    # 添加备注标识来源
+                    if not attendance.remarks:
+                        attendance.remarks = ''
+                    if '考勤机' not in attendance.remarks:
+                        attendance.remarks = f"[考勤机同步] {attendance.remarks}".strip()
+                    
                     attendance.save()
                     
                     # 标记日志为已处理
