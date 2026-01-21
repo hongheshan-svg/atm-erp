@@ -151,6 +151,42 @@
         </el-form-item>
         <el-row :gutter="20">
           <el-col :span="12">
+            <el-form-item label="客户">
+              <el-select v-model="formData.customer" placeholder="选择客户" clearable filterable style="width: 100%">
+                <el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="关联项目">
+              <el-select v-model="formData.project" placeholder="选择项目" clearable filterable style="width: 100%">
+                <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="负责人">
+              <el-select v-model="formData.owner" placeholder="选择负责人" clearable filterable style="width: 100%">
+                <el-option v-for="u in users" :key="u.id" :label="u.name" :value="u.id" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="提出日期">
+              <el-date-picker v-model="formData.request_date" type="date" style="width: 100%" value-format="YYYY-MM-DD" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="假设条件">
+          <el-input v-model="formData.assumptions" type="textarea" :rows="2" placeholder="需求假设条件" />
+        </el-form-item>
+        <el-form-item label="约束条件">
+          <el-input v-model="formData.constraints" type="textarea" :rows="2" placeholder="技术或业务约束" />
+        </el-form-item>
+        <el-row :gutter="20">
+          <el-col :span="12">
             <el-form-item label="预估工时">
               <el-input-number v-model="formData.estimated_hours" :min="0" style="width: 100%" />
             </el-form-item>
@@ -161,6 +197,38 @@
             </el-form-item>
           </el-col>
         </el-row>
+        
+        <!-- 附件上传 -->
+        <el-form-item label="技术附件">
+          <el-upload
+            v-model:file-list="fileList"
+            :action="uploadUrl"
+            :headers="uploadHeaders"
+            :on-success="handleUploadSuccess"
+            :on-remove="handleRemoveFile"
+            :on-error="handleUploadError"
+            :before-upload="beforeUpload"
+            multiple
+            :limit="20"
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.dwg,.dxf,.step,.stp,.iges,.igs,.jpg,.jpeg,.png,.zip,.rar,.7z"
+          >
+            <el-button type="primary" plain>
+              <el-icon><Upload /></el-icon>
+              上传文件
+            </el-button>
+            <template #tip>
+              <div class="el-upload__tip">
+                支持 PDF、Word、Excel、PPT、CAD图纸(dwg/dxf)、3D模型(step/iges)、图片、压缩包等格式，单个文件不超过 50MB
+              </div>
+            </template>
+          </el-upload>
+        </el-form-item>
+        
+        <el-form-item label="标签">
+          <el-select v-model="formData.tags" multiple filterable allow-create default-first-option placeholder="添加标签" style="width: 100%">
+            <el-option v-for="tag in commonTags" :key="tag" :label="tag" :value="tag" />
+          </el-select>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -184,29 +252,71 @@
         <el-descriptions-item label="负责人">{{ currentReq.owner_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="提出日期">{{ currentReq.request_date }}</el-descriptions-item>
         <el-descriptions-item label="期望日期">{{ currentReq.due_date || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="预估工时">{{ currentReq.estimated_hours || '-' }} 小时</el-descriptions-item>
+        <el-descriptions-item label="预估成本">{{ currentReq.estimated_cost ? '¥' + currentReq.estimated_cost : '-' }}</el-descriptions-item>
+        <el-descriptions-item label="版本">{{ currentReq.version }}</el-descriptions-item>
         <el-descriptions-item label="需求描述" :span="3">{{ currentReq.description }}</el-descriptions-item>
         <el-descriptions-item label="验收标准" :span="3">{{ currentReq.acceptance_criteria || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="假设条件" :span="3" v-if="currentReq.assumptions">{{ currentReq.assumptions }}</el-descriptions-item>
+        <el-descriptions-item label="约束条件" :span="3" v-if="currentReq.constraints">{{ currentReq.constraints }}</el-descriptions-item>
+        <el-descriptions-item label="标签" :span="3" v-if="currentReq.tags?.length">
+          <el-tag v-for="tag in currentReq.tags" :key="tag" size="small" style="margin-right: 5px;">{{ tag }}</el-tag>
+        </el-descriptions-item>
       </el-descriptions>
       
+      <!-- 附件列表 -->
+      <el-divider content-position="left" v-if="currentReq?.attachments?.length">技术附件 ({{ currentReq.attachments.length }})</el-divider>
+      <div v-if="currentReq?.attachments?.length" class="attachment-list">
+        <div v-for="(file, index) in currentReq.attachments" :key="index" class="attachment-item">
+          <el-icon><Document /></el-icon>
+          <a :href="file.url" target="_blank" class="attachment-name">{{ file.name }}</a>
+          <span class="attachment-size" v-if="file.size">{{ formatFileSize(file.size) }}</span>
+        </div>
+      </div>
+      
+      <!-- 追溯关联 -->
       <el-divider content-position="left" v-if="currentReq?.traces?.length">追溯关联</el-divider>
       <el-table :data="currentReq?.traces" v-if="currentReq?.traces?.length" border size="small">
         <el-table-column prop="trace_type_display" label="类型" width="100" />
         <el-table-column prop="target_name" label="名称" />
         <el-table-column prop="description" label="说明" />
       </el-table>
+      
+      <!-- 变更历史 -->
+      <el-divider content-position="left" v-if="currentReq?.changes?.length">变更历史</el-divider>
+      <el-timeline v-if="currentReq?.changes?.length">
+        <el-timeline-item v-for="change in currentReq.changes" :key="change.id" :timestamp="change.created_at">
+          <p><strong>{{ change.change_type_display }}</strong> - {{ change.created_by_name }}</p>
+          <p>{{ change.change_reason }}</p>
+        </el-timeline-item>
+      </el-timeline>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Upload, Document } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 const loading = ref(false)
 const submitLoading = ref(false)
 const requirementList = ref([])
 const stats = ref({})
+const customers = ref([])
+const projects = ref([])
+const users = ref([])
+const fileList = ref([])
+
+// 常用标签
+const commonTags = ['技术规格', '功能需求', '性能要求', '接口规范', '安全要求', '客户提供', '内部文档']
+
+// 文件上传配置
+const uploadUrl = '/api/core/upload/'
+const uploadHeaders = computed(() => ({
+  Authorization: `Bearer ${localStorage.getItem('access_token')}`
+}))
 
 const queryParams = reactive({
   search: '',
@@ -231,10 +341,18 @@ const formData = reactive({
   req_type: 'FUNCTIONAL',
   priority: 'MEDIUM',
   due_date: '',
+  request_date: new Date().toISOString().split('T')[0],
   description: '',
   acceptance_criteria: '',
+  assumptions: '',
+  constraints: '',
   estimated_hours: null,
-  estimated_cost: null
+  estimated_cost: null,
+  customer: null,
+  project: null,
+  owner: null,
+  attachments: [],
+  tags: []
 })
 
 const rules = {
@@ -277,17 +395,94 @@ const fetchStats = async () => {
   }
 }
 
+// 加载客户列表
+const fetchCustomers = async () => {
+  try {
+    const data = await request.get('/masterdata/customers/', { params: { page_size: 1000 } })
+    customers.value = data.results || data
+  } catch (e) {
+    console.error('加载客户失败', e)
+  }
+}
+
+// 加载项目列表
+const fetchProjects = async () => {
+  try {
+    const data = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    projects.value = data.results || data
+  } catch (e) {
+    console.error('加载项目失败', e)
+  }
+}
+
+// 加载用户列表
+const fetchUsers = async () => {
+  try {
+    const data = await request.get('/auth/users/', { params: { page_size: 1000 } })
+    const userList = data.results || data
+    users.value = userList.map(u => ({
+      id: u.id,
+      name: u.name || `${u.last_name || ''}${u.first_name || ''}`.trim() || u.username
+    }))
+  } catch (e) {
+    console.error('加载用户失败', e)
+  }
+}
+
+// 文件上传前校验
+const beforeUpload = (file) => {
+  const maxSize = 50 * 1024 * 1024 // 50MB
+  if (file.size > maxSize) {
+    ElMessage.error('文件大小不能超过 50MB')
+    return false
+  }
+  return true
+}
+
+// 上传成功处理
+const handleUploadSuccess = (response, file, fileListRef) => {
+  formData.attachments.push({
+    name: file.name,
+    url: response.url || response.file_url,
+    size: file.size,
+    type: file.raw?.type || ''
+  })
+  ElMessage.success(`${file.name} 上传成功`)
+}
+
+// 移除文件
+const handleRemoveFile = (file, fileListRef) => {
+  const index = formData.attachments.findIndex(a => a.name === file.name)
+  if (index > -1) {
+    formData.attachments.splice(index, 1)
+  }
+}
+
+// 上传错误处理
+const handleUploadError = (error, file) => {
+  ElMessage.error(`${file.name} 上传失败`)
+}
+
 const handleAdd = () => {
   isEdit.value = false
+  fileList.value = []
   Object.assign(formData, {
     title: '',
     req_type: 'FUNCTIONAL',
     priority: 'MEDIUM',
     due_date: '',
+    request_date: new Date().toISOString().split('T')[0],
     description: '',
     acceptance_criteria: '',
+    assumptions: '',
+    constraints: '',
     estimated_hours: null,
-    estimated_cost: null
+    estimated_cost: null,
+    customer: null,
+    project: null,
+    owner: null,
+    attachments: [],
+    tags: []
   })
   dialogVisible.value = true
 }
@@ -381,9 +576,25 @@ const getStatusType = (status) => {
   return types[status] || ''
 }
 
+// 格式化文件大小
+const formatFileSize = (bytes) => {
+  if (!bytes) return ''
+  const units = ['B', 'KB', 'MB', 'GB']
+  let size = bytes
+  let unitIndex = 0
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024
+    unitIndex++
+  }
+  return `${size.toFixed(1)} ${units[unitIndex]}`
+}
+
 onMounted(() => {
   fetchList()
   fetchStats()
+  fetchCustomers()
+  fetchProjects()
+  fetchUsers()
 })
 </script>
 
@@ -428,5 +639,51 @@ onMounted(() => {
 .stat-card.pending .stat-value { color: #e6a23c; }
 .stat-card.progress .stat-value { color: #67c23a; }
 .stat-card.new .stat-value { color: #909399; }
+
+/* 附件列表样式 */
+.attachment-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.attachment-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  border: 1px solid #e4e7ed;
+}
+
+.attachment-item .el-icon {
+  color: #409eff;
+  font-size: 18px;
+}
+
+.attachment-name {
+  color: #409eff;
+  text-decoration: none;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-name:hover {
+  text-decoration: underline;
+}
+
+.attachment-size {
+  color: #909399;
+  font-size: 12px;
+}
+
+.el-upload__tip {
+  color: #909399;
+  font-size: 12px;
+  margin-top: 8px;
+}
 </style>
 
