@@ -30,6 +30,9 @@ from .andon import (
 from .data_acquisition import (
     DataSourceViewSet, DataPointViewSet, DataRecordViewSet, DataAlarmViewSet
 )
+from .sn_traceability import (
+    SNRuleViewSet, SerialNumberViewSet, SNTraceRecordViewSet, ComponentBindingViewSet
+)
 
 router = DefaultRouter()
 router.register(r'processes', ProductionProcessViewSet, basename='process')
@@ -67,6 +70,12 @@ router.register(r'data-sources', DataSourceViewSet, basename='data-source')
 router.register(r'data-points', DataPointViewSet, basename='data-point')
 router.register(r'data-records', DataRecordViewSet, basename='data-record')
 router.register(r'data-alarms', DataAlarmViewSet, basename='data-alarm')
+
+# 序列号与批次追溯
+router.register(r'sn-rules', SNRuleViewSet, basename='sn-rule')
+router.register(r'serial-numbers', SerialNumberViewSet, basename='serial-number')
+router.register(r'sn-traces', SNTraceRecordViewSet, basename='sn-trace')
+router.register(r'component-bindings', ComponentBindingViewSet, basename='component-binding')
 
 urlpatterns = [
     path('', include(router.urls)),

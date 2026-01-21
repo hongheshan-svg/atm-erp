@@ -63,6 +63,17 @@ from .cad_integration import (
     CADBOMImportViewSet, CADPropertyMappingViewSet
 )
 from .bom_integration import BOMIntegrationViewSet
+from .technical_agreement import (
+    TechnicalAgreementTemplateViewSet, TechnicalAgreementViewSet, TechnicalAgreementChangeViewSet
+)
+from .equipment_archive import (
+    EquipmentArchiveViewSet, EquipmentMaintenancePlanViewSet,
+    EquipmentMaintenanceRecordViewSet, EquipmentSparePartViewSet
+)
+from .acceptance import (
+    AcceptanceTemplateViewSet, AcceptanceViewSet,
+    AcceptanceCheckItemViewSet, AcceptanceIssueViewSet
+)
 
 router = DefaultRouter()
 router.register(r'projects', ProjectViewSet, basename='project')
@@ -180,6 +191,23 @@ router.register(r'cad-property-mappings', CADPropertyMappingViewSet, basename='c
 
 # BOM集成(采购/生产)
 router.register(r'bom-integration', BOMIntegrationViewSet, basename='bom-integration')
+
+# 技术协议管理
+router.register(r'agreement-templates', TechnicalAgreementTemplateViewSet, basename='agreement-template')
+router.register(r'agreements', TechnicalAgreementViewSet, basename='agreement')
+router.register(r'agreement-changes', TechnicalAgreementChangeViewSet, basename='agreement-change')
+
+# 设备档案管理
+router.register(r'equipment-archives', EquipmentArchiveViewSet, basename='equipment-archive')
+router.register(r'archive-maintenance-plans', EquipmentMaintenancePlanViewSet, basename='archive-maintenance-plan')
+router.register(r'archive-maintenance-records', EquipmentMaintenanceRecordViewSet, basename='archive-maintenance-record')
+router.register(r'archive-spare-parts', EquipmentSparePartViewSet, basename='archive-spare-part')
+
+# FAT/SAT验收管理
+router.register(r'acceptance-templates', AcceptanceTemplateViewSet, basename='acceptance-template')
+router.register(r'acceptances', AcceptanceViewSet, basename='acceptance')
+router.register(r'acceptance-items', AcceptanceCheckItemViewSet, basename='acceptance-item')
+router.register(r'acceptance-issues', AcceptanceIssueViewSet, basename='acceptance-issue')
 
 urlpatterns = [
     path('', include(router.urls)),
