@@ -18,6 +18,9 @@ from .andon import (
 from .data_acquisition import (
     DataSource, DataPoint, DataRecord, DataAlarm
 )
+from .sn_traceability import (
+    SerialNumber, SNTraceRecord, ComponentBinding, SNRule
+)
 
 
 class ProductionProcess(BaseModel):
