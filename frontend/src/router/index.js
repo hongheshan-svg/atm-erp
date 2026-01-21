@@ -823,16 +823,10 @@ const routes = [
         meta: { title: '考勤打卡', icon: 'Clock', menuId: 'oa:attendance' }
       },
       {
-        path: 'oa/attendance-devices',
-        name: 'AttendanceDeviceList',
-        component: () => import('@/views/oa/AttendanceDeviceList.vue'),
-        meta: { title: '考勤设备', icon: 'Monitor', menuId: 'oa:attendance-devices' }
-      },
-      {
-        path: 'oa/wechat-work',
-        name: 'WechatWorkConfig',
-        component: () => import('@/views/oa/WechatWorkConfig.vue'),
-        meta: { title: '企业微信同步', icon: 'Connection', menuId: 'oa:wechat-work' }
+        path: 'oa/attendance-import',
+        name: 'AttendanceImport',
+        component: () => import('@/views/oa/AttendanceImport.vue'),
+        meta: { title: '考勤导入', icon: 'Upload', menuId: 'oa:attendance-import' }
       },
       {
         path: 'oa/leave',

@@ -545,6 +545,366 @@ class AttendanceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
             summaries.append(summary)
         
         return Response(summaries)
+    
+    @action(detail=False, methods=['post'])
+    def batch_import(self, request):
+        """批量导入考勤记录"""
+        from apps.accounts.models import User
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        records = request.data.get('records', [])
+        month = request.data.get('month', '')
+        source = request.data.get('source', 'IMPORT')
+        overwrite = request.data.get('overwrite', False)
+        
+        if not records:
+            return Response({'error': '没有可导入的记录'}, status=400)
+        
+        success_count = 0
+        skip_count = 0
+        error_count = 0
+        errors = []
+        
+        # 构建员工缓存
+        employee_cache = {}
+        for user in User.objects.filter(is_active=True, is_deleted=False):
+            # 按姓名和工号建立映射
+            if user.first_name:
+                employee_cache[user.first_name] = user
+            if user.employee_id:
+                employee_cache[user.employee_id] = user
+            if user.username:
+                employee_cache[user.username] = user
+        
+        for idx, record in enumerate(records):
+            try:
+                # 查找员工
+                employee = None
+                employee_name = record.get('employee_name', '').strip()
+                employee_id = record.get('employee_id', '').strip()
+                
+                if employee_id and employee_id in employee_cache:
+                    employee = employee_cache[employee_id]
+                elif employee_name and employee_name in employee_cache:
+                    employee = employee_cache[employee_name]
+                
+                if not employee:
+                    error_count += 1
+                    errors.append(f"第{idx+1}行: 找不到员工 {employee_name} ({employee_id})")
+                    continue
+                
+                # 解析日期
+                date_str = record.get('date', '')
+                if not date_str:
+                    error_count += 1
+                    errors.append(f"第{idx+1}行: 日期为空")
+                    continue
+                
+                try:
+                    attendance_date = date.fromisoformat(date_str)
+                except:
+                    error_count += 1
+                    errors.append(f"第{idx+1}行: 日期格式错误 {date_str}")
+                    continue
+                
+                # 检查是否已存在
+                existing = AttendanceRecord.objects.filter(
+                    user=employee,
+                    attendance_date=attendance_date,
+                    is_deleted=False
+                ).first()
+                
+                if existing and not overwrite:
+                    skip_count += 1
+                    continue
+                
+                # 解析时间
+                def parse_time(time_str):
+                    if not time_str:
+                        return None
+                    try:
+                        if ':' in time_str:
+                            parts = time_str.split(':')
+                            return time(int(parts[0]), int(parts[1]))
+                    except:
+                        pass
+                    return None
+                
+                check_in_time = parse_time(record.get('check_in_time', ''))
+                check_out_time = parse_time(record.get('check_out_time', ''))
+                
+                # 转换为datetime
+                check_in_dt = None
+                check_out_dt = None
+                if check_in_time:
+                    check_in_dt = timezone.make_aware(
+                        datetime.combine(attendance_date, check_in_time)
+                    )
+                if check_out_time:
+                    check_out_dt = timezone.make_aware(
+                        datetime.combine(attendance_date, check_out_time)
+                    )
+                
+                # 解析状态
+                status_map = {
+                    'NORMAL': 'NORMAL',
+                    'LATE': 'LATE',
+                    'EARLY': 'EARLY',
+                    'ABNORMAL': 'ABNORMAL',
+                    'ABSENT': 'ABSENT',
+                    'REST': 'REST',
+                    'LEAVE': 'LEAVE',
+                }
+                status = status_map.get(record.get('status', 'NORMAL'), 'NORMAL')
+                
+                # 解析工时
+                work_hours = None
+                try:
+                    wh = record.get('work_hours')
+                    if wh:
+                        work_hours = Decimal(str(wh))
+                except:
+                    pass
+                
+                # 创建或更新记录
+                if existing:
+                    existing.check_in_time = check_in_dt
+                    existing.check_out_time = check_out_dt
+                    existing.status = status
+                    existing.work_hours = work_hours
+                    existing.remarks = record.get('remarks', '') or f"[{source}导入]"
+                    existing.updated_by = request.user
+                    existing.save()
+                else:
+                    AttendanceRecord.objects.create(
+                        user=employee,
+                        attendance_date=attendance_date,
+                        check_in_time=check_in_dt,
+                        check_out_time=check_out_dt,
+                        status=status,
+                        work_hours=work_hours,
+                        remarks=record.get('remarks', '') or f"[{source}导入]",
+                        created_by=request.user
+                    )
+                
+                success_count += 1
+                
+            except Exception as e:
+                error_count += 1
+                errors.append(f"第{idx+1}行: {str(e)}")
+                logger.error(f"Import error at row {idx+1}: {e}")
+        
+        # 记录导入历史
+        from django.core.cache import cache
+        history_key = f"attendance_import_history_{request.user.id}"
+        history = cache.get(history_key, [])
+        history.insert(0, {
+            'import_time': timezone.now().isoformat(),
+            'month': month,
+            'total_count': len(records),
+            'success_count': success_count,
+            'skip_count': skip_count,
+            'error_count': error_count,
+            'operator': request.user.get_full_name() or request.user.username
+        })
+        cache.set(history_key, history[:20], 60 * 60 * 24 * 30)  # 保留30天
+        
+        return Response({
+            'total': len(records),
+            'success_count': success_count,
+            'skip_count': skip_count,
+            'error_count': error_count,
+            'errors': errors[:10]  # 只返回前10条错误
+        })
+    
+    @action(detail=False, methods=['get'])
+    def month_stats(self, request):
+        """月度考勤统计"""
+        month = request.query_params.get('month', date.today().strftime('%Y-%m'))
+        
+        try:
+            year, m = month.split('-')
+            year, m = int(year), int(m)
+        except:
+            return Response({'error': '月份格式错误'}, status=400)
+        
+        # 计算应出勤天数（简单计算：该月工作日）
+        import calendar
+        first_day = date(year, m, 1)
+        last_day = date(year, m, calendar.monthrange(year, m)[1])
+        
+        work_days = 0
+        current = first_day
+        while current <= last_day:
+            if current.weekday() < 5:  # 周一到周五
+                work_days += 1
+            current += timedelta(days=1)
+        
+        # 已导入记录数
+        imported_count = AttendanceRecord.objects.filter(
+            attendance_date__year=year,
+            attendance_date__month=m,
+            is_deleted=False
+        ).count()
+        
+        # 异常记录数
+        abnormal_count = AttendanceRecord.objects.filter(
+            attendance_date__year=year,
+            attendance_date__month=m,
+            is_deleted=False,
+            status__in=['LATE', 'EARLY', 'ABSENT', 'ABNORMAL']
+        ).count()
+        
+        return Response({
+            'work_days': work_days,
+            'imported_count': imported_count,
+            'abnormal_count': abnormal_count
+        })
+    
+    @action(detail=False, methods=['get'])
+    def import_history(self, request):
+        """导入历史"""
+        from django.core.cache import cache
+        history_key = f"attendance_import_history_{request.user.id}"
+        history = cache.get(history_key, [])
+        return Response(history)
+    
+    @action(detail=False, methods=['post'])
+    def recalculate_month(self, request):
+        """重新计算月度考勤"""
+        month = request.data.get('month', date.today().strftime('%Y-%m'))
+        
+        try:
+            year, m = month.split('-')
+            year, m = int(year), int(m)
+        except:
+            return Response({'error': '月份格式错误'}, status=400)
+        
+        # 获取该月所有记录
+        records = AttendanceRecord.objects.filter(
+            attendance_date__year=year,
+            attendance_date__month=m,
+            is_deleted=False
+        )
+        
+        # 获取考勤配置
+        config = AttendanceConfig.objects.filter(is_default=True, is_active=True).first()
+        work_start = time(9, 0)
+        work_end = time(18, 0)
+        late_grace = 10
+        
+        if config:
+            work_start = config.work_start_time
+            work_end = config.work_end_time
+            late_grace = config.late_grace_minutes
+        
+        updated = 0
+        for record in records:
+            # 跳过请假和休息
+            if record.status in ['LEAVE', 'REST']:
+                continue
+            
+            new_status = 'NORMAL'
+            late_minutes = 0
+            early_minutes = 0
+            
+            # 判断迟到
+            if record.check_in_time:
+                check_in_local = record.check_in_time.replace(tzinfo=None)
+                expected_start = datetime.combine(record.attendance_date, work_start)
+                grace_time = expected_start + timedelta(minutes=late_grace)
+                
+                if check_in_local > grace_time:
+                    late_minutes = int((check_in_local - expected_start).total_seconds() / 60)
+                    new_status = 'LATE'
+            
+            # 判断早退
+            if record.check_out_time:
+                check_out_local = record.check_out_time.replace(tzinfo=None)
+                expected_end = datetime.combine(record.attendance_date, work_end)
+                
+                if check_out_local < expected_end:
+                    early_minutes = int((expected_end - check_out_local).total_seconds() / 60)
+                    if new_status == 'NORMAL':
+                        new_status = 'EARLY'
+            
+            # 判断缺勤
+            if not record.check_in_time and not record.check_out_time:
+                new_status = 'ABSENT'
+            
+            # 计算工时
+            work_hours = record.calculate_work_hours() if hasattr(record, 'calculate_work_hours') else None
+            
+            # 更新记录
+            if record.status != new_status or record.late_minutes != late_minutes:
+                record.status = new_status
+                record.late_minutes = late_minutes
+                record.early_minutes = early_minutes
+                if work_hours:
+                    record.work_hours = work_hours
+                record.save(update_fields=['status', 'late_minutes', 'early_minutes', 'work_hours'])
+                updated += 1
+        
+        return Response({
+            'message': f'重新计算完成，更新了 {updated} 条记录',
+            'updated': updated
+        })
+    
+    @action(detail=False, methods=['get'])
+    def export_report(self, request):
+        """导出考勤报表"""
+        import io
+        from django.http import HttpResponse
+        
+        month = request.query_params.get('month', date.today().strftime('%Y-%m'))
+        
+        try:
+            year, m = month.split('-')
+            year, m = int(year), int(m)
+        except:
+            return Response({'error': '月份格式错误'}, status=400)
+        
+        # 获取记录
+        records = AttendanceRecord.objects.filter(
+            attendance_date__year=year,
+            attendance_date__month=m,
+            is_deleted=False
+        ).select_related('user').order_by('user__first_name', 'attendance_date')
+        
+        # 生成CSV
+        output = io.StringIO()
+        import csv
+        writer = csv.writer(output)
+        
+        # 表头
+        writer.writerow([
+            '姓名', '工号', '日期', '签到时间', '签退时间', 
+            '工时', '状态', '迟到(分钟)', '早退(分钟)', '备注'
+        ])
+        
+        # 数据
+        for r in records:
+            writer.writerow([
+                r.user.get_full_name() if r.user else '',
+                r.user.employee_id if r.user else '',
+                r.attendance_date.strftime('%Y-%m-%d'),
+                r.check_in_time.strftime('%H:%M') if r.check_in_time else '',
+                r.check_out_time.strftime('%H:%M') if r.check_out_time else '',
+                str(r.work_hours) if r.work_hours else '',
+                r.get_status_display() if hasattr(r, 'get_status_display') else r.status,
+                r.late_minutes or '',
+                r.early_minutes or '',
+                r.remarks or ''
+            ])
+        
+        # 返回CSV文件
+        response = HttpResponse(
+            output.getvalue().encode('utf-8-sig'),
+            content_type='text/csv; charset=utf-8-sig'
+        )
+        response['Content-Disposition'] = f'attachment; filename="attendance_{month}.csv"'
+        return response
 
 
 class LeaveRequestViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):

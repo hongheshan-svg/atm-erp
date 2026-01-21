@@ -195,8 +195,7 @@
           </el-menu-item-group>
           <el-menu-item-group title="考勤管理">
             <el-menu-item index="/attendance" v-if="hasMenuAccess('accounts:attendance') || hasMenuAccess('oa')">考勤打卡</el-menu-item>
-            <el-menu-item index="/oa/attendance-devices" v-if="hasMenuAccess('oa:attendance-devices') || isAdmin">考勤设备</el-menu-item>
-            <el-menu-item index="/oa/wechat-work" v-if="hasMenuAccess('oa:wechat-work') || isAdmin">企业微信同步</el-menu-item>
+            <el-menu-item index="/oa/attendance-import" v-if="hasMenuAccess('oa:attendance-import') || isAdmin">考勤导入</el-menu-item>
             <el-menu-item index="/oa/leave" v-if="hasMenuAccess('oa:leave') || hasMenuAccess('oa')">请假申请</el-menu-item>
           </el-menu-item-group>
           <el-menu-item-group title="日程会议">
