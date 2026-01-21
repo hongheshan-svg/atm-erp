@@ -330,6 +330,141 @@ const readExcelFile = (file) => {
 }
 
 const parseAttendanceData = (rawData) => {
+  // 检测是企业微信月报格式还是每日明细格式
+  const firstRow = rawData[0] || []
+  const isMonthlyReport = firstRow[0] && String(firstRow[0]).includes('月报')
+  
+  if (isMonthlyReport) {
+    return parseWechatMonthlyReport(rawData)
+  } else {
+    return parseDailyDetailReport(rawData)
+  }
+}
+
+// 解析企业微信月报格式
+const parseWechatMonthlyReport = (rawData) => {
+  const result = []
+  
+  // 从第2行获取日期范围 "统计时间:01-01 ～ 01-20"
+  const dateRangeRow = rawData[1] || []
+  const dateRangeStr = String(dateRangeRow[0] || '')
+  let year = new Date().getFullYear()
+  let startDay = 1, endDay = 31
+  
+  // 解析日期范围
+  const rangeMatch = dateRangeStr.match(/(\d{2})-(\d{2})\s*[～~]\s*(\d{2})-(\d{2})/)
+  if (rangeMatch) {
+    startDay = parseInt(rangeMatch[2])
+    endDay = parseInt(rangeMatch[4])
+  }
+  
+  // 从制表时间获取年份
+  const yearMatch = dateRangeStr.match(/(\d{4})-\d{2}-\d{2}/)
+  if (yearMatch) {
+    year = parseInt(yearMatch[1])
+  }
+  
+  // 找到表头行（包含"姓名"的行）
+  let headerRowIndex = 2
+  let subHeaderRowIndex = 3
+  for (let i = 0; i < Math.min(10, rawData.length); i++) {
+    const row = rawData[i]
+    if (row && row[0] === '姓名') {
+      headerRowIndex = i
+      subHeaderRowIndex = i + 1
+      break
+    }
+  }
+  
+  // 获取子表头（包含日期列）
+  const subHeaders = rawData[subHeaderRowIndex] || []
+  
+  // 找到每日状态的起始列（格式如 "1\n星期四"）
+  let dailyStartCol = -1
+  const dailyCols = []
+  for (let col = 0; col < subHeaders.length; col++) {
+    const header = String(subHeaders[col] || '')
+    const dayMatch = header.match(/^(\d{1,2})\n/)
+    if (dayMatch) {
+      if (dailyStartCol < 0) dailyStartCol = col
+      dailyCols.push({
+        col: col,
+        day: parseInt(dayMatch[1])
+      })
+    }
+  }
+  
+  // 解析选择的月份
+  const selectedMonth = importForm.month // 格式: "2026-01"
+  const [selectedYear, selectedMonthNum] = selectedMonth.split('-').map(Number)
+  
+  // 解析数据行（从表头后开始）
+  for (let i = subHeaderRowIndex + 1; i < rawData.length; i++) {
+    const row = rawData[i]
+    if (!row || !row.length) continue
+    
+    const name = String(row[0] || '').trim()
+    const account = String(row[1] || '').trim()
+    
+    if (!name || name === '姓名') continue
+    
+    // 获取汇总数据
+    const workHoursTotal = row[12] // 实际工作时长
+    const lateCount = row[14] // 迟到次数
+    const lateMinutes = row[15] // 迟到时长
+    
+    // 解析每天的状态
+    for (const dayCol of dailyCols) {
+      const dayStatus = String(row[dayCol.col] || '').trim()
+      if (!dayStatus) continue
+      
+      // 构建日期
+      const dateStr = `${selectedYear}-${String(selectedMonthNum).padStart(2, '0')}-${String(dayCol.day).padStart(2, '0')}`
+      
+      // 解析状态
+      let statusCode = 'NORMAL'
+      let remark = dayStatus.replace(/\s*;\s*/g, ' ').trim()
+      
+      if (dayStatus.includes('旷工')) {
+        statusCode = 'ABSENT'
+      } else if (dayStatus.includes('迟到')) {
+        statusCode = 'LATE'
+      } else if (dayStatus.includes('早退')) {
+        statusCode = 'EARLY'
+      } else if (dayStatus.includes('缺卡')) {
+        statusCode = 'ABNORMAL'
+      } else if (dayStatus.includes('休息')) {
+        statusCode = 'REST'
+      } else if (dayStatus.includes('请假')) {
+        statusCode = 'LEAVE'
+      } else if (dayStatus.includes('正常')) {
+        statusCode = 'NORMAL'
+      }
+      
+      // 提取迟到分钟数
+      const lateMatch = dayStatus.match(/迟到(\d+)分钟/)
+      const lateMins = lateMatch ? lateMatch[1] : ''
+      
+      result.push({
+        employee_name: name,
+        employee_id: account,
+        date: dateStr,
+        check_in: '',  // 月报没有具体打卡时间
+        check_out: '',
+        work_hours: '',
+        status: statusCode,
+        status_text: getStatusText(statusCode),
+        remark: remark + (lateMins ? ` (迟到${lateMins}分钟)` : ''),
+        import_status: statusCode === 'REST' ? 'skip' : 'valid' // 休息日跳过
+      })
+    }
+  }
+  
+  return result
+}
+
+// 解析每日明细格式（原有逻辑）
+const parseDailyDetailReport = (rawData) => {
   // 找到表头行
   let headerIndex = 0
   for (let i = 0; i < Math.min(10, rawData.length); i++) {
