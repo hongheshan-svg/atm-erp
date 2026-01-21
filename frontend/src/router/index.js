@@ -829,6 +829,12 @@ const routes = [
         meta: { title: '考勤设备', icon: 'Monitor', menuId: 'oa:attendance-devices' }
       },
       {
+        path: 'oa/wechat-work',
+        name: 'WechatWorkConfig',
+        component: () => import('@/views/oa/WechatWorkConfig.vue'),
+        meta: { title: '企业微信同步', icon: 'Connection', menuId: 'oa:wechat-work' }
+      },
+      {
         path: 'oa/leave',
         name: 'LeaveRequest',
         component: () => import('@/views/oa/LeaveList.vue'),
