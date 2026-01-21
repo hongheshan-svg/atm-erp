@@ -13,3 +13,8 @@ from .asset import OAAssetCategory, Asset, AssetBorrow, OAAssetTransfer, AssetMa
 # Aliases
 AssetCategory = OAAssetCategory
 AssetTransfer = OAAssetTransfer
+
+# Import models from attendance_device
+from .attendance_device import (
+    AttendanceDevice, DeviceUserMapping, DeviceAttendanceLog, DeviceSyncLog
+)

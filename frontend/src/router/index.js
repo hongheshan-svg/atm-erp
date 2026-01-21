@@ -823,6 +823,12 @@ const routes = [
         meta: { title: '考勤打卡', icon: 'Clock', menuId: 'oa:attendance' }
       },
       {
+        path: 'oa/attendance-devices',
+        name: 'AttendanceDeviceList',
+        component: () => import('@/views/oa/AttendanceDeviceList.vue'),
+        meta: { title: '考勤设备', icon: 'Monitor', menuId: 'oa:attendance-devices' }
+      },
+      {
         path: 'oa/leave',
         name: 'LeaveRequest',
         component: () => import('@/views/oa/LeaveList.vue'),

@@ -23,6 +23,16 @@ from apps.accounts.attendance import (
     AttendanceRecordViewSet, AttendanceConfigViewSet,
     LeaveRequestViewSet, OvertimeRequestViewSet
 )
+from .attendance_device import (
+    AttendanceDeviceViewSet, DeviceUserMappingViewSet,
+    DeviceAttendanceLogViewSet, DeviceSyncLogViewSet
+)
+from .attendance_sync_service import ZKTECOWebhookHandler
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+import json
 
 router = DefaultRouter()
 router.register(r'conversations', IMConversationViewSet, basename='im-conversation')
@@ -64,6 +74,83 @@ router.register(r'asset-borrows', AssetBorrowViewSet, basename='oa-asset-borrow'
 router.register(r'asset-transfers', AssetTransferViewSet, basename='oa-asset-transfer')
 router.register(r'asset-maintenance', AssetMaintenanceViewSet, basename='oa-asset-maintenance')
 
+# 考勤设备管理
+router.register(r'attendance-devices', AttendanceDeviceViewSet, basename='oa-attendance-device')
+router.register(r'device-user-mappings', DeviceUserMappingViewSet, basename='oa-device-user-mapping')
+router.register(r'device-attendance-logs', DeviceAttendanceLogViewSet, basename='oa-device-attendance-log')
+router.register(r'device-sync-logs', DeviceSyncLogViewSet, basename='oa-device-sync-log')
+
+
+# Webhook接收考勤机推送数据
+@csrf_exempt
+def device_webhook(request, device_sn):
+    """
+    接收ZKTECO考勤机推送的数据
+    支持 iclock 协议和 JSON 格式
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    try:
+        # 尝试解析JSON
+        if request.content_type == 'application/json':
+            data = json.loads(request.body)
+        else:
+            # iclock 协议格式
+            data = {}
+            for key, value in request.POST.items():
+                data[key] = value
+            # 也检查 body 中的数据
+            if request.body:
+                body_str = request.body.decode('utf-8')
+                for line in body_str.split('&'):
+                    if '=' in line:
+                        k, v = line.split('=', 1)
+                        data[k] = v
+        
+        result = ZKTECOWebhookHandler.handle_push_data(device_sn, data)
+        
+        if result['success']:
+            return JsonResponse({'OK': ''})  # iclock 协议要求返回 OK
+        else:
+            return JsonResponse({'error': result['message']}, status=400)
+            
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@csrf_exempt
+def device_webhook_iclock(request):
+    """
+    iclock 协议兼容接口
+    设备会以 GET 请求获取命令，POST 请求推送数据
+    """
+    device_sn = request.GET.get('SN', '') or request.POST.get('SN', '')
+    
+    if request.method == 'GET':
+        # 设备请求命令
+        return JsonResponse({'OK': ''})
+    
+    if request.method == 'POST':
+        # 设备推送数据
+        if device_sn:
+            data = {}
+            for key, value in request.POST.items():
+                data[key] = value
+            if request.body:
+                body_str = request.body.decode('utf-8', errors='ignore')
+                data['body'] = body_str
+            
+            result = ZKTECOWebhookHandler.handle_push_data(device_sn, data)
+            return JsonResponse({'OK': ''})
+    
+    return JsonResponse({'error': 'Invalid request'}, status=400)
+
+
 urlpatterns = [
     path('', include(router.urls)),
+    # 考勤机推送接口
+    path('webhook/attendance/<str:device_sn>/', device_webhook, name='attendance-device-webhook'),
+    # iclock 协议兼容接口
+    path('iclock/cdata', device_webhook_iclock, name='iclock-cdata'),
 ]
