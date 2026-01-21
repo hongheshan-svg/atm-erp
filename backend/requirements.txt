@@ -51,6 +51,9 @@ python-decouple==3.8
 # HTTP requests
 requests==2.31.0
 
+# ZKTECO attendance device integration
+pyzk==0.9
+
 # Image handling (for future use)
 Pillow==10.1.0
 

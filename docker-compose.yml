@@ -131,27 +131,28 @@ services:
     container_name: erp-celery
     restart: unless-stopped
     command: celery -A config worker -l info --concurrency=2
+    # 使用host网络模式，允许访问宿主机局域网设备(如考勤机192.168.2.x)
+    network_mode: host
     environment:
       - DEBUG=${DEBUG:-False}
       - SECRET_KEY=${SECRET_KEY:-django-insecure-change-this-in-production-123456}
-      - DB_HOST=postgres
-      - DB_PORT=5432
+      # 使用localhost端口访问其他服务(host网络模式)
+      - DB_HOST=127.0.0.1
+      - DB_PORT=5433
       - DB_NAME=${DB_NAME:-erp_db}
       - DB_USER=${DB_USER:-erp_user}
       - DB_PASSWORD=${DB_PASSWORD:-erp_password}
-      - REDIS_HOST=redis
-      - REDIS_URL=redis://redis:6379/1
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - ELASTICSEARCH_HOST=elasticsearch:9200
+      - REDIS_HOST=127.0.0.1
+      - REDIS_URL=redis://127.0.0.1:6380/1
+      - CELERY_BROKER_URL=redis://127.0.0.1:6380/0
+      - CELERY_RESULT_BACKEND=redis://127.0.0.1:6380/0
+      - ELASTICSEARCH_HOST=127.0.0.1:9201
     volumes:
       - media_files:/app/uploads
       - backend_logs:/app/logs
     depends_on:
       - backend
       - redis
-    networks:
-      - erp-network
 
   # ===========================================
   # Celery Beat (Scheduled Tasks)

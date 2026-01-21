@@ -467,17 +467,48 @@ class AttendanceDeviceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     def _test_tcp_connection(self, device):
-        """测试TCP连接"""
+        """测试TCP连接 - 尝试连接ZKTECO设备"""
         import socket
         try:
+            # 首先检查端口是否可达
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(5)
             result = sock.connect_ex((device.ip_address, device.port))
             sock.close()
-            if result == 0:
-                return True, f'TCP连接成功 ({device.ip_address}:{device.port})'
-            else:
-                return False, f'TCP连接失败，端口未开放'
+            
+            if result != 0:
+                return False, f'TCP连接失败，端口 {device.ip_address}:{device.port} 未开放'
+            
+            # 尝试使用pyzk连接获取设备信息
+            try:
+                from zk import ZK
+                zk = ZK(
+                    device.ip_address,
+                    port=device.port,
+                    timeout=10,
+                    password=int(device.device_password) if device.device_password else 0,
+                    ommit_ping=True  # 跳过ping检查
+                )
+                conn = zk.connect()
+                
+                # 获取设备信息
+                device_name = conn.get_device_name() or 'Unknown'
+                serial = conn.get_serialnumber() or device.device_sn
+                users = conn.get_users()
+                attendances = conn.get_attendance()
+                
+                conn.disconnect()
+                
+                # 更新设备固件版本
+                device.firmware_version = conn.get_firmware_version() if hasattr(conn, 'get_firmware_version') else ''
+                device.save(update_fields=['firmware_version'])
+                
+                return True, f'连接成功! 设备: {device_name}, 用户数: {len(users)}, 记录数: {len(attendances)}'
+            except ImportError:
+                return True, f'TCP端口连接成功 ({device.ip_address}:{device.port})，pyzk库未安装'
+            except Exception as e:
+                return True, f'TCP端口可达，但设备通讯异常: {str(e)}'
+                
         except Exception as e:
             return False, f'TCP连接异常: {str(e)}'
     

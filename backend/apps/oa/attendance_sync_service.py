@@ -146,7 +146,8 @@ class AttendanceSyncService:
                 self.device.ip_address,
                 port=self.device.port,
                 timeout=30,
-                password=int(self.device.device_password) if self.device.device_password else 0
+                password=int(self.device.device_password) if self.device.device_password else 0,
+                ommit_ping=True  # 跳过ping检查，Docker容器中ping可能不可用
             )
             
             conn = zk.connect()
