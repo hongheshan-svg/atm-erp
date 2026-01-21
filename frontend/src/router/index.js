@@ -95,6 +95,12 @@ const routes = [
         meta: { title: '项目列表', icon: 'Management', menuId: 'projects:list' }
       },
       {
+        path: 'projects/dashboard',
+        name: 'ProjectDashboard',
+        component: () => import('@/views/projects/ProjectDashboard.vue'),
+        meta: { title: '项目仪表盘', icon: 'DataAnalysis', menuId: 'projects:dashboard' }
+      },
+      {
         path: 'projects/:id',
         name: 'ProjectDetail',
         component: () => import('@/views/projects/ProjectDetail.vue'),

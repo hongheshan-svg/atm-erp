@@ -50,6 +50,7 @@
           </el-menu-item-group>
           <el-menu-item-group title="项目管理">
             <el-menu-item index="/projects" v-if="hasMenuAccess('projects:list')">项目列表</el-menu-item>
+            <el-menu-item index="/projects/dashboard" v-if="hasMenuAccess('projects:dashboard') || hasMenuAccess('projects')">项目仪表盘</el-menu-item>
             <el-menu-item index="/projects/tasks" v-if="hasMenuAccess('projects:tasks')">任务管理</el-menu-item>
             <el-menu-item index="/projects/milestones" v-if="hasMenuAccess('projects:milestones') || hasMenuAccess('projects')">里程碑</el-menu-item>
             <el-menu-item index="/projects/gantt" v-if="hasMenuAccess('projects:gantt')">甘特图</el-menu-item>

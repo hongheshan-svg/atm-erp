@@ -41,6 +41,10 @@ from .progress_alert import ProjectAlertRuleViewSet, ProjectAlertViewSet
 from .maintenance_calendar import (
     MaintenanceCalendarView, MaintenanceStatisticsView, EquipmentMaintenanceHistoryView
 )
+from .dashboard import (
+    ProjectDashboardView, ProjectListDashboardView, BOMCostRollupView,
+    DeliveryTrackingView, ProcurementTrackingView, ProductionProgressView
+)
 from .requirement import (
     RequirementCategoryViewSet, RequirementViewSet, RequirementChangeViewSet
 )
@@ -219,4 +223,14 @@ urlpatterns = [
     
     # BOM对比
     path('bom/compare/', BOMCompareView.as_view(), name='bom-compare'),
+    
+    # 项目仪表盘增强
+    path('dashboard/<int:project_id>/', ProjectDashboardView.as_view(), name='project-dashboard'),
+    path('dashboard/overview/', ProjectListDashboardView.as_view(), name='project-list-dashboard'),
+    path('dashboard/<int:project_id>/bom-cost/', BOMCostRollupView.as_view(), name='bom-cost-rollup'),
+    
+    # 业务跟踪仪表盘
+    path('tracking/delivery/', DeliveryTrackingView.as_view(), name='delivery-tracking'),
+    path('tracking/procurement/', ProcurementTrackingView.as_view(), name='procurement-tracking'),
+    path('tracking/production/', ProductionProgressView.as_view(), name='production-progress'),
 ]
