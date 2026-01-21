@@ -110,4 +110,36 @@ app.conf.beat_schedule = {
         'schedule': crontab(hour=3, minute=0, day_of_week=0),
         'kwargs': {'days': 90},
     },
+    
+    # ============ 考勤设备同步任务 ============
+    # 自动同步考勤设备数据 - 每10分钟
+    'sync-attendance-devices': {
+        'task': 'apps.oa.tasks.sync_all_attendance_devices',
+        'schedule': crontab(minute='*/10'),
+    },
+    
+    # 处理未处理的打卡记录 - 每5分钟
+    'process-attendance-logs': {
+        'task': 'apps.oa.tasks.process_unprocessed_attendance_logs',
+        'schedule': crontab(minute='*/5'),
+    },
+    
+    # 考勤设备健康检查 - 每30分钟
+    'check-attendance-device-health': {
+        'task': 'apps.oa.tasks.check_device_health',
+        'schedule': crontab(minute='*/30'),
+    },
+    
+    # 生成每日考勤报表 - 每天早上7点
+    'generate-daily-attendance-report': {
+        'task': 'apps.oa.tasks.generate_daily_attendance_report',
+        'schedule': crontab(hour=7, minute=0),
+    },
+    
+    # 清理旧的设备日志 - 每周日凌晨4点
+    'cleanup-old-device-logs': {
+        'task': 'apps.oa.tasks.cleanup_old_device_logs',
+        'schedule': crontab(hour=4, minute=0, day_of_week=0),
+        'kwargs': {'days': 90},
+    },
 }
