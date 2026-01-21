@@ -306,7 +306,7 @@ const loadStats = async () => {
 
 const loadDepartments = async () => {
   try {
-    const res = await request.get('/masterdata/departments/')
+    const res = await request.get('/accounts/departments/')
     departments.value = res.results || res || []
   } catch (error) {
     console.error('加载部门失败:', error)
