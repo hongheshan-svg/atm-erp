@@ -232,6 +232,54 @@ class ProjectTaskViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
         task.save()
         
         return Response(ProjectTaskSerializer(task).data)
+    
+    @action(detail=True, methods=['post'])
+    def recalculate_hours(self, request, pk=None):
+        """重新计算任务的实际工时（从工时填报汇总）"""
+        task = self.get_object()
+        
+        # 汇总该任务下所有已审批的工时记录
+        total_hours = TimeLog.objects.filter(
+            task=task,
+            status='APPROVED',
+            is_deleted=False
+        ).aggregate(total=Sum('hours'))['total'] or 0
+        
+        task.actual_hours = total_hours
+        task.save(update_fields=['actual_hours'])
+        
+        return Response({
+            'message': '工时已重新计算',
+            'actual_hours': float(task.actual_hours),
+            'task': ProjectTaskSerializer(task).data
+        })
+    
+    @action(detail=False, methods=['post'])
+    def batch_recalculate_hours(self, request):
+        """批量重新计算所有任务的实际工时"""
+        project_id = request.data.get('project')
+        
+        queryset = self.get_queryset().filter(is_deleted=False)
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        
+        updated_count = 0
+        for task in queryset:
+            total_hours = TimeLog.objects.filter(
+                task=task,
+                status='APPROVED',
+                is_deleted=False
+            ).aggregate(total=Sum('hours'))['total'] or 0
+            
+            if task.actual_hours != total_hours:
+                task.actual_hours = total_hours
+                task.save(update_fields=['actual_hours'])
+                updated_count += 1
+        
+        return Response({
+            'message': f'已重新计算 {updated_count} 个任务的工时',
+            'updated_count': updated_count
+        })
 
 
 class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
@@ -2261,6 +2309,20 @@ class TimeLogViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
             'month_hours': float(month_hours),
         })
     
+    def _update_task_actual_hours(self, task):
+        """重新计算任务的实际工时（从所有已审批工时记录汇总）"""
+        if not task:
+            return
+        # 汇总该任务下所有已审批的工时记录
+        total_hours = TimeLog.objects.filter(
+            task=task,
+            status='APPROVED',
+            is_deleted=False
+        ).aggregate(total=Sum('hours'))['total'] or 0
+        
+        task.actual_hours = total_hours
+        task.save(update_fields=['actual_hours'])
+    
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         """Approve a time log."""
@@ -2268,10 +2330,8 @@ class TimeLogViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         time_log.status = 'APPROVED'
         time_log.save()
         
-        # Update task actual hours
-        if time_log.task:
-            time_log.task.actual_hours = F('actual_hours') + time_log.hours
-            time_log.task.save()
+        # 重新计算任务实际工时
+        self._update_task_actual_hours(time_log.task)
         
         return Response(TimeLogSerializer(time_log).data)
     
@@ -2279,8 +2339,14 @@ class TimeLogViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     def reject(self, request, pk=None):
         """Reject a time log."""
         time_log = self.get_object()
+        old_status = time_log.status
         time_log.status = 'REJECTED'
         time_log.save()
+        
+        # 如果之前是已审批状态，需要重新计算任务工时
+        if old_status == 'APPROVED':
+            self._update_task_actual_hours(time_log.task)
+        
         return Response(TimeLogSerializer(time_log).data)
 
 

@@ -164,6 +164,8 @@ class ProjectTaskSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(source='project.name', read_only=True)
     assignee_name = serializers.CharField(source='assignee.get_full_name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    # 工时记录数（显示有多少条工时填报）
+    time_log_count = serializers.SerializerMethodField()
     
     class Meta:
         model = ProjectTask
@@ -171,9 +173,14 @@ class ProjectTaskSerializer(serializers.ModelSerializer):
             'id', 'project', 'project_name', 'parent', 'code', 'name',
             'assignee', 'assignee_name', 'planned_hours', 'actual_hours',
             'progress_percent', 'status', 'status_display', 'start_date', 'end_date',
-            'description', 'sort_order', 'is_deleted', 'created_at', 'updated_at'
+            'description', 'sort_order', 'is_deleted', 'created_at', 'updated_at',
+            'time_log_count'
         ]
-        read_only_fields = ['created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at', 'actual_hours']  # actual_hours 设为只读
+    
+    def get_time_log_count(self, obj):
+        """获取该任务的已审批工时记录数"""
+        return obj.time_logs.filter(status='APPROVED', is_deleted=False).count()
 
 
 class ProjectBOMSerializer(serializers.ModelSerializer):

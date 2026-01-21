@@ -23,17 +23,25 @@
       
       <!-- 任务统计 -->
       <el-row :gutter="20" class="stats-row" v-if="selectedProject">
-        <el-col :span="6">
+        <el-col :span="4">
           <el-statistic title="总任务数" :value="stats.total" />
         </el-col>
-        <el-col :span="6">
+        <el-col :span="4">
           <el-statistic title="进行中" :value="stats.inProgress" :value-style="{ color: '#409eff' }" />
         </el-col>
-        <el-col :span="6">
+        <el-col :span="4">
           <el-statistic title="已完成" :value="stats.completed" :value-style="{ color: '#67c23a' }" />
         </el-col>
-        <el-col :span="6">
+        <el-col :span="4">
           <el-statistic title="计划工期" :value="stats.totalPlannedDays" suffix="天" />
+        </el-col>
+        <el-col :span="4">
+          <el-statistic title="实际工时" :value="stats.totalActualHours" suffix="小时" :value-style="{ color: '#e6a23c' }" />
+        </el-col>
+        <el-col :span="4">
+          <el-button size="small" @click="handleRecalculateHours" :loading="recalculating">
+            <el-icon><Refresh /></el-icon> 重算工时
+          </el-button>
         </el-col>
       </el-row>
       
@@ -72,9 +80,11 @@
             {{ row.planned_hours || 0 }}天
           </template>
         </el-table-column>
-        <el-table-column prop="actual_hours" label="实际工时" width="100" align="right">
+        <el-table-column prop="actual_hours" label="实际工时" width="120" align="right">
           <template #default="{ row }">
-            {{ row.actual_hours || 0 }}小时
+            <el-tooltip :content="`来自 ${row.time_log_count || 0} 条工时记录`" placement="top">
+              <span>{{ row.actual_hours || 0 }}小时</span>
+            </el-tooltip>
           </template>
         </el-table-column>
         <el-table-column prop="start_date" label="开始日期" width="110" />
@@ -211,10 +221,11 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Top, Bottom } from '@element-plus/icons-vue'
+import { Plus, Top, Bottom, Refresh } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 const loading = ref(false)
+const recalculating = ref(false)
 const selectedProject = ref(null)
 const projects = ref([])
 const taskTree = ref([])
@@ -629,6 +640,25 @@ const handleLogTime = (row) => {
   timeLogForm.hours = 1
   timeLogForm.description = ''
   timeLogVisible.value = true
+}
+
+// 重新计算所有任务的实际工时（从工时填报汇总）
+const handleRecalculateHours = async () => {
+  if (!selectedProject.value) return
+  
+  try {
+    recalculating.value = true
+    const res = await request.post('/projects/tasks/batch_recalculate_hours/', {
+      project: selectedProject.value
+    })
+    ElMessage.success(res.message || '工时重算完成')
+    fetchTasks() // 刷新任务列表
+  } catch (error) {
+    console.error('重算工时失败:', error)
+    ElMessage.error('重算工时失败')
+  } finally {
+    recalculating.value = false
+  }
 }
 
 const handleSubmitTimeLog = async () => {
