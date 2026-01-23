@@ -12,6 +12,24 @@
               <el-icon><Plus /></el-icon>
               新增图纸
             </el-button>
+            <el-dropdown style="margin-left: 10px;" :disabled="!selectedProject">
+              <el-button type="success">
+                导入/导出 <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item @click="handleExport" :disabled="!drawings.length">
+                    <el-icon><Download /></el-icon> 导出Excel
+                  </el-dropdown-item>
+                  <el-dropdown-item @click="handleImport">
+                    <el-icon><Upload /></el-icon> 导入Excel
+                  </el-dropdown-item>
+                  <el-dropdown-item divided @click="handleDownloadTemplate">
+                    <el-icon><Document /></el-icon> 下载导入模板
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
         </div>
       </template>
@@ -187,13 +205,88 @@
         <el-button type="primary" @click="submitNewRevision" :loading="saving">创建新版本</el-button>
       </template>
     </el-dialog>
+    
+    <!-- 导入对话框 -->
+    <el-dialog v-model="importDialogVisible" title="批量导入图纸" width="550px">
+      <el-alert
+        title="导入说明"
+        type="info"
+        show-icon
+        :closable="false"
+        class="mb-15"
+      >
+        <template #default>
+          <div>1. 请先下载导入模板，按模板格式填写数据</div>
+          <div>2. 图纸号和图纸名称为必填项</div>
+          <div>3. 同一项目下相同图纸号+文件类型视为同一图纸</div>
+        </template>
+      </el-alert>
+      
+      <el-upload
+        ref="uploadRef"
+        class="upload-area"
+        drag
+        action="#"
+        :auto-upload="false"
+        :limit="1"
+        :on-change="handleFileChange"
+        :on-exceed="handleExceed"
+        accept=".xlsx,.xls"
+      >
+        <el-icon class="el-icon--upload"><Upload /></el-icon>
+        <div class="el-upload__text">
+          将Excel文件拖到此处，或 <em>点击上传</em>
+        </div>
+        <template #tip>
+          <div class="el-upload__tip">只支持 .xlsx 或 .xls 格式文件</div>
+        </template>
+      </el-upload>
+      
+      <div style="margin-top: 15px;">
+        <el-checkbox v-model="importOptions.updateExisting">
+          更新已存在的图纸（不勾选则跳过已存在的）
+        </el-checkbox>
+      </div>
+      
+      <!-- 导入结果 -->
+      <div v-if="importResult" class="import-result">
+        <el-divider content-position="left">导入结果</el-divider>
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item label="新增图纸">
+            <el-tag type="success">{{ importResult.created || 0 }} 条</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="更新图纸">
+            <el-tag type="primary">{{ importResult.updated || 0 }} 条</el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
+        
+        <div v-if="importResult.errors && importResult.errors.length > 0" class="error-list" style="margin-top: 10px;">
+          <el-alert title="导入错误" type="warning" show-icon :closable="false">
+            <template #default>
+              <div v-for="error in importResult.errors.slice(0, 5)" :key="error.row" class="error-item">
+                第 {{ error.row }} 行: {{ error.error }}
+              </div>
+              <div v-if="importResult.errors.length > 5">... 还有 {{ importResult.errors.length - 5 }} 个错误</div>
+            </template>
+          </el-alert>
+        </div>
+      </div>
+      
+      <template #footer>
+        <el-button @click="handleDownloadTemplate">下载模板</el-button>
+        <el-button @click="importDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="handleConfirmImport" :loading="importing" :disabled="!importFile">
+          开始导入
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Download, Upload, Document, ArrowDown } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
@@ -246,6 +339,16 @@ const form = reactive({
 
 const revisionForm = reactive({
   change_description: ''
+})
+
+// 导入导出相关
+const importDialogVisible = ref(false)
+const importFile = ref(null)
+const importing = ref(false)
+const importResult = ref(null)
+const uploadRef = ref(null)
+const importOptions = reactive({
+  updateExisting: false
 })
 
 const rules = {
@@ -460,6 +563,133 @@ const submitNewRevision = async () => {
 
 // handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
+// ========== 导入导出功能 ==========
+
+const handleExport = async () => {
+  if (!selectedProject.value) {
+    ElMessage.warning('请先选择项目')
+    return
+  }
+  
+  try {
+    const response = await request.get('/projects/drawings/export_excel/', {
+      params: { project: selectedProject.value },
+      responseType: 'blob'
+    })
+    
+    const blobData = response.data || response
+    const blob = new Blob([blobData], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    })
+    
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    const project = projects.value.find(p => p.id === selectedProject.value)
+    link.setAttribute('download', `图纸列表_${project?.code || '项目'}.xlsx`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
+    ElMessage.success('导出成功')
+  } catch (error) {
+    console.error('导出失败:', error)
+    ElMessage.error('导出失败')
+  }
+}
+
+const handleDownloadTemplate = async () => {
+  try {
+    const response = await request.get('/projects/drawings/export_template/', {
+      responseType: 'blob'
+    })
+    
+    const blobData = response.data || response
+    const blob = new Blob([blobData], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    })
+    
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', '图纸导入模板.xlsx')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
+    ElMessage.success('模板下载成功')
+  } catch (error) {
+    console.error('下载模板失败:', error)
+    ElMessage.error('下载模板失败')
+  }
+}
+
+const handleImport = () => {
+  if (!selectedProject.value) {
+    ElMessage.warning('请先选择项目')
+    return
+  }
+  importFile.value = null
+  importResult.value = null
+  importOptions.updateExisting = false
+  if (uploadRef.value) {
+    uploadRef.value.clearFiles()
+  }
+  importDialogVisible.value = true
+}
+
+const handleFileChange = (file) => {
+  importFile.value = file.raw
+  importResult.value = null
+}
+
+const handleExceed = () => {
+  ElMessage.warning('只能上传一个文件，请先删除已选文件')
+}
+
+const handleConfirmImport = async () => {
+  if (!importFile.value) {
+    ElMessage.warning('请选择要导入的文件')
+    return
+  }
+  
+  importing.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', importFile.value)
+    formData.append('project', selectedProject.value)
+    formData.append('update_existing', importOptions.updateExisting.toString())
+    
+    const response = await request.post('/projects/drawings/import_excel/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    
+    const data = response.data || response
+    importResult.value = data
+    
+    if (data.created > 0 || data.updated > 0) {
+      ElMessage.success(data.message || `导入成功：新增${data.created}条，更新${data.updated}条`)
+      loadDrawings()
+    } else if (data.errors && data.errors.length > 0) {
+      ElMessage.warning('导入完成，但存在错误，请查看详情')
+    }
+  } catch (error) {
+    console.error('导入失败:', error)
+    const errData = error.response?.data || error
+    if (errData?.errors?.length) {
+      importResult.value = errData
+    } else if (errData?.error) {
+      ElMessage.error(errData.error)
+    } else {
+      ElMessage.error('导入失败')
+    }
+  } finally {
+    importing.value = false
+  }
+}
+
 onMounted(() => {
   loadProjects()
   loadItems()
@@ -485,6 +715,37 @@ onMounted(() => {
 
 .search-form {
   margin-bottom: 16px;
+}
+
+.table-toolbar {
+  margin-bottom: 15px;
+  padding: 10px 15px;
+  background-color: #f0f9eb;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.mb-15 {
+  margin-bottom: 15px;
+}
+
+.upload-area {
+  width: 100%;
+}
+
+.upload-area :deep(.el-upload-dragger) {
+  width: 100%;
+}
+
+.import-result {
+  margin-top: 20px;
+}
+
+.error-item {
+  padding: 2px 0;
+  font-size: 12px;
 }
 </style>
 

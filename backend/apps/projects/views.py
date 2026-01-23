@@ -288,11 +288,27 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
     """
     queryset = ProjectBOM.objects.all()
     serializer_class = ProjectBOMSerializer
-    filterset_fields = ['project', 'item', 'is_deleted', 'quote_status', 'order_status']
-    search_fields = ['item__sku', 'item__name', 'project__name', 'project__code']
+    filterset_fields = ['project', 'item', 'is_deleted', 'quote_status', 'order_status', 'has_drawing']
+    search_fields = ['item__sku', 'item__name', 'project__name', 'project__code', 'specification', 'version_brand']
     ordering_fields = ['created_at', 'project', 'item', 'quote_status']
     ordering = ['-created_at']  # 默认按创建时间倒序
     parser_classes = [JSONParser, MultiPartParser, FormParser]
+    
+    def get_queryset(self):
+        """支持更多筛选参数"""
+        queryset = super().get_queryset()
+        
+        # 物料类型筛选
+        item_type = self.request.query_params.get('item_type')
+        if item_type:
+            queryset = queryset.filter(item__item_type__icontains=item_type)
+        
+        # 版本/品牌筛选
+        version_brand = self.request.query_params.get('version_brand')
+        if version_brand:
+            queryset = queryset.filter(version_brand__icontains=version_brand)
+        
+        return queryset
     
     def create(self, request, *args, **kwargs):
         """
@@ -742,6 +758,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         file = request.FILES.get('file')
         project_id = request.data.get('project')
         update_existing = request.data.get('update_existing', 'false').lower() == 'true'
+        auto_create_items = request.data.get('auto_create_items', 'false').lower() == 'true'
         
         if not file:
             return Response(
@@ -815,6 +832,12 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         requester_column = find_column(df, ['申请人'])
         unit_column = find_column(df, ['单位'])
         
+        # 物料基本信息（用于自动创建物料）
+        item_name_column = find_column(df, ['物料名称', '名称', '描述'])
+        spec_column = find_column(df, ['规格型号', '规格', '型号'])
+        item_type_column = find_column(df, ['物料类型', '类型'])
+        brand_column = find_column(df, ['品牌', '厂家', '生产厂家'])
+        
         # 新增字段（非标自动化行业专用）
         item_property_column = find_column(df, ['物料属性'])
         status_column = find_column(df, ['BOM状态', '状态'])
@@ -840,6 +863,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         created_count = 0
         updated_count = 0
         skip_count = 0
+        items_created_count = 0  # 自动创建的物料数量
         error_rows = []
         
         # 先校验所有关键字段，若有任一行缺失/无效则拒绝全部导入
@@ -860,8 +884,38 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             try:
                 item = Item.objects.get(sku=sku)
             except Item.DoesNotExist:
-                error_rows.append({'row': row_num, 'error': f'物料编码 {sku} 不存在于物料主数据'})
-                continue
+                if auto_create_items:
+                    # 自动创建物料
+                    item_name = str(row[item_name_column]).strip() if item_name_column and pd.notna(row.get(item_name_column)) else f'物料-{sku}'
+                    spec = str(row[spec_column]).strip() if spec_column and pd.notna(row.get(spec_column)) else ''
+                    unit_val = str(row[unit_column]).strip() if unit_column and pd.notna(row.get(unit_column)) else '个'
+                    item_type_val = str(row[item_type_column]).strip() if item_type_column and pd.notna(row.get(item_type_column)) else ''
+                    brand_val = str(row[brand_column]).strip() if brand_column and pd.notna(row.get(brand_column)) else ''
+                    
+                    # 推断物料属性
+                    item_property = 'PURCHASED'  # 默认外购
+                    if item_property_column and pd.notna(row.get(item_property_column)):
+                        prop_val = str(row[item_property_column]).strip()
+                        if '自制' in prop_val: item_property = 'SELF_MADE'
+                        elif '外协' in prop_val: item_property = 'OUTSOURCED'
+                        elif '标准' in prop_val: item_property = 'STANDARD'
+                    
+                    item = Item.objects.create(
+                        sku=sku,
+                        name=item_name,
+                        specification=spec,
+                        unit=unit_val,
+                        item_type=item_type_val,
+                        item_property=item_property,
+                        manufacturer=brand_val,
+                        is_active=True,
+                        created_by=request.user,
+                        updated_by=request.user
+                    )
+                    items_created_count += 1
+                else:
+                    error_rows.append({'row': row_num, 'error': f'物料编码 {sku} 不存在于物料主数据'})
+                    continue
             # 数量校验（保持原逻辑）
             try:
                 planned_qty = float(row[qty_column]) if pd.notna(row[qty_column]) else 0
@@ -889,11 +943,24 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 try:
                     date_val = row[required_date_column]
                     if isinstance(date_val, str):
-                        required_date = datetime.strptime(date_val, '%Y-%m-%d').date()
+                        # 尝试多种字符串格式
+                        for fmt in ['%Y-%m-%d', '%Y/%m/%d', '%d/%m/%Y', '%Y年%m月%d日']:
+                            try:
+                                required_date = datetime.strptime(date_val, fmt).date()
+                                break
+                            except ValueError:
+                                continue
+                        if not required_date:
+                            required_date = pd.to_datetime(date_val).date()
+                    elif isinstance(date_val, (int, float)):
+                        # Excel日期数值格式转换 (Excel epoch: 1899-12-30)
+                        from datetime import timedelta
+                        excel_epoch = datetime(1899, 12, 30)
+                        required_date = (excel_epoch + timedelta(days=int(date_val))).date()
                     else:
                         required_date = pd.to_datetime(date_val).date()
-                except (ValueError, TypeError):
-                    error_rows.append({'row': row_num, 'error': '需求日期格式错误，应为YYYY-MM-DD'})
+                except (ValueError, TypeError) as e:
+                    error_rows.append({'row': row_num, 'error': f'需求日期格式错误: {date_val}'})
                     continue
             if not required_date:
                 error_rows.append({'row': row_num, 'error': '需求日期为空'})
@@ -937,231 +1004,238 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                     continue
                 processed_skus.add(sku)
             
-            # Get price (optional)
-            unit_price = item.standard_cost
-            if price_column and pd.notna(row.get(price_column)):
-                try:
-                    unit_price = float(row[price_column])
-                except (ValueError, TypeError):
-                    pass  # Use item's standard cost
+                # Get price (optional)
+                unit_price = item.standard_cost
+                if price_column and pd.notna(row.get(price_column)):
+                    try:
+                        unit_price = float(row[price_column])
+                    except (ValueError, TypeError):
+                        pass  # Use item's standard cost
             
-            # Get notes (optional)
-            notes = ''
-            if notes_column and pd.notna(row.get(notes_column)):
-                notes = str(row[notes_column])
+                # Get notes (optional)
+                notes = ''
+                if notes_column and pd.notna(row.get(notes_column)):
+                    notes = str(row[notes_column])
             
-            # Get description (optional)
-            description = ''
-            if description_column and pd.notna(row.get(description_column)):
-                description = str(row[description_column])
+                # Get description (optional)
+                description = ''
+                if description_column and pd.notna(row.get(description_column)):
+                    description = str(row[description_column])
             
-            # 版本/品牌：始终以物料主数据为准，忽略文件中的差异
-            brand = item.brand or ''
-            model = getattr(item, 'model', '') or ''
-            version_brand = f"{brand}/{model}".strip('/ ')
+                # 版本/品牌：始终以物料主数据为准，忽略文件中的差异
+                brand = item.brand or ''
+                model = getattr(item, 'model', '') or ''
+                version_brand = f"{brand}/{model}".strip('/ ')
             
-            # Get has_drawing (optional)
-            has_drawing = 'PENDING'
-            if has_drawing_column and pd.notna(row.get(has_drawing_column)):
-                drawing_val = str(row[has_drawing_column]).strip()
-                if '有图' in drawing_val:
-                    has_drawing = 'YES'
-                elif '无图' in drawing_val:
-                    has_drawing = 'NO'
+                # Get has_drawing (optional)
+                has_drawing = 'PENDING'
+                if has_drawing_column and pd.notna(row.get(has_drawing_column)):
+                    drawing_val = str(row[has_drawing_column]).strip()
+                    if '有图' in drawing_val:
+                        has_drawing = 'YES'
+                    elif '无图' in drawing_val:
+                        has_drawing = 'NO'
             
-                # required_date / requester 已在预校验阶段解析
+                    # required_date / requester 已在预校验阶段解析
             
-            # ===== 新增字段处理 =====
-            # 物料属性
-            item_property = None
-            if item_property_column and pd.notna(row.get(item_property_column)):
-                prop_map = {
-                    '标准件': 'STANDARD', '外购件': 'PURCHASED', '外协件': 'OUTSOURCED',
-                    '自制件': 'SELF_MADE', '易耗品': 'CONSUMABLE', '虚拟件': 'VIRTUAL', '组件': 'ASSEMBLY'
-                }
-                prop_val = str(row[item_property_column]).strip()
-                item_property = prop_map.get(prop_val, None)
+                # ===== 新增字段处理 =====
+                # 物料属性
+                item_property = None
+                if item_property_column and pd.notna(row.get(item_property_column)):
+                    prop_map = {
+                        '标准件': 'STANDARD', '外购件': 'PURCHASED', '外协件': 'OUTSOURCED',
+                        '自制件': 'SELF_MADE', '易耗品': 'CONSUMABLE', '虚拟件': 'VIRTUAL', '组件': 'ASSEMBLY'
+                    }
+                    prop_val = str(row[item_property_column]).strip()
+                    item_property = prop_map.get(prop_val, None)
             
-            # BOM状态
-            bom_status = 'DRAFT'
-            if status_column and pd.notna(row.get(status_column)):
-                status_map = {
-                    '草稿': 'DRAFT', '已确认': 'CONFIRMED', '已下发': 'ISSUED',
-                    '已完成': 'COMPLETED', '已取消': 'CANCELLED'
-                }
-                status_val = str(row[status_column]).strip()
-                bom_status = status_map.get(status_val, 'DRAFT')
+                # BOM状态
+                bom_status = 'DRAFT'
+                if status_column and pd.notna(row.get(status_column)):
+                    status_map = {
+                        '草稿': 'DRAFT', '已确认': 'CONFIRMED', '已下发': 'ISSUED',
+                        '已完成': 'COMPLETED', '已取消': 'CANCELLED'
+                    }
+                    status_val = str(row[status_column]).strip()
+                    bom_status = status_map.get(status_val, 'DRAFT')
             
-            # 优先级
-            priority = 'NORMAL'
-            if priority_column and pd.notna(row.get(priority_column)):
-                priority_map = {'低': 'LOW', '普通': 'NORMAL', '高': 'HIGH', '紧急': 'URGENT'}
-                priority_val = str(row[priority_column]).strip()
-                priority = priority_map.get(priority_val, 'NORMAL')
+                # 优先级
+                priority = 'NORMAL'
+                if priority_column and pd.notna(row.get(priority_column)):
+                    priority_map = {'低': 'LOW', '普通': 'NORMAL', '高': 'HIGH', '紧急': 'URGENT'}
+                    priority_val = str(row[priority_column]).strip()
+                    priority = priority_map.get(priority_val, 'NORMAL')
             
-            # 关键件
-            is_critical = False
-            if is_critical_column and pd.notna(row.get(is_critical_column)):
-                val = str(row[is_critical_column]).strip()
-                is_critical = val in ['是', 'Y', 'Yes', 'TRUE', 'True', '1']
+                # 关键件
+                is_critical = False
+                if is_critical_column and pd.notna(row.get(is_critical_column)):
+                    val = str(row[is_critical_column]).strip()
+                    is_critical = val in ['是', 'Y', 'Yes', 'TRUE', 'True', '1']
             
-            # 长周期件
-            is_long_lead = False
-            if is_long_lead_column and pd.notna(row.get(is_long_lead_column)):
-                val = str(row[is_long_lead_column]).strip()
-                is_long_lead = val in ['是', 'Y', 'Yes', 'TRUE', 'True', '1']
+                # 长周期件
+                is_long_lead = False
+                if is_long_lead_column and pd.notna(row.get(is_long_lead_column)):
+                    val = str(row[is_long_lead_column]).strip()
+                    is_long_lead = val in ['是', 'Y', 'Yes', 'TRUE', 'True', '1']
             
-            # 简单字符串字段
-            drawing_no = str(row[drawing_no_column]).strip() if drawing_no_column and pd.notna(row.get(drawing_no_column)) else ''
-            drawing_version = str(row[drawing_version_column]).strip() if drawing_version_column and pd.notna(row.get(drawing_version_column)) else ''
-            material_spec = str(row[material_spec_column]).strip() if material_spec_column and pd.notna(row.get(material_spec_column)) else ''
-            surface_treatment = str(row[surface_treatment_column]).strip() if surface_treatment_column and pd.notna(row.get(surface_treatment_column)) else ''
-            function_module = str(row[function_module_column]).strip() if function_module_column and pd.notna(row.get(function_module_column)) else ''
+                # 简单字符串字段
+                drawing_no = str(row[drawing_no_column]).strip() if drawing_no_column and pd.notna(row.get(drawing_no_column)) else ''
+                drawing_version = str(row[drawing_version_column]).strip() if drawing_version_column and pd.notna(row.get(drawing_version_column)) else ''
+                material_spec = str(row[material_spec_column]).strip() if material_spec_column and pd.notna(row.get(material_spec_column)) else ''
+                surface_treatment = str(row[surface_treatment_column]).strip() if surface_treatment_column and pd.notna(row.get(surface_treatment_column)) else ''
+                function_module = str(row[function_module_column]).strip() if function_module_column and pd.notna(row.get(function_module_column)) else ''
             
-            # 工作中心和工序（查找对象）
-            work_center = None
-            if work_center_column and pd.notna(row.get(work_center_column)):
-                from apps.production.scheduling import WorkCenter as WC
-                wc_name = str(row[work_center_column]).strip()
-                work_center = WC.objects.filter(name=wc_name).first()
+                # 工作中心和工序（查找对象）
+                work_center = None
+                if work_center_column and pd.notna(row.get(work_center_column)):
+                    from apps.production.scheduling import WorkCenter as WC
+                    wc_name = str(row[work_center_column]).strip()
+                    work_center = WC.objects.filter(name=wc_name).first()
             
-            process = None
-            if process_column and pd.notna(row.get(process_column)):
-                from apps.production.models import ProductionProcess as PP
-                process_name = str(row[process_column]).strip()
-                process = PP.objects.filter(name=process_name, project=project).first()
+                process = None
+                if process_column and pd.notna(row.get(process_column)):
+                    from apps.production.models import ProductionProcess as PP
+                    process_name = str(row[process_column]).strip()
+                    process = PP.objects.filter(name=process_name, project=project).first()
             
-            # 数值字段
-            assembly_sequence = 0
-            if assembly_sequence_column and pd.notna(row.get(assembly_sequence_column)):
-                try:
-                    assembly_sequence = int(row[assembly_sequence_column])
-                except (ValueError, TypeError):
-                    pass
+                # 数值字段
+                assembly_sequence = 0
+                if assembly_sequence_column and pd.notna(row.get(assembly_sequence_column)):
+                    try:
+                        assembly_sequence = int(row[assembly_sequence_column])
+                    except (ValueError, TypeError):
+                        pass
             
-            target_cost = None
-            if target_cost_column and pd.notna(row.get(target_cost_column)):
-                try:
-                    target_cost = float(row[target_cost_column])
-                except (ValueError, TypeError):
-                    pass
+                target_cost = None
+                if target_cost_column and pd.notna(row.get(target_cost_column)):
+                    try:
+                        target_cost = float(row[target_cost_column])
+                    except (ValueError, TypeError):
+                        pass
             
-            scrap_rate = 0
-            if scrap_rate_column and pd.notna(row.get(scrap_rate_column)):
-                try:
-                    scrap_rate = float(row[scrap_rate_column])
-                except (ValueError, TypeError):
-                    pass
+                scrap_rate = 0
+                if scrap_rate_column and pd.notna(row.get(scrap_rate_column)):
+                    try:
+                        scrap_rate = float(row[scrap_rate_column])
+                    except (ValueError, TypeError):
+                        pass
             
-            # 最晚下单日期
-            latest_order_date = None
-            if latest_order_date_column and pd.notna(row.get(latest_order_date_column)):
-                try:
-                    date_val = row[latest_order_date_column]
-                    if isinstance(date_val, str):
-                        latest_order_date = datetime.strptime(date_val, '%Y-%m-%d').date()
-                    else:
-                        latest_order_date = pd.to_datetime(date_val).date()
-                except (ValueError, TypeError):
-                    pass
-            # ===== 新增字段处理结束 =====
+                # 最晚下单日期
+                latest_order_date = None
+                if latest_order_date_column and pd.notna(row.get(latest_order_date_column)):
+                    try:
+                        date_val = row[latest_order_date_column]
+                        if isinstance(date_val, str):
+                            latest_order_date = datetime.strptime(date_val, '%Y-%m-%d').date()
+                        else:
+                            latest_order_date = pd.to_datetime(date_val).date()
+                    except (ValueError, TypeError):
+                        pass
+                # ===== 新增字段处理结束 =====
             
-            # Check if BOM item exists
-            existing_bom = ProjectBOM.objects.filter(
-                project=project,
-                item=item,
-                is_deleted=False
-            ).first()
-            
-            if existing_bom:
-                if update_existing:
-                    existing_bom.planned_qty = planned_qty
-                    existing_bom.estimated_cost = unit_price
-                    if notes:
-                        existing_bom.notes = notes
-                    if description:
-                        existing_bom.description = description
-                    if version_brand:
-                        existing_bom.version_brand = version_brand
-                    existing_bom.has_drawing = has_drawing
-                    if required_date:
-                        existing_bom.required_date = required_date
-                    if requester:
-                        existing_bom.requester = requester
-                    
-                    # 更新新增字段
-                    if item_property:
-                        existing_bom.item_property = item_property
-                    existing_bom.status = bom_status
-                    existing_bom.priority = priority
-                    existing_bom.is_critical = is_critical
-                    existing_bom.is_long_lead = is_long_lead
-                    if drawing_no:
-                        existing_bom.drawing_no = drawing_no
-                    if drawing_version:
-                        existing_bom.drawing_version = drawing_version
-                    if material_spec:
-                        existing_bom.material_spec = material_spec
-                    if surface_treatment:
-                        existing_bom.surface_treatment = surface_treatment
-                    if work_center:
-                        existing_bom.work_center = work_center
-                    if process:
-                        existing_bom.process = process
-                    existing_bom.assembly_sequence = assembly_sequence
-                    if function_module:
-                        existing_bom.function_module = function_module
-                    if target_cost is not None:
-                        existing_bom.target_cost = target_cost
-                    existing_bom.scrap_rate = scrap_rate
-                    if latest_order_date:
-                        existing_bom.latest_order_date = latest_order_date
-                    
-                    existing_bom.save()
-                    updated_count += 1
-                else:
-                    error_rows.append({
-                        'row': row_num,
-                        'error': f'物料 {sku} 已存在于BOM中'
-                    })
-            else:
-                ProjectBOM.objects.create(
+                # Check if BOM item exists
+                existing_bom = ProjectBOM.objects.filter(
                     project=project,
                     item=item,
-                    planned_qty=planned_qty,
-                    estimated_cost=unit_price,
-                    notes=notes,
-                    description=description,
-                    version_brand=version_brand,
-                    has_drawing=has_drawing,
-                    required_date=required_date,
-                    requester=requester,
-                    # 新增字段
-                    item_property=item_property,
-                    status=bom_status,
-                    priority=priority,
-                    is_critical=is_critical,
-                    is_long_lead=is_long_lead,
-                    drawing_no=drawing_no,
-                    drawing_version=drawing_version,
-                    material_spec=material_spec,
-                    surface_treatment=surface_treatment,
-                    work_center=work_center,
-                    process=process,
-                    assembly_sequence=assembly_sequence,
-                    function_module=function_module,
-                    target_cost=target_cost,
-                    scrap_rate=scrap_rate,
-                    latest_order_date=latest_order_date,
-                    created_by=request.user
-                )
-                created_count += 1
+                    is_deleted=False
+                ).first()
+            
+                if existing_bom:
+                    if update_existing:
+                        existing_bom.planned_qty = planned_qty
+                        existing_bom.estimated_cost = unit_price
+                        if notes:
+                            existing_bom.notes = notes
+                        if description:
+                            existing_bom.description = description
+                        if version_brand:
+                            existing_bom.version_brand = version_brand
+                        existing_bom.has_drawing = has_drawing
+                        if required_date:
+                            existing_bom.required_date = required_date
+                        if requester:
+                            existing_bom.requester = requester
+                    
+                        # 更新新增字段
+                        if item_property:
+                            existing_bom.item_property = item_property
+                        existing_bom.status = bom_status
+                        existing_bom.priority = priority
+                        existing_bom.is_critical = is_critical
+                        existing_bom.is_long_lead = is_long_lead
+                        if drawing_no:
+                            existing_bom.drawing_no = drawing_no
+                        if drawing_version:
+                            existing_bom.drawing_version = drawing_version
+                        if material_spec:
+                            existing_bom.material_spec = material_spec
+                        if surface_treatment:
+                            existing_bom.surface_treatment = surface_treatment
+                        if work_center:
+                            existing_bom.work_center = work_center
+                        if process:
+                            existing_bom.process = process
+                        existing_bom.assembly_sequence = assembly_sequence
+                        if function_module:
+                            existing_bom.function_module = function_module
+                        if target_cost is not None:
+                            existing_bom.target_cost = target_cost
+                        existing_bom.scrap_rate = scrap_rate
+                        if latest_order_date:
+                            existing_bom.latest_order_date = latest_order_date
+                    
+                        existing_bom.save()
+                        updated_count += 1
+                    else:
+                        error_rows.append({
+                            'row': row_num,
+                            'error': f'物料 {sku} 已存在于BOM中'
+                        })
+                else:
+                    ProjectBOM.objects.create(
+                        project=project,
+                        item=item,
+                        planned_qty=planned_qty,
+                        estimated_cost=unit_price,
+                        notes=notes,
+                        description=description,
+                        version_brand=version_brand,
+                        has_drawing=has_drawing,
+                        required_date=required_date,
+                        requester=requester,
+                        # 新增字段
+                        item_property=item_property,
+                        status=bom_status,
+                        priority=priority,
+                        is_critical=is_critical,
+                        is_long_lead=is_long_lead,
+                        drawing_no=drawing_no,
+                        drawing_version=drawing_version,
+                        material_spec=material_spec,
+                        surface_treatment=surface_treatment,
+                        work_center=work_center,
+                        process=process,
+                        assembly_sequence=assembly_sequence,
+                        function_module=function_module,
+                        target_cost=target_cost,
+                        scrap_rate=scrap_rate,
+                        latest_order_date=latest_order_date,
+                        created_by=request.user
+                    )
+                    created_count += 1
+        
+        msg_parts = [f'新增 {created_count} 条', f'更新 {updated_count} 条']
+        if skip_count > 0:
+            msg_parts.append(f'跳过重复 {skip_count} 条')
+        if items_created_count > 0:
+            msg_parts.append(f'自动创建物料 {items_created_count} 个')
         
         return Response({
-            'message': f'导入完成: 新增 {created_count} 条, 更新 {updated_count} 条, 跳过重复 {skip_count} 条',
+            'message': f'导入完成: {", ".join(msg_parts)}',
             'created': created_count,
             'updated': updated_count,
             'skip_count': skip_count,
+            'items_created': items_created_count,
             'errors': error_rows
         })
     
@@ -3029,6 +3103,289 @@ class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         drawing.save()
         
         return Response(DrawingSerializer(new_drawing).data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=False, methods=['get'])
+    def export_template(self, request):
+        """导出图纸导入模板"""
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            workbook = writer.book
+            worksheet = workbook.add_worksheet('图纸导入模板')
+            
+            # 定义格式
+            header_format = workbook.add_format({
+                'bold': True, 'bg_color': '#4472C4', 'font_color': 'white',
+                'border': 1, 'align': 'center', 'valign': 'vcenter'
+            })
+            required_format = workbook.add_format({
+                'bold': True, 'bg_color': '#FF6B6B', 'font_color': 'white',
+                'border': 1, 'align': 'center', 'valign': 'vcenter'
+            })
+            
+            # 表头
+            headers = [
+                ('图纸号*', True), ('图纸名称*', True), ('版本', False),
+                ('文件类型*', True), ('关联物料编码', False), ('公共盘路径', False),
+                ('变更说明', False), ('备注', False)
+            ]
+            
+            for col, (header, required) in enumerate(headers):
+                fmt = required_format if required else header_format
+                worksheet.write(0, col, header, fmt)
+            
+            # 列宽
+            widths = [15, 25, 10, 12, 15, 40, 25, 25]
+            for col, width in enumerate(widths):
+                worksheet.set_column(col, col, width)
+            
+            # 示例数据
+            examples = [
+                ('DWG-001', '主轴装配图', 'A0', 'PDF', 'MAT001', r'\\192.168.1.100\drawings\项目A\DWG-001.pdf', '初版发布', ''),
+                ('DWG-002', '底座加工图', 'A0', 'STEP', '', r'\\192.168.1.100\drawings\项目A\DWG-002.stp', '', '3D模型'),
+            ]
+            for row, example in enumerate(examples, 1):
+                for col, val in enumerate(example):
+                    worksheet.write(row, col, val)
+            
+            # 添加说明sheet
+            help_sheet = workbook.add_worksheet('填写说明')
+            help_sheet.write(0, 0, '字段说明', header_format)
+            help_sheet.write(0, 1, '可选值/格式', header_format)
+            helps = [
+                ('图纸号*', '必填，图纸唯一标识'),
+                ('图纸名称*', '必填，图纸描述'),
+                ('版本', '默认A0，如：A0, A1, B0等'),
+                ('文件类型*', 'PDF, STEP, STP, DWG, DXF, SOLIDWORKS, OTHER'),
+                ('关联物料编码', '物料SKU，需已存在于系统'),
+                ('公共盘路径', '网络共享路径'),
+            ]
+            for row, (field, desc) in enumerate(helps, 1):
+                help_sheet.write(row, 0, field)
+                help_sheet.write(row, 1, desc)
+            help_sheet.set_column(0, 0, 20)
+            help_sheet.set_column(1, 1, 50)
+        
+        output.seek(0)
+        response = HttpResponse(
+            output.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename=drawing_import_template.xlsx'
+        return response
+    
+    @action(detail=False, methods=['get'])
+    def export_excel(self, request):
+        """导出图纸列表"""
+        project_id = request.query_params.get('project')
+        
+        queryset = self.get_queryset().filter(is_deleted=False)
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        
+        queryset = queryset.select_related('project', 'item', 'designer')
+        
+        data = []
+        for d in queryset:
+            data.append({
+                '图纸号': d.drawing_no,
+                '图纸名称': d.name,
+                '版本': f'{d.version}.{d.revision}',
+                '文件类型': d.get_file_type_display() if hasattr(d, 'get_file_type_display') else d.file_type,
+                '状态': d.get_status_display() if hasattr(d, 'get_status_display') else d.status,
+                '项目': d.project.name if d.project else '',
+                '关联物料编码': d.item.sku if d.item else '',
+                '关联物料名称': d.item.name if d.item else '',
+                '公共盘路径': d.public_share_path or '',
+                '设计者': d.designer.get_full_name() if d.designer else '',
+                '变更说明': d.change_description or '',
+                '备注': d.notes or '',
+                '创建时间': d.created_at.strftime('%Y-%m-%d %H:%M') if d.created_at else '',
+            })
+        
+        df = pd.DataFrame(data)
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, sheet_name='图纸列表', index=False)
+            
+            workbook = writer.book
+            worksheet = writer.sheets['图纸列表']
+            header_format = workbook.add_format({
+                'bold': True, 'bg_color': '#4472C4', 'font_color': 'white',
+                'border': 1, 'align': 'center'
+            })
+            for col, header in enumerate(df.columns):
+                worksheet.write(0, col, header, header_format)
+            
+            # 自动列宽
+            for col, column in enumerate(df.columns):
+                max_len = max(df[column].astype(str).apply(len).max(), len(column)) + 2
+                worksheet.set_column(col, col, min(max_len, 50))
+        
+        output.seek(0)
+        project_name = ''
+        if project_id:
+            try:
+                project_name = Project.objects.get(id=project_id).code + '_'
+            except Project.DoesNotExist:
+                pass
+        
+        response = HttpResponse(
+            output.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename=drawings_{project_name}{pd.Timestamp.now().strftime("%Y%m%d")}.xlsx'
+        return response
+    
+    @action(detail=False, methods=['post'])
+    def import_excel(self, request):
+        """批量导入图纸"""
+        file = request.FILES.get('file')
+        project_id = request.data.get('project')
+        update_existing = request.data.get('update_existing', 'false').lower() == 'true'
+        
+        if not file:
+            return Response({'error': '请上传Excel文件'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not project_id:
+            return Response({'error': '请选择项目'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            project = Project.objects.get(id=project_id)
+        except Project.DoesNotExist:
+            return Response({'error': '项目不存在'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            df = pd.read_excel(file)
+        except Exception as e:
+            return Response({'error': f'Excel读取失败: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 查找列
+        def find_column(keywords):
+            for col in df.columns:
+                for kw in keywords:
+                    if kw in col:
+                        return col
+            return None
+        
+        drawing_no_col = find_column(['图纸号'])
+        name_col = find_column(['图纸名称', '名称'])
+        version_col = find_column(['版本'])
+        file_type_col = find_column(['文件类型', '类型'])
+        item_col = find_column(['物料编码', '关联物料'])
+        path_col = find_column(['公共盘路径', '路径'])
+        desc_col = find_column(['变更说明', '说明'])
+        notes_col = find_column(['备注'])
+        
+        if not drawing_no_col or not name_col:
+            return Response({
+                'error': '缺少必需列',
+                'required_columns': ['图纸号*', '图纸名称*']
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 文件类型映射
+        file_type_map = {
+            'PDF': 'PDF', 'DWG': 'DWG', 'DXF': 'DXF',
+            'STEP': 'STEP', 'STP': 'STP', 'IGES': 'IGES',
+            'STL': 'STL', 'SOLIDWORKS': 'SOLIDWORKS', '其他': 'OTHER'
+        }
+        
+        created_count = 0
+        updated_count = 0
+        error_rows = []
+        
+        for idx, row in df.iterrows():
+            row_num = idx + 2
+            
+            drawing_no = str(row[drawing_no_col]).strip() if pd.notna(row[drawing_no_col]) else ''
+            if not drawing_no or drawing_no.startswith('DWG-00') or '示例' in drawing_no:
+                continue
+            
+            name = str(row[name_col]).strip() if name_col and pd.notna(row.get(name_col)) else ''
+            if not name:
+                error_rows.append({'row': row_num, 'error': '图纸名称为空'})
+                continue
+            
+            # 文件类型
+            file_type = 'PDF'
+            if file_type_col and pd.notna(row.get(file_type_col)):
+                ft = str(row[file_type_col]).strip().upper()
+                file_type = file_type_map.get(ft, 'OTHER')
+            
+            # 版本
+            version = 'A0'
+            if version_col and pd.notna(row.get(version_col)):
+                version = str(row[version_col]).strip()
+            
+            # 关联物料
+            item = None
+            if item_col and pd.notna(row.get(item_col)):
+                item_sku = str(row[item_col]).strip()
+                if item_sku:
+                    try:
+                        item = Item.objects.get(sku=item_sku)
+                    except Item.DoesNotExist:
+                        pass  # 物料不存在不报错，只是不关联
+            
+            # 路径
+            public_share_path = ''
+            if path_col and pd.notna(row.get(path_col)):
+                public_share_path = str(row[path_col]).strip()
+            
+            # 变更说明
+            change_description = ''
+            if desc_col and pd.notna(row.get(desc_col)):
+                change_description = str(row[desc_col]).strip()
+            
+            # 备注
+            notes = ''
+            if notes_col and pd.notna(row.get(notes_col)):
+                notes = str(row[notes_col]).strip()
+            
+            # 检查是否已存在
+            existing = Drawing.objects.filter(
+                project=project,
+                drawing_no=drawing_no,
+                file_type=file_type,
+                is_deleted=False
+            ).first()
+            
+            try:
+                if existing:
+                    if update_existing:
+                        existing.name = name
+                        existing.version = version
+                        existing.item = item
+                        existing.public_share_path = public_share_path
+                        existing.change_description = change_description
+                        existing.notes = notes
+                        existing.updated_by = request.user
+                        existing.save()
+                        updated_count += 1
+                else:
+                    Drawing.objects.create(
+                        project=project,
+                        drawing_no=drawing_no,
+                        name=name,
+                        version=version,
+                        file_type=file_type,
+                        item=item,
+                        public_share_path=public_share_path,
+                        change_description=change_description,
+                        notes=notes,
+                        status='DRAFT',
+                        designer=request.user,
+                        created_by=request.user
+                    )
+                    created_count += 1
+            except Exception as e:
+                error_rows.append({'row': row_num, 'error': str(e)})
+        
+        return Response({
+            'message': f'导入完成：新增{created_count}条，更新{updated_count}条',
+            'created': created_count,
+            'updated': updated_count,
+            'errors': error_rows
+        })
     
     def _send_change_notification(self, notice):
         """发送变更通知邮件"""

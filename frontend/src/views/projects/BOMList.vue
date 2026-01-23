@@ -73,10 +73,10 @@
       </el-row>
       
       <!-- 筛选和搜索栏 -->
-      <div class="filter-bar" v-if="bomItems.length > 0 || selectedProject">
+      <div class="filter-bar" v-if="pagination.total > 0 || selectedProject">
         <el-row :gutter="15" style="margin-bottom: 15px;">
           <el-col :span="4">
-            <el-select v-model="filterHasDrawing" placeholder="有图/无图" clearable style="width: 100%;">
+            <el-select v-model="filterHasDrawing" placeholder="有图/无图" clearable style="width: 100%;" @change="applyFilters">
               <el-option label="全部" value="" />
               <el-option label="有图" value="HAS_DRAWING" />
               <el-option label="无图" value="NO_DRAWING" />
@@ -84,7 +84,7 @@
             </el-select>
           </el-col>
           <el-col :span="5">
-            <el-select v-model="filterItemType" placeholder="物料类型" clearable style="width: 100%;">
+            <el-select v-model="filterItemType" placeholder="物料类型" clearable style="width: 100%;" @change="applyFilters">
               <el-option label="全部" value="" />
               <el-option label="机加" value="机加" />
               <el-option label="钣金" value="钣金" />
@@ -101,6 +101,8 @@
               v-model="filterBrand" 
               placeholder="版本/品牌筛选" 
               clearable
+              @clear="applyFilters"
+              @keyup.enter="applyFilters"
             />
           </el-col>
           <el-col :span="6">
@@ -108,7 +110,8 @@
           v-model="searchKeyword" 
           placeholder="搜索物料编码/名称/规格" 
           clearable 
-          @input="handleSearch"
+          @clear="applyFilters"
+          @keyup.enter="applyFilters"
         >
           <template #prefix>
             <el-icon><Search /></el-icon>
@@ -116,9 +119,13 @@
         </el-input>
           </el-col>
           <el-col :span="4">
+            <el-button type="primary" @click="applyFilters" style="margin-right: 5px;">
+              <el-icon><Search /></el-icon>
+              查询
+            </el-button>
             <el-button @click="resetFilters">
               <el-icon><Refresh /></el-icon>
-              重置筛选
+              重置
             </el-button>
           </el-col>
         </el-row>
@@ -126,13 +133,13 @@
         <!-- 筛选结果提示和操作 -->
         <div class="filter-actions">
           <span class="filter-result">
-            筛选结果: <el-tag type="info">{{ filteredBomItems.length }}</el-tag> / {{ bomItems.length }} 项
+            共 <el-tag type="info">{{ pagination.total }}</el-tag> 项
           </span>
           <el-button 
             type="success" 
             size="small" 
             @click="handleExportFiltered" 
-            :disabled="filteredBomItems.length === 0"
+            :disabled="bomItems.length === 0"
             style="margin-left: 15px;"
           >
             <el-icon><Download /></el-icon>
@@ -161,7 +168,7 @@
       
       <!-- BOM列表 -->
       <el-table 
-        :data="filteredBomItems" 
+        :data="bomItems" 
         border 
         stripe 
         v-loading="loading"
@@ -169,9 +176,9 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="50" />
-        <el-table-column type="index" label="序号" width="60" />
+        <el-table-column type="index" label="序号" width="60" :index="(index) => (pagination.page - 1) * pagination.pageSize + index + 1" />
         <el-table-column prop="project_name" label="所属项目" width="150" show-overflow-tooltip v-if="!selectedProject" />
-        <el-table-column prop="item_code" label="物料编码" width="100" />
+        <el-table-column prop="item_sku" label="物料编码" width="120" />
         <el-table-column prop="item_name" label="物料名称" width="150" />
         <el-table-column prop="specification" label="规格型号" width="120" show-overflow-tooltip />
         <el-table-column prop="version_brand_display" label="版本/品牌" width="100" show-overflow-tooltip />
@@ -232,6 +239,18 @@
           </template>
         </el-table-column>
       </el-table>
+      
+      <!-- 分页 -->
+      <el-pagination
+        v-model:current-page="pagination.page"
+        v-model:page-size="pagination.pageSize"
+        :total="pagination.total"
+        :page-sizes="[20, 50, 100, 200, 500]"
+        layout="total, sizes, prev, pager, next, jumper"
+        @size-change="handleSizeChange"
+        @current-change="handlePageChange"
+        style="margin-top: 20px; justify-content: flex-end;"
+      />
     </el-card>
     
     <!-- 添加/编辑物料对话框 -->
@@ -438,29 +457,54 @@
         </template>
       </el-upload>
       
-      <el-checkbox v-model="importOptions.updateExisting" class="mt-15">
-        更新已存在的物料（不勾选则跳过已存在的物料）
-      </el-checkbox>
+      <div style="margin-top: 15px;">
+        <el-checkbox v-model="importOptions.updateExisting">
+          更新已存在的BOM（不勾选则跳过已存在的）
+        </el-checkbox>
+      </div>
+      <div style="margin-top: 10px;">
+        <el-checkbox v-model="importOptions.autoCreateItems">
+          自动创建不存在的物料（勾选后，若物料编码不存在则自动在物料主数据中创建）
+        </el-checkbox>
+      </div>
       
       <!-- 导入结果 -->
       <div v-if="importResult" class="import-result">
         <el-divider content-position="left">导入结果</el-divider>
-        <el-descriptions :column="2" border size="small">
-          <el-descriptions-item label="新增">
-            <el-tag type="success">{{ importResult.created }} 条</el-tag>
+        
+        <!-- 成功结果 -->
+        <el-descriptions v-if="importResult.created !== undefined || importResult.updated !== undefined" :column="2" border size="small">
+          <el-descriptions-item label="新增BOM">
+            <el-tag type="success">{{ importResult.created || 0 }} 条</el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="更新">
-            <el-tag type="primary">{{ importResult.updated }} 条</el-tag>
+          <el-descriptions-item label="更新BOM">
+            <el-tag type="primary">{{ importResult.updated || 0 }} 条</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="自动创建物料" v-if="importResult.items_created">
+            <el-tag type="warning">{{ importResult.items_created }} 个</el-tag>
           </el-descriptions-item>
         </el-descriptions>
         
-        <div v-if="importResult.errors && importResult.errors.length > 0" class="error-list">
-          <el-alert title="导入错误" type="error" show-icon :closable="false">
+        <!-- 错误信息 -->
+        <div v-if="importResult.error" class="error-summary" style="margin: 10px 0;">
+          <el-alert :title="importResult.error" type="error" show-icon :closable="false" />
+        </div>
+        
+        <!-- 详细错误列表 -->
+        <div v-if="importResult.errors && importResult.errors.length > 0" class="error-list" style="margin-top: 10px; max-height: 200px; overflow-y: auto;">
+          <el-alert title="详细错误" type="warning" show-icon :closable="false">
             <template #default>
               <div v-for="error in importResult.errors" :key="error.row" class="error-item">
                 第 {{ error.row }} 行: {{ error.error }}
               </div>
             </template>
+          </el-alert>
+        </div>
+        
+        <!-- 必需列提示 -->
+        <div v-if="importResult.required_columns" style="margin-top: 10px;">
+          <el-alert type="info" show-icon :closable="false">
+            <template #title>必需列: {{ importResult.required_columns.join(', ') }}</template>
           </el-alert>
         </div>
       </div>
@@ -673,6 +717,13 @@ const filterItemType = ref('')    // 物料类型筛选
 const filterBrand = ref('')       // 版本/品牌筛选
 const selectedRows = ref([])
 
+// 分页
+const pagination = reactive({
+  page: 1,
+  pageSize: 50,
+  total: 0
+})
+
 // Import/Export related
 const importDialogVisible = ref(false)
 const copyDialogVisible = ref(false)
@@ -691,7 +742,8 @@ const copying = ref(false)
 const copySourceProject = ref(null)
 const importResult = ref(null)
 const importOptions = reactive({
-  updateExisting: false
+  updateExisting: false,
+  autoCreateItems: false
 })
 
 const form = reactive({
@@ -763,46 +815,6 @@ const fetchPendingQuoteCount = async () => {
   }
 }
 
-// 搜索和筛选后的 BOM 列表
-const filteredBomItems = computed(() => {
-  let result = bomItems.value
-  
-  // 1. 有图/无图筛选
-  if (filterHasDrawing.value) {
-    result = result.filter(item => item.has_drawing === filterHasDrawing.value)
-  }
-  
-  // 2. 物料类型筛选（根据物料编码解析或item_type字段）
-  if (filterItemType.value) {
-    result = result.filter(item => {
-      // 尝试从item_type_display或物料编码解析
-      const itemType = item.item_type_display || item.item_type || ''
-      return itemType.includes(filterItemType.value)
-    })
-  }
-  
-  // 3. 版本/品牌筛选
-  if (filterBrand.value.trim()) {
-    const brandKeyword = filterBrand.value.toLowerCase().trim()
-    result = result.filter(item => {
-      const versionBrand = (item.version_brand_display || item.version_brand || '').toLowerCase()
-      return versionBrand.includes(brandKeyword)
-    })
-  }
-  
-  // 4. 关键字搜索
-  if (searchKeyword.value.trim()) {
-  const keyword = searchKeyword.value.toLowerCase().trim()
-    result = result.filter(item => {
-    return (item.item_code && item.item_code.toLowerCase().includes(keyword)) ||
-           (item.item_name && item.item_name.toLowerCase().includes(keyword)) ||
-           (item.specification && item.specification.toLowerCase().includes(keyword))
-  })
-  }
-  
-  return result
-})
-
 // 重置筛选条件
 const resetFilters = () => {
   filterHasDrawing.value = ''
@@ -810,9 +822,17 @@ const resetFilters = () => {
   filterBrand.value = ''
   searchKeyword.value = ''
   selectedRows.value = []
+  pagination.page = 1
   if (tableRef.value) {
     tableRef.value.clearSelection()
   }
+  fetchBOM()
+}
+
+// 应用筛选（重置到第一页并重新加载）
+const applyFilters = () => {
+  pagination.page = 1
+  fetchBOM()
 }
 
 const getProgressStatus = (row) => {
@@ -834,20 +854,54 @@ const fetchProjects = async () => {
 const fetchBOM = async () => {
   loading.value = true
   try {
-    // 构建查询参数，如果选择了项目则过滤
-    const params = {}
+    // 构建查询参数
+    const params = {
+      page: pagination.page,
+      page_size: pagination.pageSize
+    }
     if (selectedProject.value) {
       params.project = selectedProject.value
     }
+    // 筛选参数
+    if (filterHasDrawing.value) {
+      // 转换前端值到后端值: HAS_DRAWING->YES, NO_DRAWING->NO, PENDING->PENDING
+      const hasDrawingMap = { 'HAS_DRAWING': 'YES', 'NO_DRAWING': 'NO', 'PENDING': 'PENDING' }
+      params.has_drawing = hasDrawingMap[filterHasDrawing.value] || filterHasDrawing.value
+    }
+    if (filterItemType.value) {
+      params.item_type = filterItemType.value
+    }
+    if (filterBrand.value.trim()) {
+      params.version_brand = filterBrand.value.trim()
+    }
+    if (searchKeyword.value.trim()) {
+      params.search = searchKeyword.value.trim()
+    }
+    
     const res = await request.get('/projects/bom/', { params })
     bomItems.value = res.data?.results || res.results || res.data || res || []
+    // 更新分页总数
+    pagination.total = res.data?.count || res.count || bomItems.value.length
   } catch (error) {
     console.error('获取BOM列表失败:', error)
     bomItems.value = []
+    pagination.total = 0
     ElMessage.error('获取BOM列表失败')
   } finally {
     loading.value = false
   }
+}
+
+// 分页变化处理
+const handlePageChange = (page) => {
+  pagination.page = page
+  fetchBOM()
+}
+
+const handleSizeChange = (size) => {
+  pagination.pageSize = size
+  pagination.page = 1
+  fetchBOM()
 }
 
 const fetchItems = async () => {
@@ -975,15 +1029,6 @@ const handleSubmit = async () => {
   }
 }
 
-// 搜索处理
-const handleSearch = () => {
-  // 搜索时清空选择
-  selectedRows.value = []
-  if (tableRef.value) {
-    tableRef.value.clearSelection()
-  }
-}
-
 // 多选处理
 const handleSelectionChange = (rows) => {
   selectedRows.value = rows
@@ -1064,7 +1109,7 @@ const generatePurchaseRequest = (itemsToOrder) => {
       projectName: currentProjectName.value,
       lines: itemsToOrder.map(item => ({
         item: item.item,
-        item_sku: item.item_code,
+        item_sku: item.item_sku,
         item_name: item.item_name,
         qty: Math.max(1, (item.planned_qty || 0) - (item.actual_qty || 0)),
         estimated_price: item.estimated_cost || 0
@@ -1134,13 +1179,13 @@ const handleExportExcel = async () => {
 
 // 导出筛选结果（用于询价）
 const handleExportFiltered = async () => {
-  if (!selectedProject.value || filteredBomItems.value.length === 0) {
+  if (!selectedProject.value || bomItems.value.length === 0) {
     ElMessage.warning('没有可导出的数据')
     return
   }
   
-  // 获取筛选后的物料ID列表
-  const itemIds = filteredBomItems.value.map(item => item.id)
+  // 获取当前页的物料ID列表
+  const itemIds = bomItems.value.map(item => item.id)
   await exportForQuote(itemIds, '筛选结果')
 }
 
@@ -1318,6 +1363,7 @@ const handleImport = () => {
   importFile.value = null
   importResult.value = null
   importOptions.updateExisting = false
+  importOptions.autoCreateItems = false
   if (uploadRef.value) {
     uploadRef.value.clearFiles()
   }
@@ -1345,6 +1391,7 @@ const handleConfirmImport = async () => {
     formData.append('file', importFile.value)
     formData.append('project', selectedProject.value)
     formData.append('update_existing', importOptions.updateExisting.toString())
+    formData.append('auto_create_items', importOptions.autoCreateItems.toString())
     
     const response = await request.post('/projects/bom/import_excel/', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
@@ -1361,17 +1408,18 @@ const handleConfirmImport = async () => {
     }
   } catch (error) {
     console.error('导入失败:', error)
-    const errData = error.response?.data
+    // request.js interceptor 已经解包过，error.response?.data 或直接 error 可能包含信息
+    const errData = error.response?.data || error
     if (errData?.errors?.length) {
-      const preview = errData.errors
-        .slice(0, 3)
-        .map(e => `行${e.row}: ${e.error}`)
-        .join('；')
-      ElMessage.error(errData.error ? `${errData.error}（${preview}）` : preview)
+      // 有详细错误列表
       importResult.value = errData
-    } else {
-      ElMessage.error(errData?.error || '导入失败')
+      // 对话框已经打开，保持显示错误列表
+      // 不额外弹窗，因为 request.js 已经弹过了
+    } else if (errData?.error) {
+      // 有错误消息但没有详细列表
+      importResult.value = { error: errData.error }
     }
+    // 注意：request.js 的 interceptor 已经弹出了错误提示
   } finally {
     importing.value = false
   }
@@ -1441,6 +1489,12 @@ const getMaterialCheckStatusType = (status) => {
 }
 
 watch(selectedProject, () => {
+  // 切换项目时重置分页和筛选
+  pagination.page = 1
+  filterHasDrawing.value = ''
+  filterItemType.value = ''
+  filterBrand.value = ''
+  searchKeyword.value = ''
   fetchBOM()
   fetchPendingQuoteCount()  // 同时获取待询价数量
 })
