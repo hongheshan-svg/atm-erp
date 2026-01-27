@@ -12,6 +12,11 @@ from .cost_analysis import (
     ProjectCostAnalysisView, ProjectCostComparisonView, CostTrendView
 )
 from .export_service import ExportTemplateViewSet, ExportHistoryViewSet, ScheduledExportViewSet
+from .industry_reports import (
+    ProjectProfitabilityReportView, EquipmentLifecycleReportView,
+    CapacityUtilizationReportView, CustomerValueReportView,
+    ProjectDeliveryReportView, OutsourceAnalysisReportView
+)
 
 router = DefaultRouter()
 router.register(r'export-templates', ExportTemplateViewSet, basename='export-template')
@@ -41,5 +46,13 @@ urlpatterns = [
     
     # 导出服务
     path('', include(router.urls)),
+    
+    # 非标自动化行业专用报表
+    path('industry/project-profitability/', ProjectProfitabilityReportView.as_view(), name='project-profitability-report'),
+    path('industry/equipment-lifecycle/', EquipmentLifecycleReportView.as_view(), name='equipment-lifecycle-report'),
+    path('industry/capacity-utilization/', CapacityUtilizationReportView.as_view(), name='capacity-utilization-report'),
+    path('industry/customer-value/', CustomerValueReportView.as_view(), name='customer-value-report'),
+    path('industry/project-delivery/', ProjectDeliveryReportView.as_view(), name='project-delivery-report'),
+    path('industry/outsource-analysis/', OutsourceAnalysisReportView.as_view(), name='outsource-analysis-report'),
 ]
 

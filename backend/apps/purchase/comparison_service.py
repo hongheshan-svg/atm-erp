@@ -34,10 +34,10 @@ class QuotationComparisonService:
         """
         rfq = RFQ.objects.get(id=rfq_id)
         
-        # 检查是否有已提交的报价
+        # 检查是否有有效的报价（SUBMITTED或ACCEPTED状态）
         quotations = SupplierQuotation.objects.filter(
             rfq_supplier__rfq=rfq,
-            status='SUBMITTED',
+            status__in=['SUBMITTED', 'ACCEPTED'],
             is_deleted=False
         )
         

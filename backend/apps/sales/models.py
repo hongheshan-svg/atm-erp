@@ -617,3 +617,14 @@ from .wechat_marketing import (
     WeChatOfficialAccount, WeChatFollower, WeChatTemplate,
     WeChatCampaign, WeChatMessageLog
 )
+
+# Import models from quote_prediction
+from .quote_prediction import (
+    QuoteVersion, QuoteCostItem, QuoteComparison, QuoteProjectCostRef
+)
+
+# Import models from after_sales_service
+from .after_sales_service import (
+    ServiceContract, PreventiveMaintenance, ServiceRequest,
+    ServiceActivity, CustomerPortalAccount, KnowledgeBaseArticle
+)

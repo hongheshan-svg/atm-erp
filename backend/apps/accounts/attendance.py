@@ -404,6 +404,29 @@ class AttendanceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
     search_fields = ['user__first_name', 'user__last_name', 'user__username']
     ordering_fields = ['attendance_date', 'check_in_time']
     
+    def get_queryset(self):
+        """支持按月份过滤考勤记录"""
+        queryset = super().get_queryset()
+        
+        # 支持 month 参数过滤 (格式: YYYY-MM)
+        month = self.request.query_params.get('month')
+        if month:
+            try:
+                year, m = month.split('-')
+                queryset = queryset.filter(
+                    attendance_date__year=int(year),
+                    attendance_date__month=int(m)
+                )
+            except (ValueError, AttributeError):
+                pass
+        
+        # 支持 user_id 参数过滤
+        user_id = self.request.query_params.get('user_id')
+        if user_id:
+            queryset = queryset.filter(user_id=user_id)
+        
+        return queryset.order_by('-attendance_date')
+    
     @action(detail=False, methods=['post'])
     def check_in(self, request):
         """签到"""
@@ -548,7 +571,7 @@ class AttendanceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
     
     @action(detail=False, methods=['post'])
     def batch_import(self, request):
-        """批量导入考勤记录"""
+        """批量导入考勤记录（支持企业微信月报完整字段）"""
         from apps.accounts.models import User
         import logging
         logger = logging.getLogger(__name__)
@@ -566,16 +589,20 @@ class AttendanceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         error_count = 0
         errors = []
         
-        # 构建员工缓存
+        # 构建员工缓存（多种匹配方式）
         employee_cache = {}
         for user in User.objects.filter(is_active=True, is_deleted=False):
-            # 按姓名和工号建立映射
+            # 按姓名、工号、账号建立映射
             if user.first_name:
                 employee_cache[user.first_name] = user
-            if user.employee_id:
+            if hasattr(user, 'employee_id') and user.employee_id:
                 employee_cache[user.employee_id] = user
             if user.username:
                 employee_cache[user.username] = user
+            # 全名也建立映射
+            full_name = user.get_full_name()
+            if full_name:
+                employee_cache[full_name] = user
         
         for idx, record in enumerate(records):
             try:
@@ -584,10 +611,17 @@ class AttendanceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
                 employee_name = record.get('employee_name', '').strip()
                 employee_id = record.get('employee_id', '').strip()
                 
+                # 尝试多种匹配方式
                 if employee_id and employee_id in employee_cache:
                     employee = employee_cache[employee_id]
                 elif employee_name and employee_name in employee_cache:
                     employee = employee_cache[employee_name]
+                # 尝试模糊匹配姓名
+                elif employee_name:
+                    for key, user in employee_cache.items():
+                        if employee_name in key or key in employee_name:
+                            employee = user
+                            break
                 
                 if not employee:
                     error_count += 1
@@ -624,8 +658,8 @@ class AttendanceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
                     if not time_str:
                         return None
                     try:
-                        if ':' in time_str:
-                            parts = time_str.split(':')
+                        if ':' in str(time_str):
+                            parts = str(time_str).split(':')
                             return time(int(parts[0]), int(parts[1]))
                     except:
                         pass
@@ -646,34 +680,88 @@ class AttendanceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
                         datetime.combine(attendance_date, check_out_time)
                     )
                 
-                # 解析状态
+                # 解析状态（扩展支持更多状态）
                 status_map = {
                     'NORMAL': 'NORMAL',
                     'LATE': 'LATE',
                     'EARLY': 'EARLY',
-                    'ABNORMAL': 'ABNORMAL',
+                    'ABNORMAL': 'LATE',    # 异常按迟到处理
                     'ABSENT': 'ABSENT',
-                    'REST': 'REST',
+                    'REST': 'NORMAL',      # 休息日如有加班按正常处理
                     'LEAVE': 'LEAVE',
+                    'TRAVEL': 'TRAVEL',
+                    'OVERTIME': 'OVERTIME',
+                    'REMOTE': 'REMOTE',
                 }
-                status = status_map.get(record.get('status', 'NORMAL'), 'NORMAL')
+                raw_status = record.get('status', 'NORMAL')
+                status = status_map.get(raw_status, 'NORMAL')
                 
-                # 解析工时
-                work_hours = None
-                try:
-                    wh = record.get('work_hours')
-                    if wh:
-                        work_hours = Decimal(str(wh))
-                except:
-                    pass
+                # 解析数值字段的辅助函数
+                def parse_decimal(val, default=Decimal('0')):
+                    if val is None or val == '' or val == '--':
+                        return default
+                    try:
+                        return Decimal(str(val))
+                    except:
+                        return default
+                
+                def parse_int(val, default=0):
+                    if val is None or val == '' or val == '--':
+                        return default
+                    try:
+                        return int(float(val))
+                    except:
+                        return default
+                
+                # 解析各字段
+                work_hours = parse_decimal(record.get('work_hours'))
+                overtime_hours = parse_decimal(record.get('overtime_hours'))
+                late_minutes = parse_int(record.get('late_minutes'))
+                early_minutes = parse_int(record.get('early_minutes'))
+                
+                # 构建备注（包含详细信息）
+                remarks_parts = []
+                remarks_input = record.get('remarks', '')
+                if remarks_input:
+                    remarks_parts.append(remarks_input)
+                
+                # 添加额外信息到备注
+                out_hours = parse_decimal(record.get('out_hours'))
+                travel_hours = parse_decimal(record.get('travel_hours'))
+                leave_type = record.get('leave_type', '')
+                leave_hours = parse_decimal(record.get('leave_hours'))
+                absent_minutes = parse_int(record.get('absent_minutes'))
+                miss_count = parse_int(record.get('miss_count'))
+                
+                if out_hours > 0:
+                    remarks_parts.append(f"外出{out_hours}小时")
+                if travel_hours > 0:
+                    remarks_parts.append(f"出差{travel_hours}小时")
+                if leave_type and leave_hours > 0:
+                    leave_type_names = {
+                        'ANNUAL': '年假', 'PERSONAL': '事假', 'SICK': '病假',
+                        'COMP': '调休', 'MARRIAGE': '婚假', 'MATERNITY': '产假',
+                        'PATERNITY': '陪产假', 'BEREAVEMENT': '丧假'
+                    }
+                    leave_name = leave_type_names.get(leave_type, '请假')
+                    remarks_parts.append(f"{leave_name}{leave_hours}小时")
+                if absent_minutes > 0:
+                    remarks_parts.append(f"旷工{absent_minutes}分钟")
+                if miss_count > 0:
+                    remarks_parts.append(f"缺卡{miss_count}次")
+                
+                final_remarks = f"[{source}导入] " + '；'.join(remarks_parts) if remarks_parts else f"[{source}导入]"
                 
                 # 创建或更新记录
                 if existing:
                     existing.check_in_time = check_in_dt
                     existing.check_out_time = check_out_dt
                     existing.status = status
-                    existing.work_hours = work_hours
-                    existing.remarks = record.get('remarks', '') or f"[{source}导入]"
+                    existing.work_hours = work_hours if work_hours > 0 else existing.work_hours
+                    existing.overtime_hours = overtime_hours if overtime_hours > 0 else existing.overtime_hours
+                    existing.late_minutes = late_minutes if late_minutes > 0 else existing.late_minutes
+                    existing.early_minutes = early_minutes if early_minutes > 0 else existing.early_minutes
+                    existing.remarks = final_remarks
                     existing.updated_by = request.user
                     existing.save()
                 else:
@@ -684,7 +772,10 @@ class AttendanceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
                         check_out_time=check_out_dt,
                         status=status,
                         work_hours=work_hours,
-                        remarks=record.get('remarks', '') or f"[{source}导入]",
+                        overtime_hours=overtime_hours,
+                        late_minutes=late_minutes,
+                        early_minutes=early_minutes,
+                        remarks=final_remarks,
                         created_by=request.user
                     )
                 
@@ -706,6 +797,7 @@ class AttendanceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
             'success_count': success_count,
             'skip_count': skip_count,
             'error_count': error_count,
+            'source': source,
             'operator': request.user.get_full_name() or request.user.username
         })
         cache.set(history_key, history[:20], 60 * 60 * 24 * 30)  # 保留30天

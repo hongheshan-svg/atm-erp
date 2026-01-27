@@ -62,29 +62,32 @@
         </el-button>
       </div>
       
-      <el-table :data="suppliers" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+      <el-table :data="suppliers" v-loading="loading" stripe border @selection-change="handleSelectionChange" :table-layout="'auto'" style="width: 100%;">
         <!-- 仅管理员显示选择列 -->
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
-        <el-table-column prop="code" label="编码" width="120" />
-        <el-table-column prop="name" label="供应商名称" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="contact_person" label="联系人" width="100" />
-        <el-table-column prop="phone" label="电话" width="130" />
-        <el-table-column prop="tax_number" label="税号" width="180" show-overflow-tooltip />
-        <el-table-column prop="bank_name" label="开户银行" width="150" show-overflow-tooltip />
-        <el-table-column prop="address" label="地址" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="status" label="状态" width="80">
+        <el-table-column v-if="canDelete" type="selection" width="45" fixed />
+        <el-table-column prop="code" label="编码" width="110" />
+        <el-table-column prop="name" label="供应商名称" min-width="200" />
+        <el-table-column prop="contact_person" label="联系人" width="80" />
+        <el-table-column prop="phone" label="电话" width="120" />
+        <el-table-column prop="tax_number" label="税号" min-width="180" />
+        <el-table-column prop="bank_name" label="开户银行" min-width="180" />
+        <el-table-column prop="bank_account" label="银行账号" min-width="180" />
+        <el-table-column prop="settlement_method_display" label="结款方式" width="90" />
+        <el-table-column prop="address" label="地址" min-width="250" />
+        <el-table-column prop="status" label="状态" width="70">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ row.status === 'ACTIVE' ? '激活' : '停用' }}</el-tag>
+            <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'" size="small">{{ row.status === 'ACTIVE' ? '激活' : '停用' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" :width="canDelete ? 280 : 200" fixed="right">
+        <el-table-column label="操作" :width="canDelete ? 200 : 140" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button size="small" type="success" @click="handleViewAttachments(row)">附件</el-button>
+            <el-button size="small" link type="primary" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" link type="success" @click="handleViewAttachments(row)">附件</el-button>
             <!-- 仅管理员显示删除按钮 -->
             <el-button 
               v-if="canDelete"
               size="small" 
+              link
               type="danger" 
               @click="deleteRow(row)"
               :loading="deleteLoading"
@@ -153,6 +156,20 @@
             </el-row>
             <el-form-item label="邮箱">
               <el-input v-model="form.email" />
+            </el-form-item>
+            <el-form-item label="结款方式">
+              <el-select v-model="form.settlement_method" placeholder="请选择结款方式" clearable style="width: 100%;">
+                <el-option label="预付款" value="PREPAY" />
+                <el-option label="货到付款" value="COD" />
+                <el-option label="月结15天" value="NET15" />
+                <el-option label="月结30天" value="NET30" />
+                <el-option label="月结45天" value="NET45" />
+                <el-option label="月结60天" value="NET60" />
+                <el-option label="月结90天" value="NET90" />
+                <el-option label="月结120天" value="NET120" />
+                <el-option label="承兑汇票" value="ACCEPTANCE" />
+                <el-option label="其他" value="OTHER" />
+              </el-select>
             </el-form-item>
             <el-form-item label="地址">
               <el-input v-model="form.address" type="textarea" :rows="2" />
@@ -296,6 +313,7 @@ const form = reactive({
   phone: '',
   email: '',
   address: '',
+  settlement_method: '',
   // 开票信息
   invoice_title: '',
   tax_number: '',
@@ -343,7 +361,7 @@ const handleAdd = () => {
   activeFormTab.value = 'basic'
   Object.assign(form, { 
     id: null, code: '', name: '', short_name: '', contact_person: '', phone: '', 
-    email: '', address: '',
+    email: '', address: '', settlement_method: '',
     invoice_title: '', tax_number: '', bank_name: '', bank_account: '',
     registered_address: '', registered_phone: '', status: 'ACTIVE', notes: ''
   })

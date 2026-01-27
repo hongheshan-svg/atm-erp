@@ -4,7 +4,7 @@ Core API views for audit logs, notifications and attachments
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from django.utils import timezone
 from django.http import FileResponse
@@ -369,8 +369,14 @@ class SystemConfigViewSet(viewsets.ViewSet):
     """
     permission_classes = [IsAuthenticated]
     
+    def get_permissions(self):
+        """list 方法允许匿名访问（用于登录页面显示公司信息）"""
+        if self.action == 'list':
+            return [AllowAny()]
+        return super().get_permissions()
+    
     def list(self, request):
-        """获取系统配置"""
+        """获取系统配置（公开信息，无需登录）"""
         config = SystemConfig.get_config()
         serializer = SystemConfigSerializer(config)
         return Response(serializer.data)

@@ -796,6 +796,12 @@ const routes = [
         component: () => import('@/views/plm/ModelViewer.vue'),
         meta: { title: '3D模型预览', icon: 'View', menuId: 'plm:model-viewer' }
       },
+      {
+        path: 'plm/cad-bom-import',
+        name: 'CADBOMImport',
+        component: () => import('@/views/plm/CreoBOMImport.vue'),
+        meta: { title: 'CAD BOM导入', icon: 'Upload', menuId: 'plm:cad-bom' }
+      },
       // OA - 日程会议
       {
         path: 'oa/schedule',
@@ -888,6 +894,284 @@ const routes = [
         name: 'Announcements',
         component: () => import('@/views/system/Announcement.vue'),
         meta: { title: '系统公告', icon: 'Bell', menuId: 'system:announcements' }
+      },
+      // 非标自动化行业增强功能
+      // 非标报价估算
+      {
+        path: 'sales/quote-estimations',
+        name: 'QuoteEstimation',
+        component: () => import('@/views/sales/QuoteEstimation.vue'),
+        meta: { title: '报价估算', icon: 'Calculator', menuId: 'sales:quote-estimation' }
+      },
+      {
+        path: 'sales/quote-estimation/:id',
+        name: 'QuoteEstimationDetail',
+        component: () => import('@/views/sales/QuoteEstimationDetail.vue'),
+        meta: { title: '估算详情', menuId: 'sales:quote-estimation' }
+      },
+      // 客户培训管理
+      {
+        path: 'sales/training-plans',
+        name: 'TrainingPlanList',
+        component: () => import('@/views/sales/TrainingPlanList.vue'),
+        meta: { title: '培训计划', icon: 'Reading', menuId: 'sales:training' }
+      },
+      {
+        path: 'sales/training-courses',
+        name: 'TrainingCourseList',
+        component: () => import('@/views/sales/TrainingCourseList.vue'),
+        meta: { title: '培训课程', icon: 'Notebook', menuId: 'sales:training' }
+      },
+      // 现场服务派工
+      {
+        path: 'projects/service-orders',
+        name: 'ServiceOrderList',
+        component: () => import('@/views/projects/ServiceOrder.vue'),
+        meta: { title: '现场服务', icon: 'Van', menuId: 'projects:service' }
+      },
+      {
+        path: 'projects/service-order/:id',
+        name: 'ServiceOrderDetail',
+        component: () => import('@/views/projects/ServiceOrderDetail.vue'),
+        meta: { title: '服务详情', menuId: 'projects:service' }
+      },
+      {
+        path: 'projects/technicians',
+        name: 'TechnicianList',
+        component: () => import('@/views/projects/TechnicianList.vue'),
+        meta: { title: '技术人员', icon: 'User', menuId: 'projects:service' }
+      },
+      // 项目成本看板
+      {
+        path: 'projects/cost-dashboard',
+        name: 'ProjectCostDashboard',
+        component: () => import('@/views/projects/CostDashboard.vue'),
+        meta: { title: '成本看板', icon: 'Coin', menuId: 'projects:cost' }
+      },
+      {
+        path: 'projects/cost-records',
+        name: 'ProjectCostRecords',
+        component: () => import('@/views/projects/CostRecordList.vue'),
+        meta: { title: '成本记录', icon: 'Document', menuId: 'projects:cost' }
+      },
+      // 高级成本分析（非标增强）
+      {
+        path: 'projects/advanced-cost-analysis',
+        name: 'AdvancedCostAnalysis',
+        component: () => import('@/views/projects/AdvancedCostAnalysis.vue'),
+        meta: { title: '成本分析', icon: 'TrendCharts', menuId: 'projects:cost' }
+      },
+      {
+        path: 'projects/cost-comparison',
+        name: 'CostComparison',
+        component: () => import('@/views/projects/CostComparison.vue'),
+        meta: { title: '成本对比', icon: 'DataAnalysis', menuId: 'projects:cost' }
+      },
+      {
+        path: 'projects/labor-rates',
+        name: 'LaborRates',
+        component: () => import('@/views/projects/LaborRateList.vue'),
+        meta: { title: '工时费率', icon: 'Money', menuId: 'projects:cost' }
+      },
+      // 设备远程运维
+      {
+        path: 'projects/equipment-monitoring',
+        name: 'EquipmentMonitoring',
+        component: () => import('@/views/projects/EquipmentMonitoring.vue'),
+        meta: { title: '设备监控', icon: 'Monitor', menuId: 'projects:monitoring' }
+      },
+      {
+        path: 'projects/equipment-alarms',
+        name: 'EquipmentAlarmList',
+        component: () => import('@/views/projects/EquipmentAlarmList.vue'),
+        meta: { title: '设备报警', icon: 'Warning', menuId: 'projects:monitoring' }
+      },
+      {
+        path: 'projects/diagnostic-sessions',
+        name: 'DiagnosticSessionList',
+        component: () => import('@/views/projects/DiagnosticSessionList.vue'),
+        meta: { title: '远程诊断', icon: 'Service', menuId: 'projects:monitoring' }
+      },
+      // 工艺路线管理
+      {
+        path: 'production/routing-templates',
+        name: 'RoutingTemplateList',
+        component: () => import('@/views/production/RoutingTemplate.vue'),
+        meta: { title: '工艺模板', icon: 'Guide', menuId: 'production:routing' }
+      },
+      {
+        path: 'production/routing-template/:id',
+        name: 'RoutingTemplateDetail',
+        component: () => import('@/views/production/RoutingTemplateDetail.vue'),
+        meta: { title: '工艺详情', menuId: 'production:routing' }
+      },
+      {
+        path: 'production/work-stations',
+        name: 'WorkStationList',
+        component: () => import('@/views/production/WorkStationList.vue'),
+        meta: { title: '工位管理', icon: 'OfficeBuilding', menuId: 'production:routing' }
+      },
+      // 3D装配指导
+      {
+        path: 'production/assembly-guides',
+        name: 'AssemblyGuideList',
+        component: () => import('@/views/production/AssemblyGuideList.vue'),
+        meta: { title: '装配指导', icon: 'Connection', menuId: 'production:assembly' }
+      },
+      {
+        path: 'production/assembly-guide/:id',
+        name: 'AssemblyGuideDetail',
+        component: () => import('@/views/production/AssemblyGuideDetail.vue'),
+        meta: { title: '装配详情', menuId: 'production:assembly' }
+      },
+      // 智能排产
+      {
+        path: 'production/smart-scheduling',
+        name: 'SmartScheduling',
+        component: () => import('@/views/production/SmartScheduling.vue'),
+        meta: { title: '智能排产', icon: 'SetUp', menuId: 'production:scheduling' }
+      },
+      {
+        path: 'production/scheduling-scenario/:id',
+        name: 'SchedulingScenarioDetail',
+        component: () => import('@/views/production/SchedulingScenarioDetail.vue'),
+        meta: { title: '排产详情', menuId: 'production:scheduling' }
+      },
+      // 备件管理
+      {
+        path: 'inventory/spare-parts',
+        name: 'SparePartList',
+        component: () => import('@/views/inventory/SparePartList.vue'),
+        meta: { title: '备件管理', icon: 'Box', menuId: 'inventory:spare-parts' }
+      },
+      {
+        path: 'inventory/spare-part-alerts',
+        name: 'SparePartAlertList',
+        component: () => import('@/views/inventory/SparePartAlertList.vue'),
+        meta: { title: '备件预警', icon: 'Warning', menuId: 'inventory:spare-parts' }
+      },
+      // 进销存数据准确性
+      {
+        path: 'inventory/data-accuracy',
+        name: 'DataAccuracy',
+        component: () => import('@/views/inventory/DataAccuracy.vue'),
+        meta: { title: '数据准确性', icon: 'Checked', menuId: 'inventory:data-accuracy' }
+      },
+      {
+        path: 'inventory/reconciliation/:id',
+        name: 'ReconciliationDetail',
+        component: () => import('@/views/inventory/ReconciliationDetail.vue'),
+        meta: { title: '对账详情', menuId: 'inventory:data-accuracy' }
+      },
+      // 外协加工增强
+      {
+        path: 'purchase/outsource-tracking',
+        name: 'OutsourceTracking',
+        component: () => import('@/views/purchase/OutsourceTracking.vue'),
+        meta: { title: '外协跟踪', icon: 'Setting', menuId: 'purchase:outsource' }
+      },
+      {
+        path: 'purchase/outsource-capabilities',
+        name: 'OutsourceCapabilityList',
+        component: () => import('@/views/purchase/OutsourceCapabilityList.vue'),
+        meta: { title: '外协商能力', icon: 'Opportunity', menuId: 'purchase:outsource' }
+      },
+      // 供应链协同
+      {
+        path: 'purchase/rfq-collaborations',
+        name: 'RFQCollaborationList',
+        component: () => import('@/views/purchase/RFQCollaborationList.vue'),
+        meta: { title: '询报价协同', icon: 'ChatDotSquare', menuId: 'purchase:collaboration' }
+      },
+      {
+        path: 'purchase/delivery-collaborations',
+        name: 'DeliveryCollaborationList',
+        component: () => import('@/views/purchase/DeliveryCollaborationList.vue'),
+        meta: { title: '交期协同', icon: 'Van', menuId: 'purchase:collaboration' }
+      },
+      // 行业报表
+      {
+        path: 'reports/project-profitability',
+        name: 'ProjectProfitabilityReport',
+        component: () => import('@/views/reports/ProjectProfitabilityReport.vue'),
+        meta: { title: '项目毛利分析', icon: 'TrendCharts', menuId: 'reports:industry' }
+      },
+      {
+        path: 'reports/equipment-lifecycle',
+        name: 'EquipmentLifecycleReport',
+        component: () => import('@/views/reports/EquipmentLifecycleReport.vue'),
+        meta: { title: '设备生命周期', icon: 'Timer', menuId: 'reports:industry' }
+      },
+      {
+        path: 'reports/capacity-utilization',
+        name: 'CapacityUtilizationReport',
+        component: () => import('@/views/reports/CapacityUtilizationReport.vue'),
+        meta: { title: '产能利用率', icon: 'DataAnalysis', menuId: 'reports:industry' }
+      },
+      {
+        path: 'reports/customer-value',
+        name: 'CustomerValueReport',
+        component: () => import('@/views/reports/CustomerValueReport.vue'),
+        meta: { title: '客户价值分析', icon: 'UserFilled', menuId: 'reports:industry' }
+      },
+      // 供应商协同门户
+      {
+        path: 'purchase/supplier-portal',
+        name: 'SupplierPortal',
+        component: () => import('@/views/purchase/SupplierPortal.vue'),
+        meta: { title: '供应商协同', icon: 'Connection', menuId: 'purchase:portal' }
+      },
+      // 技术文档协同
+      {
+        path: 'projects/tech-documents',
+        name: 'TechDocumentList',
+        component: () => import('@/views/projects/TechDocumentList.vue'),
+        meta: { title: '技术文档', icon: 'Document', menuId: 'projects:documents' }
+      },
+      // 售后服务管理
+      {
+        path: 'sales/service-contracts',
+        name: 'ServiceContractList',
+        component: () => import('@/views/sales/ServiceContractList.vue'),
+        meta: { title: '服务合同', icon: 'Tickets', menuId: 'sales:service' }
+      },
+      {
+        path: 'sales/service-requests',
+        name: 'ServiceRequestList',
+        component: () => import('@/views/sales/ServiceRequestList.vue'),
+        meta: { title: '服务请求', icon: 'Service', menuId: 'sales:service' }
+      },
+      {
+        path: 'sales/preventive-maintenance',
+        name: 'PreventiveMaintenanceList',
+        component: () => import('@/views/sales/PreventiveMaintenanceList.vue'),
+        meta: { title: '预防维护', icon: 'Tools', menuId: 'sales:service' }
+      },
+      {
+        path: 'sales/knowledge-base',
+        name: 'KnowledgeBaseList',
+        component: () => import('@/views/sales/KnowledgeBaseList.vue'),
+        meta: { title: '知识库', icon: 'Reading', menuId: 'sales:service' }
+      },
+      // 报价版本管理
+      {
+        path: 'sales/quote-versions',
+        name: 'QuoteVersionList',
+        component: () => import('@/views/sales/QuoteVersionList.vue'),
+        meta: { title: '报价版本', icon: 'PriceTag', menuId: 'sales:quote' }
+      },
+      // 产能资源规划
+      {
+        path: 'production/capacity-planning',
+        name: 'CapacityPlanning',
+        component: () => import('@/views/production/CapacityPlanning.vue'),
+        meta: { title: '产能规划', icon: 'Cpu', menuId: 'production:capacity' }
+      },
+      {
+        path: 'production/resource-types',
+        name: 'ResourceTypeList',
+        component: () => import('@/views/production/ResourceTypeList.vue'),
+        meta: { title: '资源类型', icon: 'Files', menuId: 'production:capacity' }
       },
       // User Profile - 这些是公共页面，所有登录用户都可以访问
       {

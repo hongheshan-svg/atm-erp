@@ -258,3 +258,9 @@ from .permission_models import ModulePermissionRule, RoleModulePermission
 
 # 导入编码规则模型
 from .code_rule_models import CodeRule, CodeHistory
+
+# 导入移动端API模型
+from .mobile_api import (
+    MobileTimeEntry, MobilePhoto, MobileScanRecord,
+    MobileApproval, MobileNotification
+)

@@ -1502,3 +1502,55 @@ from .cad_integration import (
     CADSoftware, CADSession, CADFile,
     CADBOMImport, CADBOMItem, CADPropertyMapping
 )
+
+# Import models from field_service
+from .field_service import (
+    SkillCategory, Skill, TechnicianProfile, TechnicianSkill,
+    TechnicianSchedule, ServiceOrder, ServiceDispatch, ServiceCheckIn,
+    ServiceExpense, ServiceLog
+)
+
+# Import models from equipment_archive
+from .equipment_archive import (
+    EquipmentArchive, EquipmentSparePart, EquipmentMaintenancePlan,
+    EquipmentMaintenanceRecord
+)
+
+# Import models from remote_monitoring
+from .remote_monitoring import (
+    EquipmentConnection, EquipmentDataPoint, EquipmentDataMapping,
+    EquipmentDataRecord, EquipmentAlarm, PredictiveMaintenanceModel,
+    PredictiveMaintenanceResult, DiagnosticSession, DiagnosticLog
+)
+
+# Import models from acceptance
+from .acceptance import (
+    AcceptanceTemplate, Acceptance, AcceptanceCheckItem, AcceptanceIssue
+)
+
+# Import models from technical_agreement
+from .technical_agreement import (
+    TechnicalAgreementTemplate, TechnicalAgreement, TechnicalAgreementChange
+)
+
+# Import models from cost_tracking
+from .cost_tracking import (
+    ProjectBudget, ProjectCostRecord, CostAlert, ProjectCostSnapshot
+)
+
+# Import models from advanced_cost_tracking
+from .advanced_cost_tracking import (
+    StandardCostCategory, LaborRateStandard, ManufacturingOverheadRate,
+    ProjectCostDetail, ProjectCostSummary, CostVarianceAnalysis
+)
+
+# Import models from document_collaboration
+from .document_collaboration import (
+    TechDocumentCategory, TechnicalDocument, TechDocumentVersion,
+    DocumentAnnotation, DocumentDistribution, DocumentAccessLog, DocumentReview
+)
+
+# Import models from creo_integration
+from .creo_integration import (
+    CreoBOMImportSession, CreoBOMImportItem
+)

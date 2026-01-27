@@ -889,7 +889,7 @@ class PurchaseOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
             )
         
         # 自动生成付款计划（避免重复创建）
-        existing_schedules = PurchasePaymentSchedule.objects.filter(po=po, is_deleted=False).exists()
+        existing_schedules = PurchasePaymentSchedule.objects.filter(purchase_order=po, is_deleted=False).exists()
         if existing_schedules:
             schedules = []
         else:
@@ -1302,7 +1302,7 @@ class PurchaseContractViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         
         # 获取公司信息
         from apps.core.models import SystemConfig
-        company_config = SystemConfig.get_config('company', {})
+        config = SystemConfig.get_config()
         
         # 获取订单明细
         lines = []
@@ -1317,23 +1317,69 @@ class PurchaseContractViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
                 'line_amount': float(line.line_amount),
             })
         
+        # 获取采购订单的付款条款
+        payment_terms_display = ''
+        if hasattr(po, 'payment_terms') and po.payment_terms:
+            payment_terms_map = {
+                'PREPAY': '预付款',
+                'COD': '货到付款',
+                'NET15': '月结15天',
+                'NET30': '月结30天',
+                'NET45': '月结45天',
+                'NET60': '月结60天',
+                'NET90': '月结90天',
+                'NET120': '月结120天',
+                'MILESTONE': '分期付款',
+                'OTHER': '其他',
+            }
+            payment_terms_display = payment_terms_map.get(po.payment_terms, po.payment_terms)
+        
+        # 获取付款方式
+        payment_method_display = ''
+        if hasattr(po, 'payment_method') and po.payment_method:
+            payment_method_map = {
+                'WIRE': '电汇',
+                'ACCEPTANCE': '承兑汇票',
+                'CHECK': '支票',
+                'CASH': '现金',
+                'LC': '信用证',
+                'OTHER': '其他',
+            }
+            payment_method_display = payment_method_map.get(po.payment_method, po.payment_method)
+        
         return Response({
             'contract': PurchaseContractSerializer(contract).data,
             'company': {
-                'name': company_config.get('name', ''),
-                'address': company_config.get('address', ''),
-                'phone': company_config.get('phone', ''),
-                'fax': company_config.get('fax', ''),
-                'bank_name': company_config.get('bank_name', ''),
-                'bank_account': company_config.get('bank_account', ''),
+                'name': config.company_name or '',
+                'address': config.company_address or '',
+                'phone': config.company_phone or '',
+                'email': config.company_email or '',
+                'tax_no': config.company_tax_no or '',
+                'bank_name': config.bank_name or '',
+                'bank_account': config.bank_account or '',
             },
             'supplier': {
                 'name': contract.supplier.name,
                 'address': contract.supplier.address or '',
                 'contact': contract.supplier.contact_person or '',
                 'phone': contract.supplier.phone or '',
+                'email': contract.supplier.email or '' if hasattr(contract.supplier, 'email') else '',
+                'tax_no': contract.supplier.tax_id or '' if hasattr(contract.supplier, 'tax_id') else '',
                 'bank_name': contract.supplier.bank_name or '',
                 'bank_account': contract.supplier.bank_account or '',
+            },
+            'po': {
+                'order_no': po.order_no,
+                'order_date': po.order_date.isoformat() if po.order_date else '',
+                'delivery_date': po.delivery_date.isoformat() if po.delivery_date else '',
+                'payment_terms': payment_terms_display,
+                'payment_method': payment_method_display,
+                'total_amount': float(po.total_amount) if po.total_amount else 0,
+                'total_with_tax': float(po.total_with_tax) if po.total_with_tax else 0,
+                'buyer_name': po.created_by.get_full_name() if po.created_by else '',
+                'buyer_phone': '',
+                'project_name': po.project.name if po.project else '',
+                'notes': po.notes or '',
             },
             'lines': lines,
         })

@@ -382,6 +382,20 @@ class Supplier(BaseModel):
         ('POTENTIAL', '潜在供应商'),
     ]
     
+    # 结款方式选项
+    SETTLEMENT_METHOD_CHOICES = [
+        ('PREPAY', '预付款'),
+        ('COD', '货到付款'),
+        ('NET15', '月结15天'),
+        ('NET30', '月结30天'),
+        ('NET45', '月结45天'),
+        ('NET60', '月结60天'),
+        ('NET90', '月结90天'),
+        ('NET120', '月结120天'),
+        ('ACCEPTANCE', '承兑汇票'),
+        ('OTHER', '其他'),
+    ]
+    
     code = models.CharField(max_length=50, unique=True, verbose_name='供应商编码')
     name = models.CharField(max_length=200, verbose_name='供应商名称')
     short_name = models.CharField(max_length=100, blank=True, verbose_name='简称')
@@ -390,6 +404,12 @@ class Supplier(BaseModel):
     email = models.EmailField(blank=True, verbose_name='邮箱')
     address = models.TextField(blank=True, verbose_name='地址')
     payment_terms = models.CharField(max_length=100, blank=True, verbose_name='付款条款')
+    settlement_method = models.CharField(
+        max_length=20,
+        choices=SETTLEMENT_METHOD_CHOICES,
+        blank=True,
+        verbose_name='结款方式'
+    )
     
     # 开票信息 (Invoice Information)
     invoice_title = models.CharField(max_length=200, blank=True, verbose_name='开票名称')

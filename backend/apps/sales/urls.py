@@ -41,6 +41,24 @@ from .wechat_marketing import (
     WeChatOfficialAccountViewSet, WeChatFollowerViewSet,
     WeChatTemplateViewSet, WeChatCampaignViewSet, WeChatMessageLogViewSet
 )
+from .quote_estimation import (
+    CostCategoryViewSet, LaborRateViewSet, QuoteEstimationViewSet,
+    EstimationMaterialItemViewSet, EstimationLaborItemViewSet,
+    EstimationOutsourceItemViewSet, ProjectCostHistoryViewSet
+)
+from .customer_training import (
+    TrainingCourseViewSet, TrainingMaterialViewSet, TrainingPlanViewSet,
+    TraineeViewSet, TrainingExamViewSet, TrainingFeedbackViewSet
+)
+from .quote_prediction import (
+    QuoteVersionViewSet, QuoteCostItemViewSet, QuoteComparisonViewSet,
+    QuoteProjectCostRefViewSet
+)
+from .after_sales_service import (
+    ServiceContractViewSet, PreventiveMaintenanceViewSet,
+    ServiceRequestViewSet, KnowledgeBaseArticleViewSet,
+    CustomerPortalLoginView, CustomerPortalDashboardView, CustomerPortalSubmitRequestView
+)
 
 router = DefaultRouter()
 router.register(r'quotations', SalesQuotationViewSet, basename='quotation')
@@ -103,6 +121,35 @@ router.register(r'wechat-templates', WeChatTemplateViewSet, basename='wechat-tem
 router.register(r'wechat-campaigns', WeChatCampaignViewSet, basename='wechat-campaign')
 router.register(r'wechat-message-logs', WeChatMessageLogViewSet, basename='wechat-message-log')
 
+# 非标报价估算工具
+router.register(r'cost-categories', CostCategoryViewSet, basename='cost-category')
+router.register(r'labor-rates', LaborRateViewSet, basename='labor-rate')
+router.register(r'quote-estimations', QuoteEstimationViewSet, basename='quote-estimation')
+router.register(r'estimation-materials', EstimationMaterialItemViewSet, basename='estimation-material')
+router.register(r'estimation-labors', EstimationLaborItemViewSet, basename='estimation-labor')
+router.register(r'estimation-outsources', EstimationOutsourceItemViewSet, basename='estimation-outsource')
+router.register(r'project-cost-history', ProjectCostHistoryViewSet, basename='project-cost-history')
+
+# 客户培训管理
+router.register(r'training-courses', TrainingCourseViewSet, basename='training-course')
+router.register(r'training-materials', TrainingMaterialViewSet, basename='training-material')
+router.register(r'training-plans', TrainingPlanViewSet, basename='training-plan')
+router.register(r'trainees', TraineeViewSet, basename='trainee')
+router.register(r'training-exams', TrainingExamViewSet, basename='training-exam')
+router.register(r'training-feedbacks', TrainingFeedbackViewSet, basename='training-feedback')
+
+# 报价成本预测优化
+router.register(r'quote-versions', QuoteVersionViewSet, basename='quote-version')
+router.register(r'quote-cost-items', QuoteCostItemViewSet, basename='quote-cost-item')
+router.register(r'quote-comparisons', QuoteComparisonViewSet, basename='quote-comparison')
+router.register(r'quote-cost-refs', QuoteProjectCostRefViewSet, basename='quote-cost-ref')
+
+# 售后服务管理
+router.register(r'service-contracts', ServiceContractViewSet, basename='service-contract')
+router.register(r'preventive-maintenance', PreventiveMaintenanceViewSet, basename='preventive-maintenance')
+router.register(r'service-requests', ServiceRequestViewSet, basename='service-request')
+router.register(r'knowledge-base', KnowledgeBaseArticleViewSet, basename='knowledge-base')
+
 urlpatterns = [
     path('', include(router.urls)),
     
@@ -120,5 +167,10 @@ urlpatterns = [
     path('ai/sales-prediction/', SalesPredictionView.as_view(), name='ai-sales-prediction'),
     path('ai/churn-prediction/', ChurnPredictionView.as_view(), name='ai-churn-prediction'),
     path('ai/insights/', AIInsightsView.as_view(), name='ai-insights'),
+    
+    # 客户门户
+    path('customer-portal/login/', CustomerPortalLoginView.as_view(), name='customer-portal-login'),
+    path('customer-portal/<int:customer_id>/dashboard/', CustomerPortalDashboardView.as_view(), name='customer-portal-dashboard'),
+    path('customer-portal/<int:customer_id>/submit-request/', CustomerPortalSubmitRequestView.as_view(), name='customer-portal-submit-request'),
 ]
 

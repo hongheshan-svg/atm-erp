@@ -108,12 +108,9 @@
           
           <el-table :data="previewData" max-height="400" size="small" stripe>
             <el-table-column type="index" width="50" label="#" />
-            <el-table-column prop="employee_name" label="姓名" width="100" />
-            <el-table-column prop="employee_id" label="工号" width="100" />
-            <el-table-column prop="date" label="日期" width="110" />
-            <el-table-column prop="check_in" label="签到时间" width="90" />
-            <el-table-column prop="check_out" label="签退时间" width="90" />
-            <el-table-column prop="work_hours" label="工时" width="70" align="center" />
+            <el-table-column prop="employee_name" label="姓名" width="80" />
+            <el-table-column prop="employee_id" label="账号" width="100" show-overflow-tooltip />
+            <el-table-column prop="date" label="日期" width="100" />
             <el-table-column prop="status" label="状态" width="80">
               <template #default="{ row }">
                 <el-tag :type="getStatusType(row.status)" size="small">
@@ -121,11 +118,35 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
-            <el-table-column label="导入状态" width="100">
+            <el-table-column label="加班" width="60" align="center">
+              <template #default="{ row }">
+                <span v-if="row.overtime_hours > 0" style="color: #409eff; font-weight: 500">
+                  {{ row.overtime_hours }}h
+                </span>
+                <span v-else style="color: #c0c4cc">-</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="迟到" width="60" align="center">
+              <template #default="{ row }">
+                <span v-if="row.late_minutes > 0" style="color: #e6a23c">
+                  {{ row.late_minutes }}′
+                </span>
+                <span v-else style="color: #c0c4cc">-</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="请假" width="80" align="center">
+              <template #default="{ row }">
+                <span v-if="row.leave_hours > 0" style="color: #909399">
+                  {{ getLeaveTypeName(row.leave_type) }}{{ row.leave_hours }}h
+                </span>
+                <span v-else style="color: #c0c4cc">-</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip />
+            <el-table-column label="导入" width="80" fixed="right">
               <template #default="{ row }">
                 <el-tag :type="row.import_status === 'valid' ? 'success' : row.import_status === 'skip' ? 'warning' : 'danger'" size="small">
-                  {{ row.import_status === 'valid' ? '待导入' : row.import_status === 'skip' ? '将跳过' : '错误' }}
+                  {{ row.import_status === 'valid' ? '待导入' : row.import_status === 'skip' ? '跳过' : '错误' }}
                 </el-tag>
               </template>
             </el-table-column>
@@ -376,8 +397,55 @@ const parseWechatMonthlyReport = (rawData) => {
     }
   }
   
-  // 获取子表头（包含日期列）
+  // 获取子表头（包含日期列和列名映射）
   const subHeaders = rawData[subHeaderRowIndex] || []
+  
+  // 构建列索引映射（基于第4行的子表头）
+  const colMap = {
+    department: 3,        // 部门
+    position: 4,          // 职务
+    employeeId: 5,        // 工号
+    expectedDays: 6,      // 应出勤天数
+    actualDays: 7,        // 实际出勤天数
+    restDays: 8,          // 休息天数
+    normalDays: 9,        // 正常天数
+    abnormalDays: 10,     // 异常天数
+    expectedHours: 11,    // 标准工作时长
+    actualHours: 12,      // 实际工作时长
+    abnormalCount: 13,    // 异常合计
+    lateCount: 14,        // 迟到次数
+    lateMinutes: 15,      // 迟到时长(分钟)
+    earlyCount: 16,       // 早退次数
+    earlyMinutes: 17,     // 早退时长(分钟)
+    absentCount: 18,      // 旷工次数
+    absentMinutes: 19,    // 旷工时长(分钟)
+    missCount: 20,        // 缺卡次数
+    locationError: 21,    // 地点异常
+    deviceError: 22,      // 设备异常
+    makeupCount: 23,      // 补卡次数
+    approveCount: 24,     // 审批打卡次数
+    fieldCount: 25,       // 外勤次数
+    outHours: 26,         // 外出(小时)
+    travelDays: 27,       // 出差(天)
+    annualHours: 28,      // 年假(小时)
+    personalHours: 29,    // 事假(小时)
+    sickHours: 30,        // 病假(小时)
+    compHours: 31,        // 调休假(小时)
+    marriageDay: 32,      // 婚假(天)
+    maternityDay: 33,     // 产假(天)
+    paternityDay: 34,     // 陪产假(天)
+    bereavementDay: 35,   // 丧假(天)
+    overtimeTotal: 36,    // 加班时长合计(小时)
+    overtimeWeekday: 37,  // 工作日加班时长
+    overtimeWeekdayComp: 38,  // 工作日加班计为调休
+    overtimeWeekdayPay: 39,   // 工作日加班计为加班费
+    overtimeWeekend: 40,      // 休息日加班时长
+    overtimeWeekendComp: 41,  // 休息日加班计为调休
+    overtimeWeekendPay: 42,   // 休息日加班计为加班费
+    overtimeHoliday: 43,      // 节假日加班时长
+    overtimeHolidayComp: 44,  // 节假日加班计为调休
+    overtimeHolidayPay: 45,   // 节假日加班计为加班费
+  }
   
   // 找到每日状态的起始列（格式如 "1\n星期四"）
   let dailyStartCol = -1
@@ -398,6 +466,82 @@ const parseWechatMonthlyReport = (rawData) => {
   const selectedMonth = importForm.month // 格式: "2026-01"
   const [selectedYear, selectedMonthNum] = selectedMonth.split('-').map(Number)
   
+  // 辅助函数：解析数值
+  const parseNum = (val) => {
+    if (val === '--' || val === '' || val === null || val === undefined) return 0
+    const num = parseFloat(val)
+    return isNaN(num) ? 0 : num
+  }
+  
+  // 辅助函数：从每日状态中提取详细信息
+  const parseDayDetails = (dayStatus) => {
+    const details = {
+      overtime: 0,        // 加班小时数
+      outHours: 0,        // 外出小时数
+      travelHours: 0,     // 出差小时数
+      leaveType: '',      // 请假类型
+      leaveHours: 0,      // 请假小时数
+      lateMinutes: 0,     // 迟到分钟
+      earlyMinutes: 0,    // 早退分钟
+      absentMinutes: 0,   // 旷工分钟
+      missCount: 0,       // 缺卡次数
+    }
+    
+    // 提取加班时长 "加班9.5小时"
+    const otMatch = dayStatus.match(/加班([\d.]+)小时/)
+    if (otMatch) details.overtime = parseFloat(otMatch[1])
+    
+    // 提取外出时长 "外出1.5小时" 或 "外出9.0小时"
+    const outMatch = dayStatus.match(/外出([\d.]+)小时/)
+    if (outMatch) details.outHours = parseFloat(outMatch[1])
+    
+    // 提取出差时长 "出差1天9.5小时" 或 "出差12.9小时"
+    const travelMatch = dayStatus.match(/出差(?:(\d+)天)?([\d.]+)小时/)
+    if (travelMatch) {
+      const days = travelMatch[1] ? parseFloat(travelMatch[1]) : 0
+      const hours = parseFloat(travelMatch[2])
+      details.travelHours = days * 8 + hours // 假设1天=8小时
+    }
+    
+    // 提取请假类型和时长
+    const leavePatterns = [
+      { pattern: /年假([\d.]+)小时/, type: 'ANNUAL' },
+      { pattern: /事假([\d.]+)小时/, type: 'PERSONAL' },
+      { pattern: /病假([\d.]+)小时/, type: 'SICK' },
+      { pattern: /调休假([\d.]+)小时/, type: 'COMP' },
+      { pattern: /婚假([\d.]+)(?:天|小时)/, type: 'MARRIAGE' },
+      { pattern: /产假([\d.]+)(?:天|小时)/, type: 'MATERNITY' },
+      { pattern: /陪产假([\d.]+)(?:天|小时)/, type: 'PATERNITY' },
+      { pattern: /丧假([\d.]+)(?:天|小时)/, type: 'BEREAVEMENT' },
+    ]
+    for (const { pattern, type } of leavePatterns) {
+      const match = dayStatus.match(pattern)
+      if (match) {
+        details.leaveType = type
+        details.leaveHours = parseFloat(match[1])
+        break
+      }
+    }
+    
+    // 提取迟到分钟
+    const lateMatch = dayStatus.match(/迟到(\d+)分钟/)
+    if (lateMatch) details.lateMinutes = parseInt(lateMatch[1])
+    
+    // 提取早退分钟
+    const earlyMatch = dayStatus.match(/早退(\d+)分钟/)
+    if (earlyMatch) details.earlyMinutes = parseInt(earlyMatch[1])
+    
+    // 提取旷工分钟
+    const absentMatch = dayStatus.match(/旷工(\d+)分钟/)
+    if (absentMatch) details.absentMinutes = parseInt(absentMatch[1])
+    
+    // 提取缺卡次数
+    const missMatch = dayStatus.match(/缺卡(\d+)次/)
+    if (missMatch) details.missCount = parseInt(missMatch[1])
+    
+    return details
+  }
+  
   // 解析数据行（从表头后开始）
   for (let i = subHeaderRowIndex + 1; i < rawData.length; i++) {
     const row = rawData[i]
@@ -409,9 +553,24 @@ const parseWechatMonthlyReport = (rawData) => {
     if (!name || name === '姓名') continue
     
     // 获取汇总数据
-    const workHoursTotal = row[12] // 实际工作时长
-    const lateCount = row[14] // 迟到次数
-    const lateMinutes = row[15] // 迟到时长
+    const summary = {
+      department: String(row[colMap.department] || '').trim(),
+      position: String(row[colMap.position] || '').trim(),
+      employeeId: String(row[colMap.employeeId] || '').trim(),
+      expectedDays: parseNum(row[colMap.expectedDays]),
+      actualDays: parseNum(row[colMap.actualDays]),
+      restDays: parseNum(row[colMap.restDays]),
+      actualHours: parseNum(row[colMap.actualHours]),
+      lateCount: parseNum(row[colMap.lateCount]),
+      lateMinutes: parseNum(row[colMap.lateMinutes]),
+      earlyCount: parseNum(row[colMap.earlyCount]),
+      earlyMinutes: parseNum(row[colMap.earlyMinutes]),
+      absentMinutes: parseNum(row[colMap.absentMinutes]),
+      missCount: parseNum(row[colMap.missCount]),
+      outHours: parseNum(row[colMap.outHours]),
+      travelDays: parseNum(row[colMap.travelDays]),
+      overtimeTotal: parseNum(row[colMap.overtimeTotal]),
+    }
     
     // 解析每天的状态
     for (const dayCol of dailyCols) {
@@ -421,46 +580,108 @@ const parseWechatMonthlyReport = (rawData) => {
       // 构建日期
       const dateStr = `${selectedYear}-${String(selectedMonthNum).padStart(2, '0')}-${String(dayCol.day).padStart(2, '0')}`
       
-      // 解析状态
+      // 解析每日详细信息
+      const dayDetails = parseDayDetails(dayStatus)
+      
+      // 解析状态（改进逻辑：正确处理复合状态）
       let statusCode = 'NORMAL'
-      let remark = dayStatus.replace(/\s*;\s*/g, ' ').trim()
+      let statusText = '正常'
+      const isRest = dayStatus.includes('休息')
       
       if (dayStatus.includes('旷工')) {
         statusCode = 'ABSENT'
+        statusText = '旷工'
+      } else if (dayStatus.includes('缺卡') && !dayStatus.includes('正常')) {
+        statusCode = 'ABNORMAL'
+        statusText = '缺卡'
+      } else if (dayStatus.includes('迟到') && dayStatus.includes('早退')) {
+        statusCode = 'LATE'  // 优先标记迟到
+        statusText = '迟到+早退'
       } else if (dayStatus.includes('迟到')) {
         statusCode = 'LATE'
+        statusText = '迟到'
       } else if (dayStatus.includes('早退')) {
         statusCode = 'EARLY'
-      } else if (dayStatus.includes('缺卡')) {
-        statusCode = 'ABNORMAL'
-      } else if (dayStatus.includes('休息')) {
-        statusCode = 'REST'
-      } else if (dayStatus.includes('请假')) {
+        statusText = '早退'
+      } else if (dayStatus.includes('请假') || dayDetails.leaveHours > 0) {
         statusCode = 'LEAVE'
+        statusText = dayDetails.leaveType ? getLeaveTypeName(dayDetails.leaveType) : '请假'
+      } else if (dayStatus.includes('出差') || dayDetails.travelHours > 0) {
+        statusCode = 'TRAVEL'
+        statusText = '出差'
+      } else if (isRest && dayDetails.overtime > 0) {
+        // 休息日加班算加班
+        statusCode = 'OVERTIME'
+        statusText = '休息日加班'
+      } else if (isRest) {
+        statusCode = 'REST'
+        statusText = '休息'
+      } else if (dayDetails.overtime > 0) {
+        statusCode = 'OVERTIME'
+        statusText = '加班'
       } else if (dayStatus.includes('正常')) {
         statusCode = 'NORMAL'
+        statusText = '正常'
       }
       
-      // 提取迟到分钟数
-      const lateMatch = dayStatus.match(/迟到(\d+)分钟/)
-      const lateMins = lateMatch ? lateMatch[1] : ''
+      // 生成详细备注
+      const remarkParts = []
+      if (dayDetails.lateMinutes > 0) remarkParts.push(`迟到${dayDetails.lateMinutes}分钟`)
+      if (dayDetails.earlyMinutes > 0) remarkParts.push(`早退${dayDetails.earlyMinutes}分钟`)
+      if (dayDetails.absentMinutes > 0) remarkParts.push(`旷工${dayDetails.absentMinutes}分钟`)
+      if (dayDetails.missCount > 0) remarkParts.push(`缺卡${dayDetails.missCount}次`)
+      if (dayDetails.overtime > 0) remarkParts.push(`加班${dayDetails.overtime}小时`)
+      if (dayDetails.outHours > 0) remarkParts.push(`外出${dayDetails.outHours}小时`)
+      if (dayDetails.travelHours > 0) remarkParts.push(`出差${dayDetails.travelHours}小时`)
+      if (dayDetails.leaveHours > 0) {
+        const leaveTypeName = getLeaveTypeName(dayDetails.leaveType)
+        remarkParts.push(`${leaveTypeName}${dayDetails.leaveHours}小时`)
+      }
+      
+      // 决定是否导入（纯休息日且无加班跳过）
+      const shouldImport = !(statusCode === 'REST' && dayDetails.overtime === 0)
       
       result.push({
         employee_name: name,
-        employee_id: account,
+        employee_id: account || summary.employeeId,
         date: dateStr,
         check_in: '',  // 月报没有具体打卡时间
         check_out: '',
-        work_hours: '',
+        work_hours: dayDetails.overtime > 0 ? dayDetails.overtime : '',
+        overtime_hours: dayDetails.overtime,
+        out_hours: dayDetails.outHours,
+        travel_hours: dayDetails.travelHours,
+        leave_type: dayDetails.leaveType,
+        leave_hours: dayDetails.leaveHours,
+        late_minutes: dayDetails.lateMinutes,
+        early_minutes: dayDetails.earlyMinutes,
+        absent_minutes: dayDetails.absentMinutes,
+        miss_count: dayDetails.missCount,
         status: statusCode,
-        status_text: getStatusText(statusCode),
-        remark: remark + (lateMins ? ` (迟到${lateMins}分钟)` : ''),
-        import_status: statusCode === 'REST' ? 'skip' : 'valid' // 休息日跳过
+        status_text: statusText,
+        remark: remarkParts.length > 0 ? remarkParts.join('；') : (isRest ? '休息日' : ''),
+        department: summary.department,
+        import_status: shouldImport ? 'valid' : 'skip'
       })
     }
   }
   
   return result
+}
+
+// 获取请假类型名称
+const getLeaveTypeName = (type) => {
+  const names = {
+    'ANNUAL': '年假',
+    'PERSONAL': '事假',
+    'SICK': '病假',
+    'COMP': '调休假',
+    'MARRIAGE': '婚假',
+    'MATERNITY': '产假',
+    'PATERNITY': '陪产假',
+    'BEREAVEMENT': '丧假',
+  }
+  return names[type] || '请假'
 }
 
 // 解析每日明细格式（原有逻辑）
@@ -575,7 +796,10 @@ const getStatusText = (status) => {
     'ABNORMAL': '异常',
     'ABSENT': '缺勤',
     'REST': '休息',
-    'LEAVE': '请假'
+    'LEAVE': '请假',
+    'OVERTIME': '加班',
+    'TRAVEL': '出差',
+    'REMOTE': '远程'
   }
   return texts[status] || status
 }
@@ -588,7 +812,10 @@ const getStatusType = (status) => {
     'ABNORMAL': 'danger',
     'ABSENT': 'danger',
     'REST': 'info',
-    'LEAVE': 'info'
+    'LEAVE': 'info',
+    'OVERTIME': 'primary',
+    'TRAVEL': '',
+    'REMOTE': ''
   }
   return types[status] || 'info'
 }
@@ -615,16 +842,28 @@ const handleImport = async () => {
       month: importForm.month,
       source: importForm.source,
       overwrite: importForm.overwrite,
-      records: previewData.value.map(r => ({
-        employee_name: r.employee_name,
-        employee_id: r.employee_id,
-        date: r.date,
-        check_in_time: r.check_in,
-        check_out_time: r.check_out,
-        work_hours: r.work_hours,
-        status: r.status,
-        remarks: r.remark
-      }))
+      records: previewData.value
+        .filter(r => r.import_status !== 'skip')  // 只导入非跳过的记录
+        .map(r => ({
+          employee_name: r.employee_name,
+          employee_id: r.employee_id,
+          date: r.date,
+          check_in_time: r.check_in,
+          check_out_time: r.check_out,
+          work_hours: r.work_hours,
+          overtime_hours: r.overtime_hours || 0,
+          out_hours: r.out_hours || 0,
+          travel_hours: r.travel_hours || 0,
+          leave_type: r.leave_type || '',
+          leave_hours: r.leave_hours || 0,
+          late_minutes: r.late_minutes || 0,
+          early_minutes: r.early_minutes || 0,
+          absent_minutes: r.absent_minutes || 0,
+          miss_count: r.miss_count || 0,
+          status: r.status,
+          remarks: r.remark,
+          department: r.department || ''
+        }))
     })
 
     importResult.success = res.error_count === 0

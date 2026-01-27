@@ -478,9 +478,9 @@ class WorkflowService:
                 from apps.purchase.models import PurchaseOrder
                 po = PurchaseOrder.objects.get(id=instance.business_id)
                 if result == 'APPROVED':
-                    po.status = 'CONFIRMED'
+                    po.status = 'APPROVED'
                     po.save()
-                    logger.info(f"Purchase order {po.order_no} approved")
+                    logger.info(f"Purchase order {po.order_no} approved, waiting for confirmation")
                 elif result == 'REJECTED':
                     po.status = 'REJECTED'
                     po.save()

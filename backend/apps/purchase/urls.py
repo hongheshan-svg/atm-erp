@@ -31,6 +31,20 @@ from .supplier_qualification import (
 from .contract_execution import (
     ContractExecutionViewSet, DeliveryRecordViewSet, PaymentRecordViewSet, ContractIssueViewSet
 )
+from .outsource_tracking import (
+    OutsourceCapabilityViewSet, OutsourceProgressViewSet,
+    OutsourceInspectionViewSet, OutsourceClaimViewSet
+)
+from .supply_chain_collaboration import (
+    SupplierPortalUserViewSet, RFQCollaborationViewSet,
+    DeliveryCollaborationViewSet, QualityCollaborationViewSet,
+    ReconciliationCollaborationViewSet, SupplierNotificationViewSet
+)
+from .supplier_portal import (
+    SupplierAccountViewSet, SupplierOrderViewViewSet, SupplierQualityRecordViewSet,
+    SupplierPortalLoginView, SupplierPortalOrdersView, SupplierPortalOrderDetailView,
+    SupplierPortalQualityView, SupplierPortalMessagesView, SupplierDashboardView
+)
 
 router = DefaultRouter()
 router.register(r'requests', PurchaseRequestViewSet, basename='request')
@@ -82,7 +96,34 @@ router.register(r'delivery-records', DeliveryRecordViewSet, basename='delivery-r
 router.register(r'payment-records', PaymentRecordViewSet, basename='payment-record')
 router.register(r'contract-issues', ContractIssueViewSet, basename='contract-issue')
 
+# 外协加工跟踪增强
+router.register(r'outsource-capabilities', OutsourceCapabilityViewSet, basename='outsource-capability')
+router.register(r'outsource-progress', OutsourceProgressViewSet, basename='outsource-progress')
+router.register(r'outsource-inspections', OutsourceInspectionViewSet, basename='outsource-inspection')
+router.register(r'outsource-claims', OutsourceClaimViewSet, basename='outsource-claim')
+
+# 供应链协同平台
+router.register(r'portal-users', SupplierPortalUserViewSet, basename='portal-user')
+router.register(r'rfq-collaborations', RFQCollaborationViewSet, basename='rfq-collaboration')
+router.register(r'delivery-collaborations', DeliveryCollaborationViewSet, basename='delivery-collaboration')
+router.register(r'quality-collaborations', QualityCollaborationViewSet, basename='quality-collaboration')
+router.register(r'reconciliations', ReconciliationCollaborationViewSet, basename='reconciliation')
+router.register(r'supplier-notifications', SupplierNotificationViewSet, basename='supplier-notification')
+
+# 供应商协同门户增强
+router.register(r'supplier-accounts', SupplierAccountViewSet, basename='supplier-account')
+router.register(r'supplier-order-views', SupplierOrderViewViewSet, basename='supplier-order-view')
+router.register(r'supplier-quality-records', SupplierQualityRecordViewSet, basename='supplier-quality-record')
+
 urlpatterns = [
     path('', include(router.urls)),
+    
+    # 供应商门户API
+    path('supplier-portal/login/', SupplierPortalLoginView.as_view(), name='supplier-portal-login'),
+    path('supplier-portal/<int:supplier_id>/orders/', SupplierPortalOrdersView.as_view(), name='supplier-portal-orders'),
+    path('supplier-portal/<int:supplier_id>/orders/<int:order_view_id>/', SupplierPortalOrderDetailView.as_view(), name='supplier-portal-order-detail'),
+    path('supplier-portal/<int:supplier_id>/quality/', SupplierPortalQualityView.as_view(), name='supplier-portal-quality'),
+    path('supplier-portal/<int:supplier_id>/messages/', SupplierPortalMessagesView.as_view(), name='supplier-portal-messages'),
+    path('supplier-portal/dashboard/', SupplierDashboardView.as_view(), name='supplier-portal-dashboard'),
 ]
 

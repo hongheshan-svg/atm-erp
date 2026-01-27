@@ -213,6 +213,41 @@ class QuotationComparisonViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermiss
             'recommended_quotation__rfq_supplier__supplier', 'approved_by'
         ).prefetch_related('scores')
     
+    @action(detail=False, methods=['get'], url_path='available-rfqs')
+    def available_rfqs(self, request):
+        """获取可用于比价的询价单列表（至少有2个有效报价）"""
+        from django.db.models import Count, Q
+        
+        # 获取每个RFQ的有效报价数量（SUBMITTED或ACCEPTED状态）
+        rfqs = RFQ.objects.filter(
+            is_deleted=False,
+            status__in=['QUOTED', 'SENT']  # 已报价或已发送状态
+        ).annotate(
+            valid_quotation_count=Count(
+                'supplier_rfqs__quotations',
+                filter=Q(
+                    supplier_rfqs__quotations__status__in=['SUBMITTED', 'ACCEPTED'],
+                    supplier_rfqs__quotations__is_deleted=False
+                )
+            )
+        ).filter(
+            valid_quotation_count__gte=2  # 至少2个有效报价
+        ).select_related('project').order_by('-request_date')
+        
+        result = []
+        for rfq in rfqs:
+            result.append({
+                'id': rfq.id,
+                'rfq_no': rfq.rfq_no,
+                'project_name': rfq.project.name if rfq.project else None,
+                'status': rfq.status,
+                'status_display': rfq.get_status_display(),
+                'quotation_count': rfq.valid_quotation_count,
+                'request_date': rfq.request_date.isoformat() if rfq.request_date else None,
+            })
+        
+        return Response(result)
+    
     @action(detail=False, methods=['post'], url_path='create-comparison')
     def create_comparison(self, request):
         """创建比价分析"""
@@ -323,6 +358,33 @@ class QuotationComparisonViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermiss
             return Response(QuotationScoreSerializer(score).data)
         except QuotationScore.DoesNotExist:
             return Response({'error': '评分记录不存在'}, status=status.HTTP_404_NOT_FOUND)
+    
+    @action(detail=False, methods=['post'], url_path='batch-delete')
+    def batch_delete(self, request):
+        """批量删除比价分析（仅管理员）"""
+        # 检查管理员权限
+        if not request.user.is_superuser and not request.user.is_staff:
+            return Response({'error': '无权限执行此操作'}, status=status.HTTP_403_FORBIDDEN)
+        
+        ids = request.data.get('ids', [])
+        if not ids:
+            return Response({'error': '请选择要删除的记录'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        from django.utils import timezone
+        deleted_count = 0
+        
+        for comparison_id in ids:
+            try:
+                comparison = QuotationComparison.objects.get(id=comparison_id, is_deleted=False)
+                # 使用软删除
+                comparison.is_deleted = True
+                comparison.deleted_at = timezone.now()
+                comparison.save(update_fields=['is_deleted', 'deleted_at'])
+                deleted_count += 1
+            except QuotationComparison.DoesNotExist:
+                continue
+        
+        return Response({'message': f'成功删除 {deleted_count} 条记录', 'deleted_count': deleted_count})
 
 
 class QuotationScoreViewSet(viewsets.ModelViewSet):

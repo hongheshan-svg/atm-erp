@@ -120,13 +120,14 @@ class CustomerSerializer(serializers.ModelSerializer):
 class SupplierSerializer(serializers.ModelSerializer):
     """Supplier serializer."""
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    settlement_method_display = serializers.CharField(source='get_settlement_method_display', read_only=True)
     code = serializers.CharField(required=False, allow_blank=True)
     
     class Meta:
         model = Supplier
         fields = [
             'id', 'code', 'name', 'short_name', 'contact_person', 'phone',
-            'email', 'address', 'payment_terms',
+            'email', 'address', 'payment_terms', 'settlement_method', 'settlement_method_display',
             # 开票信息
             'invoice_title', 'tax_number', 'bank_name', 'bank_account',
             'registered_address', 'registered_phone',

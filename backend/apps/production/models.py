@@ -22,6 +22,11 @@ from .sn_traceability import (
     SerialNumber, SNTraceRecord, ComponentBinding, SNRule
 )
 
+# Import models from capacity_planning
+from .capacity_planning import (
+    ResourceType, Resource, ResourceAllocation, CapacityResourceConflict, CapacityPlan
+)
+
 
 class ProductionProcess(BaseModel):
     """

@@ -66,6 +66,7 @@ from .cad_integration import (
     CADSoftwareViewSet, CADSessionViewSet, CADFileViewSet,
     CADBOMImportViewSet, CADPropertyMappingViewSet
 )
+from .creo_integration import CreoBOMImportViewSet
 from .bom_integration import BOMIntegrationViewSet
 from .technical_agreement import (
     TechnicalAgreementTemplateViewSet, TechnicalAgreementViewSet, TechnicalAgreementChangeViewSet
@@ -77,6 +78,32 @@ from .equipment_archive import (
 from .acceptance import (
     AcceptanceTemplateViewSet, AcceptanceViewSet,
     AcceptanceCheckItemViewSet, AcceptanceIssueViewSet
+)
+from .field_service import (
+    SkillCategoryViewSet, SkillViewSet, TechnicianProfileViewSet,
+    TechnicianSkillViewSet, ServiceOrderViewSet, ServiceDispatchViewSet,
+    ServiceCheckInViewSet, ServiceLogViewSet, ServiceExpenseViewSet,
+    TechnicianScheduleViewSet
+)
+from .cost_tracking import (
+    ProjectBudgetViewSet, ProjectCostRecordViewSet, CostAlertViewSet,
+    ProjectCostDashboardView, CostOverviewDashboardView
+)
+from .remote_monitoring import (
+    EquipmentDataPointViewSet, EquipmentConnectionViewSet,
+    EquipmentDataRecordViewSet, EquipmentAlarmViewSet,
+    DiagnosticSessionViewSet, PredictiveMaintenanceResultViewSet,
+    EquipmentMonitoringDashboardView
+)
+from .advanced_cost_tracking import (
+    StandardCostCategoryViewSet, LaborRateStandardViewSet,
+    ProjectCostDetailViewSet, ProjectCostSummaryViewSet,
+    CostVarianceAnalysisViewSet, ProjectCostAnalysisDashboardView,
+    CostComparisonReportView, CostElementReportView
+)
+from .document_collaboration import (
+    TechDocumentCategoryViewSet,
+    TechnicalDocumentViewSet, DocumentAnnotationViewSet, DocumentReviewViewSet
 )
 
 router = DefaultRouter()
@@ -193,6 +220,9 @@ router.register(r'cad-files', CADFileViewSet, basename='cad-file')
 router.register(r'cad-bom-imports', CADBOMImportViewSet, basename='cad-bom-import')
 router.register(r'cad-property-mappings', CADPropertyMappingViewSet, basename='cad-property-mapping')
 
+# CREO BOM导入
+router.register(r'creo-bom-imports', CreoBOMImportViewSet, basename='creo-bom-import')
+
 # BOM集成(采购/生产)
 router.register(r'bom-integration', BOMIntegrationViewSet, basename='bom-integration')
 
@@ -212,6 +242,44 @@ router.register(r'acceptance-templates', AcceptanceTemplateViewSet, basename='ac
 router.register(r'acceptances', AcceptanceViewSet, basename='acceptance')
 router.register(r'acceptance-items', AcceptanceCheckItemViewSet, basename='acceptance-item')
 router.register(r'acceptance-issues', AcceptanceIssueViewSet, basename='acceptance-issue')
+
+# 现场服务派工管理
+router.register(r'skill-categories', SkillCategoryViewSet, basename='skill-category')
+router.register(r'skills', SkillViewSet, basename='skill')
+router.register(r'technician-profiles', TechnicianProfileViewSet, basename='technician-profile')
+router.register(r'technician-skills', TechnicianSkillViewSet, basename='technician-skill')
+router.register(r'service-orders', ServiceOrderViewSet, basename='service-order')
+router.register(r'service-dispatches', ServiceDispatchViewSet, basename='service-dispatch')
+router.register(r'service-checkins', ServiceCheckInViewSet, basename='service-checkin')
+router.register(r'service-logs', ServiceLogViewSet, basename='service-log')
+router.register(r'service-expenses', ServiceExpenseViewSet, basename='service-expense')
+router.register(r'technician-schedules', TechnicianScheduleViewSet, basename='technician-schedule')
+
+# 项目成本跟踪
+router.register(r'project-budgets', ProjectBudgetViewSet, basename='project-budget')
+router.register(r'project-cost-records', ProjectCostRecordViewSet, basename='project-cost-record')
+router.register(r'cost-alerts', CostAlertViewSet, basename='cost-alert')
+
+# 设备远程运维
+router.register(r'equipment-data-points', EquipmentDataPointViewSet, basename='equipment-data-point')
+router.register(r'equipment-connections', EquipmentConnectionViewSet, basename='equipment-connection')
+router.register(r'equipment-data-records', EquipmentDataRecordViewSet, basename='equipment-data-record')
+router.register(r'equipment-alarms', EquipmentAlarmViewSet, basename='equipment-alarm')
+router.register(r'diagnostic-sessions', DiagnosticSessionViewSet, basename='diagnostic-session')
+router.register(r'pm-results', PredictiveMaintenanceResultViewSet, basename='pm-result')
+
+# 高级成本核算（非标自动化增强）
+router.register(r'cost-categories', StandardCostCategoryViewSet, basename='cost-category')
+router.register(r'labor-rates', LaborRateStandardViewSet, basename='labor-rate')
+router.register(r'cost-details', ProjectCostDetailViewSet, basename='cost-detail')
+router.register(r'cost-summaries', ProjectCostSummaryViewSet, basename='cost-summary')
+router.register(r'variance-analyses', CostVarianceAnalysisViewSet, basename='variance-analysis')
+
+# 技术文档协同
+router.register(r'tech-doc-categories', TechDocumentCategoryViewSet, basename='tech-doc-category')
+router.register(r'tech-documents', TechnicalDocumentViewSet, basename='tech-document')
+router.register(r'doc-annotations', DocumentAnnotationViewSet, basename='doc-annotation')
+router.register(r'doc-reviews', DocumentReviewViewSet, basename='doc-review')
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -233,4 +301,16 @@ urlpatterns = [
     path('tracking/delivery/', DeliveryTrackingView.as_view(), name='delivery-tracking'),
     path('tracking/procurement/', ProcurementTrackingView.as_view(), name='procurement-tracking'),
     path('tracking/production/', ProductionProgressView.as_view(), name='production-progress'),
+    
+    # 项目成本看板
+    path('cost/dashboard/<int:project_id>/', ProjectCostDashboardView.as_view(), name='project-cost-dashboard'),
+    path('cost/overview/', CostOverviewDashboardView.as_view(), name='cost-overview-dashboard'),
+    
+    # 设备监控看板
+    path('monitoring/dashboard/', EquipmentMonitoringDashboardView.as_view(), name='equipment-monitoring-dashboard'),
+    
+    # 高级成本分析报表
+    path('cost/analysis/<int:project_id>/', ProjectCostAnalysisDashboardView.as_view(), name='project-cost-analysis'),
+    path('cost/comparison/', CostComparisonReportView.as_view(), name='cost-comparison-report'),
+    path('cost/elements/', CostElementReportView.as_view(), name='cost-element-report'),
 ]

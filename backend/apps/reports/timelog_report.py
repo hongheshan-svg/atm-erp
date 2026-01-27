@@ -2,6 +2,7 @@
 工时统计报表
 Timelog Report Service
 """
+from decimal import Decimal
 from django.db.models import Sum, Count, Avg, F, Q
 from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from django.utils import timezone
@@ -237,7 +238,7 @@ class TimelogOvertimeView(APIView):
     def get(self, request):
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
-        daily_standard = float(request.query_params.get('daily_standard', 8))
+        daily_standard = Decimal(str(request.query_params.get('daily_standard', 8)))
         
         today = timezone.now().date()
         if not start_date:
@@ -261,15 +262,15 @@ class TimelogOvertimeView(APIView):
         for record in daily_hours:
             user_id = record['user__id']
             username = record['user__username']
-            daily_total = record['daily_total'] or 0
-            overtime = max(0, daily_total - daily_standard)
+            daily_total = record['daily_total'] or Decimal('0')
+            overtime = max(Decimal('0'), daily_total - daily_standard)
             
             if user_id not in overtime_by_user:
                 overtime_by_user[user_id] = {
                     'user_id': user_id,
                     'username': username,
-                    'total_hours': 0,
-                    'overtime_hours': 0,
+                    'total_hours': Decimal('0'),
+                    'overtime_hours': Decimal('0'),
                     'overtime_days': 0,
                     'work_days': 0
                 }
@@ -280,8 +281,20 @@ class TimelogOvertimeView(APIView):
             if overtime > 0:
                 overtime_by_user[user_id]['overtime_days'] += 1
         
+        # 转换为可序列化的格式
+        overtime_list = []
+        for user_data in overtime_by_user.values():
+            overtime_list.append({
+                'user_id': user_data['user_id'],
+                'username': user_data['username'],
+                'total_hours': float(user_data['total_hours']),
+                'overtime_hours': float(user_data['overtime_hours']),
+                'overtime_days': user_data['overtime_days'],
+                'work_days': user_data['work_days']
+            })
+        
         overtime_list = sorted(
-            overtime_by_user.values(), 
+            overtime_list, 
             key=lambda x: x['overtime_hours'], 
             reverse=True
         )
@@ -289,5 +302,5 @@ class TimelogOvertimeView(APIView):
         return Response({
             'overtime_by_user': overtime_list,
             'period': {'start': start_date, 'end': end_date},
-            'daily_standard': daily_standard
+            'daily_standard': float(daily_standard)
         })

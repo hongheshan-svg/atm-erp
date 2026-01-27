@@ -21,6 +21,9 @@
         <el-form-item label="状态">
           <el-select v-model="searchForm.status" placeholder="选择状态" clearable style="width: 120px;">
             <el-option label="草稿" value="DRAFT" />
+            <el-option label="待审批" value="PENDING" />
+            <el-option label="已审批" value="APPROVED" />
+            <el-option label="已拒绝" value="REJECTED" />
             <el-option label="已确认" value="CONFIRMED" />
             <el-option label="部分收货" value="PARTIAL" />
             <el-option label="已完成" value="COMPLETED" />
@@ -67,7 +70,8 @@
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
-            <el-button size="small" type="warning" @click="handleConfirm(row)" v-if="row.status === 'DRAFT'">确认</el-button>
+            <el-button size="small" type="warning" @click="handleSubmit(row)" v-if="row.status === 'DRAFT' || row.status === 'REJECTED'">提交审批</el-button>
+            <el-button size="small" type="success" @click="handleConfirm(row)" v-if="row.status === 'APPROVED'">确认</el-button>
             <el-button size="small" type="info" @click="handleWithdraw(row)" v-if="row.status === 'CONFIRMED'">撤回</el-button>
             <el-button size="small" type="primary" @click="handleContract(row)" v-if="row.status === 'CONFIRMED'">合同</el-button>
             <el-button size="small" type="warning" @click="handleViewAttachments(row)">附件</el-button>
@@ -314,6 +318,9 @@ const rules = {
 const getStatusType = (status) => {
   const types = { 
     DRAFT: 'info', 
+    PENDING: 'warning',
+    APPROVED: 'primary',
+    REJECTED: 'danger',
     CONFIRMED: 'success', 
     PARTIAL: 'warning',
     COMPLETED: '', 
@@ -325,6 +332,9 @@ const getStatusType = (status) => {
 const getStatusLabel = (status) => {
   const labels = { 
     DRAFT: '草稿', 
+    PENDING: '待审批',
+    APPROVED: '已审批',
+    REJECTED: '已拒绝',
     CONFIRMED: '已确认', 
     PARTIAL: '部分收货',
     COMPLETED: '已完成', 
@@ -527,6 +537,23 @@ const handleSave = async () => {
   }
 }
 
+const handleSubmit = async (row) => {
+  try {
+    await ElMessageBox.confirm('确定要提交该采购订单审批吗？', '提交审批', { type: 'warning' })
+    const res = await request.post(`/purchase/orders/${row.id}/submit/`)
+    if (res.workflow_started) {
+      ElMessage.success(res.message || '已提交审批')
+    } else {
+      ElMessage.warning(res.message || '未配置审批流程，订单已直接确认')
+    }
+    loadOrders()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.error || '提交审批失败')
+    }
+  }
+}
+
 const handleConfirm = async (row) => {
   try {
     await ElMessageBox.confirm('确定要确认该采购订单吗？确认后将无法修改。', '确认订单', { type: 'warning' })
@@ -604,132 +631,179 @@ const handlePrintContract = async (contract) => {
 }
 
 const generateContractHtml = (data) => {
-  const { contract, company, supplier, lines } = data
+  const { contract, company, supplier, lines, po } = data
   const totalAmount = lines.reduce((sum, l) => sum + l.line_amount, 0)
-  const taxAmount = totalAmount * (contract.tax_rate / 100)
-  const totalWithTax = totalAmount + taxAmount
+  const taxRate = contract.tax_rate || 13
   
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <title>采购合同 - ${contract.contract_no}</title>
-      <style>
-        body { font-family: 'SimSun', serif; padding: 40px; font-size: 14px; }
-        .header { text-align: center; margin-bottom: 30px; }
-        .header h1 { font-size: 24px; margin-bottom: 10px; }
-        .header p { color: #666; }
-        .parties { margin-bottom: 20px; }
-        .parties table { width: 100%; border-collapse: collapse; }
-        .parties td { padding: 5px 10px; vertical-align: top; }
-        .items-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-        .items-table th, .items-table td { border: 1px solid #333; padding: 8px; text-align: center; }
-        .items-table th { background: #f0f0f0; }
-        .terms { margin: 20px 0; }
-        .terms h3 { font-size: 14px; margin: 15px 0 5px; }
-        .signature { margin-top: 50px; }
-        .signature table { width: 100%; }
-        .signature td { width: 50%; padding: 20px; vertical-align: top; }
-        .amount-row { text-align: right; font-weight: bold; }
-        @media print {
-          body { padding: 20px; }
-          button { display: none; }
-        }
-      </style>
-    </head>
-    <body>
-      <button onclick="window.print()" style="position:fixed;top:10px;right:10px;padding:10px 20px;cursor:pointer;">打印合同</button>
-      
-      <div class="header">
-        <h1>采 购 合 同</h1>
-        <p>合同编号：${contract.contract_no}</p>
-      </div>
-      
-      <div class="parties">
-        <table>
-          <tr>
-            <td width="50%">
-              <strong>甲方（买方）：</strong>${company.name}<br>
-              地址：${company.address}<br>
-              电话：${company.phone}
-            </td>
-            <td width="50%">
-              <strong>乙方（卖方）：</strong>${supplier.name}<br>
-              地址：${supplier.address}<br>
-              联系人：${supplier.contact}　电话：${supplier.phone}
-            </td>
-          </tr>
-        </table>
-      </div>
-      
-      <p>经双方友好协商，就甲方向乙方采购以下货物达成如下协议：</p>
-      
-      <h3>一、货物清单</h3>
-      <table class="items-table">
-        <tr>
-          <th>序号</th>
-          <th>物料编码</th>
-          <th>物料名称</th>
-          <th>规格型号</th>
-          <th>单位</th>
-          <th>数量</th>
-          <th>单价(元)</th>
-          <th>金额(元)</th>
-        </tr>
-        ${lines.map((line, idx) => `
-          <tr>
-            <td>${idx + 1}</td>
-            <td>${line.item_sku}</td>
-            <td>${line.item_name}</td>
-            <td>${line.specification || '-'}</td>
-            <td>${line.unit}</td>
-            <td>${line.qty}</td>
-            <td>${line.unit_price.toFixed(2)}</td>
-            <td>${line.line_amount.toFixed(2)}</td>
-          </tr>
-        `).join('')}
-      </table>
-      
-      <p class="amount-row">
-        不含税金额：¥${totalAmount.toFixed(2)} | 
-        税额(${contract.tax_rate}%)：¥${taxAmount.toFixed(2)} | 
-        <strong>含税总额：¥${totalWithTax.toFixed(2)}</strong>
-      </p>
-      
-      <div class="terms">
-        <h3>二、付款条款</h3>
-        <p>${contract.payment_terms || '按约定付款'}</p>
-        
-        <h3>三、交货条款</h3>
-        <p>${contract.delivery_terms || '按约定交货'}</p>
-        
-        <h3>四、质量条款</h3>
-        <p>${contract.quality_terms || '按国家标准或行业标准验收'}</p>
-        
-        <h3>五、质保条款</h3>
-        <p>${contract.warranty_terms || '按供应商标准质保期'}</p>
-      </div>
-      
-      <div class="signature">
-        <table>
-          <tr>
-            <td>
-              <strong>甲方（盖章）：</strong><br><br><br>
-              授权代表：${contract.buyer_signer || '_____________'}<br><br>
-              日期：${contract.signed_date || '_____年____月____日'}
-            </td>
-            <td>
-              <strong>乙方（盖章）：</strong><br><br><br>
-              授权代表：${contract.seller_signer || '_____________'}<br><br>
-              日期：${contract.signed_date || '_____年____月____日'}
-            </td>
-          </tr>
-        </table>
-      </div>
-    </body>
-    </html>
-  `
+  // 金额大写转换
+  const toChineseMoney = (n) => {
+    const fraction = ['角', '分']
+    const digit = ['零', '壹', '贰', '叁', '肆', '伍', '陆', '柒', '捌', '玖']
+    const unit = [['元', '万', '亿'], ['', '拾', '佰', '仟']]
+    let s = ''
+    n = Math.abs(n)
+    for (let i = 0; i < fraction.length; i++) {
+      s += (digit[Math.floor(n * 10 * Math.pow(10, i)) % 10] + fraction[i]).replace(/零./, '')
+    }
+    s = s || '整'
+    n = Math.floor(n)
+    for (let i = 0; i < unit[0].length && n > 0; i++) {
+      let p = ''
+      for (let j = 0; j < unit[1].length && n > 0; j++) {
+        p = digit[n % 10] + unit[1][j] + p
+        n = Math.floor(n / 10)
+      }
+      s = p.replace(/(零.)*零$/, '').replace(/^$/, '零') + unit[0][i] + s
+    }
+    return s.replace(/(零.)*零元/, '元').replace(/(零.)+/g, '零').replace(/^整$/, '零元整')
+  }
+  
+  const formatDate = (dateStr) => {
+    if (!dateStr) return ''
+    const d = new Date(dateStr)
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+  }
+  
+  const today = new Date()
+  const contractDate = formatDate(contract.created_at) || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  
+  // 动态计算空行数，根据实际数据行填充到合适行数
+  const targetRows = 10
+  const emptyRows = Math.max(0, targetRows - lines.length)
+  
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>采购合同 - ${contract.contract_no}</title>
+<style>
+@page { size: A4; margin: 8mm 12mm; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: '宋体', 'SimSun', serif; padding: 8px 15px; font-size: 10.5px; line-height: 1.5; color: #000; }
+.print-btn { position: fixed; top: 10px; right: 10px; padding: 8px 16px; background: #409eff; color: white; border: none; border-radius: 4px; cursor: pointer; z-index: 100; font-size: 14px; }
+.header { text-align: center; margin-bottom: 12px; }
+.header .company { font-size: 18px; font-weight: bold; letter-spacing: 4px; }
+.header .title { font-size: 14px; font-weight: bold; margin-top: 6px; }
+.info-row { display: flex; justify-content: space-between; font-size: 10.5px; margin: 5px 0; }
+.parties { display: flex; gap: 30px; margin: 10px 0; font-size: 10.5px; }
+.party { flex: 1; line-height: 1.7; }
+.party-label { font-weight: bold; }
+.section-title { font-weight: bold; font-size: 10.5px; margin: 10px 0 5px 0; }
+table.items { width: 100%; border-collapse: collapse; font-size: 9.5px; }
+table.items th, table.items td { border: 1px solid #000; padding: 3px 4px; text-align: center; height: 22px; }
+table.items th { background: #f0f0f0; font-weight: bold; }
+table.items .left { text-align: left; }
+table.items .right { text-align: right; }
+.summary-row { font-weight: bold; }
+.terms { font-size: 9px; line-height: 1.5; margin: 8px 0; text-align: justify; }
+.terms p { margin: 2px 0; text-indent: 0; }
+.signature { display: flex; gap: 50px; margin-top: 15px; font-size: 10.5px; }
+.sig-box { flex: 1; line-height: 2.5; }
+.sig-box .label { font-weight: bold; }
+.note-line { font-size: 10.5px; margin: 8px 0; }
+@media print { .print-btn { display: none; } body { padding: 0; } }
+</style>
+</head>
+<body>
+<button class="print-btn" onclick="window.print()">打印</button>
+
+<div class="header">
+  <div class="company">深圳市奥特迈智能装备有限公司</div>
+  <div class="title">采购合同（Purchase order）</div>
+</div>
+
+<div class="info-row">
+  <span>项目号/负责人：${po?.project_name || ''}</span>
+  <span>合同编号：${contract.contract_no}</span>
+  <span>合同日期：${contractDate}</span>
+</div>
+
+<div class="parties">
+  <div class="party">
+    <div class="party-label">采购方（甲方）：深圳市奥特迈智能装备有限公司</div>
+    <div>地址：广东省深圳市光明区玉塘街道玉律社区寮光路55号德永佳工业园1栋1楼（奥特迈）</div>
+    <div>联系人：吴远明 &nbsp;&nbsp;&nbsp;&nbsp; 联系方式：19129305737</div>
+  </div>
+  <div class="party">
+    <div class="party-label">供货方（乙方）：${supplier.name || ''}</div>
+    <div>地址：${supplier.address || ''}</div>
+    <div>联系人：${supplier.contact || ''} &nbsp;&nbsp;&nbsp;&nbsp; 联系方式：${supplier.phone || ''}</div>
+  </div>
+</div>
+
+<div class="section-title">一、货物清单：产品名称、规格、数量、单价、金额（单位：人民币元）</div>
+<table class="items">
+  <tr>
+    <th style="width:30px;">序号</th>
+    <th>产品名称</th>
+    <th style="width:100px;">规格型号</th>
+    <th style="width:38px;">版本</th>
+    <th style="width:35px;">单位</th>
+    <th style="width:40px;">数量</th>
+    <th style="width:60px;">单价</th>
+    <th style="width:70px;">金额</th>
+    <th style="width:70px;">交货日期</th>
+    <th style="width:60px;">项目号</th>
+    <th style="width:60px;">备注</th>
+  </tr>
+  ${lines.map((line, idx) => `<tr>
+    <td>${idx + 1}</td>
+    <td class="left">${line.item_name || ''}</td>
+    <td class="left">${line.specification || ''}</td>
+    <td></td>
+    <td>${line.unit || ''}</td>
+    <td>${line.qty || ''}</td>
+    <td class="right">${line.unit_price ? line.unit_price.toFixed(2) : ''}</td>
+    <td class="right">${line.line_amount ? line.line_amount.toFixed(2) : ''}</td>
+    <td>${formatDate(po?.delivery_date)}</td>
+    <td>${po?.project_name || ''}</td>
+    <td>按图纸制作</td>
+  </tr>`).join('')}
+  ${emptyRows > 0 ? Array(emptyRows).fill(0).map((_, i) => `<tr>
+    <td>${lines.length + i + 1}</td>
+    <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+  </tr>`).join('') : ''}
+  <tr class="summary-row">
+    <td colspan="6" style="text-align:left;padding-left:10px;">以下空白</td>
+    <td colspan="5"></td>
+  </tr>
+  <tr class="summary-row">
+    <td colspan="6" style="text-align:left;padding-left:10px;">合计（小写）：</td>
+    <td class="right" colspan="2">¥${totalAmount.toFixed(2)}</td>
+    <td colspan="3"></td>
+  </tr>
+  <tr class="summary-row">
+    <td colspan="6" style="text-align:left;padding-left:10px;">金额（大写）：</td>
+    <td colspan="5" style="text-align:left;padding-left:5px;">人民币${toChineseMoney(totalAmount)}</td>
+  </tr>
+</table>
+
+<div class="note-line">产品按甲方提供图纸，负责包工、包料、表面处理等全部加工。价格含税${taxRate}%。</div>
+
+<div class="terms">
+<p><b>二、合同条款：</b></p>
+<p>1. 乙方收到本合同后，务必于24小时内签字盖章回传确认，急件1小时内回传，逾期甲方有权取消订购合同。</p>
+<p>2. 票据：${taxRate}％增值税专用发票。&nbsp;&nbsp;&nbsp;&nbsp;3. 付款方式：${po?.payment_terms || '月结60天'}。</p>
+<p>4. 收货地址：吴远明，19129305737，深圳市光明区玉塘街道玉律社区寮光路55号德永佳工业园1栋1楼（奥特迈）。</p>
+<p>5. 收货方式：运费由乙方承担，附送货单，注明合同号、品名、规格型号、数量并盖章，包装符合甲方要求，否则拒收。</p>
+<p>6. 交期违约：逾期每天按订单总金额3%支付延误费用，超5天甲方可解约，因乙方延期导致甲方被索赔由乙方承担。</p>
+<p>7. 质量要求：验收合格后24个月免费质保，质保期内包修包换包退。产品须符合材质、规格、精度等要求及图纸资料要求，来料不良率须≤3‰，超出双倍赔偿。如发现不合格商品，甲方有权退货并索赔相关费用。</p>
+<p>8. 违约责任：按中华人民共和国经济合同法执行，争议协商不成向甲方所在地法院起诉。</p>
+<p>9. 本合同经双方代表人签字或盖章生效，扫描件、传真件同样有效。</p>
+</div>
+
+<div class="signature">
+  <div class="sig-box">
+    <div class="label">甲方（盖章）：深圳市奥特迈智能装备有限公司</div>
+    <div>代表人签字：</div>
+  </div>
+  <div class="sig-box">
+    <div class="label">乙方（盖章）：${supplier.name || ''}</div>
+    <div>代表人签字：</div>
+  </div>
+</div>
+</body>
+</html>`
 }
 
 const receiveGoods = (row) => {

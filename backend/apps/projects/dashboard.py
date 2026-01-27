@@ -1,7 +1,8 @@
 """
 项目仪表盘增强模块 - 提供项目全景视图和关键指标
 """
-from django.db.models import Sum, Count, F, Q, Avg
+from decimal import Decimal
+from django.db.models import Sum, Count, F, Q, Avg, Value, DecimalField
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework.views import APIView
@@ -54,8 +55,12 @@ class ProjectDashboardView(APIView):
         
         # 工时统计
         time_logs = TimeLog.objects.filter(project=project, is_deleted=False, status='APPROVED')
-        planned_hours = tasks.aggregate(total=Coalesce(Sum('planned_hours'), 0.0))['total']
-        actual_hours = time_logs.aggregate(total=Coalesce(Sum('hours'), 0.0))['total']
+        planned_hours = tasks.aggregate(
+            total=Coalesce(Sum('planned_hours'), Value(Decimal('0')), output_field=DecimalField())
+        )['total'] or Decimal('0')
+        actual_hours = time_logs.aggregate(
+            total=Coalesce(Sum('hours'), Value(Decimal('0')), output_field=DecimalField())
+        )['total'] or Decimal('0')
         
         time_metrics = {
             'planned_hours': float(planned_hours),
@@ -88,10 +93,18 @@ class ProjectDashboardView(APIView):
         payables = AccountPayable.objects.filter(project=project, is_deleted=False)
         
         finance_metrics = {
-            'total_receivable': float(receivables.aggregate(total=Coalesce(Sum('amount_due'), 0))['total']),
-            'received': float(receivables.aggregate(total=Coalesce(Sum('amount_paid'), 0))['total']),
-            'total_payable': float(payables.aggregate(total=Coalesce(Sum('amount_due'), 0))['total']),
-            'paid': float(payables.aggregate(total=Coalesce(Sum('amount_paid'), 0))['total']),
+            'total_receivable': float(receivables.aggregate(
+                total=Coalesce(Sum('amount_due'), Value(Decimal('0')), output_field=DecimalField())
+            )['total'] or 0),
+            'received': float(receivables.aggregate(
+                total=Coalesce(Sum('amount_paid'), Value(Decimal('0')), output_field=DecimalField())
+            )['total'] or 0),
+            'total_payable': float(payables.aggregate(
+                total=Coalesce(Sum('amount_due'), Value(Decimal('0')), output_field=DecimalField())
+            )['total'] or 0),
+            'paid': float(payables.aggregate(
+                total=Coalesce(Sum('amount_paid'), Value(Decimal('0')), output_field=DecimalField())
+            )['total'] or 0),
         }
         finance_metrics['pending_receivable'] = finance_metrics['total_receivable'] - finance_metrics['received']
         finance_metrics['pending_payable'] = finance_metrics['total_payable'] - finance_metrics['paid']
@@ -99,11 +112,12 @@ class ProjectDashboardView(APIView):
         
         # BOM成本
         bom_items = ProjectBOM.objects.filter(project=project, is_deleted=False)
+        bom_estimated_cost = Decimal('0')
+        for bom in bom_items:
+            bom_estimated_cost += bom.planned_qty * bom.estimated_cost
         bom_metrics = {
             'total_items': bom_items.count(),
-            'estimated_cost': float(bom_items.aggregate(
-                total=Coalesce(Sum(F('quantity') * F('unit_price')), 0.0)
-            )['total']),
+            'estimated_cost': float(bom_estimated_cost),
         }
         
         # 采购状态
@@ -113,7 +127,9 @@ class ProjectDashboardView(APIView):
             'pending_orders': po_list.filter(status__in=['DRAFT', 'PENDING', 'APPROVED']).count(),
             'in_delivery': po_list.filter(status='SHIPPED').count(),
             'completed_orders': po_list.filter(status__in=['RECEIVED', 'COMPLETED']).count(),
-            'total_amount': float(po_list.aggregate(total=Coalesce(Sum('total_amount'), 0))['total']),
+            'total_amount': float(po_list.aggregate(
+                total=Coalesce(Sum('total_amount'), Value(Decimal('0')), output_field=DecimalField())
+            )['total'] or 0),
         }
         
         # 生产状态
@@ -200,7 +216,9 @@ class ProjectListDashboardView(APIView):
             'active': queryset.filter(status__in=['IN_PROGRESS', 'ACTIVE']).count(),
             'completed': queryset.filter(status='COMPLETED').count(),
             'overdue': queryset.filter(end_date__lt=today, status__in=['IN_PROGRESS', 'ACTIVE', 'PLANNING']).count(),
-            'total_budget': float(queryset.aggregate(total=Coalesce(Sum('budget_total'), 0))['total']),
+            'total_budget': float(queryset.aggregate(
+                total=Coalesce(Sum('budget_total'), Value(Decimal('0')), output_field=DecimalField())
+            )['total'] or 0),
         }
         
         # 按状态分组
@@ -263,7 +281,7 @@ class BOMCostRollupView(APIView):
         
         item_details = []
         for bom in bom_items:
-            estimated = float(bom.quantity) * float(bom.unit_price)
+            estimated = float(bom.planned_qty) * float(bom.estimated_cost)
             
             # 计算实际采购成本
             actual_purchases = PurchaseOrderLine.objects.filter(
@@ -272,8 +290,8 @@ class BOMCostRollupView(APIView):
                 order__status__in=['RECEIVED', 'COMPLETED'],
                 order__is_deleted=False
             ).aggregate(
-                total_qty=Coalesce(Sum('quantity'), 0.0),
-                total_amount=Coalesce(Sum('amount'), 0.0)
+                total_qty=Coalesce(Sum('quantity'), Value(Decimal('0')), output_field=DecimalField()),
+                total_amount=Coalesce(Sum('amount'), Value(Decimal('0')), output_field=DecimalField())
             )
             
             actual_cost = float(actual_purchases['total_amount'])
@@ -282,9 +300,9 @@ class BOMCostRollupView(APIView):
                 'id': bom.id,
                 'item_sku': bom.item.sku if bom.item else '',
                 'item_name': bom.item.name if bom.item else '',
-                'bom_type': bom.bom_type,
-                'quantity': float(bom.quantity),
-                'unit_price': float(bom.unit_price),
+                'status': bom.status,
+                'quantity': float(bom.planned_qty),
+                'unit_price': float(bom.estimated_cost),
                 'estimated_cost': estimated,
                 'actual_purchased_qty': float(actual_purchases['total_qty']),
                 'actual_cost': actual_cost,
@@ -296,19 +314,19 @@ class BOMCostRollupView(APIView):
         
         cost_summary['variance'] = cost_summary['estimated_cost'] - cost_summary['actual_cost']
         
-        # 按BOM类型分组
-        by_type = {}
+        # 按BOM状态分组
+        by_status = {}
         for item in item_details:
-            bom_type = item['bom_type']
-            if bom_type not in by_type:
-                by_type[bom_type] = {'estimated': 0, 'actual': 0, 'count': 0}
-            by_type[bom_type]['estimated'] += item['estimated_cost']
-            by_type[bom_type]['actual'] += item['actual_cost']
-            by_type[bom_type]['count'] += 1
+            item_status = item['status']
+            if item_status not in by_status:
+                by_status[item_status] = {'estimated': 0, 'actual': 0, 'count': 0}
+            by_status[item_status]['estimated'] += item['estimated_cost']
+            by_status[item_status]['actual'] += item['actual_cost']
+            by_status[item_status]['count'] += 1
         
         return Response({
             'summary': cost_summary,
-            'by_type': by_type,
+            'by_status': by_status,
             'items': item_details,
         })
 
@@ -410,7 +428,9 @@ class ProcurementTrackingView(APIView):
                 expected_date__lt=today,
                 status__in=['APPROVED', 'SHIPPED']
             ).count(),
-            'total_amount': float(po_queryset.aggregate(total=Coalesce(Sum('total_amount'), 0))['total']),
+            'total_amount': float(po_queryset.aggregate(
+                total=Coalesce(Sum('total_amount'), Value(Decimal('0')), output_field=DecimalField())
+            )['total'] or 0),
         }
         
         # 待收货订单

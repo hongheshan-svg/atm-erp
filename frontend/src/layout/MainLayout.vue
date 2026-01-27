@@ -33,7 +33,12 @@
           <el-menu-item index="/sales/quotations" v-if="hasMenuAccess('sales:quotations')">销售报价</el-menu-item>
           <el-menu-item index="/sales/contracts" v-if="hasMenuAccess('sales:contracts')">销售合同</el-menu-item>
           <el-menu-item index="/sales/analysis" v-if="hasMenuAccess('sales:analysis') || hasMenuAccess('sales')">销售分析</el-menu-item>
-          <el-menu-item index="/aftersales/orders" v-if="hasMenuAccess('aftersales:orders') || hasMenuAccess('sales')">售后服务</el-menu-item>
+          <el-menu-item index="/aftersales/orders" v-if="hasMenuAccess('aftersales:orders') || hasMenuAccess('sales')">售后工单</el-menu-item>
+          <el-menu-item index="/sales/service-contracts" v-if="hasMenuAccess('sales:service') || hasMenuAccess('sales')">服务合同</el-menu-item>
+          <el-menu-item index="/sales/service-requests" v-if="hasMenuAccess('sales:service') || hasMenuAccess('sales')">服务请求</el-menu-item>
+          <el-menu-item index="/sales/preventive-maintenance" v-if="hasMenuAccess('sales:service') || hasMenuAccess('sales')">预防维护</el-menu-item>
+          <el-menu-item index="/sales/knowledge-base" v-if="hasMenuAccess('sales:service') || hasMenuAccess('sales')">知识库</el-menu-item>
+          <el-menu-item index="/sales/quote-versions" v-if="hasMenuAccess('sales:quote') || hasMenuAccess('sales')">报价版本</el-menu-item>
         </el-sub-menu>
         
         <!-- ==================== PLM 产品生命周期管理 ==================== -->
@@ -62,7 +67,9 @@
           <el-menu-item-group title="技术文档">
             <el-menu-item index="/projects/bom" v-if="hasMenuAccess('projects:bom')">BOM管理</el-menu-item>
             <el-menu-item index="/projects/drawings" v-if="hasMenuAccess('projects:drawings') || hasMenuAccess('projects')">图纸管理</el-menu-item>
+            <el-menu-item index="/projects/tech-documents" v-if="hasMenuAccess('projects:documents') || hasMenuAccess('projects')">技术文档协同</el-menu-item>
             <el-menu-item index="/plm/model-viewer" v-if="hasMenuAccess('plm:model-viewer') || hasMenuAccess('projects')">3D模型预览</el-menu-item>
+            <el-menu-item index="/plm/cad-bom-import" v-if="hasMenuAccess('plm:cad-bom') || hasMenuAccess('projects')">CAD BOM导入</el-menu-item>
             <el-menu-item index="/projects/ecn" v-if="hasMenuAccess('projects:ecn') || hasMenuAccess('projects')">ECN变更</el-menu-item>
             <el-menu-item index="/projects/bugs" v-if="hasMenuAccess('projects:bugs')">Bug跟踪</el-menu-item>
           </el-menu-item-group>
@@ -110,6 +117,7 @@
           <el-menu-item index="/suppliers" v-if="hasMenuAccess('masterdata:suppliers')">供应商档案</el-menu-item>
           <el-menu-item index="/purchase/evaluations" v-if="hasMenuAccess('purchase:evaluations') || hasMenuAccess('purchase')">供应商评价</el-menu-item>
           <el-menu-item index="/purchase/blacklist" v-if="hasMenuAccess('purchase:blacklist') || hasMenuAccess('purchase')">供应商黑名单</el-menu-item>
+          <el-menu-item index="/purchase/supplier-portal" v-if="hasMenuAccess('purchase:portal') || hasMenuAccess('purchase')">供应商协同</el-menu-item>
         </el-sub-menu>
         
         <el-sub-menu index="erp-inventory" v-if="hasMenuAccess('inventory')">
@@ -148,6 +156,8 @@
             <el-menu-item index="/production/plans" v-if="hasMenuAccess('production:plans')">生产计划</el-menu-item>
             <el-menu-item index="/mes/scheduling" v-if="hasMenuAccess('mes:scheduling') || hasMenuAccess('production')">APS排程</el-menu-item>
             <el-menu-item index="/projects/work-orders" v-if="hasMenuAccess('projects:work-orders') || hasMenuAccess('production')">工单派工</el-menu-item>
+            <el-menu-item index="/production/capacity-planning" v-if="hasMenuAccess('production:capacity') || hasMenuAccess('production')">产能规划</el-menu-item>
+            <el-menu-item index="/production/resource-types" v-if="hasMenuAccess('production:capacity') || hasMenuAccess('production')">资源类型</el-menu-item>
           </el-menu-item-group>
           <el-menu-item-group title="生产执行">
             <el-menu-item index="/production/processes" v-if="hasMenuAccess('production:processes')">生产工序</el-menu-item>

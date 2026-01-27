@@ -78,13 +78,13 @@
       <el-row :gutter="20" class="stats-row">
         <el-col :span="6">
           <el-card shadow="hover" class="stat-card">
-            <div class="stat-value in">{{ stats.totalIn }}</div>
+            <div class="stat-value in">{{ formatQty(stats.totalIn) }}</div>
             <div class="stat-label">入库数量</div>
           </el-card>
         </el-col>
         <el-col :span="6">
           <el-card shadow="hover" class="stat-card">
-            <div class="stat-value out">{{ stats.totalOut }}</div>
+            <div class="stat-value out">{{ formatQty(stats.totalOut) }}</div>
             <div class="stat-label">出库数量</div>
           </el-card>
         </el-col>
@@ -233,6 +233,13 @@ const formatNumber = (num) => {
   return Number(num).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+const formatQty = (num) => {
+  if (num === null || num === undefined) return '0'
+  const n = Number(num)
+  if (isNaN(n)) return '0'
+  return n.toLocaleString('zh-CN', { maximumFractionDigits: 2 })
+}
+
 const fetchData = async () => {
   loading.value = true
   try {
@@ -266,12 +273,14 @@ const fetchData = async () => {
 const calculateStats = () => {
   let totalIn = 0, totalOut = 0, totalInValue = 0, totalOutValue = 0
   tableData.value.forEach(item => {
-    const value = Math.abs(item.qty * item.unit_cost)
-    if (item.qty > 0) {
-      totalIn += item.qty
+    const qty = parseFloat(item.qty) || 0
+    const unitCost = parseFloat(item.unit_cost) || 0
+    const value = Math.abs(qty * unitCost)
+    if (qty > 0) {
+      totalIn += qty
       totalInValue += value
     } else {
-      totalOut += Math.abs(item.qty)
+      totalOut += Math.abs(qty)
       totalOutValue += value
     }
   })

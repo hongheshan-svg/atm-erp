@@ -45,6 +45,7 @@
                 <el-icon v-if="!data.isWorkflow" class="folder-icon"><Folder /></el-icon>
                 <el-icon v-else class="workflow-icon"><Document /></el-icon>
                 <span class="node-label">{{ data.label }}</span>
+                <el-tag v-if="!data.isWorkflow && data.isEmpty" size="small" type="info">点击配置</el-tag>
                 <el-tag v-if="data.isWorkflow && !data.is_active" size="small" type="danger">停用</el-tag>
                 <el-tag v-if="data.isWorkflow && data.isDefault" size="small" type="info">默认</el-tag>
                 <el-tag v-if="data.isWorkflow && data.amount_threshold" size="small" type="warning">
@@ -453,23 +454,30 @@ const filteredWorkflows = computed(() => {
 })
 
 const treeData = computed(() => {
+  // 先创建所有业务类型的分组（确保都显示）
   const groups = {}
+  Object.keys(businessTypeLabels).forEach(type => {
+    groups[type] = {
+      id: `group_${type}`,
+      label: businessTypeLabels[type],
+      children: [],
+      isEmpty: true
+    }
+  })
+  
+  // 将现有工作流添加到对应分组
   filteredWorkflows.value.forEach(w => {
     const type = w.business_type
-    if (!groups[type]) {
-      groups[type] = {
-        id: `group_${type}`,
-        label: businessTypeLabels[type] || type,
-        children: []
-      }
+    if (groups[type]) {
+      groups[type].isEmpty = false
+      groups[type].children.push({
+        ...w,
+        id: w.id,
+        label: w.name,
+        isWorkflow: true,
+        isDefault: !w.amount_threshold
+      })
     }
-    groups[type].children.push({
-      ...w,
-      id: w.id,
-      label: w.name,
-      isWorkflow: true,
-      isDefault: !w.amount_threshold
-    })
   })
   return Object.values(groups)
 })
@@ -560,6 +568,10 @@ const handleNodeClick = (data) => {
     selectedWorkflow.value = data
     selectedStep.value = null
     loadSteps()
+  } else if (data.id?.startsWith('group_')) {
+    // 点击分类节点时，自动弹出创建对话框并预选该业务类型
+    const businessType = data.id.replace('group_', '')
+    showCreateDialogWithType(businessType)
   }
 }
 
@@ -570,6 +582,20 @@ const selectStep = (step) => {
 const showCreateDialog = () => {
   isEdit.value = false
   form.value = { code: '', name: '', business_type: '', amount_threshold: null, description: '', is_active: true }
+  dialogVisible.value = true
+}
+
+const showCreateDialogWithType = (businessType) => {
+  isEdit.value = false
+  const label = businessTypeLabels[businessType] || businessType
+  form.value = { 
+    code: '', 
+    name: `${label}审批流程`, 
+    business_type: businessType, 
+    amount_threshold: null, 
+    description: '', 
+    is_active: true 
+  }
   dialogVisible.value = true
 }
 

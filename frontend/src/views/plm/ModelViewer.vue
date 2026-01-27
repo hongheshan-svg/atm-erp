@@ -255,11 +255,18 @@ const handleNodeClick = (data) => {
 
 // 初始化Three.js场景
 const initScene = () => {
-  if (!canvas.value) return
+  if (!canvas.value || !viewerContainer.value) return
   
   const container = viewerContainer.value
-  const width = container.clientWidth
-  const height = container.clientHeight - 60
+  const width = Math.max(container.clientWidth || 100, 100)
+  const height = Math.max((container.clientHeight || 100) - 60, 100)
+  
+  // 防止尺寸为0或负数
+  if (width <= 0 || height <= 0) {
+    console.warn('ModelViewer: Invalid container dimensions, retrying...')
+    setTimeout(initScene, 100)
+    return
+  }
   
   // 场景
   scene = new THREE.Scene()
@@ -312,8 +319,16 @@ const initScene = () => {
 // 渲染循环
 const animate = () => {
   animationId = requestAnimationFrame(animate)
+  
+  // 检查渲染器和相机是否有效
+  if (!renderer || !camera || !scene) return
+  
+  // 检查渲染器尺寸是否有效
+  const size = renderer.getSize(new THREE.Vector2())
+  if (size.x <= 0 || size.y <= 0) return
+  
   controls?.update()
-  renderer?.render(scene, camera)
+  renderer.render(scene, camera)
 }
 
 // 加载3D模型
@@ -517,8 +532,11 @@ const handleUploadSuccess = () => {
 const handleResize = () => {
   if (!renderer || !camera || !viewerContainer.value) return
   
-  const width = viewerContainer.value.clientWidth
-  const height = viewerContainer.value.clientHeight - 60
+  const width = Math.max(viewerContainer.value.clientWidth || 100, 100)
+  const height = Math.max((viewerContainer.value.clientHeight || 100) - 60, 100)
+  
+  // 防止尺寸为0或负数导致WebGL错误
+  if (width <= 0 || height <= 0) return
   
   camera.aspect = width / height
   camera.updateProjectionMatrix()

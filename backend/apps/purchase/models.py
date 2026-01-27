@@ -182,6 +182,9 @@ class PurchaseOrder(BaseModel):
     """
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
+        ('PENDING', '待审批'),
+        ('APPROVED', '已审批'),
+        ('REJECTED', '已拒绝'),
         ('CONFIRMED', '已确认'),
         ('PARTIAL', '部分收货'),
         ('COMPLETED', '完成'),
@@ -547,4 +550,11 @@ class PurchaseContract(BaseModel):
         if not self.contract_no:
             self.contract_no = generate_code('PC', rule_type='PURCHASE_CONTRACT')
         super().save(*args, **kwargs)
+
+
+# Import models from supplier_portal
+from .supplier_portal import (
+    SupplierAccount, SupplierOrderView, SupplierProgressUpdate,
+    SupplierDocument, SupplierQualityRecord, SupplierMessage
+)
 

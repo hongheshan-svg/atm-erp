@@ -163,8 +163,8 @@
         <el-table-column label="价格分" width="100" align="center">
           <template #default="{ row }">
             <el-progress 
-              :percentage="Number(row.score_price)" 
-              :format="() => row.score_price?.toFixed(1)"
+              :percentage="Number(row.score_price) || 0" 
+              :format="() => formatScore(row.score_price)"
               :stroke-width="6"
               :color="getScoreColor(row.score_price)"
             />
@@ -181,8 +181,8 @@
             </div>
             <el-progress 
               v-else
-              :percentage="Number(row.score_quality)" 
-              :format="() => row.score_quality?.toFixed(1)"
+              :percentage="Number(row.score_quality) || 0" 
+              :format="() => formatScore(row.score_quality)"
               :stroke-width="6"
               :color="getScoreColor(row.score_quality)"
             />
@@ -191,8 +191,8 @@
         <el-table-column label="交期分" width="100" align="center">
           <template #default="{ row }">
             <el-progress 
-              :percentage="Number(row.score_delivery)" 
-              :format="() => row.score_delivery?.toFixed(1)"
+              :percentage="Number(row.score_delivery) || 0" 
+              :format="() => formatScore(row.score_delivery)"
               :stroke-width="6"
               :color="getScoreColor(row.score_delivery)"
             />
@@ -209,8 +209,8 @@
             </div>
             <el-progress 
               v-else
-              :percentage="Number(row.score_service)" 
-              :format="() => row.score_service?.toFixed(1)"
+              :percentage="Number(row.score_service) || 0" 
+              :format="() => formatScore(row.score_service)"
               :stroke-width="6"
               :color="getScoreColor(row.score_service)"
             />
@@ -219,7 +219,7 @@
         <el-table-column label="综合得分" width="120" align="center">
           <template #default="{ row }">
             <div class="total-score" :class="{ 'top-score': row.ranking === 1 }">
-              {{ row.total_score?.toFixed(2) }}
+              {{ formatTotalScore(row.total_score) }}
             </div>
           </template>
         </el-table-column>
@@ -262,10 +262,10 @@
               <div class="item-price">¥{{ formatNumber(getSupplierPrice(row, supplier).unit_price) }}</div>
               <div v-if="getSupplierPrice(row, supplier).price_change_rate" class="price-change">
                 <el-tag 
-                  :type="getSupplierPrice(row, supplier).price_change_rate > 0 ? 'danger' : 'success'"
+                  :type="Number(getSupplierPrice(row, supplier).price_change_rate) > 0 ? 'danger' : 'success'"
                   size="small"
                 >
-                  {{ getSupplierPrice(row, supplier).price_change_rate > 0 ? '+' : '' }}{{ getSupplierPrice(row, supplier).price_change_rate.toFixed(1) }}%
+                  {{ Number(getSupplierPrice(row, supplier).price_change_rate) > 0 ? '+' : '' }}{{ formatPriceChange(getSupplierPrice(row, supplier).price_change_rate) }}%
                 </el-tag>
               </div>
             </div>
@@ -344,6 +344,21 @@ const weightFormTotal = computed(() => {
 // 格式化
 const formatNumber = (num) => {
   return parseFloat(num || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+const formatScore = (score) => {
+  const num = parseFloat(score)
+  return isNaN(num) ? '0.0' : num.toFixed(1)
+}
+
+const formatTotalScore = (score) => {
+  const num = parseFloat(score)
+  return isNaN(num) ? '0.00' : num.toFixed(2)
+}
+
+const formatPriceChange = (rate) => {
+  const num = parseFloat(rate)
+  return isNaN(num) ? '0.0' : num.toFixed(1)
 }
 
 const getStatusType = (status) => {

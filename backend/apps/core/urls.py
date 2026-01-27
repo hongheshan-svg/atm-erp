@@ -38,6 +38,11 @@ from .schedule import (
 from .instant_message import (
     ConversationViewSet, MessageViewSet, ConversationMemberViewSet
 )
+from .mobile_api import (
+    MobileTimeEntryViewSet, MobilePhotoViewSet, MobileScanRecordViewSet,
+    MobileApprovalViewSet, MobileNotificationViewSet,
+    MobileDashboardView, MobileQuickActionsView
+)
 
 router = DefaultRouter()
 router.register(r'audit-logs', views.AuditLogViewSet, basename='audit-log')
@@ -91,6 +96,13 @@ router.register(r'meeting-rooms', MeetingRoomViewSet, basename='meeting-room')
 router.register(r'conversations', ConversationViewSet, basename='conversation')
 router.register(r'messages', MessageViewSet, basename='message')
 router.register(r'conversation-members', ConversationMemberViewSet, basename='conversation-member')
+
+# 移动端API
+router.register(r'mobile/time-entries', MobileTimeEntryViewSet, basename='mobile-time-entry')
+router.register(r'mobile/photos', MobilePhotoViewSet, basename='mobile-photo')
+router.register(r'mobile/scan-records', MobileScanRecordViewSet, basename='mobile-scan-record')
+router.register(r'mobile/approvals', MobileApprovalViewSet, basename='mobile-approval')
+router.register(r'mobile/notifications', MobileNotificationViewSet, basename='mobile-notification')
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -152,4 +164,8 @@ urlpatterns = [
     path('files/preview/', FilePreviewView.as_view(), name='file-preview'),
     path('files/upload/', FileUploadView.as_view(), name='file-upload'),
     path('files/list/', FileListView.as_view(), name='file-list'),
+    
+    # 移动端API
+    path('mobile/dashboard/', MobileDashboardView.as_view(), name='mobile-dashboard'),
+    path('mobile/quick-actions/', MobileQuickActionsView.as_view(), name='mobile-quick-actions'),
 ]

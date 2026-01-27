@@ -33,6 +33,23 @@ from .data_acquisition import (
 from .sn_traceability import (
     SNRuleViewSet, SerialNumberViewSet, SNTraceRecordViewSet, ComponentBindingViewSet
 )
+from .routing import (
+    WorkStationViewSet, RoutingTemplateViewSet, RoutingOperationViewSet,
+    ProjectRoutingViewSet, ProjectRoutingOperationViewSet
+)
+from .assembly_guide import (
+    AssemblyGuideViewSet, AssemblyStepViewSet, AssemblySessionViewSet
+)
+from .smart_scheduling import (
+    SchedulingObjectiveViewSet, SchedulingConstraintViewSet,
+    SchedulingScenarioViewSet, ResourceConflictViewSet,
+    BottleneckAnalysisViewSet, SchedulingComparisonViewSet
+)
+from .capacity_planning import (
+    ResourceTypeViewSet, ResourceViewSet, ResourceAllocationViewSet,
+    CapacityResourceConflictViewSet,
+    CapacityDashboardView
+)
 
 router = DefaultRouter()
 router.register(r'processes', ProductionProcessViewSet, basename='process')
@@ -77,6 +94,32 @@ router.register(r'serial-numbers', SerialNumberViewSet, basename='serial-number'
 router.register(r'sn-traces', SNTraceRecordViewSet, basename='sn-trace')
 router.register(r'component-bindings', ComponentBindingViewSet, basename='component-binding')
 
+# 工艺路线管理
+router.register(r'work-stations', WorkStationViewSet, basename='work-station')
+router.register(r'routing-templates', RoutingTemplateViewSet, basename='routing-template')
+router.register(r'routing-operations', RoutingOperationViewSet, basename='routing-operation')
+router.register(r'project-routings', ProjectRoutingViewSet, basename='project-routing')
+router.register(r'project-routing-operations', ProjectRoutingOperationViewSet, basename='project-routing-operation')
+
+# 3D装配指导
+router.register(r'assembly-guides', AssemblyGuideViewSet, basename='assembly-guide')
+router.register(r'assembly-steps', AssemblyStepViewSet, basename='assembly-step')
+router.register(r'assembly-sessions', AssemblySessionViewSet, basename='assembly-session')
+
+# 智能排产优化
+router.register(r'scheduling-objectives', SchedulingObjectiveViewSet, basename='scheduling-objective')
+router.register(r'scheduling-constraints', SchedulingConstraintViewSet, basename='scheduling-constraint')
+router.register(r'scheduling-scenarios', SchedulingScenarioViewSet, basename='scheduling-scenario')
+router.register(r'resource-conflicts', ResourceConflictViewSet, basename='resource-conflict')
+router.register(r'bottleneck-analyses', BottleneckAnalysisViewSet, basename='bottleneck-analysis')
+router.register(r'scheduling-comparisons', SchedulingComparisonViewSet, basename='scheduling-comparison')
+
+# 产能资源规划
+router.register(r'resource-types', ResourceTypeViewSet, basename='resource-type')
+router.register(r'resources', ResourceViewSet, basename='resource')
+router.register(r'resource-allocations', ResourceAllocationViewSet, basename='resource-allocation')
+router.register(r'capacity-conflicts', CapacityResourceConflictViewSet, basename='capacity-conflict')
+
 urlpatterns = [
     path('', include(router.urls)),
     
@@ -88,4 +131,7 @@ urlpatterns = [
     
     # 追溯搜索
     path('traceability/search/', TraceSearchView.as_view(), name='traceability-search'),
+    
+    # 产能资源规划看板
+    path('capacity/dashboard/', CapacityDashboardView.as_view(), name='capacity-dashboard'),
 ]

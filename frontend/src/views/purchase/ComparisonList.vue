@@ -5,6 +5,14 @@
         <div class="card-header">
           <span>报价比价分析</span>
           <div class="header-actions">
+            <el-button 
+              v-if="isAdmin && selectedRows.length > 0" 
+              type="danger" 
+              @click="handleBatchDelete"
+            >
+              <el-icon><Delete /></el-icon>
+              批量删除 ({{ selectedRows.length }})
+            </el-button>
             <el-button type="primary" @click="handleCreate">
               <el-icon><Plus /></el-icon>
               新建比价
@@ -33,7 +41,14 @@
       </el-form>
 
       <!-- 数据表格 -->
-      <el-table :data="tableData" v-loading="loading" stripe border>
+      <el-table 
+        :data="tableData" 
+        v-loading="loading" 
+        stripe 
+        border
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column v-if="isAdmin" type="selection" width="50" />
         <el-table-column prop="comparison_no" label="比价单号" width="160" />
         <el-table-column prop="rfq_no" label="询价单号" width="160" />
         <el-table-column prop="project_name" label="项目" min-width="120" />
@@ -61,7 +76,7 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" link @click="handleView(row)">
               查看
@@ -86,6 +101,13 @@
               @click="handleConvertToPO(row)"
             >
               转采购订单
+            </el-button>
+            <el-button 
+              v-if="isAdmin" 
+              type="danger" size="small" link 
+              @click="handleDelete(row)"
+            >
+              删除
             </el-button>
           </template>
         </el-table-column>
@@ -112,10 +134,13 @@
             <el-option
               v-for="rfq in availableRFQs"
               :key="rfq.id"
-              :label="`${rfq.rfq_no} - ${rfq.project_name || '无项目'}`"
+              :label="`${rfq.rfq_no} - ${rfq.project_name || '无项目'} (${rfq.quotation_count}个报价)`"
               :value="rfq.id"
             />
           </el-select>
+          <div v-if="availableRFQs.length === 0" class="no-rfq-hint">
+            暂无可用询价单，需要询价单至少有2个供应商已提交报价
+          </div>
         </el-form-item>
         <el-divider content-position="left">权重配置 (总和需等于100%)</el-divider>
         <el-form-item label="价格权重">
@@ -157,10 +182,12 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Delete } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
+const userStore = useUserStore()
 
 // 状态
 const loading = ref(false)
@@ -168,6 +195,10 @@ const tableData = ref([])
 const createDialogVisible = ref(false)
 const availableRFQs = ref([])
 const createFormRef = ref(null)
+const selectedRows = ref([])
+
+// 检查是否管理员
+const isAdmin = computed(() => userStore.userInfo?.is_superuser || userStore.userInfo?.is_staff)
 
 // 搜索
 const searchForm = reactive({
@@ -241,15 +272,17 @@ const loadData = async () => {
   }
 }
 
-// 加载可用的询价单（已报价状态）
+// 加载可用于比价的询价单（至少有2个已提交报价）
 const loadAvailableRFQs = async () => {
   try {
-    const res = await request.get('/purchase/rfqs/', { 
-      params: { status: 'QUOTED', page_size: 100 }
-    })
-    availableRFQs.value = res.results || res || []
+    const res = await request.get('/purchase/comparisons/available-rfqs/')
+    availableRFQs.value = res || []
+    if (availableRFQs.value.length === 0) {
+      ElMessage.warning('暂无可用于比价的询价单，需要询价单至少有2个供应商报价')
+    }
   } catch (error) {
     console.error('加载询价单失败:', error)
+    ElMessage.error('加载可用询价单失败')
   }
 }
 
@@ -285,7 +318,8 @@ const submitCreate = async () => {
     router.push(`/purchase/comparisons/${res.id}`)
   } catch (error) {
     console.error('创建比价失败:', error)
-    ElMessage.error(error.response?.data?.error || '创建失败')
+    const errorMsg = error.response?.data?.error || error.response?.data?.detail || '创建失败'
+    ElMessage.error(errorMsg)
   }
 }
 
@@ -336,6 +370,54 @@ const handleConvertToPO = async (row) => {
   }
 }
 
+// 选择变化
+const handleSelectionChange = (rows) => {
+  selectedRows.value = rows
+}
+
+// 单行删除
+const handleDelete = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除比价单 ${row.comparison_no} 吗？此操作不可恢复。`, 
+      '确认删除',
+      { type: 'warning' }
+    )
+    await request.post('/purchase/comparisons/batch-delete/', { ids: [row.id] })
+    ElMessage.success('删除成功')
+    loadData()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.error || '删除失败')
+    }
+  }
+}
+
+// 批量删除
+const handleBatchDelete = async () => {
+  if (selectedRows.value.length === 0) {
+    ElMessage.warning('请先选择要删除的记录')
+    return
+  }
+  
+  try {
+    await ElMessageBox.confirm(
+      `确定删除选中的 ${selectedRows.value.length} 条比价记录吗？此操作不可恢复。`, 
+      '确认批量删除',
+      { type: 'warning' }
+    )
+    const ids = selectedRows.value.map(row => row.id)
+    const res = await request.post('/purchase/comparisons/batch-delete/', { ids })
+    ElMessage.success(res.message || '批量删除成功')
+    selectedRows.value = []
+    loadData()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.error || '批量删除失败')
+    }
+  }
+}
+
 onMounted(() => {
   loadData()
 })
@@ -372,6 +454,13 @@ onMounted(() => {
 
 .text-muted {
   color: #909399;
+}
+
+.no-rfq-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #e6a23c;
+  line-height: 1.4;
 }
 </style>
 
