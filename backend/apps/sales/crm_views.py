@@ -472,10 +472,10 @@ class CRMDashboardView(viewsets.ViewSet):
         won_this_month = Opportunity.objects.filter(
             is_deleted=False,
             stage='CLOSED_WON',
-            closed_date__gte=month_start
+            actual_close_date__gte=month_start
         ).aggregate(
             count=Count('id'),
-            amount=Sum('actual_amount')
+            amount=Sum('estimated_amount')
         )
         
         return Response({
