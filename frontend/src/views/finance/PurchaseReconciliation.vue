@@ -630,6 +630,10 @@ const generatePrintHtml = (data) => {
       <td>${line.reference_no || ''}</td>
       <td>${line.reference_date || ''}</td>
       <td style="text-align:left;">${line.description || ''}</td>
+      <td style="text-align:left;">${line.specification || line.drawing_no || ''}</td>
+      <td style="text-align:right;">${formatNumber(line.unit_price || 0)}</td>
+      <td>${line.unit || ''}</td>
+      <td style="text-align:right;">${line.quantity || ''}</td>
       <td style="text-align:right;">${formatNumber(line.order_amount)}</td>
       <td style="text-align:right;">${formatNumber(line.received_amount)}</td>
       <td style="text-align:right;">${formatNumber(line.invoice_amount)}</td>
@@ -730,7 +734,7 @@ table td { text-align: center; }
 
 <div class="header">
   <div class="company">深圳市奥特迈智能装备有限公司</div>
-  <div class="title">采购对账单（供应商往来对账）</div>
+  <div class="title">采购对账单（供应商往来对账）- ${data.period_start?.slice(0,7) || ''}${data.period_end && data.period_end.slice(0,7) !== data.period_start?.slice(0,7) ? ' 至 ' + data.period_end.slice(0,7) : ''}</div>
   <div class="doc-no">对账单号：${data.reconciliation_no} &nbsp;&nbsp;&nbsp;&nbsp; 打印日期：${today}</div>
 </div>
 
@@ -752,19 +756,23 @@ table td { text-align: center; }
 <div class="section-title">一、采购订单明细（非标零部件/外协加工）</div>
 <table>
   <tr>
-    <th style="width:25px;">序号</th>
-    <th style="width:90px;">订单号</th>
-    <th style="width:65px;">订单日期</th>
-    <th>物料名称/加工内容</th>
-    <th style="width:70px;">订单金额</th>
-    <th style="width:60px;">已收货</th>
-    <th style="width:60px;">已开票</th>
-    <th style="width:60px;">已付款</th>
-    <th style="width:55px;">匹配状态</th>
+    <th style="width:22px;">序号</th>
+    <th style="width:85px;">订单号</th>
+    <th style="width:58px;">订单日期</th>
+    <th style="min-width:80px;">物料名称/加工内容</th>
+    <th style="width:70px;">规格/图号</th>
+    <th style="width:50px;">单价</th>
+    <th style="width:30px;">单位</th>
+    <th style="width:35px;">数量</th>
+    <th style="width:58px;">订单金额</th>
+    <th style="width:50px;">已收货</th>
+    <th style="width:50px;">已开票</th>
+    <th style="width:50px;">已付款</th>
+    <th style="width:45px;">匹配状态</th>
   </tr>
-  ${orderRows || '<tr><td colspan="9">暂无数据</td></tr>'}
+  ${orderRows || '<tr><td colspan="13">暂无数据</td></tr>'}
   <tr style="font-weight:bold; background:#f5f5f5;">
-    <td colspan="4" style="text-align:right;">合计：</td>
+    <td colspan="8" style="text-align:right;">合计：</td>
     <td style="text-align:right;">${formatNumber(data.total_order_amount)}</td>
     <td style="text-align:right;">${formatNumber(data.total_received_amount)}</td>
     <td style="text-align:right;">${formatNumber(data.total_invoice_amount)}</td>
