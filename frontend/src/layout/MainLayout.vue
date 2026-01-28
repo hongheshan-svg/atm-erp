@@ -35,6 +35,7 @@
           <el-menu-item index="/sales/quotations" v-if="hasMenuAccess('sales:quotations')">销售报价</el-menu-item>
           <el-menu-item index="/sales/contracts" v-if="hasMenuAccess('sales:contracts')">销售合同</el-menu-item>
           <el-menu-item index="/sales/analysis" v-if="hasMenuAccess('sales:analysis') || hasMenuAccess('sales')">销售分析</el-menu-item>
+          <el-menu-item index="/finance/sales-reconciliation" v-if="hasMenuAccess('finance:sales-reconciliation') || hasMenuAccess('sales')">销售对账</el-menu-item>
           <el-menu-item index="/aftersales/orders" v-if="hasMenuAccess('aftersales:orders') || hasMenuAccess('sales')">售后工单</el-menu-item>
           <el-menu-item index="/sales/service-contracts" v-if="hasMenuAccess('sales:service') || hasMenuAccess('sales')">服务合同</el-menu-item>
           <el-menu-item index="/sales/service-requests" v-if="hasMenuAccess('sales:service') || hasMenuAccess('sales')">服务请求</el-menu-item>
@@ -109,6 +110,7 @@
           <el-menu-item index="/purchase/outsource" v-if="hasMenuAccess('purchase:outsource') || hasMenuAccess('purchase')">外协加工</el-menu-item>
           <el-menu-item index="/purchase/budgets" v-if="hasMenuAccess('purchase:budgets') || hasMenuAccess('purchase')">采购预算</el-menu-item>
           <el-menu-item index="/finance/ap" v-if="hasMenuAccess('finance:ap')">应付账款</el-menu-item>
+          <el-menu-item index="/finance/purchase-reconciliation" v-if="hasMenuAccess('finance:purchase-reconciliation') || hasMenuAccess('purchase')">采购对账</el-menu-item>
         </el-sub-menu>
         
         <el-sub-menu index="erp-supplier" v-if="hasMenuAccess('purchase') || hasMenuAccess('masterdata')">

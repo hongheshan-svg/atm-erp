@@ -374,6 +374,18 @@ const routes = [
         meta: { title: '应付账款', icon: 'Wallet', menuId: 'finance:ap' }
       },
       {
+        path: 'finance/sales-reconciliation',
+        name: 'SalesReconciliation',
+        component: () => import('@/views/finance/SalesReconciliation.vue'),
+        meta: { title: '销售对账', icon: 'Document', menuId: 'finance:sales-reconciliation' }
+      },
+      {
+        path: 'finance/purchase-reconciliation',
+        name: 'PurchaseReconciliation',
+        component: () => import('@/views/finance/PurchaseReconciliation.vue'),
+        meta: { title: '采购对账', icon: 'Document', menuId: 'finance:purchase-reconciliation' }
+      },
+      {
         path: 'finance/invoices',
         name: 'InvoiceList',
         component: () => import('@/views/finance/InvoiceList.vue'),
