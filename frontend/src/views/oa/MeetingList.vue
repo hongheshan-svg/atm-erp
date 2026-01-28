@@ -41,7 +41,14 @@
               </el-radio-group>
             </div>
           </template>
-          <el-table :data="meetings" v-loading="loading" stripe>
+          <!-- 批量操作工具栏 -->
+          <div class="batch-toolbar" v-if="canDelete && selectedRows.length > 0">
+            <span>已选择 {{ selectedRows.length }} 项</span>
+            <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+          </div>
+          
+          <el-table :data="meetings" v-loading="loading" stripe @selection-change="handleSelectionChange">
+            <el-table-column v-if="canDelete" type="selection" width="45" />
             <el-table-column prop="meeting_no" label="会议编号" width="130" />
             <el-table-column prop="title" label="会议主题" min-width="200" />
             <el-table-column prop="type_display" label="类型" width="90" />
@@ -58,10 +65,11 @@
                 <el-tag :type="getStatusType(row.status)" size="small">{{ row.status_display }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="150" fixed="right">
+            <el-table-column label="操作" :width="canDelete ? 200 : 150" fixed="right">
               <template #default="{ row }">
                 <el-button link type="primary" size="small" @click="showDetail(row)">详情</el-button>
                 <el-button link type="success" size="small" @click="startMeeting(row)" v-if="row.status === 'SCHEDULED'">开始</el-button>
+                <el-button v-if="canDelete" link type="danger" size="small" @click="deleteRow(row)" :loading="deleteLoading">删除</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -146,6 +154,22 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Location } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/core/meetings/',
+  {
+    confirmTitle: '确认删除会议',
+    confirmMessage: '此操作将永久删除选中的会议记录，是否继续？',
+    successMessage: '删除会议成功',
+    onSuccess: () => { loadMeetings(); loadUpcoming() }
+  }
+)
 
 const loading = ref(false)
 const saving = ref(false)
@@ -296,6 +320,16 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.batch-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  background: #fef0f0;
+  border-radius: 4px;
 }
 
 .upcoming-meetings {

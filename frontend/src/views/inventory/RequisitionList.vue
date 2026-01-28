@@ -42,8 +42,15 @@
         </el-form-item>
       </el-form>
 
+      <!-- 批量操作工具栏 -->
+      <div class="batch-toolbar" v-if="canDelete && selectedRows.length > 0">
+        <span>已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+      </div>
+
       <!-- 列表 -->
-      <el-table :data="list" v-loading="loading" stripe border>
+      <el-table :data="list" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <el-table-column v-if="canDelete" type="selection" width="45" />
         <el-table-column prop="requisition_no" label="领料单号" width="160" />
         <el-table-column prop="requisition_type_display" label="类型" width="100" />
         <el-table-column label="关联单据" min-width="150">
@@ -62,7 +69,7 @@
             <el-tag :type="getStatusType(row.status)">{{ row.status_display }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="操作" :width="canDelete ? 330 : 280" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <!-- 草稿状态 -->
@@ -76,6 +83,8 @@
             <el-button size="small" type="success" @click="handleReady(row)" v-if="row.status === 'PREPARING'">备料完成</el-button>
             <!-- 出库阶段 -->
             <el-button size="small" type="primary" @click="handleIssue(row)" v-if="['READY', 'PARTIAL'].includes(row.status)">出库</el-button>
+            <!-- 删除 -->
+            <el-button v-if="canDelete && row.status === 'DRAFT'" size="small" type="danger" @click="deleteRow(row)" :loading="deleteLoading">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -257,6 +266,22 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { usePermission } from '@/composables/usePermission'
+
+// 权限检查
+const { canDelete } = usePermission()
+
+// 批量删除功能
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+  '/inventory/requisitions/',
+  {
+    confirmTitle: '确认删除领料单',
+    confirmMessage: '此操作将永久删除选中的领料单，是否继续？',
+    successMessage: '删除领料单成功',
+    onSuccess: () => loadList()
+  }
+)
 
 const loading = ref(false)
 const saving = ref(false)
@@ -684,6 +709,16 @@ onMounted(() => {
 
 .search-form {
   margin-bottom: 20px;
+}
+
+.batch-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  background: #fef0f0;
+  border-radius: 4px;
 }
 
 .material-section {
