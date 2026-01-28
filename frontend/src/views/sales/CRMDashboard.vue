@@ -79,22 +79,19 @@
               <span>近期商机动态</span>
             </div>
           </template>
-          <el-table :data="recentOpportunities" border stripe max-height="300">
-            <el-table-column prop="opportunity_no" label="商机编号" width="120" />
-            <el-table-column prop="name" label="商机名称" min-width="180" show-overflow-tooltip />
-            <el-table-column prop="customer_name" label="客户" width="150" show-overflow-tooltip />
-            <el-table-column prop="stage_display" label="阶段" width="100">
+          <el-table :data="recentOpportunities" border stripe max-height="300" size="small" table-layout="auto">
+            <el-table-column prop="opportunity_no" label="编号" min-width="110" show-overflow-tooltip />
+            <el-table-column prop="name" label="商机名称" min-width="150" show-overflow-tooltip />
+            <el-table-column prop="customer_name" label="客户" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="stage_display" label="阶段" min-width="80">
               <template #default="{ row }">
                 <el-tag :type="getStageType(row.stage)" size="small">{{ row.stage_display }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="预计金额" width="120" align="right">
+            <el-table-column label="金额" min-width="100" align="right">
               <template #default="{ row }">¥{{ formatNumber(row.estimated_amount) }}</template>
             </el-table-column>
-            <el-table-column prop="probability" label="概率" width="70" align="center">
-              <template #default="{ row }">{{ row.probability }}%</template>
-            </el-table-column>
-            <el-table-column prop="expected_close_date" label="预计成交" width="100" />
+            <el-table-column prop="expected_close_date" label="预计成交" min-width="90" />
           </el-table>
         </el-card>
       </el-col>
@@ -169,17 +166,16 @@
               <el-button type="primary" link @click="$router.push('/sales/leads')">查看全部</el-button>
             </div>
           </template>
-          <el-table :data="recentLeads" border stripe max-height="250">
-            <el-table-column prop="lead_no" label="线索编号" width="110" />
-            <el-table-column prop="company_name" label="公司名称" min-width="150" show-overflow-tooltip />
-            <el-table-column prop="contact_name" label="联系人" width="80" />
-            <el-table-column prop="phone" label="电话" width="120" />
-            <el-table-column prop="status_display" label="状态" width="80">
+          <el-table :data="recentLeads" border stripe max-height="250" size="small" table-layout="auto">
+            <el-table-column prop="lead_no" label="编号" min-width="100" show-overflow-tooltip />
+            <el-table-column prop="company_name" label="公司" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="contact_name" label="联系人" min-width="70" />
+            <el-table-column prop="status_display" label="状态" min-width="70">
               <template #default="{ row }">
                 <el-tag :type="getLeadStatusType(row.status)" size="small">{{ row.status_display }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="created_at" label="创建时间" width="100">
+            <el-table-column prop="created_at" label="日期" min-width="85">
               <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
             </el-table-column>
           </el-table>
@@ -193,17 +189,16 @@
               <el-button type="primary" link @click="$router.push('/masterdata/customer-followups')">查看全部</el-button>
             </div>
           </template>
-          <el-table :data="recentFollowups" border stripe max-height="250">
-            <el-table-column prop="customer_name" label="客户" min-width="150" show-overflow-tooltip />
-            <el-table-column prop="follow_type_display" label="类型" width="80" />
-            <el-table-column prop="subject" label="主题" min-width="150" show-overflow-tooltip />
-            <el-table-column prop="result_display" label="结果" width="80">
+          <el-table :data="recentFollowups" border stripe max-height="250" size="small" table-layout="auto">
+            <el-table-column prop="customer_name" label="客户" min-width="100" show-overflow-tooltip />
+            <el-table-column prop="follow_type_display" label="类型" min-width="60" />
+            <el-table-column prop="subject" label="主题" min-width="100" show-overflow-tooltip />
+            <el-table-column prop="result_display" label="结果" min-width="60">
               <template #default="{ row }">
                 <el-tag :type="getResultType(row.result)" size="small">{{ row.result_display }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="follower_name" label="跟进人" width="80" />
-            <el-table-column prop="follow_date" label="日期" width="100" />
+            <el-table-column prop="follow_date" label="日期" min-width="85" />
           </el-table>
         </el-card>
       </el-col>
