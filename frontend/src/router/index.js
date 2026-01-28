@@ -239,6 +239,12 @@ const routes = [
       },
       // Sales - CRM
       {
+        path: 'sales/crm-dashboard',
+        name: 'CRMDashboard',
+        component: () => import('@/views/sales/CRMDashboard.vue'),
+        meta: { title: 'CRM工作台', icon: 'DataBoard', menuId: 'sales:crm-dashboard' }
+      },
+      {
         path: 'sales/leads',
         name: 'LeadList',
         component: () => import('@/views/sales/LeadList.vue'),
@@ -620,6 +626,13 @@ const routes = [
         name: 'CustomerFollowUp',
         component: () => import('@/views/masterdata/CustomerFollowUp.vue'),
         meta: { title: '客户跟进', icon: 'ChatDotRound', menuId: 'masterdata:customer-followups' }
+      },
+      // 客户联系人
+      {
+        path: 'masterdata/customer-contacts',
+        name: 'CustomerContactList',
+        component: () => import('@/views/masterdata/CustomerContactList.vue'),
+        meta: { title: '客户联系人', icon: 'UserFilled', menuId: 'masterdata:customer-contacts' }
       },
       // 采购预算
       {

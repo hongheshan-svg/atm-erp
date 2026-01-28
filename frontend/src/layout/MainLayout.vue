@@ -25,9 +25,11 @@
             <el-icon><Avatar /></el-icon>
             <span>CRM客户管理</span>
           </template>
+          <el-menu-item index="/sales/crm-dashboard" v-if="hasMenuAccess('sales:crm-dashboard') || hasMenuAccess('sales')">CRM工作台</el-menu-item>
           <el-menu-item index="/sales/leads" v-if="hasMenuAccess('sales:leads')">销售线索</el-menu-item>
           <el-menu-item index="/sales/opportunities" v-if="hasMenuAccess('sales:opportunities')">销售商机</el-menu-item>
           <el-menu-item index="/customers" v-if="hasMenuAccess('masterdata:customers')">客户档案</el-menu-item>
+          <el-menu-item index="/masterdata/customer-contacts" v-if="hasMenuAccess('masterdata:customer-contacts') || hasMenuAccess('masterdata:customers')">客户联系人</el-menu-item>
           <el-menu-item index="/masterdata/customer-followups" v-if="hasMenuAccess('masterdata:customer-followups') || hasMenuAccess('masterdata:customers')">客户跟进</el-menu-item>
           <el-menu-item index="/masterdata/customer-credit" v-if="hasMenuAccess('masterdata:credit') || hasMenuAccess('masterdata:customers')">信用管理</el-menu-item>
           <el-menu-item index="/sales/quotations" v-if="hasMenuAccess('sales:quotations')">销售报价</el-menu-item>

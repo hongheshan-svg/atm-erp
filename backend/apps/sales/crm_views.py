@@ -411,3 +411,80 @@ class SalesForecastViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
             )
         
         return Response({'message': f'{year}年{month}月预测已更新'})
+
+
+class CRMDashboardView(viewsets.ViewSet):
+    """CRM仪表盘数据"""
+    
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """获取CRM统计数据"""
+        from apps.masterdata.models import Customer
+        from dateutil.relativedelta import relativedelta
+        
+        today = timezone.now().date()
+        month_start = today.replace(day=1)
+        last_month_start = month_start - relativedelta(months=1)
+        last_month_end = month_start - timezone.timedelta(days=1)
+        
+        # 线索统计
+        leads_count = Lead.objects.filter(
+            is_deleted=False
+        ).exclude(status__in=['CONVERTED', 'DISQUALIFIED']).count()
+        
+        leads_this_month = Lead.objects.filter(
+            is_deleted=False,
+            created_at__gte=month_start
+        ).count()
+        
+        leads_last_month = Lead.objects.filter(
+            is_deleted=False,
+            created_at__gte=last_month_start,
+            created_at__lt=month_start
+        ).count()
+        
+        leads_trend = 0
+        if leads_last_month > 0:
+            leads_trend = round((leads_this_month - leads_last_month) / leads_last_month * 100, 1)
+        
+        # 商机统计
+        active_opportunities = Opportunity.objects.filter(
+            is_deleted=False
+        ).exclude(stage__in=['CLOSED_WON', 'CLOSED_LOST'])
+        
+        opportunities_count = active_opportunities.count()
+        opportunities_amount = active_opportunities.aggregate(
+            total=Sum('estimated_amount')
+        )['total'] or 0
+        
+        # 客户统计
+        customers_count = Customer.objects.filter(
+            is_deleted=False,
+            status='ACTIVE'
+        ).count()
+        
+        new_customers = Customer.objects.filter(
+            is_deleted=False,
+            created_at__gte=month_start
+        ).count()
+        
+        # 本月成交
+        won_this_month = Opportunity.objects.filter(
+            is_deleted=False,
+            stage='CLOSED_WON',
+            closed_date__gte=month_start
+        ).aggregate(
+            count=Count('id'),
+            amount=Sum('actual_amount')
+        )
+        
+        return Response({
+            'leads_count': leads_count,
+            'leads_trend': leads_trend,
+            'opportunities_count': opportunities_count,
+            'opportunities_amount': float(opportunities_amount),
+            'customers_count': customers_count,
+            'new_customers': new_customers,
+            'won_count': won_this_month['count'] or 0,
+            'won_amount': float(won_this_month['amount'] or 0)
+        })

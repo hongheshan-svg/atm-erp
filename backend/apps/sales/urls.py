@@ -11,7 +11,7 @@ from .views import (
 )
 from .crm_views import (
     LeadSourceViewSet, LeadViewSet, OpportunityViewSet,
-    OpportunityActivityViewSet, SalesForecastViewSet
+    OpportunityActivityViewSet, SalesForecastViewSet, CRMDashboardView
 )
 from .quote_templates import QuoteTemplateViewSet, QuoteHistoryViewSet
 from .contract_templates import (
@@ -75,6 +75,7 @@ router.register(r'leads', LeadViewSet, basename='lead')
 router.register(r'opportunities', OpportunityViewSet, basename='opportunity')
 router.register(r'opportunity-activities', OpportunityActivityViewSet, basename='opportunity-activity')
 router.register(r'forecasts', SalesForecastViewSet, basename='forecast')
+router.register(r'crm-dashboard', CRMDashboardView, basename='crm-dashboard')
 
 # Quote Templates - 报价单模板
 router.register(r'quote-templates', QuoteTemplateViewSet, basename='quote-template')
