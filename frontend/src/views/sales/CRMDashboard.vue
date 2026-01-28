@@ -157,6 +157,7 @@
     </el-row>
 
     <!-- 底部：最新线索和跟进记录 -->
+    <!-- 底部：最新线索和跟进记录 - 使用列表格式 -->
     <el-row :gutter="16" style="margin-top: 16px;">
       <el-col :span="12">
         <el-card shadow="never" class="section-card">
@@ -166,19 +167,19 @@
               <el-button type="primary" link @click="$router.push('/sales/leads')">查看全部</el-button>
             </div>
           </template>
-          <el-table :data="recentLeads" border stripe max-height="250" size="small" table-layout="auto">
-            <el-table-column prop="lead_no" label="编号" min-width="100" show-overflow-tooltip />
-            <el-table-column prop="company_name" label="公司" min-width="120" show-overflow-tooltip />
-            <el-table-column prop="contact_name" label="联系人" min-width="70" />
-            <el-table-column prop="status_display" label="状态" min-width="70">
-              <template #default="{ row }">
-                <el-tag :type="getLeadStatusType(row.status)" size="small">{{ row.status_display }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="created_at" label="日期" min-width="85">
-              <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
-            </el-table-column>
-          </el-table>
+          <div class="data-list">
+            <div v-for="lead in recentLeads" :key="lead.id" class="data-item" @click="$router.push('/sales/leads')">
+              <div class="item-main">
+                <span class="item-title">{{ lead.company_name }}</span>
+                <el-tag :type="getLeadStatusType(lead.status)" size="small">{{ lead.status_display }}</el-tag>
+              </div>
+              <div class="item-sub">
+                <span>{{ lead.contact_name }}</span>
+                <span class="item-date">{{ formatDate(lead.created_at) }}</span>
+              </div>
+            </div>
+            <el-empty v-if="!recentLeads.length" description="暂无线索" :image-size="60" />
+          </div>
         </el-card>
       </el-col>
       <el-col :span="12">
@@ -189,17 +190,19 @@
               <el-button type="primary" link @click="$router.push('/masterdata/customer-followups')">查看全部</el-button>
             </div>
           </template>
-          <el-table :data="recentFollowups" border stripe max-height="250" size="small" table-layout="auto">
-            <el-table-column prop="customer_name" label="客户" min-width="100" show-overflow-tooltip />
-            <el-table-column prop="follow_type_display" label="类型" min-width="60" />
-            <el-table-column prop="subject" label="主题" min-width="100" show-overflow-tooltip />
-            <el-table-column prop="result_display" label="结果" min-width="60">
-              <template #default="{ row }">
-                <el-tag :type="getResultType(row.result)" size="small">{{ row.result_display }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="follow_date" label="日期" min-width="85" />
-          </el-table>
+          <div class="data-list">
+            <div v-for="follow in recentFollowups" :key="follow.id" class="data-item" @click="$router.push('/masterdata/customer-followups')">
+              <div class="item-main">
+                <span class="item-title">{{ follow.customer_name }}</span>
+                <el-tag :type="getResultType(follow.result)" size="small">{{ follow.result_display }}</el-tag>
+              </div>
+              <div class="item-sub">
+                <span>{{ follow.follow_type_display }} · {{ follow.subject }}</span>
+                <span class="item-date">{{ follow.follow_date }}</span>
+              </div>
+            </div>
+            <el-empty v-if="!recentFollowups.length" description="暂无跟进" :image-size="60" />
+          </div>
         </el-card>
       </el-col>
     </el-row>
@@ -516,5 +519,62 @@ onMounted(() => {
 .ranking-item .amount {
   font-weight: 500;
   color: #f56c6c;
+}
+
+/* 数据列表样式 */
+.data-list {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.data-item {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.data-item:hover {
+  background: #f5f7fa;
+}
+
+.data-item:last-child {
+  border-bottom: none;
+}
+
+.item-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.item-title {
+  font-weight: 500;
+  color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  margin-right: 8px;
+}
+
+.item-sub {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #909399;
+}
+
+.item-sub span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  margin-right: 8px;
+}
+
+.item-date {
+  flex-shrink: 0;
 }
 </style>
