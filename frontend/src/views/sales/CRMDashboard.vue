@@ -77,22 +77,22 @@
           <template #header>
             <div class="card-header">
               <span>近期商机动态</span>
+              <el-button type="primary" link @click="$router.push('/sales/opportunities')">查看全部</el-button>
             </div>
           </template>
-          <el-table :data="recentOpportunities" border stripe max-height="300" size="small" table-layout="auto">
-            <el-table-column prop="opportunity_no" label="编号" min-width="110" show-overflow-tooltip />
-            <el-table-column prop="name" label="商机名称" min-width="150" show-overflow-tooltip />
-            <el-table-column prop="customer_name" label="客户" min-width="120" show-overflow-tooltip />
-            <el-table-column prop="stage_display" label="阶段" min-width="80">
-              <template #default="{ row }">
-                <el-tag :type="getStageType(row.stage)" size="small">{{ row.stage_display }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="金额" min-width="100" align="right">
-              <template #default="{ row }">¥{{ formatNumber(row.estimated_amount) }}</template>
-            </el-table-column>
-            <el-table-column prop="expected_close_date" label="预计成交" min-width="90" />
-          </el-table>
+          <div class="data-list opp-list">
+            <div v-for="opp in recentOpportunities" :key="opp.id" class="data-item" @click="$router.push('/sales/opportunities')">
+              <div class="item-main">
+                <span class="item-title">{{ opp.name }}</span>
+                <el-tag :type="getStageType(opp.stage)" size="small">{{ opp.stage_display }}</el-tag>
+              </div>
+              <div class="item-sub">
+                <span>{{ opp.customer_name }}</span>
+                <span class="item-amount">¥{{ formatNumber(opp.estimated_amount) }}</span>
+              </div>
+            </div>
+            <el-empty v-if="!recentOpportunities.length" description="暂无商机" :image-size="60" />
+          </div>
         </el-card>
       </el-col>
 
@@ -576,5 +576,15 @@ onMounted(() => {
 
 .item-date {
   flex-shrink: 0;
+}
+
+.item-amount {
+  flex-shrink: 0;
+  font-weight: 500;
+  color: #f56c6c;
+}
+
+.opp-list {
+  max-height: 280px;
 }
 </style>
