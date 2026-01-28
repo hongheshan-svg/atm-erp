@@ -525,13 +525,18 @@ onMounted(() => {
 .data-list {
   max-height: 220px;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .data-item {
+  display: block;
   padding: 10px 12px;
   border-bottom: 1px solid #f0f0f0;
   cursor: pointer;
   transition: background 0.2s;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .data-item:hover {
@@ -544,9 +549,12 @@ onMounted(() => {
 
 .item-main {
   display: flex;
+  flex-direction: row;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 4px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .item-title {
@@ -556,14 +564,22 @@ onMounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
+  min-width: 0;
   margin-right: 8px;
+}
+
+.item-main .el-tag {
+  flex-shrink: 0;
 }
 
 .item-sub {
   display: flex;
+  flex-direction: row;
   justify-content: space-between;
   font-size: 12px;
   color: #909399;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .item-sub span:first-child {
@@ -571,6 +587,7 @@ onMounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
+  min-width: 0;
   margin-right: 8px;
 }
 
