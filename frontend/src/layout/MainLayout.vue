@@ -23,25 +23,12 @@
         <el-sub-menu index="crm" v-if="hasMenuAccess('crm') || hasMenuAccess('sales')">
           <template #title>
             <el-icon><Avatar /></el-icon>
-            <span>CRM客户管理</span>
+            <span>客户管理</span>
           </template>
-          <el-menu-item index="/sales/crm-dashboard" v-if="hasMenuAccess('sales:crm-dashboard') || hasMenuAccess('sales')">CRM工作台</el-menu-item>
-          <el-menu-item index="/sales/leads" v-if="hasMenuAccess('sales:leads')">销售线索</el-menu-item>
-          <el-menu-item index="/sales/opportunities" v-if="hasMenuAccess('sales:opportunities')">销售商机</el-menu-item>
           <el-menu-item index="/customers" v-if="hasMenuAccess('masterdata:customers')">客户档案</el-menu-item>
-          <el-menu-item index="/masterdata/customer-contacts" v-if="hasMenuAccess('masterdata:customer-contacts') || hasMenuAccess('masterdata:customers')">客户联系人</el-menu-item>
           <el-menu-item index="/masterdata/customer-followups" v-if="hasMenuAccess('masterdata:customer-followups') || hasMenuAccess('masterdata:customers')">客户跟进</el-menu-item>
-          <el-menu-item index="/masterdata/customer-credit" v-if="hasMenuAccess('masterdata:credit') || hasMenuAccess('masterdata:customers')">信用管理</el-menu-item>
           <el-menu-item index="/sales/quotations" v-if="hasMenuAccess('sales:quotations')">销售报价</el-menu-item>
           <el-menu-item index="/sales/contracts" v-if="hasMenuAccess('sales:contracts')">销售合同</el-menu-item>
-          <el-menu-item index="/sales/analysis" v-if="hasMenuAccess('sales:analysis') || hasMenuAccess('sales')">销售分析</el-menu-item>
-          <el-menu-item index="/finance/sales-reconciliation" v-if="hasMenuAccess('finance:sales-reconciliation') || hasMenuAccess('sales')">销售对账</el-menu-item>
-          <el-menu-item index="/aftersales/orders" v-if="hasMenuAccess('aftersales:orders') || hasMenuAccess('sales')">售后工单</el-menu-item>
-          <el-menu-item index="/sales/service-contracts" v-if="hasMenuAccess('sales:service') || hasMenuAccess('sales')">服务合同</el-menu-item>
-          <el-menu-item index="/sales/service-requests" v-if="hasMenuAccess('sales:service') || hasMenuAccess('sales')">服务请求</el-menu-item>
-          <el-menu-item index="/sales/preventive-maintenance" v-if="hasMenuAccess('sales:service') || hasMenuAccess('sales')">预防维护</el-menu-item>
-          <el-menu-item index="/sales/knowledge-base" v-if="hasMenuAccess('sales:service') || hasMenuAccess('sales')">知识库</el-menu-item>
-          <el-menu-item index="/sales/quote-versions" v-if="hasMenuAccess('sales:quote') || hasMenuAccess('sales')">报价版本</el-menu-item>
         </el-sub-menu>
         
         <!-- ==================== PLM 产品生命周期管理 ==================== -->
@@ -110,7 +97,6 @@
           <el-menu-item index="/purchase/outsource" v-if="hasMenuAccess('purchase:outsource') || hasMenuAccess('purchase')">外协加工</el-menu-item>
           <el-menu-item index="/purchase/budgets" v-if="hasMenuAccess('purchase:budgets') || hasMenuAccess('purchase')">采购预算</el-menu-item>
           <el-menu-item index="/finance/ap" v-if="hasMenuAccess('finance:ap')">应付账款</el-menu-item>
-          <el-menu-item index="/finance/purchase-reconciliation" v-if="hasMenuAccess('finance:purchase-reconciliation') || hasMenuAccess('purchase')">采购对账</el-menu-item>
         </el-sub-menu>
         
         <el-sub-menu index="erp-supplier" v-if="hasMenuAccess('purchase') || hasMenuAccess('masterdata')">
@@ -146,6 +132,8 @@
           <el-menu-item index="/finance/expenses" v-if="hasMenuAccess('finance:expenses')">费用报销</el-menu-item>
           <el-menu-item index="/finance/shared-expenses" v-if="hasMenuAccess('finance:shared-expenses')">公共费用分摊</el-menu-item>
           <el-menu-item index="/finance/invoices" v-if="hasMenuAccess('finance:invoices')">发票管理</el-menu-item>
+          <el-menu-item index="/finance/sales-reconciliation" v-if="hasMenuAccess('finance:sales-reconciliation') || hasMenuAccess('finance')">销售对账</el-menu-item>
+          <el-menu-item index="/finance/purchase-reconciliation" v-if="hasMenuAccess('finance:purchase-reconciliation') || hasMenuAccess('finance')">采购对账</el-menu-item>
           <el-menu-item index="/finance/project-costs" v-if="hasMenuAccess('finance:project-costs')">项目成本</el-menu-item>
           <el-menu-item index="/finance/assets" v-if="hasMenuAccess('finance:assets') || hasMenuAccess('finance')">固定资产</el-menu-item>
         </el-sub-menu>
