@@ -283,7 +283,7 @@ const loadMaintenances = async () => {
     }
     if (statusFilter.value) params.status = statusFilter.value
 
-    const res = await request.get('/api/sales/preventive-maintenance/', { params })
+    const res = await request.get('/sales/preventive-maintenance/', { params })
     maintenances.value = res.results || res
     pagination.total = res.count || maintenances.value.length
   } catch (e) {
@@ -296,9 +296,9 @@ const loadMaintenances = async () => {
 const loadStats = async () => {
   try {
     const [scheduledRes, upcomingRes, overdueRes] = await Promise.all([
-      request.get('/api/sales/preventive-maintenance/', { params: { status: 'SCHEDULED', page_size: 1 } }),
-      request.get('/api/sales/preventive-maintenance/upcoming/', { params: { days: 7 } }),
-      request.get('/api/sales/preventive-maintenance/overdue/')
+      request.get('/sales/preventive-maintenance/', { params: { status: 'SCHEDULED', page_size: 1 } }),
+      request.get('/sales/preventive-maintenance/upcoming/', { params: { days: 7 } }),
+      request.get('/sales/preventive-maintenance/overdue/')
     ])
     stats.value.scheduled = scheduledRes.count || 0
     stats.value.dueThisWeek = upcomingRes?.length || 0
@@ -310,7 +310,7 @@ const loadStats = async () => {
 
 const loadContracts = async () => {
   try {
-    const res = await request.get('/api/sales/service-contracts/', { params: { status: 'ACTIVE', page_size: 1000 } })
+    const res = await request.get('/sales/service-contracts/', { params: { status: 'ACTIVE', page_size: 1000 } })
     contracts.value = res.results || res
   } catch (e) {
     console.error('加载合同列表失败')
@@ -319,7 +319,7 @@ const loadContracts = async () => {
 
 const loadUsers = async () => {
   try {
-    const res = await request.get('/api/auth/users/', { params: { page_size: 1000 } })
+    const res = await request.get('/auth/users/', { params: { page_size: 1000 } })
     users.value = res.results || res
   } catch (e) {
     console.error('加载用户列表失败')
@@ -334,7 +334,7 @@ const createMaintenance = async () => {
     if (data.checklist) {
       data.checklist = data.checklist.split('\n').filter(s => s.trim())
     }
-    await request.post('/api/sales/preventive-maintenance/', data)
+    await request.post('/sales/preventive-maintenance/', data)
     ElMessage.success('预防维护计划创建成功')
     showCreateDialog.value = false
     loadMaintenances()

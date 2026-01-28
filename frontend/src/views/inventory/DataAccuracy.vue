@@ -279,7 +279,7 @@ const formatDateTime = (dt) => {
 
 const loadStats = async () => {
   try {
-    const res = await request.get('/api/inventory/reports/accuracy/')
+    const res = await request.get('/inventory/reports/accuracy/')
     accuracyTrend.value = res.data.accuracy_trend || []
     severityData.value = res.data.issue_by_severity || []
     stats.value = {
@@ -299,7 +299,7 @@ const loadStats = async () => {
 const loadPendingIssues = async () => {
   loading.value = true
   try {
-    const res = await request.get('/api/inventory/validation-results/', {
+    const res = await request.get('/inventory/validation-results/', {
       params: { status: 'PENDING', page: issuePage.value, page_size: 10 }
     })
     pendingIssues.value = res.data.results || res.data
@@ -313,7 +313,7 @@ const loadPendingIssues = async () => {
 
 const loadReconciliations = async () => {
   try {
-    const res = await request.get('/api/inventory/reconciliation-sessions/', {
+    const res = await request.get('/inventory/reconciliation-sessions/', {
       params: { page_size: 20 }
     })
     reconciliations.value = res.data.results || res.data
@@ -324,7 +324,7 @@ const loadReconciliations = async () => {
 
 const loadValidationRules = async () => {
   try {
-    const res = await request.get('/api/inventory/validation-rules/', {
+    const res = await request.get('/inventory/validation-rules/', {
       params: { page_size: 100 }
     })
     validationRules.value = res.data.results || res.data
@@ -334,7 +334,7 @@ const loadValidationRules = async () => {
 }
 
 const loadWarehouses = async () => {
-  const res = await request.get('/api/masterdata/warehouses/', { params: { page_size: 100 } })
+  const res = await request.get('/masterdata/warehouses/', { params: { page_size: 100 } })
   warehouses.value = res.data.results || res.data
 }
 
@@ -394,7 +394,7 @@ const renderCharts = () => {
 const runValidation = async () => {
   validating.value = true
   try {
-    const res = await request.post('/api/inventory/validation-results/run_checks/')
+    const res = await request.post('/inventory/validation-results/run_checks/')
     ElMessage.success(`校验完成，发现 ${res.data.total_issues} 个问题`)
     loadStats()
     loadPendingIssues()
@@ -417,7 +417,7 @@ const showReconcileDialog = () => {
 const createReconciliation = async () => {
   submitting.value = true
   try {
-    const res = await request.post('/api/inventory/reconciliation-sessions/create_and_run/', reconcileForm)
+    const res = await request.post('/inventory/reconciliation-sessions/create_and_run/', reconcileForm)
     ElMessage.success(`对账完成，检查 ${res.data.total_items_checked} 个物料，发现 ${res.data.issues_found} 个问题`)
     reconcileDialogVisible.value = false
     loadReconciliations()
@@ -471,7 +471,7 @@ const viewReconciliation = (session) => {
 
 const initDefaultRules = async () => {
   try {
-    const res = await request.post('/api/inventory/validation-rules/init_default_rules/')
+    const res = await request.post('/inventory/validation-rules/init_default_rules/')
     ElMessage.success(`初始化完成，创建 ${res.data.created_count} 条规则`)
     loadValidationRules()
   } catch (e) {

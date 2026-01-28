@@ -194,7 +194,7 @@ const loadData = async () => {
       search: searchText.value || undefined,
       status: statusFilter.value || undefined
     }
-    const res = await request.get('/api/production/routing-templates/', { params })
+    const res = await request.get('/production/routing-templates/', { params })
     tableData.value = res.data.results || res.data
     total.value = res.data.count || tableData.value.length
   } catch (e) {
@@ -205,17 +205,17 @@ const loadData = async () => {
 }
 
 const loadCategories = async () => {
-  const res = await request.get('/api/masterdata/item-categories/', { params: { page_size: 500 } })
+  const res = await request.get('/masterdata/item-categories/', { params: { page_size: 500 } })
   categories.value = res.data.results || res.data
 }
 
 const loadItems = async () => {
-  const res = await request.get('/api/masterdata/items/', { params: { page_size: 1000, item_type: 'PRODUCT' } })
+  const res = await request.get('/masterdata/items/', { params: { page_size: 1000, item_type: 'PRODUCT' } })
   items.value = res.data.results || res.data
 }
 
 const loadProjects = async () => {
-  const res = await request.get('/api/projects/projects/', { params: { page_size: 500, status: 'IN_PROGRESS' } })
+  const res = await request.get('/projects/projects/', { params: { page_size: 500, status: 'IN_PROGRESS' } })
   projects.value = res.data.results || res.data
 }
 
@@ -261,7 +261,7 @@ const handleSubmit = async () => {
       await request.patch(`/api/production/routing-templates/${form.id}/`, form)
       ElMessage.success('保存成功')
     } else {
-      const res = await request.post('/api/production/routing-templates/', form)
+      const res = await request.post('/production/routing-templates/', form)
       ElMessage.success('创建成功')
       router.push(`/production/routing-template/${res.data.id}`)
     }
@@ -299,7 +299,7 @@ const handleCommand = async (cmd, row) => {
       case 'copy':
         // 复制模板
         const copyData = { ...row, code: `${row.code}_COPY`, id: null }
-        await request.post('/api/production/routing-templates/', copyData)
+        await request.post('/production/routing-templates/', copyData)
         ElMessage.success('复制成功')
         loadData()
         break

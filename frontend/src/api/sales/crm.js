@@ -22,7 +22,7 @@ export function createLeadSource(data) {
 
 export function updateLeadSource(id, data) {
   return request({
-    url: `/api/sales/lead-sources/${id}/`,
+    url: `/sales/lead-sources/${id}/`,
     method: 'put',
     data
   })
@@ -30,7 +30,7 @@ export function updateLeadSource(id, data) {
 
 export function deleteLeadSource(id) {
   return request({
-    url: `/api/sales/lead-sources/${id}/`,
+    url: `/sales/lead-sources/${id}/`,
     method: 'delete'
   })
 }
@@ -46,7 +46,7 @@ export function getLeadList(params) {
 
 export function getLead(id) {
   return request({
-    url: `/api/sales/leads/${id}/`,
+    url: `/sales/leads/${id}/`,
     method: 'get'
   })
 }
@@ -61,7 +61,7 @@ export function createLead(data) {
 
 export function updateLead(id, data) {
   return request({
-    url: `/api/sales/leads/${id}/`,
+    url: `/sales/leads/${id}/`,
     method: 'put',
     data
   })
@@ -69,7 +69,7 @@ export function updateLead(id, data) {
 
 export function deleteLead(id) {
   return request({
-    url: `/api/sales/leads/${id}/`,
+    url: `/sales/leads/${id}/`,
     method: 'delete'
   })
 }
@@ -84,7 +84,7 @@ export function getLeadStatistics(params) {
 
 export function convertLead(id, data) {
   return request({
-    url: `/api/sales/leads/${id}/convert/`,
+    url: `/sales/leads/${id}/convert/`,
     method: 'post',
     data
   })
@@ -92,7 +92,7 @@ export function convertLead(id, data) {
 
 export function disqualifyLead(id, data) {
   return request({
-    url: `/api/sales/leads/${id}/disqualify/`,
+    url: `/sales/leads/${id}/disqualify/`,
     method: 'post',
     data
   })
@@ -109,7 +109,7 @@ export function getOpportunityList(params) {
 
 export function getOpportunity(id) {
   return request({
-    url: `/api/sales/opportunities/${id}/`,
+    url: `/sales/opportunities/${id}/`,
     method: 'get'
   })
 }
@@ -124,7 +124,7 @@ export function createOpportunity(data) {
 
 export function updateOpportunity(id, data) {
   return request({
-    url: `/api/sales/opportunities/${id}/`,
+    url: `/sales/opportunities/${id}/`,
     method: 'put',
     data
   })
@@ -132,7 +132,7 @@ export function updateOpportunity(id, data) {
 
 export function deleteOpportunity(id) {
   return request({
-    url: `/api/sales/opportunities/${id}/`,
+    url: `/sales/opportunities/${id}/`,
     method: 'delete'
   })
 }
@@ -155,7 +155,7 @@ export function getOpportunityPipeline(params) {
 
 export function changeOpportunityStage(id, data) {
   return request({
-    url: `/api/sales/opportunities/${id}/change_stage/`,
+    url: `/sales/opportunities/${id}/change_stage/`,
     method: 'post',
     data
   })
@@ -163,7 +163,7 @@ export function changeOpportunityStage(id, data) {
 
 export function addOpportunityActivity(id, data) {
   return request({
-    url: `/api/sales/opportunities/${id}/add_activity/`,
+    url: `/sales/opportunities/${id}/add_activity/`,
     method: 'post',
     data
   })
@@ -171,7 +171,7 @@ export function addOpportunityActivity(id, data) {
 
 export function createQuotationFromOpportunity(id) {
   return request({
-    url: `/api/sales/opportunities/${id}/create_quotation/`,
+    url: `/sales/opportunities/${id}/create_quotation/`,
     method: 'post'
   })
 }

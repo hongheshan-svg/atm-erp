@@ -303,7 +303,7 @@ const loadDashboard = async () => {
       params.start_date = dateRange.value[0]
       params.end_date = dateRange.value[1]
     }
-    const res = await request.get('/api/production/capacity/dashboard/', { params })
+    const res = await request.get('/production/capacity/dashboard/', { params })
     dashboard.value = res.summary || {}
     
     // 渲染图表
@@ -367,7 +367,7 @@ const loadResources = async () => {
   try {
     const params = {}
     if (resourceFilter.type) params.resource_type = resourceFilter.type
-    const res = await request.get('/api/production/resources/', { params })
+    const res = await request.get('/production/resources/', { params })
     resources.value = res.results || res
   } catch (e) {
     ElMessage.error('加载资源列表失败')
@@ -379,7 +379,7 @@ const loadResources = async () => {
 const loadAllocations = async () => {
   allocationLoading.value = true
   try {
-    const res = await request.get('/api/production/resource-allocations/')
+    const res = await request.get('/production/resource-allocations/')
     allocations.value = res.results || res
   } catch (e) {
     ElMessage.error('加载分配列表失败')
@@ -390,7 +390,7 @@ const loadAllocations = async () => {
 
 const loadResourceTypes = async () => {
   try {
-    const res = await request.get('/api/production/resource-types/')
+    const res = await request.get('/production/resource-types/')
     resourceTypes.value = res.results || res
   } catch (e) {
     console.error('加载资源类型失败')
@@ -399,7 +399,7 @@ const loadResourceTypes = async () => {
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/api/projects/projects/', { params: { page_size: 1000 } })
+    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
     projects.value = res.results || res
   } catch (e) {
     console.error('加载项目列表失败')
@@ -410,7 +410,7 @@ const createResource = async () => {
   try {
     await resourceFormRef.value.validate()
     submitting.value = true
-    await request.post('/api/production/resources/', resourceForm)
+    await request.post('/production/resources/', resourceForm)
     ElMessage.success('资源创建成功')
     showResourceDialog.value = false
     loadResources()
@@ -426,7 +426,7 @@ const checkAvailability = async () => {
   try {
     await allocationFormRef.value.validate()
     checking.value = true
-    const res = await request.post('/api/production/resource-allocations/check_availability/', {
+    const res = await request.post('/production/resource-allocations/check_availability/', {
       resource: allocationForm.resource,
       start_date: allocationForm.start_date,
       end_date: allocationForm.end_date,
@@ -448,7 +448,7 @@ const createAllocation = async () => {
   try {
     await allocationFormRef.value.validate()
     submitting.value = true
-    await request.post('/api/production/resource-allocations/', allocationForm)
+    await request.post('/production/resource-allocations/', allocationForm)
     ElMessage.success('分配创建成功')
     showAllocationDialog.value = false
     loadAllocations()

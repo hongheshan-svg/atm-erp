@@ -226,7 +226,7 @@ const loadData = async () => {
       search: searchText.value || undefined,
       status: statusFilter.value || undefined
     }
-    const res = await request.get('/api/sales/quote-estimations/', { params })
+    const res = await request.get('/sales/quote-estimations/', { params })
     tableData.value = res.data.results || res.data
     total.value = res.data.count || tableData.value.length
   } catch (e) {
@@ -237,12 +237,12 @@ const loadData = async () => {
 }
 
 const loadCustomers = async () => {
-  const res = await request.get('/api/masterdata/customers/', { params: { page_size: 1000 } })
+  const res = await request.get('/masterdata/customers/', { params: { page_size: 1000 } })
   customers.value = res.data.results || res.data
 }
 
 const loadOpportunities = async () => {
-  const res = await request.get('/api/sales/opportunities/', { params: { page_size: 1000 } })
+  const res = await request.get('/sales/opportunities/', { params: { page_size: 1000 } })
   opportunities.value = res.data.results || res.data
 }
 
@@ -283,7 +283,7 @@ const handleSubmit = async () => {
       await request.patch(`/api/sales/quote-estimations/${form.id}/`, form)
       ElMessage.success('保存成功')
     } else {
-      const res = await request.post('/api/sales/quote-estimations/', form)
+      const res = await request.post('/sales/quote-estimations/', form)
       ElMessage.success('创建成功')
       router.push(`/sales/quote-estimation/${res.data.id}`)
     }

@@ -141,7 +141,7 @@ const fetchSuggestions = async (queryString, cb) => {
   }
 
   try {
-    const { data } = await request.get('/api/core/search/suggest/', {
+    const { data } = await request.get('/core/search/suggest/', {
       params: {
         q: queryString,
         type: 'items',
@@ -168,7 +168,7 @@ const performSearch = async () => {
   resultsVisible.value = true
 
   try {
-    const { data } = await request.get('/api/core/search/search/', {
+    const { data } = await request.get('/core/search/search/', {
       params: {
         q: searchQuery.value,
         limit: 20

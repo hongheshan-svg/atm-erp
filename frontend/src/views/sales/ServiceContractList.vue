@@ -293,7 +293,7 @@ const loadContracts = async () => {
     if (searchKeyword.value) params.search = searchKeyword.value
     if (statusFilter.value) params.status = statusFilter.value
 
-    const res = await request.get('/api/sales/service-contracts/', { params })
+    const res = await request.get('/sales/service-contracts/', { params })
     contracts.value = res.results || res
     pagination.total = res.count || contracts.value.length
   } catch (e) {
@@ -305,16 +305,16 @@ const loadContracts = async () => {
 
 const loadStats = async () => {
   try {
-    const activeRes = await request.get('/api/sales/service-contracts/', { params: { status: 'ACTIVE', page_size: 1 } })
+    const activeRes = await request.get('/sales/service-contracts/', { params: { status: 'ACTIVE', page_size: 1 } })
     stats.value.activeContracts = activeRes.count || 0
 
-    const expiringRes = await request.get('/api/sales/service-contracts/expiring_soon/', { params: { days: 30 } })
+    const expiringRes = await request.get('/sales/service-contracts/expiring_soon/', { params: { days: 30 } })
     stats.value.expiringSoon = expiringRes?.length || 0
 
-    const requestsRes = await request.get('/api/sales/service-requests/', { params: { status: 'NEW', page_size: 1 } })
+    const requestsRes = await request.get('/sales/service-requests/', { params: { status: 'NEW', page_size: 1 } })
     stats.value.openRequests = requestsRes.count || 0
 
-    const pmRes = await request.get('/api/sales/preventive-maintenance/upcoming/', { params: { days: 30 } })
+    const pmRes = await request.get('/sales/preventive-maintenance/upcoming/', { params: { days: 30 } })
     stats.value.plannedPM = pmRes?.length || 0
   } catch (e) {
     console.error('加载统计数据失败')
@@ -323,7 +323,7 @@ const loadStats = async () => {
 
 const loadCustomers = async () => {
   try {
-    const res = await request.get('/api/masterdata/customers/', { params: { page_size: 1000 } })
+    const res = await request.get('/masterdata/customers/', { params: { page_size: 1000 } })
     customers.value = res.results || res
   } catch (e) {
     console.error('加载客户列表失败')
@@ -332,7 +332,7 @@ const loadCustomers = async () => {
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/api/projects/projects/', { params: { page_size: 1000 } })
+    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
     projects.value = res.results || res
   } catch (e) {
     console.error('加载项目列表失败')
@@ -343,7 +343,7 @@ const createContract = async () => {
   try {
     await contractFormRef.value.validate()
     submitting.value = true
-    await request.post('/api/sales/service-contracts/', contractForm)
+    await request.post('/sales/service-contracts/', contractForm)
     ElMessage.success('合同创建成功')
     showCreateDialog.value = false
     loadContracts()

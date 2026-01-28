@@ -13,7 +13,7 @@ export function getCustomerList(params) {
 
 export function getCustomer(id) {
   return request({
-    url: `/api/masterdata/customers/${id}/`,
+    url: `/masterdata/customers/${id}/`,
     method: 'get'
   })
 }
@@ -28,7 +28,7 @@ export function createCustomer(data) {
 
 export function updateCustomer(id, data) {
   return request({
-    url: `/api/masterdata/customers/${id}/`,
+    url: `/masterdata/customers/${id}/`,
     method: 'put',
     data
   })
@@ -36,7 +36,7 @@ export function updateCustomer(id, data) {
 
 export function deleteCustomer(id) {
   return request({
-    url: `/api/masterdata/customers/${id}/`,
+    url: `/masterdata/customers/${id}/`,
     method: 'delete'
   })
 }

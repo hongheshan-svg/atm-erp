@@ -256,7 +256,7 @@ const getPercentage = (value) => {
 }
 
 const loadProjects = async () => {
-  const res = await request.get('/api/projects/projects/', {
+  const res = await request.get('/projects/projects/', {
     params: { page_size: 500 }
   })
   projects.value = res.data.results || res.data
@@ -297,7 +297,7 @@ const loadDetails = async () => {
       page_size: detailPageSize.value,
       cost_element: elementFilter.value || undefined
     }
-    const res = await request.get('/api/projects/cost-details/', { params })
+    const res = await request.get('/projects/cost-details/', { params })
     costDetails.value = res.data.results || res.data
     detailTotal.value = res.data.count || costDetails.value.length
   } catch (e) {

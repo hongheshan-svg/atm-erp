@@ -177,7 +177,7 @@ const treeProps = {
 }
 
 // 上传配置
-const uploadUrl = '/api/projects/drawings/'
+const uploadUrl = '/projects/drawings/'
 const uploadHeaders = {
   Authorization: `Bearer ${localStorage.getItem('access_token')}`
 }

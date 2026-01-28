@@ -143,7 +143,7 @@ const getCategoryType = (category) => {
 const loadResourceTypes = async () => {
   loading.value = true
   try {
-    const res = await request.get('/api/production/resource-types/')
+    const res = await request.get('/production/resource-types/')
     resourceTypes.value = res.results || res
   } catch (e) {
     ElMessage.error('加载资源类型失败')
@@ -186,7 +186,7 @@ const saveType = async () => {
       await request.put(`/api/production/resource-types/${editingId.value}/`, typeForm)
       ElMessage.success('资源类型已更新')
     } else {
-      await request.post('/api/production/resource-types/', typeForm)
+      await request.post('/production/resource-types/', typeForm)
       ElMessage.success('资源类型已创建')
     }
     

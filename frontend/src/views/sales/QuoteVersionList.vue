@@ -401,7 +401,7 @@ const loadQuotes = async () => {
     if (filters.customer) params.customer = filters.customer
     if (filters.status) params.status = filters.status
 
-    const res = await request.get('/api/sales/quote-versions/', { params })
+    const res = await request.get('/sales/quote-versions/', { params })
     quotes.value = res.results || res
     pagination.total = res.count || quotes.value.length
   } catch (e) {
@@ -413,7 +413,7 @@ const loadQuotes = async () => {
 
 const loadCustomers = async () => {
   try {
-    const res = await request.get('/api/masterdata/customers/', { params: { page_size: 1000 } })
+    const res = await request.get('/masterdata/customers/', { params: { page_size: 1000 } })
     customers.value = res.results || res
   } catch (e) {
     console.error('加载客户列表失败')
@@ -422,7 +422,7 @@ const loadCustomers = async () => {
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/api/projects/projects/', { params: { page_size: 1000, status: 'COMPLETED' } })
+    const res = await request.get('/projects/projects/', { params: { page_size: 1000, status: 'COMPLETED' } })
     projects.value = res.results || res
   } catch (e) {
     console.error('加载项目列表失败')
@@ -439,7 +439,7 @@ const createQuote = async () => {
   try {
     await quoteFormRef.value.validate()
     submitting.value = true
-    await request.post('/api/sales/quote-versions/', quoteForm)
+    await request.post('/sales/quote-versions/', quoteForm)
     ElMessage.success('报价创建成功')
     showCreateDialog.value = false
     loadQuotes()
@@ -508,7 +508,7 @@ const estimateFromReference = async (projectId) => {
 const findSimilar = async () => {
   searchingSimilar.value = true
   try {
-    const res = await request.post('/api/sales/quote-versions/find_similar/', {
+    const res = await request.post('/sales/quote-versions/find_similar/', {
       keywords: similarKeywords.value,
       industry: similarIndustry.value
     })

@@ -189,7 +189,7 @@ const getPhaseLabel = (phase) => {
 }
 
 const loadProjects = async () => {
-  const res = await request.get('/api/projects/projects/', { 
+  const res = await request.get('/projects/projects/', { 
     params: { page_size: 500, status__in: 'IN_PROGRESS,DEBUGGING,INSTALLATION' } 
   })
   projects.value = res.data.results || res.data

@@ -313,7 +313,7 @@ const fileList = ref([])
 const commonTags = ['技术规格', '功能需求', '性能要求', '接口规范', '安全要求', '客户提供', '内部文档']
 
 // 文件上传配置
-const uploadUrl = '/api/core/upload/'
+const uploadUrl = '/core/upload/'
 const uploadHeaders = computed(() => ({
   Authorization: `Bearer ${localStorage.getItem('access_token')}`
 }))

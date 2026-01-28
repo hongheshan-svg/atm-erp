@@ -228,7 +228,7 @@ const getProgressStatus = (row) => {
 
 const loadDashboard = async () => {
   try {
-    const res = await request.get('/api/purchase/supplier-portal/dashboard/')
+    const res = await request.get('/purchase/supplier-portal/dashboard/')
     stats.value = {
       pendingConfirmation: res.pending_confirmation || 0,
       inProgress: res.in_progress || 0,
@@ -245,7 +245,7 @@ const loadDashboard = async () => {
 const loadAccounts = async () => {
   loading.value = true
   try {
-    const res = await request.get('/api/purchase/supplier-accounts/')
+    const res = await request.get('/purchase/supplier-accounts/')
     accounts.value = res.results || res
   } catch (e) {
     ElMessage.error('加载账户列表失败')
@@ -259,7 +259,7 @@ const loadOrderViews = async () => {
   try {
     const params = {}
     if (orderFilter.status) params.status = orderFilter.status
-    const res = await request.get('/api/purchase/supplier-order-views/', { params })
+    const res = await request.get('/purchase/supplier-order-views/', { params })
     orderViews.value = res.results || res
   } catch (e) {
     ElMessage.error('加载订单视图失败')
@@ -270,7 +270,7 @@ const loadOrderViews = async () => {
 
 const loadSuppliers = async () => {
   try {
-    const res = await request.get('/api/masterdata/suppliers/', { params: { page_size: 1000 } })
+    const res = await request.get('/masterdata/suppliers/', { params: { page_size: 1000 } })
     suppliers.value = res.results || res
   } catch (e) {
     console.error('加载供应商列表失败')
@@ -281,7 +281,7 @@ const createAccount = async () => {
   try {
     await accountFormRef.value.validate()
     submitting.value = true
-    await request.post('/api/purchase/supplier-accounts/', accountForm)
+    await request.post('/purchase/supplier-accounts/', accountForm)
     ElMessage.success('账户创建成功')
     showCreateDialog.value = false
     loadAccounts()

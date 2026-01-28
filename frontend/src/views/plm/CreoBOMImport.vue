@@ -550,7 +550,7 @@ const doManualMatch = async () => {
 
 const downloadTemplate = () => {
   // 下载CAD BOM导入模板
-  window.open('/api/projects/creo-bom-imports/download_template/', '_blank')
+  window.open('/projects/creo-bom-imports/download_template/', '_blank')
 }
 
 onMounted(() => {

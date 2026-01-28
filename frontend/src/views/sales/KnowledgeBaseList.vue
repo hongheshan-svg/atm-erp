@@ -260,7 +260,7 @@ const loadArticles = async () => {
     if (searchKeyword.value) params.search = searchKeyword.value
     if (categoryFilter.value) params.category = categoryFilter.value
 
-    const res = await request.get('/api/sales/knowledge-base/', { params })
+    const res = await request.get('/sales/knowledge-base/', { params })
     articles.value = res.results || res
     pagination.total = res.count || articles.value.length
   } catch (e) {
@@ -272,7 +272,7 @@ const loadArticles = async () => {
 
 const loadPopularArticles = async () => {
   try {
-    const res = await request.get('/api/sales/knowledge-base/popular/')
+    const res = await request.get('/sales/knowledge-base/popular/')
     popularArticles.value = res || []
   } catch (e) {
     console.error('加载热门文章失败')
@@ -281,7 +281,7 @@ const loadPopularArticles = async () => {
 
 const loadPopularTags = async () => {
   try {
-    const res = await request.get('/api/sales/knowledge-base/tags/')
+    const res = await request.get('/sales/knowledge-base/tags/')
     popularTags.value = res || []
   } catch (e) {
     console.error('加载热门标签失败')
@@ -309,7 +309,7 @@ const saveDraft = async () => {
   try {
     await articleFormRef.value.validate()
     submitting.value = true
-    await request.post('/api/sales/knowledge-base/', { ...articleForm, status: 'DRAFT' })
+    await request.post('/sales/knowledge-base/', { ...articleForm, status: 'DRAFT' })
     ElMessage.success('草稿已保存')
     showCreateDialog.value = false
     loadArticles()
@@ -324,7 +324,7 @@ const publishArticle = async () => {
   try {
     await articleFormRef.value.validate()
     submitting.value = true
-    await request.post('/api/sales/knowledge-base/', { ...articleForm, status: 'PUBLISHED' })
+    await request.post('/sales/knowledge-base/', { ...articleForm, status: 'PUBLISHED' })
     ElMessage.success('文章已发布')
     showCreateDialog.value = false
     loadArticles()

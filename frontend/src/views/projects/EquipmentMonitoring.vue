@@ -236,7 +236,7 @@ const isHeartbeatOld = (datetime) => {
 const loadDashboard = async () => {
   loading.value = true
   try {
-    const res = await request.get('/api/projects/monitoring/dashboard/')
+    const res = await request.get('/projects/monitoring/dashboard/')
     stats.value = res.data.equipment_stats || {}
     activeAlarms.value = res.data.active_alarms || []
     pendingPM.value = res.data.pending_pm || []
@@ -249,7 +249,7 @@ const loadDashboard = async () => {
 
 const loadConnections = async () => {
   try {
-    const res = await request.get('/api/projects/equipment-connections/', { params: { page_size: 100 } })
+    const res = await request.get('/projects/equipment-connections/', { params: { page_size: 100 } })
     connections.value = res.data.results || res.data
   } catch (e) {
     console.error(e)
@@ -324,7 +324,7 @@ const startDiagnosis = (conn) => {
 const handleStartDiagnosis = async () => {
   submitting.value = true
   try {
-    const res = await request.post('/api/projects/diagnostic-sessions/', {
+    const res = await request.post('/projects/diagnostic-sessions/', {
       equipment: currentEquipment.value.equipment,
       reason: diagnosisForm.reason,
       started_at: new Date().toISOString()
