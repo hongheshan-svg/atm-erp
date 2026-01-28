@@ -80,7 +80,6 @@
           </template>
           <el-menu-item index="/sales/orders" v-if="hasMenuAccess('sales:orders')">销售订单</el-menu-item>
           <el-menu-item index="/sales/delivery-orders" v-if="hasMenuAccess('sales:delivery-orders')">发货管理</el-menu-item>
-          <el-menu-item index="/finance/ar" v-if="hasMenuAccess('finance:ar')">应收账款</el-menu-item>
           <el-menu-item index="/finance/sales-reconciliation" v-if="hasMenuAccess('finance:sales-reconciliation') || hasMenuAccess('sales')">销售对账</el-menu-item>
         </el-sub-menu>
         
@@ -95,7 +94,6 @@
           <el-menu-item index="/purchase/orders" v-if="hasMenuAccess('purchase:orders')">采购订单</el-menu-item>
           <el-menu-item index="/purchase/goods-receipts" v-if="hasMenuAccess('purchase:goods-receipts')">到货质检</el-menu-item>
           <el-menu-item index="/purchase/outsource" v-if="hasMenuAccess('purchase:outsource') || hasMenuAccess('purchase')">外协加工</el-menu-item>
-          <el-menu-item index="/finance/ap" v-if="hasMenuAccess('finance:ap')">应付账款</el-menu-item>
           <el-menu-item index="/finance/purchase-reconciliation" v-if="hasMenuAccess('finance:purchase-reconciliation') || hasMenuAccess('purchase')">采购对账</el-menu-item>
         </el-sub-menu>
         
@@ -129,9 +127,10 @@
             <el-icon><Money /></el-icon>
             <span>ERP财务管理</span>
           </template>
-          <el-menu-item index="/finance/expenses" v-if="hasMenuAccess('finance:expenses')">费用报销</el-menu-item>
-          <el-menu-item index="/finance/shared-expenses" v-if="hasMenuAccess('finance:shared-expenses')">公共费用分摊</el-menu-item>
+          <el-menu-item index="/finance/ar" v-if="hasMenuAccess('finance:ar') || hasMenuAccess('finance')">应收账款</el-menu-item>
+          <el-menu-item index="/finance/ap" v-if="hasMenuAccess('finance:ap') || hasMenuAccess('finance')">应付账款</el-menu-item>
           <el-menu-item index="/finance/invoices" v-if="hasMenuAccess('finance:invoices')">发票管理</el-menu-item>
+          <el-menu-item index="/finance/expenses" v-if="hasMenuAccess('finance:expenses')">费用报销</el-menu-item>
           <el-menu-item index="/finance/project-costs" v-if="hasMenuAccess('finance:project-costs')">项目成本</el-menu-item>
           <el-menu-item index="/finance/assets" v-if="hasMenuAccess('finance:assets') || hasMenuAccess('finance')">固定资产</el-menu-item>
         </el-sub-menu>
