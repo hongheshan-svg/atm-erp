@@ -14,6 +14,18 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
     line_type_display = serializers.CharField(source='get_line_type_display', read_only=True)
     receipt_status_display = serializers.CharField(source='get_receipt_status_display', read_only=True)
     po_order_no = serializers.CharField(source='po.order_no', read_only=True)
+    order_items = serializers.SerializerMethodField()
+    
+    # 前端打印模板需要的字段映射
+    description = serializers.SerializerMethodField()
+    specification = serializers.SerializerMethodField()
+    drawing_no = serializers.SerializerMethodField()
+    unit_price = serializers.SerializerMethodField()
+    unit = serializers.SerializerMethodField()
+    quantity = serializers.SerializerMethodField()
+    order_amount = serializers.DecimalField(source='debit_amount', max_digits=12, decimal_places=2, read_only=True)
+    received_amount = serializers.SerializerMethodField()
+    invoice_amount = serializers.SerializerMethodField()
     
     class Meta:
         model = PurchaseReconciliationLine
@@ -24,8 +36,104 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
             'order_qty', 'received_qty', 'receipt_status', 'receipt_status_display',
             'receipt_confirmed', 'receipt_confirmed_at',
             'payable_amount', 'paid_amount', 'payment_progress',
-            'is_matched', 'notes'
+            'is_matched', 'notes',
+            # 打印模板字段
+            'order_items', 'description', 'specification', 'drawing_no',
+            'unit_price', 'unit', 'quantity', 'order_amount', 'received_amount', 'invoice_amount'
         ]
+    
+    def get_order_items(self, obj):
+        """获取订单行明细"""
+        if obj.line_type != 'ORDER' or not obj.po:
+            return []
+        items = []
+        for line in obj.po.lines.filter(is_deleted=False):
+            items.append({
+                'material_name': line.material.name if hasattr(line, 'material') and line.material else (line.description or ''),
+                'specification': getattr(line.material, 'specification', '') if hasattr(line, 'material') and line.material else '',
+                'drawing_no': getattr(line.material, 'drawing_no', '') if hasattr(line, 'material') and line.material else '',
+                'unit': line.unit or (line.material.unit if hasattr(line, 'material') and line.material else ''),
+                'quantity': float(line.qty or 0),
+                'unit_price': float(line.unit_price or 0),
+                'amount': float(line.amount or 0),
+            })
+        return items
+    
+    def get_description(self, obj):
+        """获取物料描述"""
+        if obj.line_type != 'ORDER' or not obj.po:
+            return obj.notes or ''
+        first_line = obj.po.lines.filter(is_deleted=False).first()
+        if first_line:
+            if hasattr(first_line, 'material') and first_line.material:
+                return first_line.material.name
+            return first_line.description or ''
+        return ''
+    
+    def get_specification(self, obj):
+        """获取规格"""
+        if obj.line_type != 'ORDER' or not obj.po:
+            return ''
+        first_line = obj.po.lines.filter(is_deleted=False).first()
+        if first_line and hasattr(first_line, 'material') and first_line.material:
+            return getattr(first_line.material, 'specification', '') or getattr(first_line.material, 'model', '')
+        return ''
+    
+    def get_drawing_no(self, obj):
+        """获取图号"""
+        if obj.line_type != 'ORDER' or not obj.po:
+            return ''
+        first_line = obj.po.lines.filter(is_deleted=False).first()
+        if first_line and hasattr(first_line, 'material') and first_line.material:
+            return getattr(first_line.material, 'drawing_no', '') or ''
+        return ''
+    
+    def get_unit_price(self, obj):
+        """获取单价"""
+        if obj.line_type != 'ORDER' or not obj.po:
+            return 0
+        first_line = obj.po.lines.filter(is_deleted=False).first()
+        if first_line:
+            return float(first_line.unit_price or 0)
+        return 0
+    
+    def get_unit(self, obj):
+        """获取单位"""
+        if obj.line_type != 'ORDER' or not obj.po:
+            return ''
+        first_line = obj.po.lines.filter(is_deleted=False).first()
+        if first_line:
+            return first_line.unit or ''
+        return ''
+    
+    def get_quantity(self, obj):
+        """获取数量"""
+        if obj.line_type != 'ORDER' or not obj.po:
+            return 0
+        total_qty = sum(line.qty for line in obj.po.lines.filter(is_deleted=False))
+        return float(total_qty)
+    
+    def get_received_amount(self, obj):
+        """计算已收货金额"""
+        if obj.line_type != 'ORDER' or not obj.po:
+            return 0
+        total = 0
+        for receipt in obj.po.receipts.filter(status__in=['CONFIRMED', 'COMPLETED'], is_deleted=False):
+            for line in receipt.lines.filter(is_deleted=False):
+                if hasattr(line, 'po_line') and line.po_line:
+                    total += float(line.qty * line.po_line.unit_price)
+        return total
+    
+    def get_invoice_amount(self, obj):
+        """获取已开票金额"""
+        if obj.line_type != 'ORDER' or not obj.po:
+            return 0
+        from apps.finance.models import AccountPayable
+        from django.db.models import Sum
+        total = AccountPayable.objects.filter(po=obj.po, is_deleted=False).aggregate(
+            total=Sum('amount_due')
+        )['total'] or 0
+        return float(total)
 
 
 class PurchaseReconciliationSerializer(serializers.ModelSerializer):
@@ -81,6 +189,18 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
     line_type_display = serializers.CharField(source='get_line_type_display', read_only=True)
     delivery_status_display = serializers.CharField(source='get_delivery_status_display', read_only=True)
     so_order_no = serializers.CharField(source='so.order_no', read_only=True)
+    order_items = serializers.SerializerMethodField()
+    
+    # 前端打印模板需要的字段映射
+    description = serializers.SerializerMethodField()
+    specification = serializers.SerializerMethodField()
+    drawing_no = serializers.SerializerMethodField()
+    unit_price = serializers.SerializerMethodField()
+    unit = serializers.SerializerMethodField()
+    quantity = serializers.SerializerMethodField()
+    order_amount = serializers.DecimalField(source='debit_amount', max_digits=12, decimal_places=2, read_only=True)
+    delivered_amount = serializers.SerializerMethodField()
+    invoice_amount = serializers.SerializerMethodField()
     
     class Meta:
         model = SalesReconciliationLine
@@ -91,8 +211,104 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
             'order_qty', 'delivered_qty', 'delivery_status', 'delivery_status_display',
             'delivery_confirmed', 'delivery_confirmed_at',
             'receivable_amount', 'received_amount', 'collection_progress',
-            'is_matched', 'notes'
+            'is_matched', 'notes',
+            # 打印模板字段
+            'order_items', 'description', 'specification', 'drawing_no',
+            'unit_price', 'unit', 'quantity', 'order_amount', 'delivered_amount', 'invoice_amount'
         ]
+    
+    def get_order_items(self, obj):
+        """获取订单行明细"""
+        if obj.line_type != 'ORDER' or not obj.so:
+            return []
+        items = []
+        for line in obj.so.lines.filter(is_deleted=False):
+            items.append({
+                'material_name': line.material.name if hasattr(line, 'material') and line.material else (line.description or ''),
+                'specification': getattr(line.material, 'specification', '') if hasattr(line, 'material') and line.material else '',
+                'drawing_no': getattr(line.material, 'drawing_no', '') if hasattr(line, 'material') and line.material else '',
+                'unit': line.unit or (line.material.unit if hasattr(line, 'material') and line.material else ''),
+                'quantity': float(line.qty or 0),
+                'unit_price': float(line.unit_price or 0),
+                'amount': float(line.amount or 0),
+            })
+        return items
+    
+    def get_description(self, obj):
+        """获取物料描述"""
+        if obj.line_type != 'ORDER' or not obj.so:
+            return obj.notes or ''
+        first_line = obj.so.lines.filter(is_deleted=False).first()
+        if first_line:
+            if hasattr(first_line, 'material') and first_line.material:
+                return first_line.material.name
+            return first_line.description or ''
+        return ''
+    
+    def get_specification(self, obj):
+        """获取规格"""
+        if obj.line_type != 'ORDER' or not obj.so:
+            return ''
+        first_line = obj.so.lines.filter(is_deleted=False).first()
+        if first_line and hasattr(first_line, 'material') and first_line.material:
+            return getattr(first_line.material, 'specification', '') or getattr(first_line.material, 'model', '')
+        return ''
+    
+    def get_drawing_no(self, obj):
+        """获取图号"""
+        if obj.line_type != 'ORDER' or not obj.so:
+            return ''
+        first_line = obj.so.lines.filter(is_deleted=False).first()
+        if first_line and hasattr(first_line, 'material') and first_line.material:
+            return getattr(first_line.material, 'drawing_no', '') or ''
+        return ''
+    
+    def get_unit_price(self, obj):
+        """获取单价"""
+        if obj.line_type != 'ORDER' or not obj.so:
+            return 0
+        first_line = obj.so.lines.filter(is_deleted=False).first()
+        if first_line:
+            return float(first_line.unit_price or 0)
+        return 0
+    
+    def get_unit(self, obj):
+        """获取单位"""
+        if obj.line_type != 'ORDER' or not obj.so:
+            return ''
+        first_line = obj.so.lines.filter(is_deleted=False).first()
+        if first_line:
+            return first_line.unit or ''
+        return ''
+    
+    def get_quantity(self, obj):
+        """获取数量"""
+        if obj.line_type != 'ORDER' or not obj.so:
+            return 0
+        total_qty = sum(line.qty for line in obj.so.lines.filter(is_deleted=False))
+        return float(total_qty)
+    
+    def get_delivered_amount(self, obj):
+        """计算已发货金额"""
+        if obj.line_type != 'ORDER' or not obj.so:
+            return 0
+        total = 0
+        for delivery in obj.so.deliveries.filter(status__in=['CONFIRMED', 'COMPLETED'], is_deleted=False):
+            for line in delivery.lines.filter(is_deleted=False):
+                if hasattr(line, 'so_line') and line.so_line:
+                    total += float(line.qty * line.so_line.unit_price)
+        return total
+    
+    def get_invoice_amount(self, obj):
+        """获取已开票金额"""
+        if obj.line_type != 'ORDER' or not obj.so:
+            return 0
+        from apps.finance.models import AccountReceivable
+        from django.db.models import Sum
+        total = AccountReceivable.objects.filter(so=obj.so, is_deleted=False).aggregate(
+            total=Sum('amount_due')
+        )['total'] or 0
+        return float(total)
 
 
 class SalesReconciliationSerializer(serializers.ModelSerializer):

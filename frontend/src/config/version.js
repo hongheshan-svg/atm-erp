@@ -4,7 +4,7 @@
  */
 
 // Main application version - update this when releasing new features
-export const APP_VERSION = '1.0.54'
+export const APP_VERSION = '1.0.55'
 
 // Build timestamp (auto-generated at build time if needed)
 export const BUILD_TIME = new Date().toISOString()
