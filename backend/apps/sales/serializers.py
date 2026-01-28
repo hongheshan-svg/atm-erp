@@ -331,7 +331,7 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
     """DeliveryOrder serializer."""
     so_no = serializers.CharField(source='so.order_no', read_only=True)
     customer_name = serializers.CharField(source='so.customer.name', read_only=True)
-    customer_contact = serializers.CharField(source='so.customer.contact', read_only=True)
+    customer_contact = serializers.CharField(source='so.customer.contact_person', read_only=True)
     customer_phone = serializers.CharField(source='so.customer.phone', read_only=True)
     customer_address = serializers.CharField(source='so.customer.address', read_only=True)
     project_name = serializers.CharField(source='so.project.name', read_only=True, allow_null=True)

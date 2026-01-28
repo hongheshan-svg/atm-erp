@@ -68,8 +68,11 @@ class AccountReceivableSerializer(serializers.ModelSerializer):
     
     def get_project_name(self, obj):
         return obj.project.name if obj.project else '未关联项目'
+    
+    def get_amount_remaining(self, obj):
+        return float(obj.amount_remaining) if obj.amount_remaining else float(obj.amount_due - obj.amount_paid)
+    
     currency_code = serializers.CharField(source='currency.code', read_only=True)
-    amount_remaining = serializers.SerializerMethodField()
     
     class Meta:
         model = AccountReceivable
@@ -80,9 +83,6 @@ class AccountReceivableSerializer(serializers.ModelSerializer):
             'status', 'status_display', 'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['ar_no', 'amount_paid', 'created_at', 'updated_at']
-    
-    def get_amount_remaining(self, obj):
-        return float(obj.amount_remaining)
 
 
 class AccountPayableSerializer(serializers.ModelSerializer):

@@ -227,6 +227,22 @@ class PurchaseReconciliationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPerm
         return Response(PurchaseReconciliationSerializer(reconciliation).data)
     
     @action(detail=True, methods=['post'])
+    def submit(self, request, pk=None):
+        """提交对账单"""
+        reconciliation = self.get_object()
+        
+        if reconciliation.status != 'DRAFT':
+            return Response(
+                {'error': '只能提交草稿状态的对账单'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        reconciliation.status = 'PENDING'
+        reconciliation.save()
+        
+        return Response(PurchaseReconciliationSerializer(reconciliation).data)
+    
+    @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
         """确认对账单"""
         reconciliation = self.get_object()
@@ -533,6 +549,22 @@ class SalesReconciliationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermiss
             reconciliation.reconciled_at = timezone.now()
             reconciliation.status = 'PENDING'
             reconciliation.save()
+        
+        return Response(SalesReconciliationSerializer(reconciliation).data)
+    
+    @action(detail=True, methods=['post'])
+    def submit(self, request, pk=None):
+        """提交对账单"""
+        reconciliation = self.get_object()
+        
+        if reconciliation.status != 'DRAFT':
+            return Response(
+                {'error': '只能提交草稿状态的对账单'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        reconciliation.status = 'PENDING'
+        reconciliation.save()
         
         return Response(SalesReconciliationSerializer(reconciliation).data)
     

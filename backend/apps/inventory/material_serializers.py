@@ -13,7 +13,7 @@ class MaterialRequisitionLineSerializer(serializers.ModelSerializer):
     """领料单明细序列化器"""
     item_sku = serializers.CharField(source='item.sku', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
-    item_spec = serializers.CharField(source='item.spec', read_only=True)
+    item_spec = serializers.CharField(source='item.specification', read_only=True)
     item_unit = serializers.CharField(source='item.unit', read_only=True)
     pending_qty = serializers.DecimalField(
         max_digits=15, decimal_places=2, read_only=True
@@ -156,7 +156,7 @@ class MaterialReturnLineSerializer(serializers.ModelSerializer):
     """退料单明细序列化器"""
     item_sku = serializers.CharField(source='item.sku', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
-    item_spec = serializers.CharField(source='item.spec', read_only=True)
+    item_spec = serializers.CharField(source='item.specification', read_only=True)
     item_unit = serializers.CharField(source='item.unit', read_only=True)
     condition_display = serializers.CharField(
         source='get_condition_display', read_only=True

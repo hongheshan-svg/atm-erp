@@ -42,7 +42,7 @@ service.interceptors.response.use(
         if (refreshToken) {
           try {
             // Try to refresh token
-            const response = await axios.post('/auth/refresh/', {
+            const response = await axios.post('/api/auth/refresh/', {
               refresh: refreshToken
             })
             
