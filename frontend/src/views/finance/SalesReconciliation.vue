@@ -586,52 +586,214 @@ const handlePrint = (row) => {
 }
 
 const generatePrintHtml = (data) => {
+  // 生成订单明细行
+  const orderRows = orderLines.value.map((line, idx) => `
+    <tr>
+      <td>${idx + 1}</td>
+      <td>${line.reference_no || ''}</td>
+      <td>${line.reference_date || ''}</td>
+      <td style="text-align:left;">${line.description || ''}</td>
+      <td style="text-align:right;">${formatNumber(line.order_amount)}</td>
+      <td style="text-align:right;">${formatNumber(line.delivered_amount)}</td>
+      <td style="text-align:right;">${formatNumber(line.invoice_amount)}</td>
+      <td style="text-align:right;">${formatNumber(line.received_amount)}</td>
+    </tr>
+  `).join('')
+  
+  // 生成发货明细行
+  const deliveryRows = deliveryLines.value.map((line, idx) => `
+    <tr>
+      <td>${idx + 1}</td>
+      <td>${line.reference_no || ''}</td>
+      <td>${line.reference_date || ''}</td>
+      <td style="text-align:left;">${line.description || ''}</td>
+      <td style="text-align:right;">${formatNumber(line.amount)}</td>
+      <td>${line.delivery_confirmed ? '已确认' : '待确认'}</td>
+    </tr>
+  `).join('')
+  
+  // 生成发票明细行
+  const invoiceRows = invoiceLines.value.map((line, idx) => `
+    <tr>
+      <td>${idx + 1}</td>
+      <td>${line.reference_no || ''}</td>
+      <td>${line.reference_date || ''}</td>
+      <td style="text-align:left;">${line.description || ''}</td>
+      <td style="text-align:right;">${formatNumber(line.amount)}</td>
+      <td style="text-align:right;">${formatNumber(line.tax_amount || 0)}</td>
+    </tr>
+  `).join('')
+  
+  // 生成收款明细行
+  const receiptRows = receiptLines.value.map((line, idx) => `
+    <tr>
+      <td>${idx + 1}</td>
+      <td>${line.reference_no || ''}</td>
+      <td>${line.reference_date || ''}</td>
+      <td style="text-align:left;">${line.description || ''}</td>
+      <td style="text-align:right;">${formatNumber(line.amount)}</td>
+      <td>${line.payment_method || ''}</td>
+    </tr>
+  `).join('')
+  
+  const today = new Date().toISOString().slice(0, 10)
+  
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <title>销售对账单 - ${data.reconciliation_no}</title>
 <style>
-@page { size: A4; margin: 10mm; }
-body { font-family: '宋体', serif; font-size: 12px; }
-.header { text-align: center; margin-bottom: 20px; }
-.header h2 { margin: 0; }
-.info-table { width: 100%; margin-bottom: 15px; }
-.info-table td { padding: 5px; }
-table.data { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-table.data th, table.data td { border: 1px solid #000; padding: 5px; text-align: center; }
-table.data th { background: #f0f0f0; }
-.summary { margin-top: 20px; }
-.signature { margin-top: 40px; display: flex; justify-content: space-between; }
-.sig-box { width: 40%; }
-@media print { body { padding: 0; } }
+@page { size: A4; margin: 8mm; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: '宋体', 'SimSun', serif; font-size: 10px; line-height: 1.4; color: #000; padding: 10px; }
+.print-btn { position: fixed; top: 10px; right: 10px; padding: 8px 16px; background: #409eff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+.header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
+.header .company { font-size: 16px; font-weight: bold; letter-spacing: 3px; }
+.header .title { font-size: 14px; font-weight: bold; margin-top: 5px; }
+.header .doc-no { font-size: 11px; margin-top: 5px; }
+.info-section { display: flex; justify-content: space-between; margin-bottom: 12px; padding: 8px; background: #f8f8f8; }
+.info-box { width: 48%; font-size: 10px; line-height: 1.6; }
+.info-box .label { font-weight: bold; display: inline-block; width: 70px; }
+.section-title { font-weight: bold; font-size: 11px; margin: 12px 0 6px 0; padding: 4px 8px; background: #e8e8e8; }
+table { width: 100%; border-collapse: collapse; font-size: 9px; margin-bottom: 10px; }
+table th, table td { border: 1px solid #000; padding: 3px 5px; }
+table th { background: #f0f0f0; font-weight: bold; text-align: center; }
+table td { text-align: center; }
+.summary-table { width: 50%; margin-left: auto; }
+.summary-table td { text-align: right; padding: 4px 8px; }
+.summary-table .label { text-align: left; font-weight: bold; }
+.summary-table .total { font-size: 12px; font-weight: bold; background: #fffbe6; }
+.aging-section { margin: 12px 0; }
+.aging-table { width: 60%; }
+.notes { margin: 10px 0; padding: 8px; border: 1px solid #ddd; background: #fafafa; font-size: 9px; }
+.signature { display: flex; justify-content: space-between; margin-top: 20px; padding-top: 15px; border-top: 1px solid #000; }
+.sig-box { width: 45%; font-size: 10px; line-height: 2; }
+.sig-box .sig-title { font-weight: bold; margin-bottom: 5px; }
+.footer { margin-top: 15px; padding-top: 8px; border-top: 1px dashed #ccc; font-size: 8px; color: #666; text-align: center; }
+@media print { .print-btn { display: none; } body { padding: 0; } }
 </style>
 </head>
 <body>
+<button class="print-btn" onclick="window.print()">打印</button>
+
 <div class="header">
-  <h2>销售对账单</h2>
-  <p>对账单号：${data.reconciliation_no}</p>
+  <div class="company">深圳市奥特迈智能装备有限公司</div>
+  <div class="title">销售对账单（客户往来对账）</div>
+  <div class="doc-no">对账单号：${data.reconciliation_no} &nbsp;&nbsp;&nbsp;&nbsp; 打印日期：${today}</div>
 </div>
-<table class="info-table">
+
+<div class="info-section">
+  <div class="info-box">
+    <div><span class="label">客户名称：</span>${data.customer_name || ''}</div>
+    <div><span class="label">对账期间：</span>${data.period_start} 至 ${data.period_end}</div>
+    <div><span class="label">联系人：</span>${data.customer_contact || ''}</div>
+    <div><span class="label">联系电话：</span>${data.customer_phone || ''}</div>
+  </div>
+  <div class="info-box">
+    <div><span class="label">我方单位：</span>深圳市奥特迈智能装备有限公司</div>
+    <div><span class="label">对账人员：</span>${data.created_by_name || ''}</div>
+    <div><span class="label">创建日期：</span>${data.created_at?.slice(0, 10) || ''}</div>
+    <div><span class="label">对账状态：</span>${getStatusText(data.status)}</div>
+  </div>
+</div>
+
+<div class="section-title">一、销售订单明细（非标自动化设备/零部件）</div>
+<table>
   <tr>
-    <td>客户名称：${data.customer_name}</td>
-    <td>对账期间：${data.period_start} ~ ${data.period_end}</td>
+    <th style="width:30px;">序号</th>
+    <th style="width:100px;">订单号</th>
+    <th style="width:70px;">订单日期</th>
+    <th>项目/设备名称</th>
+    <th style="width:80px;">订单金额</th>
+    <th style="width:70px;">已发货</th>
+    <th style="width:70px;">已开票</th>
+    <th style="width:70px;">已收款</th>
+  </tr>
+  ${orderRows || '<tr><td colspan="8">暂无数据</td></tr>'}
+  <tr style="font-weight:bold; background:#f5f5f5;">
+    <td colspan="4" style="text-align:right;">合计：</td>
+    <td style="text-align:right;">${formatNumber(data.total_order_amount)}</td>
+    <td style="text-align:right;">${formatNumber(data.total_delivered_amount)}</td>
+    <td style="text-align:right;">${formatNumber(data.total_invoice_amount)}</td>
+    <td style="text-align:right;">${formatNumber(data.total_received_amount)}</td>
   </tr>
 </table>
-<table class="data">
-  <tr><th>项目</th><th>金额（元）</th></tr>
-  <tr><td>期初余额</td><td>${formatNumber(data.opening_balance)}</td></tr>
-  <tr><td>本期销售</td><td>${formatNumber(data.total_order_amount)}</td></tr>
-  <tr><td>本期发货</td><td>${formatNumber(data.total_delivered_amount)}</td></tr>
-  <tr><td>本期开票</td><td>${formatNumber(data.total_invoice_amount)}</td></tr>
-  <tr><td>本期收款</td><td>${formatNumber(data.total_received_amount)}</td></tr>
-  <tr><td><b>期末余额</b></td><td><b>${formatNumber(data.closing_balance)}</b></td></tr>
+
+<div class="section-title">二、发货记录（设备交付/零部件出库）</div>
+<table>
+  <tr>
+    <th style="width:30px;">序号</th>
+    <th style="width:100px;">发货单号</th>
+    <th style="width:70px;">发货日期</th>
+    <th>发货内容/设备型号</th>
+    <th style="width:90px;">发货金额</th>
+    <th style="width:70px;">客户签收</th>
+  </tr>
+  ${deliveryRows || '<tr><td colspan="6">暂无数据</td></tr>'}
 </table>
-<div class="signature">
-  <div class="sig-box">甲方（供方）确认：<br><br>日期：</div>
-  <div class="sig-box">乙方（需方）确认：<br><br>日期：</div>
+
+<div class="section-title">三、发票明细（增值税专用发票）</div>
+<table>
+  <tr>
+    <th style="width:30px;">序号</th>
+    <th style="width:120px;">发票号码</th>
+    <th style="width:70px;">开票日期</th>
+    <th>发票内容/备注</th>
+    <th style="width:90px;">发票金额</th>
+    <th style="width:70px;">税额</th>
+  </tr>
+  ${invoiceRows || '<tr><td colspan="6">暂无数据</td></tr>'}
+</table>
+
+<div class="section-title">四、收款记录</div>
+<table>
+  <tr>
+    <th style="width:30px;">序号</th>
+    <th style="width:100px;">收款单号</th>
+    <th style="width:70px;">收款日期</th>
+    <th>收款说明</th>
+    <th style="width:90px;">收款金额</th>
+    <th style="width:80px;">收款方式</th>
+  </tr>
+  ${receiptRows || '<tr><td colspan="6">暂无数据</td></tr>'}
+</table>
+
+<div class="section-title">五、账款汇总</div>
+<table class="summary-table">
+  <tr><td class="label">期初应收余额</td><td>¥ ${formatNumber(data.opening_balance)}</td></tr>
+  <tr><td class="label">本期销售金额（+）</td><td>¥ ${formatNumber(data.total_order_amount)}</td></tr>
+  <tr><td class="label">本期开票金额</td><td>¥ ${formatNumber(data.total_invoice_amount)}</td></tr>
+  <tr><td class="label">本期收款金额（-）</td><td>¥ ${formatNumber(data.total_received_amount)}</td></tr>
+  <tr class="total"><td class="label">期末应收余额</td><td>¥ ${formatNumber(data.closing_balance)}</td></tr>
+</table>
+
+<div class="notes">
+  <b>对账说明：</b><br>
+  1. 本对账单涵盖期间内所有非标自动化设备销售及零部件订单的发货、开票、收款情况。<br>
+  2. 如有差异，请于收到对账单后 5 个工作日内书面反馈，逾期视为确认无误。<br>
+  3. 设备质保期内的服务费用不在本对账单范围内，另行结算。<br>
+  ${data.notes ? '4. 备注：' + data.notes : ''}
 </div>
-<script>window.print()<\/script>
+
+<div class="signature">
+  <div class="sig-box">
+    <div class="sig-title">供方（甲方）：深圳市奥特迈智能装备有限公司</div>
+    <div>对账人员：________________</div>
+    <div>确认签章：________________</div>
+    <div>确认日期：________________</div>
+  </div>
+  <div class="sig-box">
+    <div class="sig-title">需方（乙方）：${data.customer_name || ''}</div>
+    <div>对账人员：________________</div>
+    <div>确认签章：________________</div>
+    <div>确认日期：________________</div>
+  </div>
+</div>
+
+<div class="footer">
+  深圳市奥特迈智能装备有限公司 | 地址：深圳市光明区玉塘街道玉律社区寮光路55号德永佳工业园1栋1楼 | 电话：19129305737
+</div>
 </body>
 </html>`
 }

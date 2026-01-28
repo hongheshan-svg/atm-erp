@@ -623,51 +623,237 @@ const handlePrint = (row) => {
 }
 
 const generatePrintHtml = (data) => {
+  // 生成采购订单明细行
+  const orderRows = orderLines.value.map((line, idx) => `
+    <tr>
+      <td>${idx + 1}</td>
+      <td>${line.reference_no || ''}</td>
+      <td>${line.reference_date || ''}</td>
+      <td style="text-align:left;">${line.description || ''}</td>
+      <td style="text-align:right;">${formatNumber(line.order_amount)}</td>
+      <td style="text-align:right;">${formatNumber(line.received_amount)}</td>
+      <td style="text-align:right;">${formatNumber(line.invoice_amount)}</td>
+      <td style="text-align:right;">${formatNumber(line.paid_amount)}</td>
+      <td>${getThreeWayMatchText(line)}</td>
+    </tr>
+  `).join('')
+  
+  // 生成收货明细行
+  const receiptRows = receiptLines.value.map((line, idx) => `
+    <tr>
+      <td>${idx + 1}</td>
+      <td>${line.reference_no || ''}</td>
+      <td>${line.reference_date || ''}</td>
+      <td style="text-align:left;">${line.description || ''}</td>
+      <td style="text-align:right;">${formatNumber(line.amount)}</td>
+      <td>${line.receipt_confirmed ? '已确认' : '待确认'}</td>
+    </tr>
+  `).join('')
+  
+  // 生成发票明细行
+  const invoiceRows = invoiceLines.value.map((line, idx) => `
+    <tr>
+      <td>${idx + 1}</td>
+      <td>${line.reference_no || ''}</td>
+      <td>${line.reference_date || ''}</td>
+      <td style="text-align:left;">${line.description || ''}</td>
+      <td style="text-align:right;">${formatNumber(line.amount)}</td>
+      <td style="text-align:right;">${formatNumber(line.tax_amount || 0)}</td>
+      <td>${line.is_deducted ? '已抵扣' : '未抵扣'}</td>
+    </tr>
+  `).join('')
+  
+  // 生成付款明细行
+  const paymentRows = paymentLines.value.map((line, idx) => `
+    <tr>
+      <td>${idx + 1}</td>
+      <td>${line.reference_no || ''}</td>
+      <td>${line.reference_date || ''}</td>
+      <td style="text-align:left;">${line.description || ''}</td>
+      <td style="text-align:right;">${formatNumber(line.amount)}</td>
+      <td>${line.payment_method || ''}</td>
+    </tr>
+  `).join('')
+  
+  // 三方匹配差异
+  const orderAmt = data.total_order_amount || 0
+  const receiptAmt = data.total_received_amount || 0
+  const invoiceAmt = data.total_invoice_amount || 0
+  const matchIssues = []
+  if (Math.abs(orderAmt - receiptAmt) > 0.01) {
+    matchIssues.push('订单与收货差异: ¥' + formatNumber(Math.abs(orderAmt - receiptAmt)))
+  }
+  if (Math.abs(receiptAmt - invoiceAmt) > 0.01) {
+    matchIssues.push('收货与发票差异: ¥' + formatNumber(Math.abs(receiptAmt - invoiceAmt)))
+  }
+  
+  const today = new Date().toISOString().slice(0, 10)
+  
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <title>采购对账单 - ${data.reconciliation_no}</title>
 <style>
-@page { size: A4; margin: 10mm; }
-body { font-family: '宋体', serif; font-size: 12px; }
-.header { text-align: center; margin-bottom: 20px; }
-.header h2 { margin: 0; }
-.info-table { width: 100%; margin-bottom: 15px; }
-.info-table td { padding: 5px; }
-table.data { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-table.data th, table.data td { border: 1px solid #000; padding: 5px; text-align: center; }
-table.data th { background: #f0f0f0; }
-.signature { margin-top: 40px; display: flex; justify-content: space-between; }
-.sig-box { width: 40%; }
-@media print { body { padding: 0; } }
+@page { size: A4; margin: 8mm; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: '宋体', 'SimSun', serif; font-size: 10px; line-height: 1.4; color: #000; padding: 10px; }
+.print-btn { position: fixed; top: 10px; right: 10px; padding: 8px 16px; background: #409eff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+.header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
+.header .company { font-size: 16px; font-weight: bold; letter-spacing: 3px; }
+.header .title { font-size: 14px; font-weight: bold; margin-top: 5px; }
+.header .doc-no { font-size: 11px; margin-top: 5px; }
+.info-section { display: flex; justify-content: space-between; margin-bottom: 12px; padding: 8px; background: #f8f8f8; }
+.info-box { width: 48%; font-size: 10px; line-height: 1.6; }
+.info-box .label { font-weight: bold; display: inline-block; width: 70px; }
+.section-title { font-weight: bold; font-size: 11px; margin: 12px 0 6px 0; padding: 4px 8px; background: #e8e8e8; }
+table { width: 100%; border-collapse: collapse; font-size: 9px; margin-bottom: 10px; }
+table th, table td { border: 1px solid #000; padding: 3px 5px; }
+table th { background: #f0f0f0; font-weight: bold; text-align: center; }
+table td { text-align: center; }
+.summary-table { width: 50%; margin-left: auto; }
+.summary-table td { text-align: right; padding: 4px 8px; }
+.summary-table .label { text-align: left; font-weight: bold; }
+.summary-table .total { font-size: 12px; font-weight: bold; background: #fffbe6; }
+.match-alert { margin: 10px 0; padding: 8px; border: 1px solid #e6a23c; background: #fdf6ec; color: #e6a23c; }
+.match-ok { border-color: #67c23a; background: #f0f9eb; color: #67c23a; }
+.notes { margin: 10px 0; padding: 8px; border: 1px solid #ddd; background: #fafafa; font-size: 9px; }
+.signature { display: flex; justify-content: space-between; margin-top: 20px; padding-top: 15px; border-top: 1px solid #000; }
+.sig-box { width: 45%; font-size: 10px; line-height: 2; }
+.sig-box .sig-title { font-weight: bold; margin-bottom: 5px; }
+.footer { margin-top: 15px; padding-top: 8px; border-top: 1px dashed #ccc; font-size: 8px; color: #666; text-align: center; }
+@media print { .print-btn { display: none; } body { padding: 0; } }
 </style>
 </head>
 <body>
+<button class="print-btn" onclick="window.print()">打印</button>
+
 <div class="header">
-  <h2>采购对账单</h2>
-  <p>对账单号：${data.reconciliation_no}</p>
+  <div class="company">深圳市奥特迈智能装备有限公司</div>
+  <div class="title">采购对账单（供应商往来对账）</div>
+  <div class="doc-no">对账单号：${data.reconciliation_no} &nbsp;&nbsp;&nbsp;&nbsp; 打印日期：${today}</div>
 </div>
-<table class="info-table">
+
+<div class="info-section">
+  <div class="info-box">
+    <div><span class="label">供应商：</span>${data.supplier_name || ''}</div>
+    <div><span class="label">对账期间：</span>${data.period_start} 至 ${data.period_end}</div>
+    <div><span class="label">联系人：</span>${data.supplier_contact || ''}</div>
+    <div><span class="label">联系电话：</span>${data.supplier_phone || ''}</div>
+  </div>
+  <div class="info-box">
+    <div><span class="label">我方单位：</span>深圳市奥特迈智能装备有限公司</div>
+    <div><span class="label">对账人员：</span>${data.created_by_name || ''}</div>
+    <div><span class="label">创建日期：</span>${data.created_at?.slice(0, 10) || ''}</div>
+    <div><span class="label">对账状态：</span>${getStatusText(data.status)}</div>
+  </div>
+</div>
+
+<div class="section-title">一、采购订单明细（非标零部件/外协加工）</div>
+<table>
   <tr>
-    <td>供应商：${data.supplier_name}</td>
-    <td>对账期间：${data.period_start} ~ ${data.period_end}</td>
+    <th style="width:25px;">序号</th>
+    <th style="width:90px;">订单号</th>
+    <th style="width:65px;">订单日期</th>
+    <th>物料名称/加工内容</th>
+    <th style="width:70px;">订单金额</th>
+    <th style="width:60px;">已收货</th>
+    <th style="width:60px;">已开票</th>
+    <th style="width:60px;">已付款</th>
+    <th style="width:55px;">匹配状态</th>
+  </tr>
+  ${orderRows || '<tr><td colspan="9">暂无数据</td></tr>'}
+  <tr style="font-weight:bold; background:#f5f5f5;">
+    <td colspan="4" style="text-align:right;">合计：</td>
+    <td style="text-align:right;">${formatNumber(data.total_order_amount)}</td>
+    <td style="text-align:right;">${formatNumber(data.total_received_amount)}</td>
+    <td style="text-align:right;">${formatNumber(data.total_invoice_amount)}</td>
+    <td style="text-align:right;">${formatNumber(data.total_paid_amount)}</td>
+    <td></td>
   </tr>
 </table>
-<table class="data">
-  <tr><th>项目</th><th>金额（元）</th></tr>
-  <tr><td>期初余额</td><td>${formatNumber(data.opening_balance)}</td></tr>
-  <tr><td>本期采购</td><td>${formatNumber(data.total_order_amount)}</td></tr>
-  <tr><td>本期收货</td><td>${formatNumber(data.total_received_amount)}</td></tr>
-  <tr><td>本期发票</td><td>${formatNumber(data.total_invoice_amount)}</td></tr>
-  <tr><td>本期付款</td><td>${formatNumber(data.total_paid_amount)}</td></tr>
-  <tr><td><b>期末余额</b></td><td><b>${formatNumber(data.closing_balance)}</b></td></tr>
-</table>
-<div class="signature">
-  <div class="sig-box">甲方（需方）确认：<br><br>日期：</div>
-  <div class="sig-box">乙方（供方）确认：<br><br>日期：</div>
+
+<div class="match-alert ${matchIssues.length === 0 ? 'match-ok' : ''}">
+  <b>三方匹配验证（订单-收货-发票）：</b>
+  ${matchIssues.length === 0 ? '✓ 三方金额匹配正常' : '⚠ ' + matchIssues.join('；')}
 </div>
-<script>window.print()<\/script>
+
+<div class="section-title">二、收货记录（来料检验/入库）</div>
+<table>
+  <tr>
+    <th style="width:30px;">序号</th>
+    <th style="width:100px;">收货单号</th>
+    <th style="width:70px;">收货日期</th>
+    <th>物料名称/规格型号</th>
+    <th style="width:90px;">收货金额</th>
+    <th style="width:70px;">确认状态</th>
+  </tr>
+  ${receiptRows || '<tr><td colspan="6">暂无数据</td></tr>'}
+</table>
+
+<div class="section-title">三、发票明细（增值税专用发票-进项）</div>
+<table>
+  <tr>
+    <th style="width:30px;">序号</th>
+    <th style="width:130px;">发票号码</th>
+    <th style="width:70px;">开票日期</th>
+    <th>发票内容/备注</th>
+    <th style="width:80px;">发票金额</th>
+    <th style="width:60px;">税额</th>
+    <th style="width:60px;">抵扣状态</th>
+  </tr>
+  ${invoiceRows || '<tr><td colspan="7">暂无数据</td></tr>'}
+</table>
+
+<div class="section-title">四、付款记录</div>
+<table>
+  <tr>
+    <th style="width:30px;">序号</th>
+    <th style="width:100px;">付款单号</th>
+    <th style="width:70px;">付款日期</th>
+    <th>付款说明</th>
+    <th style="width:90px;">付款金额</th>
+    <th style="width:80px;">付款方式</th>
+  </tr>
+  ${paymentRows || '<tr><td colspan="6">暂无数据</td></tr>'}
+</table>
+
+<div class="section-title">五、账款汇总</div>
+<table class="summary-table">
+  <tr><td class="label">期初应付余额</td><td>¥ ${formatNumber(data.opening_balance)}</td></tr>
+  <tr><td class="label">本期采购金额（+）</td><td>¥ ${formatNumber(data.total_order_amount)}</td></tr>
+  <tr><td class="label">本期收票金额</td><td>¥ ${formatNumber(data.total_invoice_amount)}</td></tr>
+  <tr><td class="label">本期付款金额（-）</td><td>¥ ${formatNumber(data.total_paid_amount)}</td></tr>
+  <tr class="total"><td class="label">期末应付余额</td><td>¥ ${formatNumber(data.closing_balance)}</td></tr>
+</table>
+
+<div class="notes">
+  <b>对账说明：</b><br>
+  1. 本对账单涵盖期间内所有非标零部件采购及外协加工订单的收货、开票、付款情况。<br>
+  2. 三方匹配原则：采购订单金额 = 收货金额 = 发票金额，如有差异请核实。<br>
+  3. 如有争议，请于收到对账单后 5 个工作日内书面反馈，逾期视为确认无误。<br>
+  4. 发票需为增值税专用发票（税率13%），请确保发票信息准确。<br>
+  ${data.notes ? '5. 备注：' + data.notes : ''}
+</div>
+
+<div class="signature">
+  <div class="sig-box">
+    <div class="sig-title">需方（甲方）：深圳市奥特迈智能装备有限公司</div>
+    <div>对账人员：________________</div>
+    <div>确认签章：________________</div>
+    <div>确认日期：________________</div>
+  </div>
+  <div class="sig-box">
+    <div class="sig-title">供方（乙方）：${data.supplier_name || ''}</div>
+    <div>对账人员：________________</div>
+    <div>确认签章：________________</div>
+    <div>确认日期：________________</div>
+  </div>
+</div>
+
+<div class="footer">
+  深圳市奥特迈智能装备有限公司 | 地址：深圳市光明区玉塘街道玉律社区寮光路55号德永佳工业园1栋1楼 | 电话：19129305737
+</div>
 </body>
 </html>`
 }
