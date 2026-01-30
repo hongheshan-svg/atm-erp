@@ -50,7 +50,7 @@ class SalesQuotationLineSerializer(serializers.ModelSerializer):
     def get_item_spec(self, obj):
         """返回规格型号"""
         if obj.item:
-            return getattr(obj.item, 'spec', '') or ''
+            return obj.item.specification or ''
         return obj.custom_spec or ''
 
 
@@ -193,7 +193,7 @@ class SalesOrderLineSerializer(serializers.ModelSerializer):
     def get_item_spec(self, obj):
         """返回规格型号"""
         if obj.item:
-            return getattr(obj.item, 'spec', '') or ''
+            return obj.item.specification or ''
         return obj.custom_spec or ''
     
     def get_remaining_qty(self, obj):

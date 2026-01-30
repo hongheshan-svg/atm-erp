@@ -13,7 +13,7 @@ export function getProjectList(params) {
 
 export function getProject(id) {
   return request({
-    url: `/api/projects/projects/${id}/`,
+    url: `/projects/projects/${id}/`,
     method: 'get'
   })
 }
@@ -28,7 +28,7 @@ export function createProject(data) {
 
 export function updateProject(id, data) {
   return request({
-    url: `/api/projects/projects/${id}/`,
+    url: `/projects/projects/${id}/`,
     method: 'put',
     data
   })
@@ -36,7 +36,7 @@ export function updateProject(id, data) {
 
 export function deleteProject(id) {
   return request({
-    url: `/api/projects/projects/${id}/`,
+    url: `/projects/projects/${id}/`,
     method: 'delete'
   })
 }

@@ -14,7 +14,7 @@ export function getCollectionPlanList(params) {
 
 export function getCollectionPlan(id) {
   return request({
-    url: `/api/finance/collection-plans/${id}/`,
+    url: `/finance/collection-plans/${id}/`,
     method: 'get'
   })
 }
@@ -29,7 +29,7 @@ export function createCollectionPlan(data) {
 
 export function updateCollectionPlan(id, data) {
   return request({
-    url: `/api/finance/collection-plans/${id}/`,
+    url: `/finance/collection-plans/${id}/`,
     method: 'put',
     data
   })
@@ -37,7 +37,7 @@ export function updateCollectionPlan(id, data) {
 
 export function deleteCollectionPlan(id) {
   return request({
-    url: `/api/finance/collection-plans/${id}/`,
+    url: `/finance/collection-plans/${id}/`,
     method: 'delete'
   })
 }
@@ -68,14 +68,14 @@ export function getUpcomingCollections(params) {
 
 export function confirmCollectionPlan(id) {
   return request({
-    url: `/api/finance/collection-plans/${id}/confirm/`,
+    url: `/finance/collection-plans/${id}/confirm/`,
     method: 'post'
   })
 }
 
 export function addMilestones(id, data) {
   return request({
-    url: `/api/finance/collection-plans/${id}/add_milestones/`,
+    url: `/finance/collection-plans/${id}/add_milestones/`,
     method: 'post',
     data
   })
@@ -83,7 +83,7 @@ export function addMilestones(id, data) {
 
 export function createStandardMilestones(id, data) {
   return request({
-    url: `/api/finance/collection-plans/${id}/create_from_contract/`,
+    url: `/finance/collection-plans/${id}/create_from_contract/`,
     method: 'post',
     data
   })
@@ -100,14 +100,14 @@ export function getCollectionMilestoneList(params) {
 
 export function getCollectionMilestone(id) {
   return request({
-    url: `/api/finance/collection-milestones/${id}/`,
+    url: `/finance/collection-milestones/${id}/`,
     method: 'get'
   })
 }
 
 export function updateCollectionMilestone(id, data) {
   return request({
-    url: `/api/finance/collection-milestones/${id}/`,
+    url: `/finance/collection-milestones/${id}/`,
     method: 'put',
     data
   })
@@ -115,7 +115,7 @@ export function updateCollectionMilestone(id, data) {
 
 export function addCollectionRecord(id, data) {
   return request({
-    url: `/api/finance/collection-milestones/${id}/add_record/`,
+    url: `/finance/collection-milestones/${id}/add_record/`,
     method: 'post',
     data
   })
@@ -123,14 +123,14 @@ export function addCollectionRecord(id, data) {
 
 export function triggerMilestone(id) {
   return request({
-    url: `/api/finance/collection-milestones/${id}/trigger/`,
+    url: `/finance/collection-milestones/${id}/trigger/`,
     method: 'post'
   })
 }
 
 export function sendMilestoneReminder(id, data) {
   return request({
-    url: `/api/finance/collection-milestones/${id}/send_reminder/`,
+    url: `/finance/collection-milestones/${id}/send_reminder/`,
     method: 'post',
     data
   })
@@ -155,7 +155,7 @@ export function createCollectionRecord(data) {
 
 export function confirmCollectionRecord(id) {
   return request({
-    url: `/api/finance/collection-records/${id}/confirm/`,
+    url: `/finance/collection-records/${id}/confirm/`,
     method: 'post'
   })
 }

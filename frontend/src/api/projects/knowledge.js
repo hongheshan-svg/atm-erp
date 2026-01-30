@@ -29,7 +29,7 @@ export function createKnowledgeCategory(data) {
 
 export function updateKnowledgeCategory(id, data) {
   return request({
-    url: `/api/projects/knowledge-categories/${id}/`,
+    url: `/projects/knowledge-categories/${id}/`,
     method: 'put',
     data
   })
@@ -37,7 +37,7 @@ export function updateKnowledgeCategory(id, data) {
 
 export function deleteKnowledgeCategory(id) {
   return request({
-    url: `/api/projects/knowledge-categories/${id}/`,
+    url: `/projects/knowledge-categories/${id}/`,
     method: 'delete'
   })
 }
@@ -53,7 +53,7 @@ export function getKnowledgeArticleList(params) {
 
 export function getKnowledgeArticle(id) {
   return request({
-    url: `/api/projects/knowledge-articles/${id}/`,
+    url: `/projects/knowledge-articles/${id}/`,
     method: 'get'
   })
 }
@@ -68,7 +68,7 @@ export function createKnowledgeArticle(data) {
 
 export function updateKnowledgeArticle(id, data) {
   return request({
-    url: `/api/projects/knowledge-articles/${id}/`,
+    url: `/projects/knowledge-articles/${id}/`,
     method: 'put',
     data
   })
@@ -76,7 +76,7 @@ export function updateKnowledgeArticle(id, data) {
 
 export function deleteKnowledgeArticle(id) {
   return request({
-    url: `/api/projects/knowledge-articles/${id}/`,
+    url: `/projects/knowledge-articles/${id}/`,
     method: 'delete'
   })
 }
@@ -90,14 +90,14 @@ export function getKnowledgeArticleStatistics() {
 
 export function publishKnowledgeArticle(id) {
   return request({
-    url: `/api/projects/knowledge-articles/${id}/publish/`,
+    url: `/projects/knowledge-articles/${id}/publish/`,
     method: 'post'
   })
 }
 
 export function likeKnowledgeArticle(id) {
   return request({
-    url: `/api/projects/knowledge-articles/${id}/like/`,
+    url: `/projects/knowledge-articles/${id}/like/`,
     method: 'post'
   })
 }
@@ -121,7 +121,7 @@ export function getProjectArchiveList(params) {
 
 export function getProjectArchive(id) {
   return request({
-    url: `/api/projects/project-archives/${id}/`,
+    url: `/projects/project-archives/${id}/`,
     method: 'get'
   })
 }
@@ -136,7 +136,7 @@ export function createProjectArchive(data) {
 
 export function updateProjectArchive(id, data) {
   return request({
-    url: `/api/projects/project-archives/${id}/`,
+    url: `/projects/project-archives/${id}/`,
     method: 'put',
     data
   })
@@ -144,14 +144,14 @@ export function updateProjectArchive(id, data) {
 
 export function submitProjectArchiveReview(id) {
   return request({
-    url: `/api/projects/project-archives/${id}/submit_review/`,
+    url: `/projects/project-archives/${id}/submit_review/`,
     method: 'post'
   })
 }
 
 export function approveProjectArchive(id, data) {
   return request({
-    url: `/api/projects/project-archives/${id}/approve/`,
+    url: `/projects/project-archives/${id}/approve/`,
     method: 'post',
     data
   })
@@ -159,7 +159,7 @@ export function approveProjectArchive(id, data) {
 
 export function rejectProjectArchive(id, data) {
   return request({
-    url: `/api/projects/project-archives/${id}/reject/`,
+    url: `/projects/project-archives/${id}/reject/`,
     method: 'post',
     data
   })
@@ -167,7 +167,7 @@ export function rejectProjectArchive(id, data) {
 
 export function generateKnowledgeFromArchive(id) {
   return request({
-    url: `/api/projects/project-archives/${id}/generate_knowledge/`,
+    url: `/projects/project-archives/${id}/generate_knowledge/`,
     method: 'post'
   })
 }
@@ -183,7 +183,7 @@ export function getTechnicalIssueList(params) {
 
 export function getTechnicalIssue(id) {
   return request({
-    url: `/api/projects/technical-issues/${id}/`,
+    url: `/projects/technical-issues/${id}/`,
     method: 'get'
   })
 }
@@ -198,7 +198,7 @@ export function createTechnicalIssue(data) {
 
 export function updateTechnicalIssue(id, data) {
   return request({
-    url: `/api/projects/technical-issues/${id}/`,
+    url: `/projects/technical-issues/${id}/`,
     method: 'put',
     data
   })
@@ -206,7 +206,7 @@ export function updateTechnicalIssue(id, data) {
 
 export function resolveTechnicalIssue(id, data) {
   return request({
-    url: `/api/projects/technical-issues/${id}/resolve/`,
+    url: `/projects/technical-issues/${id}/resolve/`,
     method: 'post',
     data
   })
@@ -214,7 +214,7 @@ export function resolveTechnicalIssue(id, data) {
 
 export function convertIssueToKnowledge(id) {
   return request({
-    url: `/api/projects/technical-issues/${id}/convert_to_knowledge/`,
+    url: `/projects/technical-issues/${id}/convert_to_knowledge/`,
     method: 'post'
   })
 }
@@ -230,7 +230,7 @@ export function getStandardComponentList(params) {
 
 export function getStandardComponent(id) {
   return request({
-    url: `/api/projects/standard-components/${id}/`,
+    url: `/projects/standard-components/${id}/`,
     method: 'get'
   })
 }
@@ -245,7 +245,7 @@ export function createStandardComponent(data) {
 
 export function updateStandardComponent(id, data) {
   return request({
-    url: `/api/projects/standard-components/${id}/`,
+    url: `/projects/standard-components/${id}/`,
     method: 'put',
     data
   })
@@ -253,21 +253,21 @@ export function updateStandardComponent(id, data) {
 
 export function useStandardComponent(id) {
   return request({
-    url: `/api/projects/standard-components/${id}/use/`,
+    url: `/projects/standard-components/${id}/use/`,
     method: 'post'
   })
 }
 
 export function activateStandardComponent(id) {
   return request({
-    url: `/api/projects/standard-components/${id}/activate/`,
+    url: `/projects/standard-components/${id}/activate/`,
     method: 'post'
   })
 }
 
 export function deprecateStandardComponent(id) {
   return request({
-    url: `/api/projects/standard-components/${id}/deprecate/`,
+    url: `/projects/standard-components/${id}/deprecate/`,
     method: 'post'
   })
 }

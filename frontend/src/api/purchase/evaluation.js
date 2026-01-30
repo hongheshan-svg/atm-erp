@@ -14,7 +14,7 @@ export function getEvaluationTemplateList(params) {
 
 export function getEvaluationTemplate(id) {
   return request({
-    url: `/api/purchase/evaluation-templates/${id}/`,
+    url: `/purchase/evaluation-templates/${id}/`,
     method: 'get'
   })
 }
@@ -29,7 +29,7 @@ export function createEvaluationTemplate(data) {
 
 export function updateEvaluationTemplate(id, data) {
   return request({
-    url: `/api/purchase/evaluation-templates/${id}/`,
+    url: `/purchase/evaluation-templates/${id}/`,
     method: 'put',
     data
   })
@@ -37,21 +37,21 @@ export function updateEvaluationTemplate(id, data) {
 
 export function deleteEvaluationTemplate(id) {
   return request({
-    url: `/api/purchase/evaluation-templates/${id}/`,
+    url: `/purchase/evaluation-templates/${id}/`,
     method: 'delete'
   })
 }
 
 export function setDefaultTemplate(id) {
   return request({
-    url: `/api/purchase/evaluation-templates/${id}/set_default/`,
+    url: `/purchase/evaluation-templates/${id}/set_default/`,
     method: 'post'
   })
 }
 
 export function addCriteria(templateId, data) {
   return request({
-    url: `/api/purchase/evaluation-templates/${templateId}/add_criteria/`,
+    url: `/purchase/evaluation-templates/${templateId}/add_criteria/`,
     method: 'post',
     data
   })
@@ -59,7 +59,7 @@ export function addCriteria(templateId, data) {
 
 export function copyTemplate(id, data) {
   return request({
-    url: `/api/purchase/evaluation-templates/${id}/copy_template/`,
+    url: `/purchase/evaluation-templates/${id}/copy_template/`,
     method: 'post',
     data
   })
@@ -84,7 +84,7 @@ export function createEvaluationCriteria(data) {
 
 export function updateEvaluationCriteria(id, data) {
   return request({
-    url: `/api/purchase/evaluation-criteria/${id}/`,
+    url: `/purchase/evaluation-criteria/${id}/`,
     method: 'put',
     data
   })
@@ -92,7 +92,7 @@ export function updateEvaluationCriteria(id, data) {
 
 export function deleteEvaluationCriteria(id) {
   return request({
-    url: `/api/purchase/evaluation-criteria/${id}/`,
+    url: `/purchase/evaluation-criteria/${id}/`,
     method: 'delete'
   })
 }
@@ -108,7 +108,7 @@ export function getEvaluationList(params) {
 
 export function getEvaluation(id) {
   return request({
-    url: `/api/purchase/evaluations/${id}/`,
+    url: `/purchase/evaluations/${id}/`,
     method: 'get'
   })
 }
@@ -123,7 +123,7 @@ export function createEvaluation(data) {
 
 export function updateEvaluation(id, data) {
   return request({
-    url: `/api/purchase/evaluations/${id}/`,
+    url: `/purchase/evaluations/${id}/`,
     method: 'put',
     data
   })
@@ -131,21 +131,21 @@ export function updateEvaluation(id, data) {
 
 export function deleteEvaluation(id) {
   return request({
-    url: `/api/purchase/evaluations/${id}/`,
+    url: `/purchase/evaluations/${id}/`,
     method: 'delete'
   })
 }
 
 export function submitEvaluation(id) {
   return request({
-    url: `/api/purchase/evaluations/${id}/submit/`,
+    url: `/purchase/evaluations/${id}/submit/`,
     method: 'post'
   })
 }
 
 export function approveEvaluation(id, data) {
   return request({
-    url: `/api/purchase/evaluations/${id}/approve/`,
+    url: `/purchase/evaluations/${id}/approve/`,
     method: 'post',
     data
   })
@@ -153,7 +153,7 @@ export function approveEvaluation(id, data) {
 
 export function rejectEvaluation(id, data) {
   return request({
-    url: `/api/purchase/evaluations/${id}/reject/`,
+    url: `/purchase/evaluations/${id}/reject/`,
     method: 'post',
     data
   })
@@ -161,7 +161,7 @@ export function rejectEvaluation(id, data) {
 
 export function updateEvaluationScores(id, data) {
   return request({
-    url: `/api/purchase/evaluations/${id}/update_scores/`,
+    url: `/purchase/evaluations/${id}/update_scores/`,
     method: 'post',
     data
   })
@@ -209,7 +209,7 @@ export function createBlacklist(data) {
 
 export function liftBlacklist(id, data) {
   return request({
-    url: `/api/purchase/blacklist/${id}/lift/`,
+    url: `/purchase/blacklist/${id}/lift/`,
     method: 'post',
     data
   })
