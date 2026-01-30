@@ -217,7 +217,7 @@ class SupplierAccountSerializer(serializers.ModelSerializer):
 class SupplierOrderViewSerializer(serializers.ModelSerializer):
     order_no = serializers.CharField(source='purchase_order.order_no', read_only=True)
     order_date = serializers.DateField(source='purchase_order.order_date', read_only=True)
-    expected_date = serializers.DateField(source='purchase_order.expected_date', read_only=True)
+    expected_date = serializers.DateField(source='purchase_order.delivery_date', read_only=True)
     total_amount = serializers.DecimalField(source='purchase_order.total_amount', 
                                            max_digits=14, decimal_places=2, read_only=True)
     progress_status_display = serializers.CharField(source='get_progress_status_display', read_only=True)
@@ -380,7 +380,7 @@ class SupplierPortalOrdersView(APIView):
                 'id': view.id,
                 'order_no': po.order_no,
                 'order_date': po.order_date,
-                'expected_date': po.expected_date,
+                'expected_date': po.delivery_date,  # 使用 delivery_date
                 'total_amount': float(po.total_amount),
                 'confirmed': view.confirmed,
                 'progress_status': view.progress_status,
@@ -414,12 +414,12 @@ class SupplierPortalOrderDetailView(APIView):
                 'id': line.id,
                 'item_code': line.item.sku if line.item else '',
                 'item_name': line.item.name if line.item else '',
-                'specification': line.specification,
-                'quantity': float(line.quantity),
-                'unit': line.unit,
+                'specification': line.item.specification if line.item else '',
+                'quantity': float(line.qty),
+                'unit': line.item.get_unit_display() if line.item else '',
                 'unit_price': float(line.unit_price),
-                'amount': float(line.amount),
-                'expected_date': line.expected_date,
+                'amount': float(line.line_amount),
+                'expected_date': po.delivery_date,  # 使用订单的 delivery_date
             })
         
         # 进度更新记录
@@ -431,9 +431,9 @@ class SupplierPortalOrderDetailView(APIView):
             'order': {
                 'order_no': po.order_no,
                 'order_date': po.order_date,
-                'expected_date': po.expected_date,
+                'expected_date': po.delivery_date,  # 使用 delivery_date
                 'total_amount': float(po.total_amount),
-                'remarks': po.remarks,
+                'remarks': getattr(po, 'remarks', po.notes),  # 兼容 notes 字段
             },
             'confirmation': {
                 'confirmed': view.confirmed,
@@ -607,7 +607,7 @@ class SupplierDashboardView(APIView):
         today = timezone.now().date()
         overdue = SupplierOrderView.objects.filter(
             progress_status__in=['PENDING', 'CONFIRMED', 'PRODUCING'],
-            purchase_order__expected_date__lt=today,
+            purchase_order__delivery_date__lt=today,  # 使用 delivery_date
             is_deleted=False
         ).count()
         
