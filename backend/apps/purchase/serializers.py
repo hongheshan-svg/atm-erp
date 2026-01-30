@@ -155,7 +155,9 @@ class PurchaseOrderLineSerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source='item.name', read_only=True)
     item_sku = serializers.CharField(source='item.sku', read_only=True)
     item_unit = serializers.CharField(source='item.get_unit_display', read_only=True)
+    unit = serializers.CharField(source='item.get_unit_display', read_only=True)  # 前端兼容字段
     item_property = serializers.CharField(source='item.get_item_property_display', read_only=True)
+    specification = serializers.CharField(source='item.specification', read_only=True, allow_null=True)  # 规格型号
     remaining_qty = serializers.SerializerMethodField()
     # BOM关联信息
     bom_item_id = serializers.IntegerField(source='bom_item.id', read_only=True, allow_null=True)
@@ -165,7 +167,8 @@ class PurchaseOrderLineSerializer(serializers.ModelSerializer):
     class Meta:
         model = PurchaseOrderLine
         fields = [
-            'id', 'po', 'item', 'item_sku', 'item_name', 'item_unit', 'item_property',
+            'id', 'po', 'item', 'item_sku', 'item_name', 'item_unit', 'unit', 'item_property',
+            'specification',
             'qty', 'unit_price', 'line_amount', 'received_qty', 'remaining_qty',
             # BOM关联字段
             'bom_item', 'bom_item_id', 'bom_planned_qty', 'bom_project_code',
@@ -182,21 +185,29 @@ class PurchaseOrderLineSerializer(serializers.ModelSerializer):
 class PurchaseOrderSerializer(serializers.ModelSerializer):
     """PurchaseOrder serializer."""
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
-    project_name = serializers.CharField(source='project.name', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True, allow_null=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     tax_rate_display = serializers.CharField(source='get_tax_rate_display', read_only=True)
     payment_terms_display = serializers.CharField(source='get_payment_terms_display', read_only=True)
     payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
+    expected_date = serializers.DateField(source='delivery_date', read_only=True)  # 前端兼容字段
+    created_by_name = serializers.SerializerMethodField()
     lines = PurchaseOrderLineSerializer(many=True, read_only=True)
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.username
+        return ''
     
     class Meta:
         model = PurchaseOrder
         fields = [
             'id', 'order_no', 'supplier', 'supplier_name', 'project', 'project_name',
-            'order_date', 'delivery_date', 'status', 'status_display',
+            'order_date', 'delivery_date', 'expected_date', 'status', 'status_display',
             'tax_rate', 'tax_rate_display', 'total_amount', 'tax_amount', 'total_with_tax',
             'payment_terms', 'payment_terms_display', 'payment_method', 'payment_method_display',
-            'payment_terms_detail', 'notes', 'lines', 'is_deleted', 'created_at', 'updated_at'
+            'payment_terms_detail', 'notes', 'lines', 'is_deleted', 
+            'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
         read_only_fields = ['order_no', 'order_date', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
     

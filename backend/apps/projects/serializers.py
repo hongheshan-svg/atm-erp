@@ -14,16 +14,22 @@ from .models import (
 
 class ProjectSerializer(serializers.ModelSerializer):
     """Project serializer."""
-    customer_name = serializers.CharField(source='customer.name', read_only=True)
-    manager_name = serializers.CharField(source='manager.get_full_name', read_only=True)
+    customer_name = serializers.CharField(source='customer.name', read_only=True, allow_null=True)
+    manager_name = serializers.CharField(source='manager.get_full_name', read_only=True, allow_null=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     sales_order_no = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
     
-    # Calculated fields
+    # Calculated fields - 前端兼容字段
     actual_material_cost = serializers.SerializerMethodField()
     actual_labor_cost = serializers.SerializerMethodField()
     actual_expense_cost = serializers.SerializerMethodField()
     total_actual_cost = serializers.SerializerMethodField()
+    actual_cost = serializers.SerializerMethodField()  # 前端兼容
+    material_cost = serializers.SerializerMethodField()  # 前端兼容
+    labor_cost = serializers.SerializerMethodField()  # 前端兼容
+    revenue = serializers.SerializerMethodField()  # 收入
+    profit = serializers.SerializerMethodField()  # 利润
     
     class Meta:
         model = Project
@@ -34,12 +40,19 @@ class ProjectSerializer(serializers.ModelSerializer):
             'start_date', 'end_date', 'status', 'status_display', 'budget_total',
             'budget_material', 'budget_labor', 'budget_expense', 'description', 'notes',
             'actual_material_cost', 'actual_labor_cost', 'actual_expense_cost',
-            'total_actual_cost', 'is_deleted', 'created_at', 'updated_at'
+            'total_actual_cost', 'actual_cost', 'material_cost', 'labor_cost',
+            'revenue', 'profit',
+            'is_deleted', 'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
     
     def get_sales_order_no(self, obj):
         return obj.sales_order.order_no if obj.sales_order else None
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.username
+        return ''
     
     def get_actual_material_cost(self, obj):
         # Will be calculated in reports service
@@ -57,6 +70,28 @@ class ProjectSerializer(serializers.ModelSerializer):
             self.get_actual_labor_cost(obj) +
             self.get_actual_expense_cost(obj)
         )
+    
+    def get_actual_cost(self, obj):
+        """前端兼容字段"""
+        return self.get_total_actual_cost(obj)
+    
+    def get_material_cost(self, obj):
+        """前端兼容字段"""
+        return self.get_actual_material_cost(obj)
+    
+    def get_labor_cost(self, obj):
+        """前端兼容字段"""
+        return self.get_actual_labor_cost(obj)
+    
+    def get_revenue(self, obj):
+        """获取收入（销售订单金额）"""
+        if obj.sales_order:
+            return float(obj.sales_order.total_with_tax or obj.sales_order.total_amount or 0)
+        return 0
+    
+    def get_profit(self, obj):
+        """获取利润（收入-成本）"""
+        return self.get_revenue(obj) - self.get_total_actual_cost(obj)
 
 
 class ProjectMemberSerializer(serializers.ModelSerializer):
@@ -194,6 +229,7 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
     # ===== 物料信息 =====
     item_name = serializers.CharField(source='item.name', read_only=True)
     item_sku = serializers.CharField(source='item.sku', read_only=True)
+    item_code = serializers.CharField(source='item.sku', read_only=True)  # 前端兼容字段
     item_specification = serializers.CharField(source='item.specification', read_only=True, allow_blank=True)
     specification = serializers.CharField(source='item.specification', read_only=True, allow_blank=True)  # 别名
     item_unit = serializers.CharField(source='item.get_unit_display', read_only=True)

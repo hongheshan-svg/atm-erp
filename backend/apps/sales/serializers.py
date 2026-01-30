@@ -211,24 +211,36 @@ class SalesOrderLineWriteSerializer(serializers.Serializer):
 class SalesOrderSerializer(serializers.ModelSerializer):
     """SalesOrder serializer."""
     customer_name = serializers.CharField(source='customer.name', read_only=True)
+    customer_address = serializers.CharField(source='customer.address', read_only=True, allow_null=True)
+    customer_contact = serializers.CharField(source='customer.contact_person', read_only=True, allow_null=True)
+    customer_phone = serializers.CharField(source='customer.phone', read_only=True, allow_null=True)
     project_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     tax_rate_display = serializers.CharField(source='get_tax_rate_display', read_only=True)
     payment_terms_display = serializers.CharField(source='get_payment_terms_display', read_only=True)
     payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
+    created_by_name = serializers.SerializerMethodField()
     lines = SalesOrderLineSerializer(many=True, read_only=True)
     
     def get_project_name(self, obj):
         return obj.project.name if obj.project else '未关联项目'
     
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.username
+        return ''
+    
     class Meta:
         model = SalesOrder
         fields = [
-            'id', 'order_no', 'customer_order_no', 'customer', 'customer_name', 'project', 'project_name',
+            'id', 'order_no', 'customer_order_no', 'customer', 'customer_name', 
+            'customer_address', 'customer_contact', 'customer_phone',
+            'project', 'project_name',
             'order_date', 'delivery_date', 'status', 'status_display',
             'tax_rate', 'tax_rate_display', 'total_amount', 'tax_amount', 'total_with_tax',
             'payment_terms', 'payment_terms_display', 'payment_method', 'payment_method_display',
-            'payment_terms_detail', 'notes', 'lines', 'is_deleted', 'created_at', 'updated_at'
+            'payment_terms_detail', 'notes', 'lines', 'is_deleted', 
+            'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
         read_only_fields = ['order_date', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
         extra_kwargs = {
