@@ -157,17 +157,25 @@
         <el-table-column type="index" label="#" width="50" />
         <el-table-column prop="item_sku" label="物料编码" width="150" />
         <el-table-column prop="item_name" label="物料名称" />
-        <el-table-column prop="specification" label="规格" />
+        <el-table-column label="规格">
+          <template #default="{ row }">
+            {{ row.item_spec || row.custom_spec || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="qty" label="数量" width="100" align="right" />
-        <el-table-column prop="unit" label="单位" width="80" />
+        <el-table-column label="单位" width="80">
+          <template #default="{ row }">
+            {{ row.item_unit || row.custom_unit || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="unit_price" label="单价" width="120" align="right">
           <template #default="{ row }">
             ¥{{ formatMoney(row.unit_price) }}
           </template>
         </el-table-column>
-        <el-table-column prop="amount" label="金额" width="130" align="right">
+        <el-table-column prop="line_amount" label="金额" width="130" align="right">
           <template #default="{ row }">
-            ¥{{ formatMoney(parseFloat(row.qty || 0) * parseFloat(row.unit_price || 0)) }}
+            ¥{{ formatMoney(row.line_amount || parseFloat(row.qty || 0) * parseFloat(row.unit_price || 0)) }}
           </template>
         </el-table-column>
         <el-table-column prop="notes" label="备注" show-overflow-tooltip />

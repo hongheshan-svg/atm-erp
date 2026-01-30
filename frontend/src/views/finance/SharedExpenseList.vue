@@ -392,7 +392,7 @@ const handleSubmit = async () => {
 const handleView = async (expense) => {
   try {
     const response = await request.get(`/finance/shared-expenses/${expense.id}/`)
-    currentExpense.value = data
+    currentExpense.value = response
     detailDialogVisible.value = true
   } catch (error) {
     console.error('加载详情失败:', error)
@@ -431,7 +431,7 @@ const handlePreviewAllocation = async () => {
       `/finance/shared-expenses/${currentExpense.value.id}/calculate_allocation/`,
       payload
     )
-    allocationPreview.value = data.allocations || []
+    allocationPreview.value = response.allocations || []
   } catch (error) {
     console.error('计算分摊失败:', error)
     ElMessage.error('计算分摊失败')

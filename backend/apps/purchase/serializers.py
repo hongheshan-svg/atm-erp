@@ -330,7 +330,14 @@ class GoodsReceiptSerializer(serializers.ModelSerializer):
     supplier_name = serializers.CharField(source='po.supplier.name', read_only=True)
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    created_by_name = serializers.SerializerMethodField()
     lines = GoodsReceiptLineSerializer(many=True, read_only=True)
+    
+    def get_created_by_name(self, obj):
+        """获取创建人姓名"""
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.username
+        return ''
     
     class Meta:
         model = GoodsReceipt
@@ -338,6 +345,7 @@ class GoodsReceiptSerializer(serializers.ModelSerializer):
             'id', 'receipt_no', 'po', 'po_no', 'purchase_order_no', 'supplier_name', 
             'warehouse', 'warehouse_name',
             'receipt_date', 'status', 'status_display', 'notes', 'lines',
+            'created_by', 'created_by_name',
             'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['receipt_no', 'created_at', 'updated_at']

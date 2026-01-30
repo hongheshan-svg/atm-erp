@@ -40,14 +40,14 @@
       <el-table :data="contacts" v-loading="loading" stripe border>
         <el-table-column prop="customer_name" label="客户" min-width="180" show-overflow-tooltip />
         <el-table-column prop="name" label="联系人" width="100" />
-        <el-table-column prop="position" label="职位" width="120" />
+        <el-table-column prop="title" label="职位" width="120" />
         <el-table-column prop="role_display" label="角色" width="100">
           <template #default="{ row }">
             <el-tag :type="getRoleType(row.role)" size="small">{{ row.role_display || row.role }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="phone" label="手机" width="130" />
-        <el-table-column prop="telephone" label="座机" width="130" />
+        <el-table-column prop="mobile" label="手机" width="130" />
+        <el-table-column prop="phone" label="座机" width="130" />
         <el-table-column prop="email" label="邮箱" width="180" show-overflow-tooltip />
         <el-table-column prop="wechat" label="微信" width="120" />
         <el-table-column prop="is_primary" label="主联系人" width="90" align="center">
@@ -97,7 +97,7 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="职位">
-              <el-input v-model="form.position" placeholder="如：总经理、采购经理" />
+              <el-input v-model="form.title" placeholder="如：总经理、采购经理" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -105,12 +105,12 @@
           <el-col :span="12">
             <el-form-item label="角色" prop="role">
               <el-select v-model="form.role" placeholder="选择角色" style="width: 100%;">
-                <el-option label="决策者" value="DECISION_MAKER" />
-                <el-option label="影响者" value="INFLUENCER" />
-                <el-option label="执行者" value="EXECUTOR" />
-                <el-option label="使用者" value="USER" />
-                <el-option label="财务" value="FINANCE" />
-                <el-option label="技术" value="TECHNICAL" />
+                <el-option label="决策者" value="DECISION" />
+                <el-option label="技术负责人" value="TECHNICAL" />
+                <el-option label="采购负责人" value="PURCHASE" />
+                <el-option label="财务负责人" value="FINANCE" />
+                <el-option label="项目负责人" value="PROJECT" />
+                <el-option label="操作人员" value="OPERATOR" />
                 <el-option label="其他" value="OTHER" />
               </el-select>
             </el-form-item>
@@ -123,13 +123,13 @@
         </el-row>
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="手机号码" prop="phone">
-              <el-input v-model="form.phone" placeholder="手机号码" />
+            <el-form-item label="手机号码" prop="mobile">
+              <el-input v-model="form.mobile" placeholder="手机号码" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="座机">
-              <el-input v-model="form.telephone" placeholder="座机号码" />
+              <el-input v-model="form.phone" placeholder="座机号码" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -152,12 +152,8 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="性别">
-              <el-radio-group v-model="form.gender">
-                <el-radio value="M">男</el-radio>
-                <el-radio value="F">女</el-radio>
-                <el-radio value="">未知</el-radio>
-              </el-radio-group>
+            <el-form-item label="部门">
+              <el-input v-model="form.department" placeholder="所属部门" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -200,14 +196,14 @@ const form = reactive({
   id: null,
   customer: null,
   name: '',
-  position: '',
+  title: '',
+  department: '',
   role: 'OTHER',
+  mobile: '',
   phone: '',
-  telephone: '',
   email: '',
   wechat: '',
   birthday: null,
-  gender: '',
   hobbies: '',
   notes: '',
   is_primary: false
@@ -216,17 +212,18 @@ const form = reactive({
 const formRules = {
   customer: [{ required: true, message: '请选择客户', trigger: 'change' }],
   name: [{ required: true, message: '请输入联系人姓名', trigger: 'blur' }],
-  role: [{ required: true, message: '请选择角色', trigger: 'change' }]
+  role: [{ required: true, message: '请选择角色', trigger: 'change' }],
+  mobile: [{ pattern: /^1\d{10}$/, message: '请输入正确的手机号', trigger: 'blur' }]
 }
 
 const getRoleType = (role) => {
   const types = {
-    DECISION_MAKER: 'danger',
-    INFLUENCER: 'warning',
-    EXECUTOR: 'primary',
-    USER: 'success',
+    DECISION: 'danger',
+    TECHNICAL: 'primary',
+    PURCHASE: 'warning',
     FINANCE: 'info',
-    TECHNICAL: '',
+    PROJECT: 'success',
+    OPERATOR: '',
     OTHER: 'info'
   }
   return types[role] || 'info'
@@ -272,8 +269,8 @@ const handleAdd = () => {
   dialogTitle.value = '新增联系人'
   isEdit.value = false
   Object.assign(form, {
-    id: null, customer: searchForm.customer, name: '', position: '', role: 'OTHER',
-    phone: '', telephone: '', email: '', wechat: '', birthday: null, gender: '',
+    id: null, customer: searchForm.customer, name: '', title: '', department: '', role: 'OTHER',
+    mobile: '', phone: '', email: '', wechat: '', birthday: null,
     hobbies: '', notes: '', is_primary: false
   })
   dialogVisible.value = true

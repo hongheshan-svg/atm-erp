@@ -19,22 +19,9 @@
           </template>
         </el-table-column>
         <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="default_efficiency" label="默认效率" width="100" align="center">
+        <el-table-column prop="resource_count" label="资源数量" width="100" align="center">
           <template #default="{ row }">
-            {{ (row.default_efficiency * 100).toFixed(0) }}%
-          </template>
-        </el-table-column>
-        <el-table-column prop="default_cost_rate" label="默认费率" width="120" align="right">
-          <template #default="{ row }">
-            ¥{{ formatMoney(row.default_cost_rate) }}/h
-          </template>
-        </el-table-column>
-        <el-table-column prop="resource_count" label="资源数量" width="100" align="center" />
-        <el-table-column label="状态" width="80" align="center">
-          <template #default="{ row }">
-            <el-tag :type="row.is_active ? 'success' : 'danger'" size="small">
-              {{ row.is_active ? '启用' : '禁用' }}
-            </el-tag>
+            {{ row.resource_count || 0 }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
@@ -60,31 +47,14 @@
         </el-form-item>
         <el-form-item label="类别" prop="category">
           <el-select v-model="typeForm.category" style="width: 100%">
-            <el-option label="机器设备" value="MACHINE" />
-            <el-option label="人力资源" value="HUMAN" />
-            <el-option label="工位/工作中心" value="WORKSTATION" />
-            <el-option label="工具" value="TOOL" />
-            <el-option label="场地" value="SPACE" />
+            <el-option label="工位" value="WORKSTATION" />
+            <el-option label="设备" value="EQUIPMENT" />
+            <el-option label="人员" value="PERSONNEL" />
+            <el-option label="工装夹具" value="TOOL" />
           </el-select>
         </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="typeForm.description" type="textarea" :rows="2" placeholder="资源类型描述" />
-        </el-form-item>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="默认效率">
-              <el-slider v-model="typeForm.default_efficiency" :min="0.5" :max="1.5" :step="0.05" show-input />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="默认费率">
-              <el-input-number v-model="typeForm.default_cost_rate" :min="0" :precision="2" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-form-item label="能力标签">
-          <el-select v-model="typeForm.capabilities" multiple filterable allow-create
-                     placeholder="输入能力标签" style="width: 100%" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -112,11 +82,8 @@ const editingId = ref(null)
 const typeForm = reactive({
   code: '',
   name: '',
-  category: 'MACHINE',
-  description: '',
-  default_efficiency: 1.0,
-  default_cost_rate: 100,
-  capabilities: []
+  category: 'WORKSTATION',
+  description: ''
 })
 
 const typeRules = {
@@ -131,11 +98,10 @@ const formatMoney = (val) => Number(val || 0).toLocaleString('zh-CN', { minimumF
 
 const getCategoryType = (category) => {
   const map = {
-    MACHINE: 'primary',
-    HUMAN: 'success',
     WORKSTATION: 'warning',
-    TOOL: 'info',
-    SPACE: ''
+    EQUIPMENT: 'primary',
+    PERSONNEL: 'success',
+    TOOL: 'info'
   }
   return map[category] || 'info'
 }

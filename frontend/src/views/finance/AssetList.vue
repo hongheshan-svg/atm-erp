@@ -254,8 +254,8 @@
           </el-descriptions>
         </el-tab-pane>
         
-        <el-tab-pane label="折旧记录" v-if="currentAsset.depreciation_records?.length">
-          <el-table :data="currentAsset.depreciation_records" size="small" border stripe>
+        <el-tab-pane label="折旧记录" v-if="currentAsset.depreciations?.length">
+          <el-table :data="currentAsset.depreciations" size="small" border stripe>
             <el-table-column label="期间" width="100">
               <template #default="{ row }">
                 {{ row.year }}-{{ String(row.month).padStart(2, '0') }}
@@ -284,10 +284,10 @@
           </el-table>
         </el-tab-pane>
         
-        <el-tab-pane label="变动记录" v-if="currentAsset.changes?.length">
+        <el-tab-pane label="变动记录" v-if="currentAsset.transfers?.length">
           <el-timeline>
             <el-timeline-item 
-              v-for="change in currentAsset.changes" 
+              v-for="change in currentAsset.transfers" 
               :key="change.id"
               :timestamp="change.change_date"
               :type="getChangeType(change.change_type)">

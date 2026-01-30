@@ -36,7 +36,7 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="unit_cost" label="单位成本" width="120" align="right">
+        <el-table-column prop="weighted_avg_cost" label="单位成本" width="120" align="right">
           <template #default="{ row }">
             ¥{{ parseFloat(row.weighted_avg_cost || 0).toFixed(2) }}
           </template>

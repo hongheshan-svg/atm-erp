@@ -318,9 +318,15 @@ class CapacityPlanningService:
 # ==================== Serializers ====================
 
 class ResourceTypeSerializer(serializers.ModelSerializer):
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    resource_count = serializers.SerializerMethodField()
+    
     class Meta:
         model = ResourceType
         fields = '__all__'
+    
+    def get_resource_count(self, obj):
+        return obj.resources.filter(is_deleted=False).count()
 
 
 class ResourceSerializer(serializers.ModelSerializer):

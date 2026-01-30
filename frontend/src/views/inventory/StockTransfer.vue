@@ -79,8 +79,8 @@
       <template #header><span>调拨历史</span></template>
       <el-table :data="history" v-loading="loadingHistory" border>
         <el-table-column prop="move_no" label="调拨单号" width="150" />
-        <el-table-column prop="from_warehouse_name" label="源仓库" width="150" />
-        <el-table-column prop="to_warehouse_name" label="目标仓库" width="150" />
+        <el-table-column prop="warehouse_from_name" label="源仓库" width="150" />
+        <el-table-column prop="warehouse_to_name" label="目标仓库" width="150" />
         <el-table-column prop="item_name" label="物料" />
         <el-table-column prop="qty" label="数量" width="100" align="right" />
         <el-table-column prop="move_date" label="调拨日期" width="120" />
