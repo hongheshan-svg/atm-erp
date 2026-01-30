@@ -871,6 +871,92 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                         detail_sheet = wb[sheet_name]
                         break
                 
+                # 如果没有找到明细sheet，尝试从主sheet的额外列读取明细
+                # 检查主sheet是否有明细列（产品名称、数量、单价）
+                if not detail_sheet and len(order_map) > 0:
+                    # 检查主sheet是否包含明细列
+                    main_detail_cols = {'产品名称', '产品名称*', '数量', '数量*', '单价', '单价*'}
+                    has_detail_cols = any(h in main_detail_cols for h in headers)
+                    
+                    if has_detail_cols:
+                        # 主sheet包含明细列，尝试从主sheet读取明细
+                        main_detail_col_map = {
+                            '产品名称': 'product_name',
+                            '产品名称*': 'product_name',
+                            '规格型号': 'spec',
+                            '单位': 'unit',
+                            '数量': 'qty',
+                            '数量*': 'qty',
+                            '单价': 'unit_price',
+                            '单价*': 'unit_price',
+                        }
+                        
+                        main_detail_header_to_field = {}
+                        for idx, header in enumerate(headers):
+                            if header in main_detail_col_map:
+                                main_detail_header_to_field[idx] = main_detail_col_map[header]
+                        
+                        if main_detail_header_to_field:
+                            # 重新遍历主sheet获取明细
+                            row_counter = 0
+                            for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
+                                try:
+                                    # 检查是否为空行
+                                    row_data = {}
+                                    for col_idx, cell in enumerate(row):
+                                        if col_idx in header_to_field:
+                                            if cell.value is not None:
+                                                row_data[header_to_field[col_idx]] = cell.value
+                                    
+                                    if not row_data or all(v is None or str(v).strip() == '' for v in row_data.values()):
+                                        continue
+                                    
+                                    row_counter += 1
+                                    so = order_by_row_idx.get(row_counter)
+                                    if not so:
+                                        continue
+                                    
+                                    # 获取明细数据
+                                    detail_data = {}
+                                    for col_idx, cell in enumerate(row):
+                                        if col_idx in main_detail_header_to_field:
+                                            field = main_detail_header_to_field[col_idx]
+                                            if cell.value is not None:
+                                                detail_data[field] = cell.value
+                                    
+                                    if not detail_data:
+                                        continue
+                                    
+                                    qty = parse_decimal(detail_data.get('qty'))
+                                    unit_price = parse_decimal(detail_data.get('unit_price'))
+                                    product_name = str(detail_data.get('product_name', '')).strip()
+                                    spec = str(detail_data.get('spec', '')).strip()
+                                    unit = str(detail_data.get('unit', '件')).strip()
+                                    
+                                    if qty > 0 and unit_price > 0 and product_name:
+                                        line_amount = qty * unit_price
+                                        SalesOrderLine.objects.create(
+                                            so=so,
+                                            item=None,
+                                            custom_name=product_name,
+                                            custom_spec=spec,
+                                            custom_unit=unit,
+                                            qty=qty,
+                                            unit_price=unit_price,
+                                            line_amount=line_amount,
+                                            notes='',
+                                            created_by=request.user
+                                        )
+                                        line_count += 1
+                                except Exception as e:
+                                    errors.append({'row': row_idx, 'error': f'读取明细失败: {str(e)}'})
+                    else:
+                        # 没有明细sheet，也没有明细列，给出警告
+                        errors.append({
+                            'row': 0, 
+                            'error': f'警告：未找到订单明细工作表（支持的名称：订单明细、Sheet2、明细），已创建 {len(order_map)} 个订单但没有产品明细。请手动添加明细或重新导入包含明细sheet的文件。'
+                        })
+                
                 if detail_sheet:
                     detail_headers = [str(cell.value).strip() if cell.value else '' for cell in detail_sheet[1]]
                     
@@ -939,7 +1025,12 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                             qty = parse_decimal(data.get('qty'))
                             unit_price = parse_decimal(data.get('unit_price'))
                             
-                            if qty <= 0 or unit_price <= 0:
+                            if qty <= 0:
+                                errors.append({'row': row_idx, 'sheet': '订单明细', 'error': '数量必须大于0'})
+                                continue
+                            
+                            if unit_price <= 0:
+                                errors.append({'row': row_idx, 'sheet': '订单明细', 'error': '单价必须大于0'})
                                 continue
                             
                             item_sku = str(data.get('item_sku', '')).strip()
@@ -952,6 +1043,7 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
                             
                             # 如果没有物料也没有产品名称，跳过
                             if not item and not product_name:
+                                errors.append({'row': row_idx, 'sheet': '订单明细', 'error': '产品名称不能为空'})
                                 continue
                             
                             line_amount = qty * unit_price
