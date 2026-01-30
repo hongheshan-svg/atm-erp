@@ -274,22 +274,59 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
 
 class GoodsReceiptLineSerializer(serializers.ModelSerializer):
     """GoodsReceiptLine serializer."""
-    item_name = serializers.CharField(source='item.name', read_only=True)
-    item_sku = serializers.CharField(source='item.sku', read_only=True)
-    item_unit = serializers.CharField(source='item.get_unit_display', read_only=True)
+    item_name = serializers.SerializerMethodField()
+    item_sku = serializers.SerializerMethodField()
+    sku = serializers.SerializerMethodField()  # 前端兼容字段
+    item_unit = serializers.SerializerMethodField()
     quality_status_display = serializers.CharField(source='get_quality_status_display', read_only=True)
+    ordered_qty = serializers.SerializerMethodField()  # 订单数量
+    received_qty = serializers.SerializerMethodField()  # 已收货数量
+    
+    def get_item_name(self, obj):
+        if obj.item:
+            return obj.item.name
+        return ''
+    
+    def get_item_sku(self, obj):
+        if obj.item:
+            return obj.item.sku
+        return ''
+    
+    def get_sku(self, obj):
+        if obj.item:
+            return obj.item.sku
+        return ''
+    
+    def get_item_unit(self, obj):
+        if obj.item:
+            return obj.item.get_unit_display()
+        return ''
+    
+    def get_ordered_qty(self, obj):
+        """获取订单数量"""
+        if obj.po_line:
+            return float(obj.po_line.qty or 0)
+        return 0
+    
+    def get_received_qty(self, obj):
+        """获取已收货数量"""
+        if obj.po_line:
+            return float(obj.po_line.received_qty or 0)
+        return 0
     
     class Meta:
         model = GoodsReceiptLine
         fields = [
-            'id', 'receipt', 'po_line', 'item', 'item_sku', 'item_name', 'item_unit',
-            'qty', 'quality_status', 'quality_status_display', 'notes', 'is_deleted'
+            'id', 'receipt', 'po_line', 'item', 'item_sku', 'sku', 'item_name', 'item_unit',
+            'qty', 'ordered_qty', 'received_qty',
+            'quality_status', 'quality_status_display', 'notes', 'is_deleted'
         ]
 
 
 class GoodsReceiptSerializer(serializers.ModelSerializer):
     """GoodsReceipt serializer."""
     po_no = serializers.CharField(source='po.order_no', read_only=True)
+    purchase_order_no = serializers.CharField(source='po.order_no', read_only=True)  # 前端兼容字段
     supplier_name = serializers.CharField(source='po.supplier.name', read_only=True)
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
@@ -298,7 +335,8 @@ class GoodsReceiptSerializer(serializers.ModelSerializer):
     class Meta:
         model = GoodsReceipt
         fields = [
-            'id', 'receipt_no', 'po', 'po_no', 'supplier_name', 'warehouse', 'warehouse_name',
+            'id', 'receipt_no', 'po', 'po_no', 'purchase_order_no', 'supplier_name', 
+            'warehouse', 'warehouse_name',
             'receipt_date', 'status', 'status_display', 'notes', 'lines',
             'is_deleted', 'created_at', 'updated_at'
         ]

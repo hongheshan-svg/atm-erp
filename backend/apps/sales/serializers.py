@@ -57,10 +57,16 @@ class SalesQuotationLineSerializer(serializers.ModelSerializer):
 class SalesQuotationSerializer(serializers.ModelSerializer):
     """SalesQuotation serializer."""
     customer_name = serializers.CharField(source='customer.name', read_only=True)
-    project_name = serializers.CharField(source='project.name', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True, allow_null=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     tax_rate_display = serializers.CharField(source='get_tax_rate_display', read_only=True)
+    created_by_name = serializers.SerializerMethodField()
     lines = SalesQuotationLineSerializer(many=True, read_only=True)
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.username
+        return ''
     
     class Meta:
         model = SalesQuotation
@@ -68,7 +74,7 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
             'id', 'quote_no', 'customer', 'customer_name', 'project', 'project_name',
             'quote_date', 'valid_until', 'status', 'status_display', 'version',
             'tax_rate', 'tax_rate_display', 'total_amount', 'tax_amount', 'total_with_tax',
-            'notes', 'lines', 'is_deleted', 'created_at', 'updated_at'
+            'notes', 'lines', 'is_deleted', 'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
         read_only_fields = ['quote_no', 'quote_date', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
     
@@ -327,14 +333,42 @@ class SalesOrderSerializer(serializers.ModelSerializer):
 
 class DeliveryOrderLineSerializer(serializers.ModelSerializer):
     """DeliveryOrderLine serializer."""
-    item_name = serializers.CharField(source='item.name', read_only=True)
-    item_sku = serializers.CharField(source='item.sku', read_only=True)
-    item_unit = serializers.CharField(source='item.get_unit_display', read_only=True)
+    item_name = serializers.SerializerMethodField()
+    item_sku = serializers.SerializerMethodField()
+    item_unit = serializers.SerializerMethodField()
+    unit = serializers.SerializerMethodField()  # 前端兼容字段
+    specification = serializers.SerializerMethodField()  # 规格型号
+    
+    def get_item_name(self, obj):
+        if obj.item:
+            return obj.item.name
+        return ''
+    
+    def get_item_sku(self, obj):
+        if obj.item:
+            return obj.item.sku
+        return ''
+    
+    def get_item_unit(self, obj):
+        if obj.item:
+            return obj.item.get_unit_display()
+        return ''
+    
+    def get_unit(self, obj):
+        if obj.item:
+            return obj.item.get_unit_display()
+        return ''
+    
+    def get_specification(self, obj):
+        if obj.item:
+            return obj.item.specification or ''
+        return ''
     
     class Meta:
         model = DeliveryOrderLine
         fields = [
             'id', 'delivery', 'so_line', 'item', 'item_sku', 'item_name', 'item_unit',
+            'unit', 'specification',
             'qty', 'notes', 'is_deleted'
         ]
 

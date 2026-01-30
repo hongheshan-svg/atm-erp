@@ -767,7 +767,7 @@ const handlePageChange = (page) => {
 const handleRowClick = async (row) => {
   try {
     const res = await request.get(`/production/inspections/${row.id}/`)
-    currentInspection.value = res.data
+    currentInspection.value = res
     detailVisible.value = true
   } catch (error) {
     console.error('加载详情失败:', error)
@@ -931,7 +931,7 @@ const handleItemsConfirm = async () => {
     
     // 刷新详情
     const res = await request.get(`/production/inspections/${currentInspection.value.id}/`)
-    currentInspection.value = res.data
+    currentInspection.value = res
   } catch (error) {
     console.error('添加检验项失败:', error)
   } finally {

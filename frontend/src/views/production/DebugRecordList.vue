@@ -720,7 +720,7 @@ const handlePageChange = (page) => {
 const handleRowClick = async (row) => {
   try {
     const res = await request.get(`/production/debug-records/${row.id}/`)
-    currentRecord.value = res.data
+    currentRecord.value = res
     detailVisible.value = true
   } catch (error) {
     console.error('加载详情失败:', error)
@@ -880,7 +880,7 @@ const handleCheckItemsConfirm = async () => {
     
     // 刷新详情
     const res = await request.get(`/production/debug-records/${currentRecord.value.id}/`)
-    currentRecord.value = res.data
+    currentRecord.value = res
   } catch (error) {
     console.error('添加检查项失败:', error)
   } finally {

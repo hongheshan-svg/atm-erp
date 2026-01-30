@@ -27,6 +27,11 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
     received_amount = serializers.SerializerMethodField()
     invoice_amount = serializers.SerializerMethodField()
     
+    # 发票和付款相关字段
+    tax_amount = serializers.SerializerMethodField()
+    payment_method = serializers.SerializerMethodField()
+    is_deducted = serializers.BooleanField(default=False, read_only=True)
+    
     class Meta:
         model = PurchaseReconciliationLine
         fields = [
@@ -39,8 +44,23 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
             'is_matched', 'notes',
             # 打印模板字段
             'order_items', 'description', 'specification', 'drawing_no',
-            'unit_price', 'unit', 'quantity', 'order_amount', 'received_amount', 'invoice_amount'
+            'unit_price', 'unit', 'quantity', 'order_amount', 'received_amount', 'invoice_amount',
+            # 发票和付款字段
+            'tax_amount', 'payment_method', 'is_deducted'
         ]
+    
+    def get_tax_amount(self, obj):
+        """获取税额"""
+        if obj.line_type == 'INVOICE':
+            # 假设税率为13%
+            return float(obj.debit_amount or 0) * 0.13 / 1.13
+        return 0
+    
+    def get_payment_method(self, obj):
+        """获取付款方式"""
+        if obj.line_type == 'PAYMENT':
+            return obj.notes or '银行转账'
+        return ''
     
     def get_order_items(self, obj):
         """获取订单行明细"""
@@ -139,15 +159,24 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
 class PurchaseReconciliationSerializer(serializers.ModelSerializer):
     """采购对账单序列化器"""
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    supplier_contact = serializers.CharField(source='supplier.contact_person', read_only=True, allow_null=True)
+    supplier_phone = serializers.CharField(source='supplier.phone', read_only=True, allow_null=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    reconciled_by_name = serializers.CharField(source='reconciled_by.username', read_only=True)
-    confirmed_by_name = serializers.CharField(source='confirmed_by.username', read_only=True)
+    reconciled_by_name = serializers.CharField(source='reconciled_by.username', read_only=True, allow_null=True)
+    confirmed_by_name = serializers.CharField(source='confirmed_by.username', read_only=True, allow_null=True)
+    created_by_name = serializers.SerializerMethodField()
     lines = PurchaseReconciliationLineSerializer(many=True, read_only=True)
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.username
+        return ''
     
     class Meta:
         model = PurchaseReconciliation
         fields = [
             'id', 'reconciliation_no', 'supplier', 'supplier_name',
+            'supplier_contact', 'supplier_phone',
             'period_start', 'period_end',
             'total_order_amount', 'total_received_amount',
             'total_invoice_amount', 'total_paid_amount', 'balance_amount',
@@ -155,6 +184,7 @@ class PurchaseReconciliationSerializer(serializers.ModelSerializer):
             'status', 'status_display',
             'reconciled_by', 'reconciled_by_name', 'reconciled_at',
             'confirmed_by', 'confirmed_by_name', 'confirmed_at',
+            'created_by', 'created_by_name',
             'notes', 'lines', 'created_at', 'updated_at'
         ]
         read_only_fields = [
@@ -202,6 +232,10 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
     delivered_amount = serializers.SerializerMethodField()
     invoice_amount = serializers.SerializerMethodField()
     
+    # 发票和收款相关字段
+    tax_amount = serializers.SerializerMethodField()
+    payment_method = serializers.SerializerMethodField()
+    
     class Meta:
         model = SalesReconciliationLine
         fields = [
@@ -214,8 +248,23 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
             'is_matched', 'notes',
             # 打印模板字段
             'order_items', 'description', 'specification', 'drawing_no',
-            'unit_price', 'unit', 'quantity', 'order_amount', 'delivered_amount', 'invoice_amount'
+            'unit_price', 'unit', 'quantity', 'order_amount', 'delivered_amount', 'invoice_amount',
+            # 发票和收款字段
+            'tax_amount', 'payment_method'
         ]
+    
+    def get_tax_amount(self, obj):
+        """获取税额"""
+        if obj.line_type == 'INVOICE':
+            # 假设税率为13%
+            return float(obj.debit_amount or 0) * 0.13 / 1.13
+        return 0
+    
+    def get_payment_method(self, obj):
+        """获取收款方式"""
+        if obj.line_type == 'RECEIPT':
+            return obj.notes or '银行转账'
+        return ''
     
     def get_order_items(self, obj):
         """获取订单行明细"""
@@ -314,15 +363,24 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
 class SalesReconciliationSerializer(serializers.ModelSerializer):
     """销售对账单序列化器"""
     customer_name = serializers.CharField(source='customer.name', read_only=True)
+    customer_contact = serializers.CharField(source='customer.contact_person', read_only=True, allow_null=True)
+    customer_phone = serializers.CharField(source='customer.phone', read_only=True, allow_null=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    reconciled_by_name = serializers.CharField(source='reconciled_by.username', read_only=True)
-    confirmed_by_name = serializers.CharField(source='confirmed_by.username', read_only=True)
+    reconciled_by_name = serializers.CharField(source='reconciled_by.username', read_only=True, allow_null=True)
+    confirmed_by_name = serializers.CharField(source='confirmed_by.username', read_only=True, allow_null=True)
+    created_by_name = serializers.SerializerMethodField()
     lines = SalesReconciliationLineSerializer(many=True, read_only=True)
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.username
+        return ''
     
     class Meta:
         model = SalesReconciliation
         fields = [
             'id', 'reconciliation_no', 'customer', 'customer_name',
+            'customer_contact', 'customer_phone',
             'period_start', 'period_end',
             'total_order_amount', 'total_delivered_amount',
             'total_invoice_amount', 'total_received_amount', 'balance_amount',
@@ -330,6 +388,7 @@ class SalesReconciliationSerializer(serializers.ModelSerializer):
             'status', 'status_display',
             'reconciled_by', 'reconciled_by_name', 'reconciled_at',
             'confirmed_by', 'confirmed_by_name', 'confirmed_at',
+            'created_by', 'created_by_name',
             'notes', 'lines', 'created_at', 'updated_at'
         ]
         read_only_fields = [

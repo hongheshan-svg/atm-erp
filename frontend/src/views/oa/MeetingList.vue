@@ -59,7 +59,7 @@
             </el-table-column>
             <el-table-column prop="location" label="地点" width="120" />
             <el-table-column prop="organizer_name" label="组织者" width="100" />
-            <el-table-column prop="attendee_count" label="参会人" width="80" align="center" />
+            <el-table-column prop="participant_count" label="参会人" width="80" align="center" />
             <el-table-column prop="status_display" label="状态" width="90" align="center">
               <template #default="{ row }">
                 <el-tag :type="getStatusType(row.status)" size="small">{{ row.status_display }}</el-tag>

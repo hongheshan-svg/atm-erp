@@ -122,8 +122,18 @@ class Meeting(BaseModel):
         ('CANCELLED', '已取消'),
     ]
     
+    TYPE_CHOICES = [
+        ('REGULAR', '例会'),
+        ('PROJECT', '项目会议'),
+        ('REVIEW', '评审会议'),
+        ('TRAINING', '培训'),
+        ('CUSTOMER', '客户会议'),
+        ('OTHER', '其他'),
+    ]
+    
     meeting_no = models.CharField(max_length=50, unique=True, verbose_name='会议编号')
     title = models.CharField(max_length=200, verbose_name='会议主题')
+    meeting_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='REGULAR', verbose_name='会议类型')
     
     # 时间地点
     start_time = models.DateTimeField(verbose_name='开始时间')
@@ -301,9 +311,10 @@ class MeetingParticipantSerializer(serializers.ModelSerializer):
 
 class MeetingSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    type_display = serializers.CharField(source='get_meeting_type_display', read_only=True)
     organizer_name = serializers.CharField(source='organizer.get_full_name', read_only=True)
     room_name = serializers.CharField(source='meeting_room.name', read_only=True)
-    project_name = serializers.CharField(source='project.name', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True, allow_null=True)
     meeting_participants = MeetingParticipantSerializer(many=True, read_only=True)
     
     class Meta:
@@ -314,6 +325,7 @@ class MeetingSerializer(serializers.ModelSerializer):
 
 class MeetingListSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    type_display = serializers.CharField(source='get_meeting_type_display', read_only=True)
     organizer_name = serializers.CharField(source='organizer.get_full_name', read_only=True)
     room_name = serializers.CharField(source='meeting_room.name', read_only=True)
     participant_count = serializers.SerializerMethodField()
@@ -321,7 +333,8 @@ class MeetingListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Meeting
         fields = [
-            'id', 'meeting_no', 'title', 'start_time', 'end_time',
+            'id', 'meeting_no', 'title', 'meeting_type', 'type_display',
+            'start_time', 'end_time',
             'location', 'is_online', 'status', 'status_display',
             'organizer_name', 'room_name', 'participant_count'
         ]
