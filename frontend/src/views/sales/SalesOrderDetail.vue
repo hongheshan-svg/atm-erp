@@ -88,13 +88,17 @@
 
       <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center;">
         <div>
-          <el-button type="primary" @click="handleCreateDelivery" v-if="order.status === 'CONFIRMED'">
+          <el-button type="primary" @click="handleCreateDelivery" v-if="order.status === 'CONFIRMED' && (order.lines?.length > 0)">
             <el-icon><Van /></el-icon>
             创建发货单
           </el-button>
           <el-button @click="handleEdit" v-if="order.status === 'DRAFT'">
             <el-icon><Edit /></el-icon>
             编辑订单
+          </el-button>
+          <el-button type="warning" @click="handleReturnToDraft" v-if="order.status === 'CONFIRMED' && (!order.lines || order.lines.length === 0)">
+            <el-icon><RefreshLeft /></el-icon>
+            退回草稿(补充明细)
           </el-button>
           <el-button type="success" @click="handleConfirm" v-if="order.status === 'DRAFT'">
             <el-icon><Check /></el-icon>
@@ -254,7 +258,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Van, Edit, Check, Close } from '@element-plus/icons-vue'
+import { Van, Edit, Check, Close, RefreshLeft } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 const route = useRoute()
@@ -376,6 +380,29 @@ const handleConfirm = async () => {
     if (error !== 'cancel') {
       console.error('确认订单失败:', error)
       ElMessage.error('确认订单失败')
+    }
+  }
+}
+
+const handleReturnToDraft = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '将订单退回草稿状态后，您可以编辑订单并补充产品明细。确定要退回吗？', 
+      '退回草稿', 
+      {
+        confirmButtonText: '确定退回',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    await request.post(`/sales/orders/${route.params.id}/return_to_draft/`)
+    ElMessage.success('订单已退回草稿状态，请点击"编辑订单"补充明细')
+    loadOrderDetail()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('退回草稿失败:', error)
+      ElMessage.error('退回草稿失败: ' + (error.response?.data?.error || error.message))
     }
   }
 }

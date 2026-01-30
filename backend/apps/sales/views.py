@@ -337,6 +337,29 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
         so.save()
         return Response(SalesOrderSerializer(so).data)
     
+    @action(detail=True, methods=['post'], url_path='return_to_draft')
+    def return_to_draft(self, request, pk=None):
+        """将已确认的订单退回草稿状态（用于补充明细）"""
+        so = self.get_object()
+        
+        # 只能退回确认状态的订单
+        if so.status != 'CONFIRMED':
+            return Response(
+                {'error': '只能将已确认状态的订单退回草稿'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 检查是否已有发货记录
+        if so.deliveries.filter(is_deleted=False).exists():
+            return Response(
+                {'error': '订单已有发货记录，无法退回草稿'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        so.status = 'DRAFT'
+        so.save()
+        return Response(SalesOrderSerializer(so).data)
+    
     @action(detail=True, methods=['get'])
     def generate_invoice(self, request, pk=None):
         """Generate PDF invoice for sales order."""
