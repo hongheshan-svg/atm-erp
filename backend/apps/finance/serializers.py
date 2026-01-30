@@ -80,7 +80,7 @@ class AccountReceivableSerializer(serializers.ModelSerializer):
             'id', 'ar_no', 'customer', 'customer_name', 'so', 'so_no', 'sales_order_no',
             'project', 'project_name', 'invoice_no', 'invoice_date', 'currency', 'currency_code', 
             'amount_due', 'amount_paid', 'amount_remaining', 'exchange_rate', 'due_date', 
-            'status', 'status_display', 'notes', 'is_deleted', 'created_at', 'updated_at'
+            'status', 'status_display', 'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['ar_no', 'amount_paid', 'created_at', 'updated_at']
 
@@ -101,7 +101,7 @@ class AccountPayableSerializer(serializers.ModelSerializer):
             'id', 'ap_no', 'supplier', 'supplier_name', 'po', 'po_no', 'purchase_order_no',
             'project_name', 'invoice_no', 'invoice_date', 'currency', 'currency_code', 
             'amount_due', 'amount_paid', 'amount_remaining', 'exchange_rate', 'due_date', 
-            'status', 'status_display', 'notes', 'is_deleted', 'created_at', 'updated_at'
+            'status', 'status_display', 'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['ap_no', 'amount_paid', 'created_at', 'updated_at']
     
