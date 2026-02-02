@@ -67,6 +67,8 @@ from .cad_integration import (
     CADBOMImportViewSet, CADPropertyMappingViewSet
 )
 from .creo_integration import CreoBOMImportViewSet
+from .drawing_import import DrawingImportViewSet
+from .bom_compare import BOMCompareViewSet, BOMSnapshotViewSet
 from .bom_integration import BOMIntegrationViewSet
 from .technical_agreement import (
     TechnicalAgreementTemplateViewSet, TechnicalAgreementViewSet, TechnicalAgreementChangeViewSet
@@ -128,6 +130,7 @@ router.register(r'bug-attachments', BugAttachmentViewSet, basename='bug-attachme
 # 图纸管理
 router.register(r'drawings', DrawingViewSet, basename='drawing')
 router.register(r'drawing-notices', DrawingChangeNoticeViewSet, basename='drawing-notice')
+router.register(r'drawing-import', DrawingImportViewSet, basename='drawing-import')
 
 # 设备台账管理
 router.register(r'equipment', EquipmentViewSet, basename='equipment')
@@ -222,6 +225,10 @@ router.register(r'cad-property-mappings', CADPropertyMappingViewSet, basename='c
 
 # CREO BOM导入
 router.register(r'creo-bom-imports', CreoBOMImportViewSet, basename='creo-bom-import')
+
+# BOM版本对比与快照
+router.register(r'bom-compare', BOMCompareViewSet, basename='bom-compare')
+router.register(r'bom-snapshots', BOMSnapshotViewSet, basename='bom-snapshot')
 
 # BOM集成(采购/生产)
 router.register(r'bom-integration', BOMIntegrationViewSet, basename='bom-integration')

@@ -131,6 +131,233 @@ ITEM_PROPERTY_RULES = {
     },
 }
 
+# 材质规格标准化映射（非标自动化行业常用材质）
+MATERIAL_MAPPING = {
+    # 碳钢
+    'Q235': {'category': '碳钢', 'grade': 'Q235', 'standard': 'GB/T 700'},
+    'Q235A': {'category': '碳钢', 'grade': 'Q235A', 'standard': 'GB/T 700'},
+    'Q235B': {'category': '碳钢', 'grade': 'Q235B', 'standard': 'GB/T 700'},
+    'Q345': {'category': '碳钢', 'grade': 'Q345', 'standard': 'GB/T 1591'},
+    'Q345B': {'category': '碳钢', 'grade': 'Q345B', 'standard': 'GB/T 1591'},
+    '45': {'category': '碳钢', 'grade': '45号钢', 'standard': 'GB/T 699'},
+    '45#': {'category': '碳钢', 'grade': '45号钢', 'standard': 'GB/T 699'},
+    '45钢': {'category': '碳钢', 'grade': '45号钢', 'standard': 'GB/T 699'},
+    '40CR': {'category': '合金钢', 'grade': '40Cr', 'standard': 'GB/T 3077'},
+    '42CRMO': {'category': '合金钢', 'grade': '42CrMo', 'standard': 'GB/T 3077'},
+    'GCR15': {'category': '轴承钢', 'grade': 'GCr15', 'standard': 'GB/T 18254'},
+    
+    # 不锈钢
+    'SUS304': {'category': '不锈钢', 'grade': '304', 'standard': 'JIS G4303'},
+    '304': {'category': '不锈钢', 'grade': '304', 'standard': 'GB/T 1220'},
+    '0CR18NI9': {'category': '不锈钢', 'grade': '304', 'standard': 'GB/T 1220'},
+    'SUS316': {'category': '不锈钢', 'grade': '316', 'standard': 'JIS G4303'},
+    '316': {'category': '不锈钢', 'grade': '316', 'standard': 'GB/T 1220'},
+    '316L': {'category': '不锈钢', 'grade': '316L', 'standard': 'GB/T 1220'},
+    'SUS316L': {'category': '不锈钢', 'grade': '316L', 'standard': 'JIS G4303'},
+    '201': {'category': '不锈钢', 'grade': '201', 'standard': 'GB/T 1220'},
+    '303': {'category': '不锈钢', 'grade': '303', 'standard': 'GB/T 1220'},
+    
+    # 铝合金
+    '6061': {'category': '铝合金', 'grade': '6061-T6', 'standard': 'GB/T 3190'},
+    '6061-T6': {'category': '铝合金', 'grade': '6061-T6', 'standard': 'GB/T 3190'},
+    '6063': {'category': '铝合金', 'grade': '6063', 'standard': 'GB/T 3190'},
+    '7075': {'category': '铝合金', 'grade': '7075-T6', 'standard': 'GB/T 3190'},
+    '7075-T6': {'category': '铝合金', 'grade': '7075-T6', 'standard': 'GB/T 3190'},
+    '2024': {'category': '铝合金', 'grade': '2024', 'standard': 'GB/T 3190'},
+    '5052': {'category': '铝合金', 'grade': '5052', 'standard': 'GB/T 3190'},
+    'AL': {'category': '铝合金', 'grade': '铝', 'standard': ''},
+    'ALUMINUM': {'category': '铝合金', 'grade': '铝', 'standard': ''},
+    
+    # 铜合金
+    'H62': {'category': '黄铜', 'grade': 'H62', 'standard': 'GB/T 5231'},
+    'H59': {'category': '黄铜', 'grade': 'H59', 'standard': 'GB/T 5231'},
+    'T2': {'category': '紫铜', 'grade': 'T2', 'standard': 'GB/T 5231'},
+    'C3604': {'category': '黄铜', 'grade': 'C3604', 'standard': 'JIS H3250'},
+    'BRASS': {'category': '黄铜', 'grade': '黄铜', 'standard': ''},
+    'COPPER': {'category': '紫铜', 'grade': '紫铜', 'standard': ''},
+    
+    # 工程塑料
+    'POM': {'category': '工程塑料', 'grade': 'POM', 'standard': '', 'alias': '赛钢'},
+    '赛钢': {'category': '工程塑料', 'grade': 'POM', 'standard': ''},
+    'PEEK': {'category': '工程塑料', 'grade': 'PEEK', 'standard': ''},
+    'PTFE': {'category': '工程塑料', 'grade': 'PTFE', 'standard': '', 'alias': '铁氟龙'},
+    '铁氟龙': {'category': '工程塑料', 'grade': 'PTFE', 'standard': ''},
+    'TEFLON': {'category': '工程塑料', 'grade': 'PTFE', 'standard': ''},
+    'PA66': {'category': '工程塑料', 'grade': 'PA66', 'standard': '', 'alias': '尼龙66'},
+    'NYLON': {'category': '工程塑料', 'grade': 'PA', 'standard': ''},
+    '尼龙': {'category': '工程塑料', 'grade': 'PA', 'standard': ''},
+    'MC901': {'category': '工程塑料', 'grade': 'MC901', 'standard': '', 'alias': '蓝色尼龙'},
+    'UHMWPE': {'category': '工程塑料', 'grade': 'UHMWPE', 'standard': '', 'alias': '超高分子量聚乙烯'},
+    'PC': {'category': '工程塑料', 'grade': 'PC', 'standard': '', 'alias': '聚碳酸酯'},
+    'ACRYLIC': {'category': '工程塑料', 'grade': 'PMMA', 'standard': '', 'alias': '亚克力'},
+    '亚克力': {'category': '工程塑料', 'grade': 'PMMA', 'standard': ''},
+    'ABS': {'category': '工程塑料', 'grade': 'ABS', 'standard': ''},
+    'PVC': {'category': '工程塑料', 'grade': 'PVC', 'standard': ''},
+    
+    # 橡胶
+    'NBR': {'category': '橡胶', 'grade': 'NBR', 'standard': '', 'alias': '丁腈橡胶'},
+    '丁腈': {'category': '橡胶', 'grade': 'NBR', 'standard': ''},
+    'EPDM': {'category': '橡胶', 'grade': 'EPDM', 'standard': '', 'alias': '三元乙丙'},
+    'FKM': {'category': '橡胶', 'grade': 'FKM', 'standard': '', 'alias': '氟橡胶'},
+    'VITON': {'category': '橡胶', 'grade': 'FKM', 'standard': ''},
+    '硅胶': {'category': '橡胶', 'grade': 'VMQ', 'standard': ''},
+    'SILICONE': {'category': '橡胶', 'grade': 'VMQ', 'standard': ''},
+    'PU': {'category': '橡胶', 'grade': 'PU', 'standard': '', 'alias': '聚氨酯'},
+}
+
+# 表面处理标准化
+SURFACE_TREATMENT_MAPPING = {
+    '镀锌': {'code': 'ZN', 'name': '镀锌', 'standard': 'GB/T 9799'},
+    '镀锌发蓝': {'code': 'ZN-BL', 'name': '镀锌发蓝', 'standard': ''},
+    '镀镍': {'code': 'NI', 'name': '镀镍', 'standard': 'GB/T 9798'},
+    '镀铬': {'code': 'CR', 'name': '镀铬', 'standard': 'GB/T 11379'},
+    '硬铬': {'code': 'HCR', 'name': '硬铬', 'standard': 'GB/T 11379'},
+    '发黑': {'code': 'BK', 'name': '发黑', 'standard': 'GB/T 15519'},
+    '阳极氧化': {'code': 'ANOD', 'name': '阳极氧化', 'standard': 'GB/T 8013'},
+    '硬质阳极氧化': {'code': 'HARD-ANOD', 'name': '硬质阳极氧化', 'standard': 'GB/T 8013'},
+    '喷涂': {'code': 'PAINT', 'name': '喷涂', 'standard': ''},
+    '喷塑': {'code': 'POWDER', 'name': '喷塑', 'standard': ''},
+    '达克罗': {'code': 'DACRO', 'name': '达克罗', 'standard': ''},
+    '钝化': {'code': 'PASS', 'name': '钝化', 'standard': ''},
+    '抛光': {'code': 'POLISH', 'name': '抛光', 'standard': ''},
+    '拉丝': {'code': 'BRUSH', 'name': '拉丝', 'standard': ''},
+    '喷砂': {'code': 'SANDBLAST', 'name': '喷砂', 'standard': ''},
+    '电泳': {'code': 'ED', 'name': '电泳', 'standard': ''},
+    '镀锡': {'code': 'SN', 'name': '镀锡', 'standard': ''},
+}
+
+
+class MaterialExtractionService:
+    """材质规格提取与标准化服务"""
+    
+    @classmethod
+    def extract_material(cls, material_str: str) -> Dict:
+        """
+        从材质字符串提取并标准化材质信息
+        
+        Args:
+            material_str: 原始材质字符串，如 "SUS304 Φ20" 或 "Q235B 10*50*100"
+            
+        Returns:
+            {
+                'category': '不锈钢',
+                'grade': '304',
+                'standard': 'JIS G4303',
+                'dimension': 'Φ20',
+                'original': 'SUS304 Φ20',
+                'normalized': '304不锈钢 Φ20'
+            }
+        """
+        if not material_str:
+            return {'category': '', 'grade': '', 'standard': '', 'dimension': '', 'original': '', 'normalized': ''}
+        
+        original = material_str.strip()
+        upper = original.upper()
+        
+        # 尝试匹配标准材质
+        matched_material = None
+        matched_key = ''
+        
+        for key, info in MATERIAL_MAPPING.items():
+            if key.upper() in upper:
+                # 优先匹配更长的关键词
+                if not matched_key or len(key) > len(matched_key):
+                    matched_material = info
+                    matched_key = key
+        
+        if matched_material:
+            # 提取尺寸信息（去除材质关键词后的部分）
+            dimension = cls._extract_dimension(original, matched_key)
+            
+            return {
+                'category': matched_material['category'],
+                'grade': matched_material['grade'],
+                'standard': matched_material.get('standard', ''),
+                'dimension': dimension,
+                'original': original,
+                'normalized': f"{matched_material['grade']}{matched_material['category']} {dimension}".strip()
+            }
+        
+        # 未匹配到标准材质，尝试提取尺寸
+        dimension = cls._extract_dimension(original, '')
+        
+        return {
+            'category': '',
+            'grade': '',
+            'standard': '',
+            'dimension': dimension,
+            'original': original,
+            'normalized': original
+        }
+    
+    @classmethod
+    def _extract_dimension(cls, material_str: str, material_key: str) -> str:
+        """提取尺寸规格信息"""
+        # 移除材质关键词
+        remaining = material_str
+        if material_key:
+            remaining = re.sub(re.escape(material_key), '', material_str, flags=re.IGNORECASE).strip()
+        
+        # 常见尺寸格式匹配
+        dimension_patterns = [
+            r'[Φφ]\s*\d+(?:\.\d+)?(?:\s*[xX×*]\s*\d+(?:\.\d+)?)*',  # Φ20, Φ20*100
+            r'\d+(?:\.\d+)?\s*[xX×*]\s*\d+(?:\.\d+)?(?:\s*[xX×*]\s*\d+(?:\.\d+)?)*',  # 10*50*100
+            r'\d+(?:\.\d+)?\s*[mM]{2}',  # 10mm
+            r'DN\s*\d+',  # DN50
+            r'M\d+(?:\.\d+)?(?:\s*[xX×*]\s*\d+)?',  # M10, M10*50
+        ]
+        
+        for pattern in dimension_patterns:
+            match = re.search(pattern, remaining)
+            if match:
+                return match.group().strip()
+        
+        # 返回去除材质后的剩余部分
+        return remaining.strip()
+    
+    @classmethod
+    def extract_surface_treatment(cls, treatment_str: str) -> Dict:
+        """
+        提取并标准化表面处理信息
+        
+        Returns:
+            {'code': 'ZN', 'name': '镀锌', 'standard': 'GB/T 9799', 'original': '...'}
+        """
+        if not treatment_str:
+            return {'code': '', 'name': '', 'standard': '', 'original': ''}
+        
+        original = treatment_str.strip()
+        
+        for key, info in SURFACE_TREATMENT_MAPPING.items():
+            if key in original:
+                return {
+                    'code': info['code'],
+                    'name': info['name'],
+                    'standard': info.get('standard', ''),
+                    'original': original
+                }
+        
+        return {
+            'code': '',
+            'name': original,
+            'standard': '',
+            'original': original
+        }
+    
+    @classmethod
+    def batch_extract_materials(cls, items: List[Dict]) -> List[Dict]:
+        """批量提取材质信息并更新到items"""
+        for item in items:
+            material_str = item.get('material', '')
+            if material_str:
+                extracted = cls.extract_material(material_str)
+                item['material_category'] = extracted['category']
+                item['material_grade'] = extracted['grade']
+                item['material_standard'] = extracted['standard']
+                item['material_dimension'] = extracted['dimension']
+                item['material_normalized'] = extracted['normalized']
+        return items
+
 
 class CreoBOMImportSession(BaseModel):
     """CAD BOM统一导入会话"""
@@ -483,6 +710,189 @@ class CreoBOMImportService:
         session.completed_at = timezone.now()
         session.save()
         return {'success': True, 'imported': imp, 'skipped': skip, 'errors': err}
+    
+    @classmethod
+    def import_hierarchical_bom(cls, session, options=None):
+        """
+        导入层级BOM结构（支持装配体-子装配-零件父子关系）
+        根据level字段建立parent关系
+        """
+        from apps.projects.models import Project, ProjectBOM
+        options = options or {}
+        
+        if not session.project_id:
+            return {'success': False, 'error': '未指定项目'}
+        
+        try:
+            project = Project.objects.get(id=session.project_id)
+        except Project.DoesNotExist:
+            return {'success': False, 'error': '项目不存在'}
+        
+        session.status = 'IMPORTING'
+        session.save()
+        
+        imported, skipped, errors = 0, 0, 0
+        level_stack = {}  # 用于追踪各层级的最后一个BOM项，以建立父子关系
+        
+        # 按行号排序处理，确保父级先于子级创建
+        items = session.items.filter(status__in=['MATCHED', 'CREATED']).order_by('row_number')
+        
+        for item in items:
+            item_id = item.matched_item_id or item.created_item_id
+            if not item_id:
+                item.status = 'SKIPPED'
+                item.error_message = '无匹配物料'
+                item.save()
+                skipped += 1
+                continue
+            
+            try:
+                with transaction.atomic():
+                    level = item.level or 0
+                    
+                    # 确定父级BOM项
+                    parent_bom = None
+                    if level > 0:
+                        # 查找上一层级的BOM项作为父级
+                        for check_level in range(level - 1, -1, -1):
+                            if check_level in level_stack:
+                                parent_bom = level_stack[check_level]
+                                break
+                    
+                    # 检查是否已存在
+                    existing = ProjectBOM.objects.filter(
+                        project=project,
+                        item_id=item_id,
+                        parent=parent_bom,
+                        is_deleted=False
+                    ).first()
+                    
+                    if existing:
+                        existing.planned_qty += item.quantity
+                        existing.save()
+                        bom = existing
+                    else:
+                        # 解析非标件类型
+                        custom_part_type = cls._identify_custom_part_type(item)
+                        is_custom = bool(custom_part_type)
+                        
+                        bom = ProjectBOM.objects.create(
+                            project=project,
+                            item_id=item_id,
+                            planned_qty=item.quantity,
+                            level=level,
+                            parent=parent_bom,
+                            # 非标件信息
+                            is_custom_part=is_custom,
+                            custom_part_type=custom_part_type,
+                            cad_file_name=item.file_name,
+                            cad_software=session.detected_software or session.cad_software,
+                            # 材质信息
+                            material_spec=item.material,
+                            # 装配体代号
+                            assembly_code=item.part_number if level == 0 else '',
+                            notes=f'CAD导入: {item.file_name}'
+                        )
+                    
+                    # 更新层级栈
+                    level_stack[level] = bom
+                    # 清除更深层级的引用
+                    for k in list(level_stack.keys()):
+                        if k > level:
+                            del level_stack[k]
+                    
+                    item.imported_bom_id = bom.id
+                    item.status = 'IMPORTED'
+                    item.save()
+                    imported += 1
+                    
+            except Exception as e:
+                item.status = 'ERROR'
+                item.error_message = str(e)
+                item.save()
+                errors += 1
+                logger.exception(f"导入BOM项失败: {item.part_number}")
+        
+        session.imported_count = imported
+        session.error_count = errors
+        session.status = 'COMPLETED' if errors == 0 else 'FAILED'
+        session.completed_at = timezone.now()
+        session.save()
+        
+        return {
+            'success': True,
+            'imported': imported,
+            'skipped': skipped,
+            'errors': errors,
+            'hierarchy_levels': len(level_stack)
+        }
+    
+    @classmethod
+    def _identify_custom_part_type(cls, item):
+        """识别非标件类型"""
+        # 自制件关键词匹配
+        CUSTOM_PART_PATTERNS = {
+            'MACHINED': ['机加', 'CNC', '车', '铣', '磨', '钻', '镗', 'MACHINED'],
+            'SHEET_METAL': ['钣金', '折弯', '冲压', 'SHEET', '激光切割', '数冲'],
+            'WELDING': ['焊接', '焊件', 'WELD', '焊合件'],
+            'ASSEMBLY': ['组件', '装配', 'ASSY', 'ASM', '总成'],
+            'CASTING': ['铸造', '铸件', 'CAST'],
+            'FORGING': ['锻造', '锻件', 'FORG'],
+            'PLASTIC': ['塑料', '注塑', 'PLASTIC', 'MOLD'],
+        }
+        
+        # 检查文件名和零件名
+        check_text = f"{item.file_name} {item.part_name} {item.part_number}".upper()
+        
+        for part_type, keywords in CUSTOM_PART_PATTERNS.items():
+            for kw in keywords:
+                if kw.upper() in check_text:
+                    return part_type
+        
+        # 检查文件扩展名判断是否为CAD自制件
+        file_ext = item.file_name.lower().split('.')[-1] if item.file_name else ''
+        if file_ext in ['prt', 'sldprt', 'ipt']:
+            # CAD零件文件，可能是自制件
+            # 进一步根据材质判断
+            material = item.material.upper() if item.material else ''
+            if any(m in material for m in ['Q235', 'Q345', '45#', 'SUS', '铝', 'ALUMINUM', 'AL']):
+                return 'MACHINED'
+        
+        return ''
+    
+    @classmethod
+    def get_bom_tree(cls, project_id):
+        """获取项目BOM树形结构"""
+        from apps.projects.models import ProjectBOM
+        
+        def build_tree(parent_id=None, level=0):
+            items = ProjectBOM.objects.filter(
+                project_id=project_id,
+                parent_id=parent_id,
+                is_deleted=False
+            ).select_related('item').order_by('level', 'sort_order')
+            
+            result = []
+            for item in items:
+                node = {
+                    'id': item.id,
+                    'item_id': item.item_id,
+                    'item_code': item.item.sku if item.item else '',
+                    'item_name': item.item.name if item.item else '',
+                    'level': item.level,
+                    'planned_qty': float(item.planned_qty),
+                    'is_custom_part': item.is_custom_part,
+                    'custom_part_type': item.custom_part_type,
+                    'has_drawing': item.has_drawing,
+                    'drawing_no': item.drawing_no,
+                    'material_spec': item.material_spec,
+                    'cad_file_name': item.cad_file_name,
+                    'children': build_tree(item.id, level + 1)
+                }
+                result.append(node)
+            return result
+        
+        return build_tree()
 
 
 # Serializers
@@ -549,6 +959,26 @@ class CreoBOMImportViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         result = CreoBOMImportService.import_to_bom(session)
         session.refresh_from_db()
         return Response({'session': CreoBOMImportSessionSerializer(session).data, 'result': result})
+    
+    @action(detail=True, methods=['post'])
+    def import_hierarchy(self, request, pk=None):
+        """导入层级BOM（支持装配体-子装配-零件父子关系）"""
+        session = self.get_object()
+        if request.data.get('project_id'):
+            session.project_id = request.data['project_id']
+            session.save()
+        result = CreoBOMImportService.import_hierarchical_bom(session, request.data.get('options', {}))
+        session.refresh_from_db()
+        return Response({'session': CreoBOMImportSessionSerializer(session).data, 'result': result})
+    
+    @action(detail=False, methods=['get'])
+    def bom_tree(self, request):
+        """获取项目BOM树形结构"""
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response({'error': '请指定project_id'}, status=400)
+        tree = CreoBOMImportService.get_bom_tree(int(project_id))
+        return Response({'tree': tree})
     
     @action(detail=True, methods=['post'])
     def manual_match(self, request, pk=None):

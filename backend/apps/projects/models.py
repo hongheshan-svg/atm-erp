@@ -666,6 +666,40 @@ class ProjectBOM(BaseModel):
     is_long_lead = models.BooleanField(default=False, verbose_name='长周期件',
                                        help_text='采购周期较长需要提前采购')
     
+    # ==================== 非标自动化行业增强 ====================
+    # 装配体代号（用于CAD图纸关联）
+    assembly_code = models.CharField(max_length=100, blank=True, verbose_name='装配体代号',
+                                     help_text='CAD装配体文件名或代号，用于自动关联图纸')
+    
+    # 非标件识别
+    CUSTOM_PART_TYPE_CHOICES = [
+        ('', '非自制件'),
+        ('MACHINED', '机加件'),
+        ('SHEET_METAL', '钣金件'),
+        ('WELDING', '焊接件'),
+        ('ASSEMBLY', '组装件'),
+        ('CASTING', '铸造件'),
+        ('FORGING', '锻造件'),
+        ('PLASTIC', '塑料件'),
+        ('ELECTRICAL', '电气件'),
+        ('OTHER', '其他自制件'),
+    ]
+    is_custom_part = models.BooleanField(default=False, verbose_name='非标件/自制件',
+                                         help_text='是否为非标准件或自制件')
+    custom_part_type = models.CharField(
+        max_length=20,
+        choices=CUSTOM_PART_TYPE_CHOICES,
+        blank=True,
+        default='',
+        verbose_name='非标件类型'
+    )
+    
+    # CAD来源信息
+    cad_file_name = models.CharField(max_length=200, blank=True, verbose_name='CAD文件名',
+                                     help_text='来源CAD文件名（如.prt/.asm）')
+    cad_software = models.CharField(max_length=50, blank=True, verbose_name='CAD软件',
+                                    help_text='来源CAD软件类型')
+    
     # ==================== 询价信息 ====================
     QUOTE_STATUS_CHOICES = [
         ('NOT_QUOTED', '未询价'),
@@ -1315,6 +1349,7 @@ class SparePartUsage(BaseModel):
 class Drawing(BaseModel):
     """
     图纸管理 - 管理项目和物料相关的图纸文件
+    支持非标自动化行业的装配图-零件图层级结构
     """
     FILE_TYPE_CHOICES = [
         ('PDF', 'PDF文件'),
@@ -1325,6 +1360,8 @@ class Drawing(BaseModel):
         ('IGES', 'IGES文件'),
         ('STL', 'STL文件'),
         ('SOLIDWORKS', 'SolidWorks文件'),
+        ('CREO', 'Creo/Pro-E文件'),
+        ('INVENTOR', 'Inventor文件'),
         ('OTHER', '其他'),
     ]
     
@@ -1336,10 +1373,32 @@ class Drawing(BaseModel):
         ('OBSOLETE', '已废弃'),
     ]
     
+    # 图纸类型（非标自动化行业分类）
+    PART_TYPE_CHOICES = [
+        ('ASSEMBLY', '装配图'),
+        ('PART', '零件图'),
+        ('WELDMENT', '焊接图'),
+        ('SHEET_METAL', '钣金图'),
+        ('TOOLING', '工装图'),
+        ('SCHEMATIC', '示意图'),
+        ('ELECTRICAL', '电气图'),
+        ('PNEUMATIC', '气动图'),
+        ('LAYOUT', '布局图'),
+        ('OTHER', '其他'),
+    ]
+    
     drawing_no = models.CharField(max_length=100, verbose_name='图纸号')
     name = models.CharField(max_length=200, verbose_name='图纸名称')
     version = models.CharField(max_length=20, default='A0', verbose_name='版本')
     revision = models.IntegerField(default=1, verbose_name='修订号')
+    
+    # 图纸类型
+    part_type = models.CharField(
+        max_length=20,
+        choices=PART_TYPE_CHOICES,
+        default='PART',
+        verbose_name='图纸类型'
+    )
     
     # 关联
     project = models.ForeignKey(
@@ -1364,6 +1423,35 @@ class Drawing(BaseModel):
         related_name='drawings',
         verbose_name='关联BOM项'
     )
+    
+    # 父级图纸（装配图-零件图层级关系）
+    parent_drawing = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='child_drawings',
+        verbose_name='父级图纸',
+        help_text='所属的装配图'
+    )
+    
+    # 技术参数（非标自动化行业常用）
+    material = models.CharField(max_length=100, blank=True, verbose_name='材质',
+                                help_text='从图纸标题栏提取的材质信息')
+    weight = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True,
+                                 verbose_name='重量(kg)')
+    surface_treatment = models.CharField(max_length=100, blank=True, verbose_name='表面处理',
+                                         help_text='如：镀锌、发黑、喷涂等')
+    heat_treatment = models.CharField(max_length=100, blank=True, verbose_name='热处理',
+                                      help_text='如：调质、淬火等')
+    tolerance_grade = models.CharField(max_length=50, blank=True, verbose_name='公差等级',
+                                       help_text='未注公差等级')
+    roughness = models.CharField(max_length=50, blank=True, verbose_name='表面粗糙度',
+                                 help_text='未注粗糙度要求')
+    
+    # CAD来源信息
+    cad_file_name = models.CharField(max_length=200, blank=True, verbose_name='CAD文件名')
+    cad_software = models.CharField(max_length=50, blank=True, verbose_name='CAD软件类型')
     
     # 文件信息
     file_type = models.CharField(

@@ -827,6 +827,24 @@ const routes = [
         component: () => import('@/views/plm/CreoBOMImport.vue'),
         meta: { title: 'CAD BOM导入', icon: 'Upload', menuId: 'plm:cad-bom' }
       },
+      {
+        path: 'plm/bom-compare',
+        name: 'BOMCompare',
+        component: () => import('@/views/plm/BOMCompare.vue'),
+        meta: { title: 'BOM版本对比', icon: 'Connection', menuId: 'plm:bom-compare' }
+      },
+      {
+        path: 'projects/batch-drawing-import',
+        name: 'BatchDrawingImport',
+        component: () => import('@/views/projects/BatchDrawingImport.vue'),
+        meta: { title: '批量图纸导入', icon: 'FolderOpened', menuId: 'projects:batch-drawing' }
+      },
+      {
+        path: 'projects/drawing-bom-link',
+        name: 'DrawingBOMLink',
+        component: () => import('@/views/projects/DrawingBOMLink.vue'),
+        meta: { title: '图纸-BOM关联', icon: 'Connection', menuId: 'projects:drawing-bom-link' }
+      },
       // OA - 日程会议
       {
         path: 'oa/schedule',

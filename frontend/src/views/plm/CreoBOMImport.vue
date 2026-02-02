@@ -204,34 +204,61 @@
           >
             <el-icon><Plus /></el-icon> 创建新物料 ({{ currentSession.new_item_count }})
           </el-button>
-          <el-button 
-            v-if="currentSession.status === 'REVIEWING'" 
-            type="success"
-            @click="importBOM(currentSession)"
-          >
+          <el-dropdown split-button type="success" @click="importBOM(currentSession)" v-if="currentSession.status === 'REVIEWING'">
             <el-icon><Download /></el-icon> 导入到项目BOM
-          </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item @click="importBOM(currentSession)">普通导入</el-dropdown-item>
+                <el-dropdown-item @click="importHierarchicalBOM(currentSession)">
+                  <el-icon><Connection /></el-icon> 层级导入(保留父子关系)
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
 
         <!-- 导入项列表 -->
-        <el-table :data="currentSession.items" border stripe max-height="500">
+        <el-table :data="currentSession.items" border stripe max-height="500" row-class-name="bom-row">
           <el-table-column prop="row_number" label="行" width="50" />
-          <el-table-column prop="level" label="层级" width="60" />
-          <el-table-column prop="part_number" label="物料编码" width="150" />
-          <el-table-column prop="part_name" label="物料名称" min-width="200" />
-          <el-table-column prop="quantity" label="数量" width="80" align="right" />
-          <el-table-column prop="unit" label="单位" width="60" />
-          <el-table-column prop="material" label="材料" width="120" />
-          <el-table-column prop="status" label="状态" width="100">
+          <el-table-column label="层级" width="70">
+            <template #default="{ row }">
+              <span class="level-indicator" :style="{ paddingLeft: (row.level || 0) * 12 + 'px' }">
+                <el-tag size="small" :type="row.level === 0 ? 'primary' : 'info'">L{{ row.level }}</el-tag>
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column label="物料编码" width="180">
+            <template #default="{ row }">
+              <div :style="{ paddingLeft: (row.level || 0) * 12 + 'px' }">
+                <span v-if="row.level > 0" class="tree-indent">└ </span>
+                <span class="part-number">{{ row.part_number }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="part_name" label="物料名称" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="quantity" label="数量" width="70" align="right" />
+          <el-table-column prop="unit" label="单位" width="50" />
+          <el-table-column prop="material" label="材料" width="100" show-overflow-tooltip />
+          <el-table-column label="建议属性" width="90">
+            <template #default="{ row }">
+              <el-tag v-if="row.suggested_item_property" size="small" :type="getPropertyType(row.suggested_item_property)">
+                {{ getPropertyLabel(row.suggested_item_property) }}
+              </el-tag>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="status" label="状态" width="90">
             <template #default="{ row }">
               <el-tag :type="getItemStatusType(row.status)" size="small">
                 {{ row.status_display }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="match_score" label="匹配度" width="80">
+          <el-table-column prop="match_score" label="匹配度" width="70">
             <template #default="{ row }">
-              <span v-if="row.match_score > 0">{{ (row.match_score * 100).toFixed(0) }}%</span>
+              <span v-if="row.match_score > 0" :class="getMatchScoreClass(row.match_score)">
+                {{ (row.match_score * 100).toFixed(0) }}%
+              </span>
               <span v-else>-</span>
             </template>
           </el-table-column>
@@ -292,7 +319,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Upload, Plus, Download, DocumentAdd } from '@element-plus/icons-vue'
+import { Upload, Plus, Download, DocumentAdd, Connection } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 const loading = ref(false)
@@ -361,6 +388,34 @@ const getItemStatusType = (status) => {
     'SKIPPED': 'info'
   }
   return map[status] || 'default'
+}
+
+const getPropertyType = (prop) => {
+  const map = {
+    'STANDARD': 'info',
+    'PURCHASED': 'primary',
+    'OUTSOURCED': 'warning',
+    'SELF_MADE': 'success',
+    'ASSEMBLY': 'danger'
+  }
+  return map[prop] || 'info'
+}
+
+const getPropertyLabel = (prop) => {
+  const map = {
+    'STANDARD': '标准件',
+    'PURCHASED': '外购件',
+    'OUTSOURCED': '外协件',
+    'SELF_MADE': '自制件',
+    'ASSEMBLY': '组件'
+  }
+  return map[prop] || prop
+}
+
+const getMatchScoreClass = (score) => {
+  if (score >= 0.9) return 'match-high'
+  if (score >= 0.7) return 'match-medium'
+  return 'match-low'
 }
 
 const formatDate = (date) => {
@@ -498,6 +553,33 @@ const importBOM = async (session) => {
   }
 }
 
+const importHierarchicalBOM = async (session) => {
+  if (!session.project_id) {
+    // 先选择项目
+    const { value } = await ElMessageBox.prompt('请输入项目ID', '选择项目', {
+      inputPattern: /^\d+$/,
+      inputErrorMessage: '请输入有效的项目ID'
+    }).catch(() => ({ value: null }))
+    
+    if (!value) return
+    session.project_id = parseInt(value)
+  }
+  
+  try {
+    const res = await request.post(`/projects/creo-bom-imports/${session.id}/import_hierarchy/`, {
+      project_id: session.project_id
+    })
+    
+    ElMessage.success(`成功导入 ${res.result.imported} 条BOM（${res.result.hierarchy_levels || 0}层结构）`)
+    loadSessions()
+    if (currentSession.value?.id === session.id) {
+      currentSession.value = res.session
+    }
+  } catch (e) {
+    ElMessage.error('层级导入失败: ' + (e.response?.data?.error || e.message))
+  }
+}
+
 const showMatchDialog = (item) => {
   matchingItem.value = item
   selectedMaterialId.value = null
@@ -611,5 +693,35 @@ onMounted(() => {
 
 .mb-4 {
   margin-bottom: 16px;
+}
+
+/* BOM层级显示样式 */
+.tree-indent {
+  color: #c0c4cc;
+  font-family: monospace;
+}
+
+.part-number {
+  font-weight: 500;
+  color: #409eff;
+}
+
+.level-indicator {
+  display: inline-block;
+}
+
+/* 匹配度颜色 */
+.match-high {
+  color: #67c23a;
+  font-weight: bold;
+}
+
+.match-medium {
+  color: #e6a23c;
+  font-weight: bold;
+}
+
+.match-low {
+  color: #f56c6c;
 }
 </style>
