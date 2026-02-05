@@ -26,6 +26,15 @@
         <el-form-item label="询价单号">
           <el-input v-model="searchForm.rfq_no" placeholder="请输入询价单号" clearable />
         </el-form-item>
+        <el-form-item label="比价类型">
+          <el-select v-model="searchForm.comparison_type" placeholder="全部类型" clearable>
+            <el-option label="常规比价" value="NORMAL" />
+            <el-option label="样件比价" value="SAMPLE" />
+            <el-option label="批量比价" value="BATCH" />
+            <el-option label="紧急比价" value="URGENT" />
+            <el-option label="变更重新比价" value="CHANGE" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="searchForm.status" placeholder="选择状态" clearable>
             <el-option label="草稿" value="DRAFT" />
@@ -50,8 +59,22 @@
       >
         <el-table-column v-if="isAdmin" type="selection" width="50" />
         <el-table-column prop="comparison_no" label="比价单号" width="160" />
-        <el-table-column prop="rfq_no" label="询价单号" width="160" />
-        <el-table-column prop="project_name" label="项目" min-width="120" />
+        <el-table-column prop="rfq_no" label="询价单号" width="140" />
+        <el-table-column prop="project_name" label="项目" min-width="100" />
+        <el-table-column prop="comparison_type_display" label="比价类型" width="100" align="center">
+          <template #default="{ row }">
+            <el-tag :type="getComparisonTypeColor(row.comparison_type)" size="small">
+              {{ row.comparison_type_display || row.comparison_type }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="risk_level" label="风险" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag :type="getRiskLevelColor(row.risk_level)" size="small">
+              {{ row.risk_level === 'LOW' ? '低' : (row.risk_level === 'MEDIUM' ? '中' : '高') }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="supplier_count" label="供应商数" width="100" align="center" />
         <el-table-column label="报价范围" width="200" align="right">
           <template #default="{ row }">
@@ -127,7 +150,7 @@
     </el-card>
 
     <!-- 新建比价对话框 -->
-    <el-dialog v-model="createDialogVisible" title="新建比价分析" width="500px">
+    <el-dialog v-model="createDialogVisible" title="新建比价分析" width="550px">
       <el-form :model="createForm" :rules="createRules" ref="createFormRef" label-width="100px">
         <el-form-item label="询价单" prop="rfq_id">
           <el-select v-model="createForm.rfq_id" placeholder="选择询价单" filterable style="width: 100%">
@@ -142,35 +165,90 @@
             暂无可用询价单，需要询价单至少有2个供应商已提交报价
           </div>
         </el-form-item>
-        <el-divider content-position="left">权重配置 (总和需等于100%)</el-divider>
-        <el-form-item label="价格权重">
-          <el-input-number v-model="createForm.weight_price" :min="0" :max="100" :step="5" />
-          <span style="margin-left: 8px;">%</span>
+        <el-form-item label="比价类型">
+          <el-select v-model="createForm.comparison_type" style="width: 100%">
+            <el-option label="常规比价" value="NORMAL" />
+            <el-option label="样件比价" value="SAMPLE" />
+            <el-option label="批量比价" value="BATCH" />
+            <el-option label="紧急比价" value="URGENT" />
+            <el-option label="变更重新比价" value="CHANGE" />
+          </el-select>
         </el-form-item>
-        <el-form-item label="质量权重">
-          <el-input-number v-model="createForm.weight_quality" :min="0" :max="100" :step="5" />
-          <span style="margin-left: 8px;">%</span>
+        <el-divider content-position="left">权重配置</el-divider>
+        <el-form-item label="权重模板">
+          <el-select v-model="createForm.weight_template" @change="applyTemplate" style="width: 100%">
+            <el-option label="标准权重 (价格40%)" value="STANDARD" />
+            <el-option label="质量优先 (质量40%)" value="QUALITY_FIRST" />
+            <el-option label="交期优先 (交期40%)" value="DELIVERY_FIRST" />
+            <el-option label="价格优先 (价格55%)" value="PRICE_FIRST" />
+            <el-option label="自定义" value="CUSTOM" />
+          </el-select>
         </el-form-item>
-        <el-form-item label="交期权重">
-          <el-input-number v-model="createForm.weight_delivery" :min="0" :max="100" :step="5" />
-          <span style="margin-left: 8px;">%</span>
-        </el-form-item>
-        <el-form-item label="服务权重">
-          <el-input-number v-model="createForm.weight_service" :min="0" :max="100" :step="5" />
-          <span style="margin-left: 8px;">%</span>
-        </el-form-item>
-        <el-form-item>
-          <el-alert 
-            v-if="weightTotal !== 100" 
-            type="warning" 
-            :title="`权重总和为 ${weightTotal}%，需要等于 100%`"
-            :closable="false"
-          />
-        </el-form-item>
+        <template v-if="createForm.weight_template === 'CUSTOM'">
+          <el-row :gutter="10">
+            <el-col :span="12">
+              <el-form-item label="价格权重">
+                <el-input-number v-model="createForm.weight_price" :min="0" :max="100" :step="5" size="small" />
+                <span style="margin-left: 4px;">%</span>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="质量权重">
+                <el-input-number v-model="createForm.weight_quality" :min="0" :max="100" :step="5" size="small" />
+                <span style="margin-left: 4px;">%</span>
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="10">
+            <el-col :span="12">
+              <el-form-item label="交期权重">
+                <el-input-number v-model="createForm.weight_delivery" :min="0" :max="100" :step="5" size="small" />
+                <span style="margin-left: 4px;">%</span>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="服务权重">
+                <el-input-number v-model="createForm.weight_service" :min="0" :max="100" :step="5" size="small" />
+                <span style="margin-left: 4px;">%</span>
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="10">
+            <el-col :span="12">
+              <el-form-item label="技术权重">
+                <el-input-number v-model="createForm.weight_technical" :min="0" :max="100" :step="5" size="small" />
+                <span style="margin-left: 4px;">%</span>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <div class="weight-total-display">
+                合计: <span :class="{ 'valid': weightTotal === 100, 'invalid': weightTotal !== 100 }">{{ weightTotal }}%</span>
+              </div>
+            </el-col>
+          </el-row>
+          <el-form-item v-if="weightTotal !== 100">
+            <el-alert 
+              type="warning" 
+              :title="`权重总和为 ${weightTotal}%，需要等于 100%`"
+              :closable="false"
+            />
+          </el-form-item>
+        </template>
+        <template v-else>
+          <el-form-item>
+            <div class="template-weights">
+              <el-tag type="success">价格 {{ templateWeights.price }}%</el-tag>
+              <el-tag type="primary">质量 {{ templateWeights.quality }}%</el-tag>
+              <el-tag type="warning">交期 {{ templateWeights.delivery }}%</el-tag>
+              <el-tag type="info">服务 {{ templateWeights.service }}%</el-tag>
+              <el-tag v-if="templateWeights.technical > 0" type="danger">技术 {{ templateWeights.technical }}%</el-tag>
+            </div>
+          </el-form-item>
+        </template>
       </el-form>
       <template #footer>
         <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitCreate" :disabled="weightTotal !== 100">
+        <el-button type="primary" @click="submitCreate" :disabled="createForm.weight_template === 'CUSTOM' && weightTotal !== 100">
           创建
         </el-button>
       </template>
@@ -203,6 +281,7 @@ const isAdmin = computed(() => userStore.userInfo?.is_superuser || userStore.use
 // 搜索
 const searchForm = reactive({
   rfq_no: '',
+  comparison_type: '',
   status: ''
 })
 
@@ -213,13 +292,24 @@ const pagination = reactive({
   total: 0
 })
 
+// 权重模板定义
+const WEIGHT_TEMPLATES = {
+  'STANDARD': { price: 40, quality: 25, delivery: 20, service: 15, technical: 0 },
+  'QUALITY_FIRST': { price: 25, quality: 40, delivery: 15, service: 10, technical: 10 },
+  'DELIVERY_FIRST': { price: 25, quality: 20, delivery: 40, service: 15, technical: 0 },
+  'PRICE_FIRST': { price: 55, quality: 20, delivery: 15, service: 10, technical: 0 },
+}
+
 // 新建表单
 const createForm = reactive({
   rfq_id: null,
+  comparison_type: 'NORMAL',
+  weight_template: 'STANDARD',
   weight_price: 40,
   weight_quality: 25,
   weight_delivery: 20,
-  weight_service: 15
+  weight_service: 15,
+  weight_technical: 0
 })
 
 const createRules = {
@@ -229,8 +319,49 @@ const createRules = {
 // 计算权重总和
 const weightTotal = computed(() => {
   return createForm.weight_price + createForm.weight_quality + 
-         createForm.weight_delivery + createForm.weight_service
+         createForm.weight_delivery + createForm.weight_service + createForm.weight_technical
 })
+
+// 当前模板权重
+const templateWeights = computed(() => {
+  return WEIGHT_TEMPLATES[createForm.weight_template] || WEIGHT_TEMPLATES['STANDARD']
+})
+
+// 应用权重模板
+const applyTemplate = (template) => {
+  if (template !== 'CUSTOM') {
+    const weights = WEIGHT_TEMPLATES[template]
+    if (weights) {
+      createForm.weight_price = weights.price
+      createForm.weight_quality = weights.quality
+      createForm.weight_delivery = weights.delivery
+      createForm.weight_service = weights.service
+      createForm.weight_technical = weights.technical
+    }
+  }
+}
+
+// 比价类型颜色
+const getComparisonTypeColor = (type) => {
+  const colors = {
+    'NORMAL': 'info',
+    'SAMPLE': 'primary',
+    'BATCH': 'success',
+    'URGENT': 'danger',
+    'CHANGE': 'warning'
+  }
+  return colors[type] || 'info'
+}
+
+// 风险等级颜色
+const getRiskLevelColor = (level) => {
+  const colors = {
+    'LOW': 'success',
+    'MEDIUM': 'warning',
+    'HIGH': 'danger'
+  }
+  return colors[level] || 'info'
+}
 
 // 格式化
 const formatNumber = (num) => {
@@ -289,6 +420,7 @@ const loadAvailableRFQs = async () => {
 // 重置搜索
 const resetSearch = () => {
   searchForm.rfq_no = ''
+  searchForm.comparison_type = ''
   searchForm.status = ''
   pagination.page = 1
   loadData()
@@ -298,10 +430,13 @@ const resetSearch = () => {
 const handleCreate = async () => {
   await loadAvailableRFQs()
   createForm.rfq_id = null
+  createForm.comparison_type = 'NORMAL'
+  createForm.weight_template = 'STANDARD'
   createForm.weight_price = 40
   createForm.weight_quality = 25
   createForm.weight_delivery = 20
   createForm.weight_service = 15
+  createForm.weight_technical = 0
   createDialogVisible.value = true
 }
 
@@ -461,6 +596,28 @@ onMounted(() => {
   font-size: 12px;
   color: #e6a23c;
   line-height: 1.4;
+}
+
+.template-weights {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.weight-total-display {
+  padding: 8px 12px;
+  font-size: 14px;
+  color: #606266;
+}
+
+.weight-total-display .valid {
+  color: #67c23a;
+  font-weight: 600;
+}
+
+.weight-total-display .invalid {
+  color: #f56c6c;
+  font-weight: 600;
 }
 </style>
 

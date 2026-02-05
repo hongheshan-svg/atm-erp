@@ -5,6 +5,17 @@
         <div class="card-header">
           <span>询价单管理</span>
           <div class="header-actions">
+            <el-dropdown @command="handleQuickCreate" style="margin-right: 10px;">
+              <el-button type="success">
+                快速创建 <el-icon><ArrowDown /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="from-bom">从项目BOM创建</el-dropdown-item>
+                  <el-dropdown-item command="from-template">从模板创建</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
             <el-button type="primary" @click="handleCreate">
               <el-icon><Plus /></el-icon>
               新建询价单
@@ -36,6 +47,15 @@
         <el-form-item label="询价单号">
           <el-input v-model="searchForm.rfq_no" placeholder="请输入询价单号" clearable />
         </el-form-item>
+        <el-form-item label="询价类型">
+          <el-select v-model="searchForm.rfq_type" placeholder="全部类型" clearable>
+            <el-option label="常规询价" value="NORMAL" />
+            <el-option label="样件询价" value="SAMPLE" />
+            <el-option label="批量询价" value="BATCH" />
+            <el-option label="紧急询价" value="URGENT" />
+            <el-option label="框架协议" value="FRAMEWORK" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="searchForm.status" placeholder="选择状态" clearable>
             <el-option label="草稿" value="DRAFT" />
@@ -61,20 +81,38 @@
       <!-- 数据表格 -->
       <el-table :data="tableData" v-loading="loading" stripe border @selection-change="handleSelectionChange">
         <el-table-column v-if="canDelete" type="selection" width="55" fixed />
-        <el-table-column prop="rfq_no" label="询价单号" width="160" />
-        <el-table-column prop="project_name" label="项目" min-width="150">
+        <el-table-column prop="rfq_no" label="询价单号" width="150" />
+        <el-table-column prop="project_name" label="项目" min-width="120">
           <template #default="{ row }">
             {{ row.project_name || '无项目' }}
           </template>
         </el-table-column>
-        <el-table-column label="物料数" width="80" align="center">
+        <el-table-column prop="rfq_type_display" label="类型" width="90" align="center">
           <template #default="{ row }">
-            {{ row.lines?.length || 0 }}
+            <el-tag :type="getRFQTypeColor(row.rfq_type)" size="small">
+              {{ row.rfq_type_display || row.rfq_type || '常规' }}
+            </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="供应商数" width="100" align="center">
+        <el-table-column prop="priority_display" label="优先级" width="80" align="center">
           <template #default="{ row }">
-            {{ row.supplier_rfqs?.length || 0 }}
+            <el-tag :type="getPriorityColor(row.priority)" size="small" v-if="row.priority !== 'NORMAL'">
+              {{ row.priority_display || row.priority }}
+            </el-tag>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="物料/供应商" width="100" align="center">
+          <template #default="{ row }">
+            <span>{{ row.line_count || row.lines?.length || 0 }}</span>
+            <span class="text-muted">/</span>
+            <span>{{ row.supplier_count || row.supplier_rfqs?.length || 0 }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="附件" width="60" align="center">
+          <template #default="{ row }">
+            <el-badge v-if="row.attachment_count > 0" :value="row.attachment_count" type="info" />
+            <span v-else>-</span>
           </template>
         </el-table-column>
         <el-table-column prop="request_date" label="询价日期" width="120">
@@ -307,6 +345,164 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 从项目BOM创建询价单对话框 -->
+    <el-dialog v-model="bomRFQDialogVisible" title="从项目BOM创建询价单" width="900px" destroy-on-close>
+      <el-form :model="bomRFQForm" label-width="100px">
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="选择项目" required>
+              <el-select v-model="bomRFQForm.project_id" placeholder="选择项目" filterable style="width: 100%"
+                @change="loadProjectBOM">
+                <el-option
+                  v-for="project in projects"
+                  :key="project.id"
+                  :label="`${project.code} - ${project.name}`"
+                  :value="project.id"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="询价类型">
+              <el-select v-model="bomRFQForm.rfq_type" style="width: 100%">
+                <el-option label="常规询价" value="NORMAL" />
+                <el-option label="样件询价" value="SAMPLE" />
+                <el-option label="批量询价" value="BATCH" />
+                <el-option label="紧急询价" value="URGENT" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="优先级">
+              <el-select v-model="bomRFQForm.priority" style="width: 100%">
+                <el-option label="低" value="LOW" />
+                <el-option label="普通" value="NORMAL" />
+                <el-option label="高" value="HIGH" />
+                <el-option label="紧急" value="URGENT" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="报价截止">
+              <el-date-picker
+                v-model="bomRFQForm.deadline_days"
+                type="date"
+                placeholder="选择日期"
+                value-format="YYYY-MM-DD"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item>
+          <el-checkbox v-model="bomRFQForm.auto_match_suppliers">自动匹配供应商</el-checkbox>
+        </el-form-item>
+      </el-form>
+
+      <el-divider content-position="left">选择BOM物料</el-divider>
+      
+      <el-table 
+        :data="projectBOMItems" 
+        v-loading="bomLoading" 
+        stripe 
+        border 
+        max-height="350"
+        @selection-change="handleBOMSelectionChange"
+      >
+        <el-table-column type="selection" width="50" />
+        <el-table-column prop="item_sku" label="物料编码" width="120" />
+        <el-table-column prop="item_name" label="物料名称" min-width="150" />
+        <el-table-column prop="planned_qty" label="需求数量" width="100" align="right" />
+        <el-table-column prop="drawing_no" label="图号" width="120" />
+        <el-table-column label="属性" width="120">
+          <template #default="{ row }">
+            <el-tag v-if="row.is_critical" type="danger" size="small" style="margin-right: 4px;">关键</el-tag>
+            <el-tag v-if="row.is_long_lead" type="warning" size="small">长周期</el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <div class="bom-selection-info" v-if="selectedBOMItems.length > 0">
+        已选择 {{ selectedBOMItems.length }} 项物料
+      </div>
+
+      <template #footer>
+        <el-button @click="bomRFQDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleCreateFromBOM" :disabled="selectedBOMItems.length === 0">
+          创建询价单 ({{ selectedBOMItems.length }})
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 从模板创建询价单对话框 -->
+    <el-dialog v-model="templateRFQDialogVisible" title="从模板创建询价单" width="600px">
+      <el-form :model="templateRFQForm" label-width="100px">
+        <el-form-item label="选择模板" required>
+          <el-select v-model="templateRFQForm.template_id" placeholder="选择模板" filterable style="width: 100%">
+            <el-option
+              v-for="template in rfqTemplates"
+              :key="template.id"
+              :label="`${template.name} (${template.items_count}项)`"
+              :value="template.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="关联项目">
+          <el-select v-model="templateRFQForm.project_id" placeholder="选择项目" filterable clearable style="width: 100%">
+            <el-option
+              v-for="project in projects"
+              :key="project.id"
+              :label="`${project.code} - ${project.name}`"
+              :value="project.id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="templateRFQDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleCreateFromTemplate" :disabled="!templateRFQForm.template_id">
+          创建询价单
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 供应商匹配推荐对话框 -->
+    <el-dialog v-model="supplierMatchDialogVisible" title="供应商匹配推荐" width="700px">
+      <el-alert type="info" :closable="false" style="margin-bottom: 15px;">
+        系统根据物料能力需求，自动匹配推荐供应商
+      </el-alert>
+      
+      <el-table :data="matchedSuppliers" v-loading="matchLoading" stripe border>
+        <el-table-column type="selection" width="50" />
+        <el-table-column prop="supplier_name" label="供应商" min-width="150" />
+        <el-table-column label="匹配度" width="120" align="center">
+          <template #default="{ row }">
+            <el-progress 
+              :percentage="row.overall_score" 
+              :format="() => row.overall_score + '%'"
+              :stroke-width="6"
+              :color="getMatchScoreColor(row.overall_score)"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column prop="coverage" label="物料覆盖" width="100" align="center">
+          <template #default="{ row }">
+            {{ row.coverage }}%
+          </template>
+        </el-table-column>
+        <el-table-column prop="matched_items" label="匹配物料数" width="100" align="center" />
+      </el-table>
+      
+      <template #footer>
+        <el-button @click="supplierMatchDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="addMatchedSuppliers">
+          添加选中供应商
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -365,8 +561,35 @@ const selectAllPurchasable = ref(false)
 // 搜索
 const searchForm = reactive({
   rfq_no: '',
+  rfq_type: '',
   status: ''
 })
+
+// 从BOM创建询价
+const bomRFQDialogVisible = ref(false)
+const bomRFQForm = reactive({
+  project_id: null,
+  rfq_type: 'NORMAL',
+  priority: 'NORMAL',
+  deadline_days: '',
+  auto_match_suppliers: true
+})
+const projectBOMItems = ref([])
+const selectedBOMItems = ref([])
+const bomLoading = ref(false)
+
+// 从模板创建询价
+const templateRFQDialogVisible = ref(false)
+const templateRFQForm = reactive({
+  template_id: null,
+  project_id: null
+})
+const rfqTemplates = ref([])
+
+// 供应商匹配
+const supplierMatchDialogVisible = ref(false)
+const matchedSuppliers = ref([])
+const matchLoading = ref(false)
 
 // 分页
 const pagination = reactive({
@@ -707,9 +930,184 @@ const searchItems = async (query) => {
 // 重置搜索
 const resetSearch = () => {
   searchForm.rfq_no = ''
+  searchForm.rfq_type = ''
   searchForm.status = ''
   pagination.page = 1
   loadData()
+}
+
+// 询价类型颜色
+const getRFQTypeColor = (type) => {
+  const colors = {
+    'NORMAL': 'info',
+    'SAMPLE': 'primary',
+    'BATCH': 'success',
+    'URGENT': 'danger',
+    'FRAMEWORK': 'warning'
+  }
+  return colors[type] || 'info'
+}
+
+// 优先级颜色
+const getPriorityColor = (priority) => {
+  const colors = {
+    'LOW': 'info',
+    'NORMAL': '',
+    'HIGH': 'warning',
+    'URGENT': 'danger'
+  }
+  return colors[priority] || ''
+}
+
+// 匹配得分颜色
+const getMatchScoreColor = (score) => {
+  if (score >= 80) return '#67c23a'
+  if (score >= 60) return '#e6a23c'
+  return '#f56c6c'
+}
+
+// 快速创建菜单
+const handleQuickCreate = async (command) => {
+  if (command === 'from-bom') {
+    await loadProjects()
+    bomRFQForm.project_id = null
+    bomRFQForm.rfq_type = 'NORMAL'
+    bomRFQForm.priority = 'NORMAL'
+    bomRFQForm.auto_match_suppliers = true
+    projectBOMItems.value = []
+    selectedBOMItems.value = []
+    bomRFQDialogVisible.value = true
+  } else if (command === 'from-template') {
+    await loadProjects()
+    await loadRFQTemplates()
+    templateRFQForm.template_id = null
+    templateRFQForm.project_id = null
+    templateRFQDialogVisible.value = true
+  }
+}
+
+// 加载项目BOM
+const loadProjectBOM = async () => {
+  if (!bomRFQForm.project_id) {
+    projectBOMItems.value = []
+    return
+  }
+  
+  bomLoading.value = true
+  try {
+    const res = await request.get('/projects/bom/', {
+      params: { 
+        project: bomRFQForm.project_id, 
+        is_deleted: false,
+        page_size: 500
+      }
+    })
+    const items = res.results || res || []
+    projectBOMItems.value = items.map(item => ({
+      ...item,
+      item_sku: item.item_sku || item.item?.sku,
+      item_name: item.item_name || item.item?.name,
+      is_critical: item.is_critical || false,
+      is_long_lead: item.is_long_lead || false
+    }))
+  } catch (error) {
+    console.error('加载项目BOM失败:', error)
+    projectBOMItems.value = []
+  } finally {
+    bomLoading.value = false
+  }
+}
+
+// BOM选择变化
+const handleBOMSelectionChange = (selection) => {
+  selectedBOMItems.value = selection
+}
+
+// 从BOM创建询价单
+const handleCreateFromBOM = async () => {
+  if (selectedBOMItems.value.length === 0) {
+    ElMessage.warning('请选择要询价的物料')
+    return
+  }
+  
+  try {
+    const bomItemIds = selectedBOMItems.value.map(item => item.id)
+    
+    const res = await request.post('/purchase/rfqs/create-from-bom/', {
+      project_id: bomRFQForm.project_id,
+      bom_item_ids: bomItemIds,
+      rfq_type: bomRFQForm.rfq_type,
+      priority: bomRFQForm.priority,
+      deadline_days: 7,
+      auto_match_suppliers: bomRFQForm.auto_match_suppliers
+    })
+    
+    ElMessage.success(`询价单 ${res.rfq_no} 创建成功`)
+    bomRFQDialogVisible.value = false
+    loadData()
+  } catch (error) {
+    console.error('创建询价单失败:', error)
+    ElMessage.error(error.response?.data?.error || '创建失败')
+  }
+}
+
+// 加载询价模板
+const loadRFQTemplates = async () => {
+  try {
+    const res = await request.get('/purchase/rfq-templates/', { params: { page_size: 100 } })
+    rfqTemplates.value = res.results || res || []
+  } catch (error) {
+    console.error('加载询价模板失败:', error)
+  }
+}
+
+// 从模板创建询价单
+const handleCreateFromTemplate = async () => {
+  if (!templateRFQForm.template_id) {
+    ElMessage.warning('请选择模板')
+    return
+  }
+  
+  try {
+    const res = await request.post('/purchase/rfqs/create-from-template/', {
+      template_id: templateRFQForm.template_id,
+      project_id: templateRFQForm.project_id
+    })
+    
+    ElMessage.success(`询价单 ${res.rfq_no} 创建成功`)
+    templateRFQDialogVisible.value = false
+    loadData()
+  } catch (error) {
+    console.error('创建询价单失败:', error)
+    ElMessage.error(error.response?.data?.error || '创建失败')
+  }
+}
+
+// 打开供应商匹配对话框
+const openSupplierMatch = async (rfq) => {
+  currentRFQ.value = rfq
+  matchLoading.value = true
+  supplierMatchDialogVisible.value = true
+  
+  try {
+    const res = await request.get(`/purchase/rfqs/${rfq.id}/match-suppliers/`)
+    matchedSuppliers.value = res.recommended_suppliers || []
+  } catch (error) {
+    console.error('匹配供应商失败:', error)
+    matchedSuppliers.value = []
+  } finally {
+    matchLoading.value = false
+  }
+}
+
+// 添加匹配的供应商
+const addMatchedSuppliers = () => {
+  // 将匹配的供应商添加到已选择列表
+  const matchedIds = matchedSuppliers.value.filter(s => s.selected).map(s => s.supplier_id)
+  if (matchedIds.length > 0) {
+    selectedSuppliers.value = [...new Set([...selectedSuppliers.value, ...matchedIds])]
+  }
+  supplierMatchDialogVisible.value = false
 }
 
 // 新建
@@ -858,6 +1256,25 @@ onMounted(() => {
 
 .upload-area :deep(.el-upload-dragger) {
   width: 100%;
+}
+
+.bom-selection-info {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: #f0f9eb;
+  border-radius: 4px;
+  color: #67c23a;
+  font-weight: 500;
+}
+
+.table-toolbar {
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 </style>
 

@@ -1020,9 +1020,9 @@ class CreoBOMImportViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
             'bom_format': BOM_FORMAT_CONFIG,
         })
     
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], permission_classes=[])
     def download_template(self, request):
-        """下载CAD BOM导入模板（与系统BOM格式一致）"""
+        """下载CAD BOM导入模板（与系统BOM格式一致）- 允许匿名下载"""
         from io import BytesIO
         from django.http import HttpResponse
         from .bom_format import PROJECT_BOM_IMPORT_TEMPLATE, get_excel_headers

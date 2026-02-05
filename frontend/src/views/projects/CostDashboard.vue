@@ -10,36 +10,51 @@
         </el-col>
         <el-col :span="16" class="project-info" v-if="projectData">
           <span class="info-item"><strong>客户：</strong>{{ projectData.project?.customer_name }}</span>
-          <span class="info-item"><strong>状态：</strong>{{ projectData.project?.status }}</span>
-          <el-tag :type="warningType" size="large" style="margin-left: 16px">
-            预算使用率: {{ projectData.budget_used_rate || 0 }}%
+          <span class="info-item"><strong>订单：</strong>{{ projectData.project?.sales_order_no || '未关联' }}</span>
+          <el-tag :type="profitWarningType" size="large" style="margin-left: 16px">
+            净利率: {{ projectData.net_margin || 0 }}%
           </el-tag>
         </el-col>
       </el-row>
     </el-card>
 
     <div v-if="projectData" v-loading="loading">
-      <!-- 成本概览 -->
+      <!-- 收入与利润概览 -->
       <el-row :gutter="16" class="stat-row">
-        <el-col :span="6">
-          <el-card shadow="hover" class="stat-card">
-            <div class="stat-label">预算总额</div>
-            <div class="stat-value">¥{{ formatMoney(projectData.budget_total) }}</div>
+        <el-col :span="4">
+          <el-card shadow="hover" class="stat-card revenue">
+            <div class="stat-label">合同收入</div>
+            <div class="stat-value">¥{{ formatMoney(projectData.revenue) }}</div>
           </el-card>
         </el-col>
-        <el-col :span="6">
+        <el-col :span="4">
           <el-card shadow="hover" class="stat-card primary">
-            <div class="stat-label">实际成本</div>
+            <div class="stat-label">总成本</div>
             <div class="stat-value">¥{{ formatMoney(projectData.actual_total) }}</div>
           </el-card>
         </el-col>
-        <el-col :span="6">
+        <el-col :span="4">
+          <el-card shadow="hover" :class="['stat-card', grossProfitClass]">
+            <div class="stat-label">毛利润</div>
+            <div class="stat-value">¥{{ formatMoney(projectData.gross_profit) }}</div>
+            <div class="stat-sub">毛利率: {{ projectData.gross_margin || 0 }}%</div>
+          </el-card>
+        </el-col>
+        <el-col :span="4">
+          <el-card shadow="hover" :class="['stat-card', netProfitClass]">
+            <div class="stat-label">净利润</div>
+            <div class="stat-value">¥{{ formatMoney(projectData.net_profit) }}</div>
+            <div class="stat-sub">净利率: {{ projectData.net_margin || 0 }}%</div>
+          </el-card>
+        </el-col>
+        <el-col :span="4">
           <el-card shadow="hover" :class="['stat-card', remainingClass]">
             <div class="stat-label">剩余预算</div>
             <div class="stat-value">¥{{ formatMoney(projectData.budget_total - projectData.actual_total) }}</div>
+            <div class="stat-sub">使用率: {{ projectData.budget_used_rate || 0 }}%</div>
           </el-card>
         </el-col>
-        <el-col :span="6">
+        <el-col :span="4">
           <el-card shadow="hover" class="stat-card">
             <div class="stat-label">待处理预警</div>
             <div class="stat-value warning-text">{{ projectData.pending_alerts || 0 }}</div>
@@ -47,29 +62,87 @@
         </el-col>
       </el-row>
 
-      <!-- 预算vs实际对比 -->
+      <!-- 成本构成分析 -->
       <el-row :gutter="16">
+        <el-col :span="8">
+          <el-card>
+            <template #header>
+              <span>成本构成明细</span>
+            </template>
+            <div class="cost-breakdown">
+              <div class="cost-section">
+                <div class="section-title">
+                  <span>直接成本</span>
+                  <span class="section-amount">¥{{ formatMoney(projectData.direct_cost) }}</span>
+                </div>
+                <div class="cost-item" v-for="(item, key) in directCosts" :key="key">
+                  <div class="item-info">
+                    <span class="item-name">{{ item.name }}</span>
+                    <span class="item-amount">¥{{ formatMoney(item.amount) }}</span>
+                  </div>
+                  <el-progress 
+                    :percentage="item.percentage" 
+                    :stroke-width="8"
+                    :color="getProgressColor(item.usage_rate)"
+                  />
+                  <div class="item-detail">
+                    <span>预算: ¥{{ formatMoney(item.budget) }}</span>
+                    <span :class="item.variance >= 0 ? 'text-success' : 'text-danger'">
+                      {{ item.variance >= 0 ? '节余' : '超支' }}: ¥{{ formatMoney(Math.abs(item.variance)) }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <el-divider />
+              <div class="cost-section">
+                <div class="section-title">
+                  <span>间接成本</span>
+                  <span class="section-amount">¥{{ formatMoney(projectData.indirect_cost) }}</span>
+                </div>
+                <div class="cost-item" v-for="(item, key) in indirectCosts" :key="key">
+                  <div class="item-info">
+                    <span class="item-name">{{ item.name }}</span>
+                    <span class="item-amount">¥{{ formatMoney(item.amount) }}</span>
+                  </div>
+                  <el-progress 
+                    :percentage="item.percentage" 
+                    :stroke-width="8"
+                    :color="getProgressColor(item.usage_rate)"
+                  />
+                </div>
+              </div>
+            </div>
+          </el-card>
+        </el-col>
+        <el-col :span="8">
+          <el-card>
+            <template #header>
+              <span>成本构成饼图</span>
+            </template>
+            <div ref="pieChartRef" style="height: 350px"></div>
+          </el-card>
+        </el-col>
+        <el-col :span="8">
+          <el-card>
+            <template #header>
+              <span>利润瀑布图</span>
+            </template>
+            <div ref="waterfallChartRef" style="height: 350px"></div>
+          </el-card>
+        </el-col>
+      </el-row>
+
+      <!-- 预算vs实际 + 成本趋势 -->
+      <el-row :gutter="16" style="margin-top: 16px">
         <el-col :span="14">
           <el-card>
             <template #header>
               <span>预算 vs 实际成本对比</span>
             </template>
-            <div ref="comparisonChartRef" style="height: 350px"></div>
+            <div ref="comparisonChartRef" style="height: 300px"></div>
           </el-card>
         </el-col>
         <el-col :span="10">
-          <el-card>
-            <template #header>
-              <span>成本构成分布</span>
-            </template>
-            <div ref="pieChartRef" style="height: 350px"></div>
-          </el-card>
-        </el-col>
-      </el-row>
-
-      <!-- 成本趋势和阶段分布 -->
-      <el-row :gutter="16" style="margin-top: 16px">
-        <el-col :span="14">
           <el-card>
             <template #header>
               <span>成本趋势</span>
@@ -77,6 +150,10 @@
             <div ref="trendChartRef" style="height: 300px"></div>
           </el-card>
         </el-col>
+      </el-row>
+
+      <!-- 各阶段成本 + 最近记录 -->
+      <el-row :gutter="16" style="margin-top: 16px">
         <el-col :span="10">
           <el-card>
             <template #header>
@@ -97,33 +174,33 @@
             </el-table>
           </el-card>
         </el-col>
-      </el-row>
-
-      <!-- 最近成本记录 -->
-      <el-card style="margin-top: 16px">
-        <template #header>
-          <div class="card-header">
-            <span>最近成本记录</span>
-            <el-button type="primary" link @click="viewAllRecords">查看全部</el-button>
-          </div>
-        </template>
-        <el-table :data="recentCosts" size="small">
-          <el-table-column prop="cost_date" label="日期" width="110" />
-          <el-table-column prop="cost_type_display" label="类型" width="90" />
-          <el-table-column prop="description" label="说明" min-width="200" show-overflow-tooltip />
-          <el-table-column prop="source_doc_no" label="单据号" width="130" />
-          <el-table-column label="金额" width="120" align="right">
-            <template #default="{ row }">¥{{ formatMoney(row.amount) }}</template>
-          </el-table-column>
-          <el-table-column prop="is_verified" label="核实" width="70" align="center">
-            <template #default="{ row }">
-              <el-icon :color="row.is_verified ? '#67c23a' : '#909399'">
-                <Check v-if="row.is_verified" /><Close v-else />
-              </el-icon>
+        <el-col :span="14">
+          <el-card>
+            <template #header>
+              <div class="card-header">
+                <span>最近成本记录</span>
+                <el-button type="primary" link @click="viewAllRecords">查看全部</el-button>
+              </div>
             </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
+            <el-table :data="recentCosts" size="small" max-height="280">
+              <el-table-column prop="cost_date" label="日期" width="100" />
+              <el-table-column prop="cost_type_display" label="类型" width="80" />
+              <el-table-column prop="description" label="说明" min-width="150" show-overflow-tooltip />
+              <el-table-column prop="source_doc_no" label="单据号" width="120" show-overflow-tooltip />
+              <el-table-column label="金额" width="100" align="right">
+                <template #default="{ row }">¥{{ formatMoney(row.amount) }}</template>
+              </el-table-column>
+              <el-table-column prop="is_verified" label="核实" width="60" align="center">
+                <template #default="{ row }">
+                  <el-icon :color="row.is_verified ? '#67c23a' : '#909399'">
+                    <Check v-if="row.is_verified" /><Close v-else />
+                  </el-icon>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+        </el-col>
+      </el-row>
     </div>
 
     <!-- 未选择项目提示 -->
@@ -148,17 +225,54 @@ const projectData = ref(null)
 const comparisonChartRef = ref(null)
 const pieChartRef = ref(null)
 const trendChartRef = ref(null)
+const waterfallChartRef = ref(null)
 let comparisonChart = null
 let pieChart = null
 let trendChart = null
+let waterfallChart = null
 
 const phaseCosts = computed(() => projectData.value?.phase_costs || [])
 const recentCosts = computed(() => projectData.value?.recent_costs || [])
 
-const warningType = computed(() => {
+// 直接成本
+const directCosts = computed(() => {
+  if (!projectData.value?.cost_breakdown) return []
+  const breakdown = projectData.value.cost_breakdown
+  return ['material', 'labor', 'outsource']
+    .map(key => breakdown[key])
+    .filter(item => item)
+})
+
+// 间接成本
+const indirectCosts = computed(() => {
+  if (!projectData.value?.cost_breakdown) return []
+  const breakdown = projectData.value.cost_breakdown
+  return ['equipment', 'travel', 'management', 'other']
+    .map(key => breakdown[key])
+    .filter(item => item)
+})
+
+// 利润预警类型
+const profitWarningType = computed(() => {
   if (!projectData.value) return 'info'
-  if (projectData.value.warning_status === 'critical') return 'danger'
-  if (projectData.value.warning_status === 'warning') return 'warning'
+  if (projectData.value.profit_warning === 'critical') return 'danger'
+  if (projectData.value.profit_warning === 'warning') return 'warning'
+  return 'success'
+})
+
+// 毛利润样式
+const grossProfitClass = computed(() => {
+  if (!projectData.value) return ''
+  if (projectData.value.gross_profit < 0) return 'danger'
+  if (projectData.value.gross_margin < 20) return 'warning'
+  return 'success'
+})
+
+// 净利润样式
+const netProfitClass = computed(() => {
+  if (!projectData.value) return ''
+  if (projectData.value.net_profit < 0) return 'danger'
+  if (projectData.value.net_margin < 10) return 'warning'
   return 'success'
 })
 
@@ -168,6 +282,13 @@ const remainingClass = computed(() => {
   if (projectData.value?.budget_used_rate > 80) return 'warning'
   return 'success'
 })
+
+// 预算使用率进度条颜色
+const getProgressColor = (usageRate) => {
+  if (usageRate > 100) return '#f56c6c'
+  if (usageRate > 80) return '#e6a23c'
+  return '#409eff'
+}
 
 const formatMoney = (val) => {
   if (!val) return '0.00'
@@ -281,6 +402,63 @@ const renderCharts = () => {
       }]
     })
   }
+
+  // 利润瀑布图
+  if (waterfallChartRef.value) {
+    if (!waterfallChart) {
+      waterfallChart = echarts.init(waterfallChartRef.value)
+    }
+    const data = projectData.value
+    const revenue = data.revenue || 0
+    const directCost = data.direct_cost || 0
+    const indirectCost = data.indirect_cost || 0
+    const grossProfit = data.gross_profit || 0
+    const netProfit = data.net_profit || 0
+
+    waterfallChart.setOption({
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' },
+        formatter: (params) => {
+          const item = params[0]
+          return `${item.name}<br/>¥${parseFloat(item.value).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}`
+        }
+      },
+      grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+      xAxis: {
+        type: 'category',
+        data: ['合同收入', '直接成本', '毛利润', '间接成本', '净利润']
+      },
+      yAxis: { type: 'value' },
+      series: [
+        {
+          name: '辅助',
+          type: 'bar',
+          stack: 'Total',
+          itemStyle: { borderColor: 'transparent', color: 'transparent' },
+          emphasis: { itemStyle: { borderColor: 'transparent', color: 'transparent' } },
+          data: [0, grossProfit, 0, netProfit, 0]
+        },
+        {
+          name: '金额',
+          type: 'bar',
+          stack: 'Total',
+          label: {
+            show: true,
+            position: 'top',
+            formatter: (params) => `¥${(params.value / 10000).toFixed(1)}万`
+          },
+          data: [
+            { value: revenue, itemStyle: { color: '#409eff' } },
+            { value: -directCost, itemStyle: { color: '#f56c6c' } },
+            { value: grossProfit, itemStyle: { color: grossProfit >= 0 ? '#67c23a' : '#f56c6c' } },
+            { value: -indirectCost, itemStyle: { color: '#e6a23c' } },
+            { value: netProfit, itemStyle: { color: netProfit >= 0 ? '#67c23a' : '#f56c6c' } }
+          ]
+        }
+      ]
+    })
+  }
 }
 
 const viewAllRecords = () => {
@@ -291,6 +469,7 @@ watch(() => selectedProject.value, () => {
   if (comparisonChart) { comparisonChart.dispose(); comparisonChart = null }
   if (pieChart) { pieChart.dispose(); pieChart = null }
   if (trendChart) { trendChart.dispose(); trendChart = null }
+  if (waterfallChart) { waterfallChart.dispose(); waterfallChart = null }
 })
 
 onMounted(() => {
@@ -330,12 +509,18 @@ onMounted(() => {
   color: #909399;
 }
 .stat-card .stat-value {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: bold;
-  margin-top: 8px;
+  margin-top: 6px;
   color: #303133;
 }
+.stat-card .stat-sub {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+}
 .stat-card.primary .stat-value { color: #409eff; }
+.stat-card.revenue .stat-value { color: #409eff; }
 .stat-card.success .stat-value { color: #67c23a; }
 .stat-card.warning .stat-value { color: #e6a23c; }
 .stat-card.danger .stat-value { color: #f56c6c; }
@@ -344,5 +529,60 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+/* 成本构成明细样式 */
+.cost-breakdown {
+  max-height: 350px;
+  overflow-y: auto;
+}
+.cost-section {
+  margin-bottom: 12px;
+}
+.section-title {
+  display: flex;
+  justify-content: space-between;
+  font-weight: bold;
+  font-size: 14px;
+  color: #303133;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #ebeef5;
+}
+.section-amount {
+  color: #409eff;
+}
+.cost-item {
+  margin-bottom: 12px;
+  padding: 8px;
+  background: #fafafa;
+  border-radius: 4px;
+}
+.item-info {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.item-name {
+  font-size: 13px;
+  color: #606266;
+}
+.item-amount {
+  font-size: 13px;
+  font-weight: 500;
+  color: #303133;
+}
+.item-detail {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #909399;
+  margin-top: 4px;
+}
+.text-success {
+  color: #67c23a;
+}
+.text-danger {
+  color: #f56c6c;
 }
 </style>

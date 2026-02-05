@@ -324,6 +324,83 @@ class PurchaseReconciliationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPerm
         return Response({'message': f'已确认 {lines.count()} 条明细'})
     
     @action(detail=False, methods=['get'])
+    def get_opening_balance(self, request):
+        """
+        获取供应商期初余额
+        计算逻辑：
+        1. 如果有上期已确认对账单，以上期期末余额为基础
+        2. 减去上期对账单期末日期之后的所有付款金额
+        3. 如果没有历史对账单，则计算应付账款余额（应付-已付）
+        """
+        supplier_id = request.query_params.get('supplier')
+        if not supplier_id:
+            return Response({'error': '请提供供应商ID'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 查找该供应商最近一期已确认的对账单
+        last_reconciliation = PurchaseReconciliation.objects.filter(
+            supplier_id=supplier_id,
+            status='CONFIRMED',
+            is_deleted=False
+        ).order_by('-period_end').first()
+        
+        if last_reconciliation:
+            # 使用上期对账单的期末余额
+            opening_balance = last_reconciliation.closing_balance or Decimal('0')
+            
+            # 减去上期对账单之后的付款金额
+            payments_after = Payment.objects.filter(
+                supplier_id=supplier_id,
+                payment_date__gt=last_reconciliation.period_end,
+                status='COMPLETED',
+                is_deleted=False
+            ).aggregate(total=Sum('amount'))
+            payments_after_amount = payments_after['total'] or Decimal('0')
+            opening_balance = opening_balance - payments_after_amount
+            
+            # 加上上期对账单之后的新发票金额
+            invoices_after = Invoice.objects.filter(
+                supplier_id=supplier_id,
+                invoice_date__gt=last_reconciliation.period_end,
+                invoice_type='PURCHASE',
+                is_deleted=False
+            ).aggregate(total=Sum('total_amount'))
+            invoices_after_amount = invoices_after['total'] or Decimal('0')
+            opening_balance = opening_balance + invoices_after_amount
+            
+            source = 'last_reconciliation'
+            last_period = f"{last_reconciliation.period_start} ~ {last_reconciliation.period_end}"
+            details = {
+                'last_closing_balance': float(last_reconciliation.closing_balance or 0),
+                'payments_after': float(payments_after_amount),
+                'invoices_after': float(invoices_after_amount)
+            }
+        else:
+            # 没有历史对账单，计算应付账款余额
+            payable = AccountPayable.objects.filter(
+                supplier_id=supplier_id,
+                is_deleted=False
+            ).aggregate(
+                total_due=Sum('amount_due'),
+                total_paid=Sum('amount_paid')
+            )
+            total_due = payable['total_due'] or Decimal('0')
+            total_paid = payable['total_paid'] or Decimal('0')
+            opening_balance = total_due - total_paid
+            source = 'account_payable'
+            last_period = None
+            details = {
+                'total_due': float(total_due),
+                'total_paid': float(total_paid)
+            }
+        
+        return Response({
+            'opening_balance': float(opening_balance),
+            'source': source,
+            'last_period': last_period,
+            'details': details
+        })
+    
+    @action(detail=False, methods=['get'])
     def supplier_summary(self, request):
         """
         获取供应商对账汇总
@@ -631,6 +708,83 @@ class SalesReconciliationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermiss
                 line.save()
         
         return Response({'message': f'已确认 {lines.count()} 条明细'})
+    
+    @action(detail=False, methods=['get'])
+    def get_opening_balance(self, request):
+        """
+        获取客户期初余额
+        计算逻辑：
+        1. 如果有上期已确认对账单，以上期期末余额为基础
+        2. 减去上期对账单期末日期之后的所有收款金额
+        3. 如果没有历史对账单，则计算应收账款余额（应收-已收）
+        """
+        customer_id = request.query_params.get('customer')
+        if not customer_id:
+            return Response({'error': '请提供客户ID'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 查找该客户最近一期已确认的对账单
+        last_reconciliation = SalesReconciliation.objects.filter(
+            customer_id=customer_id,
+            status='CONFIRMED',
+            is_deleted=False
+        ).order_by('-period_end').first()
+        
+        if last_reconciliation:
+            # 使用上期对账单的期末余额
+            opening_balance = last_reconciliation.closing_balance or Decimal('0')
+            
+            # 减去上期对账单之后的收款金额
+            receipts_after = Payment.objects.filter(
+                customer_id=customer_id,
+                payment_date__gt=last_reconciliation.period_end,
+                status='COMPLETED',
+                is_deleted=False
+            ).aggregate(total=Sum('amount'))
+            receipts_after_amount = receipts_after['total'] or Decimal('0')
+            opening_balance = opening_balance - receipts_after_amount
+            
+            # 加上上期对账单之后的新发票金额
+            invoices_after = Invoice.objects.filter(
+                customer_id=customer_id,
+                invoice_date__gt=last_reconciliation.period_end,
+                invoice_type='SALE',
+                is_deleted=False
+            ).aggregate(total=Sum('total_amount'))
+            invoices_after_amount = invoices_after['total'] or Decimal('0')
+            opening_balance = opening_balance + invoices_after_amount
+            
+            source = 'last_reconciliation'
+            last_period = f"{last_reconciliation.period_start} ~ {last_reconciliation.period_end}"
+            details = {
+                'last_closing_balance': float(last_reconciliation.closing_balance or 0),
+                'receipts_after': float(receipts_after_amount),
+                'invoices_after': float(invoices_after_amount)
+            }
+        else:
+            # 没有历史对账单，计算应收账款余额
+            receivable = AccountReceivable.objects.filter(
+                customer_id=customer_id,
+                is_deleted=False
+            ).aggregate(
+                total_due=Sum('amount_due'),
+                total_received=Sum('amount_paid')
+            )
+            total_due = receivable['total_due'] or Decimal('0')
+            total_received = receivable['total_received'] or Decimal('0')
+            opening_balance = total_due - total_received
+            source = 'account_receivable'
+            last_period = None
+            details = {
+                'total_due': float(total_due),
+                'total_received': float(total_received)
+            }
+        
+        return Response({
+            'opening_balance': float(opening_balance),
+            'source': source,
+            'last_period': last_period,
+            'details': details
+        })
     
     @action(detail=False, methods=['get'])
     def customer_summary(self, request):

@@ -1,18 +1,27 @@
 """
 RFQ views
 询价单、供应商报价、比价分析视图
+
+非标自动化增强:
+- 供应商能力匹配和推荐
+- 从项目BOM批量创建询价单
+- 询价模板管理
+- 附件管理
 """
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser
 from django.db import transaction
 from django.utils import timezone
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.data_permission import DataPermissionMixin
 from .rfq_models import (
     RFQ, RFQLine, RFQSupplier, SupplierQuotation, SupplierQuotationLine,
-    QuotationComparison, QuotationScore, ItemPriceHistory
+    QuotationComparison, QuotationScore, ItemPriceHistory,
+    RFQTemplate, RFQTemplateItem, RFQAttachment,
+    SupplierCapability, SupplierCapabilityMapping
 )
 from .rfq_serializers import (
     RFQSerializer, RFQLineSerializer, RFQSupplierSerializer,
@@ -22,6 +31,10 @@ from .rfq_serializers import (
     CreateComparisonSerializer, UpdateScoreSerializer
 )
 from .comparison_service import QuotationComparisonService
+from .rfq_service import (
+    SupplierMatchingService, BatchRFQService, 
+    RFQAttachmentService, RFQTemplateService
+)
 
 
 class RFQViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
@@ -136,6 +149,159 @@ class RFQViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewse
         
         from .serializers import PurchaseOrderSerializer
         return Response(PurchaseOrderSerializer(po).data, status=status.HTTP_201_CREATED)
+    
+    # ==================== 非标自动化增强API ====================
+    
+    @action(detail=False, methods=['post'], url_path='create-from-bom')
+    def create_from_bom(self, request):
+        """从项目BOM批量创建询价单"""
+        project_id = request.data.get('project_id')
+        bom_item_ids = request.data.get('bom_item_ids', [])
+        
+        if not project_id or not bom_item_ids:
+            return Response(
+                {'error': '请指定项目和BOM项'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        options = {
+            'rfq_type': request.data.get('rfq_type', 'NORMAL'),
+            'priority': request.data.get('priority', 'NORMAL'),
+            'deadline_days': request.data.get('deadline_days', 7),
+            'template_id': request.data.get('template_id'),
+            'supplier_ids': request.data.get('supplier_ids', []),
+            'auto_match_suppliers': request.data.get('auto_match_suppliers', False),
+        }
+        
+        try:
+            rfq = BatchRFQService.create_rfq_from_bom(
+                project_id, bom_item_ids, request.user, options
+            )
+            return Response(RFQSerializer(rfq).data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'], url_path='batch-send')
+    def batch_send(self, request):
+        """批量发送询价单"""
+        rfq_ids = request.data.get('rfq_ids', [])
+        
+        if not rfq_ids:
+            return Response(
+                {'error': '请指定询价单'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        result = BatchRFQService.batch_send_rfq(rfq_ids, request.user)
+        return Response(result)
+    
+    @action(detail=True, methods=['get'], url_path='match-suppliers')
+    def match_suppliers(self, request, pk=None):
+        """为询价单匹配供应商"""
+        rfq = self.get_object()
+        result = SupplierMatchingService.match_suppliers_for_rfq(rfq.id)
+        return Response(result)
+    
+    @action(detail=True, methods=['post'], url_path='upload-attachment', parser_classes=[MultiPartParser])
+    def upload_attachment(self, request, pk=None):
+        """上传询价单附件"""
+        rfq = self.get_object()
+        file = request.FILES.get('file')
+        
+        if not file:
+            return Response({'error': '请上传文件'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            attachment = RFQAttachmentService.upload_attachment(
+                file=file,
+                rfq_id=rfq.id,
+                category=request.data.get('category', 'OTHER'),
+                description=request.data.get('description', ''),
+                version=request.data.get('version', ''),
+                user=request.user
+            )
+            return Response({
+                'id': attachment.id,
+                'file_name': attachment.file_name,
+                'file_size': attachment.file_size,
+                'category': attachment.category,
+            })
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['get'], url_path='attachments')
+    def list_attachments(self, request, pk=None):
+        """获取询价单附件列表"""
+        rfq = self.get_object()
+        attachments = RFQAttachment.objects.filter(
+            rfq=rfq, is_deleted=False
+        ).order_by('category', '-created_at')
+        
+        result = []
+        for att in attachments:
+            result.append({
+                'id': att.id,
+                'file_name': att.file_name,
+                'file_size': att.file_size,
+                'file_type': att.file_type,
+                'category': att.category,
+                'category_display': att.get_category_display(),
+                'description': att.description,
+                'version': att.version,
+                'created_at': att.created_at.isoformat() if att.created_at else None,
+            })
+        return Response(result)
+    
+    @action(detail=False, methods=['post'], url_path='create-from-template')
+    def create_from_template(self, request):
+        """从模板创建询价单"""
+        template_id = request.data.get('template_id')
+        project_id = request.data.get('project_id')
+        
+        if not template_id:
+            return Response(
+                {'error': '请指定模板'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        options = {
+            'rfq_type': request.data.get('rfq_type'),
+            'priority': request.data.get('priority'),
+            'deadline_days': request.data.get('deadline_days'),
+        }
+        
+        try:
+            rfq = RFQTemplateService.create_rfq_from_template(
+                template_id, project_id, request.user, options
+            )
+            return Response(RFQSerializer(rfq).data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'], url_path='save-as-template')
+    def save_as_template(self, request, pk=None):
+        """将询价单保存为模板"""
+        rfq = self.get_object()
+        name = request.data.get('name')
+        
+        if not name:
+            return Response(
+                {'error': '请指定模板名称'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            template = RFQTemplateService.create_template_from_rfq(
+                rfq.id, name, request.user,
+                description=request.data.get('description', '')
+            )
+            return Response({
+                'id': template.id,
+                'name': template.name,
+                'message': '模板创建成功'
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class RFQLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
@@ -250,22 +416,31 @@ class QuotationComparisonViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermiss
     
     @action(detail=False, methods=['post'], url_path='create-comparison')
     def create_comparison(self, request):
-        """创建比价分析"""
+        """创建比价分析（非标自动化增强版）"""
         serializer = CreateComparisonSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
         try:
-            weights = {
-                'price': float(serializer.validated_data.get('weight_price', 40)),
-                'quality': float(serializer.validated_data.get('weight_quality', 25)),
-                'delivery': float(serializer.validated_data.get('weight_delivery', 20)),
-                'service': float(serializer.validated_data.get('weight_service', 15)),
-            }
+            weight_template = serializer.validated_data.get('weight_template', 'STANDARD')
+            comparison_type = serializer.validated_data.get('comparison_type', 'NORMAL')
+            
+            # 如果使用模板，权重将由服务层根据模板自动设置
+            weights = None
+            if weight_template == 'CUSTOM':
+                weights = {
+                    'price': float(serializer.validated_data.get('weight_price', 40)),
+                    'quality': float(serializer.validated_data.get('weight_quality', 25)),
+                    'delivery': float(serializer.validated_data.get('weight_delivery', 20)),
+                    'service': float(serializer.validated_data.get('weight_service', 15)),
+                    'technical': float(serializer.validated_data.get('weight_technical', 0)),
+                }
             
             comparison = QuotationComparisonService.create_comparison(
                 rfq_id=serializer.validated_data['rfq_id'],
                 user=request.user,
-                weights=weights
+                weights=weights,
+                comparison_type=comparison_type,
+                weight_template=weight_template
             )
             
             return Response(
@@ -294,6 +469,7 @@ class QuotationComparisonViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermiss
             'quality': float(request.data.get('weight_quality', comparison.weight_quality)),
             'delivery': float(request.data.get('weight_delivery', comparison.weight_delivery)),
             'service': float(request.data.get('weight_service', comparison.weight_service)),
+            'technical': float(request.data.get('weight_technical', comparison.weight_technical)),
         }
         
         try:
@@ -301,6 +477,25 @@ class QuotationComparisonViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermiss
             return Response(QuotationComparisonSerializer(comparison).data)
         except ValueError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'], url_path='apply-template')
+    def apply_template(self, request, pk=None):
+        """应用权重模板"""
+        comparison = self.get_object()
+        template = request.data.get('template', 'STANDARD')
+        
+        try:
+            comparison = QuotationComparisonService.apply_weight_template(comparison.id, template)
+            return Response(QuotationComparisonSerializer(comparison).data)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['get'], url_path='multi-recommendations')
+    def multi_recommendations(self, request, pk=None):
+        """获取多维度推荐结果"""
+        comparison = self.get_object()
+        recommendations = QuotationComparisonService.get_multi_dimension_recommendations(comparison.id)
+        return Response(recommendations)
     
     @action(detail=True, methods=['post'], url_path='auto-score')
     def auto_score(self, request, pk=None):
@@ -456,3 +651,239 @@ class ItemPriceHistoryViewSet(viewsets.ReadOnlyModelViewSet):
         price = QuotationComparisonService.get_last_purchase_price(item_id, supplier_id)
         return Response({'last_price': price})
 
+
+# ==================== 非标自动化增强ViewSet ====================
+
+class RFQTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+    """询价模板管理"""
+    queryset = RFQTemplate.objects.filter(is_deleted=False)
+    permission_classes = [IsAuthenticated]
+    filterset_fields = ['default_rfq_type', 'default_priority']
+    search_fields = ['name', 'description']
+    ordering_fields = ['use_count', 'name', 'created_at']
+    
+    def get_serializer_class(self):
+        # 简单返回基础数据，实际项目中应该定义专门的序列化器
+        from rest_framework import serializers
+        
+        class RFQTemplateSerializer(serializers.ModelSerializer):
+            default_suppliers_count = serializers.SerializerMethodField()
+            items_count = serializers.SerializerMethodField()
+            
+            class Meta:
+                model = RFQTemplate
+                fields = [
+                    'id', 'name', 'description',
+                    'default_rfq_type', 'default_priority', 'default_deadline_days',
+                    'default_technical_requirements', 'default_quality_requirements',
+                    'default_packaging_requirements', 'default_delivery_requirements',
+                    'use_count', 'default_suppliers_count', 'items_count',
+                    'created_at', 'updated_at'
+                ]
+            
+            def get_default_suppliers_count(self, obj):
+                return obj.default_suppliers.count()
+            
+            def get_items_count(self, obj):
+                return obj.items.filter(is_deleted=False).count()
+        
+        return RFQTemplateSerializer
+    
+    @action(detail=True, methods=['get'])
+    def items(self, request, pk=None):
+        """获取模板物料列表"""
+        template = self.get_object()
+        items = template.items.filter(is_deleted=False).select_related('item')
+        
+        result = []
+        for item in items:
+            result.append({
+                'id': item.id,
+                'item_id': item.item_id,
+                'item_sku': item.item.sku,
+                'item_name': item.item.name,
+                'default_qty': float(item.default_qty),
+                'specifications': item.specifications,
+                'technical_specs': item.technical_specs,
+            })
+        return Response(result)
+    
+    @action(detail=True, methods=['get'])
+    def suppliers(self, request, pk=None):
+        """获取模板默认供应商"""
+        template = self.get_object()
+        suppliers = template.default_suppliers.all()
+        
+        result = []
+        for supplier in suppliers:
+            result.append({
+                'id': supplier.id,
+                'code': supplier.code,
+                'name': supplier.name,
+            })
+        return Response(result)
+    
+    @action(detail=True, methods=['post'], url_path='add-item')
+    def add_item(self, request, pk=None):
+        """添加模板物料"""
+        template = self.get_object()
+        item_id = request.data.get('item_id')
+        
+        if not item_id:
+            return Response({'error': '请指定物料'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        RFQTemplateItem.objects.create(
+            template=template,
+            item_id=item_id,
+            default_qty=request.data.get('default_qty', 1),
+            specifications=request.data.get('specifications', ''),
+            technical_specs=request.data.get('technical_specs', {}),
+            created_by=request.user
+        )
+        return Response({'message': '物料添加成功'})
+
+
+class SupplierCapabilityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+    """供应商能力标签管理"""
+    queryset = SupplierCapability.objects.filter(is_deleted=False)
+    permission_classes = [IsAuthenticated]
+    filterset_fields = ['capability_type']
+    search_fields = ['name', 'code', 'description']
+    
+    def get_serializer_class(self):
+        from rest_framework import serializers
+        
+        class SupplierCapabilitySerializer(serializers.ModelSerializer):
+            capability_type_display = serializers.CharField(
+                source='get_capability_type_display', read_only=True
+            )
+            supplier_count = serializers.SerializerMethodField()
+            
+            class Meta:
+                model = SupplierCapability
+                fields = [
+                    'id', 'name', 'code', 'capability_type', 'capability_type_display',
+                    'description', 'supplier_count', 'created_at'
+                ]
+            
+            def get_supplier_count(self, obj):
+                return obj.supplier_mappings.filter(is_deleted=False).count()
+        
+        return SupplierCapabilitySerializer
+    
+    @action(detail=True, methods=['get'])
+    def suppliers(self, request, pk=None):
+        """获取具有此能力的供应商列表"""
+        capability = self.get_object()
+        mappings = capability.supplier_mappings.filter(
+            is_deleted=False
+        ).select_related('supplier')
+        
+        result = []
+        for mapping in mappings:
+            result.append({
+                'supplier_id': mapping.supplier_id,
+                'supplier_name': mapping.supplier.name,
+                'supplier_code': mapping.supplier.code,
+                'level': mapping.level,
+                'certification_no': mapping.certification_no,
+                'certification_valid_until': mapping.certification_valid_until.isoformat() if mapping.certification_valid_until else None,
+            })
+        return Response(result)
+
+
+class SupplierCapabilityMappingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+    """供应商能力关联管理"""
+    queryset = SupplierCapabilityMapping.objects.filter(is_deleted=False)
+    permission_classes = [IsAuthenticated]
+    filterset_fields = ['supplier', 'capability', 'level']
+    
+    def get_serializer_class(self):
+        from rest_framework import serializers
+        
+        class SupplierCapabilityMappingSerializer(serializers.ModelSerializer):
+            supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+            capability_name = serializers.CharField(source='capability.name', read_only=True)
+            capability_type = serializers.CharField(source='capability.capability_type', read_only=True)
+            
+            class Meta:
+                model = SupplierCapabilityMapping
+                fields = [
+                    'id', 'supplier', 'supplier_name', 'capability', 'capability_name',
+                    'capability_type', 'level', 'notes',
+                    'certification_no', 'certification_valid_until',
+                    'created_at'
+                ]
+        
+        return SupplierCapabilityMappingSerializer
+    
+    @action(detail=False, methods=['get'], url_path='by-supplier/(?P<supplier_id>[^/.]+)')
+    def by_supplier(self, request, supplier_id=None):
+        """获取供应商的所有能力"""
+        mappings = self.queryset.filter(supplier_id=supplier_id).select_related('capability')
+        
+        result = []
+        for mapping in mappings:
+            result.append({
+                'id': mapping.id,
+                'capability_id': mapping.capability_id,
+                'capability_name': mapping.capability.name,
+                'capability_type': mapping.capability.capability_type,
+                'level': mapping.level,
+                'notes': mapping.notes,
+            })
+        return Response(result)
+
+
+class RFQAttachmentViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
+    """询价单附件管理"""
+    queryset = RFQAttachment.objects.filter(is_deleted=False)
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+    filterset_fields = ['rfq', 'rfq_line', 'category']
+    
+    def get_serializer_class(self):
+        from rest_framework import serializers
+        
+        class RFQAttachmentSerializer(serializers.ModelSerializer):
+            category_display = serializers.CharField(
+                source='get_category_display', read_only=True
+            )
+            
+            class Meta:
+                model = RFQAttachment
+                fields = [
+                    'id', 'rfq', 'rfq_line', 'file_name', 'file_path',
+                    'file_size', 'file_type', 'category', 'category_display',
+                    'description', 'version', 'created_at'
+                ]
+                read_only_fields = ['file_path', 'file_size', 'file_type']
+        
+        return RFQAttachmentSerializer
+    
+    def create(self, request, *args, **kwargs):
+        """上传附件"""
+        file = request.FILES.get('file')
+        if not file:
+            return Response({'error': '请上传文件'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            attachment = RFQAttachmentService.upload_attachment(
+                file=file,
+                rfq_id=request.data.get('rfq'),
+                rfq_line_id=request.data.get('rfq_line'),
+                category=request.data.get('category', 'OTHER'),
+                description=request.data.get('description', ''),
+                version=request.data.get('version', ''),
+                user=request.user
+            )
+            serializer = self.get_serializer(attachment)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
+    def destroy(self, request, *args, **kwargs):
+        """删除附件"""
+        instance = self.get_object()
+        RFQAttachmentService.delete_attachment(instance.id)
+        return Response(status=status.HTTP_204_NO_CONTENT)

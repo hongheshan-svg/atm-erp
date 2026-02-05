@@ -814,6 +814,13 @@ class CustomerViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
     search_fields = ['code', 'name', 'contact_person', 'phone', 'tax_number']
     ordering_fields = ['code', 'created_at']
     
+    def perform_destroy(self, instance):
+        """客户直接使用软删除，避免触发关联查询导致的数据库结构问题"""
+        from django.utils import timezone
+        instance.is_deleted = True
+        instance.deleted_at = timezone.now()
+        instance.save(update_fields=['is_deleted', 'deleted_at'])
+    
     def perform_create(self, serializer):
         """Auto-generate customer code if not provided."""
         from apps.core.utils import generate_code

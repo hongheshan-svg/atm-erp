@@ -1253,6 +1253,116 @@ const adminOnlyMenus = [
   'system:custom-fields'
 ]
 
+// 菜单权限的 fallback 映射：某些子菜单可以通过父模块权限访问
+const menuFallbackPermissions = {
+  // ==================== PLM 相关 ====================
+  'plm:requirements': ['projects'],
+  'plm:proposals': ['projects'],
+  'plm:configurator': ['projects'],
+  'plm:agreements': ['projects'],
+  'plm:model-viewer': ['projects'],
+  'plm:cad-bom': ['projects'],
+  'plm:bom-compare': ['projects'],
+  
+  // ==================== 知识库 ====================
+  'knowledge:articles': ['projects'],
+  'knowledge:issues': ['projects'],
+  'knowledge:components': ['projects'],
+  
+  // ==================== 项目管理子菜单 ====================
+  'projects:dashboard': ['projects'],
+  'projects:milestones': ['projects'],
+  'projects:alerts': ['projects'],
+  'projects:equipment-archives': ['projects'],
+  'projects:acceptances': ['projects'],
+  'projects:drawings': ['projects'],
+  'projects:documents': ['projects'],
+  'projects:ecn': ['projects'],
+  'projects:archives': ['projects'],
+  'projects:work-orders': ['projects', 'production'],
+  'projects:batch-drawing': ['projects'],
+  'projects:drawing-bom-link': ['projects'],
+  'projects:service': ['projects'],
+  'projects:cost': ['projects'],
+  'projects:monitoring': ['projects'],
+  
+  // ==================== 设备管理 ====================
+  'equipment:list': ['projects'],
+  'equipment:fixtures': ['projects'],
+  'equipment:inspection': ['projects'],
+  'equipment:maintenance': ['projects'],
+  'equipment:oee': ['projects'],
+  
+  // ==================== 销售相关 ====================
+  'aftersales:orders': ['sales'],
+  'sales:quote-templates': ['sales'],
+  'sales:contract-templates': ['sales'],
+  'sales:crm-dashboard': ['sales'],
+  'sales:quote-estimation': ['sales'],
+  'sales:training': ['sales'],
+  'sales:service': ['sales'],
+  'sales:quote': ['sales'],
+  
+  // ==================== 财务相关 ====================
+  'finance:sales-reconciliation': ['sales', 'finance'],
+  'finance:purchase-reconciliation': ['purchase', 'finance'],
+  'finance:ar': ['finance'],
+  'finance:ap': ['finance'],
+  'finance:assets': ['finance'],
+  
+  // ==================== 采购相关 ====================
+  'purchase:outsource': ['purchase'],
+  'purchase:evaluations': ['purchase'],
+  'purchase:blacklist': ['purchase'],
+  'purchase:portal': ['purchase'],
+  'purchase:collaboration': ['purchase'],
+  'purchase:budgets': ['purchase'],
+  
+  // ==================== 库存相关 ====================
+  'inventory:mrp': ['purchase', 'inventory'],
+  'inventory:alerts': ['inventory'],
+  'inventory:cost-accounting': ['inventory'],
+  'inventory:spare-parts': ['inventory'],
+  'inventory:data-accuracy': ['inventory'],
+  
+  // ==================== 生产/MES相关 ====================
+  'mes:scheduling': ['production'],
+  'mes:kanban': ['production'],
+  'mes:traceability': ['production'],
+  'mes:spc': ['production'],
+  'mes:andon': ['production'],
+  'mes:data-acquisition': ['production'],
+  'production:serial-numbers': ['production'],
+  'production:capacity': ['production'],
+  'production:routing': ['production'],
+  'production:assembly': ['production'],
+  'production:scheduling': ['production'],
+  
+  // ==================== OA办公相关 ====================
+  'accounts:attendance': ['oa'],
+  'oa:attendance-import': ['oa'],
+  'oa:leave': ['oa'],
+  'oa:schedule': ['oa'],
+  'oa:meeting': ['oa'],
+  'oa:announcement': ['oa'],
+  'oa:vehicles': ['oa'],
+  'oa:vehicle-request': ['oa'],
+  'oa:assets': ['oa'],
+  'oa:im': ['oa'],
+  
+  // ==================== 系统管理 ====================
+  'system:data-dictionary': ['system'],
+  'system:custom-fields': ['system'],
+  'system:email-templates': ['system'],
+  'system:monitor': ['system'],
+  'system:backup': ['system'],
+  'system:audit-analytics': ['system'],
+  
+  // ==================== 基础数据 ====================
+  'masterdata:customer-followups': ['masterdata:customers', 'masterdata'],
+  'masterdata:customer-contacts': ['masterdata:customers', 'masterdata']
+}
+
 // 检查用户是否有访问某个菜单的权限
 const hasMenuAccess = (menuId, userStore) => {
   // 如果没有menuId或者是公共页面，允许访问
@@ -1285,7 +1395,17 @@ const hasMenuAccess = (menuId, userStore) => {
   }
   
   // 子菜单直接检查
-  return menuIds.includes(menuId)
+  if (menuIds.includes(menuId)) {
+    return true
+  }
+  
+  // 检查 fallback 权限：某些菜单可以通过父模块权限访问
+  const fallbacks = menuFallbackPermissions[menuId]
+  if (fallbacks && fallbacks.length > 0) {
+    return fallbacks.some(fallback => menuIds.includes(fallback))
+  }
+  
+  return false
 }
 
 // Navigation guard

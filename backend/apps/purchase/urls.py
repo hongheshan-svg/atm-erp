@@ -12,7 +12,9 @@ from .views import (
 from .rfq_views import (
     RFQViewSet, RFQLineViewSet, RFQSupplierViewSet,
     SupplierQuotationViewSet, SupplierQuotationLineViewSet,
-    QuotationComparisonViewSet, QuotationScoreViewSet, ItemPriceHistoryViewSet
+    QuotationComparisonViewSet, QuotationScoreViewSet, ItemPriceHistoryViewSet,
+    RFQTemplateViewSet, SupplierCapabilityViewSet, SupplierCapabilityMappingViewSet,
+    RFQAttachmentViewSet
 )
 from .outsource_views import (
     OutsourceOrderViewSet, OutsourceOrderLineViewSet,
@@ -64,6 +66,11 @@ router.register(r'supplier-quotation-lines', SupplierQuotationLineViewSet, basen
 router.register(r'comparisons', QuotationComparisonViewSet, basename='comparison')
 router.register(r'comparison-scores', QuotationScoreViewSet, basename='comparison-score')
 router.register(r'price-history', ItemPriceHistoryViewSet, basename='price-history')
+# 询价增强（非标自动化）
+router.register(r'rfq-templates', RFQTemplateViewSet, basename='rfq-template')
+router.register(r'rfq-attachments', RFQAttachmentViewSet, basename='rfq-attachment')
+router.register(r'supplier-capabilities', SupplierCapabilityViewSet, basename='supplier-capability')
+router.register(r'supplier-capability-mappings', SupplierCapabilityMappingViewSet, basename='supplier-capability-mapping')
 
 # 外协加工
 router.register(r'outsource-orders', OutsourceOrderViewSet, basename='outsource-order')

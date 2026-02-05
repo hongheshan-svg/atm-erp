@@ -51,21 +51,49 @@
 
       <el-table :data="orders" v-loading="loading" stripe border @selection-change="handleSelectionChange">
         <el-table-column v-if="canDelete" type="selection" width="55" fixed />
-        <el-table-column prop="order_no" label="采购订单号" width="150" />
-        <el-table-column prop="supplier_name" label="供应商" />
-        <el-table-column prop="project_name" label="项目" />
-        <el-table-column prop="status" label="状态" width="120">
+        <el-table-column prop="order_no" label="采购订单号" width="140" fixed />
+        <el-table-column prop="project_name" label="项目" width="150" show-overflow-tooltip />
+        <el-table-column label="物料名称" width="150" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)">{{ getStatusLabel(row.status) }}</el-tag>
+            <span v-if="row.item_summary">{{ row.item_summary.item_name }}</span>
+            <span v-else class="text-muted">-</span>
+            <el-tag v-if="row.lines_count > 1" size="small" type="info" style="margin-left: 4px;">+{{ row.lines_count - 1 }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="total_with_tax" label="含税总额" width="120" align="right">
+        <el-table-column label="规格/图纸号" width="120" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.item_summary?.specification || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="单价" width="90" align="right">
+          <template #default="{ row }">
+            <span v-if="row.item_summary">¥{{ row.item_summary.unit_price?.toFixed(2) }}</span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="单位" width="60" align="center">
+          <template #default="{ row }">
+            {{ row.item_summary?.unit || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="数量" width="80" align="right">
+          <template #default="{ row }">
+            {{ row.total_qty || 0 }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="supplier_name" label="供应商" width="140" show-overflow-tooltip />
+        <el-table-column prop="status" label="状态" width="90">
+          <template #default="{ row }">
+            <el-tag :type="getStatusType(row.status)" size="small">{{ getStatusLabel(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="total_with_tax" label="含税总额" width="100" align="right">
           <template #default="{ row }">
             ¥{{ parseFloat(row.total_with_tax || row.total_amount || 0).toFixed(2) }}
           </template>
         </el-table-column>
-        <el-table-column prop="order_date" label="订单日期" width="120" />
-        <el-table-column prop="delivery_date" label="交货日期" width="120" />
+        <el-table-column prop="order_date" label="订单日期" width="100" />
+        <el-table-column prop="delivery_date" label="交货日期" width="100" />
         <el-table-column label="操作" width="480" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>

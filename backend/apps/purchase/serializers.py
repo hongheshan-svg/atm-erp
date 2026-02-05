@@ -60,6 +60,10 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
     tax_rate_display = serializers.CharField(source='get_tax_rate_display', read_only=True)
     lines = PurchaseRequestLineSerializer(many=True, read_only=True)
     budget_info = serializers.SerializerMethodField()
+    # 物料摘要信息（用于列表展示）
+    item_summary = serializers.SerializerMethodField()
+    lines_count = serializers.SerializerMethodField()
+    total_qty = serializers.SerializerMethodField()
     
     class Meta:
         model = PurchaseRequest
@@ -67,9 +71,35 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
             'id', 'request_no', 'project', 'project_name', 'supplier', 'supplier_name',
             'requestor', 'requestor_name', 'request_date', 'required_date', 'status', 'status_display',
             'tax_rate', 'tax_rate_display', 'total_amount', 'tax_amount', 'total_with_tax',
-            'notes', 'lines', 'is_deleted', 'created_at', 'updated_at', 'budget_info'
+            'notes', 'lines', 'is_deleted', 'created_at', 'updated_at', 'budget_info',
+            'item_summary', 'lines_count', 'total_qty'
         ]
         read_only_fields = ['request_no', 'requestor', 'request_date', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
+    
+    def get_item_summary(self, obj):
+        """获取物料摘要信息（用于列表展示）"""
+        lines = obj.lines.filter(is_deleted=False).select_related('item')[:1]
+        if not lines:
+            return None
+        first_line = lines[0]
+        return {
+            'item_name': first_line.item.name if first_line.item else '',
+            'item_sku': first_line.item.sku if first_line.item else '',
+            'specification': first_line.item.specification if first_line.item else '',
+            'unit': first_line.item.get_unit_display() if first_line.item else '',
+            'qty': float(first_line.qty or 0),
+            'unit_price': float(first_line.estimated_price or 0),
+        }
+    
+    def get_lines_count(self, obj):
+        """获取明细行数"""
+        return obj.lines.filter(is_deleted=False).count()
+    
+    def get_total_qty(self, obj):
+        """获取总数量"""
+        from django.db.models import Sum
+        result = obj.lines.filter(is_deleted=False).aggregate(total=Sum('qty'))
+        return float(result['total'] or 0)
     
     def get_budget_info(self, obj):
         """Get budget validation info for this request."""
@@ -193,11 +223,40 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
     expected_date = serializers.DateField(source='delivery_date', read_only=True)  # 前端兼容字段
     created_by_name = serializers.SerializerMethodField()
     lines = PurchaseOrderLineSerializer(many=True, read_only=True)
+    # 物料摘要信息（用于列表展示）
+    item_summary = serializers.SerializerMethodField()
+    lines_count = serializers.SerializerMethodField()
+    total_qty = serializers.SerializerMethodField()
     
     def get_created_by_name(self, obj):
         if obj.created_by:
             return obj.created_by.get_full_name() or obj.created_by.username
         return ''
+    
+    def get_item_summary(self, obj):
+        """获取物料摘要信息（用于列表展示）"""
+        lines = obj.lines.filter(is_deleted=False).select_related('item')[:1]
+        if not lines:
+            return None
+        first_line = lines[0]
+        return {
+            'item_name': first_line.item.name if first_line.item else '',
+            'item_sku': first_line.item.sku if first_line.item else '',
+            'specification': first_line.item.specification if first_line.item else '',
+            'unit': first_line.item.get_unit_display() if first_line.item else '',
+            'qty': float(first_line.qty or 0),
+            'unit_price': float(first_line.unit_price or 0),
+        }
+    
+    def get_lines_count(self, obj):
+        """获取明细行数"""
+        return obj.lines.filter(is_deleted=False).count()
+    
+    def get_total_qty(self, obj):
+        """获取总数量"""
+        from django.db.models import Sum
+        result = obj.lines.filter(is_deleted=False).aggregate(total=Sum('qty'))
+        return float(result['total'] or 0)
     
     class Meta:
         model = PurchaseOrder
@@ -207,7 +266,8 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             'tax_rate', 'tax_rate_display', 'total_amount', 'tax_amount', 'total_with_tax',
             'payment_terms', 'payment_terms_display', 'payment_method', 'payment_method_display',
             'payment_terms_detail', 'notes', 'lines', 'is_deleted', 
-            'created_by', 'created_by_name', 'created_at', 'updated_at'
+            'created_by', 'created_by_name', 'created_at', 'updated_at',
+            'item_summary', 'lines_count', 'total_qty'
         ]
         read_only_fields = ['order_no', 'order_date', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
     

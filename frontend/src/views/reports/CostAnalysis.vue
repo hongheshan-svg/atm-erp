@@ -7,17 +7,15 @@
           <el-select 
             v-model="selectedProject" 
             filterable 
-            remote 
-            placeholder="输入项目编号或名称搜索"
-            :remote-method="searchProjects"
-            :loading="projectLoading"
+            clearable
+            placeholder="选择项目"
             @change="fetchCostAnalysis"
-            style="width: 400px"
+            style="width: 300px"
           >
             <el-option
               v-for="p in projectOptions"
               :key="p.id"
-              :label="`${p.project_no} - ${p.name}`"
+              :label="`${p.code} - ${p.name}`"
               :value="p.id"
             />
           </el-select>
@@ -101,13 +99,13 @@
         </el-col>
       </el-row>
 
-      <!-- 人工成本按阶段分析 -->
+      <!-- 人工成本按任务分析 -->
       <el-card style="margin-top: 20px">
-        <template #header>人工成本按阶段分析</template>
+        <template #header>人工成本按任务分析 (Top 10)</template>
         <el-table :data="costData.labor_by_phase" stripe>
-          <el-table-column prop="task__task_type" label="任务类型" min-width="150">
+          <el-table-column prop="task__name" label="任务名称" min-width="200" show-overflow-tooltip>
             <template #default="{ row }">
-              {{ getTaskTypeName(row.task__task_type) }}
+              {{ row.task__name || '未分类' }}
             </template>
           </el-table-column>
           <el-table-column prop="hours" label="工时 (h)" width="120" align="right">
@@ -147,7 +145,6 @@ import { ref, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import request from '@/utils/request'
-import { getProjectList } from '@/api/projects/project'
 
 const selectedProject = ref(null)
 const hourlyRate = ref(100)
@@ -177,14 +174,13 @@ const formatNumber = (num) => {
 
 const getTaskTypeName = (type) => taskTypeMap[type] || type || '未分类'
 
-const searchProjects = async (query) => {
-  if (!query) return
+const loadProjects = async () => {
   projectLoading.value = true
   try {
-    const res = await getProjectList({ search: query, page_size: 20 })
-    projectOptions.value = res.results || res || [] || []
+    const res = await request.get('/projects/projects/', { params: { page_size: 500 } })
+    projectOptions.value = res.results || res || []
   } catch (e) {
-    console.error(e)
+    console.error('加载项目列表失败:', e)
   } finally {
     projectLoading.value = false
   }
@@ -298,6 +294,7 @@ const renderComparisonChart = () => {
 }
 
 onMounted(() => {
+  loadProjects()
   fetchComparison()
 })
 </script>

@@ -47,17 +47,92 @@
       </template>
 
       <el-row :gutter="20">
-        <el-col :span="6">
+        <el-col :span="4">
           <el-statistic title="询价单号" :value="comparison.rfq_no" />
         </el-col>
-        <el-col :span="6">
+        <el-col :span="3">
           <el-statistic title="供应商数" :value="comparison.supplier_count || 0" />
         </el-col>
-        <el-col :span="6">
+        <el-col :span="4">
           <el-statistic title="最低报价" :value="comparison.min_price" prefix="¥" :precision="2" />
         </el-col>
-        <el-col :span="6">
+        <el-col :span="4">
           <el-statistic title="平均报价" :value="comparison.avg_price" prefix="¥" :precision="2" />
+        </el-col>
+        <el-col :span="3">
+          <div class="stat-item">
+            <div class="stat-label">比价类型</div>
+            <el-tag :type="getComparisonTypeColor(comparison.comparison_type)">
+              {{ comparison.comparison_type_display || comparison.comparison_type }}
+            </el-tag>
+          </div>
+        </el-col>
+        <el-col :span="3">
+          <div class="stat-item">
+            <div class="stat-label">风险等级</div>
+            <el-tag :type="getRiskLevelColor(comparison.risk_level)">
+              {{ comparison.risk_level_display || comparison.risk_level }}
+            </el-tag>
+          </div>
+        </el-col>
+        <el-col :span="3">
+          <div class="stat-item">
+            <div class="stat-label">关键件/长周期</div>
+            <span class="critical-count">{{ comparison.critical_items_count || 0 }}/{{ comparison.long_lead_items_count || 0 }}</span>
+          </div>
+        </el-col>
+      </el-row>
+    </el-card>
+
+    <!-- 多维度推荐 -->
+    <el-card class="multi-recommend-card" v-if="report.multi_recommendations">
+      <template #header>
+        <span>多维度推荐</span>
+      </template>
+      <el-row :gutter="20">
+        <el-col :span="6">
+          <div class="recommend-box overall">
+            <div class="recommend-title"><el-icon><Trophy /></el-icon> 综合最优</div>
+            <div class="recommend-supplier" v-if="report.multi_recommendations.overall">
+              {{ report.multi_recommendations.overall.supplier_name }}
+            </div>
+            <div class="recommend-score" v-if="report.multi_recommendations.overall">
+              综合得分: {{ report.multi_recommendations.overall.total_score.toFixed(1) }}
+            </div>
+          </div>
+        </el-col>
+        <el-col :span="6">
+          <div class="recommend-box price">
+            <div class="recommend-title"><el-icon><Money /></el-icon> 价格最优</div>
+            <div class="recommend-supplier" v-if="report.multi_recommendations.price">
+              {{ report.multi_recommendations.price.supplier_name }}
+            </div>
+            <div class="recommend-score" v-if="report.multi_recommendations.price">
+              ¥{{ report.multi_recommendations.price.total_amount.toLocaleString() }}
+            </div>
+          </div>
+        </el-col>
+        <el-col :span="6">
+          <div class="recommend-box delivery">
+            <div class="recommend-title"><el-icon><Clock /></el-icon> 交期最优</div>
+            <div class="recommend-supplier" v-if="report.multi_recommendations.delivery">
+              {{ report.multi_recommendations.delivery.supplier_name }}
+            </div>
+            <div class="recommend-score" v-if="report.multi_recommendations.delivery">
+              交期得分: {{ report.multi_recommendations.delivery.scores.delivery.toFixed(1) }}
+            </div>
+          </div>
+        </el-col>
+        <el-col :span="6">
+          <div class="recommend-box quality">
+            <div class="recommend-title"><el-icon><Check /></el-icon> 质量最优</div>
+            <div class="recommend-supplier" v-if="report.multi_recommendations.quality">
+              {{ report.multi_recommendations.quality.supplier_name }}
+            </div>
+            <div class="recommend-score" v-if="report.multi_recommendations.quality">
+              质量得分: {{ report.multi_recommendations.quality.scores.quality.toFixed(1) }}
+            </div>
+          </div>
         </el-col>
       </el-row>
     </el-card>
@@ -66,63 +141,97 @@
     <el-card class="weight-card">
       <template #header>
         <div class="card-header">
-          <span>权重配置</span>
-          <el-button 
-            v-if="comparison.status === 'IN_PROGRESS'"
-            type="primary" size="small" 
-            @click="showWeightDialog = true"
-          >
-            调整权重
-          </el-button>
+          <div>
+            <span>权重配置</span>
+            <el-tag v-if="comparison.weight_template" size="small" style="margin-left: 10px;">
+              {{ getWeightTemplateLabel(comparison.weight_template) }}
+            </el-tag>
+          </div>
+          <div v-if="comparison.status === 'IN_PROGRESS'">
+            <el-dropdown @command="applyWeightTemplate" style="margin-right: 10px;">
+              <el-button size="small">
+                应用模板 <el-icon><ArrowDown /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="STANDARD">标准权重</el-dropdown-item>
+                  <el-dropdown-item command="QUALITY_FIRST">质量优先</el-dropdown-item>
+                  <el-dropdown-item command="DELIVERY_FIRST">交期优先</el-dropdown-item>
+                  <el-dropdown-item command="PRICE_FIRST">价格优先</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <el-button type="primary" size="small" @click="showWeightDialog = true">
+              自定义权重
+            </el-button>
+          </div>
         </div>
       </template>
-      <el-row :gutter="20">
-        <el-col :span="6">
+      <el-row :gutter="16">
+        <el-col :span="4">
           <div class="weight-item">
             <el-progress 
               type="dashboard" 
               :percentage="Number(comparison.weight_price)" 
-              :width="80"
-              :stroke-width="8"
+              :width="70"
+              :stroke-width="6"
               color="#67c23a"
             />
             <div class="weight-label">价格 {{ comparison.weight_price }}%</div>
           </div>
         </el-col>
-        <el-col :span="6">
+        <el-col :span="4">
           <div class="weight-item">
             <el-progress 
               type="dashboard" 
               :percentage="Number(comparison.weight_quality)" 
-              :width="80"
-              :stroke-width="8"
+              :width="70"
+              :stroke-width="6"
               color="#409eff"
             />
             <div class="weight-label">质量 {{ comparison.weight_quality }}%</div>
           </div>
         </el-col>
-        <el-col :span="6">
+        <el-col :span="4">
           <div class="weight-item">
             <el-progress 
               type="dashboard" 
               :percentage="Number(comparison.weight_delivery)" 
-              :width="80"
-              :stroke-width="8"
+              :width="70"
+              :stroke-width="6"
               color="#e6a23c"
             />
             <div class="weight-label">交期 {{ comparison.weight_delivery }}%</div>
           </div>
         </el-col>
-        <el-col :span="6">
+        <el-col :span="4">
           <div class="weight-item">
             <el-progress 
               type="dashboard" 
               :percentage="Number(comparison.weight_service)" 
-              :width="80"
-              :stroke-width="8"
+              :width="70"
+              :stroke-width="6"
               color="#909399"
             />
             <div class="weight-label">服务 {{ comparison.weight_service }}%</div>
+          </div>
+        </el-col>
+        <el-col :span="4">
+          <div class="weight-item">
+            <el-progress 
+              type="dashboard" 
+              :percentage="Number(comparison.weight_technical || 0)" 
+              :width="70"
+              :stroke-width="6"
+              color="#f56c6c"
+            />
+            <div class="weight-label">技术 {{ comparison.weight_technical || 0 }}%</div>
+          </div>
+        </el-col>
+        <el-col :span="4">
+          <div class="weight-summary">
+            <div class="weight-total">{{ getTotalWeight() }}%</div>
+            <div class="weight-hint">权重合计</div>
           </div>
         </el-col>
       </el-row>
@@ -216,11 +325,65 @@
             />
           </template>
         </el-table-column>
+        <el-table-column label="技术分" width="100" align="center" v-if="Number(comparison.weight_technical) > 0">
+          <template #default="{ row }">
+            <el-progress 
+              :percentage="Number(row.score_technical) || 0" 
+              :format="() => formatScore(row.score_technical)"
+              :stroke-width="6"
+              :color="getScoreColor(row.score_technical)"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column label="可靠性" width="100" align="center">
+          <template #default="{ row }">
+            <el-progress 
+              :percentage="Number(row.score_reliability) || 75" 
+              :format="() => formatScore(row.score_reliability || 75)"
+              :stroke-width="6"
+              :color="getReliabilityColor(row.score_reliability)"
+            />
+          </template>
+        </el-table-column>
         <el-table-column label="综合得分" width="120" align="center">
           <template #default="{ row }">
             <div class="total-score" :class="{ 'top-score': row.ranking === 1 }">
               {{ formatTotalScore(row.total_score) }}
             </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="推荐" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.recommend_type === 'OVERALL'" type="success" size="small">综合</el-tag>
+            <el-tag v-else-if="row.recommend_type === 'PRICE'" type="warning" size="small">价格</el-tag>
+            <el-tag v-else-if="row.recommend_type === 'DELIVERY'" type="primary" size="small">交期</el-tag>
+            <el-tag v-else-if="row.recommend_type === 'QUALITY'" type="info" size="small">质量</el-tag>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="风险" width="80" align="center">
+          <template #default="{ row }">
+            <el-popover
+              v-if="row.risk_warnings && row.risk_warnings.length > 0"
+              placement="top"
+              :width="300"
+              trigger="hover"
+            >
+              <template #reference>
+                <el-badge :value="row.risk_warnings.length" type="danger">
+                  <el-icon color="#f56c6c"><Warning /></el-icon>
+                </el-badge>
+              </template>
+              <div class="risk-popover">
+                <div v-for="(warn, idx) in row.risk_warnings" :key="idx" class="risk-item">
+                  <el-tag :type="warn.level === 'HIGH' ? 'danger' : 'warning'" size="small">
+                    {{ warn.level === 'HIGH' ? '高' : '中' }}
+                  </el-tag>
+                  <span>{{ warn.message }}</span>
+                </div>
+              </div>
+            </el-popover>
+            <el-icon v-else color="#67c23a"><CircleCheck /></el-icon>
           </template>
         </el-table-column>
       </el-table>
@@ -318,7 +481,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowDown, Trophy, Money, Clock, Check, Warning, CircleCheck } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 const route = useRoute()
@@ -333,13 +496,78 @@ const weightForm = reactive({
   weight_price: 40,
   weight_quality: 25,
   weight_delivery: 20,
-  weight_service: 15
+  weight_service: 15,
+  weight_technical: 0
 })
 
 const weightFormTotal = computed(() => {
   return weightForm.weight_price + weightForm.weight_quality + 
-         weightForm.weight_delivery + weightForm.weight_service
+         weightForm.weight_delivery + weightForm.weight_service + weightForm.weight_technical
 })
+
+// 权重模板标签
+const getWeightTemplateLabel = (template) => {
+  const labels = {
+    'STANDARD': '标准权重',
+    'QUALITY_FIRST': '质量优先',
+    'DELIVERY_FIRST': '交期优先',
+    'PRICE_FIRST': '价格优先',
+    'CUSTOM': '自定义'
+  }
+  return labels[template] || template
+}
+
+// 计算权重合计
+const getTotalWeight = () => {
+  return Number(comparison.value.weight_price || 0) + 
+         Number(comparison.value.weight_quality || 0) + 
+         Number(comparison.value.weight_delivery || 0) + 
+         Number(comparison.value.weight_service || 0) + 
+         Number(comparison.value.weight_technical || 0)
+}
+
+// 比价类型颜色
+const getComparisonTypeColor = (type) => {
+  const colors = {
+    'NORMAL': 'info',
+    'SAMPLE': 'primary',
+    'BATCH': 'success',
+    'URGENT': 'danger',
+    'CHANGE': 'warning'
+  }
+  return colors[type] || 'info'
+}
+
+// 风险等级颜色
+const getRiskLevelColor = (level) => {
+  const colors = {
+    'LOW': 'success',
+    'MEDIUM': 'warning',
+    'HIGH': 'danger'
+  }
+  return colors[level] || 'info'
+}
+
+// 可靠性得分颜色
+const getReliabilityColor = (score) => {
+  const s = Number(score || 75)
+  if (s >= 85) return '#67c23a'
+  if (s >= 70) return '#e6a23c'
+  return '#f56c6c'
+}
+
+// 应用权重模板
+const applyWeightTemplate = async (template) => {
+  try {
+    await request.post(`/purchase/quotation-comparisons/${route.params.id}/apply_template/`, {
+      template: template
+    })
+    ElMessage.success('已应用权重模板')
+    loadComparison()
+  } catch (error) {
+    ElMessage.error('应用模板失败')
+  }
+}
 
 // 格式化
 const formatNumber = (num) => {
@@ -585,6 +813,113 @@ onMounted(() => {
 
 .text-muted {
   color: #909399;
+}
+
+/* 统计项 */
+.stat-item {
+  text-align: center;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 8px;
+}
+
+.critical-count {
+  font-size: 18px;
+  font-weight: 600;
+  color: #e6a23c;
+}
+
+/* 多维度推荐 */
+.multi-recommend-card {
+  margin-bottom: 20px;
+}
+
+.recommend-box {
+  padding: 16px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.recommend-box.overall {
+  background: linear-gradient(135deg, #f0f9eb 0%, #e1f3d8 100%);
+  border: 1px solid #67c23a;
+}
+
+.recommend-box.price {
+  background: linear-gradient(135deg, #fdf6ec 0%, #faecd8 100%);
+  border: 1px solid #e6a23c;
+}
+
+.recommend-box.delivery {
+  background: linear-gradient(135deg, #ecf5ff 0%, #d9ecff 100%);
+  border: 1px solid #409eff;
+}
+
+.recommend-box.quality {
+  background: linear-gradient(135deg, #f4f4f5 0%, #e9e9eb 100%);
+  border: 1px solid #909399;
+}
+
+.recommend-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.recommend-supplier {
+  font-size: 16px;
+  font-weight: 700;
+  color: #303133;
+  margin-bottom: 4px;
+}
+
+.recommend-score {
+  font-size: 12px;
+  color: #606266;
+}
+
+/* 权重汇总 */
+.weight-summary {
+  text-align: center;
+  padding: 15px;
+  background: #f5f7fa;
+  border-radius: 8px;
+}
+
+.weight-total {
+  font-size: 24px;
+  font-weight: 700;
+  color: #409eff;
+}
+
+.weight-hint {
+  font-size: 12px;
+  color: #909399;
+}
+
+/* 风险提示弹窗 */
+.risk-popover {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.risk-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 4px 0;
+}
+
+.risk-item:last-child {
+  margin-bottom: 0;
 }
 </style>
 

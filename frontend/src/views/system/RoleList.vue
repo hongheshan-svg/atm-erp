@@ -76,37 +76,59 @@
     </el-dialog>
 
     <!-- 权限配置对话框 -->
-    <el-dialog v-model="permDialogVisible" title="权限配置" width="750px">
+    <el-dialog v-model="permDialogVisible" title="权限配置" width="900px">
       <div v-if="currentRole" class="permission-config">
         <div class="role-info">
           <el-tag type="primary" size="large">{{ currentRole.name }}</el-tag>
           <span class="role-desc">{{ currentRole.description }}</span>
         </div>
         
+        <!-- 预设角色模板（非标自动化行业） -->
+        <el-divider content-position="left">
+          <el-icon><Briefcase /></el-icon> 快速配置（非标自动化行业预设）
+        </el-divider>
+        <div class="preset-roles">
+          <el-button v-for="preset in presetRoles" :key="preset.code" 
+            size="small" :type="preset.type || 'default'" plain
+            @click="applyPreset(preset)">
+            {{ preset.name }}
+          </el-button>
+        </div>
+        
         <el-divider content-position="left">数据权限</el-divider>
         <el-form label-width="100px">
           <el-form-item label="数据范围">
             <el-radio-group v-model="permForm.data_scope">
-              <el-radio-button value="ALL">全部数据</el-radio-button>
-              <el-radio-button value="DEPARTMENT">本部门数据</el-radio-button>
-              <el-radio-button value="SELF">仅本人数据</el-radio-button>
+              <el-radio-button value="ALL">
+                <el-icon><Grid /></el-icon> 全部数据
+              </el-radio-button>
+              <el-radio-button value="DEPARTMENT">
+                <el-icon><OfficeBuilding /></el-icon> 本部门数据
+              </el-radio-button>
+              <el-radio-button value="SELF">
+                <el-icon><User /></el-icon> 仅本人数据
+              </el-radio-button>
             </el-radio-group>
           </el-form-item>
           <el-form-item>
             <el-text type="info" size="small">
-              <template v-if="permForm.data_scope === 'ALL'">可查看系统中所有数据</template>
-              <template v-else-if="permForm.data_scope === 'DEPARTMENT'">仅可查看本部门及下级部门的数据</template>
-              <template v-else>仅可查看自己创建或被分配的数据</template>
+              <template v-if="permForm.data_scope === 'ALL'">👑 可查看系统中所有数据（适用于：总经理、财务经理）</template>
+              <template v-else-if="permForm.data_scope === 'DEPARTMENT'">🏢 仅可查看本部门及下级部门的数据（适用于：部门主管、项目经理）</template>
+              <template v-else>👤 仅可查看自己创建或负责的数据（适用于：普通员工）</template>
             </el-text>
           </el-form-item>
         </el-form>
         
-        <el-divider content-position="left">菜单权限</el-divider>
+        <el-divider content-position="left">菜单权限（按业务流程分组）</el-divider>
         
         <div class="menu-tree-header">
           <el-checkbox v-model="checkAll" :indeterminate="isIndeterminate" @change="handleCheckAll">
             全选
           </el-checkbox>
+          <el-button-group style="margin-left: 20px;">
+            <el-button size="small" @click="expandAll(true)">展开全部</el-button>
+            <el-button size="small" @click="expandAll(false)">收起全部</el-button>
+          </el-button-group>
           <el-text type="info" size="small" style="margin-left: 15px;">
             勾选的菜单将在侧边栏中显示
           </el-text>
@@ -114,14 +136,24 @@
         
         <el-tree
           ref="menuTreeRef"
-          :data="menuTree"
+          :data="industryMenuTree"
           show-checkbox
           node-key="id"
           :default-checked-keys="checkedMenuIds"
+          :default-expand-all="false"
           :props="{ label: 'label', children: 'children' }"
           @check="handleMenuCheck"
           class="menu-tree"
-        />
+        >
+          <template #default="{ node, data }">
+            <span class="custom-tree-node">
+              <span>{{ node.label }}</span>
+              <el-tag v-if="data.tag" :type="data.tagType || 'info'" size="small" style="margin-left: 8px;">
+                {{ data.tag }}
+              </el-tag>
+            </span>
+          </template>
+        </el-tree>
       </div>
       <template #footer>
         <el-button @click="permDialogVisible = false">取消</el-button>
@@ -134,7 +166,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { QuestionFilled } from '@element-plus/icons-vue'
+import { QuestionFilled, Briefcase, Grid, OfficeBuilding, User } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
@@ -225,10 +257,11 @@ const menuTree = ref([
     children: [
       { id: 'masterdata:items', label: '物料管理' },
       { id: 'masterdata:customers', label: '客户管理' },
+      { id: 'masterdata:customer-contacts', label: '客户联系人' },
+      { id: 'masterdata:customer-followups', label: '客户跟进' },
       { id: 'masterdata:suppliers', label: '供应商管理' },
       { id: 'masterdata:warehouses', label: '仓库管理' },
       { id: 'masterdata:locations', label: '库位管理' },
-      { id: 'masterdata:customer-followups', label: '客户跟进' },
       { id: 'masterdata:credit', label: '客户信用' }
     ]
   },
@@ -237,6 +270,7 @@ const menuTree = ref([
     label: '项目管理',
     children: [
       { id: 'projects:list', label: '项目列表' },
+      { id: 'projects:dashboard', label: '项目仪表盘' },
       { id: 'projects:tasks', label: '任务管理' },
       { id: 'projects:members', label: '成员管理' },
       { id: 'projects:bom', label: 'BOM清单' },
@@ -244,10 +278,19 @@ const menuTree = ref([
       { id: 'projects:gantt', label: '甘特图' },
       { id: 'projects:bugs', label: 'Bug跟踪' },
       { id: 'projects:drawings', label: '图纸管理' },
+      { id: 'projects:documents', label: '技术文档协同' },
+      { id: 'projects:ecn', label: 'ECN变更' },
       { id: 'projects:archives', label: '项目归档' },
       { id: 'projects:milestones', label: '项目里程碑' },
       { id: 'projects:work-orders', label: '工单管理' },
-      { id: 'projects:alerts', label: '项目预警' }
+      { id: 'projects:alerts', label: '项目预警' },
+      { id: 'projects:equipment-archives', label: '设备档案' },
+      { id: 'projects:acceptances', label: '验收管理' },
+      { id: 'projects:batch-drawing', label: '批量图纸导入' },
+      { id: 'projects:drawing-bom-link', label: '图纸-BOM关联' },
+      { id: 'projects:service', label: '项目服务' },
+      { id: 'projects:cost', label: '项目成本' },
+      { id: 'projects:monitoring', label: '项目监控' }
     ]
   },
   {
@@ -257,7 +300,10 @@ const menuTree = ref([
       { id: 'plm:requirements', label: '需求管理' },
       { id: 'plm:proposals', label: '方案设计' },
       { id: 'plm:configurator', label: '产品配置器' },
-      { id: 'plm:model-viewer', label: '3D模型预览' }
+      { id: 'plm:agreements', label: '技术协议' },
+      { id: 'plm:model-viewer', label: '3D模型预览' },
+      { id: 'plm:cad-bom', label: 'CAD BOM导入' },
+      { id: 'plm:bom-compare', label: 'BOM版本对比' }
     ]
   },
   {
@@ -271,23 +317,30 @@ const menuTree = ref([
       { id: 'purchase:outsource', label: '外协加工' },
       { id: 'purchase:evaluations', label: '供应商评价' },
       { id: 'purchase:blacklist', label: '供应商黑名单' },
-      { id: 'purchase:budgets', label: '采购预算' }
+      { id: 'purchase:budgets', label: '采购预算' },
+      { id: 'purchase:collaboration', label: '供应链协同' },
+      { id: 'purchase:portal', label: '供应商协同门户' }
     ]
   },
   {
     id: 'sales',
     label: '销售管理',
     children: [
+      { id: 'sales:crm-dashboard', label: 'CRM仪表盘' },
       { id: 'sales:leads', label: '销售线索' },
       { id: 'sales:opportunities', label: '销售商机' },
       { id: 'sales:quotations', label: '销售报价' },
+      { id: 'sales:quote-estimation', label: '报价估算' },
       { id: 'sales:orders', label: '销售订单' },
       { id: 'sales:contracts', label: '销售合同' },
       { id: 'sales:delivery-orders', label: '发货单' },
       { id: 'sales:quote-templates', label: '报价单模板' },
       { id: 'sales:contract-templates', label: '合同模板' },
       { id: 'sales:performance', label: '销售业绩' },
-      { id: 'sales:analysis', label: '销售分析' }
+      { id: 'sales:analysis', label: '销售分析' },
+      { id: 'sales:training', label: '销售培训' },
+      { id: 'sales:service', label: '销售服务' },
+      { id: 'sales:quote', label: '快速报价' }
     ]
   },
   {
@@ -307,11 +360,13 @@ const menuTree = ref([
       { id: 'inventory:transfer', label: '库存调拨' },
       { id: 'inventory:adjustment', label: '库存盘点' },
       { id: 'inventory:alert', label: '库存预警' },
+      { id: 'inventory:alerts', label: '库存预警配置' },
       { id: 'inventory:requisitions', label: '生产领料' },
       { id: 'inventory:returns', label: '生产退料' },
       { id: 'inventory:cost-accounting', label: '库存成本' },
       { id: 'inventory:mrp', label: 'MRP计划' },
-      { id: 'inventory:alerts', label: '库存预警' }
+      { id: 'inventory:spare-parts', label: '备品备件' },
+      { id: 'inventory:data-accuracy', label: '库存准确性' }
     ]
   },
   {
@@ -321,7 +376,12 @@ const menuTree = ref([
       { id: 'production:processes', label: '生产工序' },
       { id: 'production:plans', label: '生产计划' },
       { id: 'production:debug-records', label: '调试记录' },
-      { id: 'production:inspections', label: '质量检验' }
+      { id: 'production:inspections', label: '质量检验' },
+      { id: 'production:serial-numbers', label: '序列号管理' },
+      { id: 'production:routing', label: '工艺路线' },
+      { id: 'production:assembly', label: '装配管理' },
+      { id: 'production:scheduling', label: '生产排程' },
+      { id: 'production:capacity', label: '产能管理' }
     ]
   },
   {
@@ -358,7 +418,9 @@ const menuTree = ref([
       { id: 'finance:invoices', label: '发票管理' },
       { id: 'finance:project-costs', label: '项目成本核算' },
       { id: 'finance:collection', label: '回款计划' },
-      { id: 'finance:assets', label: '固定资产' }
+      { id: 'finance:assets', label: '固定资产' },
+      { id: 'finance:sales-reconciliation', label: '销售对账' },
+      { id: 'finance:purchase-reconciliation', label: '采购对账' }
     ]
   },
   {
@@ -381,7 +443,9 @@ const menuTree = ref([
       { id: 'oa:vehicles', label: '车辆管理' },
       { id: 'oa:vehicle-request', label: '用车申请' },
       { id: 'oa:assets', label: '资产管理' },
-      { id: 'oa:im', label: '即时通讯' }
+      { id: 'oa:im', label: '即时通讯' },
+      { id: 'oa:attendance', label: '考勤管理' },
+      { id: 'oa:attendance-import', label: '考勤导入' }
     ]
   },
   {
@@ -402,7 +466,8 @@ const menuTree = ref([
       { id: 'reports:cash-flow', label: '现金流预测' },
       { id: 'reports:slow-moving', label: '呆滞物料分析' },
       { id: 'reports:timelog', label: '工时统计' },
-      { id: 'reports:cost-analysis', label: '项目成本分析' }
+      { id: 'reports:cost-analysis', label: '项目成本分析' },
+      { id: 'reports:industry', label: '行业分析' }
     ]
   },
   {
@@ -414,6 +479,354 @@ const menuTree = ref([
     ]
   }
 ])
+
+// ============================================
+// 非标自动化行业 - 按业务流程分组的权限树
+// ============================================
+const industryMenuTree = ref([
+  {
+    id: '_presales',
+    label: '📋 售前阶段（客户→商机→报价→合同）',
+    tag: '销售团队',
+    tagType: 'success',
+    children: [
+      { id: 'dashboard', label: '工作台仪表盘' },
+      { id: 'masterdata:customers', label: '客户档案' },
+      { id: 'masterdata:customer-contacts', label: '客户联系人' },
+      { id: 'masterdata:customer-followups', label: '客户跟进' },
+      { id: 'masterdata:credit', label: '客户信用' },
+      { id: 'sales:crm-dashboard', label: 'CRM仪表盘' },
+      { id: 'sales:leads', label: '销售线索' },
+      { id: 'sales:opportunities', label: '销售商机' },
+      { id: 'sales:quotations', label: '销售报价' },
+      { id: 'sales:quote-estimation', label: '报价估算' },
+      { id: 'sales:quote', label: '快速报价' },
+      { id: 'sales:contracts', label: '销售合同' },
+      { id: 'sales:quote-templates', label: '报价单模板' },
+      { id: 'sales:contract-templates', label: '合同模板' },
+      { id: 'sales:performance', label: '销售业绩' },
+      { id: 'sales:analysis', label: '销售分析' }
+    ]
+  },
+  {
+    id: '_design',
+    label: '🔧 设计阶段（需求→方案→BOM→图纸）',
+    tag: '技术团队',
+    tagType: 'primary',
+    children: [
+      { id: 'plm:requirements', label: '需求管理' },
+      { id: 'plm:proposals', label: '方案设计' },
+      { id: 'plm:configurator', label: '产品配置器' },
+      { id: 'plm:agreements', label: '技术协议' },
+      { id: 'projects:bom', label: 'BOM清单' },
+      { id: 'plm:cad-bom', label: 'CAD BOM导入' },
+      { id: 'plm:bom-compare', label: 'BOM版本对比' },
+      { id: 'projects:drawings', label: '图纸管理' },
+      { id: 'projects:batch-drawing', label: '批量图纸导入' },
+      { id: 'projects:drawing-bom-link', label: '图纸-BOM关联' },
+      { id: 'plm:model-viewer', label: '3D模型预览' },
+      { id: 'projects:documents', label: '技术文档协同' },
+      { id: 'projects:ecn', label: 'ECN变更' },
+      { id: 'knowledge:articles', label: '知识文章' },
+      { id: 'knowledge:issues', label: '技术问题' },
+      { id: 'knowledge:components', label: '标准部件库' }
+    ]
+  },
+  {
+    id: '_project',
+    label: '📊 项目管理（计划→任务→进度→成本）',
+    tag: '项目经理',
+    tagType: 'warning',
+    children: [
+      { id: 'projects:list', label: '项目列表' },
+      { id: 'projects:dashboard', label: '项目仪表盘' },
+      { id: 'projects:tasks', label: '任务管理' },
+      { id: 'projects:members', label: '成员管理' },
+      { id: 'projects:milestones', label: '项目里程碑' },
+      { id: 'projects:gantt', label: '甘特图' },
+      { id: 'projects:time-logs', label: '工时填报' },
+      { id: 'projects:alerts', label: '项目预警' },
+      { id: 'projects:cost', label: '项目成本' },
+      { id: 'projects:monitoring', label: '项目监控' },
+      { id: 'projects:bugs', label: 'Bug跟踪' },
+      { id: 'projects:archives', label: '项目归档' }
+    ]
+  },
+  {
+    id: '_purchase',
+    label: '🛒 采购阶段（MRP→询价→比价→订单→到货）',
+    tag: '采购团队',
+    tagType: 'info',
+    children: [
+      { id: 'inventory:mrp', label: 'MRP需求计划' },
+      { id: 'purchase:requests', label: '采购申请' },
+      { id: 'purchase:comparisons', label: '比价分析' },
+      { id: 'purchase:orders', label: '采购订单' },
+      { id: 'purchase:goods-receipts', label: '到货质检' },
+      { id: 'purchase:outsource', label: '外协加工' },
+      { id: 'purchase:budgets', label: '采购预算' },
+      { id: 'masterdata:suppliers', label: '供应商档案' },
+      { id: 'purchase:evaluations', label: '供应商评价' },
+      { id: 'purchase:blacklist', label: '供应商黑名单' },
+      { id: 'purchase:collaboration', label: '供应链协同' },
+      { id: 'purchase:portal', label: '供应商协同门户' }
+    ]
+  },
+  {
+    id: '_warehouse',
+    label: '📦 仓储物流（入库→库存→出库→盘点）',
+    tag: '仓库团队',
+    tagType: '',
+    children: [
+      { id: 'inventory:stocks', label: '库存查询' },
+      { id: 'inventory:batches', label: '批次管理' },
+      { id: 'inventory:moves', label: '库存流水' },
+      { id: 'inventory:transfer', label: '库存调拨' },
+      { id: 'inventory:adjustment', label: '库存盘点' },
+      { id: 'inventory:alert', label: '库存预警' },
+      { id: 'inventory:alerts', label: '库存预警配置' },
+      { id: 'inventory:requisitions', label: '生产领料' },
+      { id: 'inventory:returns', label: '生产退料' },
+      { id: 'inventory:cost-accounting', label: '库存成本' },
+      { id: 'inventory:spare-parts', label: '备品备件' },
+      { id: 'inventory:data-accuracy', label: '库存准确性' },
+      { id: 'masterdata:items', label: '物料管理' },
+      { id: 'masterdata:warehouses', label: '仓库管理' },
+      { id: 'masterdata:locations', label: '库位管理' }
+    ]
+  },
+  {
+    id: '_production',
+    label: '🏭 生产阶段（计划→排程→执行→质检）',
+    tag: '生产团队',
+    tagType: 'danger',
+    children: [
+      { id: 'production:plans', label: '生产计划' },
+      { id: 'production:scheduling', label: '生产排程' },
+      { id: 'mes:scheduling', label: 'APS排程' },
+      { id: 'production:capacity', label: '产能管理' },
+      { id: 'projects:work-orders', label: '工单派工' },
+      { id: 'production:processes', label: '生产工序' },
+      { id: 'production:routing', label: '工艺路线' },
+      { id: 'production:assembly', label: '装配管理' },
+      { id: 'production:debug-records', label: '调试记录' },
+      { id: 'production:serial-numbers', label: '序列号管理' },
+      { id: 'mes:kanban', label: '电子看板' },
+      { id: 'mes:andon', label: '安灯系统' },
+      { id: 'mes:data-acquisition', label: '数据采集' },
+      { id: 'production:inspections', label: '质量检验' },
+      { id: 'mes:traceability', label: '追溯管理' },
+      { id: 'mes:spc', label: 'SPC统计过程控制' }
+    ]
+  },
+  {
+    id: '_equipment',
+    label: '⚙️ 设备管理（台账→点检→维护→OEE）',
+    tag: '设备团队',
+    tagType: '',
+    children: [
+      { id: 'equipment:list', label: '设备台账' },
+      { id: 'equipment:fixtures', label: '工装夹具' },
+      { id: 'equipment:inspection', label: '设备点检' },
+      { id: 'equipment:maintenance', label: '维护日历' },
+      { id: 'equipment:oee', label: 'OEE分析' },
+      { id: 'projects:equipment-archives', label: '设备档案' }
+    ]
+  },
+  {
+    id: '_delivery',
+    label: '🚚 交付验收（发货→安装→调试→验收）',
+    tag: '交付团队',
+    tagType: 'success',
+    children: [
+      { id: 'sales:orders', label: '销售订单' },
+      { id: 'sales:delivery-orders', label: '发货管理' },
+      { id: 'projects:acceptances', label: '验收管理(FAT/SAT)' },
+      { id: 'projects:service', label: '项目服务' },
+      { id: 'aftersales:orders', label: '售后工单' },
+      { id: 'sales:service', label: '销售服务' },
+      { id: 'sales:training', label: '客户培训' }
+    ]
+  },
+  {
+    id: '_finance',
+    label: '💰 财务管理（应收→应付→成本→报表）',
+    tag: '财务团队',
+    tagType: 'warning',
+    children: [
+      { id: 'finance:ar', label: '应收账款' },
+      { id: 'finance:ap', label: '应付账款' },
+      { id: 'finance:invoices', label: '发票管理' },
+      { id: 'finance:collection', label: '回款计划' },
+      { id: 'finance:sales-reconciliation', label: '销售对账' },
+      { id: 'finance:purchase-reconciliation', label: '采购对账' },
+      { id: 'finance:expenses', label: '费用报销' },
+      { id: 'finance:shared-expenses', label: '公共费用分摊' },
+      { id: 'finance:project-costs', label: '项目成本核算' },
+      { id: 'finance:assets', label: '固定资产' }
+    ]
+  },
+  {
+    id: '_reports',
+    label: '📈 报表分析（利润→成本→库存→趋势）',
+    tag: '管理层',
+    tagType: 'primary',
+    children: [
+      { id: 'reports:profitability', label: '项目利润分析' },
+      { id: 'reports:cost-analysis', label: '项目成本分析' },
+      { id: 'reports:timelog', label: '工时统计' },
+      { id: 'reports:cash-flow', label: '现金流预测' },
+      { id: 'reports:aging', label: '账龄分析' },
+      { id: 'reports:inventory-turnover', label: '库存周转率' },
+      { id: 'reports:slow-moving', label: '呆滞物料分析' },
+      { id: 'reports:purchase-price-trend', label: '采购价格趋势' },
+      { id: 'reports:industry', label: '行业分析' },
+      { id: 'analytics:project', label: '项目分析' },
+      { id: 'analytics:inventory', label: '库存分析' }
+    ]
+  },
+  {
+    id: '_oa',
+    label: '🏢 协同办公（审批→考勤→日程→会议）',
+    tag: '全员',
+    tagType: 'info',
+    children: [
+      { id: 'workflow:tasks', label: '待办审批' },
+      { id: 'workflow:my-submissions', label: '我的提交' },
+      { id: 'workflow:config', label: '流程配置' },
+      { id: 'accounts:attendance', label: '考勤打卡' },
+      { id: 'oa:attendance', label: '考勤管理' },
+      { id: 'oa:attendance-import', label: '考勤导入' },
+      { id: 'oa:leave', label: '请假申请' },
+      { id: 'oa:schedule', label: '日程管理' },
+      { id: 'oa:meeting', label: '会议管理' },
+      { id: 'oa:announcement', label: '公告管理' },
+      { id: 'oa:vehicles', label: '车辆管理' },
+      { id: 'oa:vehicle-request', label: '用车申请' },
+      { id: 'oa:assets', label: '资产管理' },
+      { id: 'oa:im', label: '即时通讯' }
+    ]
+  },
+  {
+    id: '_system',
+    label: '⚙️ 系统管理（用户→角色→配置→监控）',
+    tag: '管理员',
+    tagType: 'danger',
+    children: [
+      { id: 'system:users', label: '用户管理' },
+      { id: 'system:roles', label: '角色管理' },
+      { id: 'system:departments', label: '部门管理' },
+      { id: 'system:code-rules', label: '编码规则' },
+      { id: 'system:notifications', label: '通知中心' },
+      { id: 'system:data-dictionary', label: '数据字典' },
+      { id: 'system:custom-fields', label: '自定义字段' },
+      { id: 'system:email-templates', label: '邮件模板' },
+      { id: 'system:webhooks', label: 'Webhook管理' },
+      { id: 'system:dashboard-config', label: '仪表盘配置' },
+      { id: 'system:config', label: '系统配置' },
+      { id: 'system:monitor', label: '系统监控' },
+      { id: 'system:backup', label: '数据备份' },
+      { id: 'system:audit-log', label: '审计日志' },
+      { id: 'system:login-logs', label: '登录日志' },
+      { id: 'system:audit-analytics', label: '日志分析' },
+      { id: 'system:announcements', label: '系统公告' }
+    ]
+  }
+])
+
+// ============================================
+// 非标自动化行业 - 预设角色模板
+// ============================================
+const presetRoles = ref([
+  {
+    name: '总经理',
+    code: 'general_manager',
+    type: 'danger',
+    data_scope: 'ALL',
+    menu_ids: ['dashboard', 'projects', 'plm', 'sales', 'purchase', 'inventory', 'production', 'mes', 'equipment', 'finance', 'reports', 'analytics', 'oa', 'workflow', 'masterdata', 'knowledge', 'aftersales', 'accounts']
+  },
+  {
+    name: '项目经理',
+    code: 'project_manager',
+    type: 'warning',
+    data_scope: 'DEPARTMENT',
+    menu_ids: ['dashboard', 'projects', 'projects:list', 'projects:dashboard', 'projects:tasks', 'projects:members', 'projects:bom', 'projects:time-logs', 'projects:gantt', 'projects:milestones', 'projects:alerts', 'projects:equipment-archives', 'projects:acceptances', 'projects:archives', 'projects:cost', 'projects:monitoring', 'projects:work-orders', 'projects:drawings', 'projects:documents', 'projects:ecn', 'plm', 'plm:requirements', 'plm:proposals', 'plm:agreements', 'plm:cad-bom', 'plm:bom-compare', 'knowledge', 'knowledge:articles', 'knowledge:issues', 'knowledge:components', 'reports', 'reports:profitability', 'reports:cost-analysis', 'reports:timelog', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'oa:meeting']
+  },
+  {
+    name: '技术工程师',
+    code: 'engineer',
+    type: 'primary',
+    data_scope: 'DEPARTMENT',
+    menu_ids: ['dashboard', 'plm', 'plm:requirements', 'plm:proposals', 'plm:configurator', 'plm:agreements', 'plm:model-viewer', 'plm:cad-bom', 'plm:bom-compare', 'projects', 'projects:list', 'projects:tasks', 'projects:bom', 'projects:drawings', 'projects:documents', 'projects:ecn', 'projects:bugs', 'projects:time-logs', 'projects:batch-drawing', 'projects:drawing-bom-link', 'knowledge', 'knowledge:articles', 'knowledge:issues', 'knowledge:components', 'masterdata', 'masterdata:items', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'oa:leave', 'accounts:attendance']
+  },
+  {
+    name: '销售人员',
+    code: 'salesperson',
+    type: 'success',
+    data_scope: 'SELF',
+    menu_ids: ['dashboard', 'sales', 'sales:leads', 'sales:opportunities', 'sales:quotations', 'sales:orders', 'sales:contracts', 'sales:delivery-orders', 'sales:quote-estimation', 'sales:quote', 'masterdata', 'masterdata:customers', 'masterdata:customer-contacts', 'masterdata:customer-followups', 'aftersales', 'aftersales:orders', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'accounts:attendance']
+  },
+  {
+    name: '采购人员',
+    code: 'purchaser',
+    type: 'info',
+    data_scope: 'SELF',
+    menu_ids: ['dashboard', 'purchase', 'purchase:requests', 'purchase:comparisons', 'purchase:orders', 'purchase:goods-receipts', 'purchase:outsource', 'masterdata', 'masterdata:suppliers', 'inventory', 'inventory:mrp', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'accounts:attendance']
+  },
+  {
+    name: '仓库管理',
+    code: 'warehouse',
+    type: '',
+    data_scope: 'SELF',
+    menu_ids: ['dashboard', 'inventory', 'inventory:stocks', 'inventory:batches', 'inventory:moves', 'inventory:transfer', 'inventory:adjustment', 'inventory:requisitions', 'inventory:returns', 'purchase', 'purchase:goods-receipts', 'masterdata', 'masterdata:items', 'workflow', 'workflow:my-submissions', 'oa', 'accounts:attendance']
+  },
+  {
+    name: '生产主管',
+    code: 'production_manager',
+    type: 'danger',
+    data_scope: 'DEPARTMENT',
+    menu_ids: ['dashboard', 'production', 'production:processes', 'production:plans', 'production:debug-records', 'production:inspections', 'production:serial-numbers', 'production:routing', 'production:assembly', 'production:scheduling', 'production:capacity', 'mes', 'mes:scheduling', 'mes:kanban', 'mes:traceability', 'mes:spc', 'mes:andon', 'mes:data-acquisition', 'projects', 'projects:work-orders', 'equipment', 'equipment:list', 'equipment:fixtures', 'equipment:inspection', 'equipment:maintenance', 'equipment:oee', 'inventory', 'inventory:requisitions', 'inventory:returns', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'accounts:attendance']
+  },
+  {
+    name: '财务人员',
+    code: 'accountant',
+    type: 'warning',
+    data_scope: 'SELF',
+    menu_ids: ['dashboard', 'finance', 'finance:expenses', 'finance:ar', 'finance:ap', 'finance:invoices', 'finance:collection', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'accounts:attendance']
+  },
+  {
+    name: '普通员工',
+    code: 'employee',
+    type: '',
+    data_scope: 'SELF',
+    menu_ids: ['dashboard', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'oa:leave', 'oa:meeting', 'oa:announcement', 'oa:vehicle-request', 'accounts:attendance']
+  }
+])
+
+// 应用预设角色配置
+const applyPreset = (preset) => {
+  ElMessageBox.confirm(
+    `确定要应用"${preset.name}"的权限配置吗？这将覆盖当前的权限设置。`,
+    '应用预设配置',
+    { type: 'warning' }
+  ).then(() => {
+    permForm.data_scope = preset.data_scope
+    if (menuTreeRef.value) {
+      menuTreeRef.value.setCheckedKeys(preset.menu_ids)
+    }
+    ElMessage.success(`已应用"${preset.name}"的权限配置`)
+  }).catch(() => {})
+}
+
+// 展开/收起树节点
+const expandAll = (expand) => {
+  const tree = menuTreeRef.value
+  if (!tree) return
+  const nodes = tree.store._getAllNodes()
+  nodes.forEach(node => {
+    node.expanded = expand
+  })
+}
 
 // 获取所有菜单ID
 const allMenuIds = computed(() => {
@@ -610,12 +1023,26 @@ onMounted(() => {
 }
 
 .permission-config {
-  max-height: 600px;
+  max-height: 650px;
   overflow-y: auto;
 }
 
+.preset-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e4e7eb 100%);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.preset-roles .el-button {
+  margin: 0;
+}
+
 .menu-tree {
-  max-height: 350px;
+  max-height: 400px;
   overflow-y: auto;
   border: 1px solid #ebeef5;
   border-radius: 4px;
@@ -636,9 +1063,17 @@ onMounted(() => {
 
 .menu-tree-header {
   margin-bottom: 12px;
-  padding: 8px;
+  padding: 10px 12px;
   background: #f5f7fa;
   border-radius: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.custom-tree-node {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
 }
 
 :deep(.el-tree) {
@@ -646,6 +1081,17 @@ onMounted(() => {
 }
 
 :deep(.el-tree-node__content) {
-  height: 32px;
+  height: 36px;
+}
+
+:deep(.el-tree-node__expand-icon) {
+  font-size: 16px;
+}
+
+:deep(.el-divider__text) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
 }
 </style>

@@ -27,8 +27,21 @@ def project_profitability(request):
     output_format = request.query_params.get('format', 'json')
     
     if project_id:
-        # Single project analysis
+        # Single project analysis - 需要补充项目基本信息
+        from apps.projects.models import Project
+        try:
+            project = Project.objects.select_related('manager').get(id=project_id, is_deleted=False)
+        except Project.DoesNotExist:
+            return Response({'error': '项目不存在'}, status=status.HTTP_404_NOT_FOUND)
+        
         result = CostCalculationService.calculate_project_profit(project_id)
+        # 补充项目基本信息
+        result.update({
+            'code': project.code,
+            'name': project.name,
+            'status': project.status,
+            'manager': project.manager.username if project.manager else ''
+        })
         
         if output_format == 'excel':
             df = pd.DataFrame([result])
@@ -43,7 +56,8 @@ def project_profitability(request):
             response['Content-Disposition'] = f'attachment; filename=project_{project_id}_profit.xlsx'
             return response
         else:
-            return Response(result)
+            # 返回数组格式以保持前端一致性
+            return Response([result] if result else [])
     
     else:
         # All projects analysis
@@ -331,7 +345,8 @@ def purchase_price_trend_report(request):
             'date': line.po.order_date.isoformat(),
             'price': float(line.unit_price),
             'qty': float(line.qty),
-            'supplier': line.po.supplier.name if line.po.supplier else ''
+            'supplier': line.po.supplier.name if line.po.supplier else '',
+            'order_no': line.po.order_no  # 添加采购订单号
         })
         if line.po.supplier:
             item_data[item_key]['suppliers'].add(line.po.supplier.name)

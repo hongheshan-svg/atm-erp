@@ -394,14 +394,15 @@ class CostAlertViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
 
 
 class ProjectCostDashboardView(APIView):
-    """项目成本看板API"""
+    """项目成本看板API - 非标自动化行业成本分析"""
     permission_classes = [IsAuthenticated]
     
     def get(self, request, project_id):
         from apps.projects.models import Project
+        from decimal import Decimal
         
         try:
-            project = Project.objects.get(id=project_id, is_deleted=False)
+            project = Project.objects.select_related('sales_order', 'customer').get(id=project_id, is_deleted=False)
         except Project.DoesNotExist:
             return Response({'error': '项目不存在'}, status=404)
         
@@ -422,7 +423,90 @@ class ProjectCostDashboardView(APIView):
         )
         actual_by_type = {c['cost_type']: float(c['total']) for c in actual_costs}
         
-        total_actual = cost_records.aggregate(total=Sum('amount'))['total'] or 0
+        total_actual = cost_records.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        
+        # ==================== 收入计算 ====================
+        # 从销售订单获取合同金额
+        revenue = Decimal('0')
+        if project.sales_order:
+            revenue = project.sales_order.total_with_tax or Decimal('0')
+        
+        # ==================== 成本构成分析 ====================
+        # 直接成本（材料+人工+外协）
+        direct_cost = Decimal('0')
+        direct_cost += Decimal(str(actual_by_type.get('MATERIAL', 0)))
+        direct_cost += Decimal(str(actual_by_type.get('LABOR', 0)))
+        direct_cost += Decimal(str(actual_by_type.get('OUTSOURCE', 0)))
+        
+        # 间接成本（设备+差旅+管理+其他）
+        indirect_cost = Decimal('0')
+        indirect_cost += Decimal(str(actual_by_type.get('EQUIPMENT', 0)))
+        indirect_cost += Decimal(str(actual_by_type.get('TRAVEL', 0)))
+        indirect_cost += Decimal(str(actual_by_type.get('MANAGEMENT', 0)))
+        indirect_cost += Decimal(str(actual_by_type.get('OTHER', 0)))
+        
+        # ==================== 利润计算 ====================
+        # 毛利润 = 收入 - 直接成本
+        gross_profit = revenue - direct_cost
+        # 毛利率
+        gross_margin = round(float(gross_profit) / float(revenue) * 100, 2) if revenue > 0 else 0
+        
+        # 净利润 = 收入 - 总成本
+        net_profit = revenue - total_actual
+        # 净利率
+        net_margin = round(float(net_profit) / float(revenue) * 100, 2) if revenue > 0 else 0
+        
+        # ==================== 成本构成明细 ====================
+        cost_breakdown = {
+            'material': {
+                'name': '材料成本',
+                'amount': float(actual_by_type.get('MATERIAL', 0)),
+                'category': 'direct',
+                'budget': float(budget_data.get('material_budget', 0)) if budget_data else 0
+            },
+            'labor': {
+                'name': '人工成本',
+                'amount': float(actual_by_type.get('LABOR', 0)),
+                'category': 'direct',
+                'budget': float(budget_data.get('labor_budget', 0)) if budget_data else 0
+            },
+            'outsource': {
+                'name': '外协成本',
+                'amount': float(actual_by_type.get('OUTSOURCE', 0)),
+                'category': 'direct',
+                'budget': float(budget_data.get('outsource_budget', 0)) if budget_data else 0
+            },
+            'equipment': {
+                'name': '设备费用',
+                'amount': float(actual_by_type.get('EQUIPMENT', 0)),
+                'category': 'indirect',
+                'budget': float(budget_data.get('equipment_budget', 0)) if budget_data else 0
+            },
+            'travel': {
+                'name': '差旅费用',
+                'amount': float(actual_by_type.get('TRAVEL', 0)),
+                'category': 'indirect',
+                'budget': float(budget_data.get('travel_budget', 0)) if budget_data else 0
+            },
+            'management': {
+                'name': '管理费用',
+                'amount': float(actual_by_type.get('MANAGEMENT', 0)),
+                'category': 'indirect',
+                'budget': float(budget_data.get('management_budget', 0)) if budget_data else 0
+            },
+            'other': {
+                'name': '其他费用',
+                'amount': float(actual_by_type.get('OTHER', 0)),
+                'category': 'indirect',
+                'budget': float(budget_data.get('other_budget', 0)) if budget_data else 0
+            }
+        }
+        
+        # 计算各项成本占比
+        for key, item in cost_breakdown.items():
+            item['percentage'] = round(item['amount'] / float(total_actual) * 100, 1) if total_actual > 0 else 0
+            item['variance'] = item['budget'] - item['amount']
+            item['usage_rate'] = round(item['amount'] / item['budget'] * 100, 1) if item['budget'] > 0 else 0
         
         # 预算vs实际对比
         budget_comparison = []
@@ -474,6 +558,13 @@ class ProjectCostDashboardView(APIView):
             elif budget_used_rate >= float(budget_data.get('warning_threshold', 80)):
                 warning_status = 'warning'
         
+        # 利润预警
+        profit_warning = 'normal'
+        if net_margin < 0:
+            profit_warning = 'critical'  # 亏损
+        elif net_margin < 10:
+            profit_warning = 'warning'  # 利润率低于10%
+        
         # 最近成本记录
         recent_costs = cost_records.order_by('-cost_date')[:10]
         
@@ -487,13 +578,29 @@ class ProjectCostDashboardView(APIView):
                 'id': project.id,
                 'project_no': project.project_no,
                 'name': project.name,
+                'customer_name': project.customer.name if project.customer else None,
+                'status': project.status,
+                'sales_order_no': project.sales_order.order_no if project.sales_order else None,
             },
+            # 收入与利润
+            'revenue': float(revenue),
+            'gross_profit': float(gross_profit),
+            'gross_margin': gross_margin,
+            'net_profit': float(net_profit),
+            'net_margin': net_margin,
+            'profit_warning': profit_warning,
+            # 成本构成
+            'direct_cost': float(direct_cost),
+            'indirect_cost': float(indirect_cost),
+            'cost_breakdown': cost_breakdown,
+            # 预算相关
             'budget': budget_data,
             'actual_total': float(total_actual),
             'budget_total': budget_total,
             'budget_used_rate': budget_used_rate,
             'warning_status': warning_status,
             'budget_comparison': budget_comparison,
+            # 其他
             'phase_costs': list(phase_costs),
             'cost_trend': list(cost_trend),
             'recent_costs': ProjectCostRecordSerializer(recent_costs, many=True).data,

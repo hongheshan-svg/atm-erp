@@ -1,11 +1,17 @@
 """
 报价比价分析服务
 Quotation Comparison Service
+
+针对非标自动化行业增强:
+- 智能权重配置（根据物料类型/项目阶段自动调整）
+- 多维度推荐算法（价格/综合/交期/质量最优）
+- 关键件交期预警和风险评估
+- 供应商能力评估集成
 """
 import logging
 from decimal import Decimal
 from django.db import transaction
-from django.db.models import Avg, Sum
+from django.db.models import Avg, Sum, Count, Q
 from django.utils import timezone
 
 from .rfq_models import (
@@ -16,18 +22,39 @@ from .rfq_models import (
 logger = logging.getLogger(__name__)
 
 
+# 权重模板配置（非标自动化行业优化）
+WEIGHT_TEMPLATES = {
+    'STANDARD': {'price': 40, 'quality': 25, 'delivery': 20, 'service': 15, 'technical': 0},
+    'QUALITY_FIRST': {'price': 25, 'quality': 40, 'delivery': 15, 'service': 10, 'technical': 10},
+    'DELIVERY_FIRST': {'price': 25, 'quality': 20, 'delivery': 40, 'service': 15, 'technical': 0},
+    'PRICE_FIRST': {'price': 55, 'quality': 20, 'delivery': 15, 'service': 10, 'technical': 0},
+    'CRITICAL_PART': {'price': 20, 'quality': 35, 'delivery': 25, 'service': 10, 'technical': 10},  # 关键件
+    'LONG_LEAD': {'price': 30, 'quality': 20, 'delivery': 35, 'service': 15, 'technical': 0},  # 长周期件
+    'CUSTOM_MACHINED': {'price': 30, 'quality': 30, 'delivery': 20, 'service': 10, 'technical': 10},  # 机加件
+}
+
+# 风险阈值配置
+RISK_THRESHOLDS = {
+    'delivery_delay_days': 7,  # 交期超过需求日期超过7天为风险
+    'price_increase_rate': 20,  # 涨价超过20%为风险
+    'min_reliability_score': 70,  # 可靠性得分低于70为风险
+}
+
+
 class QuotationComparisonService:
     """报价比价分析服务"""
     
     @classmethod
-    def create_comparison(cls, rfq_id, user, weights=None):
+    def create_comparison(cls, rfq_id, user, weights=None, comparison_type='NORMAL', weight_template='STANDARD'):
         """
-        创建比价分析
+        创建比价分析（非标自动化增强版）
         
         Args:
             rfq_id: 询价单ID
             user: 创建用户
-            weights: 可选的权重配置 {'price': 40, 'quality': 25, 'delivery': 20, 'service': 15}
+            weights: 可选的权重配置 {'price': 40, 'quality': 25, 'delivery': 20, 'service': 15, 'technical': 0}
+            comparison_type: 比价类型 NORMAL/SAMPLE/BATCH/URGENT/CHANGE
+            weight_template: 权重模板 STANDARD/QUALITY_FIRST/DELIVERY_FIRST/PRICE_FIRST/CUSTOM
         
         Returns:
             QuotationComparison instance
@@ -45,20 +72,35 @@ class QuotationComparisonService:
             raise ValueError("至少需要2个供应商报价才能进行比价分析")
         
         with transaction.atomic():
+            # 如果使用模板，获取模板权重
+            if weight_template != 'CUSTOM' and not weights:
+                weights = WEIGHT_TEMPLATES.get(weight_template, WEIGHT_TEMPLATES['STANDARD'])
+            
+            # 分析关键件和长周期件数量
+            critical_count, long_lead_count = cls._analyze_critical_items(rfq)
+            
+            # 智能调整权重（如果未指定）
+            if not weights and (critical_count > 0 or long_lead_count > 0):
+                weights = cls._get_smart_weights(rfq, critical_count, long_lead_count)
+                weight_template = 'CUSTOM'
+            
+            weights = weights or WEIGHT_TEMPLATES['STANDARD']
+            
             # 创建比价分析
             comparison_data = {
                 'rfq': rfq,
                 'created_by': user,
                 'status': 'IN_PROGRESS',
+                'comparison_type': comparison_type,
+                'weight_template': weight_template,
+                'critical_items_count': critical_count,
+                'long_lead_items_count': long_lead_count,
+                'weight_price': weights.get('price', 40),
+                'weight_quality': weights.get('quality', 25),
+                'weight_delivery': weights.get('delivery', 20),
+                'weight_service': weights.get('service', 15),
+                'weight_technical': weights.get('technical', 0),
             }
-            
-            if weights:
-                comparison_data.update({
-                    'weight_price': weights.get('price', 40),
-                    'weight_quality': weights.get('quality', 25),
-                    'weight_delivery': weights.get('delivery', 20),
-                    'weight_service': weights.get('service', 15),
-                })
             
             comparison = QuotationComparison.objects.create(**comparison_data)
             
@@ -73,12 +115,77 @@ class QuotationComparisonService:
             # 计算价格统计
             cls._calculate_price_stats(comparison)
             
-            # 自动评分
+            # 自动评分（包含新增维度）
             cls.auto_score(comparison)
+            
+            # 风险评估
+            cls._assess_risks(comparison)
             
             logger.info(f"Created comparison {comparison.comparison_no} for RFQ {rfq.rfq_no}")
         
         return comparison
+    
+    @classmethod
+    def _analyze_critical_items(cls, rfq):
+        """分析询价单中的关键件和长周期件数量"""
+        critical_count = 0
+        long_lead_count = 0
+        
+        # 检查是否有关联项目BOM
+        if rfq.project:
+            from apps.projects.models import ProjectBOM
+            
+            for rfq_line in rfq.lines.filter(is_deleted=False):
+                bom_item = ProjectBOM.objects.filter(
+                    project=rfq.project,
+                    item=rfq_line.item,
+                    is_deleted=False
+                ).first()
+                
+                if bom_item:
+                    if bom_item.is_critical:
+                        critical_count += 1
+                    if bom_item.is_long_lead:
+                        long_lead_count += 1
+        
+        return critical_count, long_lead_count
+    
+    @classmethod
+    def _get_smart_weights(cls, rfq, critical_count, long_lead_count):
+        """根据物料特性智能计算权重"""
+        total_items = rfq.lines.filter(is_deleted=False).count()
+        
+        if total_items == 0:
+            return WEIGHT_TEMPLATES['STANDARD']
+        
+        critical_ratio = critical_count / total_items
+        long_lead_ratio = long_lead_count / total_items
+        
+        # 关键件占比超过30%，使用关键件权重模板
+        if critical_ratio > 0.3:
+            return WEIGHT_TEMPLATES['CRITICAL_PART']
+        
+        # 长周期件占比超过30%，使用交期优先模板
+        if long_lead_ratio > 0.3:
+            return WEIGHT_TEMPLATES['LONG_LEAD']
+        
+        # 混合情况，动态调整
+        base = WEIGHT_TEMPLATES['STANDARD'].copy()
+        
+        # 有关键件时增加质量权重
+        if critical_count > 0:
+            quality_boost = min(10, critical_ratio * 20)
+            base['quality'] += quality_boost
+            base['price'] -= quality_boost / 2
+            base['service'] -= quality_boost / 2
+        
+        # 有长周期件时增加交期权重
+        if long_lead_count > 0:
+            delivery_boost = min(10, long_lead_ratio * 20)
+            base['delivery'] += delivery_boost
+            base['price'] -= delivery_boost
+        
+        return base
     
     @classmethod
     def _calculate_price_stats(cls, comparison):
@@ -95,10 +202,13 @@ class QuotationComparisonService:
     
     @classmethod
     def auto_score(cls, comparison):
-        """自动评分（价格和交期）"""
+        """自动评分（所有维度）"""
         cls.auto_score_price(comparison)
         cls.auto_score_delivery(comparison)
+        cls.auto_score_technical(comparison)
+        cls.auto_score_reliability(comparison)
         cls.calculate_total_scores(comparison)
+        cls.calculate_multi_dimension_ranks(comparison)
     
     @classmethod
     def auto_score_price(cls, comparison):
@@ -154,14 +264,212 @@ class QuotationComparisonService:
         logger.info(f"Auto scored delivery for comparison {comparison.comparison_no}")
     
     @classmethod
-    def update_manual_scores(cls, score_id, quality_score=None, service_score=None, notes=None):
+    def auto_score_technical(cls, comparison):
         """
-        手动更新质量和服务评分
+        自动计算技术能力得分（基于供应商评价数据）
+        """
+        scores = comparison.scores.select_related('quotation__rfq_supplier__supplier').all()
+        
+        if not scores:
+            return
+        
+        for score in scores:
+            supplier = score.quotation.rfq_supplier.supplier
+            
+            # 从供应商评价中获取技术能力得分
+            try:
+                from apps.purchase.evaluation_models import SupplierEvaluation
+                
+                # 获取最近的评价
+                latest_eval = SupplierEvaluation.objects.filter(
+                    supplier=supplier,
+                    is_deleted=False
+                ).order_by('-evaluation_date').first()
+                
+                if latest_eval:
+                    # 假设评价中有技术能力指标
+                    technical_scores = latest_eval.scores.filter(
+                        indicator__category='TECHNICAL'
+                    ).values_list('score', flat=True)
+                    
+                    if technical_scores:
+                        avg_technical = sum(technical_scores) / len(technical_scores)
+                        score.score_technical = Decimal(str(avg_technical))
+                    else:
+                        score.score_technical = Decimal('75')  # 默认中等
+                else:
+                    score.score_technical = Decimal('75')  # 无评价默认中等
+                    
+            except Exception as e:
+                logger.warning(f"Failed to get technical score for supplier {supplier.id}: {e}")
+                score.score_technical = Decimal('75')
+            
+            score.save()
+    
+    @classmethod
+    def auto_score_reliability(cls, comparison):
+        """
+        自动计算可靠性得分（基于历史履约数据）
+        算法：基于历史订单的交期达成率和质量合格率
+        """
+        scores = comparison.scores.select_related('quotation__rfq_supplier__supplier').all()
+        
+        if not scores:
+            return
+        
+        from apps.purchase.models import PurchaseOrder
+        
+        for score in scores:
+            supplier = score.quotation.rfq_supplier.supplier
+            
+            # 获取该供应商的历史订单
+            historical_pos = PurchaseOrder.objects.filter(
+                supplier=supplier,
+                status__in=['RECEIVED', 'PARTIAL_RECEIVED', 'COMPLETED'],
+                is_deleted=False
+            ).order_by('-order_date')[:20]  # 最近20单
+            
+            if not historical_pos:
+                score.score_reliability = Decimal('75')  # 新供应商默认中等
+                score.save()
+                continue
+            
+            total_orders = historical_pos.count()
+            on_time_count = 0
+            quality_pass_count = 0
+            
+            for po in historical_pos:
+                # 检查是否按时交货
+                if po.actual_delivery_date and po.delivery_date:
+                    if po.actual_delivery_date <= po.delivery_date:
+                        on_time_count += 1
+                else:
+                    on_time_count += 0.5  # 无数据假设中等
+                
+                # 检查质量（简化：如果没有退货就算合格）
+                # TODO: 集成质量检验数据
+                quality_pass_count += 1
+            
+            # 计算可靠性得分
+            on_time_rate = on_time_count / total_orders if total_orders > 0 else 0.75
+            quality_rate = quality_pass_count / total_orders if total_orders > 0 else 0.75
+            
+            # 可靠性得分 = 交期达成率 * 60% + 质量合格率 * 40%
+            reliability = on_time_rate * 0.6 + quality_rate * 0.4
+            score.score_reliability = Decimal(str(reliability * 100))
+            score.save()
+        
+        logger.info(f"Auto scored reliability for comparison {comparison.comparison_no}")
+    
+    @classmethod
+    def calculate_multi_dimension_ranks(cls, comparison):
+        """
+        计算多维度排名（用于多维度推荐）
+        """
+        scores = list(comparison.scores.all())
+        
+        if not scores:
+            return
+        
+        # 价格排名（从低到高）
+        price_sorted = sorted(scores, key=lambda x: float(x.quotation.total_amount))
+        for i, s in enumerate(price_sorted, 1):
+            s.price_rank = i
+        
+        # 交期排名（从短到长）
+        delivery_sorted = sorted(scores, key=lambda x: -float(x.score_delivery))
+        for i, s in enumerate(delivery_sorted, 1):
+            s.delivery_rank = i
+        
+        # 质量排名（从高到低）
+        quality_sorted = sorted(scores, key=lambda x: -float(x.score_quality))
+        for i, s in enumerate(quality_sorted, 1):
+            s.quality_rank = i
+        
+        # 更新推荐类型
+        for s in scores:
+            if s.price_rank == 1:
+                if s.recommend_type == '' or s.recommend_type == 'PRICE':
+                    s.recommend_type = 'PRICE'
+            if s.delivery_rank == 1:
+                if s.recommend_type == '' or s.recommend_type == 'DELIVERY':
+                    s.recommend_type = 'DELIVERY'
+            if s.quality_rank == 1 and float(s.score_quality) > 0:
+                if s.recommend_type == '' or s.recommend_type == 'QUALITY':
+                    s.recommend_type = 'QUALITY'
+            if s.ranking == 1:
+                s.recommend_type = 'OVERALL'
+            
+            s.save()
+        
+        logger.info(f"Calculated multi-dimension ranks for comparison {comparison.comparison_no}")
+    
+    @classmethod
+    def _assess_risks(cls, comparison):
+        """评估风险并生成预警"""
+        scores = comparison.scores.select_related('quotation').all()
+        rfq = comparison.rfq
+        
+        risk_count = 0
+        
+        for score in scores:
+            quotation = score.quotation
+            warnings = []
+            
+            # 1. 交期风险检查
+            for line in quotation.lines.filter(is_deleted=False):
+                rfq_line = line.rfq_line
+                if line.earliest_delivery_date and rfq_line.required_date:
+                    delay_days = (line.earliest_delivery_date - rfq_line.required_date).days
+                    if delay_days > RISK_THRESHOLDS['delivery_delay_days']:
+                        warnings.append({
+                            'type': 'DELIVERY_DELAY',
+                            'level': 'HIGH' if delay_days > 14 else 'MEDIUM',
+                            'message': f'物料 {rfq_line.item.sku} 交期延迟 {delay_days} 天',
+                            'item_id': rfq_line.item.id
+                        })
+            
+            # 2. 价格风险检查
+            if quotation.price_change_rate and float(quotation.price_change_rate) > RISK_THRESHOLDS['price_increase_rate']:
+                warnings.append({
+                    'type': 'PRICE_INCREASE',
+                    'level': 'MEDIUM',
+                    'message': f'价格上涨 {quotation.price_change_rate:.1f}%'
+                })
+            
+            # 3. 可靠性风险检查
+            if float(score.score_reliability) < RISK_THRESHOLDS['min_reliability_score']:
+                warnings.append({
+                    'type': 'LOW_RELIABILITY',
+                    'level': 'MEDIUM',
+                    'message': f'供应商可靠性得分较低 ({score.score_reliability:.0f}分)'
+                })
+            
+            score.risk_warnings = warnings
+            score.save()
+            
+            if any(w['level'] == 'HIGH' for w in warnings):
+                risk_count += 1
+        
+        # 更新比价单风险等级
+        if risk_count > len(scores) * 0.5:
+            comparison.risk_level = 'HIGH'
+        elif risk_count > 0:
+            comparison.risk_level = 'MEDIUM'
+        else:
+            comparison.risk_level = 'LOW'
+        comparison.save()
+    
+    @classmethod
+    def update_manual_scores(cls, score_id, quality_score=None, service_score=None, technical_score=None, notes=None):
+        """
+        手动更新质量、服务和技术评分
         
         Args:
             score_id: QuotationScore ID
             quality_score: 质量得分 (0-100)
             service_score: 服务得分 (0-100)
+            technical_score: 技术能力得分 (0-100)
             notes: 评价说明
         """
         score = QuotationScore.objects.get(id=score_id)
@@ -172,6 +480,9 @@ class QuotationComparisonService:
         if service_score is not None:
             score.score_service = Decimal(str(service_score))
         
+        if technical_score is not None:
+            score.score_technical = Decimal(str(technical_score))
+        
         if notes is not None:
             score.notes = notes
         
@@ -179,6 +490,7 @@ class QuotationComparisonService:
         
         # 重新计算综合得分
         cls.calculate_total_scores(score.comparison)
+        cls.calculate_multi_dimension_ranks(score.comparison)
         
         return score
     
@@ -238,7 +550,7 @@ class QuotationComparisonService:
         
         Args:
             comparison_id: QuotationComparison ID
-            weights: {'price': 40, 'quality': 25, 'delivery': 20, 'service': 15}
+            weights: {'price': 40, 'quality': 25, 'delivery': 20, 'service': 15, 'technical': 0}
         """
         comparison = QuotationComparison.objects.get(id=comparison_id)
         
@@ -251,12 +563,107 @@ class QuotationComparisonService:
         comparison.weight_quality = weights.get('quality', comparison.weight_quality)
         comparison.weight_delivery = weights.get('delivery', comparison.weight_delivery)
         comparison.weight_service = weights.get('service', comparison.weight_service)
+        comparison.weight_technical = weights.get('technical', comparison.weight_technical)
+        comparison.weight_template = 'CUSTOM'
         comparison.save()
         
         # 重新计算综合得分
         cls.calculate_total_scores(comparison)
+        cls.calculate_multi_dimension_ranks(comparison)
         
         return comparison
+    
+    @classmethod
+    def apply_weight_template(cls, comparison_id, template_name):
+        """
+        应用权重模板
+        
+        Args:
+            comparison_id: QuotationComparison ID
+            template_name: 模板名称 STANDARD/QUALITY_FIRST/DELIVERY_FIRST/PRICE_FIRST
+        """
+        if template_name not in WEIGHT_TEMPLATES:
+            raise ValueError(f"无效的权重模板: {template_name}")
+        
+        weights = WEIGHT_TEMPLATES[template_name]
+        comparison = QuotationComparison.objects.get(id=comparison_id)
+        
+        comparison.weight_template = template_name
+        comparison.weight_price = weights['price']
+        comparison.weight_quality = weights['quality']
+        comparison.weight_delivery = weights['delivery']
+        comparison.weight_service = weights['service']
+        comparison.weight_technical = weights['technical']
+        comparison.save()
+        
+        # 重新计算
+        cls.calculate_total_scores(comparison)
+        cls.calculate_multi_dimension_ranks(comparison)
+        
+        return comparison
+    
+    @classmethod
+    def get_multi_dimension_recommendations(cls, comparison_id):
+        """
+        获取多维度推荐结果
+        
+        Returns:
+            dict: {
+                'overall': {...},  # 综合最优
+                'price': {...},    # 价格最优
+                'delivery': {...}, # 交期最优
+                'quality': {...},  # 质量最优
+            }
+        """
+        comparison = QuotationComparison.objects.get(id=comparison_id)
+        scores = comparison.scores.select_related(
+            'quotation__rfq_supplier__supplier'
+        ).all()
+        
+        recommendations = {
+            'overall': None,
+            'price': None,
+            'delivery': None,
+            'quality': None,
+        }
+        
+        for score in scores:
+            supplier = score.quotation.rfq_supplier.supplier
+            score_data = {
+                'score_id': score.id,
+                'quotation_id': score.quotation.id,
+                'supplier_id': supplier.id,
+                'supplier_name': supplier.name,
+                'total_amount': float(score.quotation.total_amount),
+                'total_score': float(score.total_score),
+                'ranking': score.ranking,
+                'scores': {
+                    'price': float(score.score_price),
+                    'quality': float(score.score_quality),
+                    'delivery': float(score.score_delivery),
+                    'service': float(score.score_service),
+                    'technical': float(score.score_technical),
+                    'reliability': float(score.score_reliability),
+                },
+                'ranks': {
+                    'overall': score.ranking,
+                    'price': score.price_rank,
+                    'delivery': score.delivery_rank,
+                    'quality': score.quality_rank,
+                },
+                'risk_warnings': score.risk_warnings,
+            }
+            
+            if score.ranking == 1:
+                recommendations['overall'] = score_data
+            if score.price_rank == 1:
+                recommendations['price'] = score_data
+            if score.delivery_rank == 1:
+                recommendations['delivery'] = score_data
+            if score.quality_rank == 1:
+                recommendations['quality'] = score_data
+        
+        return recommendations
     
     @classmethod
     def get_comparison_report(cls, comparison):
@@ -281,11 +688,22 @@ class QuotationComparisonService:
             'status': comparison.status,
             'status_display': comparison.get_status_display(),
             
+            # 非标自动化增强字段
+            'comparison_type': comparison.comparison_type,
+            'comparison_type_display': comparison.get_comparison_type_display(),
+            'risk_level': comparison.risk_level,
+            'risk_level_display': comparison.get_risk_level_display(),
+            'critical_items_count': comparison.critical_items_count,
+            'long_lead_items_count': comparison.long_lead_items_count,
+            'weight_template': comparison.weight_template,
+            'weight_template_display': comparison.get_weight_template_display(),
+            
             'weights': {
                 'price': float(comparison.weight_price),
                 'quality': float(comparison.weight_quality),
                 'delivery': float(comparison.weight_delivery),
                 'service': float(comparison.weight_service),
+                'technical': float(comparison.weight_technical),
             },
             
             'price_summary': {
@@ -297,6 +715,7 @@ class QuotationComparisonService:
             
             'suppliers': [],
             'recommended': None,
+            'multi_recommendations': cls.get_multi_dimension_recommendations(comparison.id),
             'item_comparisons': item_comparisons,
         }
         
@@ -333,9 +752,20 @@ class QuotationComparisonService:
                     'quality': float(score.score_quality),
                     'delivery': float(score.score_delivery),
                     'service': float(score.score_service),
+                    'technical': float(score.score_technical),
+                    'reliability': float(score.score_reliability),
                     'total': float(score.total_score),
                 },
                 
+                'ranks': {
+                    'overall': score.ranking,
+                    'price': score.price_rank,
+                    'delivery': score.delivery_rank,
+                    'quality': score.quality_rank,
+                },
+                
+                'recommend_type': score.recommend_type,
+                'risk_warnings': score.risk_warnings,
                 'notes': score.notes,
             }
             

@@ -122,16 +122,17 @@
     <el-dialog v-model="createDialogVisible" title="新建采购对账单" width="600px">
       <el-form :model="createForm" ref="createFormRef" label-width="100px" :rules="createRules">
         <el-form-item label="供应商" prop="supplier">
-          <el-select v-model="createForm.supplier" placeholder="选择供应商" filterable style="width: 100%;">
+          <el-select v-model="createForm.supplier" placeholder="选择供应商" filterable style="width: 100%;" @change="fetchOpeningBalance">
             <el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="对账期间" prop="period">
-          <el-date-picker v-model="createForm.period" type="monthrange" range-separator="至"
-            start-placeholder="开始月" end-placeholder="结束月" value-format="YYYY-MM-DD" style="width: 100%;" />
+          <el-date-picker v-model="createForm.period" type="daterange" range-separator="至"
+            start-placeholder="开始日期" end-placeholder="结束日期" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width: 100%;" />
         </el-form-item>
         <el-form-item label="期初余额">
           <el-input-number v-model="createForm.opening_balance" :precision="2" style="width: 100%;" />
+          <div class="form-tip">选择供应商后自动计算，可手动修改</div>
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="createForm.notes" type="textarea" :rows="2" />
@@ -529,6 +530,27 @@ const resetSearch = () => {
 const handleCreate = () => {
   Object.assign(createForm, { supplier: null, period: null, opening_balance: 0, notes: '' })
   createDialogVisible.value = true
+}
+
+// 获取供应商期初余额
+const fetchOpeningBalance = async (supplierId) => {
+  if (!supplierId) {
+    createForm.opening_balance = 0
+    return
+  }
+  try {
+    const res = await request.get('/finance/purchase-reconciliations/get_opening_balance/', {
+      params: { supplier: supplierId }
+    })
+    createForm.opening_balance = res.opening_balance || 0
+    if (res.source === 'last_reconciliation' && res.last_period) {
+      ElMessage.info(`已自动填入上期(${res.last_period})期末余额`)
+    } else if (res.source === 'account_payable') {
+      ElMessage.info('已自动填入应付账款余额')
+    }
+  } catch (error) {
+    console.error('获取期初余额失败:', error)
+  }
 }
 
 const submitCreate = async () => {
@@ -943,4 +965,11 @@ onMounted(() => {
 .aging-item .label { color: #606266; }
 .aging-item .value { font-weight: bold; font-size: 16px; }
 .aging-item.warning .value { color: #e6a23c; }
+
+.form-tip {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.5;
+  margin-top: 4px;
+}
 </style>

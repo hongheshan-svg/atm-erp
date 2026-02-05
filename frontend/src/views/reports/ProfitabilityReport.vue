@@ -7,18 +7,19 @@
 
       <el-form :inline="true" :model="searchForm" class="search-form">
         <el-form-item label="项目">
-          <el-select v-model="searchForm.project" placeholder="选择项目" clearable filterable>
-            <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
+          <el-select v-model="searchForm.project" placeholder="选择项目" clearable filterable style="width: 240px" @change="loadReport">
+            <el-option v-for="p in projects" :key="p.id" :label="`${p.code} - ${p.name}`" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="searchForm.status" placeholder="选择状态" clearable>
+          <el-select v-model="searchForm.status" placeholder="选择状态" clearable style="width: 160px" @change="loadReport">
             <el-option label="规划中" value="PLANNING" />
-            <el-option label="进行中" value="ACTIVE" />
-            <el-option label="暂停" value="PAUSED" />
+            <el-option label="进行中" value="IN_PROGRESS" />
+            <el-option label="调试中" value="DEBUGGING" />
+            <el-option label="安装中" value="INSTALLATION" />
             <el-option label="已完成" value="COMPLETED" />
+            <el-option label="已暂停" value="SUSPENDED" />
             <el-option label="已取消" value="CANCELLED" />
-            <el-option label="全部" value="" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -103,11 +104,19 @@ const formatCurrency = (value) => {
 
 const getStatusLabel = (status) => {
   const labels = {
+    'DRAFT': '草稿',
     'PLANNING': '规划中',
+    'PENDING': '审批中',
+    'REJECTED': '已拒绝',
+    'IN_PROGRESS': '进行中',
     'ACTIVE': '进行中',
-    'PAUSED': '暂停',
+    'DEBUGGING': '调试中',
+    'INSTALLATION': '安装中',
+    'PAUSED': '已暂停',
+    'SUSPENDED': '已暂停',
     'COMPLETED': '已完成',
-    'CANCELLED': '已取消'
+    'CANCELLED': '已取消',
+    'ARCHIVED': '已归档'
   }
   return labels[status] || status
 }
@@ -115,9 +124,17 @@ const getStatusLabel = (status) => {
 const getStatusType = (status) => {
   const types = {
     'DRAFT': 'info',
+    'PLANNING': 'info',
+    'PENDING': 'warning',
+    'REJECTED': 'danger',
+    'IN_PROGRESS': 'success',
     'ACTIVE': 'success',
+    'DEBUGGING': 'warning',
+    'INSTALLATION': 'primary',
     'PAUSED': 'warning',
-    'COMPLETED': 'primary',
+    'SUSPENDED': 'warning',
+    'COMPLETED': 'success',
+    'CANCELLED': 'danger',
     'ARCHIVED': 'info'
   }
   return types[status] || 'info'

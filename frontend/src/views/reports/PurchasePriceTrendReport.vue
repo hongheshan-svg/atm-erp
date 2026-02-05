@@ -192,10 +192,10 @@ const loadReport = async () => {
     results.forEach(item => {
       // 每个物料的 trend_data 包含了该物料的所有采购记录
       if (item.trend_data && item.trend_data.length > 0) {
-        item.trend_data.forEach((trend, index) => {
+        item.trend_data.forEach((trend) => {
           items.push({
             purchase_date: trend.date,
-            purchase_order_no: `PO-${index + 1}`, // 后端没返回订单号，使用占位符
+            purchase_order_no: trend.order_no || '-',
             supplier_name: trend.supplier,
             item_sku: item.item_sku,
             item_name: item.item_name,

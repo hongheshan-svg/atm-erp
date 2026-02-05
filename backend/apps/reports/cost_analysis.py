@@ -24,23 +24,25 @@ class ProjectCostAnalysisView(APIView):
             return Response({'error': '请选择项目'}, status=400)
         
         try:
-            project = Project.objects.get(id=project_id)
+            project = Project.objects.select_related('sales_order').get(id=project_id)
         except Project.DoesNotExist:
             return Response({'error': '项目不存在'}, status=404)
         
-        # 1. 采购成本
+        # 1. 采购成本 (只统计已确认/已完成的采购订单)
         from apps.purchase.models import PurchaseOrderLine
         purchase_cost = PurchaseOrderLine.objects.filter(
             po__project_id=project_id,
+            po__status__in=['CONFIRMED', 'PARTIAL', 'COMPLETED'],
             po__is_deleted=False
         ).aggregate(
             total=Sum(F('qty') * F('unit_price'))
         )['total'] or Decimal('0')
         
-        # 2. 外协成本
+        # 2. 外协成本 (只统计已确认/已完成的外协订单)
         from apps.purchase.outsource_models import OutsourceOrderLine
         outsource_cost = OutsourceOrderLine.objects.filter(
             outsource_order__project_id=project_id,
+            outsource_order__status__in=['CONFIRMED', 'IN_PROGRESS', 'COMPLETED'],
             outsource_order__is_deleted=False
         ).aggregate(
             total=Sum(F('qty') * F('unit_price'))
@@ -54,31 +56,49 @@ class ProjectCostAnalysisView(APIView):
         ).aggregate(total=Sum('hours'))['total'] or Decimal('0')
         labor_cost = Decimal(str(total_hours)) * hourly_rate
         
-        # 4. 按阶段分析人工
-        labor_by_phase = TimeLog.objects.filter(
+        # 4. 按任务分析人工
+        labor_by_phase_qs = TimeLog.objects.filter(
             project_id=project_id,
             is_deleted=False
         ).values(
-            'task__task_type'
+            'task__name'
         ).annotate(
-            hours=Sum('hours'),
-            cost=Sum('hours') * hourly_rate
-        ).order_by('-hours')
+            hours=Sum('hours')
+        ).order_by('-hours')[:10]  # 只取前10个任务
         
-        # 5. 物料领用成本
-        from apps.inventory.models import StockOut
-        material_cost = StockOut.objects.filter(
+        # 在Python中计算成本
+        labor_by_phase = []
+        for item in labor_by_phase_qs:
+            hours = float(item['hours'] or 0)
+            labor_by_phase.append({
+                'task__name': item['task__name'],
+                'hours': hours,
+                'cost': hours * float(hourly_rate)
+            })
+        
+        # 5. 物料领用成本 (从项目出库记录)
+        from apps.inventory.models import StockMove
+        material_cost = StockMove.objects.filter(
             project_id=project_id,
+            move_type='OUT_PROJECT',
+            status='COMPLETED',
             is_deleted=False
         ).aggregate(
-            total=Sum(F('quantity') * F('unit_cost'))
+            total=Sum(F('qty') * F('unit_cost'))
         )['total'] or Decimal('0')
         
         # 总成本
         total_cost = purchase_cost + outsource_cost + labor_cost + material_cost
         
-        # 项目预算金额（作为合同金额）
-        contract_amount = project.budget_total or Decimal('0')
+        # 合同金额：优先使用关联销售订单金额，否则使用项目预算
+        contract_amount = Decimal('0')
+        contract_source = 'none'
+        if project.sales_order and project.sales_order.total_with_tax:
+            contract_amount = project.sales_order.total_with_tax
+            contract_source = 'sales_order'
+        elif project.budget_total:
+            contract_amount = project.budget_total
+            contract_source = 'budget'
         
         # 毛利分析
         gross_profit = contract_amount - total_cost
@@ -102,7 +122,7 @@ class ProjectCostAnalysisView(APIView):
                 'project_no': project.code,
                 'name': project.name,
                 'status': project.status,
-                'contract_amount': float(contract_amount),
+                'sales_order_no': project.sales_order.order_no if project.sales_order else None,
             },
             'cost_summary': {
                 'purchase_cost': float(purchase_cost),
@@ -115,12 +135,19 @@ class ProjectCostAnalysisView(APIView):
             },
             'profitability': {
                 'contract_amount': float(contract_amount),
+                'contract_source': contract_source,  # 'sales_order' 或 'budget' 或 'none'
                 'total_cost': float(total_cost),
                 'gross_profit': float(gross_profit),
                 'gross_margin': round(gross_margin, 2),
             },
             'cost_breakdown': cost_breakdown,
             'labor_by_phase': list(labor_by_phase),
+            'data_sources': {
+                'purchase_cost': '已确认/部分完成/已完成的采购订单',
+                'outsource_cost': '已确认/进行中/已完成的外协订单',
+                'labor_cost': '项目工时记录 × 时薪单价',
+                'material_cost': '项目出库记录（已完成）',
+            }
         })
 
 
