@@ -53,9 +53,12 @@ class ProjectProfitabilityReportView(APIView):
         
         projects_data = []
         
-        for project in queryset:
-            # 合同金额
-            contract_amount = float(project.contract_amount or 0)
+        for project in queryset.select_related('sales_order', 'customer'):
+            # 合同金额：优先使用关联销售订单金额，否则使用项目预算
+            if project.sales_order and hasattr(project.sales_order, 'total_with_tax') and project.sales_order.total_with_tax:
+                contract_amount = float(project.sales_order.total_with_tax)
+            else:
+                contract_amount = float(project.budget_total or 0)
             
             # 实际成本
             costs = ProjectCostRecord.objects.filter(
@@ -80,7 +83,7 @@ class ProjectProfitabilityReportView(APIView):
             
             projects_data.append({
                 'project_id': project.id,
-                'project_no': project.project_no,
+                'project_no': project.code,
                 'project_name': project.name,
                 'customer_name': project.customer.name if project.customer else '',
                 'status': project.status,
@@ -228,31 +231,32 @@ class CapacityUtilizationReportView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        from apps.production.models import WorkCenter, ProductionOrder
+        from apps.production.models import WorkCenter
+        from apps.production.aps import ScheduleOrder
         from apps.production.routing import WorkStation
-        
+
         start_date = request.query_params.get('start_date', str(date.today() - timedelta(days=30)))
         end_date = request.query_params.get('end_date', str(date.today()))
-        
+
         # 计算工作天数
         start = date.fromisoformat(start_date)
         end = date.fromisoformat(end_date)
         work_days = (end - start).days + 1
         daily_hours = 8
-        
+
         # 工作中心利用率
         work_centers = []
         for wc in WorkCenter.objects.filter(is_deleted=False):
             # 计划工时
-            planned = ProductionOrder.objects.filter(
+            planned = ScheduleOrder.objects.filter(
                 work_center=wc,
-                planned_start_date__lte=end,
-                planned_end_date__gte=start,
+                planned_start__lte=end,
+                planned_end__gte=start,
                 is_deleted=False
             ).aggregate(total=Sum('planned_hours'))['total'] or 0
-            
+
             # 可用工时
-            available = work_days * daily_hours * float(wc.capacity or 1)
+            available = work_days * daily_hours * float(wc.capacity_per_day or 1)
             
             utilization = (float(planned) / available * 100) if available > 0 else 0
             
@@ -326,7 +330,7 @@ class CustomerValueReportView(APIView):
                 is_deleted=False
             )
             project_count = projects.count()
-            project_amount = projects.aggregate(total=Sum('contract_amount'))['total'] or 0
+            project_amount = projects.aggregate(total=Sum('budget_total'))['total'] or 0
             
             # 订单统计
             orders = SalesOrder.objects.filter(
@@ -353,7 +357,7 @@ class CustomerValueReportView(APIView):
                 customers_data.append({
                     'customer_id': customer.id,
                     'customer_name': customer.name,
-                    'industry': customer.industry or '',
+                    'industry': getattr(customer, 'industry', '') or '',
                     'project_count': project_count,
                     'project_amount': float(project_amount),
                     'order_count': order_count,

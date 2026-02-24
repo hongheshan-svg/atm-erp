@@ -1,20 +1,26 @@
 """
 非标自动化行业ERP权限配置
 
+行业特点：
+- 公司规模通常50-200人，团队小、协作紧密
+- 以项目为核心：销售→设计→BOM→采购→生产→调试→交付
+- 跨部门协作频繁：工程师、采购、项目经理需要相互了解进度
+- 数据透明度高：除核心财务数据外，业务数据应尽量开放
+
 设计原则：
-1. 项目数据全员可查看 - 促进团队协作
-2. 财务敏感数据严格控制 - 保护商业机密
-3. 操作权限按角色分配 - 确保流程规范
-4. 查看权限和操作权限分离
+1. 项目/生产/库存/采购/销售 - 全员可查看，促进协作
+2. 财务核心数据（账款、发票、税务、总账）- 仅财务和管理层可见
+3. 财务业务数据（对账、付款计划、报销）- 相关业务人员也可使用
+4. 操作权限和查看权限分离 - 能看不代表能改
+5. 菜单权限控制页面入口，数据权限控制数据范围
 
 权限类型：
-- view_all: 查看所有数据
+- view_all: 查看所有数据（全员可见）
 - view_related: 查看关联数据（项目成员、负责人等）
 - view_department: 查看部门数据
 - view_self: 仅查看自己的数据
-- edit: 编辑权限
-- delete: 删除权限
-- approve: 审批权限
+- restricted: 仅特定角色可查看
+- admin_only: 仅管理员可查看
 """
 
 # ============================================================
@@ -23,9 +29,10 @@
 
 MODULE_VIEW_POLICY = {
     # ========== 全员可查看的模块 ==========
+    
     # 项目相关 - 促进团队协作
     'projects': {
-        'default_view': 'view_all',  # 全员可查看所有项目
+        'default_view': 'view_all',
         'description': '项目数据全员可见，促进团队协作',
         'models': {
             'project': 'view_all',
@@ -36,6 +43,7 @@ MODULE_VIEW_POLICY = {
             'ecnchange': 'view_all',
             'drawing': 'view_all',
             'bug': 'view_all',
+            'aftersalesorder': 'view_all',  # 售后工单全员可见
         }
     },
     
@@ -62,6 +70,9 @@ MODULE_VIEW_POLICY = {
             'supplier': 'view_all',
             'warehouse': 'view_all',
             'location': 'view_all',
+            'creditlevel': 'view_all',
+            'customercredit': 'view_all',
+            'creditadjustment': 'view_all',
         }
     },
     
@@ -80,52 +91,123 @@ MODULE_VIEW_POLICY = {
         }
     },
     
-    # ========== 部门/关联人员可查看的模块 ==========
-    # 采购相关 - 相关人员可查看
+    # 采购相关 - 全员可查看（非标自动化行业项目制，需要跨部门跟踪采购进度）
+    # 注意：采购价格对项目成员可见，便于成本控制（见SENSITIVE_FIELDS配置）
     'purchase': {
-        'default_view': 'view_related',
-        'description': '采购数据相关人员可见',
+        'default_view': 'view_all',
+        'description': '采购数据全员可见（非标行业项目制需要跨部门跟踪采购进度）',
         'models': {
-            'purchaserequest': 'view_related',  # 申请人、项目成员可见
-            'supplierquotation': 'view_related',
-            'purchaseorder': 'view_related',
-            'outsourceorder': 'view_related',
-            'arrivalinspection': 'view_related',
+            'purchaserequest': 'view_all',
+            'purchaseorder': 'view_all',
+            'goodsreceipt': 'view_all',
+            'purchasecontract': 'view_all',
+            'outsourceorder': 'view_all',
+            'outsourceorderline': 'view_all',
+            'outsourcereceipt': 'view_all',
+            'rfq': 'view_all',
+            'supplierquotation': 'view_all',
+            'quotationcomparison': 'view_all',
+            'supplierevaluation': 'view_all',
+            'supplierblacklist': 'view_all',
+            'supplierqualification': 'view_all',
+            'contractexecution': 'view_all',
+            'reconciliationcollaboration': 'view_all',
         }
     },
     
-    # 销售相关 - 相关人员可查看
+    # 销售相关 - 全员可查看（非标行业项目从销售开始，全程需要跟踪）
+    # 注意：利润率等敏感字段通过SENSITIVE_FIELDS控制
     'sales': {
-        'default_view': 'view_related',
-        'description': '销售数据相关人员可见',
+        'default_view': 'view_all',
+        'description': '销售数据全员可见（非标行业项目从销售开始，全程跟踪）',
         'models': {
-            'salesquotation': 'view_related',
-            'salesorder': 'view_related',
-            'salescontract': 'view_related',
-            'deliveryorder': 'view_related',
+            'salesquotation': 'view_all',
+            'salesorder': 'view_all',
+            'salescontract': 'view_all',
+            'deliveryorder': 'view_all',
         }
     },
     
-    # 售后相关 - 相关人员可查看
+    # 售后相关 - 全员可查看（售后问题需要多部门协作解决）
     'aftersales': {
-        'default_view': 'view_related',
-        'description': '售后数据相关人员可见',
+        'default_view': 'view_all',
+        'description': '售后数据全员可见，便于多部门协作解决客户问题',
+    },
+    
+    # OA协同 - 全员可查看（公告、日程等协同数据）
+    'oa': {
+        'default_view': 'view_all',
+        'description': 'OA协同数据全员可见',
     },
     
     # ========== 敏感数据 - 严格控制 ==========
-    # 财务相关 - 仅财务人员和管理层可查看
+    
+    # 财务相关 - 核心财务数据受限，业务协作数据开放
     'finance': {
         'default_view': 'restricted',
-        'description': '财务数据受限，仅财务人员和管理层可见',
+        'description': '财务核心数据受限，业务协作数据按需开放',
         'sensitive': True,
-        'allowed_roles': ['admin', 'general_manager', 'finance_manager', 'finance_staff', 'accountant'],
+        'allowed_roles': [
+            'admin', 'general_manager',
+            'finance_manager', 'finance_staff', 'accountant',
+            # 采购/销售经理需要查看部分财务数据（应付/应收）
+            'purchase_manager', 'sales_manager',
+        ],
         'models': {
-            'expensereimbursement': 'view_self',  # 自己的报销单可见
-            'publicexpenseallocation': 'restricted',
-            'accountsreceivable': 'restricted',
-            'accountspayable': 'restricted',
-            'invoice': 'restricted',
-            'projectcost': 'restricted',
+            # === 全员可用的财务功能 ===
+            'expense': 'view_self',              # 费用报销 - 自己的可见
+            'expensereimbursement': 'view_self',  # 报销单 - 自己的可见
+            'currency': 'view_all',               # 币种 - 参考数据，全员可见
+
+            # === 业务协作数据 - 相关团队需要使用 ===
+            # 对账模块 - 采购/销售团队日常工作需要
+            'purchasereconciliation': 'view_all',
+            'purchasereconciliationline': 'view_all',
+            'salesreconciliation': 'view_all',
+            'salesreconciliationline': 'view_all',
+            'invoicereconciliation': 'view_all',
+            'invoicereconciliationline': 'view_all',
+            # 付款计划 - 采购/项目团队需要跟踪付款节点
+            'paymentschedule': 'view_all',
+            'purchasepaymentschedule': 'view_all',
+            # 付款申请 - 各部门都可能发起
+            'paymentrequest': 'view_all',
+            # 回款计划 - 销售/项目团队需要跟踪回款
+            'collectionplan': 'view_all',
+            'collectionmilestone': 'view_all',
+            'collectionrecord': 'view_all',
+            'collectionreminder': 'view_all',
+
+            # === 核心财务数据 - 仅财务和管理层 ===
+            'accountsreceivable': 'restricted',   # 应收账款
+            'accountspayable': 'restricted',       # 应付账款
+            'invoice': 'restricted',               # 发票管理
+            'payment': 'restricted',               # 付款记录
+            'projectcost': 'restricted',           # 项目成本
+            'publicexpenseallocation': 'restricted', # 公共费用分摊
+            'sharedexpense': 'restricted',         # 共享费用
+            'sharedexpenseallocation': 'restricted',
+            # 银行流水 - 高度敏感
+            'bankstatement': 'restricted',
+            'bankstatementimportlog': 'restricted',
+            # 固定资产 - 财务管理
+            'fixedasset': 'restricted',
+            'assetcategory': 'view_all',           # 资产分类 - 参考数据
+            'assetdepreciation': 'restricted',
+            'assettransfer': 'restricted',
+            'assetdisposal': 'restricted',
+            # 总账管理 - 高度敏感
+            'chartofaccount': 'restricted',
+            'accountcategory': 'restricted',
+            'fiscalperiod': 'restricted',
+            'journalvoucher': 'restricted',
+            'accountbalance': 'restricted',
+            # 税务管理 - 高度敏感
+            'taxtype': 'restricted',
+            'taxrate': 'restricted',
+            'taxperiod': 'restricted',
+            'taxdeclaration': 'restricted',
+            'taxinvoice': 'restricted',
         }
     },
     
@@ -133,48 +215,127 @@ MODULE_VIEW_POLICY = {
     'accounts': {
         'default_view': 'admin_only',
         'description': '用户管理仅管理员可操作',
+        'models': {
+            # 考勤记录 - 自己可见，管理员可见全部
+            'attendancerecord': 'view_self',
+            'leaverequest': 'view_self',
+            'overtimerequest': 'view_self',
+        }
     },
     
     'core': {
         'default_view': 'admin_only',
         'description': '系统配置仅管理员可操作',
+        'models': {
+            # 工作流任务 - 全员可见自己的待办
+            'workflowinstance': 'view_all',
+            'workflowtask': 'view_all',
+        }
     },
 }
 
 
 # ============================================================
 # 敏感字段配置 - 即使有查看权限也隐藏的字段
+# 
+# 设计思路：
+# - 采购价格是核心商业机密，仅采购/财务/管理层可见
+# - 销售利润率仅销售经理/财务/管理层可见
+# - 银行账户信息仅财务可见
+# - 项目预算仅项目经理/财务/管理层可见
 # ============================================================
 
 SENSITIVE_FIELDS = {
-    # 财务敏感字段
+    # 财务敏感字段 - 银行账户等信息
     'finance': {
-        'all': ['bank_account', 'bank_name', 'tax_id'],  # 所有模型隐藏
+        'all': ['bank_account', 'bank_name', 'tax_id'],
     },
+
+    # 基础数据敏感字段
     'masterdata': {
         'customer': ['credit_limit', 'payment_terms', 'bank_account', 'bank_name'],
         'supplier': ['credit_rating', 'bank_account', 'bank_name'],
+        # 物料主数据中的价格信息
+        'item': ['purchase_price', 'standard_cost', 'last_purchase_price', 'sale_price'],
     },
+
+    # 销售敏感字段 - 利润率是高度机密
     'sales': {
         'salesorder': ['profit_margin', 'cost_amount'],
         'salesquotation': ['cost_amount', 'profit_margin'],
         'salescontract': ['profit_analysis'],
     },
+
+    # ========== 采购价格敏感字段（核心保护对象）==========
     'purchase': {
-        'purchaseorder': [],  # 采购价格对项目成员可见，便于成本控制
+        # 采购申请 - 预估价格
+        'purchaserequest': ['total_amount', 'tax_amount', 'total_with_tax'],
+        'purchaserequestline': ['estimated_price', 'line_amount'],
+        # 采购订单 - 实际采购价格（最敏感）
+        'purchaseorder': ['total_amount', 'tax_amount', 'total_with_tax'],
+        'purchaseorderline': ['unit_price', 'line_amount'],
+        # 采购合同
+        'purchasecontract': ['total_amount', 'tax_amount', 'total_with_tax'],
+        # 询价单 - 目标价格和历史价格
+        'rfqline': ['target_price', 'last_price'],
+        # 供应商报价 - 高度敏感
+        'supplierquotation': [
+            'total_amount', 'tax_amount', 'total_with_tax',
+            'last_purchase_price', 'price_change_rate',
+        ],
+        'supplierquotationline': [
+            'unit_price', 'unit_price_with_tax', 'line_amount',
+            'line_amount_with_tax', 'sample_unit_price',
+            'last_unit_price', 'price_change_rate',
+        ],
+        # 比价分析 - 包含竞价信息
+        'quotationcomparison': ['min_price', 'max_price', 'avg_price', 'weight_price'],
+        'quotationscore': ['score_price', 'price_rank'],
+        # 价格历史
+        'itempricehistory': ['unit_price'],
+        # 外协加工
+        'outsourceorder': ['total_amount', 'tax_amount', 'total_with_tax'],
+        'outsourceorderline': ['unit_price', 'process_amount'],
     },
+
+    # 库存成本敏感字段
+    'inventory': {
+        'stock': ['weighted_avg_cost'],
+        'stockmove': ['unit_cost'],
+        'stockadjustmentline': ['cost_impact'],
+        'batch': ['unit_cost'],
+        'inventorylot': ['unit_cost'],
+        'lotconsumption': ['unit_cost', 'total_cost'],
+        'materialrequisitionline': ['unit_cost'],
+        'materialreturnline': ['unit_cost'],
+    },
+
+    # 项目敏感字段
     'projects': {
-        'project': ['budget_amount', 'actual_cost'],  # 项目预算敏感
+        'project': ['budget_amount', 'actual_cost'],
     },
 }
 
+# ============================================================
 # 可以查看敏感字段的角色
+# 非标自动化行业：采购价格对采购团队、项目经理、财务、管理层可见
+# 生产/仓库/普通员工不可见
+# ============================================================
+
 SENSITIVE_FIELD_ALLOWED_ROLES = [
     'admin',
-    'general_manager', 
+    'general_manager',
+    # 财务团队 - 对账、核算需要
     'finance_manager',
     'finance_staff',
-    'project_manager',  # 项目经理可以看自己项目的成本
+    'accountant',
+    # 采购团队 - 核心使用者
+    'purchase_manager',
+    'purchaser',
+    # 销售经理 - 报价定价需要了解成本
+    'sales_manager',
+    # 项目经理 - 项目成本控制需要
+    'project_manager',
 ]
 
 
@@ -303,6 +464,7 @@ OPERATION_PERMISSIONS = {
 
 # ============================================================
 # 默认角色配置 - 系统初始化时创建
+# 非标自动化行业特点：团队小、协作紧密，数据范围不宜过度限制
 # ============================================================
 
 DEFAULT_ROLES = [
@@ -316,15 +478,15 @@ DEFAULT_ROLES = [
     {
         'code': 'general_manager',
         'name': '总经理',
-        'description': '公司最高管理层，可查看所有数据',
+        'description': '公司最高管理层，可查看所有数据包括财务',
         'data_scope': 'ALL',
         'permissions': {'can_view_finance': True, 'can_approve_all': True}
     },
     {
         'code': 'project_manager',
         'name': '项目经理',
-        'description': '负责项目整体管理，可查看项目相关所有数据',
-        'data_scope': 'ALL',  # 项目数据全员可见，项目经理有编辑权
+        'description': '负责项目整体管理，跟踪采购、生产、交付全流程',
+        'data_scope': 'ALL',
         'permissions': {'can_view_project_cost': True}
     },
     {
@@ -344,29 +506,29 @@ DEFAULT_ROLES = [
     {
         'code': 'sales_manager',
         'name': '销售经理',
-        'description': '负责销售团队管理',
-        'data_scope': 'DEPARTMENT',
-        'permissions': {'can_view_sales_all': True, 'can_approve_quotation': True}
+        'description': '负责销售团队管理，可查看应收账款',
+        'data_scope': 'ALL',
+        'permissions': {'can_view_sales_all': True, 'can_approve_quotation': True, 'can_view_finance': True}
     },
     {
         'code': 'salesperson',
         'name': '销售员',
         'description': '负责客户开发和订单跟进',
-        'data_scope': 'SELF',
+        'data_scope': 'DEPARTMENT',  # 非标行业销售团队小，部门内数据互通
         'permissions': {}
     },
     {
         'code': 'purchase_manager',
         'name': '采购经理',
-        'description': '负责采购团队管理',
-        'data_scope': 'DEPARTMENT',
-        'permissions': {'can_view_purchase_all': True, 'can_approve_po': True}
+        'description': '负责采购团队管理，可查看应付账款',
+        'data_scope': 'ALL',
+        'permissions': {'can_view_purchase_all': True, 'can_approve_po': True, 'can_view_finance': True}
     },
     {
         'code': 'purchaser',
         'name': '采购员',
-        'description': '负责物料采购',
-        'data_scope': 'SELF',
+        'description': '负责物料采购和供应商协调',
+        'data_scope': 'ALL',  # 非标行业采购团队通常2-5人，需互相协作处理采购事务
         'permissions': {}
     },
     {
@@ -384,9 +546,16 @@ DEFAULT_ROLES = [
         'permissions': {'can_view_finance': True}
     },
     {
+        'code': 'accountant',
+        'name': '会计',
+        'description': '负责记账、对账、报税',
+        'data_scope': 'ALL',
+        'permissions': {'can_view_finance': True}
+    },
+    {
         'code': 'warehouse_manager',
         'name': '仓库主管',
-        'description': '负责仓库管理',
+        'description': '负责仓库管理和出入库审批',
         'data_scope': 'ALL',
         'permissions': {'can_approve_material': True}
     },
@@ -414,7 +583,7 @@ DEFAULT_ROLES = [
     {
         'code': 'qa_engineer',
         'name': '质量工程师',
-        'description': '负责质量检验和管理',
+        'description': '负责来料检验和出厂质检',
         'data_scope': 'ALL',
         'permissions': {}
     },

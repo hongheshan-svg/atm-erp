@@ -17,13 +17,6 @@ from .kanban import (
     ProductionKanbanView, WorkCenterKanbanView,
     ProductionTrendView, AndonAlertView
 )
-from .traceability import (
-    ProductBatchViewSet, TraceSearchView
-)
-from .spc import (
-    ControlChartViewSet, SPCDataPointViewSet, SubgroupStatisticsViewSet,
-    ProcessCapabilityViewSet, SPCAlarmViewSet
-)
 from .andon import (
     AndonTypeViewSet, AndonStationViewSet, AndonCallViewSet, AndonActionViewSet
 )
@@ -39,11 +32,6 @@ from .routing import (
 )
 from .assembly_guide import (
     AssemblyGuideViewSet, AssemblyStepViewSet, AssemblySessionViewSet
-)
-from .smart_scheduling import (
-    SchedulingObjectiveViewSet, SchedulingConstraintViewSet,
-    SchedulingScenarioViewSet, ResourceConflictViewSet,
-    BottleneckAnalysisViewSet, SchedulingComparisonViewSet
 )
 from .capacity_planning import (
     ResourceTypeViewSet, ResourceViewSet, ResourceAllocationViewSet,
@@ -65,16 +53,6 @@ router.register(r'inspection-items', InspectionItemViewSet, basename='inspection
 router.register(r'work-centers', WorkCenterViewSet, basename='work-center')
 router.register(r'schedule-orders', ScheduleOrderViewSet, basename='schedule-order')
 router.register(r'schedule-tasks', APSScheduleTaskViewSet, basename='schedule-task')
-
-# 追溯管理
-router.register(r'product-lots', ProductBatchViewSet, basename='product-lot')
-
-# SPC 统计过程控制
-router.register(r'control-charts', ControlChartViewSet, basename='control-chart')
-router.register(r'spc-data-points', SPCDataPointViewSet, basename='spc-data-point')
-router.register(r'subgroup-stats', SubgroupStatisticsViewSet, basename='subgroup-stat')
-router.register(r'process-capabilities', ProcessCapabilityViewSet, basename='process-capability')
-router.register(r'spc-alarms', SPCAlarmViewSet, basename='spc-alarm')
 
 # 安灯系统
 router.register(r'andon-types', AndonTypeViewSet, basename='andon-type')
@@ -106,14 +84,6 @@ router.register(r'assembly-guides', AssemblyGuideViewSet, basename='assembly-gui
 router.register(r'assembly-steps', AssemblyStepViewSet, basename='assembly-step')
 router.register(r'assembly-sessions', AssemblySessionViewSet, basename='assembly-session')
 
-# 智能排产优化
-router.register(r'scheduling-objectives', SchedulingObjectiveViewSet, basename='scheduling-objective')
-router.register(r'scheduling-constraints', SchedulingConstraintViewSet, basename='scheduling-constraint')
-router.register(r'scheduling-scenarios', SchedulingScenarioViewSet, basename='scheduling-scenario')
-router.register(r'resource-conflicts', ResourceConflictViewSet, basename='resource-conflict')
-router.register(r'bottleneck-analyses', BottleneckAnalysisViewSet, basename='bottleneck-analysis')
-router.register(r'scheduling-comparisons', SchedulingComparisonViewSet, basename='scheduling-comparison')
-
 # 产能资源规划
 router.register(r'resource-types', ResourceTypeViewSet, basename='resource-type')
 router.register(r'resources', ResourceViewSet, basename='resource')
@@ -128,9 +98,6 @@ urlpatterns = [
     path('kanban/work-center/<int:work_center_id>/', WorkCenterKanbanView.as_view(), name='work-center-kanban'),
     path('kanban/trend/', ProductionTrendView.as_view(), name='production-trend'),
     path('kanban/alerts/', AndonAlertView.as_view(), name='andon-alerts'),
-    
-    # 追溯搜索
-    path('traceability/search/', TraceSearchView.as_view(), name='traceability-search'),
     
     # 产能资源规划看板
     path('capacity/dashboard/', CapacityDashboardView.as_view(), name='capacity-dashboard'),

@@ -16,6 +16,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from apps.core.models import BaseModel
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.data_permission import DataPermissionMixin
 
 
 class TaxType(BaseModel):
@@ -488,7 +489,7 @@ class TaxInvoiceSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
-class TaxTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TaxTypeViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """税种管理"""
     queryset = TaxType.objects.filter(is_deleted=False)
     serializer_class = TaxTypeSerializer
@@ -497,7 +498,7 @@ class TaxTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     search_fields = ['code', 'name']
 
 
-class TaxRateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TaxRateViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """税率管理"""
     queryset = TaxRate.objects.filter(is_deleted=False)
     serializer_class = TaxRateSerializer
@@ -518,7 +519,7 @@ class TaxRateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         return Response(self.get_serializer(rates, many=True).data)
 
 
-class TaxPeriodViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TaxPeriodViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """税务期间管理"""
     queryset = TaxPeriod.objects.filter(is_deleted=False)
     serializer_class = TaxPeriodSerializer
@@ -591,7 +592,7 @@ class TaxPeriodViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
         })
 
 
-class TaxDeclarationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TaxDeclarationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """税务申报管理"""
     queryset = TaxDeclaration.objects.filter(is_deleted=False)
     serializer_class = TaxDeclarationSerializer
@@ -706,7 +707,7 @@ class TaxDeclarationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         })
 
 
-class TaxInvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TaxInvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """税务发票管理"""
     queryset = TaxInvoice.objects.filter(is_deleted=False)
     serializer_class = TaxInvoiceSerializer

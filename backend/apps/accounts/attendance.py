@@ -3,6 +3,7 @@
 Employee Attendance Management
 支持打卡记录、加班申请、请假管理等
 """
+import logging
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from django.db import models
@@ -16,6 +17,9 @@ from rest_framework.permissions import IsAuthenticated
 
 from apps.core.models import BaseModel
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.workflow.mixins import WorkflowEnforcementMixin
+
+logger = logging.getLogger(__name__)
 
 
 class AttendanceConfig(BaseModel):
@@ -999,7 +1003,7 @@ class AttendanceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         return response
 
 
-class LeaveRequestViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class LeaveRequestViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """请假申请管理"""
     queryset = LeaveRequest.objects.filter(is_deleted=False)
     serializer_class = LeaveRequestSerializer
@@ -1007,6 +1011,11 @@ class LeaveRequestViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
     filterset_fields = ['user', 'leave_type', 'status']
     search_fields = ['user__first_name', 'user__last_name', 'reason']
     ordering_fields = ['start_date', 'created_at']
+    
+    # Workflow configuration
+    workflow_business_type = 'LEAVE_REQUEST'
+    workflow_amount_field = None  # 使用天数计算
+    workflow_no_field = None
     
     def perform_create(self, serializer):
         serializer.save(user=self.request.user, created_by=self.request.user)
@@ -1066,29 +1075,54 @@ class LeaveRequestViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
                     'message': '已提交审批，请在审批中心查看审批进度'
                 })
             else:
-                leave.status = 'PENDING'
+                # 未配置审批流程，自动批准
+                leave.status = 'APPROVED'
+                leave.approver = request.user
+                leave.approved_at = timezone.now()
                 leave.save()
+                logger.info(f'请假申请 LEAVE-{leave.id} 自动批准（未配置审批流程）')
+                
+                # 更新考勤记录
+                current = leave.start_date
+                while current <= leave.end_date:
+                    AttendanceRecord.objects.update_or_create(
+                        user=leave.user,
+                        attendance_date=current,
+                        defaults={'status': 'LEAVE', 'remarks': f'{leave.get_leave_type_display()}'}
+                    )
+                    current += timedelta(days=1)
+                
                 return Response({
                     **self.get_serializer(leave).data,
                     'workflow_started': False,
-                    'message': error or '未配置审批流程，请等待人工审批'
+                    'auto_approved': True,
+                    'message': error or '未配置审批流程，已自动批准'
                 })
                 
         except Exception as e:
-            leave.status = 'PENDING'
+            # 工作流服务异常，自动批准
+            logger.warning(f'工作流服务异常，请假申请 LEAVE-{leave.id} 自动批准: {e}')
+            leave.status = 'APPROVED'
+            leave.approver = request.user
+            leave.approved_at = timezone.now()
             leave.save()
             return Response({
                 **self.get_serializer(leave).data,
-                'workflow_started': False,
-                'message': f'已提交，但工作流服务异常: {e}'
+                'auto_approved': True,
+                'message': '工作流服务不可用，已自动批准'
             })
     
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
-        """审批通过（手动审批，用于未配置流程时）"""
+        """审批通过 - 仅在无活跃工作流时允许直接审批"""
         leave = self.get_object()
         if leave.status != 'PENDING':
             return Response({'error': '只能审批待审批的申请'}, status=400)
+        
+        # 检查是否有活跃工作流
+        workflow_error = self.check_workflow_allows_direct_action(leave, '审批')
+        if workflow_error:
+            return workflow_error
         
         leave.status = 'APPROVED'
         leave.approver = request.user
@@ -1110,10 +1144,15 @@ class LeaveRequestViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
     
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
-        """审批拒绝"""
+        """审批拒绝 - 仅在无活跃工作流时允许直接拒绝"""
         leave = self.get_object()
         if leave.status != 'PENDING':
             return Response({'error': '只能审批待审批的申请'}, status=400)
+        
+        # 检查是否有活跃工作流
+        workflow_error = self.check_workflow_allows_direct_action(leave, '拒绝')
+        if workflow_error:
+            return workflow_error
         
         leave.status = 'REJECTED'
         leave.approver = request.user
@@ -1146,7 +1185,7 @@ class LeaveRequestViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         })
 
 
-class OvertimeRequestViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class OvertimeRequestViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """加班申请管理"""
     queryset = OvertimeRequest.objects.filter(is_deleted=False)
     serializer_class = OvertimeRequestSerializer
@@ -1154,6 +1193,11 @@ class OvertimeRequestViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
     filterset_fields = ['user', 'status', 'project']
     search_fields = ['user__first_name', 'user__last_name', 'reason']
     ordering_fields = ['overtime_date', 'created_at']
+    
+    # Workflow configuration
+    workflow_business_type = 'OVERTIME_REQUEST'
+    workflow_amount_field = 'hours'
+    workflow_no_field = None
     
     def perform_create(self, serializer):
         # 计算加班时长
@@ -1200,29 +1244,54 @@ class OvertimeRequestViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
                     'message': '已提交审批，请在审批中心查看审批进度'
                 })
             else:
-                overtime.status = 'PENDING'
+                # 未配置审批流程，自动批准
+                overtime.status = 'APPROVED'
+                overtime.approver = request.user
+                overtime.approved_at = timezone.now()
                 overtime.save()
+                logger.info(f'加班申请 OT-{overtime.id} 自动批准（未配置审批流程）')
+                
+                # 更新考勤记录
+                record, _ = AttendanceRecord.objects.get_or_create(
+                    user=overtime.user,
+                    attendance_date=overtime.overtime_date,
+                    defaults={'created_by': request.user}
+                )
+                record.overtime_hours = overtime.hours
+                record.status = 'OVERTIME'
+                record.save()
+                
                 return Response({
                     **self.get_serializer(overtime).data,
                     'workflow_started': False,
-                    'message': error or '未配置审批流程，请等待人工审批'
+                    'auto_approved': True,
+                    'message': error or '未配置审批流程，已自动批准'
                 })
                 
         except Exception as e:
-            overtime.status = 'PENDING'
+            # 工作流服务异常，自动批准
+            logger.warning(f'工作流服务异常，加班申请 OT-{overtime.id} 自动批准: {e}')
+            overtime.status = 'APPROVED'
+            overtime.approver = request.user
+            overtime.approved_at = timezone.now()
             overtime.save()
             return Response({
                 **self.get_serializer(overtime).data,
-                'workflow_started': False,
-                'message': f'已提交，但工作流服务异常: {e}'
+                'auto_approved': True,
+                'message': '工作流服务不可用，已自动批准'
             })
     
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
-        """审批通过（手动审批，用于未配置流程时）"""
+        """审批通过 - 仅在无活跃工作流时允许直接审批"""
         overtime = self.get_object()
         if overtime.status != 'PENDING':
             return Response({'error': '只能审批待审批的申请'}, status=400)
+        
+        # 检查是否有活跃工作流
+        workflow_error = self.check_workflow_allows_direct_action(overtime, '审批')
+        if workflow_error:
+            return workflow_error
         
         overtime.status = 'APPROVED'
         overtime.approver = request.user
@@ -1243,10 +1312,15 @@ class OvertimeRequestViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
     
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
-        """审批拒绝"""
+        """审批拒绝 - 仅在无活跃工作流时允许直接拒绝"""
         overtime = self.get_object()
         if overtime.status != 'PENDING':
             return Response({'error': '只能审批待审批的申请'}, status=400)
+        
+        # 检查是否有活跃工作流
+        workflow_error = self.check_workflow_allows_direct_action(overtime, '拒绝')
+        if workflow_error:
+            return workflow_error
         
         overtime.status = 'REJECTED'
         overtime.approver = request.user

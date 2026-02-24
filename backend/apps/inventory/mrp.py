@@ -1,7 +1,24 @@
 """
-物料需求计划 (MRP)
-Material Requirements Planning
-根据项目BOM和库存自动计算物料需求
+项目缺料计算
+Project Material Shortage Calculation
+
+核心功能：基于项目BOM计算物料缺口，生成采购建议
+
+非标自动化行业使用说明：
+- 选择一个或多个项目，展开BOM计算总需求
+- 对比现有库存，生成缺料清单
+- 可直接生成采购申请
+
+简化说明：
+- 安全库存系数(safety_stock_factor)：建议设为0或1，非标不需要额外安全库存
+- 提前期系数(lead_time_factor)：建议设为1，按实际采购周期
+- 此功能聚焦于"项目需要什么 vs 仓库有什么"的简单对比
+
+典型使用流程：
+1. 选择即将开工的项目
+2. 运行MRP计算
+3. 查看缺料清单
+4. 一键生成采购申请
 """
 from datetime import date, timedelta
 from decimal import Decimal

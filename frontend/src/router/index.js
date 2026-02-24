@@ -411,22 +411,10 @@ const routes = [
         meta: { title: '项目利润分析', icon: 'TrendCharts', menuId: 'reports:profitability' }
       },
       {
-        path: 'reports/inventory-turnover',
-        name: 'InventoryTurnoverReport',
-        component: () => import('@/views/reports/InventoryTurnoverReport.vue'),
-        meta: { title: '库存周转率', icon: 'Refresh', menuId: 'reports:inventory-turnover' }
-      },
-      {
         path: 'reports/aging',
         name: 'AgingReport',
         component: () => import('@/views/reports/AgingReport.vue'),
         meta: { title: '账龄分析', icon: 'Calendar', menuId: 'reports:aging' }
-      },
-      {
-        path: 'reports/purchase-price-trend',
-        name: 'PurchasePriceTrendReport',
-        component: () => import('@/views/reports/PurchasePriceTrendReport.vue'),
-        meta: { title: '采购价格趋势', icon: 'DataLine', menuId: 'reports:purchase-price-trend' }
       },
       {
         path: 'reports/cash-flow',
@@ -743,12 +731,6 @@ const routes = [
         component: () => import('@/views/plm/ProposalList.vue'),
         meta: { title: '方案设计', icon: 'Edit', menuId: 'plm:proposals' }
       },
-      {
-        path: 'plm/configurator',
-        name: 'ProductConfigurator',
-        component: () => import('@/views/plm/ProductConfigurator.vue'),
-        meta: { title: '产品配置器', icon: 'Setting', menuId: 'plm:configurator' }
-      },
       // PLM - 技术协议
       {
         path: 'plm/agreements',
@@ -789,18 +771,6 @@ const routes = [
         name: 'ProductionKanban',
         component: () => import('@/views/mes/Kanban.vue'),
         meta: { title: '电子看板', icon: 'Monitor', menuId: 'mes:kanban' }
-      },
-      {
-        path: 'mes/traceability',
-        name: 'Traceability',
-        component: () => import('@/views/mes/Traceability.vue'),
-        meta: { title: '追溯管理', icon: 'Search', menuId: 'mes:traceability' }
-      },
-      {
-        path: 'mes/spc',
-        name: 'SPCControl',
-        component: () => import('@/views/mes/SPCControl.vue'),
-        meta: { title: 'SPC统计过程控制', icon: 'DataLine', menuId: 'mes:spc' }
       },
       {
         path: 'mes/andon',
@@ -1067,19 +1037,6 @@ const routes = [
         component: () => import('@/views/production/AssemblyGuideDetail.vue'),
         meta: { title: '装配详情', menuId: 'production:assembly' }
       },
-      // 智能排产
-      {
-        path: 'production/smart-scheduling',
-        name: 'SmartScheduling',
-        component: () => import('@/views/production/SmartScheduling.vue'),
-        meta: { title: '智能排产', icon: 'SetUp', menuId: 'production:scheduling' }
-      },
-      {
-        path: 'production/scheduling-scenario/:id',
-        name: 'SchedulingScenarioDetail',
-        component: () => import('@/views/production/SchedulingScenarioDetail.vue'),
-        meta: { title: '排产详情', menuId: 'production:scheduling' }
-      },
       // 备件管理
       {
         path: 'inventory/spare-parts',
@@ -1258,7 +1215,6 @@ const menuFallbackPermissions = {
   // ==================== PLM 相关 ====================
   'plm:requirements': ['projects'],
   'plm:proposals': ['projects'],
-  'plm:configurator': ['projects'],
   'plm:agreements': ['projects'],
   'plm:model-viewer': ['projects'],
   'plm:cad-bom': ['projects'],
@@ -1328,8 +1284,6 @@ const menuFallbackPermissions = {
   // ==================== 生产/MES相关 ====================
   'mes:scheduling': ['production'],
   'mes:kanban': ['production'],
-  'mes:traceability': ['production'],
-  'mes:spc': ['production'],
   'mes:andon': ['production'],
   'mes:data-acquisition': ['production'],
   'production:serial-numbers': ['production'],

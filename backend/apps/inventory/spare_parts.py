@@ -7,6 +7,17 @@ Spare Parts Management Enhancement
 - 备件消耗预测
 - 易损件更换周期
 - 备件库存预警（按设备关联）
+
+非标自动化行业使用说明：
+- 核心功能：记录设备所需备件、易损件更换周期
+- 可选功能（建议按需启用）：
+  - min_stock/max_stock: 对标准易损件设置，定制备件可不设
+  - reorder_point: 标准件可启用自动预警，定制件建议关闭
+  - 消耗预测: 基于历史消耗，新设备/新备件数据不足时不准确
+
+建议使用方式：
+- 常用易损件（如轴承、密封件）：设置库存阈值
+- 定制备件：仅记录关联关系，不设自动预警
 """
 from decimal import Decimal
 from datetime import date, timedelta

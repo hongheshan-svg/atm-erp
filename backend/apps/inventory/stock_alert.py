@@ -1,7 +1,16 @@
 """
 库存预警管理
 Stock Alert Management
-库存预警规则、预警记录管理
+
+功能：库存预警规则、预警记录管理
+
+非标自动化行业建议配置：
+- 低库存预警：仅对常用标准件设置
+- 效期预警：针对有保质期的物料（如润滑油、密封件等）
+- 项目缺料预警：通过MRP计划自动生成
+
+注：呆滞预警、补货预警、积压预警等对非标定制件意义不大，
+可根据实际需要选择性启用。
 """
 from datetime import date, timedelta
 from decimal import Decimal

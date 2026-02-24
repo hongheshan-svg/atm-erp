@@ -1,5 +1,13 @@
 """
-Batch and Lot tracking models
+批次追溯管理 (可选功能)
+Batch and Lot Tracking Models
+
+此功能为可选，非标自动化行业使用建议：
+- 需要追溯的关键物料（如安全件、认证件）可启用批次管理
+- 有保质期的物料（润滑油、密封件等）建议启用
+- 一般定制件无需批次追溯
+
+如不需要，可在物料主数据中关闭批次管理选项
 """
 from django.db import models
 from apps.core.models import BaseModel

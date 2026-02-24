@@ -3,10 +3,13 @@
 Manufacturing Routing Management
 
 功能：
-- 标准工艺路线库
-- 工序工时标准
-- 工位能力定义（节拍时间/UPH）
+- 项目工艺路线管理（核心功能，适合非标自动化）
+- 工位/工作站定义
+- 工序工时记录
 - 工艺与BOM联动
+
+注：工艺模板(RoutingTemplate)为可选参考功能，非标自动化行业应主要使用
+项目工艺路线(ProjectRouting)来管理每个项目的独特工艺流程。
 """
 from decimal import Decimal
 from django.db import models
@@ -51,10 +54,10 @@ class WorkStation(BaseModel):
         verbose_name='工作中心'
     )
     
-    # 能力参数
-    standard_capacity = models.DecimalField(max_digits=10, decimal_places=2, default=8, verbose_name='标准产能(件/班)')
-    cycle_time = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='标准节拍(秒)')
-    uph = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='UPH(件/小时)')
+    # 能力参数（可选，主要用于产能规划参考，非标项目可不填）
+    standard_capacity = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='标准产能(件/班)')
+    cycle_time = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='标准节拍(秒)', help_text='可选')
+    uph = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='UPH(件/小时)', help_text='可选，自动计算')
     
     # 人员配置
     operators_required = models.IntegerField(default=1, verbose_name='所需人员')

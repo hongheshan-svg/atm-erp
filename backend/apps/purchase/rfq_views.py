@@ -16,7 +16,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.db import transaction
 from django.utils import timezone
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
-from apps.core.data_permission import DataPermissionMixin
+from apps.core.data_permission import DataPermissionMixin, SensitiveFieldMixin
 from .rfq_models import (
     RFQ, RFQLine, RFQSupplier, SupplierQuotation, SupplierQuotationLine,
     QuotationComparison, QuotationScore, ItemPriceHistory,
@@ -37,7 +37,7 @@ from .rfq_service import (
 )
 
 
-class RFQViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class RFQViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
     """RFQ viewset"""
     queryset = RFQ.objects.all()
     serializer_class = RFQSerializer
@@ -304,7 +304,7 @@ class RFQViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewse
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-class RFQLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class RFQLineViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
     """RFQ line viewset"""
     queryset = RFQLine.objects.all()
     serializer_class = RFQLineSerializer
@@ -319,7 +319,7 @@ class RFQSupplierViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
     filterset_fields = ['rfq', 'supplier', 'is_responded']
 
 
-class SupplierQuotationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SupplierQuotationViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
     """Supplier quotation viewset"""
     queryset = SupplierQuotation.objects.all()
     serializer_class = SupplierQuotationSerializer
@@ -352,14 +352,14 @@ class SupplierQuotationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         return Response(SupplierQuotationSerializer(quotation).data)
 
 
-class SupplierQuotationLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SupplierQuotationLineViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
     """Supplier quotation line viewset"""
     queryset = SupplierQuotationLine.objects.all()
     serializer_class = SupplierQuotationLineSerializer
     filterset_fields = ['quotation', 'rfq_line', 'is_deleted']
 
 
-class QuotationComparisonViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class QuotationComparisonViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
     """报价比价分析视图"""
     queryset = QuotationComparison.objects.all()
     serializer_class = QuotationComparisonSerializer
@@ -582,7 +582,7 @@ class QuotationComparisonViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermiss
         return Response({'message': f'成功删除 {deleted_count} 条记录', 'deleted_count': deleted_count})
 
 
-class QuotationScoreViewSet(viewsets.ModelViewSet):
+class QuotationScoreViewSet(SensitiveFieldMixin, viewsets.ModelViewSet):
     """报价评分视图"""
     queryset = QuotationScore.objects.all()
     serializer_class = QuotationScoreSerializer
@@ -612,7 +612,7 @@ class QuotationScoreViewSet(viewsets.ModelViewSet):
         return Response(QuotationScoreSerializer(score).data)
 
 
-class ItemPriceHistoryViewSet(viewsets.ReadOnlyModelViewSet):
+class ItemPriceHistoryViewSet(SensitiveFieldMixin, viewsets.ReadOnlyModelViewSet):
     """物料价格历史视图（只读）"""
     queryset = ItemPriceHistory.objects.all()
     serializer_class = ItemPriceHistorySerializer

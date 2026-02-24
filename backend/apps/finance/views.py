@@ -1,6 +1,7 @@
 """
 Views for finance app.
 """
+import logging
 from decimal import Decimal
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -10,7 +11,10 @@ from django.db import transaction
 from django.db.models import Q, Sum, F, Count
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.data_permission import DataPermissionMixin, FinanceDataMixin, require_finance_permission
+from apps.core.workflow.mixins import WorkflowEnforcementMixin
 from apps.projects.models import Project
+
+logger = logging.getLogger(__name__)
 from .models import (
     Currency, ExchangeRateHistory, Expense, Invoice,
     AccountReceivable, AccountPayable, Payment, PaymentSchedule, PurchasePaymentSchedule,
@@ -25,7 +29,7 @@ from .serializers import (
 )
 
 
-class CurrencyViewSet(viewsets.ModelViewSet):
+class CurrencyViewSet(DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for Currency management.
     """
@@ -92,7 +96,7 @@ class PaymentViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
     ordering_fields = ['payment_date', 'amount', 'created_at']
 
 
-class ExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class ExpenseViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for Expense management.
     """
@@ -102,6 +106,11 @@ class ExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, vi
     search_fields = ['expense_no', 'description']
     ordering_fields = ['expense_date', 'amount', 'created_at']
     data_scope_field = 'user'
+    
+    # Workflow configuration
+    workflow_business_type = 'EXPENSE'
+    workflow_amount_field = 'amount'
+    workflow_no_field = 'expense_no'
     
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
@@ -134,24 +143,31 @@ class ExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, vi
                     'workflow_id': instance.id
                 })
             else:
-                # No workflow configured, just submit
-                expense.status = 'SUBMITTED'
+                # No workflow configured, auto-approve
+                expense.status = 'APPROVED'
                 expense.save()
+                logger.info(f'费用报销 {expense.expense_no} 自动批准（未配置审批流程）')
                 return Response({
                     **ExpenseSerializer(expense).data,
                     'workflow_started': False,
-                    'message': error or '未配置审批流程，已直接提交'
+                    'auto_approved': True,
+                    'message': error or '未配置审批流程，已自动批准'
                 })
                 
         except Exception as e:
-            # Workflow module not available, fallback to simple submit
-            expense.status = 'SUBMITTED'
+            # Workflow module not available, auto-approve
+            logger.warning(f'工作流服务异常，费用报销 {expense.expense_no} 自动批准: {e}')
+            expense.status = 'APPROVED'
             expense.save()
-            return Response(ExpenseSerializer(expense).data)
+            return Response({
+                **ExpenseSerializer(expense).data,
+                'auto_approved': True,
+                'message': '工作流服务不可用，已自动批准'
+            })
     
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
-        """Approve expense."""
+        """Approve expense - 仅在无活跃工作流时允许直接审批."""
         expense = self.get_object()
         if expense.status != 'SUBMITTED':
             return Response(
@@ -159,19 +175,29 @@ class ExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, vi
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # 检查是否有活跃工作流
+        workflow_error = self.check_workflow_allows_direct_action(expense, '审批')
+        if workflow_error:
+            return workflow_error
+        
         expense.status = 'APPROVED'
         expense.save()
         return Response(ExpenseSerializer(expense).data)
     
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
-        """Reject expense."""
+        """Reject expense - 仅在无活跃工作流时允许直接拒绝."""
         expense = self.get_object()
         if expense.status != 'SUBMITTED':
             return Response(
                 {'error': '只能拒绝已提交的报销单'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        # 检查是否有活跃工作流
+        workflow_error = self.check_workflow_allows_direct_action(expense, '拒绝')
+        if workflow_error:
+            return workflow_error
         
         expense.status = 'REJECTED'
         expense.save()
@@ -1203,7 +1229,7 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
         return Response(serializer.data)
 
 
-class SharedExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SharedExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for SharedExpense management.
     """
@@ -1508,7 +1534,7 @@ class SharedExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         ]
 
 
-class SharedExpenseAllocationViewSet(viewsets.ReadOnlyModelViewSet):
+class SharedExpenseAllocationViewSet(DataPermissionMixin, viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for SharedExpenseAllocation (read-only).
     """
@@ -1548,7 +1574,7 @@ class SharedExpenseAllocationViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(data)
 
 
-class PaymentScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class PaymentScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for PaymentSchedule management.
     用于管理和跟踪销售订单的付款计划。
@@ -1766,7 +1792,7 @@ class PaymentScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
         })
 
 
-class PurchasePaymentScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class PurchasePaymentScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for PurchasePaymentSchedule management.
     用于管理和跟踪采购订单的付款计划。
@@ -1980,7 +2006,7 @@ class PurchasePaymentScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewset
         })
 
 
-class PaymentRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class PaymentRequestViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for PaymentRequest management - 付款申请管理.
     """
@@ -1990,6 +2016,11 @@ class PaymentRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMi
     search_fields = ['request_no', 'title', 'reason']
     ordering_fields = ['expected_date', 'amount', 'created_at']
     data_scope_field = 'applicant'
+    
+    # Workflow configuration
+    workflow_business_type = 'PAYMENT'
+    workflow_amount_field = 'amount'
+    workflow_no_field = 'request_no'
     
     def perform_create(self, serializer):
         """创建时自动设置申请人"""

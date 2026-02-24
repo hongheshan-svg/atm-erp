@@ -1,6 +1,19 @@
 """
-产能资源规划模块
-Capacity Planning - 资源看板、冲突预警、优先级调度
+项目资源分配模块
+Project Resource Allocation
+
+功能：资源看板、冲突预警、优先级调度
+
+非标自动化行业适用说明：
+- 资源分配以项目为单位，而非按日产能计算
+- 关注资源是否被多个项目同时占用（冲突预警）
+- 日产能(capacity_per_day)为参考值，实际按项目工时分配
+- 重点是资源可用性和项目优先级协调
+
+建议使用方式：
+- 工位、设备、人员分配到具体项目
+- 检查同一时段资源冲突
+- 根据项目交付优先级调整分配
 """
 from decimal import Decimal
 from django.db import models

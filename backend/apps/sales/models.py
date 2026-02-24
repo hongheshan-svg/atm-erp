@@ -601,23 +601,6 @@ class SalesContract(BaseModel):
 # Import models from win_loss_analysis
 from .win_loss_analysis import WinLossReason, OpportunityCloseRecord
 
-
-
-# Import models from marketing
-from .marketing import MarketingEmailTemplate, MarketingCampaign, CampaignRecipient, EmailSendLog
-
-# Import models from ai_prediction
-from .ai_prediction import SalesPrediction, CustomerChurnRisk
-
-# Import models from sms_marketing
-from .sms_marketing import SMSTemplate, SMSCampaign, SMSRecipient, SMSSendLog
-
-# Import models from wechat_marketing
-from .wechat_marketing import (
-    WeChatOfficialAccount, WeChatFollower, WeChatTemplate,
-    WeChatCampaign, WeChatMessageLog
-)
-
 # Import models from quote_prediction
 from .quote_prediction import (
     QuoteVersion, QuoteCostItem, QuoteComparison, QuoteProjectCostRef

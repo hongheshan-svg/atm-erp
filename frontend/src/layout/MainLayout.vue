@@ -41,7 +41,6 @@
           <el-menu-item-group title="需求与方案">
             <el-menu-item index="/plm/requirements" v-if="hasMenuAccess('plm:requirements') || hasMenuAccess('projects')">需求管理</el-menu-item>
             <el-menu-item index="/plm/proposals" v-if="hasMenuAccess('plm:proposals') || hasMenuAccess('projects')">方案设计</el-menu-item>
-            <el-menu-item index="/plm/configurator" v-if="hasMenuAccess('plm:configurator') || hasMenuAccess('projects')">产品配置器</el-menu-item>
             <el-menu-item index="/plm/agreements" v-if="hasMenuAccess('plm:agreements') || hasMenuAccess('projects')">技术协议</el-menu-item>
           </el-menu-item-group>
           <el-menu-item-group title="项目管理">
@@ -158,8 +157,6 @@
           </el-menu-item-group>
           <el-menu-item-group title="质量管理">
             <el-menu-item index="/production/inspections" v-if="hasMenuAccess('production:inspections')">质量检验</el-menu-item>
-            <el-menu-item index="/mes/traceability" v-if="hasMenuAccess('mes:traceability') || hasMenuAccess('production')">追溯管理</el-menu-item>
-            <el-menu-item index="/mes/spc" v-if="hasMenuAccess('mes:spc') || hasMenuAccess('production')">SPC统计过程控制</el-menu-item>
           </el-menu-item-group>
           <el-menu-item-group title="异常管理">
             <el-menu-item index="/mes/andon" v-if="hasMenuAccess('mes:andon') || hasMenuAccess('production')">安灯系统</el-menu-item>
@@ -227,10 +224,8 @@
           <el-menu-item index="/reports/cost-analysis" v-if="hasMenuAccess('reports:cost-analysis')">项目成本分析</el-menu-item>
           <el-menu-item index="/reports/timelog" v-if="hasMenuAccess('reports:timelog')">工时统计</el-menu-item>
           <el-menu-item index="/reports/cash-flow" v-if="hasMenuAccess('reports:cash-flow')">现金流预测</el-menu-item>
-          <el-menu-item index="/reports/inventory-turnover" v-if="hasMenuAccess('reports:inventory-turnover')">库存周转率</el-menu-item>
           <el-menu-item index="/reports/slow-moving" v-if="hasMenuAccess('reports:slow-moving')">呆滞物料分析</el-menu-item>
           <el-menu-item index="/reports/aging" v-if="hasMenuAccess('reports:aging')">账龄分析</el-menu-item>
-          <el-menu-item index="/reports/purchase-price-trend" v-if="hasMenuAccess('reports:purchase-price-trend')">采购价格趋势</el-menu-item>
         </el-sub-menu>
         
         <!-- ==================== 基础数据 ==================== -->

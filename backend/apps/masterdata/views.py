@@ -8,6 +8,7 @@ from django.http import HttpResponse
 import pandas as pd
 from io import BytesIO
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin, DataScopeMixin
+from apps.core.data_permission import SensitiveFieldMixin
 from .models import ItemCategory, Item, Customer, Supplier, Warehouse, WarehouseLocation
 from .serializers import (
     ItemCategorySerializer, ItemSerializer, CustomerSerializer,
@@ -45,10 +46,11 @@ class ItemCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         return Response(tree_data)
 
 
-class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ItemViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
     """
     ViewSet for Item management.
     NOTE: 物料是主数据，所有用户都可以查看，不应用数据范围限制
+    NOTE: 价格字段(purchase_price/standard_cost/last_purchase_price)通过SensitiveFieldMixin控制可见性
     """
     queryset = Item.objects.all()
     serializer_class = ItemSerializer

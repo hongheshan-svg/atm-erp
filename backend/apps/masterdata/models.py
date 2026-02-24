@@ -280,8 +280,8 @@ class Item(BaseModel):
     # ==================== 其他信息 ====================
     description = models.TextField(blank=True, verbose_name='描述')
     image = models.ImageField(upload_to='items/', blank=True, verbose_name='图片')
-    barcode = models.CharField(max_length=100, blank=True, verbose_name='条形码')
-    qr_code = models.CharField(max_length=200, blank=True, verbose_name='二维码')
+    barcode = models.CharField(max_length=100, blank=True, verbose_name='条形码', help_text='可选，用于仓库扫码')
+    qr_code = models.CharField(max_length=200, blank=True, verbose_name='二维码', help_text='可选，用于仓库扫码')
     weight = models.DecimalField(max_digits=10, decimal_places=3, default=0, verbose_name='重量(kg)')
     volume = models.DecimalField(max_digits=10, decimal_places=3, default=0, verbose_name='体积(m³)')
     shelf_life = models.IntegerField(default=0, verbose_name='保质期(天)')

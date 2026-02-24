@@ -14,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.data_permission import DataPermissionMixin
 from apps.masterdata.models import Supplier, Customer
 from .models import AccountPayable, AccountReceivable, Payment
 from .bank_statement_models import BankStatement, BankStatementImportLog
@@ -24,7 +25,7 @@ from .bank_statement_serializers import (
 )
 
 
-class BankStatementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class BankStatementViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for BankStatement management.
     """
@@ -813,7 +814,7 @@ class BankStatementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         })
 
 
-class BankStatementImportLogViewSet(viewsets.ReadOnlyModelViewSet):
+class BankStatementImportLogViewSet(DataPermissionMixin, viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for BankStatementImportLog (read-only).
     """

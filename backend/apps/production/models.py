@@ -8,10 +8,6 @@ from apps.core.models import BaseModel
 
 # 导入子模块模型
 from .scheduling import WorkCenter
-from .spc import (
-    ControlChart, SPCDataPoint, SubgroupStatistics,
-    ProcessCapability, SPCAlarm
-)
 from .andon import (
     AndonType, AndonStation, AndonCall, AndonEscalation, AndonAction
 )

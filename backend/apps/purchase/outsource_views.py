@@ -6,6 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db import transaction
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.data_permission import SensitiveFieldMixin
 from .outsource_models import (
     OutsourceOrder, OutsourceOrderLine,
     OutsourceMaterialIssue, OutsourceMaterialIssueLine,
@@ -18,7 +19,7 @@ from .outsource_serializers import (
 )
 
 
-class OutsourceOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class OutsourceOrderViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
     """
     外协加工单管理
     """
@@ -95,7 +96,7 @@ class OutsourceOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         return Response(OutsourceOrderLineSerializer(lines, many=True).data)
 
 
-class OutsourceOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class OutsourceOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
     """
     外协加工单明细管理
     """

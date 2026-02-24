@@ -2,6 +2,12 @@
 电子档案管理模块
 Electronic Archive Management
 文档归档、档案分类、借阅管理等
+
+非标自动化行业扩展建议：
+- 档案分类可增加：项目技术资料、工程图纸、验收文档、培训资料
+- 可关联项目：在档案中增加project字段关联到具体项目
+- 建议与项目文档管理(projects.documents)配合使用
+- 长期归档的技术资料（如设备手册、认证文件）适合放在此模块
 """
 from datetime import date, timedelta
 from django.db import models

@@ -1,6 +1,7 @@
 """
 Views for sales app.
 """
+import logging
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -8,6 +9,9 @@ from django.http import HttpResponse
 from django.db import models, transaction
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.data_permission import DataPermissionMixin
+from apps.core.workflow.mixins import WorkflowEnforcementMixin
+
+logger = logging.getLogger(__name__)
 from .models import (
     SalesQuotation, SalesQuotationLine,
     SalesOrder, SalesOrderLine,
@@ -22,7 +26,7 @@ from .serializers import (
 )
 
 
-class SalesQuotationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class SalesQuotationViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for SalesQuotation management.
     """
@@ -31,6 +35,11 @@ class SalesQuotationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMi
     filterset_fields = ['customer', 'project', 'status', 'is_deleted']
     search_fields = ['quote_no']
     ordering_fields = ['quote_date', 'created_at']
+    
+    # Workflow configuration
+    workflow_business_type = 'QUOTATION'
+    workflow_amount_field = 'total_amount'
+    workflow_no_field = 'quote_no'
     
     @action(detail=True, methods=['post'])
     def create_new_version(self, request, pk=None):
@@ -161,10 +170,10 @@ class SalesQuotationLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
     queryset = SalesQuotationLine.objects.all()
     serializer_class = SalesQuotationLineSerializer
     filterset_fields = ['quotation', 'item', 'is_deleted']
-    search_fields = ['item__sku', 'item__name']
+    search_fields = ['item__sku', 'item__name', 'custom_name', 'custom_spec']
 
 
-class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class SalesOrderViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for SalesOrder management.
     
@@ -175,6 +184,11 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
     filterset_fields = ['customer', 'project', 'status', 'is_deleted']
     search_fields = ['order_no']
     ordering_fields = ['order_date', 'created_at']
+    
+    # Workflow configuration
+    workflow_business_type = 'SALES_ORDER'
+    workflow_amount_field = 'total_with_tax'
+    workflow_no_field = 'order_no'
     
     @action(detail=False, methods=['get'])
     def for_linking(self, request):
@@ -280,13 +294,18 @@ class SalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
     
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
-        """直接确认销售订单（跳过审批）"""
+        """直接确认销售订单 - 仅在无活跃工作流时允许"""
         so = self.get_object()
         if so.status not in ['DRAFT', 'PENDING']:
             return Response(
                 {'error': '只能确认草稿或待审批状态的订单'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        # 检查是否有活跃工作流
+        workflow_error = self.check_workflow_allows_direct_action(so, '确认')
+        if workflow_error:
+            return workflow_error
         
         return self._do_confirm(so, request)
     
@@ -1127,10 +1146,10 @@ class SalesOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
     queryset = SalesOrderLine.objects.all()
     serializer_class = SalesOrderLineSerializer
     filterset_fields = ['so', 'item', 'is_deleted']
-    search_fields = ['item__sku', 'item__name']
+    search_fields = ['item__sku', 'item__name', 'custom_name', 'custom_spec']
 
 
-class DeliveryOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class DeliveryOrderViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for DeliveryOrder management.
     
@@ -1152,6 +1171,11 @@ class DeliveryOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
     filterset_fields = ['so', 'warehouse', 'status', 'is_deleted']
     search_fields = ['delivery_no']
     ordering_fields = ['delivery_date', 'created_at']
+    
+    # Workflow configuration
+    workflow_business_type = 'DELIVERY_ORDER'
+    workflow_amount_field = None  # 使用自定义计算方法
+    workflow_no_field = 'delivery_no'
     
     def _calculate_delivery_amount(self, delivery):
         """计算发货单总金额"""
@@ -1441,10 +1465,10 @@ class DeliveryOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
     queryset = DeliveryOrderLine.objects.all()
     serializer_class = DeliveryOrderLineSerializer
     filterset_fields = ['delivery', 'item', 'is_deleted']
-    search_fields = ['item__sku', 'item__name']
+    search_fields = ['item__sku', 'item__name', 'custom_name', 'custom_spec']
 
 
-class SalesContractViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SalesContractViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for SalesContract management.
     """
@@ -1453,6 +1477,11 @@ class SalesContractViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
     filterset_fields = ['so', 'customer', 'project', 'status', 'is_deleted']
     search_fields = ['contract_no', 'title']
     ordering_fields = ['contract_date', 'created_at']
+    
+    # Workflow configuration
+    workflow_business_type = 'SALES_CONTRACT'
+    workflow_amount_field = 'total_with_tax'
+    workflow_no_field = 'contract_no'
     
     @action(detail=False, methods=['post'])
     def create_from_so(self, request):
@@ -1616,13 +1645,18 @@ class SalesContractViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
     
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
-        """审批合同."""
+        """审批合同 - 仅在无活跃工作流时允许直接审批."""
         contract = self.get_object()
         if contract.status not in ['DRAFT', 'PENDING']:
             return Response(
                 {'error': '只能审批草稿或待审批状态的合同'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        # 检查是否有活跃工作流
+        workflow_error = self.check_workflow_allows_direct_action(contract, '审批')
+        if workflow_error:
+            return workflow_error
         
         contract.status = 'APPROVED'
         contract.save()

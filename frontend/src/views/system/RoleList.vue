@@ -299,7 +299,6 @@ const menuTree = ref([
     children: [
       { id: 'plm:requirements', label: '需求管理' },
       { id: 'plm:proposals', label: '方案设计' },
-      { id: 'plm:configurator', label: '产品配置器' },
       { id: 'plm:agreements', label: '技术协议' },
       { id: 'plm:model-viewer', label: '3D模型预览' },
       { id: 'plm:cad-bom', label: 'CAD BOM导入' },
@@ -390,8 +389,6 @@ const menuTree = ref([
     children: [
       { id: 'mes:scheduling', label: 'APS排程' },
       { id: 'mes:kanban', label: '电子看板' },
-      { id: 'mes:traceability', label: '追溯管理' },
-      { id: 'mes:spc', label: 'SPC统计过程控制' },
       { id: 'mes:andon', label: '安灯系统' },
       { id: 'mes:data-acquisition', label: '数据采集' }
     ]
@@ -460,9 +457,7 @@ const menuTree = ref([
     label: '报表统计',
     children: [
       { id: 'reports:profitability', label: '项目利润分析' },
-      { id: 'reports:inventory-turnover', label: '库存周转率' },
       { id: 'reports:aging', label: '账龄分析' },
-      { id: 'reports:purchase-price-trend', label: '采购价格趋势' },
       { id: 'reports:cash-flow', label: '现金流预测' },
       { id: 'reports:slow-moving', label: '呆滞物料分析' },
       { id: 'reports:timelog', label: '工时统计' },
@@ -516,7 +511,6 @@ const industryMenuTree = ref([
     children: [
       { id: 'plm:requirements', label: '需求管理' },
       { id: 'plm:proposals', label: '方案设计' },
-      { id: 'plm:configurator', label: '产品配置器' },
       { id: 'plm:agreements', label: '技术协议' },
       { id: 'projects:bom', label: 'BOM清单' },
       { id: 'plm:cad-bom', label: 'CAD BOM导入' },
@@ -614,9 +608,7 @@ const industryMenuTree = ref([
       { id: 'mes:kanban', label: '电子看板' },
       { id: 'mes:andon', label: '安灯系统' },
       { id: 'mes:data-acquisition', label: '数据采集' },
-      { id: 'production:inspections', label: '质量检验' },
-      { id: 'mes:traceability', label: '追溯管理' },
-      { id: 'mes:spc', label: 'SPC统计过程控制' }
+      { id: 'production:inspections', label: '质量检验' }
     ]
   },
   {
@@ -677,9 +669,7 @@ const industryMenuTree = ref([
       { id: 'reports:timelog', label: '工时统计' },
       { id: 'reports:cash-flow', label: '现金流预测' },
       { id: 'reports:aging', label: '账龄分析' },
-      { id: 'reports:inventory-turnover', label: '库存周转率' },
       { id: 'reports:slow-moving', label: '呆滞物料分析' },
-      { id: 'reports:purchase-price-trend', label: '采购价格趋势' },
       { id: 'reports:industry', label: '行业分析' },
       { id: 'analytics:project', label: '项目分析' },
       { id: 'analytics:inventory', label: '库存分析' }
@@ -736,6 +726,7 @@ const industryMenuTree = ref([
 
 // ============================================
 // 非标自动化行业 - 预设角色模板
+// 行业特点：项目制、团队小(50-200人)、跨部门协作频繁
 // ============================================
 const presetRoles = ref([
   {
@@ -743,63 +734,84 @@ const presetRoles = ref([
     code: 'general_manager',
     type: 'danger',
     data_scope: 'ALL',
-    menu_ids: ['dashboard', 'projects', 'plm', 'sales', 'purchase', 'inventory', 'production', 'mes', 'equipment', 'finance', 'reports', 'analytics', 'oa', 'workflow', 'masterdata', 'knowledge', 'aftersales', 'accounts']
+    menu_ids: ['dashboard', 'projects', 'plm', 'sales', 'purchase', 'inventory', 'production', 'mes', 'equipment', 'finance', 'reports', 'analytics', 'oa', 'workflow', 'masterdata', 'knowledge', 'aftersales', 'accounts', 'system']
   },
   {
     name: '项目经理',
     code: 'project_manager',
     type: 'warning',
-    data_scope: 'DEPARTMENT',
-    menu_ids: ['dashboard', 'projects', 'projects:list', 'projects:dashboard', 'projects:tasks', 'projects:members', 'projects:bom', 'projects:time-logs', 'projects:gantt', 'projects:milestones', 'projects:alerts', 'projects:equipment-archives', 'projects:acceptances', 'projects:archives', 'projects:cost', 'projects:monitoring', 'projects:work-orders', 'projects:drawings', 'projects:documents', 'projects:ecn', 'plm', 'plm:requirements', 'plm:proposals', 'plm:agreements', 'plm:cad-bom', 'plm:bom-compare', 'knowledge', 'knowledge:articles', 'knowledge:issues', 'knowledge:components', 'reports', 'reports:profitability', 'reports:cost-analysis', 'reports:timelog', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'oa:meeting']
+    data_scope: 'ALL',
+    menu_ids: ['dashboard', 'projects', 'projects:list', 'projects:dashboard', 'projects:tasks', 'projects:members', 'projects:bom', 'projects:time-logs', 'projects:gantt', 'projects:milestones', 'projects:alerts', 'projects:equipment-archives', 'projects:acceptances', 'projects:archives', 'projects:cost', 'projects:monitoring', 'projects:work-orders', 'projects:drawings', 'projects:documents', 'projects:ecn', 'plm', 'plm:requirements', 'plm:proposals', 'plm:agreements', 'plm:model-viewer', 'plm:cad-bom', 'plm:bom-compare', 'knowledge', 'knowledge:articles', 'knowledge:issues', 'knowledge:components', 'purchase', 'purchase:requests', 'purchase:orders', 'purchase:goods-receipts', 'purchase:outsource', 'sales', 'sales:orders', 'sales:delivery-orders', 'aftersales', 'aftersales:orders', 'inventory', 'inventory:stocks', 'inventory:requisitions', 'inventory:returns', 'inventory:mrp', 'production', 'production:plans', 'production:debug-records', 'production:inspections', 'mes', 'mes:scheduling', 'mes:kanban', 'equipment', 'equipment:list', 'equipment:fixtures', 'reports', 'reports:profitability', 'reports:cost-analysis', 'reports:timelog', 'masterdata', 'masterdata:items', 'masterdata:customers', 'masterdata:suppliers', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'oa:meeting', 'oa:leave', 'accounts:attendance']
   },
   {
     name: '技术工程师',
     code: 'engineer',
     type: 'primary',
-    data_scope: 'DEPARTMENT',
-    menu_ids: ['dashboard', 'plm', 'plm:requirements', 'plm:proposals', 'plm:configurator', 'plm:agreements', 'plm:model-viewer', 'plm:cad-bom', 'plm:bom-compare', 'projects', 'projects:list', 'projects:tasks', 'projects:bom', 'projects:drawings', 'projects:documents', 'projects:ecn', 'projects:bugs', 'projects:time-logs', 'projects:batch-drawing', 'projects:drawing-bom-link', 'knowledge', 'knowledge:articles', 'knowledge:issues', 'knowledge:components', 'masterdata', 'masterdata:items', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'oa:leave', 'accounts:attendance']
+    data_scope: 'ALL',
+    menu_ids: ['dashboard', 'plm', 'plm:requirements', 'plm:proposals', 'plm:agreements', 'plm:model-viewer', 'plm:cad-bom', 'plm:bom-compare', 'projects', 'projects:list', 'projects:tasks', 'projects:bom', 'projects:drawings', 'projects:documents', 'projects:ecn', 'projects:bugs', 'projects:time-logs', 'projects:batch-drawing', 'projects:drawing-bom-link', 'projects:work-orders', 'knowledge', 'knowledge:articles', 'knowledge:issues', 'knowledge:components', 'purchase', 'purchase:requests', 'inventory', 'inventory:stocks', 'inventory:requisitions', 'inventory:returns', 'production', 'production:processes', 'production:debug-records', 'production:inspections', 'masterdata', 'masterdata:items', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'oa:leave', 'accounts:attendance']
+  },
+  {
+    name: '销售经理',
+    code: 'sales_manager',
+    type: 'success',
+    data_scope: 'ALL',
+    menu_ids: ['dashboard', 'crm', 'masterdata:customers', 'masterdata:customer-contacts', 'masterdata:customer-followups', 'sales', 'sales:leads', 'sales:opportunities', 'sales:quotations', 'sales:orders', 'sales:contracts', 'sales:delivery-orders', 'sales:quote-estimation', 'sales:quote', 'finance:sales-reconciliation', 'finance:ar', 'finance:collection', 'aftersales', 'aftersales:orders', 'projects', 'projects:list', 'projects:dashboard', 'reports', 'reports:profitability', 'reports:cash-flow', 'reports:aging', 'masterdata', 'masterdata:items', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'oa:meeting', 'accounts:attendance']
   },
   {
     name: '销售人员',
     code: 'salesperson',
     type: 'success',
-    data_scope: 'SELF',
-    menu_ids: ['dashboard', 'sales', 'sales:leads', 'sales:opportunities', 'sales:quotations', 'sales:orders', 'sales:contracts', 'sales:delivery-orders', 'sales:quote-estimation', 'sales:quote', 'masterdata', 'masterdata:customers', 'masterdata:customer-contacts', 'masterdata:customer-followups', 'aftersales', 'aftersales:orders', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'accounts:attendance']
+    data_scope: 'DEPARTMENT',
+    menu_ids: ['dashboard', 'crm', 'masterdata:customers', 'masterdata:customer-contacts', 'masterdata:customer-followups', 'sales', 'sales:leads', 'sales:opportunities', 'sales:quotations', 'sales:orders', 'sales:contracts', 'sales:delivery-orders', 'sales:quote-estimation', 'sales:quote', 'finance:sales-reconciliation', 'aftersales', 'aftersales:orders', 'projects', 'projects:list', 'masterdata', 'masterdata:items', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'accounts:attendance']
+  },
+  {
+    name: '采购经理',
+    code: 'purchase_manager',
+    type: 'info',
+    data_scope: 'ALL',
+    menu_ids: ['dashboard', 'purchase', 'purchase:requests', 'purchase:comparisons', 'purchase:orders', 'purchase:goods-receipts', 'purchase:outsource', 'purchase:rfqs', 'purchase:contracts', 'purchase:evaluations', 'purchase:portal', 'purchase:blacklist', 'finance:purchase-reconciliation', 'finance:ap', 'finance:payment-requests', 'inventory', 'inventory:stocks', 'inventory:mrp', 'inventory:alerts', 'projects', 'projects:list', 'reports', 'reports:slow-moving', 'reports:aging', 'masterdata', 'masterdata:suppliers', 'masterdata:items', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'oa:meeting', 'accounts:attendance']
   },
   {
     name: '采购人员',
     code: 'purchaser',
     type: 'info',
-    data_scope: 'SELF',
-    menu_ids: ['dashboard', 'purchase', 'purchase:requests', 'purchase:comparisons', 'purchase:orders', 'purchase:goods-receipts', 'purchase:outsource', 'masterdata', 'masterdata:suppliers', 'inventory', 'inventory:mrp', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'accounts:attendance']
+    data_scope: 'ALL',
+    menu_ids: ['dashboard', 'purchase', 'purchase:requests', 'purchase:comparisons', 'purchase:orders', 'purchase:goods-receipts', 'purchase:outsource', 'purchase:rfqs', 'purchase:contracts', 'purchase:evaluations', 'purchase:portal', 'finance:purchase-reconciliation', 'inventory', 'inventory:stocks', 'inventory:mrp', 'masterdata', 'masterdata:suppliers', 'masterdata:items', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'accounts:attendance']
   },
   {
     name: '仓库管理',
     code: 'warehouse',
     type: '',
-    data_scope: 'SELF',
-    menu_ids: ['dashboard', 'inventory', 'inventory:stocks', 'inventory:batches', 'inventory:moves', 'inventory:transfer', 'inventory:adjustment', 'inventory:requisitions', 'inventory:returns', 'purchase', 'purchase:goods-receipts', 'masterdata', 'masterdata:items', 'workflow', 'workflow:my-submissions', 'oa', 'accounts:attendance']
+    data_scope: 'ALL',
+    menu_ids: ['dashboard', 'inventory', 'inventory:stocks', 'inventory:batches', 'inventory:moves', 'inventory:transfer', 'inventory:adjustment', 'inventory:requisitions', 'inventory:returns', 'inventory:alerts', 'inventory:cost-accounting', 'purchase', 'purchase:goods-receipts', 'masterdata', 'masterdata:items', 'masterdata:warehouses', 'masterdata:locations', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'accounts:attendance']
   },
   {
     name: '生产主管',
     code: 'production_manager',
     type: 'danger',
-    data_scope: 'DEPARTMENT',
-    menu_ids: ['dashboard', 'production', 'production:processes', 'production:plans', 'production:debug-records', 'production:inspections', 'production:serial-numbers', 'production:routing', 'production:assembly', 'production:scheduling', 'production:capacity', 'mes', 'mes:scheduling', 'mes:kanban', 'mes:traceability', 'mes:spc', 'mes:andon', 'mes:data-acquisition', 'projects', 'projects:work-orders', 'equipment', 'equipment:list', 'equipment:fixtures', 'equipment:inspection', 'equipment:maintenance', 'equipment:oee', 'inventory', 'inventory:requisitions', 'inventory:returns', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'accounts:attendance']
+    data_scope: 'ALL',
+    menu_ids: ['dashboard', 'production', 'production:processes', 'production:plans', 'production:debug-records', 'production:inspections', 'production:serial-numbers', 'production:routing', 'production:assembly', 'production:scheduling', 'production:capacity', 'mes', 'mes:scheduling', 'mes:kanban', 'mes:andon', 'mes:data-acquisition', 'projects', 'projects:list', 'projects:work-orders', 'equipment', 'equipment:list', 'equipment:fixtures', 'equipment:inspection', 'equipment:maintenance', 'equipment:oee', 'inventory', 'inventory:stocks', 'inventory:requisitions', 'inventory:returns', 'purchase', 'purchase:outsource', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'accounts:attendance']
+  },
+  {
+    name: '财务经理',
+    code: 'finance_manager',
+    type: 'warning',
+    data_scope: 'ALL',
+    menu_ids: ['dashboard', 'finance', 'finance:expenses', 'finance:ar', 'finance:ap', 'finance:invoices', 'finance:collection', 'finance:purchase-reconciliation', 'finance:sales-reconciliation', 'finance:payment-requests', 'finance:bank-statements', 'finance:assets', 'finance:project-costs', 'reports', 'reports:profitability', 'reports:cost-analysis', 'reports:cash-flow', 'reports:aging', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'workflow:config', 'oa', 'oa:schedule', 'accounts:attendance']
   },
   {
     name: '财务人员',
     code: 'accountant',
     type: 'warning',
-    data_scope: 'SELF',
-    menu_ids: ['dashboard', 'finance', 'finance:expenses', 'finance:ar', 'finance:ap', 'finance:invoices', 'finance:collection', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'accounts:attendance']
+    data_scope: 'ALL',
+    menu_ids: ['dashboard', 'finance', 'finance:expenses', 'finance:ar', 'finance:ap', 'finance:invoices', 'finance:collection', 'finance:purchase-reconciliation', 'finance:sales-reconciliation', 'finance:payment-requests', 'finance:bank-statements', 'finance:assets', 'finance:project-costs', 'reports', 'reports:aging', 'reports:cash-flow', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'accounts:attendance']
   },
   {
     name: '普通员工',
     code: 'employee',
     type: '',
     data_scope: 'SELF',
-    menu_ids: ['dashboard', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'oa:leave', 'oa:meeting', 'oa:announcement', 'oa:vehicle-request', 'accounts:attendance']
+    menu_ids: ['dashboard', 'projects', 'projects:list', 'projects:tasks', 'projects:time-logs', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'oa:leave', 'oa:meeting', 'oa:announcement', 'oa:vehicle-request', 'accounts:attendance']
   }
 ])
 

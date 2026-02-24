@@ -8,6 +8,7 @@ from django.db import transaction
 from django.db.models import Sum, F
 from django.conf import settings
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.data_permission import SensitiveFieldMixin
 from .models import Stock, StockMove, StockAdjustment, StockAdjustmentLine
 from .serializers import (
     StockSerializer, StockMoveSerializer,
@@ -16,7 +17,7 @@ from .serializers import (
 from .cost_methods import FIFOCostingService, CostingMethodFactory
 
 
-class StockViewSet(viewsets.ReadOnlyModelViewSet):
+class StockViewSet(SensitiveFieldMixin, viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for Stock - Read-only.
     Stock is updated automatically by StockMove.
@@ -163,7 +164,7 @@ class StockViewSet(viewsets.ReadOnlyModelViewSet):
         })
 
 
-class StockMoveViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class StockMoveViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
     """
     ViewSet for StockMove management.
     """
@@ -363,7 +364,7 @@ class StockAdjustmentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
         return Response(StockAdjustmentSerializer(adjustment).data)
 
 
-class StockAdjustmentLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class StockAdjustmentLineViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
     """
     ViewSet for StockAdjustmentLine management.
     """

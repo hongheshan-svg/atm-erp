@@ -28,8 +28,6 @@ urlpatterns = [
     path('cost-detail/', views.project_cost_detail, name='project-cost-detail'),
     path('refresh-cache/', views.refresh_project_cache, name='refresh-cache'),
     path('dashboard/', views.dashboard_summary, name='dashboard-summary'),
-    path('inventory-turnover/', views.inventory_turnover_report, name='inventory-turnover'),
-    path('purchase-price-trend/', views.purchase_price_trend_report, name='purchase-price-trend'),
     path('aging/', views.aging_report, name='aging-report'),
     
     # 工时报表

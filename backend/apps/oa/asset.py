@@ -1,7 +1,19 @@
 """
 办公资产管理
 Office Asset Management
-OA协同办公模块
+
+功能：办公资产登记、借用、维护、折旧等
+
+非标自动化行业扩展建议：
+- 资产类别可增加：测试设备、工装夹具、量检具、专用工具
+- 可关联项目：增加project字段，记录资产分配到哪个项目使用
+- 与设备管理(equipment)的区别：
+  - 此模块：通用办公/生产辅助资产
+  - equipment模块：客户项目中交付的设备
+
+建议使用方式：
+- 公司内部测试设备、工具等用此模块管理
+- 需要追踪项目占用时，可在借用记录中关联项目
 """
 from datetime import date, datetime
 from decimal import Decimal

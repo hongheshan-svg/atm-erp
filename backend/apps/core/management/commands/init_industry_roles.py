@@ -28,7 +28,7 @@ INDUSTRY_ROLES = [
             'workflow', 'masterdata', 'knowledge', 'aftersales', 'accounts',
             # 报表分析（重点）
             'reports:profitability', 'reports:cost-analysis', 'reports:cash-flow',
-            'reports:inventory-turnover', 'reports:aging', 'reports:industry',
+            'reports:aging', 'reports:industry',
             'analytics:project', 'analytics:inventory',
         ],
         'sort_order': 1
@@ -70,7 +70,7 @@ INDUSTRY_ROLES = [
         'menu_ids': [
             'dashboard',
             # PLM产品研发（核心）
-            'plm', 'plm:requirements', 'plm:proposals', 'plm:configurator',
+            'plm', 'plm:requirements', 'plm:proposals',
             'plm:agreements', 'plm:model-viewer', 'plm:cad-bom', 'plm:bom-compare',
             # 项目相关
             'projects', 'projects:list', 'projects:tasks', 'projects:bom',
@@ -159,7 +159,7 @@ INDUSTRY_ROLES = [
             # 财务相关
             'finance', 'finance:ap', 'finance:purchase-reconciliation',
             # 报表
-            'reports', 'reports:purchase-price-trend', 'reports:slow-moving',
+            'reports', 'reports:slow-moving',
             # 审批
             'workflow', 'workflow:tasks', 'workflow:my-submissions',
             # OA
@@ -205,7 +205,7 @@ INDUSTRY_ROLES = [
             # 到货
             'purchase', 'purchase:goods-receipts',
             # 报表
-            'reports', 'reports:inventory-turnover', 'reports:slow-moving',
+            'reports', 'reports:slow-moving',
             # 审批
             'workflow', 'workflow:tasks', 'workflow:my-submissions',
             # OA
@@ -248,8 +248,7 @@ INDUSTRY_ROLES = [
             'production:serial-numbers', 'production:routing', 'production:assembly',
             'production:scheduling', 'production:capacity',
             # MES
-            'mes', 'mes:scheduling', 'mes:kanban', 'mes:traceability',
-            'mes:spc', 'mes:andon', 'mes:data-acquisition',
+            'mes', 'mes:kanban', 'mes:andon', 'mes:data-acquisition',
             # 工单
             'projects', 'projects:work-orders',
             # 设备
@@ -293,7 +292,7 @@ INDUSTRY_ROLES = [
             'dashboard',
             # 质量管理（核心）
             'production', 'production:inspections',
-            'mes', 'mes:traceability', 'mes:spc',
+            'mes', 'mes:andon',
             # 采购质检
             'purchase', 'purchase:goods-receipts',
             # 项目验收
@@ -323,7 +322,7 @@ INDUSTRY_ROLES = [
             'inventory', 'inventory:cost-accounting',
             # 报表
             'reports', 'reports:profitability', 'reports:cost-analysis',
-            'reports:aging', 'reports:cash-flow', 'reports:inventory-turnover',
+            'reports:aging', 'reports:cash-flow',
             # 数据分析
             'analytics', 'analytics:project', 'analytics:inventory',
             # 审批

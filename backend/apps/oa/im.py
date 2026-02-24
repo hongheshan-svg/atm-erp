@@ -1,6 +1,11 @@
 """
 即时通讯模块
 Instant Messaging with Group Chat and File Sharing
+
+非标自动化行业建议：
+- 可创建项目专属群组，方便项目团队沟通
+- 文件共享可用于分享技术资料、图纸等
+- 建议与项目协作配合使用
 """
 from datetime import datetime
 from django.db import models

@@ -1,13 +1,15 @@
 """
 Views for purchase app.
 """
+import logging
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db import transaction
 from django.db.models import Sum
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
-from apps.core.data_permission import DataPermissionMixin
+from apps.core.data_permission import DataPermissionMixin, SensitiveFieldMixin
+from apps.core.workflow.mixins import WorkflowEnforcementMixin
 from apps.projects.models import Project
 from apps.inventory.cost_methods import CostingMethodFactory, FIFOCostingService
 from .models import (
@@ -24,8 +26,10 @@ from .serializers import (
 )
 from .services import BudgetValidationService
 
+logger = logging.getLogger(__name__)
 
-class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+
+class PurchaseRequestViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
     """
     ViewSet for PurchaseRequest management.
     """
@@ -35,6 +39,11 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
     search_fields = ['request_no']
     ordering_fields = ['request_date', 'created_at']
     data_scope_field = 'requestor'
+    
+    # Workflow configuration
+    workflow_business_type = 'PURCHASE_REQUEST'
+    workflow_amount_field = 'total_amount'
+    workflow_no_field = 'request_no'
     
     def create(self, request, *args, **kwargs):
         """Override create to add debugging."""
@@ -205,36 +214,57 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
                     response_data['over_budget'] = True
                 return Response(response_data)
             else:
-                # No workflow configured, just submit
-                pr.status = 'SUBMITTED'
+                # No workflow configured, auto-approve
+                pr.status = 'APPROVED'
                 pr.save()
+                logger.info(f'采购申请 {pr.request_no} 自动批准（未配置审批流程）')
+                
+                # 更新BOM状态
+                from apps.projects.models import ProjectBOM
+                ProjectBOM.objects.filter(
+                    purchase_request=pr,
+                    is_deleted=False,
+                    order_status='PR_PENDING'
+                ).update(order_status='PR_APPROVED')
+                
                 response_data = {
                     **PurchaseRequestSerializer(pr).data,
                     'workflow_started': False,
-                    'message': error or '未配置审批流程，已直接提交'
+                    'auto_approved': True,
+                    'message': error or '未配置审批流程，已自动批准'
                 }
                 if budget_warning:
                     response_data['budget_warning'] = budget_warning
                 return Response(response_data)
                 
         except Exception as e:
-            # Workflow module not available, fallback to simple submit
-            pr.status = 'SUBMITTED'
+            # Workflow module not available, auto-approve
+            logger.warning(f'工作流服务异常，采购申请 {pr.request_no} 自动批准: {e}')
+            pr.status = 'APPROVED'
             pr.save()
-            response_data = PurchaseRequestSerializer(pr).data
+            response_data = {
+                **PurchaseRequestSerializer(pr).data,
+                'auto_approved': True,
+                'message': '工作流服务不可用，已自动批准'
+            }
             if budget_warning:
                 response_data['budget_warning'] = budget_warning
             return Response(response_data)
     
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
-        """Approve PR."""
+        """Approve PR - 仅在无活跃工作流时允许直接审批."""
         pr = self.get_object()
         if pr.status != 'SUBMITTED':
             return Response(
                 {'error': '只能批准已提交的申请'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        # 检查是否有活跃工作流
+        workflow_error = self.check_workflow_allows_direct_action(pr, '审批')
+        if workflow_error:
+            return workflow_error
         
         with transaction.atomic():
             pr.status = 'APPROVED'
@@ -252,13 +282,18 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
     
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
-        """Reject PR."""
+        """Reject PR - 仅在无活跃工作流时允许直接拒绝."""
         pr = self.get_object()
         if pr.status != 'SUBMITTED':
             return Response(
                 {'error': '只能拒绝已提交的申请'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        # 检查是否有活跃工作流
+        workflow_error = self.check_workflow_allows_direct_action(pr, '拒绝')
+        if workflow_error:
+            return workflow_error
         
         pr.status = 'REJECTED'
         pr.save()
@@ -741,7 +776,7 @@ class PurchaseRequestViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
         return response
 
 
-class PurchaseRequestLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class PurchaseRequestLineViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
     """
     ViewSet for PurchaseRequestLine management.
     """
@@ -751,7 +786,7 @@ class PurchaseRequestLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
     search_fields = ['item__sku', 'item__name']
 
 
-class PurchaseOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class PurchaseOrderViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
     """
     ViewSet for PurchaseOrder management.
     """
@@ -760,6 +795,11 @@ class PurchaseOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
     filterset_fields = ['supplier', 'project', 'status', 'is_deleted']
     search_fields = ['order_no']
     ordering_fields = ['order_date', 'created_at']
+    
+    # Workflow configuration
+    workflow_business_type = 'PURCHASE_ORDER'
+    workflow_amount_field = 'total_with_tax'  # 优先使用含税金额
+    workflow_no_field = 'order_no'
     
     @action(detail=False, methods=['get'])
     def for_linking(self, request):
@@ -851,6 +891,11 @@ class PurchaseOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
                 {'error': '只能确认草稿或已审批状态的订单'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        # 检查是否有活跃工作流（PENDING状态时需要通过工作流确认）
+        workflow_error = self.check_workflow_allows_direct_action(po, '确认')
+        if workflow_error:
+            return workflow_error
         
         with transaction.atomic():
             po.status = 'CONFIRMED'
@@ -1031,7 +1076,7 @@ class PurchaseOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
         })
 
 
-class PurchaseOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class PurchaseOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
     """
     ViewSet for PurchaseOrderLine management.
     """
@@ -1041,7 +1086,7 @@ class PurchaseOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
     search_fields = ['item__sku', 'item__name']
 
 
-class GoodsReceiptViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class GoodsReceiptViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
     """
     ViewSet for GoodsReceipt management.
     """
@@ -1220,7 +1265,7 @@ class GoodsReceiptLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
     search_fields = ['item__sku', 'item__name']
 
 
-class PurchaseContractViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class PurchaseContractViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
     """
     ViewSet for PurchaseContract management.
     """
@@ -1229,6 +1274,11 @@ class PurchaseContractViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
     filterset_fields = ['po', 'supplier', 'project', 'status', 'is_deleted']
     search_fields = ['contract_no', 'title']
     ordering_fields = ['contract_date', 'created_at']
+    
+    # Workflow configuration
+    workflow_business_type = 'PURCHASE_CONTRACT'
+    workflow_amount_field = 'total_amount'
+    workflow_no_field = 'contract_no'
     
     @action(detail=False, methods=['post'])
     def create_from_po(self, request):
@@ -1386,13 +1436,18 @@ class PurchaseContractViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
     
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
-        """审批合同."""
+        """审批合同 - 仅在无活跃工作流时允许直接审批."""
         contract = self.get_object()
         if contract.status not in ['DRAFT', 'PENDING']:
             return Response(
                 {'error': '只能审批草稿或待审批状态的合同'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        # 检查是否有活跃工作流
+        workflow_error = self.check_workflow_allows_direct_action(contract, '审批')
+        if workflow_error:
+            return workflow_error
         
         contract.status = 'APPROVED'
         contract.save()

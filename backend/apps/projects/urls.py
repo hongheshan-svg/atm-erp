@@ -52,10 +52,6 @@ from .proposal import (
     ProposalCategoryViewSet, TechnicalProposalViewSet,
     ProposalReviewViewSet, ProposalDocumentViewSet
 )
-from .configurator import (
-    ProductTemplateViewSet, ConfigParameterViewSet, ParameterOptionViewSet,
-    ConfigRuleViewSet, ConfigBOMRuleViewSet, ProductConfigurationViewSet
-)
 from .requirement_review import (
     ReviewTemplateViewSet, RequirementReviewViewSet, ReviewActionItemViewSet
 )
@@ -197,14 +193,6 @@ router.register(r'proposal-categories', ProposalCategoryViewSet, basename='propo
 router.register(r'proposals', TechnicalProposalViewSet, basename='proposal')
 router.register(r'proposal-reviews', ProposalReviewViewSet, basename='proposal-review')
 router.register(r'proposal-documents', ProposalDocumentViewSet, basename='proposal-document')
-
-# PLM - 产品配置器
-router.register(r'product-templates', ProductTemplateViewSet, basename='product-template')
-router.register(r'config-parameters', ConfigParameterViewSet, basename='config-parameter')
-router.register(r'parameter-options', ParameterOptionViewSet, basename='parameter-option')
-router.register(r'config-rules', ConfigRuleViewSet, basename='config-rule')
-router.register(r'config-bom-rules', ConfigBOMRuleViewSet, basename='config-bom-rule')
-router.register(r'product-configurations', ProductConfigurationViewSet, basename='product-configuration')
 
 # PLM - 需求评审
 router.register(r'review-templates', ReviewTemplateViewSet, basename='review-template')

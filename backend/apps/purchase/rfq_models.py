@@ -1,6 +1,14 @@
 """
 RFQ (Request for Quotation) models
 询价单、供应商报价、比价分析模型
+
+非标自动化行业使用说明：
+- 核心功能：向供应商发送询价、收集报价、比价分析
+- 询价类型：非标建议使用'常规询价'或'样件询价'
+  - '批量询价'和'框架协议询价'更适合标准件重复采购
+- 询价模板(RFQTemplate)：可选功能，用于快速创建相似询价
+- 价格历史(ItemPriceHistory)：可选功能，对一次性定制件意义不大
+- 最小订购量(min_order_qty)：可选字段，非标通常按项目需求采购
 """
 from django.db import models
 from django.conf import settings

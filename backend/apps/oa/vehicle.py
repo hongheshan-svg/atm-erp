@@ -1,8 +1,14 @@
 """
 车辆管理
 Vehicle Management
-OA协同办公模块
+
+功能：公司车辆登记、申请用车、维护保养
+
+非标自动化行业建议：
+- 用车申请可关联项目（如项目现场调试用车）
+- 可在申请表单中增加项目编号字段
 """
+import logging
 from datetime import date, datetime, timedelta
 from django.db import models
 from django.utils import timezone
@@ -13,6 +19,9 @@ from rest_framework.permissions import IsAuthenticated
 
 from apps.core.models import BaseModel
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.workflow.mixins import WorkflowEnforcementMixin
+
+logger = logging.getLogger(__name__)
 
 
 class Vehicle(BaseModel):
@@ -370,13 +379,18 @@ class VehicleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         return Response(self.get_serializer(vehicle).data)
 
 
-class VehicleRequestViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class VehicleRequestViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """用车申请管理"""
     queryset = VehicleRequest.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'vehicle', 'applicant', 'purpose']
     search_fields = ['request_no', 'purpose_detail', 'destination']
     ordering_fields = ['start_time', 'created_at']
+    
+    # Workflow configuration
+    workflow_business_type = 'VEHICLE_REQUEST'
+    workflow_amount_field = None
+    workflow_no_field = 'request_no'
     
     def get_serializer_class(self):
         if self.action == 'list':
@@ -420,29 +434,43 @@ class VehicleRequestViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
                     'message': '已提交审批，请在审批中心查看审批进度'
                 })
             else:
-                req.status = 'PENDING'
+                # 未配置审批流程，自动批准
+                req.status = 'APPROVED'
+                req.approver = request.user
+                req.approved_at = timezone.now()
                 req.save()
+                logger.info(f'用车申请 {req.request_no or req.id} 自动批准（未配置审批流程）')
                 return Response({
                     **self.get_serializer(req).data,
                     'workflow_started': False,
-                    'message': error or '未配置审批流程，请等待人工审批'
+                    'auto_approved': True,
+                    'message': error or '未配置审批流程，已自动批准'
                 })
                 
         except Exception as e:
-            req.status = 'PENDING'
+            # 工作流服务异常，自动批准
+            logger.warning(f'工作流服务异常，用车申请 {req.request_no or req.id} 自动批准: {e}')
+            req.status = 'APPROVED'
+            req.approver = request.user
+            req.approved_at = timezone.now()
             req.save()
             return Response({
                 **self.get_serializer(req).data,
-                'workflow_started': False,
-                'message': f'已提交，但工作流服务异常: {e}'
+                'auto_approved': True,
+                'message': '工作流服务不可用，已自动批准'
             })
     
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
-        """审批通过（手动审批，用于未配置流程时）"""
+        """审批通过 - 仅在无活跃工作流时允许直接审批"""
         req = self.get_object()
         if req.status != 'PENDING':
             return Response({'error': '只能审批待审批的申请'}, status=400)
+        
+        # 检查是否有活跃工作流
+        workflow_error = self.check_workflow_allows_direct_action(req, '审批')
+        if workflow_error:
+            return workflow_error
         
         vehicle_id = request.data.get('vehicle_id')
         if vehicle_id:
@@ -458,10 +486,15 @@ class VehicleRequestViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
     
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
-        """审批拒绝"""
+        """审批拒绝 - 仅在无活跃工作流时允许直接拒绝"""
         req = self.get_object()
         if req.status != 'PENDING':
             return Response({'error': '只能审批待审批的申请'}, status=400)
+        
+        # 检查是否有活跃工作流
+        workflow_error = self.check_workflow_allows_direct_action(req, '拒绝')
+        if workflow_error:
+            return workflow_error
         
         req.status = 'REJECTED'
         req.approver = request.user

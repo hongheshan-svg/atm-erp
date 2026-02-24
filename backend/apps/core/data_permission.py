@@ -139,8 +139,11 @@ def build_view_filter(user, module_name: str, model_name: str = None, model_clas
 
 
 def get_related_rules(module_name: str, model_name: str = None):
-    """获取模块的关联规则"""
-    # 通用关联规则
+    """
+    获取模块的关联规则
+    用于 view_related 策略下，判断用户是否与数据有关联
+    """
+    # 通用关联规则 - 创建人总是可以看到自己创建的数据
     rules = [
         {'field': 'created_by', 'type': 'user'},
     ]
@@ -153,14 +156,20 @@ def get_related_rules(module_name: str, model_name: str = None):
             {'field': 'project__members__user', 'type': 'user'},
         ],
         'purchase': [
+            {'field': 'requestor', 'type': 'user'},       # 采购申请人
+            {'field': 'buyer', 'type': 'user'},            # 采购员
             {'field': 'project__manager', 'type': 'user'},
             {'field': 'project__members__user', 'type': 'user'},
-            {'field': 'buyer', 'type': 'user'},
         ],
         'aftersales': [
             {'field': 'project__manager', 'type': 'user'},
             {'field': 'project__members__user', 'type': 'user'},
             {'field': 'assignee', 'type': 'user'},
+        ],
+        'finance': [
+            {'field': 'applicant', 'type': 'user'},        # 付款申请人
+            {'field': 'user', 'type': 'user'},              # 费用报销人
+            {'field': 'reconciled_by', 'type': 'user'},     # 对账人
         ],
     }
     

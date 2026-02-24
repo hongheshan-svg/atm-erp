@@ -1,7 +1,17 @@
 """
-电子看板
-Electronic Kanban
-生产监控大屏、实时数据展示
+项目生产看板
+Project Production Kanban
+
+功能：生产监控大屏、实时数据展示
+
+非标自动化行业适用说明：
+- 看板显示当前进行中的项目生产任务
+- 工作中心状态显示各工位当前任务
+- 完成率统计按任务数量（非产品数量）
+- 重点关注：任务进度、工位占用、异常预警
+
+注：数量完成率在非标行业意义有限（通常每个任务数量为1），
+建议关注任务完成数量和工时进度。
 """
 from datetime import date, datetime, timedelta
 from decimal import Decimal

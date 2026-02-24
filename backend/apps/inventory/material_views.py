@@ -9,7 +9,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
-from apps.core.data_permission import DataPermissionMixin
+from apps.core.data_permission import DataPermissionMixin, SensitiveFieldMixin
 from .material_models import (
     MaterialRequisition, MaterialRequisitionLine,
     MaterialReturn, MaterialReturnLine
@@ -269,7 +269,7 @@ class MaterialRequisitionViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermiss
         return Response(MaterialRequisitionSerializer(requisition).data)
 
 
-class MaterialRequisitionLineViewSet(viewsets.ModelViewSet):
+class MaterialRequisitionLineViewSet(SensitiveFieldMixin, viewsets.ModelViewSet):
     """领料单明细视图集"""
     queryset = MaterialRequisitionLine.objects.all()
     serializer_class = MaterialRequisitionLineSerializer
@@ -483,7 +483,7 @@ class MaterialReturnViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMi
         return Response(MaterialReturnSerializer(material_return).data)
 
 
-class MaterialReturnLineViewSet(viewsets.ModelViewSet):
+class MaterialReturnLineViewSet(SensitiveFieldMixin, viewsets.ModelViewSet):
     """退料单明细视图集"""
     queryset = MaterialReturnLine.objects.all()
     serializer_class = MaterialReturnLineSerializer

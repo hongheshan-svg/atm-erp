@@ -15,6 +15,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from apps.core.models import BaseModel
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.data_permission import DataPermissionMixin
 
 
 class AssetCategory(BaseModel):
@@ -446,7 +447,7 @@ class FixedAssetListSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
-class AssetCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AssetCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """资产分类管理"""
     queryset = AssetCategory.objects.filter(is_deleted=False)
     serializer_class = AssetCategorySerializer
@@ -474,7 +475,7 @@ class AssetCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         return Response(tree)
 
 
-class FixedAssetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class FixedAssetViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """固定资产管理"""
     queryset = FixedAsset.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
@@ -609,7 +610,7 @@ class FixedAssetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         })
 
 
-class AssetDepreciationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AssetDepreciationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """资产折旧管理"""
     queryset = AssetDepreciation.objects.filter(is_deleted=False)
     serializer_class = AssetDepreciationSerializer
@@ -629,7 +630,7 @@ class AssetDepreciationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         return Response(list(summary))
 
 
-class AssetTransferViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AssetTransferViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """资产转移管理"""
     queryset = AssetTransfer.objects.filter(is_deleted=False)
     serializer_class = AssetTransferSerializer
@@ -637,7 +638,7 @@ class AssetTransferViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
     filterset_fields = ['asset', 'from_department', 'to_department']
 
 
-class AssetDisposalViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AssetDisposalViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """资产处置管理"""
     queryset = AssetDisposal.objects.filter(is_deleted=False)
     serializer_class = AssetDisposalSerializer

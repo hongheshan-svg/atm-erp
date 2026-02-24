@@ -16,6 +16,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from apps.core.models import BaseModel
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.data_permission import DataPermissionMixin
 
 
 class AccountCategory(BaseModel):
@@ -518,7 +519,7 @@ class AccountBalanceSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
-class AccountCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AccountCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """科目类别管理"""
     queryset = AccountCategory.objects.filter(is_deleted=False)
     serializer_class = AccountCategorySerializer
@@ -527,7 +528,7 @@ class AccountCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
     search_fields = ['name', 'code']
 
 
-class ChartOfAccountViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ChartOfAccountViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """会计科目管理"""
     queryset = ChartOfAccount.objects.filter(is_deleted=False)
     serializer_class = ChartOfAccountSerializer
@@ -570,7 +571,7 @@ class ChartOfAccountViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         ])
 
 
-class FiscalPeriodViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class FiscalPeriodViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """会计期间管理"""
     queryset = FiscalPeriod.objects.filter(is_deleted=False)
     serializer_class = FiscalPeriodSerializer
@@ -629,7 +630,7 @@ class FiscalPeriodViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         })
 
 
-class JournalVoucherViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class JournalVoucherViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
     """记账凭证管理"""
     queryset = JournalVoucher.objects.filter(is_deleted=False)
     serializer_class = JournalVoucherSerializer
@@ -720,7 +721,7 @@ class JournalVoucherViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         return Response(self.get_serializer(voucher).data)
 
 
-class AccountBalanceViewSet(viewsets.ReadOnlyModelViewSet):
+class AccountBalanceViewSet(DataPermissionMixin, viewsets.ReadOnlyModelViewSet):
     """科目余额查询"""
     queryset = AccountBalance.objects.filter(is_deleted=False)
     serializer_class = AccountBalanceSerializer

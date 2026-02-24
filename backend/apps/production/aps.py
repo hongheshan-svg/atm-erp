@@ -1,7 +1,16 @@
 """
-APS高级排程
-Advanced Planning and Scheduling
-生产计划排程优化
+项目工序排程
+Project Operation Scheduling
+
+功能：基于项目的生产任务排程
+
+非标自动化行业适用说明：
+- 每个排程工单对应项目的一个生产任务
+- 数量(quantity)字段通常为1（单件生产）
+- 重点是工序时间和资源分配，而非数量完成率
+- 优先级基于项目交付日期
+
+注：此模块已简化，适合项目型单件/小批量生产排程
 """
 from datetime import date, datetime, timedelta
 from decimal import Decimal
