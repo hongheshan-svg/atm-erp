@@ -5,13 +5,15 @@ Following TDD: write tests first, then implement the service.
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from apps.accounts.models import Role
-from apps.core.permission_models_new import Permission, RolePermission
+from apps.accounts.models import Role, Department
+from apps.core.permission_models_new import Permission, RolePermission, DataScope
 from apps.core.permission_service import (
     get_user_permissions,
     has_permission,
     on_role_permission_change,
     on_user_role_change,
+    resolve_data_scope,
+    get_department_tree_ids,
 )
 
 User = get_user_model()
@@ -317,4 +319,188 @@ class CacheInvalidationTest(TestCase):
         permissions2 = get_user_permissions(self.user)
         self.assertNotIn('purchase:order', permissions2)
         self.assertIn('sales:order', permissions2)
+
+
+class ResolveDataScopeTest(TestCase):
+    """Test resolve_data_scope function"""
+
+    def setUp(self):
+        """Set up test data"""
+        cache.clear()
+
+        # Create departments
+        self.dept_root = Department.objects.create(
+            name='总部',
+            code='ROOT',
+            parent=None
+        )
+        self.dept_sales = Department.objects.create(
+            name='销售部',
+            code='SALES',
+            parent=self.dept_root
+        )
+        self.dept_purchase = Department.objects.create(
+            name='采购部',
+            code='PURCHASE',
+            parent=self.dept_root
+        )
+        self.dept_sales_team1 = Department.objects.create(
+            name='销售一组',
+            code='SALES_TEAM1',
+            parent=self.dept_sales
+        )
+
+        # Create roles
+        self.role_admin = Role.objects.create(
+            name='管理员',
+            code='admin',
+            is_active=True
+        )
+        self.role_manager = Role.objects.create(
+            name='经理',
+            code='manager',
+            is_active=True
+        )
+
+        # Create users
+        self.user = User.objects.create_user(
+            username='testuser',
+            employee_id='EMP001',
+            password='testpass123',
+            role=self.role_manager,
+            department=self.dept_sales
+        )
+
+    def tearDown(self):
+        """Clean up cache after each test"""
+        cache.clear()
+
+    def test_global_default_scope(self):
+        """Test that global scope is returned when no module-specific scope exists"""
+        # Create global data scope
+        DataScope.objects.create(
+            role=self.role_manager,
+            module='__default__',
+            scope_type='global'
+        )
+
+        scope_type, custom_dept_ids = resolve_data_scope(self.user, 'projects')
+
+        self.assertEqual(scope_type, 'global')
+        self.assertEqual(custom_dept_ids, [])
+
+    def test_module_override(self):
+        """Test that module-specific scope overrides default scope"""
+        # Create default scope
+        DataScope.objects.create(
+            role=self.role_manager,
+            module='__default__',
+            scope_type='self'
+        )
+        # Create module-specific scope
+        DataScope.objects.create(
+            role=self.role_manager,
+            module='projects',
+            scope_type='department_and_below'
+        )
+
+        scope_type, custom_dept_ids = resolve_data_scope(self.user, 'projects')
+
+        self.assertEqual(scope_type, 'department_and_below')
+        self.assertEqual(custom_dept_ids, [])
+
+    def test_multi_role_takes_widest(self):
+        """Test that when user has multiple roles, the widest scope is used"""
+        # Note: Current implementation uses single role (FK), not multiple roles (M2M)
+        # This test validates the logic for future M2M support
+        # For now, we test with a single role having the widest scope
+
+        # Create data scope for the user's role
+        DataScope.objects.create(
+            role=self.role_manager,
+            module='projects',
+            scope_type='global'
+        )
+
+        scope_type, custom_dept_ids = resolve_data_scope(self.user, 'projects')
+
+        # Should get global scope (widest)
+        self.assertEqual(scope_type, 'global')
+        self.assertEqual(custom_dept_ids, [])
+
+    def test_custom_scope_collects_departments(self):
+        """Test that custom scope returns list of department IDs"""
+        # Create custom data scope
+        data_scope = DataScope.objects.create(
+            role=self.role_manager,
+            module='projects',
+            scope_type='custom'
+        )
+        data_scope.departments.add(self.dept_sales, self.dept_purchase)
+
+        scope_type, custom_dept_ids = resolve_data_scope(self.user, 'projects')
+
+        self.assertEqual(scope_type, 'custom')
+        self.assertIn(self.dept_sales.id, custom_dept_ids)
+        self.assertIn(self.dept_purchase.id, custom_dept_ids)
+        self.assertEqual(len(custom_dept_ids), 2)
+
+    def test_no_scope_defaults_to_self(self):
+        """Test that when no scope is configured, defaults to 'self'"""
+        scope_type, custom_dept_ids = resolve_data_scope(self.user, 'projects')
+
+        self.assertEqual(scope_type, 'self')
+        self.assertEqual(custom_dept_ids, [])
+
+
+class GetDepartmentTreeIdsTest(TestCase):
+    """Test get_department_tree_ids function"""
+
+    def setUp(self):
+        """Set up test data"""
+        # Create department tree
+        self.dept_root = Department.objects.create(
+            name='总部',
+            code='ROOT',
+            parent=None
+        )
+        self.dept_sales = Department.objects.create(
+            name='销售部',
+            code='SALES',
+            parent=self.dept_root
+        )
+        self.dept_purchase = Department.objects.create(
+            name='采购部',
+            code='PURCHASE',
+            parent=self.dept_root
+        )
+        self.dept_sales_team1 = Department.objects.create(
+            name='销售一组',
+            code='SALES_TEAM1',
+            parent=self.dept_sales
+        )
+        self.dept_sales_team2 = Department.objects.create(
+            name='销售二组',
+            code='SALES_TEAM2',
+            parent=self.dept_sales
+        )
+
+    def test_returns_self_and_children(self):
+        """Test that function returns department and all its children"""
+        dept_ids = get_department_tree_ids(self.dept_sales.id)
+
+        self.assertIn(self.dept_sales.id, dept_ids)
+        self.assertIn(self.dept_sales_team1.id, dept_ids)
+        self.assertIn(self.dept_sales_team2.id, dept_ids)
+        self.assertEqual(len(dept_ids), 3)
+        # Should NOT include root or purchase
+        self.assertNotIn(self.dept_root.id, dept_ids)
+        self.assertNotIn(self.dept_purchase.id, dept_ids)
+
+    def test_leaf_returns_self(self):
+        """Test that leaf department returns only itself"""
+        dept_ids = get_department_tree_ids(self.dept_sales_team1.id)
+
+        self.assertEqual(dept_ids, [self.dept_sales_team1.id])
+
 

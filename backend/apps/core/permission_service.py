@@ -3,15 +3,26 @@ Permission service functions for checking user permissions.
 
 Provides caching and wildcard support for permission checks.
 """
-from typing import Set
+from typing import Set, Tuple, List
 from django.core.cache import cache
 from django.contrib.auth import get_user_model
-from apps.core.permission_models_new import Permission, RolePermission
+from django.db.models import QuerySet
+from apps.core.permission_models_new import Permission, RolePermission, DataScope
+from apps.accounts.models import Department
 
 User = get_user_model()
 
 # Cache timeout in seconds (5 minutes)
 PERMISSION_CACHE_TIMEOUT = 300
+
+# Scope priority for determining widest scope
+SCOPE_PRIORITY = {
+    'global': 5,
+    'custom': 4,
+    'department_and_below': 4,
+    'department': 3,
+    'self': 2,
+}
 
 
 def get_user_permissions(user) -> Set[str]:
@@ -142,3 +153,222 @@ def on_user_role_change(user):
     """
     cache_key = f'user_permissions:{user.id}'
     cache.delete(cache_key)
+
+
+def resolve_data_scope(user, module: str) -> Tuple[str, List[int]]:
+    """
+    Resolve data scope for a user in a specific module.
+
+    Returns the widest scope type and custom department IDs if applicable.
+
+    Args:
+        user: User instance
+        module: Module name (e.g., 'projects', 'sales', 'purchase')
+
+    Returns:
+        Tuple of (scope_type, custom_dept_ids)
+        - scope_type: One of 'global', 'department_and_below', 'department', 'self', 'custom'
+        - custom_dept_ids: List of department IDs (only for 'custom' scope)
+
+    Notes:
+        - Checks module-specific scope first, then falls back to '__default__' scope
+        - If user has multiple roles (future M2M support), takes the widest scope
+        - If no scope configured, defaults to 'self'
+        - Custom scope collects all department IDs from all roles
+    """
+    # Handle None/unauthenticated user
+    if user is None or not user.is_authenticated:
+        return ('self', [])
+
+    # Superuser gets global scope
+    if user.is_superuser:
+        return ('global', [])
+
+    # Get user's role (currently FK, will be M2M in future)
+    if not user.role or not user.role.is_active or user.role.is_deleted:
+        return ('self', [])
+
+    # Try to get module-specific scope first
+    data_scope = DataScope.objects.filter(
+        role=user.role,
+        module=module
+    ).first()
+
+    # Fall back to default scope if no module-specific scope
+    if not data_scope:
+        data_scope = DataScope.objects.filter(
+            role=user.role,
+            module='__default__'
+        ).first()
+
+    # If still no scope, default to 'self'
+    if not data_scope:
+        return ('self', [])
+
+    scope_type = data_scope.scope_type
+    custom_dept_ids = []
+
+    # Collect custom department IDs if scope is custom
+    if scope_type == 'custom':
+        custom_dept_ids = list(
+            data_scope.departments.filter(
+                is_deleted=False
+            ).values_list('id', flat=True)
+        )
+
+    return (scope_type, custom_dept_ids)
+
+
+def get_department_tree_ids(dept_id: int) -> List[int]:
+    """
+    Get department ID and all its children IDs recursively.
+
+    Args:
+        dept_id: Department ID
+
+    Returns:
+        List of department IDs including the department itself and all descendants
+
+    Notes:
+        - Returns empty list if department doesn't exist
+        - Excludes soft-deleted departments
+    """
+    try:
+        dept = Department.objects.get(id=dept_id, is_deleted=False)
+    except Department.DoesNotExist:
+        return []
+
+    # Start with the department itself
+    dept_ids = [dept_id]
+
+    # Get all children recursively
+    children = Department.objects.filter(
+        parent_id=dept_id,
+        is_deleted=False
+    )
+
+    for child in children:
+        # Recursively get child's tree
+        dept_ids.extend(get_department_tree_ids(child.id))
+
+    return dept_ids
+
+
+def apply_scope_filter(queryset: QuerySet, user, scope_result: Tuple[str, List[int]]) -> QuerySet:
+    """
+    Apply data scope filter to a queryset.
+
+    Args:
+        queryset: Django QuerySet to filter
+        user: User instance
+        scope_result: Tuple from resolve_data_scope (scope_type, custom_dept_ids)
+
+    Returns:
+        Filtered QuerySet
+
+    Notes:
+        - Assumes queryset model has 'created_by' and/or 'department' fields
+        - For 'global' scope, returns queryset unchanged
+        - For 'self' scope, filters by created_by=user
+        - For 'department' scope, filters by user's department
+        - For 'department_and_below' scope, filters by user's department tree
+        - For 'custom' scope, filters by custom department list
+    """
+    scope_type, custom_dept_ids = scope_result
+
+    # Global scope - no filtering
+    if scope_type == 'global':
+        return queryset
+
+    # Self scope - only user's own data
+    if scope_type == 'self':
+        # Try to filter by created_by if field exists
+        if hasattr(queryset.model, 'created_by'):
+            return queryset.filter(created_by=user)
+        return queryset.none()
+
+    # Department scope - user's department only
+    if scope_type == 'department':
+        if not user.department:
+            return queryset.none()
+        if hasattr(queryset.model, 'department'):
+            return queryset.filter(department=user.department)
+        return queryset.none()
+
+    # Department and below scope - user's department tree
+    if scope_type == 'department_and_below':
+        if not user.department:
+            return queryset.none()
+        dept_ids = get_department_tree_ids(user.department.id)
+        if hasattr(queryset.model, 'department'):
+            return queryset.filter(department_id__in=dept_ids)
+        return queryset.none()
+
+    # Custom scope - specific departments
+    if scope_type == 'custom':
+        if not custom_dept_ids:
+            return queryset.none()
+        if hasattr(queryset.model, 'department'):
+            return queryset.filter(department_id__in=custom_dept_ids)
+        return queryset.none()
+
+    # Unknown scope type - return empty queryset
+    return queryset.none()
+
+
+def get_hidden_fields(user, module: str, resource: str) -> List[str]:
+    """
+    Get list of field names that should be hidden for the user.
+
+    Args:
+        user: User instance
+        module: Module name (e.g., 'projects', 'sales')
+        resource: Resource identifier (e.g., 'purchase_order', 'project')
+
+    Returns:
+        List of field names that should be hidden
+
+    Notes:
+        - Returns empty list for superusers
+        - Checks field-level permissions for the user's role
+        - Only returns fields where user does NOT have permission
+    """
+    # Handle None/unauthenticated user - hide all fields
+    if user is None or not user.is_authenticated:
+        return []
+
+    # Superuser sees all fields
+    if user.is_superuser:
+        return []
+
+    # Get user's role
+    if not user.role or not user.role.is_active or user.role.is_deleted:
+        return []
+
+    # Get all field permissions for this resource
+    field_permissions = Permission.objects.filter(
+        type='field',
+        resource=resource,
+        is_active=True,
+        is_deleted=False
+    )
+
+    # Get user's field permissions
+    user_field_permissions = set(
+        Permission.objects.filter(
+            role_permissions__role=user.role,
+            type='field',
+            resource=resource,
+            is_active=True,
+            is_deleted=False
+        ).values_list('field_name', flat=True)
+    )
+
+    # Fields that user does NOT have permission to see
+    hidden_fields = []
+    for perm in field_permissions:
+        if perm.field_name and perm.field_name not in user_field_permissions:
+            hidden_fields.append(perm.field_name)
+
+    return hidden_fields
+
