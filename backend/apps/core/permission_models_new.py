@@ -105,3 +105,99 @@ class Permission(BaseModel):
             raise ValidationError({
                 'parent': 'A permission cannot be its own parent.'
             })
+
+
+class RolePermission(models.Model):
+    """
+    角色权限关联表
+    不继承 BaseModel，避免软删除带来的复杂性
+    """
+    role = models.ForeignKey(
+        'accounts.Role',
+        on_delete=models.CASCADE,
+        related_name='role_permissions',
+        verbose_name='角色'
+    )
+    permission = models.ForeignKey(
+        Permission,
+        on_delete=models.CASCADE,
+        related_name='role_permissions',
+        verbose_name='权限'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='创建时间'
+    )
+
+    class Meta:
+        db_table = 'core_role_permission'
+        verbose_name = '角色权限'
+        verbose_name_plural = verbose_name
+        unique_together = [['role', 'permission']]
+        indexes = [
+            models.Index(fields=['role'], name='core_roleperm_role_idx'),
+            models.Index(fields=['permission'], name='core_roleperm_perm_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.role.name} - {self.permission.name}'
+
+
+class DataScope(models.Model):
+    """
+    数据权限范围
+    不继承 BaseModel，避免软删除带来的复杂性
+    """
+    SCOPE_TYPE_CHOICES = [
+        ('global', '全局数据'),
+        ('department', '本部门数据'),
+        ('department_and_below', '本部门及下级部门数据'),
+        ('self', '仅本人数据'),
+        ('custom', '自定义部门数据'),
+    ]
+
+    role = models.ForeignKey(
+        'accounts.Role',
+        on_delete=models.CASCADE,
+        related_name='data_scopes',
+        verbose_name='角色'
+    )
+    module = models.CharField(
+        max_length=50,
+        verbose_name='模块',
+        help_text='如 projects, sales, purchase'
+    )
+    scope_type = models.CharField(
+        max_length=30,
+        choices=SCOPE_TYPE_CHOICES,
+        verbose_name='范围类型'
+    )
+    departments = models.ManyToManyField(
+        'accounts.Department',
+        blank=True,
+        related_name='data_scopes',
+        verbose_name='自定义部门',
+        help_text='仅当 scope_type 为 custom 时使用'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='创建时间'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name='更新时间'
+    )
+
+    class Meta:
+        db_table = 'core_data_scope'
+        verbose_name = '数据权限范围'
+        verbose_name_plural = verbose_name
+        unique_together = [['role', 'module']]
+        indexes = [
+            models.Index(fields=['role', 'module'], name='core_datascope_role_mod_idx'),
+            models.Index(fields=['scope_type'], name='core_datascope_type_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.role.name} - {self.module} ({self.get_scope_type_display()})'
+

@@ -1,7 +1,8 @@
 from django.test import TestCase
 from django.db import IntegrityError
 from django.core.exceptions import ValidationError
-from apps.core.permission_models_new import Permission
+from apps.core.permission_models_new import Permission, RolePermission, DataScope
+from apps.accounts.models import Role, Department
 
 
 class PermissionModelTest(TestCase):
@@ -214,3 +215,136 @@ class PermissionModelTest(TestCase):
         ordered_children = list(children)
         self.assertEqual(ordered_children[0], child1)
         self.assertEqual(ordered_children[1], child2)
+
+
+class RolePermissionModelTest(TestCase):
+    """Test cases for RolePermission model"""
+
+    def setUp(self):
+        """Set up test data"""
+        self.role = Role.objects.create(
+            name='测试角色',
+            code='test_role'
+        )
+        self.permission = Permission.objects.create(
+            code='system:user:create',
+            name='创建用户',
+            type='operation',
+            resource='user',
+            sort_order=1
+        )
+
+    def test_create_role_permission(self):
+        """Test creating a role permission"""
+        role_perm = RolePermission.objects.create(
+            role=self.role,
+            permission=self.permission
+        )
+        self.assertEqual(role_perm.role, self.role)
+        self.assertEqual(role_perm.permission, self.permission)
+        self.assertIsNotNone(role_perm.created_at)
+
+    def test_role_permission_unique_constraint(self):
+        """Test that role-permission combination must be unique"""
+        RolePermission.objects.create(
+            role=self.role,
+            permission=self.permission
+        )
+        with self.assertRaises(IntegrityError):
+            RolePermission.objects.create(
+                role=self.role,
+                permission=self.permission
+            )
+
+    def test_role_permission_cascade_delete(self):
+        """Test that deleting role or permission cascades to RolePermission"""
+        role_perm = RolePermission.objects.create(
+            role=self.role,
+            permission=self.permission
+        )
+        role_perm_id = role_perm.id
+
+        # Delete role should cascade
+        self.role.delete()
+        self.assertFalse(RolePermission.objects.filter(id=role_perm_id).exists())
+
+
+class DataScopeModelTest(TestCase):
+    """Test cases for DataScope model"""
+
+    def setUp(self):
+        """Set up test data"""
+        self.role = Role.objects.create(
+            name='测试角色',
+            code='test_role'
+        )
+        self.dept1 = Department.objects.create(
+            name='研发部',
+            code='RD'
+        )
+        self.dept2 = Department.objects.create(
+            name='销售部',
+            code='SALES'
+        )
+
+    def test_create_global_scope(self):
+        """Test creating a global data scope"""
+        scope = DataScope.objects.create(
+            role=self.role,
+            module='projects',
+            scope_type='global'
+        )
+        self.assertEqual(scope.role, self.role)
+        self.assertEqual(scope.module, 'projects')
+        self.assertEqual(scope.scope_type, 'global')
+        self.assertEqual(scope.departments.count(), 0)
+
+    def test_create_module_scope(self):
+        """Test creating a module-level data scope"""
+        scope = DataScope.objects.create(
+            role=self.role,
+            module='sales',
+            scope_type='department'
+        )
+        scope.departments.add(self.dept1)
+
+        self.assertEqual(scope.scope_type, 'department')
+        self.assertEqual(scope.departments.count(), 1)
+        self.assertIn(self.dept1, scope.departments.all())
+
+    def test_create_custom_scope_with_departments(self):
+        """Test creating a custom scope with multiple departments"""
+        scope = DataScope.objects.create(
+            role=self.role,
+            module='purchase',
+            scope_type='custom'
+        )
+        scope.departments.add(self.dept1, self.dept2)
+
+        self.assertEqual(scope.scope_type, 'custom')
+        self.assertEqual(scope.departments.count(), 2)
+        self.assertIn(self.dept1, scope.departments.all())
+        self.assertIn(self.dept2, scope.departments.all())
+
+    def test_data_scope_unique_per_role_module(self):
+        """Test that role-module combination must be unique"""
+        DataScope.objects.create(
+            role=self.role,
+            module='projects',
+            scope_type='global'
+        )
+        with self.assertRaises(IntegrityError):
+            DataScope.objects.create(
+                role=self.role,
+                module='projects',
+                scope_type='department'
+            )
+
+    def test_scope_type_choices(self):
+        """Test that scope_type must be one of the valid choices"""
+        scope = DataScope.objects.create(
+            role=self.role,
+            module='inventory',
+            scope_type='self'
+        )
+        self.assertIn(scope.scope_type, ['global', 'department', 'department_and_below', 'self', 'custom'])
