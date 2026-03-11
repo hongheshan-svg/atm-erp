@@ -62,6 +62,15 @@ class Role(TimeStampedModel, SoftDeleteModel):
     )
     # Store menu permissions as JSON: {"menu_ids": [1,2,3], "permissions": ["user:add", "user:edit"]}
     permissions = models.JSONField(default=dict, blank=True, verbose_name='权限配置')
+    # New M2M field for structured permissions via RolePermission
+    permissions_new = models.ManyToManyField(
+        'core.Permission',
+        through='core.RolePermission',
+        blank=True,
+        related_name='roles',
+        verbose_name='权限列表',
+        help_text='通过 RolePermission 关联的结构化权限'
+    )
     is_active = models.BooleanField(default=True, verbose_name='激活状态')
     sort_order = models.IntegerField(default=0, verbose_name='排序')
     
@@ -111,7 +120,15 @@ class User(AbstractUser, SoftDeleteModel):
         related_name='users',
         verbose_name='角色'
     )
-    
+    # New M2M field for multi-role support
+    roles = models.ManyToManyField(
+        Role,
+        blank=True,
+        related_name='users_m2m',
+        verbose_name='角色列表',
+        help_text='支持多角色分配'
+    )
+
     position = models.CharField(max_length=100, blank=True, verbose_name='职位')
     hire_date = models.DateField(null=True, blank=True, verbose_name='入职日期')
     
@@ -134,13 +151,13 @@ class User(AbstractUser, SoftDeleteModel):
         return full_name or self.username
     
     def has_permission(self, permission_code):
-        """Check if user has a specific permission."""
-        if self.is_superuser:
-            return True
-        if not self.role or not self.role.is_active:
-            return False
-        permissions = self.role.permissions.get('permissions', [])
-        return permission_code in permissions
+        """
+        Check if user has a specific permission.
+
+        Uses the new permission service with caching and wildcard support.
+        """
+        from apps.core.permission_service import has_permission
+        return has_permission(self, permission_code)
     
     def soft_delete(self):
         """Soft delete user and free up username/email for reuse."""
