@@ -9,6 +9,7 @@ from django.db import transaction
 from django.db.models import Sum
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.data_permission import DataPermissionMixin, SensitiveFieldMixin
 from apps.core.workflow.mixins import WorkflowEnforcementMixin
 from apps.projects.models import Project
 from apps.inventory.cost_methods import CostingMethodFactory, FIFOCostingService
