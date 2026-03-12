@@ -37,21 +37,38 @@ class DepartmentSerializer(serializers.ModelSerializer):
 class RoleSerializer(serializers.ModelSerializer):
     """Role serializer."""
     user_count = serializers.SerializerMethodField()
-    # 显式设置 code 为可选字段，允许空值
     code = serializers.CharField(max_length=50, required=False, allow_blank=True)
-    
+    permission_ids = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=None,
+        source='permissions_new',
+        required=False
+    )
+    data_scopes = serializers.SerializerMethodField()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from apps.core.permission_models_new import Permission
+        self.fields['permission_ids'].queryset = Permission.active.all()
+
     class Meta:
         model = Role
         fields = [
             'id', 'code', 'name', 'description', 'data_scope', 'permissions',
-            'is_active', 'sort_order', 'user_count',
+            'permission_ids', 'data_scopes', 'is_active', 'sort_order', 'user_count',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
-    
+
     def get_user_count(self, obj):
         return obj.users.filter(is_deleted=False, is_active=True).count()
-    
+
+    def get_data_scopes(self, obj):
+        """返回角色的数据权限配置"""
+        from apps.core.permission_models_new import DataScope
+        scopes = DataScope.objects.filter(role=obj)
+        return [{'module': s.module, 'scope_type': s.scope_type} for s in scopes]
+
     def validate_name(self, value):
         """检查角色名称唯一性（排除当前记录）"""
         instance = self.instance
@@ -61,7 +78,7 @@ class RoleSerializer(serializers.ModelSerializer):
         if qs.exists():
             raise serializers.ValidationError('该角色名称已存在')
         return value
-    
+
     def validate_code(self, value):
         """检查角色编码唯一性（排除当前记录和空值）"""
         if not value:
@@ -73,13 +90,24 @@ class RoleSerializer(serializers.ModelSerializer):
         if qs.exists():
             raise serializers.ValidationError('该角色编码已存在')
         return value
-    
+
     def create(self, validated_data):
         import uuid
-        # 如果没有提供code或为空，自动生成角色编码
         if not validated_data.get('code'):
             validated_data['code'] = f"ROLE{uuid.uuid4().hex[:6].upper()}"
-        return super().create(validated_data)
+        permissions_new = validated_data.pop('permissions_new', [])
+        role = super().create(validated_data)
+        if permissions_new:
+            role.permissions_new.set(permissions_new)
+        return role
+
+    def update(self, instance, validated_data):
+        permissions_new = validated_data.pop('permissions_new', None)
+        role = super().update(instance, validated_data)
+        if permissions_new is not None:
+            role.permissions_new.set(permissions_new)
+        return role
+
 
 
 class UserSerializer(serializers.ModelSerializer):
