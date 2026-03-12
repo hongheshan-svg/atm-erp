@@ -9,7 +9,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
-from apps.core.data_permission import DataPermissionMixin, SensitiveFieldMixin
+from apps.core.permission_mixin import PermissionMixin
 from .material_models import (
     MaterialRequisition, MaterialRequisitionLine,
     MaterialReturn, MaterialReturnLine
@@ -23,7 +23,10 @@ from .material_serializers import (
 from .models import StockMove, Stock
 
 
-class MaterialRequisitionViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class MaterialRequisitionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'inventory'
+    permission_resource = 'material_requisition'
     """
     领料单视图集
     
@@ -269,7 +272,10 @@ class MaterialRequisitionViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermiss
         return Response(MaterialRequisitionSerializer(requisition).data)
 
 
-class MaterialRequisitionLineViewSet(SensitiveFieldMixin, viewsets.ModelViewSet):
+class MaterialRequisitionLineViewSet(PermissionMixin, viewsets.ModelViewSet):
+
+    permission_module = 'inventory'
+    permission_resource = 'material_requisition_line'
     """领料单明细视图集"""
     queryset = MaterialRequisitionLine.objects.all()
     serializer_class = MaterialRequisitionLineSerializer
@@ -277,7 +283,10 @@ class MaterialRequisitionLineViewSet(SensitiveFieldMixin, viewsets.ModelViewSet)
     filterset_fields = ['requisition', 'item']
 
 
-class MaterialReturnViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class MaterialReturnViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'inventory'
+    permission_resource = 'material_return'
     """
     退料单视图集
     
@@ -483,7 +492,10 @@ class MaterialReturnViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMi
         return Response(MaterialReturnSerializer(material_return).data)
 
 
-class MaterialReturnLineViewSet(SensitiveFieldMixin, viewsets.ModelViewSet):
+class MaterialReturnLineViewSet(PermissionMixin, viewsets.ModelViewSet):
+
+    permission_module = 'inventory'
+    permission_resource = 'material_return_line'
     """退料单明细视图集"""
     queryset = MaterialReturnLine.objects.all()
     serializer_class = MaterialReturnLineSerializer

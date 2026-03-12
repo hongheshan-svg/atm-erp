@@ -8,7 +8,7 @@ from django.db.models import Avg, Count
 from django.utils import timezone
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
-from apps.core.data_permission import DataPermissionMixin
+from apps.core.permission_mixin import PermissionMixin
 from rest_framework.permissions import IsAuthenticated
 
 from .evaluation_models import (
@@ -99,7 +99,7 @@ class EvaluationCriteriaViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
     search_fields = ['name']
 
 
-class SupplierEvaluationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class SupplierEvaluationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     供应商评价管理
     """
@@ -109,6 +109,9 @@ class SupplierEvaluationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissi
     filterset_fields = ['supplier', 'template', 'status', 'period_type', 'grade', 'evaluator']
     search_fields = ['evaluation_no', 'supplier__name', 'comments']
     ordering_fields = ['evaluation_date', 'total_score', 'grade']
+
+    permission_module = 'purchase'
+    permission_resource = 'supplier_evaluation'
     
     def get_serializer_class(self):
         if self.action == 'create':
@@ -274,7 +277,7 @@ class SupplierGradeHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     ordering_fields = ['change_date']
 
 
-class SupplierBlacklistViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class SupplierBlacklistViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     供应商黑名单管理
     """
@@ -283,6 +286,9 @@ class SupplierBlacklistViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissio
     permission_classes = [IsAuthenticated]
     filterset_fields = ['supplier', 'status']
     search_fields = ['supplier__name', 'reason']
+
+    permission_module = 'purchase'
+    permission_resource = 'supplier_blacklist'
     
     @action(detail=True, methods=['post'])
     def lift(self, request, pk=None):

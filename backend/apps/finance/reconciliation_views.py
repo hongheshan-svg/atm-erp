@@ -11,7 +11,7 @@ from django.utils import timezone
 from decimal import Decimal
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
-from apps.core.data_permission import DataPermissionMixin
+from apps.core.permission_mixin import PermissionMixin
 from .reconciliation_models import (
     PurchaseReconciliation, PurchaseReconciliationLine,
     SalesReconciliation, SalesReconciliationLine,
@@ -28,10 +28,10 @@ from .reconciliation_serializers import (
 from .models import AccountPayable, AccountReceivable, Invoice, Payment
 
 
-class PurchaseReconciliationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     采购付款对账单视图
-    
+
     支持操作：
     - 创建对账单
     - 生成对账明细（从采购订单、发票、付款记录）
@@ -43,6 +43,9 @@ class PurchaseReconciliationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPerm
     search_fields = ['reconciliation_no', 'supplier__name']
     ordering_fields = ['period_start', 'created_at']
     ordering = ['-created_at']
+
+    permission_module = 'finance'
+    permission_resource = 'purchase_reconciliation'
     module_name = 'finance'
     
     def get_serializer_class(self):
@@ -437,7 +440,7 @@ class PurchaseReconciliationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPerm
         return Response(result)
 
 
-class SalesReconciliationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class SalesReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     销售收款对账单视图
     """
@@ -447,7 +450,9 @@ class SalesReconciliationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermiss
     search_fields = ['reconciliation_no', 'customer__name']
     ordering_fields = ['period_start', 'created_at']
     ordering = ['-created_at']
-    module_name = 'finance'
+
+    permission_module = 'finance'
+    permission_resource = 'sales_reconciliation'
     
     def get_serializer_class(self):
         if self.action == 'list':
@@ -822,7 +827,7 @@ class SalesReconciliationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermiss
         return Response(result)
 
 
-class InvoiceReconciliationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class InvoiceReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     发票对账单视图
     """
@@ -832,6 +837,9 @@ class InvoiceReconciliationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermi
     search_fields = ['reconciliation_no']
     ordering_fields = ['period_start', 'created_at']
     ordering = ['-created_at']
+
+    permission_module = 'finance'
+    permission_resource = 'invoice_reconciliation'
     module_name = 'finance'
     
     def get_serializer_class(self):

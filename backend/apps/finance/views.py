@@ -10,7 +10,8 @@ from django.utils import timezone
 from django.db import transaction
 from django.db.models import Q, Sum, F, Count
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
-from apps.core.data_permission import DataPermissionMixin, FinanceDataMixin, require_finance_permission
+from apps.core.permission_mixin import PermissionMixin
+from apps.core.data_permission import FinanceDataMixin, require_finance_permission
 from apps.core.workflow.mixins import WorkflowEnforcementMixin
 from apps.projects.models import Project
 
@@ -29,7 +30,7 @@ from .serializers import (
 )
 
 
-class CurrencyViewSet(DataPermissionMixin, viewsets.ModelViewSet):
+class CurrencyViewSet(PermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for Currency management.
     """
@@ -37,6 +38,9 @@ class CurrencyViewSet(DataPermissionMixin, viewsets.ModelViewSet):
     serializer_class = CurrencySerializer
     filterset_fields = ['is_active', 'is_base_currency']
     search_fields = ['code', 'name']
+
+    permission_module = 'finance'
+    permission_resource = 'currency'
     
     @action(detail=True, methods=['post'])
     def update_rate(self, request, pk=None):
@@ -96,7 +100,7 @@ class PaymentViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
     ordering_fields = ['payment_date', 'amount', 'created_at']
 
 
-class ExpenseViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class ExpenseViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for Expense management.
     """
@@ -105,7 +109,9 @@ class ExpenseViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixi
     filterset_fields = ['project', 'department', 'user', 'category', 'status', 'is_deleted']
     search_fields = ['expense_no', 'description']
     ordering_fields = ['expense_date', 'amount', 'created_at']
-    data_scope_field = 'user'
+
+    permission_module = 'finance'
+    permission_resource = 'expense'
     
     # Workflow configuration
     workflow_business_type = 'EXPENSE'
@@ -1229,7 +1235,7 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
         return Response(serializer.data)
 
 
-class SharedExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class SharedExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for SharedExpense management.
     """
@@ -1238,6 +1244,9 @@ class SharedExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
     filterset_fields = ['category', 'status', 'allocation_method', 'is_deleted']
     search_fields = ['expense_no', 'name']
     ordering_fields = ['expense_date', 'amount', 'created_at']
+
+    permission_module = 'finance'
+    permission_resource = 'shared_expense'
     
     @action(detail=True, methods=['post'])
     def calculate_allocation(self, request, pk=None):
@@ -1534,10 +1543,13 @@ class SharedExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
         ]
 
 
-class SharedExpenseAllocationViewSet(DataPermissionMixin, viewsets.ReadOnlyModelViewSet):
+class SharedExpenseAllocationViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for SharedExpenseAllocation (read-only).
     """
+
+    permission_module = 'finance'
+    permission_resource = 'shared_expense_allocation'
     queryset = SharedExpenseAllocation.objects.all()
     serializer_class = SharedExpenseAllocationSerializer
     filterset_fields = ['shared_expense', 'project']
@@ -1574,10 +1586,13 @@ class SharedExpenseAllocationViewSet(DataPermissionMixin, viewsets.ReadOnlyModel
         return Response(data)
 
 
-class PaymentScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class PaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for PaymentSchedule management.
     用于管理和跟踪销售订单的付款计划。
+
+    permission_module = 'finance'
+    permission_resource = 'payment_schedule'
     """
     queryset = PaymentSchedule.objects.filter(is_deleted=False).select_related(
         'sales_order', 'sales_order__customer', 'project', 'account_receivable'
@@ -1792,7 +1807,7 @@ class PaymentScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
         })
 
 
-class PurchasePaymentScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class PurchasePaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for PurchasePaymentSchedule management.
     用于管理和跟踪采购订单的付款计划。
@@ -1804,6 +1819,9 @@ class PurchasePaymentScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, DataPer
     filterset_fields = ['purchase_order', 'project', 'status', 'milestone_type', 'reminder_status']
     search_fields = ['schedule_no', 'milestone_name', 'purchase_order__order_no']
     ordering_fields = ['due_date', 'amount_due', 'created_at']
+
+    permission_module = 'finance'
+    permission_resource = 'purchase_payment_schedule'
     
     @action(detail=False, methods=['get'])
     def summary(self, request):
@@ -2006,7 +2024,7 @@ class PurchasePaymentScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, DataPer
         })
 
 
-class PaymentRequestViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class PaymentRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for PaymentRequest management - 付款申请管理.
     """
@@ -2015,8 +2033,10 @@ class PaymentRequestViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrack
     filterset_fields = ['supplier', 'project', 'status', 'payment_type', 'applicant', 'is_deleted']
     search_fields = ['request_no', 'title', 'reason']
     ordering_fields = ['expected_date', 'amount', 'created_at']
-    data_scope_field = 'applicant'
-    
+
+    permission_module = 'finance'
+    permission_resource = 'payment_request'
+
     # Workflow configuration
     workflow_business_type = 'PAYMENT'
     workflow_amount_field = 'amount'

@@ -16,7 +16,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from apps.core.models import BaseModel
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
-from apps.core.data_permission import DataPermissionMixin
+from apps.core.permission_mixin import PermissionMixin
 
 
 class AccountCategory(BaseModel):
@@ -519,7 +519,10 @@ class AccountBalanceSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
-class AccountCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class AccountCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'finance'
+    permission_resource = 'account_category'
     """科目类别管理"""
     queryset = AccountCategory.objects.filter(is_deleted=False)
     serializer_class = AccountCategorySerializer
@@ -528,7 +531,10 @@ class AccountCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionM
     search_fields = ['name', 'code']
 
 
-class ChartOfAccountViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class ChartOfAccountViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'finance'
+    permission_resource = 'chart_of_account'
     """会计科目管理"""
     queryset = ChartOfAccount.objects.filter(is_deleted=False)
     serializer_class = ChartOfAccountSerializer
@@ -571,7 +577,10 @@ class ChartOfAccountViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMi
         ])
 
 
-class FiscalPeriodViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class FiscalPeriodViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'finance'
+    permission_resource = 'fiscal_period'
     """会计期间管理"""
     queryset = FiscalPeriod.objects.filter(is_deleted=False)
     serializer_class = FiscalPeriodSerializer
@@ -630,7 +639,10 @@ class FiscalPeriodViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixi
         })
 
 
-class JournalVoucherViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class JournalVoucherViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'finance'
+    permission_resource = 'journal_voucher'
     """记账凭证管理"""
     queryset = JournalVoucher.objects.filter(is_deleted=False)
     serializer_class = JournalVoucherSerializer
@@ -721,7 +733,10 @@ class JournalVoucherViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMi
         return Response(self.get_serializer(voucher).data)
 
 
-class AccountBalanceViewSet(DataPermissionMixin, viewsets.ReadOnlyModelViewSet):
+class AccountBalanceViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
+
+    permission_module = 'finance'
+    permission_resource = 'account_balance'
     """科目余额查询"""
     queryset = AccountBalance.objects.filter(is_deleted=False)
     serializer_class = AccountBalanceSerializer

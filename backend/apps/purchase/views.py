@@ -9,7 +9,6 @@ from django.db import transaction
 from django.db.models import Sum
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.permission_mixin import PermissionMixin
-from apps.core.data_permission import DataPermissionMixin, SensitiveFieldMixin
 from apps.core.workflow.mixins import WorkflowEnforcementMixin
 from apps.projects.models import Project
 from apps.inventory.cost_methods import CostingMethodFactory, FIFOCostingService
@@ -30,7 +29,7 @@ from .services import BudgetValidationService
 logger = logging.getLogger(__name__)
 
 
-class PurchaseRequestViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
+class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for PurchaseRequest management.
     """
@@ -39,8 +38,11 @@ class PurchaseRequestViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrac
     filterset_fields = ['project', 'requestor', 'status', 'is_deleted']
     search_fields = ['request_no']
     ordering_fields = ['request_date', 'created_at']
-    data_scope_field = 'requestor'
-    
+
+    # Permission configuration
+    permission_module = 'purchase'
+    permission_resource = 'request'
+
     # Workflow configuration
     workflow_business_type = 'PURCHASE_REQUEST'
     workflow_amount_field = 'total_amount'
@@ -777,13 +779,16 @@ class PurchaseRequestViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrac
         return response
 
 
-class PurchaseRequestLineViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
+class PurchaseRequestLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for PurchaseRequestLine management.
     """
     queryset = PurchaseRequestLine.objects.all()
     serializer_class = PurchaseRequestLineSerializer
     filterset_fields = ['pr', 'item', 'project', 'is_deleted']
+
+    permission_module = 'purchase'
+    permission_resource = 'request_line'
     search_fields = ['item__sku', 'item__name']
 
 
@@ -1081,17 +1086,20 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
         })
 
 
-class PurchaseOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
+class PurchaseOrderLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for PurchaseOrderLine management.
     """
     queryset = PurchaseOrderLine.objects.all()
     serializer_class = PurchaseOrderLineSerializer
     filterset_fields = ['po', 'item', 'is_deleted']
+
+    permission_module = 'purchase'
+    permission_resource = 'order_line'
     search_fields = ['item__sku', 'item__name']
 
 
-class GoodsReceiptViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
+class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for GoodsReceipt management.
     """
@@ -1100,6 +1108,9 @@ class GoodsReceiptViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixi
     filterset_fields = ['po', 'warehouse', 'status', 'is_deleted']
     search_fields = ['receipt_no']
     ordering_fields = ['receipt_date', 'created_at']
+
+    permission_module = 'purchase'
+    permission_resource = 'goods_receipt'
     
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
@@ -1270,7 +1281,7 @@ class GoodsReceiptLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
     search_fields = ['item__sku', 'item__name']
 
 
-class PurchaseContractViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
+class PurchaseContractViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for PurchaseContract management.
     """
@@ -1279,7 +1290,10 @@ class PurchaseContractViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTra
     filterset_fields = ['po', 'supplier', 'project', 'status', 'is_deleted']
     search_fields = ['contract_no', 'title']
     ordering_fields = ['contract_date', 'created_at']
-    
+
+    permission_module = 'purchase'
+    permission_resource = 'contract'
+
     # Workflow configuration
     workflow_business_type = 'PURCHASE_CONTRACT'
     workflow_amount_field = 'total_amount'

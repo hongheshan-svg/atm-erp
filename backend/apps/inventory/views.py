@@ -8,7 +8,7 @@ from django.db import transaction
 from django.db.models import Sum, F
 from django.conf import settings
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
-from apps.core.data_permission import SensitiveFieldMixin
+from apps.core.permission_mixin import PermissionMixin
 from .models import Stock, StockMove, StockAdjustment, StockAdjustmentLine
 from .serializers import (
     StockSerializer, StockMoveSerializer,
@@ -17,7 +17,10 @@ from .serializers import (
 from .cost_methods import FIFOCostingService, CostingMethodFactory
 
 
-class StockViewSet(SensitiveFieldMixin, viewsets.ReadOnlyModelViewSet):
+class StockViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
+
+    permission_module = 'inventory'
+    permission_resource = 'stock'
     """
     ViewSet for Stock - Read-only.
     Stock is updated automatically by StockMove.
@@ -164,7 +167,10 @@ class StockViewSet(SensitiveFieldMixin, viewsets.ReadOnlyModelViewSet):
         })
 
 
-class StockMoveViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
+class StockMoveViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'inventory'
+    permission_resource = 'stock_move'
     """
     ViewSet for StockMove management.
     """
@@ -364,7 +370,10 @@ class StockAdjustmentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
         return Response(StockAdjustmentSerializer(adjustment).data)
 
 
-class StockAdjustmentLineViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
+class StockAdjustmentLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'inventory'
+    permission_resource = 'stock_adjustment_line'
     """
     ViewSet for StockAdjustmentLine management.
     """

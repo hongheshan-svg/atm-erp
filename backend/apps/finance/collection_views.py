@@ -9,7 +9,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
-from apps.core.data_permission import DataPermissionMixin
+from apps.core.permission_mixin import PermissionMixin
 
 from .collection_models import (
     CollectionPlan, CollectionMilestone, CollectionRecord, CollectionReminder
@@ -22,7 +22,10 @@ from .collection_serializers import (
 )
 
 
-class CollectionPlanViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class CollectionPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'finance'
+    permission_resource = 'collection_plan'
     """回款计划管理"""
     queryset = CollectionPlan.objects.select_related('customer', 'project', 'owner')
     serializer_class = CollectionPlanSerializer
@@ -216,7 +219,10 @@ class CollectionPlanViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMi
         return Response(CollectionMilestoneSerializer(created, many=True).data)
 
 
-class CollectionMilestoneViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class CollectionMilestoneViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'finance'
+    permission_resource = 'collection_milestone'
     """回款节点管理"""
     queryset = CollectionMilestone.objects.select_related('plan', 'plan__customer', 'plan__project')
     serializer_class = CollectionMilestoneSerializer
@@ -284,7 +290,10 @@ class CollectionMilestoneViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermiss
         return Response({'message': '提醒已发送'})
 
 
-class CollectionRecordViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class CollectionRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'finance'
+    permission_resource = 'collection_record'
     """收款记录管理"""
     queryset = CollectionRecord.objects.select_related('milestone', 'milestone__plan')
     serializer_class = CollectionRecordSerializer
@@ -303,7 +312,10 @@ class CollectionRecordViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermission
         return Response(CollectionRecordSerializer(record).data)
 
 
-class CollectionReminderViewSet(SoftDeleteMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class CollectionReminderViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
+
+    permission_module = 'finance'
+    permission_resource = 'collection_reminder'
     """回款提醒管理"""
     queryset = CollectionReminder.objects.select_related('milestone', 'milestone__plan')
     serializer_class = CollectionReminderSerializer

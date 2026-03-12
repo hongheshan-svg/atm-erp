@@ -16,7 +16,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.db import transaction
 from django.utils import timezone
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
-from apps.core.data_permission import DataPermissionMixin, SensitiveFieldMixin
+from apps.core.permission_mixin import PermissionMixin
 from .rfq_models import (
     RFQ, RFQLine, RFQSupplier, SupplierQuotation, SupplierQuotationLine,
     QuotationComparison, QuotationScore, ItemPriceHistory,
@@ -37,13 +37,16 @@ from .rfq_service import (
 )
 
 
-class RFQViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
+class RFQViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """RFQ viewset"""
     queryset = RFQ.objects.all()
     serializer_class = RFQSerializer
     filterset_fields = ['project', 'status', 'is_deleted']
     search_fields = ['rfq_no']
     ordering_fields = ['request_date', 'response_deadline', 'created_at']
+
+    permission_module = 'purchase'
+    permission_resource = 'rfq'
     
     @action(detail=True, methods=['post'])
     def send_to_suppliers(self, request, pk=None):
@@ -304,12 +307,15 @@ class RFQViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, Sensit
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-class RFQLineViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
+class RFQLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """RFQ line viewset"""
     queryset = RFQLine.objects.all()
     serializer_class = RFQLineSerializer
     filterset_fields = ['rfq', 'item', 'is_deleted']
     search_fields = ['item__sku', 'item__name']
+
+    permission_module = 'purchase'
+    permission_resource = 'rfq_line'
 
 
 class RFQSupplierViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
@@ -319,13 +325,16 @@ class RFQSupplierViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
     filterset_fields = ['rfq', 'supplier', 'is_responded']
 
 
-class SupplierQuotationViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
+class SupplierQuotationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """Supplier quotation viewset"""
     queryset = SupplierQuotation.objects.all()
     serializer_class = SupplierQuotationSerializer
     filterset_fields = ['rfq_supplier', 'status', 'is_deleted']
     search_fields = ['quotation_no']
     ordering_fields = ['quotation_date', 'valid_until', 'created_at']
+
+    permission_module = 'purchase'
+    permission_resource = 'supplier_quotation'
     
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
@@ -352,20 +361,26 @@ class SupplierQuotationViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFiel
         return Response(SupplierQuotationSerializer(quotation).data)
 
 
-class SupplierQuotationLineViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
+class SupplierQuotationLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """Supplier quotation line viewset"""
     queryset = SupplierQuotationLine.objects.all()
     serializer_class = SupplierQuotationLineSerializer
+
+    permission_module = 'purchase'
+    permission_resource = 'supplier_quotation_line'
     filterset_fields = ['quotation', 'rfq_line', 'is_deleted']
 
 
-class QuotationComparisonViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
+class QuotationComparisonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """报价比价分析视图"""
     queryset = QuotationComparison.objects.all()
     serializer_class = QuotationComparisonSerializer
     filterset_fields = ['rfq', 'status', 'is_deleted']
     search_fields = ['comparison_no', 'rfq__rfq_no']
     ordering_fields = ['created_at', 'status']
+
+    permission_module = 'purchase'
+    permission_resource = 'quotation_comparison'
     
     def get_serializer_class(self):
         if self.action == 'list':
@@ -582,7 +597,10 @@ class QuotationComparisonViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermiss
         return Response({'message': f'成功删除 {deleted_count} 条记录', 'deleted_count': deleted_count})
 
 
-class QuotationScoreViewSet(SensitiveFieldMixin, viewsets.ModelViewSet):
+class QuotationScoreViewSet(PermissionMixin, viewsets.ModelViewSet):
+
+    permission_module = 'purchase'
+    permission_resource = 'quotation_score'
     """报价评分视图"""
     queryset = QuotationScore.objects.all()
     serializer_class = QuotationScoreSerializer
@@ -612,7 +630,10 @@ class QuotationScoreViewSet(SensitiveFieldMixin, viewsets.ModelViewSet):
         return Response(QuotationScoreSerializer(score).data)
 
 
-class ItemPriceHistoryViewSet(SensitiveFieldMixin, viewsets.ReadOnlyModelViewSet):
+class ItemPriceHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
+
+    permission_module = 'purchase'
+    permission_resource = 'item_price_history'
     """物料价格历史视图（只读）"""
     queryset = ItemPriceHistory.objects.all()
     serializer_class = ItemPriceHistorySerializer
