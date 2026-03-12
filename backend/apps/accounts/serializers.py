@@ -42,14 +42,15 @@ class RoleSerializer(serializers.ModelSerializer):
         many=True,
         queryset=None,
         source='permissions_new',
-        required=False
+        required=False,
+        allow_null=True
     )
     data_scopes = serializers.SerializerMethodField()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         from apps.core.permission_models_new import Permission
-        self.fields['permission_ids'].queryset = Permission.active.all()
+        self.fields['permission_ids'].child_relation.queryset = Permission.active.all()
 
     class Meta:
         model = Role
