@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from django.db import transaction
 from django.db.models import Sum
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
-from apps.core.data_permission import DataPermissionMixin, SensitiveFieldMixin
+from apps.core.permission_mixin import PermissionMixin
 from apps.core.workflow.mixins import WorkflowEnforcementMixin
 from apps.projects.models import Project
 from apps.inventory.cost_methods import CostingMethodFactory, FIFOCostingService
@@ -786,7 +786,7 @@ class PurchaseRequestLineViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFi
     search_fields = ['item__sku', 'item__name']
 
 
-class PurchaseOrderViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
+class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for PurchaseOrder management.
     """
@@ -800,6 +800,10 @@ class PurchaseOrderViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTracki
     workflow_business_type = 'PURCHASE_ORDER'
     workflow_amount_field = 'total_with_tax'  # 优先使用含税金额
     workflow_no_field = 'order_no'
+    
+    # Permission configuration
+    permission_module = 'purchase'
+    permission_resource = 'purchase_order'
     
     @action(detail=False, methods=['get'])
     def for_linking(self, request):
