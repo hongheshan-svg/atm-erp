@@ -8,6 +8,7 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import App from './App.vue'
 import router from './router'
 import { useWebSocketStore } from './stores/websocket'
+import permissionDirective from './directives/permission'
 
 const app = createApp(App)
 
@@ -15,6 +16,9 @@ const app = createApp(App)
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
   app.component(key, component)
 }
+
+// Register permission directive
+app.directive('permission', permissionDirective)
 
 const pinia = createPinia()
 app.use(pinia)
