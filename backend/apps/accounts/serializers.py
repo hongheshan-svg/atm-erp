@@ -38,19 +38,8 @@ class RoleSerializer(serializers.ModelSerializer):
     """Role serializer."""
     user_count = serializers.SerializerMethodField()
     code = serializers.CharField(max_length=50, required=False, allow_blank=True)
-    permission_ids = serializers.PrimaryKeyRelatedField(
-        many=True,
-        queryset=None,
-        source='permissions_new',
-        required=False,
-        allow_null=True
-    )
+    permission_ids = serializers.SerializerMethodField()
     data_scopes = serializers.SerializerMethodField()
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        from apps.core.permission_models_new import Permission
-        self.fields['permission_ids'].child_relation.queryset = Permission.active.all()
 
     class Meta:
         model = Role
@@ -63,6 +52,10 @@ class RoleSerializer(serializers.ModelSerializer):
 
     def get_user_count(self, obj):
         return obj.users.filter(is_deleted=False, is_active=True).count()
+
+    def get_permission_ids(self, obj):
+        """返回角色的权限ID列表"""
+        return list(obj.permissions_new.values_list('id', flat=True))
 
     def get_data_scopes(self, obj):
         """返回角色的数据权限配置"""
@@ -96,18 +89,7 @@ class RoleSerializer(serializers.ModelSerializer):
         import uuid
         if not validated_data.get('code'):
             validated_data['code'] = f"ROLE{uuid.uuid4().hex[:6].upper()}"
-        permissions_new = validated_data.pop('permissions_new', [])
-        role = super().create(validated_data)
-        if permissions_new:
-            role.permissions_new.set(permissions_new)
-        return role
-
-    def update(self, instance, validated_data):
-        permissions_new = validated_data.pop('permissions_new', None)
-        role = super().update(instance, validated_data)
-        if permissions_new is not None:
-            role.permissions_new.set(permissions_new)
-        return role
+        return super().create(validated_data)
 
 
 
