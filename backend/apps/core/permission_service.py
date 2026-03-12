@@ -63,15 +63,17 @@ def get_user_permissions(user) -> Set[str]:
                 is_deleted=False
             ).values_list('code', flat=True)
         )
-    elif user.role and user.role.is_active and not user.role.is_deleted:
-        # Get permissions from user's role
-        permissions = set(
-            Permission.objects.filter(
-                role_permissions__role=user.role,
-                is_active=True,
-                is_deleted=False
-            ).values_list('code', flat=True)
-        )
+    else:
+        # Get permissions from all user's roles (M2M)
+        user_roles = user.roles.filter(is_active=True, is_deleted=False)
+        if user_roles.exists():
+            permissions = set(
+                Permission.objects.filter(
+                    role_permissions__role__in=user_roles,
+                    is_active=True,
+                    is_deleted=False
+                ).values_list('code', flat=True)
+            )
 
     # Cache the result
     cache.set(cache_key, permissions, PERMISSION_CACHE_TIMEOUT)
@@ -133,7 +135,7 @@ def on_role_permission_change(role):
     Args:
         role: Role instance whose permissions changed
     """
-    # Get all users with this role
+    # Get all users with this role (M2M)
     user_ids = role.users.filter(is_deleted=False).values_list('id', flat=True)
 
     # Clear cache for all affected users
@@ -172,7 +174,7 @@ def resolve_data_scope(user, module: str) -> Tuple[str, List[int]]:
 
     Notes:
         - Checks module-specific scope first, then falls back to '__default__' scope
-        - If user has multiple roles (future M2M support), takes the widest scope
+        - If user has multiple roles, takes the widest scope
         - If no scope configured, defaults to 'self'
         - Custom scope collects all department IDs from all roles
     """
@@ -184,39 +186,45 @@ def resolve_data_scope(user, module: str) -> Tuple[str, List[int]]:
     if user.is_superuser:
         return ('global', [])
 
-    # Get user's role (currently FK, will be M2M in future)
-    if not user.role or not user.role.is_active or user.role.is_deleted:
+    # Get user's roles (M2M)
+    user_roles = user.roles.filter(is_active=True, is_deleted=False)
+    if not user_roles.exists():
         return ('self', [])
 
-    # Try to get module-specific scope first
-    data_scope = DataScope.objects.filter(
-        role=user.role,
-        module=module
-    ).first()
-
-    # Fall back to default scope if no module-specific scope
-    if not data_scope:
-        data_scope = DataScope.objects.filter(
-            role=user.role,
-            module='__default__'
-        ).first()
-
-    # If still no scope, default to 'self'
-    if not data_scope:
-        return ('self', [])
-
-    scope_type = data_scope.scope_type
+    # Collect scopes from all roles
+    widest_scope = 'self'
+    widest_priority = SCOPE_PRIORITY.get('self', 0)
     custom_dept_ids = []
 
-    # Collect custom department IDs if scope is custom
-    if scope_type == 'custom':
-        custom_dept_ids = list(
-            data_scope.departments.filter(
-                is_deleted=False
-            ).values_list('id', flat=True)
-        )
+    for role in user_roles:
+        # Try module-specific scope first
+        data_scope = DataScope.objects.filter(role=role, module=module).first()
 
-    return (scope_type, custom_dept_ids)
+        # Fall back to default scope
+        if not data_scope:
+            data_scope = DataScope.objects.filter(role=role, module='__default__').first()
+
+        if data_scope:
+            scope_type = data_scope.scope_type
+            priority = SCOPE_PRIORITY.get(scope_type, 0)
+
+            # Update widest scope if this one is wider
+            if priority > widest_priority:
+                widest_scope = scope_type
+                widest_priority = priority
+                custom_dept_ids = []
+
+            # Collect custom department IDs
+            if scope_type == 'custom':
+                dept_ids = list(
+                    data_scope.departments.filter(is_deleted=False).values_list('id', flat=True)
+                )
+                custom_dept_ids.extend(dept_ids)
+
+    # Remove duplicates from custom_dept_ids
+    custom_dept_ids = list(set(custom_dept_ids))
+
+    return (widest_scope, custom_dept_ids)
 
 
 def get_department_tree_ids(dept_id: int) -> List[int]:
@@ -330,7 +338,7 @@ def get_hidden_fields(user, module: str, resource: str) -> List[str]:
 
     Notes:
         - Returns empty list for superusers
-        - Checks field-level permissions for the user's role
+        - Checks field-level permissions for all user's roles
         - Only returns fields where user does NOT have permission
     """
     # Handle None/unauthenticated user - hide all fields
@@ -341,8 +349,9 @@ def get_hidden_fields(user, module: str, resource: str) -> List[str]:
     if user.is_superuser:
         return []
 
-    # Get user's role
-    if not user.role or not user.role.is_active or user.role.is_deleted:
+    # Get user's roles (M2M)
+    user_roles = user.roles.filter(is_active=True, is_deleted=False)
+    if not user_roles.exists():
         return []
 
     # Get all field permissions for this resource
@@ -353,10 +362,10 @@ def get_hidden_fields(user, module: str, resource: str) -> List[str]:
         is_deleted=False
     )
 
-    # Get user's field permissions
+    # Get user's field permissions from all roles
     user_field_permissions = set(
         Permission.objects.filter(
-            role_permissions__role=user.role,
+            role_permissions__role__in=user_roles,
             type='field',
             resource=resource,
             is_active=True,
