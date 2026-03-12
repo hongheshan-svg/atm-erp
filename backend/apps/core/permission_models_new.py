@@ -3,6 +3,12 @@ from django.core.exceptions import ValidationError
 from apps.core.models import BaseModel
 
 
+class ActivePermissionManager(models.Manager):
+    """只返回启用的权限"""
+    def get_queryset(self):
+        return super().get_queryset().filter(is_deleted=False, is_active=True)
+
+
 class Permission(BaseModel):
     """
     权限模型 - 树形结构
@@ -68,6 +74,9 @@ class Permission(BaseModel):
         default=True,
         verbose_name='是否启用'
     )
+
+    objects = models.Manager()
+    active = ActivePermissionManager()
 
     class Meta:
         db_table = 'core_permission'
