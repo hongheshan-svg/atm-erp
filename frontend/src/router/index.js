@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { usePermissionStore } from '@/stores/permission'
 
 const routes = [
   {
@@ -1365,20 +1366,21 @@ const hasMenuAccess = (menuId, userStore) => {
 // Navigation guard
 router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore()
+  const permissionStore = usePermissionStore()
   const token = localStorage.getItem('access_token')
-  
+
   // 未登录用户访问需要认证的页面
   if (to.meta.requiresAuth !== false && !token) {
     next('/login')
     return
   }
-  
+
   // 已登录用户访问登录页
   if (to.path === '/login' && token) {
     next('/')
     return
   }
-  
+
   // 如果需要认证且有token，检查权限
   if (to.meta.requiresAuth !== false && token) {
     // 确保用户信息已加载
@@ -1391,56 +1393,29 @@ router.beforeEach(async (to, from, next) => {
         return
       }
     }
-    
+
     // 公共页面（如个人中心、修改密码）不检查权限
     if (to.meta.public) {
       next()
       return
     }
-    
-    // 检查菜单权限
-    const menuId = to.meta.menuId
-    if (menuId && !hasMenuAccess(menuId, userStore)) {
-      console.warn(`Access denied to ${to.path}, missing permission for menu: ${menuId}`)
-      // 如果没有权限，重定向到仪表盘或第一个有权限的页面
-      if (hasMenuAccess('dashboard', userStore)) {
-        next('/dashboard')
-      } else {
-        // 找到第一个有权限的页面
-        const firstMenu = userStore.menuIds?.[0]
-        if (firstMenu) {
-          // 根据menuId找到对应的路由
-          const menuToPath = {
-            'dashboard': '/dashboard',
-            'workflow:tasks': '/workflow/tasks',
-            'workflow:my-submissions': '/workflow/my-submissions',
-            'system:users': '/users',
-            'system:roles': '/roles',
-            'system:departments': '/departments',
-            'system:code-rules': '/code-rules',
-            'masterdata:items': '/items',
-            'masterdata:customers': '/customers',
-            'masterdata:suppliers': '/suppliers',
-            'projects:list': '/projects',
-            'purchase:requests': '/purchase/requests',
-            'sales:quotations': '/sales/quotations',
-            'inventory:stocks': '/inventory/stocks',
-            'finance:expenses': '/finance/expenses',
-            'reports:profitability': '/reports/profitability',
-            'analytics:project': '/analytics/project'
-          }
-          const targetPath = menuToPath[firstMenu] || '/profile'
-          next(targetPath)
-  } else {
-          // 没有任何权限，跳转到个人中心
-          next('/profile')
-        }
-      }
+
+    // 超级管理员跳过权限检查
+    if (userStore.userInfo?.is_superuser) {
+      next()
+      return
+    }
+
+    // 检查权限：优先使用 permission 字段，回退到 menuId 保持兼容
+    const requiredPermission = to.meta.permission || to.meta.menuId
+    if (requiredPermission && !permissionStore.hasPermission(requiredPermission)) {
+      console.warn(`Access denied to ${to.path}, missing permission: ${requiredPermission}`)
+      next('/dashboard')
       return
     }
   }
-  
-    next()
+
+  next()
 })
 
 export default router
