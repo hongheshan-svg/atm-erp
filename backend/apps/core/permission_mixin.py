@@ -189,8 +189,12 @@ class PermissionMixin:
         )
 
         # Remove hidden fields from serializer
+        # Handle ListSerializer (when many=True)
+        from rest_framework.serializers import ListSerializer
+        target_serializer = serializer.child if isinstance(serializer, ListSerializer) else serializer
+
         for field_name in hidden_fields:
-            if field_name in serializer.fields:
-                serializer.fields.pop(field_name)
+            if hasattr(target_serializer, 'fields') and field_name in target_serializer.fields:
+                target_serializer.fields.pop(field_name)
 
         return serializer
