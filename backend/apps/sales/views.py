@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from django.http import HttpResponse
 from django.db import models, transaction
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
-from apps.core.data_permission import DataPermissionMixin
+from apps.core.permission_mixin import PermissionMixin
 from apps.core.workflow.mixins import WorkflowEnforcementMixin
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ from .serializers import (
 )
 
 
-class SalesQuotationViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class SalesQuotationViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for SalesQuotation management.
     """
@@ -35,7 +35,11 @@ class SalesQuotationViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrack
     filterset_fields = ['customer', 'project', 'status', 'is_deleted']
     search_fields = ['quote_no']
     ordering_fields = ['quote_date', 'created_at']
-    
+
+    # Permission configuration
+    permission_module = 'sales'
+    permission_resource = 'quotation'
+
     # Workflow configuration
     workflow_business_type = 'QUOTATION'
     workflow_amount_field = 'total_amount'
@@ -173,10 +177,10 @@ class SalesQuotationLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
     search_fields = ['item__sku', 'item__name', 'custom_name', 'custom_spec']
 
 
-class SalesOrderViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for SalesOrder management.
-    
+
     销售订单审批流程由审批中心的流程配置决定。
     """
     queryset = SalesOrder.objects.all()
@@ -184,7 +188,11 @@ class SalesOrderViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingM
     filterset_fields = ['customer', 'project', 'status', 'is_deleted']
     search_fields = ['order_no']
     ordering_fields = ['order_date', 'created_at']
-    
+
+    # Permission configuration
+    permission_module = 'sales'
+    permission_resource = 'order'
+
     # Workflow configuration
     workflow_business_type = 'SALES_ORDER'
     workflow_amount_field = 'total_with_tax'
@@ -1149,10 +1157,10 @@ class SalesOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
     search_fields = ['item__sku', 'item__name', 'custom_name', 'custom_spec']
 
 
-class DeliveryOrderViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for DeliveryOrder management.
-    
+
     发货流程:
     1. 销售发货通知 (DRAFT) - 销售创建发货单
     2. 提交审批 (PENDING) - 进入审批中心，审批步骤由流程配置决定
@@ -1163,7 +1171,7 @@ class DeliveryOrderViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTracki
        - 采购上传送货单 (UPLOADING_RECEIPT)
        - 项目确认 (PROJECT_CONFIRMING)
     4. 完成 (COMPLETED)
-    
+
     注意: 审批步骤由审批中心的流程配置决定，修改流程配置会自动影响审批流程
     """
     queryset = DeliveryOrder.objects.all()
@@ -1171,7 +1179,11 @@ class DeliveryOrderViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTracki
     filterset_fields = ['so', 'warehouse', 'status', 'is_deleted']
     search_fields = ['delivery_no']
     ordering_fields = ['delivery_date', 'created_at']
-    
+
+    # Permission configuration
+    permission_module = 'sales'
+    permission_resource = 'delivery'
+
     # Workflow configuration
     workflow_business_type = 'DELIVERY_ORDER'
     workflow_amount_field = None  # 使用自定义计算方法

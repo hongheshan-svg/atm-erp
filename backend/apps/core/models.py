@@ -255,6 +255,7 @@ class SystemConfig(models.Model):
 
 # 导入权限配置模型，使其可被迁移系统发现
 from .permission_models import ModulePermissionRule, RoleModulePermission
+from .permission_models_new import Permission, RolePermission, DataScope
 
 # 导入编码规则模型
 from .code_rule_models import CodeRule, CodeHistory

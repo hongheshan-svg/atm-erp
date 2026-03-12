@@ -37,21 +37,32 @@ class DepartmentSerializer(serializers.ModelSerializer):
 class RoleSerializer(serializers.ModelSerializer):
     """Role serializer."""
     user_count = serializers.SerializerMethodField()
-    # 显式设置 code 为可选字段，允许空值
     code = serializers.CharField(max_length=50, required=False, allow_blank=True)
-    
+    permission_ids = serializers.SerializerMethodField()
+    data_scopes = serializers.SerializerMethodField()
+
     class Meta:
         model = Role
         fields = [
             'id', 'code', 'name', 'description', 'data_scope', 'permissions',
-            'is_active', 'sort_order', 'user_count',
+            'permission_ids', 'data_scopes', 'is_active', 'sort_order', 'user_count',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
-    
+
     def get_user_count(self, obj):
         return obj.users.filter(is_deleted=False, is_active=True).count()
-    
+
+    def get_permission_ids(self, obj):
+        """返回角色的权限ID列表"""
+        return list(obj.permissions_new.values_list('id', flat=True))
+
+    def get_data_scopes(self, obj):
+        """返回角色的数据权限配置"""
+        from apps.core.permission_models_new import DataScope
+        scopes = DataScope.objects.filter(role=obj)
+        return [{'module': s.module, 'scope_type': s.scope_type} for s in scopes]
+
     def validate_name(self, value):
         """检查角色名称唯一性（排除当前记录）"""
         instance = self.instance
@@ -61,7 +72,7 @@ class RoleSerializer(serializers.ModelSerializer):
         if qs.exists():
             raise serializers.ValidationError('该角色名称已存在')
         return value
-    
+
     def validate_code(self, value):
         """检查角色编码唯一性（排除当前记录和空值）"""
         if not value:
@@ -73,13 +84,13 @@ class RoleSerializer(serializers.ModelSerializer):
         if qs.exists():
             raise serializers.ValidationError('该角色编码已存在')
         return value
-    
+
     def create(self, validated_data):
         import uuid
-        # 如果没有提供code或为空，自动生成角色编码
         if not validated_data.get('code'):
             validated_data['code'] = f"ROLE{uuid.uuid4().hex[:6].upper()}"
         return super().create(validated_data)
+
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -167,29 +178,69 @@ class UserProfileSerializer(serializers.ModelSerializer):
     """User profile serializer with additional info."""
     department_info = DepartmentSerializer(source='department', read_only=True)
     role_info = RoleSerializer(source='role', read_only=True)
+    roles = serializers.SerializerMethodField()
     permissions = serializers.SerializerMethodField()
-    menu_ids = serializers.SerializerMethodField()
-    
+    menus = serializers.SerializerMethodField()
+    data_scopes = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = [
             'id', 'username', 'employee_id', 'email', 'first_name', 'last_name',
             'phone', 'avatar', 'gender', 'birth_date', 'department', 'department_info',
-            'role', 'role_info', 'position', 'hire_date', 'is_active', 'is_staff',
-            'is_superuser', 'permissions', 'menu_ids', 'last_login'
+            'role', 'role_info', 'roles', 'position', 'hire_date', 'is_active', 'is_staff',
+            'is_superuser', 'permissions', 'menus', 'data_scopes', 'last_login'
         ]
-    
+
+    def get_roles(self, obj):
+        """返回用户的所有角色代码"""
+        return list(obj.roles.filter(is_active=True).values_list('code', flat=True))
+
     def get_permissions(self, obj):
+        """返回用户的所有权限代码"""
+        from apps.core.permission_service import get_user_permissions
         if obj.is_superuser:
-            return ['*:*:*']  # Superuser has all permissions
-        if obj.role and obj.role.is_active:
-            return obj.role.permissions.get('permissions', [])
-        return []
-    
-    def get_menu_ids(self, obj):
+            return ['*']
+        return list(get_user_permissions(obj))
+
+    def get_menus(self, obj):
+        """返回用户可访问的菜单树"""
+        from apps.core.permission_models_new import Permission
+        from apps.core.permission_service import get_user_permissions
+
         if obj.is_superuser:
-            return []  # Empty means all menus
-        if obj.role and obj.role.is_active:
-            return obj.role.permissions.get('menu_ids', [])
-        return []
+            menu_perms = Permission.active.filter(type='menu').order_by('sort_order')
+        else:
+            user_perms = get_user_permissions(obj)
+            menu_perms = Permission.active.filter(type='menu', code__in=user_perms).order_by('sort_order')
+
+        def build_tree(parent_id=None):
+            nodes = []
+            for perm in menu_perms.filter(parent_id=parent_id):
+                node = {
+                    'code': perm.code,
+                    'name': perm.name,
+                    'icon': perm.icon,
+                    'route': perm.route_path,
+                    'children': build_tree(perm.id)
+                }
+                nodes.append(node)
+            return nodes
+
+        return build_tree()
+
+    def get_data_scopes(self, obj):
+        """返回用户的数据权限范围"""
+        from apps.core.permission_service import resolve_data_scope
+
+        if obj.is_superuser:
+            return {'': 'all'}
+
+        scopes = {}
+        modules = ['', 'finance', 'purchase', 'projects', 'sales']
+        for module in modules:
+            scope_type, _ = resolve_data_scope(obj, module)
+            scopes[module] = scope_type
+
+        return scopes
 

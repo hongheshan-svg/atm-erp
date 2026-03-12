@@ -4,9 +4,9 @@ from apps.core.models import BaseModel
 
 
 class ActivePermissionManager(models.Manager):
-    """Manager that filters out soft-deleted permissions"""
+    """只返回启用的权限"""
     def get_queryset(self):
-        return super().get_queryset().filter(is_deleted=False)
+        return super().get_queryset().filter(is_deleted=False, is_active=True)
 
 
 class Permission(BaseModel):
@@ -19,9 +19,6 @@ class Permission(BaseModel):
         ('operation', '操作权限'),
         ('field', '字段权限'),
     ]
-
-    objects = models.Manager()  # Default manager (includes soft-deleted)
-    active = ActivePermissionManager()  # Active-only manager (excludes soft-deleted)
 
     parent = models.ForeignKey(
         'self',
@@ -77,6 +74,9 @@ class Permission(BaseModel):
         default=True,
         verbose_name='是否启用'
     )
+
+    objects = models.Manager()
+    active = ActivePermissionManager()
 
     class Meta:
         db_table = 'core_permission'
@@ -158,9 +158,9 @@ class DataScope(models.Model):
     不继承 BaseModel，避免软删除带来的复杂性
     """
     SCOPE_TYPE_CHOICES = [
-        ('all', '全局数据'),
-        ('dept', '本部门数据'),
-        ('dept_tree', '本部门及下级部门数据'),
+        ('global', '全局数据'),
+        ('department', '本部门数据'),
+        ('department_and_below', '本部门及下级部门数据'),
         ('self', '仅本人数据'),
         ('custom', '自定义部门数据'),
     ]
@@ -181,7 +181,7 @@ class DataScope(models.Model):
         choices=SCOPE_TYPE_CHOICES,
         verbose_name='范围类型'
     )
-    custom_departments = models.ManyToManyField(
+    departments = models.ManyToManyField(
         'accounts.Department',
         blank=True,
         related_name='data_scopes',

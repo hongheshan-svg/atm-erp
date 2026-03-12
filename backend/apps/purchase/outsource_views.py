@@ -6,7 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db import transaction
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
-from apps.core.data_permission import SensitiveFieldMixin
+from apps.core.permission_mixin import PermissionMixin
 from .outsource_models import (
     OutsourceOrder, OutsourceOrderLine,
     OutsourceMaterialIssue, OutsourceMaterialIssueLine,
@@ -19,7 +19,7 @@ from .outsource_serializers import (
 )
 
 
-class OutsourceOrderViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
+class OutsourceOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     外协加工单管理
     """
@@ -29,6 +29,9 @@ class OutsourceOrderViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMi
     search_fields = ['order_no']
     ordering_fields = ['order_date', 'required_date', 'created_at']
     ordering = ['-created_at']
+
+    permission_module = 'purchase'
+    permission_resource = 'outsource_order'
     
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
@@ -96,13 +99,16 @@ class OutsourceOrderViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMi
         return Response(OutsourceOrderLineSerializer(lines, many=True).data)
 
 
-class OutsourceOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, SensitiveFieldMixin, viewsets.ModelViewSet):
+class OutsourceOrderLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     外协加工单明细管理
     """
     queryset = OutsourceOrderLine.objects.all()
     serializer_class = OutsourceOrderLineSerializer
     filterset_fields = ['outsource_order', 'item', 'process_type', 'is_deleted']
+
+    permission_module = 'purchase'
+    permission_resource = 'outsource_order_line'
     search_fields = ['item__sku', 'item__name', 'drawing_no']
 
 

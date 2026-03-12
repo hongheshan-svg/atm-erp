@@ -43,6 +43,7 @@ from .mobile_api import (
     MobileApprovalViewSet, MobileNotificationViewSet,
     MobileDashboardView, MobileQuickActionsView
 )
+from .permission_views import PermissionViewSet, DataScopeViewSet
 
 router = DefaultRouter()
 router.register(r'audit-logs', views.AuditLogViewSet, basename='audit-log')
@@ -103,6 +104,10 @@ router.register(r'mobile/photos', MobilePhotoViewSet, basename='mobile-photo')
 router.register(r'mobile/scan-records', MobileScanRecordViewSet, basename='mobile-scan-record')
 router.register(r'mobile/approvals', MobileApprovalViewSet, basename='mobile-approval')
 router.register(r'mobile/notifications', MobileNotificationViewSet, basename='mobile-notification')
+
+# 权限管理
+router.register(r'permissions', PermissionViewSet, basename='permission')
+router.register(r'data-scopes', DataScopeViewSet, basename='data-scope')
 
 urlpatterns = [
     path('', include(router.urls)),

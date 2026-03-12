@@ -16,7 +16,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from apps.core.models import BaseModel
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
-from apps.core.data_permission import DataPermissionMixin
+from apps.core.permission_mixin import PermissionMixin
 
 
 class TaxType(BaseModel):
@@ -489,7 +489,10 @@ class TaxInvoiceSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
-class TaxTypeViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class TaxTypeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'finance'
+    permission_resource = 'tax_type'
     """税种管理"""
     queryset = TaxType.objects.filter(is_deleted=False)
     serializer_class = TaxTypeSerializer
@@ -498,7 +501,10 @@ class TaxTypeViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, vi
     search_fields = ['code', 'name']
 
 
-class TaxRateViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class TaxRateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'finance'
+    permission_resource = 'tax_rate'
     """税率管理"""
     queryset = TaxRate.objects.filter(is_deleted=False)
     serializer_class = TaxRateSerializer
@@ -519,7 +525,10 @@ class TaxRateViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, vi
         return Response(self.get_serializer(rates, many=True).data)
 
 
-class TaxPeriodViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class TaxPeriodViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'finance'
+    permission_resource = 'tax_period'
     """税务期间管理"""
     queryset = TaxPeriod.objects.filter(is_deleted=False)
     serializer_class = TaxPeriodSerializer
@@ -592,7 +601,10 @@ class TaxPeriodViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, 
         })
 
 
-class TaxDeclarationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class TaxDeclarationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'finance'
+    permission_resource = 'tax_declaration'
     """税务申报管理"""
     queryset = TaxDeclaration.objects.filter(is_deleted=False)
     serializer_class = TaxDeclarationSerializer
@@ -707,7 +719,10 @@ class TaxDeclarationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMi
         })
 
 
-class TaxInvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class TaxInvoiceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'finance'
+    permission_resource = 'tax_invoice'
     """税务发票管理"""
     queryset = TaxInvoice.objects.filter(is_deleted=False)
     serializer_class = TaxInvoiceSerializer

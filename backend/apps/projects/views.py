@@ -11,7 +11,7 @@ from django.http import HttpResponse
 import pandas as pd
 from io import BytesIO
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
-from apps.core.data_permission import DataPermissionMixin
+from apps.core.permission_mixin import PermissionMixin
 from apps.masterdata.models import Item
 from .models import (
     Project, ProjectMember, ProjectTask, ProjectBOM, TimeLog, 
@@ -29,10 +29,13 @@ from .serializers import (
 )
 
 
-class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for Project management.
     """
+    permission_module = 'projects'
+    permission_resource = 'project'
+
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
     filterset_fields = ['customer', 'manager', 'status', 'is_deleted']
@@ -2424,15 +2427,17 @@ class TimeLogViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         return Response(TimeLogSerializer(time_log).data)
 
 
-class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for ECN (Engineering Change Notice) management.
     """
+    permission_module = 'projects'
+    permission_resource = 'ecn'
+
     queryset = ECN.objects.all()
     filterset_fields = ['project', 'change_type', 'priority', 'status', 'requested_by', 'is_deleted']
     search_fields = ['ecn_no', 'title', 'description']
     ordering_fields = ['ecn_no', 'requested_date', 'created_at']
-    module_name = 'projects'
     
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
@@ -2752,10 +2757,13 @@ class ECNItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 
 # ==================== 售后管理视图 ====================
 
-class AfterSalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class AfterSalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.ModelViewSet):
     """
     售后工单管理视图
     """
+    permission_module = 'projects'
+    permission_resource = 'aftersales'
+
     queryset = AfterSalesOrder.objects.all()
     filterset_fields = ['project', 'customer', 'order_type', 'priority', 'status', 'assigned_to', 'is_warranty']
     search_fields = ['order_no', 'title', 'description', 'contact_person', 'contact_phone']

@@ -15,7 +15,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from apps.core.models import BaseModel
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
-from apps.core.data_permission import DataPermissionMixin
+from apps.core.permission_mixin import PermissionMixin
 
 
 class AssetCategory(BaseModel):
@@ -447,7 +447,10 @@ class FixedAssetListSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
-class AssetCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class AssetCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'finance'
+    permission_resource = 'asset_category'
     """资产分类管理"""
     queryset = AssetCategory.objects.filter(is_deleted=False)
     serializer_class = AssetCategorySerializer
@@ -475,7 +478,10 @@ class AssetCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
         return Response(tree)
 
 
-class FixedAssetViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class FixedAssetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'finance'
+    permission_resource = 'fixed_asset'
     """固定资产管理"""
     queryset = FixedAsset.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
@@ -610,7 +616,10 @@ class FixedAssetViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin,
         })
 
 
-class AssetDepreciationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class AssetDepreciationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'finance'
+    permission_resource = 'asset_depreciation'
     """资产折旧管理"""
     queryset = AssetDepreciation.objects.filter(is_deleted=False)
     serializer_class = AssetDepreciationSerializer
@@ -630,7 +639,10 @@ class AssetDepreciationViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissio
         return Response(list(summary))
 
 
-class AssetTransferViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class AssetTransferViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'finance'
+    permission_resource = 'asset_transfer'
     """资产转移管理"""
     queryset = AssetTransfer.objects.filter(is_deleted=False)
     serializer_class = AssetTransferSerializer
@@ -638,7 +650,10 @@ class AssetTransferViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMix
     filterset_fields = ['asset', 'from_department', 'to_department']
 
 
-class AssetDisposalViewSet(SoftDeleteMixin, UserTrackingMixin, DataPermissionMixin, viewsets.ModelViewSet):
+class AssetDisposalViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+
+    permission_module = 'finance'
+    permission_resource = 'asset_disposal'
     """资产处置管理"""
     queryset = AssetDisposal.objects.filter(is_deleted=False)
     serializer_class = AssetDisposalSerializer
