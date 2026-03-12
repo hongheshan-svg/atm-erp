@@ -151,7 +151,7 @@ class WorkflowService:
             if step.approver_role:
                 # Get first active user with this role
                 assignee = User.objects.filter(
-                    role=step.approver_role,
+                    roles=step.approver_role,
                     is_active=True,
                     is_deleted=False
                 ).first()
@@ -173,7 +173,7 @@ class WorkflowService:
         # Fallback to approver_role if no assignee found
         if not assignee and step.approver_role:
             assignee = User.objects.filter(
-                role=step.approver_role,
+                roles=step.approver_role,
                 is_active=True,
                 is_deleted=False
             ).first()
