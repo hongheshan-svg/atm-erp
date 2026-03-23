@@ -23,6 +23,8 @@
 - admin_only: 仅管理员可查看
 """
 
+from apps.core.permission_service import get_user_permissions, has_permission
+
 # ============================================================
 # 模块权限配置 - 定义各模块的默认查看权限
 # ============================================================
@@ -472,126 +474,126 @@ DEFAULT_ROLES = [
         'code': 'admin',
         'name': '系统管理员',
         'description': '拥有系统所有权限',
-        'data_scope': 'ALL',
+        'data_scope': 'all',
         'permissions': {'is_admin': True}
     },
     {
         'code': 'general_manager',
         'name': '总经理',
         'description': '公司最高管理层，可查看所有数据包括财务',
-        'data_scope': 'ALL',
+        'data_scope': 'all',
         'permissions': {'can_view_finance': True, 'can_approve_all': True}
     },
     {
         'code': 'project_manager',
         'name': '项目经理',
         'description': '负责项目整体管理，跟踪采购、生产、交付全流程',
-        'data_scope': 'ALL',
+        'data_scope': 'all',
         'permissions': {'can_view_project_cost': True}
     },
     {
         'code': 'engineer',
         'name': '工程师',
         'description': '技术人员，参与项目设计和开发',
-        'data_scope': 'ALL',
+        'data_scope': 'all',
         'permissions': {}
     },
     {
         'code': 'debug_engineer',
         'name': '调试工程师',
         'description': '负责设备调试和测试',
-        'data_scope': 'ALL',
+        'data_scope': 'all',
         'permissions': {}
     },
     {
         'code': 'sales_manager',
         'name': '销售经理',
         'description': '负责销售团队管理，可查看应收账款',
-        'data_scope': 'ALL',
+        'data_scope': 'all',
         'permissions': {'can_view_sales_all': True, 'can_approve_quotation': True, 'can_view_finance': True}
     },
     {
         'code': 'salesperson',
-        'name': '销售员',
+        'name': '销售人员',
         'description': '负责客户开发和订单跟进',
-        'data_scope': 'DEPARTMENT',  # 非标行业销售团队小，部门内数据互通
+        'data_scope': 'dept_tree',
         'permissions': {}
     },
     {
         'code': 'purchase_manager',
         'name': '采购经理',
         'description': '负责采购团队管理，可查看应付账款',
-        'data_scope': 'ALL',
+        'data_scope': 'all',
         'permissions': {'can_view_purchase_all': True, 'can_approve_po': True, 'can_view_finance': True}
     },
     {
         'code': 'purchaser',
-        'name': '采购员',
+        'name': '采购人员',
         'description': '负责物料采购和供应商协调',
-        'data_scope': 'ALL',  # 非标行业采购团队通常2-5人，需互相协作处理采购事务
+        'data_scope': 'all',
         'permissions': {}
     },
     {
         'code': 'finance_manager',
         'name': '财务经理',
         'description': '负责财务管理，可查看所有财务数据',
-        'data_scope': 'ALL',
+        'data_scope': 'all',
         'permissions': {'can_view_finance': True, 'can_approve_payment': True}
     },
     {
         'code': 'finance_staff',
         'name': '财务专员',
         'description': '财务日常工作处理',
-        'data_scope': 'ALL',
+        'data_scope': 'all',
         'permissions': {'can_view_finance': True}
     },
     {
         'code': 'accountant',
-        'name': '会计',
-        'description': '负责记账、对账、报税',
-        'data_scope': 'ALL',
+        'name': '财务人员',
+        'description': '负责记账、对账、报税与日常财务处理',
+        'data_scope': 'all',
         'permissions': {'can_view_finance': True}
     },
     {
         'code': 'warehouse_manager',
         'name': '仓库主管',
         'description': '负责仓库管理和出入库审批',
-        'data_scope': 'ALL',
+        'data_scope': 'all',
         'permissions': {'can_approve_material': True}
     },
     {
         'code': 'warehouse_staff',
         'name': '仓管员',
         'description': '负责出入库操作',
-        'data_scope': 'ALL',
+        'data_scope': 'all',
         'permissions': {}
     },
     {
         'code': 'production_manager',
         'name': '生产主管',
         'description': '负责生产计划和进度管理',
-        'data_scope': 'ALL',
+        'data_scope': 'all',
         'permissions': {}
     },
     {
         'code': 'production_staff',
         'name': '生产人员',
         'description': '一线生产人员',
-        'data_scope': 'ALL',
+        'data_scope': 'all',
         'permissions': {}
     },
     {
         'code': 'qa_engineer',
         'name': '质量工程师',
         'description': '负责来料检验和出厂质检',
-        'data_scope': 'ALL',
+        'data_scope': 'all',
         'permissions': {}
     },
     {
         'code': 'viewer',
         'name': '查看者',
         'description': '只读权限，可查看项目和生产数据',
-        'data_scope': 'ALL',
+        'data_scope': 'all',
         'permissions': {'readonly': True}
     },
 ]
@@ -613,33 +615,28 @@ def get_module_view_policy(module_name: str, model_name: str = None) -> str:
 
 def is_finance_allowed(user) -> bool:
     """检查用户是否可以查看财务数据"""
+    if not user or not user.is_authenticated:
+        return False
     if user.is_superuser:
         return True
-    
-    if not hasattr(user, 'role') or not user.role:
-        return False
-    
-    role_code = getattr(user.role, 'code', '')
-    allowed_roles = MODULE_VIEW_POLICY.get('finance', {}).get('allowed_roles', [])
-    
-    if role_code in allowed_roles:
-        return True
-    
-    # 检查权限配置
-    permissions = getattr(user.role, 'permissions', {}) or {}
-    return permissions.get('can_view_finance', False)
+
+    user_permissions = get_user_permissions(user)
+    return any(code == 'finance' or code.startswith('finance:') for code in user_permissions)
 
 
 def can_view_sensitive_fields(user, module_name: str, model_name: str = None) -> bool:
     """检查用户是否可以查看敏感字段"""
+    if not user or not user.is_authenticated:
+        return False
     if user.is_superuser:
         return True
-    
-    if not hasattr(user, 'role') or not user.role:
-        return False
-    
-    role_code = getattr(user.role, 'code', '')
-    return role_code in SENSITIVE_FIELD_ALLOWED_ROLES
+
+    user_permissions = get_user_permissions(user)
+    required_codes = {
+        f'{module_name}:{model_name}:*' if model_name else None,
+        f'{module_name}:*',
+    }
+    return any(code and has_permission(user, code) for code in required_codes)
 
 
 def get_hidden_fields(user, module_name: str, model_name: str) -> list:
@@ -662,34 +659,9 @@ def get_hidden_fields(user, module_name: str, model_name: str) -> list:
 
 def has_operation_permission(user, module_name: str, model_name: str, operation: str) -> bool:
     """检查用户是否有操作权限"""
+    if not user or not user.is_authenticated:
+        return False
     if user.is_superuser:
         return True
-    
-    if not hasattr(user, 'role') or not user.role:
-        return False
-    
-    role_code = getattr(user.role, 'code', '')
-    
-    # 只读角色
-    permissions = getattr(user.role, 'permissions', {}) or {}
-    if permissions.get('readonly'):
-        return False
-    
-    # 获取操作权限配置
-    module_perms = OPERATION_PERMISSIONS.get(module_name, {})
-    model_perms = module_perms.get(model_name.lower(), {})
-    allowed_roles = model_perms.get(operation, [])
-    
-    # 检查通配符
-    if '*' in allowed_roles:
-        return True
-    
-    # 检查角色
-    if role_code in allowed_roles:
-        return True
-    
-    # admin角色总是有权限
-    if 'admin' in allowed_roles and role_code == 'admin':
-        return True
-    
-    return False
+
+    return has_permission(user, f'{module_name}:{model_name}:{operation}')

@@ -17,7 +17,11 @@ from .quote_templates import QuoteTemplateViewSet, QuoteHistoryViewSet
 from .contract_templates import (
     ContractTemplateViewSet, ContractClauseViewSet, GeneratedContractViewSet
 )
-from .performance import SalesTargetViewSet, SalesCommissionViewSet, SalesPerformanceViewSet
+from .performance import (
+    SalesTargetViewSet, SalesCommissionViewSet, SalesPerformanceViewSet,
+    CustomerRFMSegmentSummaryView, CustomerRFMTopCustomersView,
+    CustomerRFMAnalyzeView,
+)
 from .funnel_analysis import (
     SalesFunnelView, OpportunityStageAnalysisView, SalesTrendView, SalespersonRankingView
 )
@@ -117,6 +121,9 @@ urlpatterns = [
     path('analysis/stages/', OpportunityStageAnalysisView.as_view(), name='opportunity-stages'),
     path('analysis/trend/', SalesTrendView.as_view(), name='sales-trend'),
     path('analysis/ranking/', SalespersonRankingView.as_view(), name='salesperson-ranking'),
+    path('customer-rfm/segment_summary/', CustomerRFMSegmentSummaryView.as_view(), name='customer-rfm-segment-summary'),
+    path('customer-rfm/top_customers/', CustomerRFMTopCustomersView.as_view(), name='customer-rfm-top-customers'),
+    path('customer-rfm/analyze/', CustomerRFMAnalyzeView.as_view(), name='customer-rfm-analyze'),
     
     # 赢单/丢单分析
     path('analysis/win-loss/', WinLossAnalysisView.as_view(), name='win-loss-analysis'),

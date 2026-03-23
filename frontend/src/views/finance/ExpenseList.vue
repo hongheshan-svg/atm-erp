@@ -234,9 +234,11 @@ import request from '@/utils/request'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { usePermissionStore } from '@/stores/permission'
 
 // 权限检查
 const { canDelete } = usePermission()
+const permissionStore = usePermissionStore()
 
 // 批量删除功能
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
@@ -252,6 +254,7 @@ const loading = ref(false)
 const saving = ref(false)
 const expenses = ref([])
 const projects = ref([])
+const projectsLoaded = ref(false)
 const departments = ref([])
 const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
@@ -346,12 +349,31 @@ const loadExpenses = async () => {
 }
 
 const loadProjects = async () => {
+  if (projectsLoaded.value) {
+    return true
+  }
+
   try {
     const res = await request.get('/projects/projects/')
     projects.value = res.data?.results || res.results || res.data || []
+    projectsLoaded.value = true
+    return true
   } catch (error) {
-    console.error('加载项目失败:', error)
+    if (error?.response?.status !== 403) {
+      console.error('加载项目失败:', error)
+    }
+    return false
   }
+}
+
+const ensureProjectsLoaded = async () => {
+  if (!permissionStore.hasPermission('projects:list')) {
+    projects.value = []
+    projectsLoaded.value = false
+    return false
+  }
+
+  return loadProjects()
 }
 
 const loadDepartments = async () => {
@@ -406,7 +428,8 @@ const uploadTempFiles = async (expenseId) => {
   }
 }
 
-const handleAdd = () => {
+const handleAdd = async () => {
+  await ensureProjectsLoaded()
   dialogTitle.value = '提交报销'
   isEdit.value = false
   tempFiles.value = []
@@ -423,6 +446,7 @@ const handleAdd = () => {
 }
 
 const handleEdit = async (row) => {
+  await ensureProjectsLoaded()
   dialogTitle.value = '编辑报销'
   isEdit.value = true
   
@@ -550,7 +574,6 @@ const handleReimburse = async (row) => {
 
 onMounted(() => {
   loadExpenses()
-  loadProjects()
   loadDepartments()
 })
 </script>

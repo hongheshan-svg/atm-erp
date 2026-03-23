@@ -74,6 +74,7 @@ const bomManagementRef = ref(null)
 const memberManagementRef = ref(null)
 
 const projectId = computed(() => route.params.id)
+const isValidProjectId = computed(() => /^\d+$/.test(String(route.params.id || '')))
 
 const statusMap = {
   'DRAFT': '草稿',
@@ -103,6 +104,11 @@ const getStatusType = (status) => {
 }
 
 const loadProject = async () => {
+  if (!isValidProjectId.value) {
+    router.replace('/projects')
+    return
+  }
+
   try {
     const response = await request.get(`/projects/projects/${route.params.id}/`)
     project.value = response.data || response

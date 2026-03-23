@@ -292,25 +292,25 @@ class DataScopeModelTest(TestCase):
         scope = DataScope.objects.create(
             role=self.role,
             module='projects',
-            scope_type='global'
+            scope_type='all'
         )
         self.assertEqual(scope.role, self.role)
         self.assertEqual(scope.module, 'projects')
-        self.assertEqual(scope.scope_type, 'global')
-        self.assertEqual(scope.departments.count(), 0)
+        self.assertEqual(scope.scope_type, 'all')
+        self.assertEqual(scope.custom_departments.count(), 0)
 
     def test_create_module_scope(self):
         """Test creating a module-level data scope"""
         scope = DataScope.objects.create(
             role=self.role,
             module='sales',
-            scope_type='department'
+            scope_type='dept'
         )
-        scope.departments.add(self.dept1)
+        scope.custom_departments.add(self.dept1)
 
-        self.assertEqual(scope.scope_type, 'department')
-        self.assertEqual(scope.departments.count(), 1)
-        self.assertIn(self.dept1, scope.departments.all())
+        self.assertEqual(scope.scope_type, 'dept')
+        self.assertEqual(scope.custom_departments.count(), 1)
+        self.assertIn(self.dept1, scope.custom_departments.all())
 
     def test_create_custom_scope_with_departments(self):
         """Test creating a custom scope with multiple departments"""
@@ -319,25 +319,25 @@ class DataScopeModelTest(TestCase):
             module='purchase',
             scope_type='custom'
         )
-        scope.departments.add(self.dept1, self.dept2)
+        scope.custom_departments.add(self.dept1, self.dept2)
 
         self.assertEqual(scope.scope_type, 'custom')
-        self.assertEqual(scope.departments.count(), 2)
-        self.assertIn(self.dept1, scope.departments.all())
-        self.assertIn(self.dept2, scope.departments.all())
+        self.assertEqual(scope.custom_departments.count(), 2)
+        self.assertIn(self.dept1, scope.custom_departments.all())
+        self.assertIn(self.dept2, scope.custom_departments.all())
 
     def test_data_scope_unique_per_role_module(self):
         """Test that role-module combination must be unique"""
         DataScope.objects.create(
             role=self.role,
             module='projects',
-            scope_type='global'
+            scope_type='all'
         )
         with self.assertRaises(IntegrityError):
             DataScope.objects.create(
                 role=self.role,
                 module='projects',
-                scope_type='department'
+                scope_type='dept'
             )
 
     def test_scope_type_choices(self):
@@ -347,4 +347,4 @@ class DataScopeModelTest(TestCase):
             module='inventory',
             scope_type='self'
         )
-        self.assertIn(scope.scope_type, ['global', 'department', 'department_and_below', 'self', 'custom'])
+        self.assertIn(scope.scope_type, ['all', 'dept', 'dept_tree', 'self', 'custom'])

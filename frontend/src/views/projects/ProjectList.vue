@@ -222,9 +222,11 @@ import AttachmentUpload from '@/components/AttachmentUpload.vue'
 import { exportProjects } from '@/api/export'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { usePermissionStore } from '@/stores/permission'
 
 // 权限检查
 const { canDelete } = usePermission()
+const permissionStore = usePermissionStore()
 
 // 批量删除功能
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
@@ -234,7 +236,7 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
     confirmMessage: '此操作将永久删除选中的项目及其所有关联数据（任务、BOM、图纸等），此操作不可恢复！',
     successMessage: '删除项目成功',
     errorMessage: '删除项目失败',
-    onSuccess: () => { loadProjects(); loadSalesOrders() }
+    onSuccess: () => { loadProjects() }
   }
 )
 
@@ -244,6 +246,7 @@ const projects = ref([])
 const customers = ref([])
 const users = ref([])
 const salesOrders = ref([])
+const salesOrdersLoaded = ref(false)
 const dialogVisible = ref(false)
 const dialogTitle = ref('创建项目')
 const isEdit = ref(false)
@@ -337,13 +340,31 @@ const loadUsers = async () => {
 }
 
 const loadSalesOrders = async () => {
+  if (salesOrdersLoaded.value) {
+    return true
+  }
+
   try {
-    // 使用专门的接口获取所有可关联的销售订单（不受数据权限限制）
     const response = await request.get('/sales/orders/for_linking/')
     salesOrders.value = response.data || response || []
+    salesOrdersLoaded.value = true
+    return true
   } catch (error) {
-    console.error('Failed to load sales orders')
+    if (error?.response?.status !== 403) {
+      console.error('Failed to load sales orders', error)
+    }
+    return false
   }
+}
+
+const ensureSalesOrdersLoaded = async () => {
+  if (!permissionStore.hasPermission('sales:orders')) {
+    salesOrders.value = []
+    salesOrdersLoaded.value = false
+    return false
+  }
+
+  return loadSalesOrders()
 }
 
 // 计算选中的订单详情
@@ -384,16 +405,18 @@ const handleView = (row) => {
   router.push(`/projects/${row.id}`)
 }
 
-const handleAdd = () => {
+const handleAdd = async () => {
   dialogTitle.value = '创建项目'
   isEdit.value = false
+  await ensureSalesOrdersLoaded()
   Object.assign(form, { id: null, code: '', name: '', sales_order: null, customer: null, manager: null, start_date: '', end_date: '', budget_total: 0, status: 'DRAFT' })
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = async (row) => {
   dialogTitle.value = '编辑项目'
   isEdit.value = true
+  await ensureSalesOrdersLoaded()
   Object.assign(form, row)
   dialogVisible.value = true
 }
@@ -439,8 +462,10 @@ const handleSubmit = async () => {
     }
     dialogVisible.value = false
     loadProjects()
-    // 刷新销售订单列表（关联订单后，该订单不再可选）
-    loadSalesOrders()
+    if (salesOrdersLoaded.value) {
+      salesOrdersLoaded.value = false
+      await ensureSalesOrdersLoaded()
+    }
   } catch (error) {
     console.error('保存项目失败:', error)
     ElMessage.error(error.response?.data?.detail || '保存项目失败')
@@ -519,7 +544,6 @@ onMounted(() => {
   loadProjects()
   loadCustomers()
   loadUsers()
-  loadSalesOrders()
 })
 </script>
 

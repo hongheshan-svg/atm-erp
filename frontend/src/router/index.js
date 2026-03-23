@@ -9,11 +9,18 @@ const routes = [
     component: () => import('@/views/Login.vue'),
     meta: { requiresAuth: false }
   },
-  // 兼容旧链接（避免用户误以为路径错了）
-  {
-    path: '/masterdata/items',
-    redirect: '/items'
-  },
+  // 基础资料旧路径兼容重定向
+  { path: '/items', redirect: '/masterdata/items' },
+  { path: '/customers', redirect: '/masterdata/customers' },
+  { path: '/suppliers', redirect: '/masterdata/suppliers' },
+  { path: '/warehouses', redirect: '/masterdata/warehouses' },
+  { path: '/locations', redirect: '/masterdata/locations' },
+  // 系统管理旧路径兼容重定向
+  { path: '/users', redirect: '/system/users' },
+  { path: '/roles', redirect: '/system/roles' },
+  { path: '/departments', redirect: '/system/departments' },
+  { path: '/code-rules', redirect: '/system/code-rules' },
+  { path: '/notification-settings', redirect: '/system/notification-settings' },
   {
     path: '/',
     component: () => import('@/layout/MainLayout.vue'),
@@ -24,66 +31,66 @@ const routes = [
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('@/views/Dashboard.vue'),
-        meta: { title: '仪表盘', icon: 'DataAnalysis', menuId: 'dashboard' }
+        meta: { title: '工作台', icon: 'DataAnalysis', menuId: 'dashboard' }
       },
-      // User Management
+      // System Management - 系统管理
       {
-        path: 'users',
+        path: 'system/users',
         name: 'UserList',
         component: () => import('@/views/system/UserList.vue'),
         meta: { title: '用户管理', icon: 'User', menuId: 'system:users' }
       },
       {
-        path: 'roles',
+        path: 'system/roles',
         name: 'RoleList',
         component: () => import('@/views/system/RoleList.vue'),
         meta: { title: '角色管理', icon: 'Setting', menuId: 'system:roles' }
       },
       {
-        path: 'notification-settings',
-        name: 'NotificationSettings',
-        component: () => import('@/views/settings/NotificationSettings.vue'),
-        meta: { title: '通知设置', icon: 'Bell', menuId: 'system:notifications' }
-      },
-      {
-        path: 'departments',
+        path: 'system/departments',
         name: 'DepartmentList',
         component: () => import('@/views/system/DepartmentList.vue'),
         meta: { title: '部门管理', icon: 'OfficeBuilding', menuId: 'system:departments' }
       },
       {
-        path: 'code-rules',
+        path: 'system/code-rules',
         name: 'CodeRuleList',
         component: () => import('@/views/system/CodeRuleList.vue'),
-        meta: { title: '编码规则', icon: 'SetUp', menuId: 'system:code-rules' }
+        meta: { title: '编号规则', icon: 'SetUp', menuId: 'system:code-rules' }
       },
-      // Master Data
       {
-        path: 'items',
+        path: 'system/notification-settings',
+        name: 'NotificationSettings',
+        component: () => import('@/views/settings/NotificationSettings.vue'),
+        meta: { title: '消息设置', icon: 'Bell', menuId: 'system:notification-settings' }
+      },
+      // Master Data - 基础资料
+      {
+        path: 'masterdata/items',
         name: 'ItemList',
         component: () => import('@/views/masterdata/ItemList.vue'),
         meta: { title: '物料管理', icon: 'Box', menuId: 'masterdata:items' }
       },
       {
-        path: 'customers',
+        path: 'masterdata/customers',
         name: 'CustomerList',
         component: () => import('@/views/masterdata/CustomerList.vue'),
         meta: { title: '客户管理', icon: 'Avatar', menuId: 'masterdata:customers' }
       },
       {
-        path: 'suppliers',
+        path: 'masterdata/suppliers',
         name: 'SupplierList',
         component: () => import('@/views/masterdata/SupplierList.vue'),
         meta: { title: '供应商管理', icon: 'ShoppingCart', menuId: 'masterdata:suppliers' }
       },
       {
-        path: 'warehouses',
+        path: 'masterdata/warehouses',
         name: 'WarehouseList',
         component: () => import('@/views/masterdata/WarehouseList.vue'),
         meta: { title: '仓库管理', icon: 'House', menuId: 'masterdata:warehouses' }
       },
       {
-        path: 'locations',
+        path: 'masterdata/locations',
         name: 'LocationList',
         component: () => import('@/views/masterdata/LocationList.vue'),
         meta: { title: '库位管理', icon: 'Grid', menuId: 'masterdata:locations' }
@@ -93,13 +100,17 @@ const routes = [
         path: 'projects',
         name: 'ProjectList',
         component: () => import('@/views/projects/ProjectList.vue'),
-        meta: { title: '项目列表', icon: 'Management', menuId: 'projects:list' }
+        meta: { title: '项目总览', icon: 'Management', menuId: 'projects:list' }
+      },
+      {
+        path: 'projects/list',
+        redirect: '/projects'
       },
       {
         path: 'projects/dashboard',
         name: 'ProjectDashboard',
         component: () => import('@/views/projects/ProjectDashboard.vue'),
-        meta: { title: '项目仪表盘', icon: 'DataAnalysis', menuId: 'projects:dashboard' }
+        meta: { title: '项目看板', icon: 'DataAnalysis', menuId: 'projects:dashboard' }
       },
       {
         path: 'projects/:id',
@@ -111,7 +122,7 @@ const routes = [
         path: 'projects/tasks',
         name: 'TaskList',
         component: () => import('@/views/projects/TaskList.vue'),
-        meta: { title: '任务管理', icon: 'List', menuId: 'projects:tasks' }
+        meta: { title: '任务看板', icon: 'List', menuId: 'projects:tasks' }
       },
       {
         path: 'projects/members',
@@ -123,13 +134,13 @@ const routes = [
         path: 'projects/bom',
         name: 'BOMList',
         component: () => import('@/views/projects/BOMList.vue'),
-        meta: { title: 'BOM清单', icon: 'Document', menuId: 'projects:bom' }
+        meta: { title: 'BOM管理', icon: 'Document', menuId: 'projects:bom' }
       },
       {
         path: 'projects/time-logs',
         name: 'TimeLogList',
         component: () => import('@/views/projects/TimeLogList.vue'),
-        meta: { title: '工时填报', icon: 'Clock', menuId: 'projects:time-logs' }
+        meta: { title: '工时记录', icon: 'Clock', menuId: 'projects:time-logs' }
       },
       {
         path: 'projects/gantt',
@@ -141,14 +152,14 @@ const routes = [
         path: 'projects/ecn',
         name: 'ECNList',
         component: () => import('@/views/projects/ECNList.vue'),
-        meta: { title: 'ECN变更', icon: 'Edit', menuId: 'projects:list' }  // 使用与项目列表相同的权限
+        meta: { title: '设计变更', icon: 'Edit', menuId: 'projects:ecn' }
       },
       // Bug跟踪
       {
         path: 'projects/bugs',
         name: 'BugList',
         component: () => import('@/views/projects/BugList.vue'),
-        meta: { title: 'Bug跟踪', icon: 'Warning', menuId: 'projects:bugs' }
+        meta: { title: '问题追踪', icon: 'Warning', menuId: 'projects:bugs' }
       },
       {
         path: 'projects/bugs/:id',
@@ -161,7 +172,7 @@ const routes = [
         path: 'projects/drawings',
         name: 'DrawingList',
         component: () => import('@/views/projects/DrawingList.vue'),
-        meta: { title: '图纸管理', icon: 'Picture', menuId: 'projects:drawings' }
+        meta: { title: '图纸文档', icon: 'Picture', menuId: 'projects:drawings' }
       },
       // After Sales - 售后管理
       {
@@ -199,7 +210,7 @@ const routes = [
         path: 'purchase/goods-receipts',
         name: 'GoodsReceiptList',
         component: () => import('@/views/purchase/GoodsReceiptList.vue'),
-        meta: { title: '到货质检', icon: 'Box', menuId: 'purchase:goods-receipts' }
+        meta: { title: '到货验收', icon: 'Box', menuId: 'purchase:goods-receipts' }
       },
       // 询价管理已移除，询价功能整合到采购申请页面
       // {
@@ -218,7 +229,7 @@ const routes = [
         path: 'purchase/comparisons',
         name: 'ComparisonList',
         component: () => import('@/views/purchase/ComparisonList.vue'),
-        meta: { title: '比价分析', icon: 'DataAnalysis', menuId: 'purchase:comparisons' }
+        meta: { title: '询价比价', icon: 'DataAnalysis', menuId: 'purchase:comparisons' }
       },
       {
         path: 'purchase/comparisons/:id',
@@ -230,7 +241,7 @@ const routes = [
         path: 'purchase/evaluations',
         name: 'SupplierEvaluationList',
         component: () => import('@/views/purchase/SupplierEvaluationList.vue'),
-        meta: { title: '供应商评价', icon: 'Star', menuId: 'purchase:evaluations' }
+        meta: { title: '供应商考核', icon: 'Star', menuId: 'purchase:evaluations' }
       },
       {
         path: 'purchase/blacklist',
@@ -243,26 +254,26 @@ const routes = [
         path: 'sales/crm-dashboard',
         name: 'CRMDashboard',
         component: () => import('@/views/sales/CRMDashboard.vue'),
-        meta: { title: 'CRM工作台', icon: 'DataBoard', menuId: 'sales:crm-dashboard' }
+        meta: { title: '客户总览', icon: 'DataBoard', menuId: 'sales:crm-dashboard' }
       },
       {
         path: 'sales/leads',
         name: 'LeadList',
         component: () => import('@/views/sales/LeadList.vue'),
-        meta: { title: '销售线索', icon: 'User', menuId: 'sales:leads' }
+        meta: { title: '商机线索', icon: 'User', menuId: 'sales:leads' }
       },
       {
         path: 'sales/opportunities',
         name: 'OpportunityList',
         component: () => import('@/views/sales/OpportunityList.vue'),
-        meta: { title: '销售商机', icon: 'Opportunity', menuId: 'sales:opportunities' }
+        meta: { title: '销售机会', icon: 'Opportunity', menuId: 'sales:opportunities' }
       },
       // Sales
       {
         path: 'sales/quotations',
         name: 'QuotationList',
         component: () => import('@/views/sales/QuotationList.vue'),
-        meta: { title: '销售报价', icon: 'Document', menuId: 'sales:quotations' }
+        meta: { title: '技术报价', icon: 'Document', menuId: 'sales:quotations' }
       },
       {
         path: 'sales/quotations/create',
@@ -292,7 +303,7 @@ const routes = [
         path: 'sales/delivery-orders',
         name: 'DeliveryOrderList',
         component: () => import('@/views/sales/DeliveryOrderList.vue'),
-        meta: { title: '发货单管理', icon: 'Van', menuId: 'sales:delivery-orders' }
+        meta: { title: '发货管理', icon: 'Van', menuId: 'sales:delivery-orders' }
       },
       {
         path: 'sales/contracts',
@@ -305,7 +316,7 @@ const routes = [
         path: 'inventory/stocks',
         name: 'StockList',
         component: () => import('@/views/inventory/StockList.vue'),
-        meta: { title: '库存查询', icon: 'Goods', menuId: 'inventory:stocks' }
+        meta: { title: '实时库存', icon: 'Goods', menuId: 'inventory:stocks' }
       },
       {
         path: 'inventory/batches',
@@ -317,37 +328,37 @@ const routes = [
         path: 'inventory/transfer',
         name: 'StockTransfer',
         component: () => import('@/views/inventory/StockTransfer.vue'),
-        meta: { title: '库存调拨', icon: 'Sort', menuId: 'inventory:transfer' }
+        meta: { title: '调拨管理', icon: 'Sort', menuId: 'inventory:transfer' }
       },
       {
         path: 'inventory/adjustment',
         name: 'StockAdjustmentList',
         component: () => import('@/views/inventory/StockAdjustmentList.vue'),
-        meta: { title: '库存盘点', icon: 'DocumentChecked', menuId: 'inventory:adjustment' }
+        meta: { title: '盘点管理', icon: 'DocumentChecked', menuId: 'inventory:adjustment' }
       },
       {
         path: 'inventory/alert',
         name: 'StockAlert',
         component: () => import('@/views/inventory/StockAlert.vue'),
-        meta: { title: '库存预警', icon: 'Warning', menuId: 'inventory:alert' }
+        meta: { title: '库存预警', icon: 'Warning', menuId: 'inventory:alerts' }
       },
       {
         path: 'inventory/moves',
         name: 'StockMoveList',
         component: () => import('@/views/inventory/StockMoveList.vue'),
-        meta: { title: '库存流水', icon: 'List', menuId: 'inventory:moves' }
+        meta: { title: '出入明细', icon: 'List', menuId: 'inventory:moves' }
       },
       {
         path: 'inventory/requisitions',
         name: 'RequisitionList',
         component: () => import('@/views/inventory/RequisitionList.vue'),
-        meta: { title: '生产领料', icon: 'TakeawayBox', menuId: 'inventory:requisitions' }
+        meta: { title: '领料出库', icon: 'TakeawayBox', menuId: 'inventory:requisitions' }
       },
       {
         path: 'inventory/returns',
         name: 'ReturnList',
         component: () => import('@/views/inventory/ReturnList.vue'),
-        meta: { title: '生产退料', icon: 'RefreshLeft', menuId: 'inventory:returns' }
+        meta: { title: '退料入库', icon: 'RefreshLeft', menuId: 'inventory:returns' }
       },
       // Finance
       {
@@ -366,13 +377,13 @@ const routes = [
         path: 'finance/ar',
         name: 'ARList',
         component: () => import('@/views/finance/ARList.vue'),
-        meta: { title: '应收账款', icon: 'CreditCard', menuId: 'finance:ar' }
+        meta: { title: '应收管理', icon: 'CreditCard', menuId: 'finance:ar' }
       },
       {
         path: 'finance/ap',
         name: 'APList',
         component: () => import('@/views/finance/APList.vue'),
-        meta: { title: '应付账款', icon: 'Wallet', menuId: 'finance:ap' }
+        meta: { title: '应付管理', icon: 'Wallet', menuId: 'finance:ap' }
       },
       {
         path: 'finance/sales-reconciliation',
@@ -396,107 +407,107 @@ const routes = [
         path: 'finance/project-costs',
         name: 'ProjectCostList',
         component: () => import('@/views/finance/ProjectCostList.vue'),
-        meta: { title: '项目成本核算', icon: 'DataAnalysis', menuId: 'finance:project-costs' }
+        meta: { title: '项目成本', icon: 'DataAnalysis', menuId: 'finance:project-costs' }
       },
       {
         path: 'finance/collection-plans',
         name: 'CollectionPlanList',
         component: () => import('@/views/finance/CollectionPlanList.vue'),
-        meta: { title: '回款计划', icon: 'Money', menuId: 'finance:collection' }
+        meta: { title: '回款跟踪', icon: 'Money', menuId: 'finance:collection' }
       },
       // Reports
       {
         path: 'reports/profitability',
         name: 'ProfitabilityReport',
         component: () => import('@/views/reports/ProfitabilityReport.vue'),
-        meta: { title: '项目利润分析', icon: 'TrendCharts', menuId: 'reports:profitability' }
+        meta: { title: '项目利润', icon: 'TrendCharts', menuId: 'reports:profitability' }
       },
       {
         path: 'reports/aging',
         name: 'AgingReport',
         component: () => import('@/views/reports/AgingReport.vue'),
-        meta: { title: '账龄分析', icon: 'Calendar', menuId: 'reports:aging' }
+        meta: { title: '账龄报表', icon: 'Calendar', menuId: 'reports:aging' }
       },
       {
         path: 'reports/cash-flow',
         name: 'CashFlowForecast',
         component: () => import('@/views/reports/CashFlowForecast.vue'),
-        meta: { title: '现金流预测', icon: 'Money', menuId: 'reports:cash-flow' }
+        meta: { title: '现金流', icon: 'Money', menuId: 'reports:cash-flow' }
       },
       {
         path: 'reports/slow-moving',
         name: 'SlowMovingReport',
         component: () => import('@/views/reports/SlowMovingReport.vue'),
-        meta: { title: '呆滞物料分析', icon: 'Warning', menuId: 'reports:slow-moving' }
+        meta: { title: '呆滞物料', icon: 'Warning', menuId: 'reports:slow-moving' }
       },
       {
         path: 'reports/timelog',
         name: 'TimelogReport',
         component: () => import('@/views/reports/TimelogReport.vue'),
-        meta: { title: '工时统计', icon: 'Clock', menuId: 'reports:timelog' }
+        meta: { title: '工时报表', icon: 'Clock', menuId: 'reports:timelog' }
       },
       {
         path: 'reports/cost-analysis',
         name: 'CostAnalysis',
         component: () => import('@/views/reports/CostAnalysis.vue'),
-        meta: { title: '项目成本分析', icon: 'Coin', menuId: 'reports:cost-analysis' }
+        meta: { title: '成本报表', icon: 'Coin', menuId: 'reports:cost-analysis' }
       },
       // Production - 生产管理
       {
         path: 'production/processes',
         name: 'ProductionProcessList',
         component: () => import('@/views/production/ProcessList.vue'),
-        meta: { title: '生产工序', icon: 'Setting', menuId: 'production:processes' }
+        meta: { title: '工艺工序', icon: 'Setting', menuId: 'production:processes' }
       },
       {
         path: 'production/plans',
         name: 'ProductionPlanList',
         component: () => import('@/views/production/PlanList.vue'),
-        meta: { title: '生产计划', icon: 'Calendar', menuId: 'production:plans' }
+        meta: { title: '排产计划', icon: 'Calendar', menuId: 'production:plans' }
       },
       {
         path: 'production/debug-records',
         name: 'DebugRecordList',
         component: () => import('@/views/production/DebugRecordList.vue'),
-        meta: { title: '调试记录', icon: 'Cpu', menuId: 'production:debug-records' }
+        meta: { title: '调试日志', icon: 'Cpu', menuId: 'production:debug-records' }
       },
       {
         path: 'production/inspections',
         name: 'QualityInspectionList',
         component: () => import('@/views/production/QualityInspectionList.vue'),
-        meta: { title: '质量检验', icon: 'DocumentChecked', menuId: 'production:inspections' }
+        meta: { title: '质检管理', icon: 'DocumentChecked', menuId: 'production:inspections' }
       },
       // Equipment - 设备台账
       {
         path: 'equipment/list',
         name: 'EquipmentList',
         component: () => import('@/views/equipment/EquipmentList.vue'),
-        meta: { title: '设备台账', icon: 'Monitor', menuId: 'equipment:list' }
+        meta: { title: '设备管理', icon: 'Monitor', menuId: 'equipment:list' }
       },
       {
         path: 'equipment/fixtures',
         name: 'FixtureList',
         component: () => import('@/views/equipment/FixtureList.vue'),
-        meta: { title: '工装夹具', icon: 'Opportunity', menuId: 'equipment:fixtures' }
+        meta: { title: '工装管理', icon: 'Opportunity', menuId: 'equipment:fixtures' }
       },
       // Knowledge Base - 知识库
       {
         path: 'knowledge/articles',
         name: 'KnowledgeArticleList',
         component: () => import('@/views/knowledge/ArticleList.vue'),
-        meta: { title: '知识文章', icon: 'Document', menuId: 'knowledge:articles' }
+        meta: { title: '技术文库', icon: 'Document', menuId: 'knowledge:articles' }
       },
       {
         path: 'knowledge/issues',
         name: 'TechnicalIssueList',
         component: () => import('@/views/knowledge/TechnicalIssueList.vue'),
-        meta: { title: '技术问题', icon: 'Warning', menuId: 'knowledge:issues' }
+        meta: { title: '问题库', icon: 'Warning', menuId: 'knowledge:issues' }
       },
       {
         path: 'knowledge/components',
         name: 'StandardComponentList',
         component: () => import('@/views/knowledge/StandardComponentList.vue'),
-        meta: { title: '标准部件库', icon: 'Box', menuId: 'knowledge:components' }
+        meta: { title: '标准件库', icon: 'Box', menuId: 'knowledge:components' }
       },
       {
         path: 'projects/archives',
@@ -522,19 +533,19 @@ const routes = [
         path: 'workflow/tasks',
         name: 'WorkflowTasks',
         component: () => import('@/views/workflow/TaskList.vue'),
-        meta: { title: '待办审批', icon: 'Checked', menuId: 'workflow:tasks' }
+        meta: { title: '待我审批', icon: 'Checked', menuId: 'workflow:tasks' }
       },
       {
         path: 'workflow/my-submissions',
         name: 'MySubmissions',
         component: () => import('@/views/workflow/MySubmissions.vue'),
-        meta: { title: '我的提交', icon: 'Document', menuId: 'workflow:my-submissions' }
+        meta: { title: '我的申请', icon: 'Document', menuId: 'workflow:my-submissions' }
       },
       {
         path: 'workflow/config',
         name: 'WorkflowConfig',
         component: () => import('@/views/workflow/WorkflowConfig.vue'),
-        meta: { title: '流程配置', icon: 'Setting', menuId: 'workflow:config' }
+        meta: { title: '审批设置', icon: 'Setting', menuId: 'workflow:config' }
       },
       // System
       {
@@ -668,7 +679,7 @@ const routes = [
         path: 'projects/work-orders',
         name: 'WorkOrders',
         component: () => import('@/views/projects/WorkOrderList.vue'),
-        meta: { title: '工单管理', icon: 'Tickets', menuId: 'projects:work-orders' }
+        meta: { title: '工单派工', icon: 'Tickets', menuId: 'projects:work-orders' }
       },
       // 设备点检
       {
@@ -703,7 +714,7 @@ const routes = [
         path: 'projects/alerts',
         name: 'ProjectAlerts',
         component: () => import('@/views/projects/AlertList.vue'),
-        meta: { title: '项目预警', icon: 'Warning', menuId: 'projects:alerts' }
+        meta: { title: '风险预警', icon: 'Warning', menuId: 'projects:alerts' }
       },
       // 库存预警
       {
@@ -724,13 +735,13 @@ const routes = [
         path: 'plm/requirements',
         name: 'Requirements',
         component: () => import('@/views/plm/RequirementList.vue'),
-        meta: { title: '需求管理', icon: 'Document', menuId: 'plm:requirements' }
+        meta: { title: '技术需求', icon: 'Document', menuId: 'plm:requirements' }
       },
       {
         path: 'plm/proposals',
         name: 'Proposals',
         component: () => import('@/views/plm/ProposalList.vue'),
-        meta: { title: '方案设计', icon: 'Edit', menuId: 'plm:proposals' }
+        meta: { title: '方案评审', icon: 'Edit', menuId: 'plm:proposals' }
       },
       // PLM - 技术协议
       {
@@ -744,14 +755,14 @@ const routes = [
         path: 'projects/equipment-archives',
         name: 'EquipmentArchives',
         component: () => import('@/views/projects/EquipmentArchiveList.vue'),
-        meta: { title: '设备档案', icon: 'Files', menuId: 'projects:equipment-archives' }
+        meta: { title: '设备台账', icon: 'Files', menuId: 'projects:equipment-archives' }
       },
       // 项目 - 验收管理
       {
         path: 'projects/acceptances',
         name: 'Acceptances',
         component: () => import('@/views/projects/AcceptanceList.vue'),
-        meta: { title: '验收管理', icon: 'Finished', menuId: 'projects:acceptances' }
+        meta: { title: '项目验收', icon: 'Finished', menuId: 'projects:acceptances' }
       },
       // 生产 - 序列号管理
       {
@@ -765,19 +776,19 @@ const routes = [
         path: 'mes/scheduling',
         name: 'APSScheduling',
         component: () => import('@/views/mes/APSScheduling.vue'),
-        meta: { title: 'APS排程', icon: 'Calendar', menuId: 'mes:scheduling' }
+        meta: { title: '智能排程', icon: 'Calendar', menuId: 'mes:scheduling' }
       },
       {
         path: 'mes/kanban',
         name: 'ProductionKanban',
         component: () => import('@/views/mes/Kanban.vue'),
-        meta: { title: '电子看板', icon: 'Monitor', menuId: 'mes:kanban' }
+        meta: { title: '生产看板', icon: 'Monitor', menuId: 'mes:kanban' }
       },
       {
         path: 'mes/andon',
         name: 'AndonSystem',
         component: () => import('@/views/mes/AndonSystem.vue'),
-        meta: { title: '安灯系统', icon: 'Bell', menuId: 'mes:andon' }
+        meta: { title: '异常报警', icon: 'Bell', menuId: 'mes:andon' }
       },
       {
         path: 'mes/data-acquisition',
@@ -796,7 +807,7 @@ const routes = [
         path: 'plm/cad-bom-import',
         name: 'CADBOMImport',
         component: () => import('@/views/plm/CreoBOMImport.vue'),
-        meta: { title: 'CAD BOM导入', icon: 'Upload', menuId: 'plm:cad-bom' }
+        meta: { title: 'Creo导入', icon: 'Upload', menuId: 'plm:cad-bom' }
       },
       {
         path: 'plm/bom-compare',
@@ -941,7 +952,7 @@ const routes = [
         path: 'projects/service-orders',
         name: 'ServiceOrderList',
         component: () => import('@/views/projects/ServiceOrder.vue'),
-        meta: { title: '现场服务', icon: 'Van', menuId: 'projects:service' }
+        meta: { title: '售后服务', icon: 'Van', menuId: 'projects:service' }
       },
       {
         path: 'projects/service-order/:id',
@@ -960,7 +971,7 @@ const routes = [
         path: 'projects/cost-dashboard',
         name: 'ProjectCostDashboard',
         component: () => import('@/views/projects/CostDashboard.vue'),
-        meta: { title: '成本看板', icon: 'Coin', menuId: 'projects:cost' }
+        meta: { title: '成本分析', icon: 'Coin', menuId: 'projects:cost' }
       },
       {
         path: 'projects/cost-records',
@@ -1011,7 +1022,7 @@ const routes = [
         path: 'production/routing-templates',
         name: 'RoutingTemplateList',
         component: () => import('@/views/production/RoutingTemplate.vue'),
-        meta: { title: '工艺模板', icon: 'Guide', menuId: 'production:routing' }
+        meta: { title: '工艺路线', icon: 'Guide', menuId: 'production:routing' }
       },
       {
         path: 'production/routing-template/:id',
@@ -1023,14 +1034,14 @@ const routes = [
         path: 'production/work-stations',
         name: 'WorkStationList',
         component: () => import('@/views/production/WorkStationList.vue'),
-        meta: { title: '工位管理', icon: 'OfficeBuilding', menuId: 'production:routing' }
+        meta: { title: '工位管理', icon: 'OfficeBuilding', menuId: 'production:workstations' }
       },
       // 3D装配指导
       {
         path: 'production/assembly-guides',
         name: 'AssemblyGuideList',
         component: () => import('@/views/production/AssemblyGuideList.vue'),
-        meta: { title: '装配指导', icon: 'Connection', menuId: 'production:assembly' }
+        meta: { title: '装配作业', icon: 'Connection', menuId: 'production:assembly' }
       },
       {
         path: 'production/assembly-guide/:id',
@@ -1095,25 +1106,25 @@ const routes = [
         path: 'reports/project-profitability',
         name: 'ProjectProfitabilityReport',
         component: () => import('@/views/reports/ProjectProfitabilityReport.vue'),
-        meta: { title: '项目毛利分析', icon: 'TrendCharts', menuId: 'reports:industry' }
+        meta: { title: '项目毛利分析', icon: 'TrendCharts', menuId: 'reports:project-profitability' }
       },
       {
         path: 'reports/equipment-lifecycle',
         name: 'EquipmentLifecycleReport',
         component: () => import('@/views/reports/EquipmentLifecycleReport.vue'),
-        meta: { title: '设备生命周期', icon: 'Timer', menuId: 'reports:industry' }
+        meta: { title: '设备生命周期', icon: 'Timer', menuId: 'reports:equipment-lifecycle' }
       },
       {
         path: 'reports/capacity-utilization',
         name: 'CapacityUtilizationReport',
         component: () => import('@/views/reports/CapacityUtilizationReport.vue'),
-        meta: { title: '产能利用率', icon: 'DataAnalysis', menuId: 'reports:industry' }
+        meta: { title: '产能利用率', icon: 'DataAnalysis', menuId: 'reports:capacity-utilization' }
       },
       {
         path: 'reports/customer-value',
         name: 'CustomerValueReport',
         component: () => import('@/views/reports/CustomerValueReport.vue'),
-        meta: { title: '客户价值分析', icon: 'UserFilled', menuId: 'reports:industry' }
+        meta: { title: '客户价值分析', icon: 'UserFilled', menuId: 'reports:customer-value' }
       },
       // 供应商协同门户
       {
@@ -1172,7 +1183,7 @@ const routes = [
         path: 'production/resource-types',
         name: 'ResourceTypeList',
         component: () => import('@/views/production/ResourceTypeList.vue'),
-        meta: { title: '资源类型', icon: 'Files', menuId: 'production:capacity' }
+        meta: { title: '资源类型', icon: 'Files', menuId: 'production:resources' }
       },
       // User Profile - 这些是公共页面，所有登录用户都可以访问
       {
@@ -1192,176 +1203,9 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory('/erp'),
   routes
 })
-
-// 需要管理员权限的菜单列表
-const adminOnlyMenus = [
-  'system:users',
-  'system:roles',
-  'system:config',
-  'system:backup',
-  'system:monitor',
-  'system:audit-log',
-  'system:audit-analytics',
-  'system:webhooks',
-  'system:data-dictionary',
-  'system:email-templates',
-  'system:custom-fields'
-]
-
-// 菜单权限的 fallback 映射：某些子菜单可以通过父模块权限访问
-const menuFallbackPermissions = {
-  // ==================== PLM 相关 ====================
-  'plm:requirements': ['projects'],
-  'plm:proposals': ['projects'],
-  'plm:agreements': ['projects'],
-  'plm:model-viewer': ['projects'],
-  'plm:cad-bom': ['projects'],
-  'plm:bom-compare': ['projects'],
-  
-  // ==================== 知识库 ====================
-  'knowledge:articles': ['projects'],
-  'knowledge:issues': ['projects'],
-  'knowledge:components': ['projects'],
-  
-  // ==================== 项目管理子菜单 ====================
-  'projects:dashboard': ['projects'],
-  'projects:milestones': ['projects'],
-  'projects:alerts': ['projects'],
-  'projects:equipment-archives': ['projects'],
-  'projects:acceptances': ['projects'],
-  'projects:drawings': ['projects'],
-  'projects:documents': ['projects'],
-  'projects:ecn': ['projects'],
-  'projects:archives': ['projects'],
-  'projects:work-orders': ['projects', 'production'],
-  'projects:batch-drawing': ['projects'],
-  'projects:drawing-bom-link': ['projects'],
-  'projects:service': ['projects'],
-  'projects:cost': ['projects'],
-  'projects:monitoring': ['projects'],
-  
-  // ==================== 设备管理 ====================
-  'equipment:list': ['projects'],
-  'equipment:fixtures': ['projects'],
-  'equipment:inspection': ['projects'],
-  'equipment:maintenance': ['projects'],
-  'equipment:oee': ['projects'],
-  
-  // ==================== 销售相关 ====================
-  'aftersales:orders': ['sales'],
-  'sales:quote-templates': ['sales'],
-  'sales:contract-templates': ['sales'],
-  'sales:crm-dashboard': ['sales'],
-  'sales:quote-estimation': ['sales'],
-  'sales:training': ['sales'],
-  'sales:service': ['sales'],
-  'sales:quote': ['sales'],
-  
-  // ==================== 财务相关 ====================
-  'finance:sales-reconciliation': ['sales', 'finance'],
-  'finance:purchase-reconciliation': ['purchase', 'finance'],
-  'finance:ar': ['finance'],
-  'finance:ap': ['finance'],
-  'finance:assets': ['finance'],
-  
-  // ==================== 采购相关 ====================
-  'purchase:outsource': ['purchase'],
-  'purchase:evaluations': ['purchase'],
-  'purchase:blacklist': ['purchase'],
-  'purchase:portal': ['purchase'],
-  'purchase:collaboration': ['purchase'],
-  'purchase:budgets': ['purchase'],
-  
-  // ==================== 库存相关 ====================
-  'inventory:mrp': ['purchase', 'inventory'],
-  'inventory:alerts': ['inventory'],
-  'inventory:cost-accounting': ['inventory'],
-  'inventory:spare-parts': ['inventory'],
-  'inventory:data-accuracy': ['inventory'],
-  
-  // ==================== 生产/MES相关 ====================
-  'mes:scheduling': ['production'],
-  'mes:kanban': ['production'],
-  'mes:andon': ['production'],
-  'mes:data-acquisition': ['production'],
-  'production:serial-numbers': ['production'],
-  'production:capacity': ['production'],
-  'production:routing': ['production'],
-  'production:assembly': ['production'],
-  'production:scheduling': ['production'],
-  
-  // ==================== OA办公相关 ====================
-  'accounts:attendance': ['oa'],
-  'oa:attendance-import': ['oa'],
-  'oa:leave': ['oa'],
-  'oa:schedule': ['oa'],
-  'oa:meeting': ['oa'],
-  'oa:announcement': ['oa'],
-  'oa:vehicles': ['oa'],
-  'oa:vehicle-request': ['oa'],
-  'oa:assets': ['oa'],
-  'oa:im': ['oa'],
-  
-  // ==================== 系统管理 ====================
-  'system:data-dictionary': ['system'],
-  'system:custom-fields': ['system'],
-  'system:email-templates': ['system'],
-  'system:monitor': ['system'],
-  'system:backup': ['system'],
-  'system:audit-analytics': ['system'],
-  
-  // ==================== 基础数据 ====================
-  'masterdata:customer-followups': ['masterdata:customers', 'masterdata'],
-  'masterdata:customer-contacts': ['masterdata:customers', 'masterdata']
-}
-
-// 检查用户是否有访问某个菜单的权限
-const hasMenuAccess = (menuId, userStore) => {
-  // 如果没有menuId或者是公共页面，允许访问
-  if (!menuId) return true
-  
-  // 超级管理员有所有权限
-  if (userStore.userInfo?.is_superuser) return true
-  
-  // 如果权限列表包含 *:*:* 则有所有权限
-  if (userStore.permissions?.includes('*:*:*')) return true
-  
-  // 检查是否是仅管理员可访问的菜单
-  if (adminOnlyMenus.includes(menuId)) {
-    // 只有超级管理员或 is_staff 可以访问
-    return userStore.userInfo?.is_staff === true
-  }
-  
-  // 获取用户的菜单权限列表
-  const menuIds = userStore.menuIds
-  
-  // 如果 menuIds 为空或未定义，允许访问所有非管理员菜单
-  if (!menuIds || menuIds.length === 0) {
-    return true  // 默认允许访问
-  }
-  
-  // 如果配置了 menuIds，则检查权限
-  // 对于父菜单，检查是否有任何子菜单的权限
-  if (!menuId.includes(':')) {
-    return menuIds.some(id => id === menuId || id.startsWith(menuId + ':'))
-  }
-  
-  // 子菜单直接检查
-  if (menuIds.includes(menuId)) {
-    return true
-  }
-  
-  // 检查 fallback 权限：某些菜单可以通过父模块权限访问
-  const fallbacks = menuFallbackPermissions[menuId]
-  if (fallbacks && fallbacks.length > 0) {
-    return fallbacks.some(fallback => menuIds.includes(fallback))
-  }
-  
-  return false
-}
 
 // Navigation guard
 router.beforeEach(async (to, from, next) => {
@@ -1410,6 +1254,8 @@ router.beforeEach(async (to, from, next) => {
     const requiredPermission = to.meta.permission || to.meta.menuId
     if (requiredPermission && !permissionStore.hasPermission(requiredPermission)) {
       console.warn(`Access denied to ${to.path}, missing permission: ${requiredPermission}`)
+      // 避免无限重定向：dashboard是默认落地页，无权限时直接放行
+      if (to.path === '/dashboard') { next(); return }
       next('/dashboard')
       return
     }

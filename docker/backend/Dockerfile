@@ -35,6 +35,9 @@ RUN pip install --no-cache-dir -r requirements.txt gunicorn \
 # Copy backend code
 COPY backend/ /app/
 
+# Copy frontend router file for menu synchronization commands
+COPY frontend/src/router/index.js /app/frontend/src/router/index.js
+
 # Create necessary directories with proper permissions
 RUN mkdir -p /app/staticfiles /app/logs /app/uploads \
     && chmod -R 755 /app/staticfiles /app/logs /app/uploads

@@ -6,23 +6,67 @@ Provides caching and wildcard support for permission checks.
 from typing import Set, Tuple, List
 from django.core.cache import cache
 from django.contrib.auth import get_user_model
-from django.db.models import QuerySet
+from django.db.models import QuerySet, Q
 from apps.core.permission_models_new import Permission, RolePermission, DataScope
 from apps.accounts.models import Department
 
 User = get_user_model()
+
+SCOPE_ALIAS_TO_PUBLIC = {
+    'ALL': 'all',
+    'all': 'all',
+    'GLOBAL': 'all',
+    'global': 'all',
+    'DEPARTMENT': 'dept_tree',
+    'department_and_below': 'dept_tree',
+    'DEPT_TREE': 'dept_tree',
+    'dept_tree': 'dept_tree',
+    'DEPT': 'dept',
+    'dept': 'dept',
+    'department': 'dept',
+    'SELF': 'self',
+    'self': 'self',
+    'CUSTOM': 'custom',
+    'custom': 'custom',
+}
+
+PUBLIC_SCOPE_TO_MODEL = {
+    'all': 'all',
+    'dept_tree': 'dept_tree',
+    'dept': 'dept',
+    'self': 'self',
+    'custom': 'custom',
+}
 
 # Cache timeout in seconds (5 minutes)
 PERMISSION_CACHE_TIMEOUT = 300
 
 # Scope priority for determining widest scope
 SCOPE_PRIORITY = {
-    'global': 5,
+    'all': 5,
     'custom': 4,
-    'department_and_below': 4,
-    'department': 3,
+    'dept_tree': 4,
+    'dept': 3,
     'self': 2,
 }
+
+
+def normalize_scope_type(scope_type: str, target: str = 'public') -> str:
+    canonical = SCOPE_ALIAS_TO_PUBLIC.get(scope_type, scope_type)
+    if target == 'public':
+        return canonical
+    if target == 'model':
+        return PUBLIC_SCOPE_TO_MODEL.get(canonical, canonical)
+    raise ValueError(f'Unsupported target: {target}')
+
+
+def get_active_user_roles(user):
+    role_model = user.roles.model
+    role_filter = Q(users_m2m=user)
+    if getattr(user, 'role_id', None):
+        role_filter |= Q(pk=user.role_id)
+
+    return role_model.objects.filter(role_filter, is_active=True, is_deleted=False).distinct()
 
 
 def get_user_permissions(user) -> Set[str]:
@@ -64,8 +108,8 @@ def get_user_permissions(user) -> Set[str]:
             ).values_list('code', flat=True)
         )
     else:
-        # Get permissions from all user's roles (M2M)
-        user_roles = user.roles.filter(is_active=True, is_deleted=False)
+        # Get permissions from all user's roles (兼容旧 role FK 和新 roles M2M)
+        user_roles = get_active_user_roles(user)
         if user_roles.exists():
             permissions = set(
                 Permission.objects.filter(
@@ -135,8 +179,9 @@ def on_role_permission_change(role):
     Args:
         role: Role instance whose permissions changed
     """
-    # Get all users with this role (M2M)
-    user_ids = role.users.filter(is_deleted=False).values_list('id', flat=True)
+    # Get all users with this role (兼容旧 role FK 和新 roles M2M)
+    user_ids = set(role.users.filter(is_deleted=False).values_list('id', flat=True))
+    user_ids.update(role.users_m2m.filter(is_deleted=False).values_list('id', flat=True))
 
     # Clear cache for all affected users
     for user_id in user_ids:
@@ -169,11 +214,11 @@ def resolve_data_scope(user, module: str) -> Tuple[str, List[int]]:
 
     Returns:
         Tuple of (scope_type, custom_dept_ids)
-        - scope_type: One of 'global', 'department_and_below', 'department', 'self', 'custom'
+        - scope_type: One of 'all', 'dept_tree', 'dept', 'self', 'custom'
         - custom_dept_ids: List of department IDs (only for 'custom' scope)
 
     Notes:
-        - Checks module-specific scope first, then falls back to '__default__' scope
+        - Checks module-specific scope first, then falls back to default scope
         - If user has multiple roles, takes the widest scope
         - If no scope configured, defaults to 'self'
         - Custom scope collects all department IDs from all roles
@@ -182,12 +227,12 @@ def resolve_data_scope(user, module: str) -> Tuple[str, List[int]]:
     if user is None or not user.is_authenticated:
         return ('self', [])
 
-    # Superuser gets global scope
+    # Superuser gets all scope
     if user.is_superuser:
-        return ('global', [])
+        return ('all', [])
 
-    # Get user's roles (M2M)
-    user_roles = user.roles.filter(is_active=True, is_deleted=False)
+    # Get user's roles (兼容旧 role FK 和新 roles M2M)
+    user_roles = get_active_user_roles(user)
     if not user_roles.exists():
         return ('self', [])
 
@@ -202,10 +247,10 @@ def resolve_data_scope(user, module: str) -> Tuple[str, List[int]]:
 
         # Fall back to default scope
         if not data_scope:
-            data_scope = DataScope.objects.filter(role=role, module='__default__').first()
+            data_scope = DataScope.objects.filter(role=role, module__in=['', '__default__']).order_by('module').first()
 
         if data_scope:
-            scope_type = data_scope.scope_type
+            scope_type = normalize_scope_type(data_scope.scope_type)
             priority = SCOPE_PRIORITY.get(scope_type, 0)
 
             # Update widest scope if this one is wider
@@ -217,7 +262,7 @@ def resolve_data_scope(user, module: str) -> Tuple[str, List[int]]:
             # Collect custom department IDs
             if scope_type == 'custom':
                 dept_ids = list(
-                    data_scope.departments.filter(is_deleted=False).values_list('id', flat=True)
+                    data_scope.custom_departments.filter(is_deleted=False).values_list('id', flat=True)
                 )
                 custom_dept_ids.extend(dept_ids)
 
@@ -276,16 +321,17 @@ def apply_scope_filter(queryset: QuerySet, user, scope_result: Tuple[str, List[i
 
     Notes:
         - Assumes queryset model has 'created_by' and/or 'department' fields
-        - For 'global' scope, returns queryset unchanged
+        - For 'all' scope, returns queryset unchanged
         - For 'self' scope, filters by created_by=user
-        - For 'department' scope, filters by user's department
-        - For 'department_and_below' scope, filters by user's department tree
+        - For 'dept' scope, filters by user's department
+        - For 'dept_tree' scope, filters by user's department tree
         - For 'custom' scope, filters by custom department list
     """
     scope_type, custom_dept_ids = scope_result
+    scope_type = normalize_scope_type(scope_type)
 
-    # Global scope - no filtering
-    if scope_type == 'global':
+    # All scope - no filtering
+    if scope_type == 'all':
         return queryset
 
     # Self scope - only user's own data
@@ -296,7 +342,7 @@ def apply_scope_filter(queryset: QuerySet, user, scope_result: Tuple[str, List[i
         return queryset.none()
 
     # Department scope - user's department only
-    if scope_type == 'department':
+    if scope_type == 'dept':
         if not user.department:
             return queryset.none()
         if hasattr(queryset.model, 'department'):
@@ -304,7 +350,7 @@ def apply_scope_filter(queryset: QuerySet, user, scope_result: Tuple[str, List[i
         return queryset.none()
 
     # Department and below scope - user's department tree
-    if scope_type == 'department_and_below':
+    if scope_type == 'dept_tree':
         if not user.department:
             return queryset.none()
         dept_ids = get_department_tree_ids(user.department.id)
@@ -349,8 +395,8 @@ def get_hidden_fields(user, module: str, resource: str) -> List[str]:
     if user.is_superuser:
         return []
 
-    # Get user's roles (M2M)
-    user_roles = user.roles.filter(is_active=True, is_deleted=False)
+    # Get user's roles (兼容旧 role FK 和新 roles M2M)
+    user_roles = get_active_user_roles(user)
     if not user_roles.exists():
         return []
 

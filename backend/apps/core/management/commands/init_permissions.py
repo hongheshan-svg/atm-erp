@@ -11,8 +11,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         permissions_data = [
-            # 系统管理
-            {'code': 'system', 'name': '系统管理', 'type': 'menu', 'icon': 'Setting', 'route_path': '/system', 'sort_order': 100},
+            # 系统管理 - 排在最后，仅管理员可见
+            {'code': 'system', 'name': '系统管理', 'type': 'menu', 'icon': 'Setting', 'route_path': '/system/users', 'sort_order': 999},
             {'code': 'system:user', 'name': '用户管理', 'type': 'menu', 'parent_code': 'system', 'route_path': '/system/users', 'sort_order': 1},
             {'code': 'system:user:view', 'name': '查看用户', 'type': 'operation', 'parent_code': 'system:user', 'resource': 'user', 'sort_order': 1},
             {'code': 'system:user:create', 'name': '新增用户', 'type': 'operation', 'parent_code': 'system:user', 'resource': 'user', 'sort_order': 2},

@@ -124,6 +124,7 @@ class User(AbstractUser, SoftDeleteModel):
     roles = models.ManyToManyField(
         Role,
         blank=True,
+        db_table='user_roles',
         related_name='users_m2m',
         verbose_name='角色列表',
         help_text='支持多角色分配'

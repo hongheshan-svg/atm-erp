@@ -8,11 +8,78 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from apps.accounts.models import Role
+from apps.core.permission_models_new import Permission, DataScope
+from apps.core.permission_service import on_role_permission_change
 from apps.core.permission_config import DEFAULT_ROLES
+
+
+SCOPE_MAP = {
+    'ALL': 'all',
+    'all': 'all',
+    'DEPARTMENT': 'dept_tree',
+    'department': 'dept',
+    'department_and_below': 'dept_tree',
+    'dept': 'dept',
+    'dept_tree': 'dept_tree',
+    'SELF': 'self',
+    'self': 'self',
+    'CUSTOM': 'custom',
+    'custom': 'custom',
+}
 
 
 class Command(BaseCommand):
     help = '初始化默认角色和权限数据'
+
+    def _normalize_scope_type(self, scope_type):
+        return SCOPE_MAP.get(scope_type, scope_type or 'self')
+
+    def _sync_default_scope(self, role, scope_type):
+        DataScope.objects.filter(role=role, module='__default__').delete()
+        scope, _ = DataScope.objects.update_or_create(
+            role=role,
+            module='',
+            defaults={'scope_type': self._normalize_scope_type(scope_type)},
+        )
+        scope.custom_departments.clear()
+
+    def _collect_permission_ids(self, selected_codes):
+        if not selected_codes:
+            return []
+
+        permissions = list(Permission.active.select_related('parent'))
+        permissions_by_code = {permission.code: permission for permission in permissions}
+        permissions_by_id = {permission.id: permission for permission in permissions}
+        children_by_parent = {}
+
+        for permission in permissions:
+            children_by_parent.setdefault(permission.parent_id, []).append(permission)
+
+        selected_ids = set()
+        stack = [permissions_by_code[code] for code in selected_codes if code in permissions_by_code]
+
+        while stack:
+            permission = stack.pop()
+            if permission.id in selected_ids:
+                continue
+
+            selected_ids.add(permission.id)
+
+            if permission.parent_id and permission.parent_id in permissions_by_id:
+                stack.append(permissions_by_id[permission.parent_id])
+
+            stack.extend(children_by_parent.get(permission.id, []))
+
+        return list(selected_ids)
+
+    def _sync_permissions(self, role, role_config):
+        selected_codes = role_config.get('permission_codes') or role_config.get('menu_ids') or []
+        if not selected_codes:
+            return
+
+        permission_ids = self._collect_permission_ids(selected_codes)
+        role.permissions_new.set(Permission.active.filter(id__in=permission_ids))
+        on_role_permission_change(role)
     
     def add_arguments(self, parser):
         parser.add_argument(
@@ -41,10 +108,12 @@ class Command(BaseCommand):
                         # 强制更新
                         role.name = role_config['name']
                         role.description = role_config.get('description', '')
-                        role.data_scope = role_config.get('data_scope', 'SELF')
-                        role.permissions = role_config.get('permissions', {})
+                        role.permissions = {}
                         role.is_active = True
-                        role.save()
+                        role.sort_order = DEFAULT_ROLES.index(role_config) * 10
+                        role.save(update_fields=['name', 'description', 'permissions', 'is_active', 'sort_order', 'updated_at'])
+                        self._sync_default_scope(role, role_config.get('data_scope', 'self'))
+                        self._sync_permissions(role, role_config)
                         updated_count += 1
                         self.stdout.write(f'  更新角色: {code} ({role_config["name"]})')
                     else:
@@ -58,10 +127,12 @@ class Command(BaseCommand):
                         # 更新现有角色的code
                         existing_by_name.code = code
                         existing_by_name.description = role_config.get('description', '')
-                        existing_by_name.data_scope = role_config.get('data_scope', 'SELF')
-                        existing_by_name.permissions = role_config.get('permissions', {})
+                        existing_by_name.permissions = {}
                         existing_by_name.is_active = True
-                        existing_by_name.save()
+                        existing_by_name.sort_order = DEFAULT_ROLES.index(role_config) * 10
+                        existing_by_name.save(update_fields=['code', 'description', 'permissions', 'is_active', 'sort_order', 'updated_at'])
+                        self._sync_default_scope(existing_by_name, role_config.get('data_scope', 'self'))
+                        self._sync_permissions(existing_by_name, role_config)
                         updated_count += 1
                         self.stdout.write(f'  更新角色(按名称): {code} ({role_config["name"]})')
                     else:
@@ -70,11 +141,12 @@ class Command(BaseCommand):
                             code=code,
                             name=role_config['name'],
                             description=role_config.get('description', ''),
-                            data_scope=role_config.get('data_scope', 'SELF'),
-                            permissions=role_config.get('permissions', {}),
+                            permissions={},
                             is_active=True,
                             sort_order=DEFAULT_ROLES.index(role_config) * 10
                         )
+                        self._sync_default_scope(role, role_config.get('data_scope', 'self'))
+                        self._sync_permissions(role, role_config)
                         created_count += 1
                         self.stdout.write(self.style.SUCCESS(f'  创建角色: {code} ({role_config["name"]})'))
         

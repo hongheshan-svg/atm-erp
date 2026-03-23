@@ -17,10 +17,24 @@ from rest_framework import permissions
 from .permission_config import (
     MODULE_VIEW_POLICY,
     get_module_view_policy,
-    is_finance_allowed,
-    has_operation_permission,
-    get_hidden_fields,
 )
+from .permission_service import (
+    get_user_permissions,
+    has_permission,
+    get_hidden_fields,
+    resolve_data_scope,
+    get_department_tree_ids,
+)
+
+
+def is_finance_allowed(user) -> bool:
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+
+    user_permissions = get_user_permissions(user)
+    return any(code == 'finance' or code.startswith('finance:') for code in user_permissions)
 
 
 def get_user_view_scope(user, module_name: str, model_name: str = None):
@@ -52,8 +66,8 @@ def get_user_view_scope(user, module_name: str, model_name: str = None):
     
     # 管理员专用模块
     if policy == 'admin_only':
-        role_code = getattr(user.role, 'code', '') if hasattr(user, 'role') and user.role else ''
-        if role_code == 'admin' or user.is_superuser:
+        user_permissions = get_user_permissions(user)
+        if any(code == module_name or code.startswith(f'{module_name}:') for code in user_permissions):
             return 'all'
         return 'none'
     
@@ -63,13 +77,11 @@ def get_user_view_scope(user, module_name: str, model_name: str = None):
     
     # 相关人员可见
     if policy == 'view_related':
-        # 根据角色的data_scope决定
-        if hasattr(user, 'role') and user.role:
-            data_scope = getattr(user.role, 'data_scope', 'SELF')
-            if data_scope == 'ALL':
-                return 'all'
-            elif data_scope == 'DEPARTMENT':
-                return 'department'
+        data_scope, _ = resolve_data_scope(user, module_name)
+        if data_scope == 'all':
+            return 'all'
+        if data_scope in {'dept_tree', 'dept', 'custom'}:
+            return 'department'
         return 'related'
     
     # 部门可见
@@ -111,7 +123,14 @@ def build_view_filter(user, module_name: str, model_name: str = None, model_clas
     if scope == 'department':
         # 部门数据
         if user.department:
-            q = Q(created_by__department=user.department)
+            dept_ids = [user.department.id]
+            scope_type, custom_dept_ids = resolve_data_scope(user, module_name)
+            if scope_type == 'dept_tree':
+                dept_ids = get_department_tree_ids(user.department.id)
+            elif scope_type == 'custom' and custom_dept_ids:
+                dept_ids = custom_dept_ids
+
+            q = Q(created_by__department_id__in=dept_ids)
         else:
             q = Q(created_by=user)
         return q
@@ -253,30 +272,25 @@ class OperationPermissionMixin:
         module_name = model._meta.app_label
         model_name = model._meta.model_name
         
+        permission_code = f'{module_name}:{model_name}:{operation}'
+
         # 检查基本操作权限
-        if has_operation_permission(user, module_name, model_name, operation):
+        if has_permission(user, permission_code):
             return True
         
-        # 检查 owner 权限
-        if obj and 'owner' in self._get_allowed_roles(module_name, model_name, operation):
+        # 检查 owner 上下文权限
+        if obj and has_permission(user, f'{permission_code}@owner'):
             if hasattr(obj, 'created_by') and obj.created_by == user:
                 return True
             if hasattr(obj, 'manager') and obj.manager == user:
                 return True
         
-        # 检查 assignee 权限
-        if obj and 'assignee' in self._get_allowed_roles(module_name, model_name, operation):
+        # 检查 assignee 上下文权限
+        if obj and has_permission(user, f'{permission_code}@assignee'):
             if hasattr(obj, 'assignee') and obj.assignee == user:
                 return True
         
         return False
-    
-    def _get_allowed_roles(self, module_name, model_name, operation):
-        """获取允许的角色列表"""
-        from .permission_config import OPERATION_PERMISSIONS
-        module_perms = OPERATION_PERMISSIONS.get(module_name, {})
-        model_perms = module_perms.get(model_name.lower(), {})
-        return model_perms.get(operation, [])
     
     def perform_create(self, serializer):
         if not self.check_operation_permission('create'):

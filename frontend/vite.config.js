@@ -26,6 +26,6 @@ export default defineConfig({
     }
   },
   // Ensure proper base path
-  base: '/'
+  base: '/erp/'
 })
 

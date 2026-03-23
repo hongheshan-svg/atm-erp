@@ -223,6 +223,7 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Top, Bottom, Refresh } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { usePermissionStore } from '@/stores/permission'
 
 const loading = ref(false)
 const recalculating = ref(false)
@@ -230,11 +231,14 @@ const selectedProject = ref(null)
 const projects = ref([])
 const taskTree = ref([])
 const projectMembers = ref([])
+const projectMembersLoadedFor = ref(null)
 const dialogVisible = ref(false)
 const timeLogVisible = ref(false)
 const formRef = ref(null)
 const currentTask = ref(null)
 const parentTaskName = ref('')
+const allUsersLoaded = ref(false)
+const permissionStore = usePermissionStore()
 
 const stats = reactive({
   total: 0,
@@ -440,28 +444,58 @@ const calculateStats = (tasks) => {
 }
 
 const fetchProjectMembers = async () => {
-  if (!selectedProject.value) return
-  
-  try {
-    // 同时获取项目成员和所有用户
-    const [membersRes, usersRes] = await Promise.all([
-      request.get('/projects/members/', { params: { project: selectedProject.value } }),
-      request.get('/auth/users/')
-    ])
-    
-    projectMembers.value = membersRes.data?.results || membersRes.results || membersRes.data || []
-    allUsers.value = usersRes.data?.results || usersRes.results || usersRes.data || []
-  } catch (error) {
-    // 使用用户列表作为备选
-    try {
-      const userRes = await request.get('/auth/users/')
-      allUsers.value = userRes.data?.results || userRes.results || userRes.data || []
-      projectMembers.value = []
-    } catch (e) {
-      allUsers.value = [{ id: 1, username: 'admin' }]
-      projectMembers.value = []
-    }
+  if (!selectedProject.value) {
+    projectMembers.value = []
+    projectMembersLoadedFor.value = null
+    return false
   }
+
+  if (projectMembersLoadedFor.value === selectedProject.value) {
+    return true
+  }
+
+  try {
+    const membersRes = await request.get('/projects/members/', { params: { project: selectedProject.value } })
+    projectMembers.value = membersRes.data?.results || membersRes.results || membersRes.data || []
+    projectMembersLoadedFor.value = selectedProject.value
+    return true
+  } catch (error) {
+    if (error?.response?.status !== 403) {
+      console.error('加载项目成员失败:', error)
+    }
+    projectMembers.value = []
+    projectMembersLoadedFor.value = null
+    return false
+  }
+}
+
+const fetchAllUsers = async () => {
+  if (allUsersLoaded.value) {
+    return true
+  }
+
+  if (!permissionStore.hasPermission('system:users')) {
+    allUsers.value = []
+    return false
+  }
+
+  try {
+    const userRes = await request.get('/auth/users/')
+    allUsers.value = userRes.data?.results || userRes.results || userRes.data || []
+    allUsersLoaded.value = true
+    return true
+  } catch (error) {
+    if (error?.response?.status !== 403) {
+      console.error('加载用户列表失败:', error)
+    }
+    allUsers.value = []
+    return false
+  }
+}
+
+const ensureAssigneeOptionsLoaded = async () => {
+  await fetchProjectMembers()
+  await fetchAllUsers()
 }
 
 const resetForm = () => {
@@ -486,19 +520,22 @@ const generateTaskCode = () => {
   return `T-${timestamp}`
 }
 
-const handleAdd = () => {
+const handleAdd = async () => {
   resetForm()
+  await ensureAssigneeOptionsLoaded()
   dialogVisible.value = true
 }
 
-const handleAddChild = (row) => {
+const handleAddChild = async (row) => {
   resetForm()
+  await ensureAssigneeOptionsLoaded()
   form.parent = row.id
   parentTaskName.value = row.name
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = async (row) => {
+  await ensureAssigneeOptionsLoaded()
   form.id = row.id
   form.code = row.code || ''
   form.name = row.name || ''

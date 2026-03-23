@@ -611,3 +611,15 @@ from .after_sales_service import (
     ServiceContract, PreventiveMaintenance, ServiceRequest,
     ServiceActivity, CustomerPortalAccount, KnowledgeBaseArticle
 )
+
+# Import models from quote_estimation
+from .quote_estimation import (
+    CostCategory, LaborRate, QuoteEstimation,
+    EstimationMaterialItem, EstimationLaborItem,
+    EstimationOutsourceItem, EstimationOtherCost, ProjectCostHistory
+)
+
+# Import models from performance
+from .performance import (
+    SalesTarget, SalesCommission, CustomerSegment, CustomerRFMAnalysis
+)

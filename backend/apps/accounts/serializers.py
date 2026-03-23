@@ -3,7 +3,20 @@ Serializers for accounts app.
 """
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
+from apps.core.permission_models_new import Permission, DataScope
+from apps.core.permission_service import normalize_scope_type, on_role_permission_change
 from .models import User, Role, Department
+
+
+class RoleDataScopeConfigSerializer(serializers.Serializer):
+    module = serializers.CharField(required=False, allow_blank=True, default='')
+    scope_type = serializers.CharField()
+    department_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_empty=True,
+        default=list,
+    )
 
 
 class DepartmentSerializer(serializers.ModelSerializer):
@@ -38,14 +51,18 @@ class RoleSerializer(serializers.ModelSerializer):
     """Role serializer."""
     user_count = serializers.SerializerMethodField()
     code = serializers.CharField(max_length=50, required=False, allow_blank=True)
-    permission_ids = serializers.SerializerMethodField()
-    data_scopes = serializers.SerializerMethodField()
+    permission_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        required=False,
+        write_only=True,
+    )
+    data_scopes = RoleDataScopeConfigSerializer(many=True, required=False, write_only=True)
 
     class Meta:
         model = Role
         fields = [
-            'id', 'code', 'name', 'description', 'data_scope', 'permissions',
-            'permission_ids', 'data_scopes', 'is_active', 'sort_order', 'user_count',
+            'id', 'code', 'name', 'description', 'permission_ids', 'data_scopes',
+            'is_active', 'sort_order', 'user_count',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
@@ -53,15 +70,20 @@ class RoleSerializer(serializers.ModelSerializer):
     def get_user_count(self, obj):
         return obj.users.filter(is_deleted=False, is_active=True).count()
 
-    def get_permission_ids(self, obj):
-        """返回角色的权限ID列表"""
-        return list(obj.permissions_new.values_list('id', flat=True))
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
 
-    def get_data_scopes(self, obj):
-        """返回角色的数据权限配置"""
-        from apps.core.permission_models_new import DataScope
-        scopes = DataScope.objects.filter(role=obj)
-        return [{'module': s.module, 'scope_type': s.scope_type} for s in scopes]
+        data['permission_ids'] = list(instance.permissions_new.values_list('id', flat=True))
+        scopes = DataScope.objects.filter(role=instance).prefetch_related('custom_departments')
+        data['data_scopes'] = [
+            {
+                'module': '' if not scope.module else scope.module,
+                'scope_type': normalize_scope_type(scope.scope_type),
+                'department_ids': list(scope.custom_departments.values_list('id', flat=True)),
+            }
+            for scope in scopes
+        ]
+        return data
 
     def validate_name(self, value):
         """检查角色名称唯一性（排除当前记录）"""
@@ -86,10 +108,64 @@ class RoleSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
+        permission_ids = validated_data.pop('permission_ids', [])
+        data_scopes = validated_data.pop('data_scopes', [])
         import uuid
         if not validated_data.get('code'):
             validated_data['code'] = f"ROLE{uuid.uuid4().hex[:6].upper()}"
-        return super().create(validated_data)
+        role = super().create(validated_data)
+        self._save_permissions(role, permission_ids)
+        self._save_data_scopes(role, data_scopes)
+        return role
+
+    def update(self, instance, validated_data):
+        permission_ids = validated_data.pop('permission_ids', None)
+        data_scopes = validated_data.pop('data_scopes', None)
+        role = super().update(instance, validated_data)
+
+        if permission_ids is not None:
+            self._save_permissions(role, permission_ids)
+
+        if data_scopes is not None:
+            self._save_data_scopes(role, data_scopes)
+
+        return role
+
+    def _save_permissions(self, role, permission_ids):
+        if permission_ids is None:
+            return
+
+        permissions = Permission.active.filter(id__in=permission_ids)
+        role.permissions_new.set(permissions)
+        on_role_permission_change(role)
+
+    def _save_data_scopes(self, role, data_scopes):
+        if data_scopes is None:
+            return
+
+        scope_payloads = data_scopes or []
+
+        existing = {scope.module: scope for scope in DataScope.objects.filter(role=role)}
+        retained_modules = set()
+
+        for scope_data in scope_payloads:
+            module = scope_data.get('module', '') or ''
+            scope_type = normalize_scope_type(scope_data.get('scope_type'), target='model')
+            department_ids = scope_data.get('department_ids', [])
+
+            scope, _ = DataScope.objects.update_or_create(
+                role=role,
+                module=module,
+                defaults={'scope_type': scope_type},
+            )
+            retained_modules.add(module)
+
+            departments = Department.objects.filter(id__in=department_ids, is_deleted=False)
+            scope.custom_departments.set(departments)
+
+        for module, scope in existing.items():
+            if module not in retained_modules:
+                scope.delete()
 
 
 

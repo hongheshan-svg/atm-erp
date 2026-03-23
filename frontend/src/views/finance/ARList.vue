@@ -366,6 +366,7 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Download, Connection } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { usePermissionStore } from '@/stores/permission'
 
 const loading = ref(false)
 const bankLoading = ref(false)
@@ -373,6 +374,7 @@ const submitting = ref(false)
 const autoMatching = ref(false)
 const matching = ref(false)
 const activeTab = ref('receivables')
+const permissionStore = usePermissionStore()
 
 const dataList = ref([])
 const bankStatements = ref([])
@@ -380,6 +382,8 @@ const selectedBankStatements = ref([])
 const customers = ref([])
 const projects = ref([])
 const salesOrders = ref([])
+const projectsLoaded = ref(false)
+const salesOrdersLoaded = ref(false)
 const currentRow = ref(null)
 const currentBankStatement = ref(null)
 const importResult = ref(null)
@@ -470,17 +474,59 @@ const loadCustomers = async () => {
 }
 
 const loadProjects = async () => {
+  if (projectsLoaded.value) {
+    return true
+  }
+
   try {
     const res = await request.get('/projects/', { params: { page_size: 500 } })
     projects.value = res.results || res || []
-  } catch (error) { console.error('加载项目失败') }
+    projectsLoaded.value = true
+    return true
+  } catch (error) {
+    if (error?.response?.status !== 403) {
+      console.error('加载项目失败')
+    }
+    return false
+  }
 }
 
 const loadSalesOrders = async () => {
+  if (salesOrdersLoaded.value) {
+    return true
+  }
+
   try {
     const res = await request.get('/sales/orders/', { params: { page_size: 500 } })
     salesOrders.value = res.results || res || []
-  } catch (error) { console.error('加载销售订单失败') }
+    salesOrdersLoaded.value = true
+    return true
+  } catch (error) {
+    if (error?.response?.status !== 403) {
+      console.error('加载销售订单失败')
+    }
+    return false
+  }
+}
+
+const ensureProjectsLoaded = async () => {
+  if (!permissionStore.hasPermission('projects:list')) {
+    projects.value = []
+    projectsLoaded.value = false
+    return false
+  }
+
+  return loadProjects()
+}
+
+const ensureSalesOrdersLoaded = async () => {
+  if (!permissionStore.hasPermission('sales:orders')) {
+    salesOrders.value = []
+    salesOrdersLoaded.value = false
+    return false
+  }
+
+  return loadSalesOrders()
 }
 
 const resetSearch = () => { searchForm.customer = null; searchForm.status = null; pagination.page = 1; loadData() }
@@ -557,7 +603,8 @@ const handleBatchDelete = async () => {
 
 const handleViewBank = (row) => { currentBankStatement.value = row; bankDetailVisible.value = true }
 
-const handleMatchBank = (row) => {
+const handleMatchBank = async (row) => {
+  await Promise.all([ensureProjectsLoaded(), ensureSalesOrdersLoaded()])
   currentBankStatement.value = row
   bankMatchForm.customer_id = row.customer || null
   bankMatchForm.project_id = null
@@ -611,8 +658,6 @@ const autoMatchAll = async () => {
 onMounted(() => {
   loadData()
   loadCustomers()
-  loadProjects()
-  loadSalesOrders()
 })
 </script>
 

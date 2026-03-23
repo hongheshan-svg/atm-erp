@@ -243,6 +243,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { VideoCameraFilled, Location } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { usePermissionStore } from '@/stores/permission'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -250,6 +251,8 @@ const meetingList = ref([])
 const todayMeetings = ref([])
 const meetingRooms = ref([])
 const userList = ref([])
+const userListLoaded = ref(false)
+const permissionStore = usePermissionStore()
 
 const queryParams = reactive({
   search: '',
@@ -324,18 +327,38 @@ const fetchRooms = async () => {
 }
 
 const fetchUsers = async () => {
+  if (userListLoaded.value) {
+    return true
+  }
+
   try {
     const data = await request.get('/auth/users/')
     userList.value = (data.results || data).map(u => ({
       id: u.id,
       name: u.full_name || u.username
     }))
+    userListLoaded.value = true
+    return true
   } catch (e) {
-    console.error(e)
+    if (e?.response?.status !== 403) {
+      console.error(e)
+    }
+    return false
   }
 }
 
-const handleAdd = () => {
+const ensureUsersLoaded = async () => {
+  if (!permissionStore.hasPermission('system:users')) {
+    userList.value = []
+    userListLoaded.value = false
+    return false
+  }
+
+  return fetchUsers()
+}
+
+const handleAdd = async () => {
+  await ensureUsersLoaded()
   isEdit.value = false
   const now = new Date()
   const later = new Date(now.getTime() + 3600000)
@@ -456,7 +479,6 @@ onMounted(() => {
   fetchList()
   fetchToday()
   fetchRooms()
-  fetchUsers()
 })
 </script>
 

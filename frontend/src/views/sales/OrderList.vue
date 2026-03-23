@@ -342,13 +342,16 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete, Download, Upload } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
+import { usePermissionStore } from '@/stores/permission'
 
 const router = useRouter()
+const permissionStore = usePermissionStore()
 const loading = ref(false)
 const saving = ref(false)
 const orders = ref([])
 const customers = ref([])
 const projects = ref([])
+const projectsLoaded = ref(false)
 const selectedOrders = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('创建销售订单')
@@ -448,12 +451,31 @@ const loadCustomers = async () => {
 }
 
 const loadProjects = async () => {
+  if (projectsLoaded.value) {
+    return true
+  }
+
   try {
     const res = await request.get('/projects/projects/')
     projects.value = res.data?.results || res.results || res.data || []
+    projectsLoaded.value = true
+    return true
   } catch (error) {
-    console.error('加载项目失败:', error)
+    if (error?.response?.status !== 403) {
+      console.error('加载项目失败:', error)
+    }
+    return false
   }
+}
+
+const ensureProjectsLoaded = async () => {
+  if (!permissionStore.hasPermission('projects:list')) {
+    projects.value = []
+    projectsLoaded.value = false
+    return false
+  }
+
+  return loadProjects()
 }
 
 const resetSearch = () => {
@@ -463,9 +485,10 @@ const resetSearch = () => {
   loadOrders()
 }
 
-const handleAdd = () => {
+const handleAdd = async () => {
   dialogTitle.value = '创建销售订单'
   isEdit.value = false
+  await ensureProjectsLoaded()
   Object.assign(form, {
     id: null,
     order_no: '',
@@ -486,6 +509,7 @@ const handleAdd = () => {
 const handleEdit = async (row) => {
   dialogTitle.value = '编辑销售订单'
   isEdit.value = true
+  await ensureProjectsLoaded()
   
   try {
     const res = await request.get(`/sales/orders/${row.id}/`)
@@ -783,7 +807,6 @@ const handleBulkDelete = async () => {
 onMounted(() => {
   loadOrders()
   loadCustomers()
-  loadProjects()
 })
 </script>
 

@@ -6,12 +6,13 @@ Sales Performance Analytics
 from datetime import date, timedelta
 from decimal import Decimal
 from django.db import models
-from django.db.models import Sum, Count, Avg, F, Q
+from django.db.models import Sum, Count, Avg, F, Q, Max
 from django.db.models.functions import TruncMonth, TruncQuarter, TruncYear
 from rest_framework import viewsets, serializers, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
 
 from apps.core.models import BaseModel
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
@@ -203,6 +204,55 @@ class SalesCommission(BaseModel):
         return f'{self.user.get_full_name()} - {self.year}年{self.month}月 - {self.commission_amount}'
 
 
+class CustomerSegment(BaseModel):
+    """客户分层定义"""
+    code = models.CharField(max_length=20, unique=True, verbose_name='分层编码')
+    name = models.CharField(max_length=50, verbose_name='分层名称')
+    r_min = models.IntegerField(default=1, verbose_name='R最小值')
+    r_max = models.IntegerField(default=5, verbose_name='R最大值')
+    f_min = models.IntegerField(default=1, verbose_name='F最小值')
+    f_max = models.IntegerField(default=5, verbose_name='F最大值')
+    m_min = models.IntegerField(default=1, verbose_name='M最小值')
+    m_max = models.IntegerField(default=5, verbose_name='M最大值')
+    color = models.CharField(max_length=20, default='#409EFF', verbose_name='显示颜色')
+    priority = models.IntegerField(default=0, verbose_name='优先级')
+    strategy = models.TextField(blank=True, verbose_name='营销策略')
+    description = models.TextField(blank=True, verbose_name='描述')
+
+    class Meta:
+        db_table = 'sales_customer_segment'
+        verbose_name = '客户分层'
+        verbose_name_plural = verbose_name
+        ordering = ['-priority']
+
+
+class CustomerRFMAnalysis(BaseModel):
+    """客户RFM分析结果"""
+    customer = models.ForeignKey(
+        'masterdata.Customer',
+        on_delete=models.CASCADE,
+        related_name='rfm_records',
+        verbose_name='客户'
+    )
+    analysis_date = models.DateField(verbose_name='分析日期')
+    last_order_date = models.DateField(null=True, blank=True, verbose_name='最近订单日期')
+    recency_days = models.IntegerField(default=0, verbose_name='距今天数')
+    frequency = models.IntegerField(default=0, verbose_name='订单次数')
+    monetary = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='累计金额')
+    r_score = models.IntegerField(default=1, verbose_name='R评分')
+    f_score = models.IntegerField(default=1, verbose_name='F评分')
+    m_score = models.IntegerField(default=1, verbose_name='M评分')
+    rfm_score = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name='RFM综合分')
+    customer_segment = models.CharField(max_length=50, blank=True, verbose_name='客户分层')
+
+    class Meta:
+        db_table = 'sales_customer_rfm'
+        verbose_name = '客户RFM分析'
+        verbose_name_plural = verbose_name
+        ordering = ['-analysis_date', '-rfm_score']
+        unique_together = ['customer', 'analysis_date']
+
+
 # =====================
 # Performance Service
 # =====================
@@ -350,11 +400,14 @@ class SalesCommissionSerializer(serializers.ModelSerializer):
 
 class SalesTargetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售目标管理"""
-    queryset = SalesTarget.objects.filter(is_deleted=False)
+    queryset = SalesTarget.objects.none()
     serializer_class = SalesTargetSerializer
     permission_classes = [IsAuthenticated]
     filterset_fields = ['user', 'target_type', 'year', 'month', 'quarter']
     ordering_fields = ['year', 'month', 'order_target']
+
+    def get_queryset(self):
+        return SalesTarget.objects.filter(is_deleted=False)
     
     @action(detail=False, methods=['get'])
     def my_targets(self, request):
@@ -433,11 +486,14 @@ class SalesTargetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
 
 class SalesCommissionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售提成管理"""
-    queryset = SalesCommission.objects.filter(is_deleted=False)
+    queryset = SalesCommission.objects.none()
     serializer_class = SalesCommissionSerializer
     permission_classes = [IsAuthenticated]
     filterset_fields = ['user', 'commission_type', 'status', 'year', 'month']
     ordering_fields = ['year', 'month', 'commission_amount']
+
+    def get_queryset(self):
+        return SalesCommission.objects.filter(is_deleted=False)
     
     @action(detail=False, methods=['get'])
     def my_commissions(self, request):
@@ -616,3 +672,171 @@ class SalesPerformanceViewSet(viewsets.ViewSet):
             'won_quotes': won,
             'conversion_rate': round(won / total * 100, 2) if total > 0 else 0
         })
+
+
+def _assign_rfm_scores(rows, key, score_key, reverse=False):
+    """按排序位置将指标映射为 1-5 分。"""
+    if not rows:
+        return
+
+    sorted_rows = sorted(rows, key=lambda row: row[key], reverse=reverse)
+    total = len(sorted_rows)
+    for index, row in enumerate(sorted_rows):
+        bucket = min(4, index * 5 // total)
+        row[score_key] = 5 - bucket
+
+
+def _classify_customer_segment(r_score, f_score, m_score):
+    if r_score >= 4 and f_score >= 4 and m_score >= 4:
+        return '重要价值客户'
+    if r_score >= 4 and (f_score >= 3 or m_score >= 3):
+        return '潜力客户'
+    if f_score >= 4 and m_score >= 3:
+        return '忠诚客户'
+    if r_score >= 4 and f_score <= 2 and m_score <= 2:
+        return '新客户'
+    if r_score <= 2 and f_score <= 2 and m_score <= 2:
+        return '流失客户'
+    return '沉睡客户'
+
+
+class CustomerRFMSegmentSummaryView(APIView):
+    """客户RFM分层汇总。"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        latest_date = CustomerRFMAnalysis.objects.filter(is_deleted=False).aggregate(
+            latest=Max('analysis_date')
+        )['latest']
+        if not latest_date:
+            return Response({'analysis_date': None, 'segments': []})
+
+        segments = CustomerRFMAnalysis.objects.filter(
+            is_deleted=False,
+            analysis_date=latest_date
+        ).values('customer_segment').annotate(
+            count=Count('id'),
+            total_monetary=Sum('monetary')
+        ).order_by('-total_monetary', 'customer_segment')
+
+        return Response({
+            'analysis_date': latest_date.isoformat(),
+            'segments': list(segments)
+        })
+
+
+class CustomerRFMTopCustomersView(APIView):
+    """客户RFM高价值客户排名。"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        latest_date = CustomerRFMAnalysis.objects.filter(is_deleted=False).aggregate(
+            latest=Max('analysis_date')
+        )['latest']
+        if not latest_date:
+            return Response({'analysis_date': None, 'customers': []})
+
+        customers = CustomerRFMAnalysis.objects.filter(
+            is_deleted=False,
+            analysis_date=latest_date
+        ).select_related('customer').order_by('-rfm_score', '-monetary', 'customer__name')[:10]
+
+        return Response({
+            'analysis_date': latest_date.isoformat(),
+            'customers': [
+                {
+                    'customer_code': item.customer.code,
+                    'customer_name': item.customer.name,
+                    'r_score': item.r_score,
+                    'f_score': item.f_score,
+                    'm_score': item.m_score,
+                    'rfm_score': float(item.rfm_score),
+                    'monetary': float(item.monetary),
+                    'customer_segment': item.customer_segment,
+                }
+                for item in customers
+            ]
+        })
+
+
+class CustomerRFMAnalyzeView(APIView):
+    """执行客户RFM分析。"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from apps.masterdata.models import Customer
+
+        analysis_date = date.today()
+        valid_statuses = ['CONFIRMED', 'DELIVERED', 'COMPLETED']
+        customer_stats = Customer.objects.filter(is_deleted=False).annotate(
+            last_order_date=Max(
+                'sales_orders__order_date',
+                filter=Q(sales_orders__is_deleted=False, sales_orders__status__in=valid_statuses)
+            ),
+            frequency=Count(
+                'sales_orders',
+                filter=Q(sales_orders__is_deleted=False, sales_orders__status__in=valid_statuses),
+                distinct=True
+            ),
+            monetary=Sum(
+                'sales_orders__total_amount',
+                filter=Q(sales_orders__is_deleted=False, sales_orders__status__in=valid_statuses)
+            )
+        )
+
+        rows = []
+        for customer in customer_stats:
+            if not customer.frequency:
+                continue
+            last_order_date = customer.last_order_date
+            recency_days = (analysis_date - last_order_date).days if last_order_date else 9999
+            rows.append({
+                'customer': customer,
+                'last_order_date': last_order_date,
+                'recency_days': recency_days,
+                'frequency': customer.frequency or 0,
+                'monetary': customer.monetary or Decimal('0'),
+            })
+
+        _assign_rfm_scores(rows, 'recency_days', 'r_score', reverse=False)
+        _assign_rfm_scores(rows, 'frequency', 'f_score', reverse=True)
+        _assign_rfm_scores(rows, 'monetary', 'm_score', reverse=True)
+
+        analyzed_count = 0
+        for row in rows:
+            row['customer_segment'] = _classify_customer_segment(
+                row['r_score'], row['f_score'], row['m_score']
+            )
+            row['rfm_score'] = round(
+                (row['r_score'] + row['f_score'] + row['m_score']) / 3,
+                2,
+            )
+
+            defaults = {
+                'last_order_date': row['last_order_date'],
+                'recency_days': row['recency_days'],
+                'frequency': row['frequency'],
+                'monetary': row['monetary'],
+                'r_score': row['r_score'],
+                'f_score': row['f_score'],
+                'm_score': row['m_score'],
+                'rfm_score': row['rfm_score'],
+                'customer_segment': row['customer_segment'],
+                'updated_by': request.user,
+            }
+            instance, created = CustomerRFMAnalysis.objects.update_or_create(
+                customer=row['customer'],
+                analysis_date=analysis_date,
+                defaults=defaults,
+            )
+            if created:
+                instance.created_by = request.user
+                instance.save(update_fields=['created_by'])
+            analyzed_count += 1
+
+        return Response({
+            'success': True,
+            'analysis_date': analysis_date.isoformat(),
+            'analyzed_count': analyzed_count,
+        })
+

@@ -158,9 +158,9 @@ class DataScope(models.Model):
     不继承 BaseModel，避免软删除带来的复杂性
     """
     SCOPE_TYPE_CHOICES = [
-        ('global', '全局数据'),
-        ('department', '本部门数据'),
-        ('department_and_below', '本部门及下级部门数据'),
+        ('all', '全局数据'),
+        ('dept', '本部门数据'),
+        ('dept_tree', '本部门及下级部门数据'),
         ('self', '仅本人数据'),
         ('custom', '自定义部门数据'),
     ]
@@ -181,10 +181,10 @@ class DataScope(models.Model):
         choices=SCOPE_TYPE_CHOICES,
         verbose_name='范围类型'
     )
-    departments = models.ManyToManyField(
+    custom_departments = models.ManyToManyField(
         'accounts.Department',
         blank=True,
-        related_name='data_scopes',
+        related_name='custom_data_scopes',
         verbose_name='自定义部门',
         help_text='仅当 scope_type 为 custom 时使用'
     )

@@ -536,33 +536,44 @@ onUnmounted(() => {
 
 <style scoped>
 .dashboard {
-  padding: 16px;
-  background: #f5f7fa;
+  padding: 20px;
+  background: var(--bg-page, #f0f2f5);
   min-height: calc(100vh - 60px);
 }
 
+/* ---- KPI 卡片 ---- */
 .kpi-card {
-  border-radius: 12px;
+  border-radius: var(--radius-lg, 12px);
   border: none;
   margin-bottom: 16px;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  overflow: hidden;
+  position: relative;
+}
+
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  border-radius: var(--radius-lg, 12px) var(--radius-lg, 12px) 0 0;
 }
 
 .kpi-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg, 0 12px 28px rgba(0, 0, 0, 0.12));
 }
 
-.kpi-card.income { border-top: 3px solid #67c23a; }
-.kpi-card.expense { border-top: 3px solid #f56c6c; }
-.kpi-card.total-ar { border-top: 3px solid #2ecc71; }
-.kpi-card.total-ap { border-top: 3px solid #9b59b6; }
-.kpi-card.receivable { border-top: 3px solid #409eff; }
-.kpi-card.payable { border-top: 3px solid #e6a23c; }
-.kpi-card.project { border-top: 3px solid #8e44ad; }
-.kpi-card.sales { border-top: 3px solid #3498db; }
-.kpi-card.purchase { border-top: 3px solid #1abc9c; }
-.kpi-card.inventory { border-top: 3px solid #34495e; }
+.kpi-card.income::before  { background: linear-gradient(90deg, #10b981, #34d399); }
+.kpi-card.expense::before { background: linear-gradient(90deg, #ef4444, #f87171); }
+.kpi-card.total-ar::before { background: linear-gradient(90deg, #06d6a0, #64dfdf); }
+.kpi-card.total-ap::before { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+.kpi-card.receivable::before { background: linear-gradient(90deg, #4361ee, #6c8cff); }
+.kpi-card.payable::before { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.kpi-card.project::before { background: linear-gradient(90deg, #8b5cf6, #c084fc); }
+.kpi-card.sales::before   { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+.kpi-card.purchase::before { background: linear-gradient(90deg, #14b8a6, #5eead4); }
+.kpi-card.inventory::before { background: linear-gradient(90deg, #475569, #64748b); }
 
 .kpi-header {
   display: flex;
@@ -572,48 +583,55 @@ onUnmounted(() => {
 }
 
 .kpi-icon {
-  font-size: 24px;
-  color: #909399;
+  font-size: 22px;
+  width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-page, #f0f2f5);
+  color: var(--primary, #4361ee);
 }
 
 .kpi-trend {
   font-size: 12px;
   padding: 2px 8px;
   border-radius: 12px;
+  font-weight: 500;
 }
 
 .kpi-trend.up {
-  background: #e8f5e9;
-  color: #4caf50;
+  background: #ecfdf5;
+  color: #059669;
 }
 
 .kpi-alert {
   font-size: 11px;
-  padding: 2px 6px;
+  padding: 2px 8px;
   border-radius: 10px;
-  background: #fff3e0;
-  color: #ff9800;
+  background: #fff7ed;
+  color: #ea580c;
+  font-weight: 500;
 }
 
 .kpi-value {
   font-size: 28px;
   font-weight: 700;
-  color: #303133;
+  color: var(--text-primary, #1e293b);
   line-height: 1.2;
+  letter-spacing: -0.5px;
 }
 
 .kpi-label {
-  font-size: 14px;
-  color: #909399;
+  font-size: 13px;
+  color: var(--text-secondary, #64748b);
   margin-top: 4px;
 }
 
 .kpi-footer {
   font-size: 12px;
-  color: #c0c4cc;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid #f0f0f0;
+  color: var(--text-muted, #94a3b8);
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border, #e2e8f0);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -621,12 +639,12 @@ onUnmounted(() => {
 }
 
 .footer-divider {
-  color: #dcdfe6;
+  color: var(--border, #e2e8f0);
   margin: 0 2px;
 }
 
 .footer-highlight {
-  color: #f56c6c;
+  color: #ef4444;
   font-weight: 500;
 }
 
@@ -643,17 +661,20 @@ onUnmounted(() => {
 
 .progress-label {
   font-size: 11px;
-  color: #909399;
+  color: var(--text-secondary, #64748b);
   white-space: nowrap;
 }
 
+/* ---- 卡片标题 ---- */
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-weight: 600;
+  color: var(--text-primary, #1e293b);
 }
 
+/* ---- 预警列表 ---- */
 .alert-card {
   height: 320px;
 }
@@ -668,7 +689,8 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 10px 0;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  transition: background 0.15s;
 }
 
 .alert-item:last-child {
@@ -683,7 +705,7 @@ onUnmounted(() => {
 .alert-title {
   font-size: 14px;
   font-weight: 500;
-  color: #303133;
+  color: var(--text-primary, #1e293b);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -691,7 +713,7 @@ onUnmounted(() => {
 
 .alert-desc {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-muted, #94a3b8);
   margin-top: 2px;
 }
 
@@ -702,6 +724,7 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
+/* ---- 项目列表 ---- */
 .project-list {
   max-height: 240px;
   overflow-y: auto;
@@ -709,13 +732,14 @@ onUnmounted(() => {
 
 .project-item {
   padding: 10px 0;
-  border-bottom: 1px solid #f0f0f0;
-  }
-  
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  transition: background 0.15s;
+}
+
 .project-item:last-child {
   border-bottom: none;
-  }
-  
+}
+
 .project-info {
   margin-bottom: 8px;
 }
@@ -723,21 +747,21 @@ onUnmounted(() => {
 .project-name {
   font-size: 14px;
   font-weight: 500;
-  color: #303133;
-  }
-  
-.project-customer {
-  font-size: 12px;
-  color: #909399;
+  color: var(--text-primary, #1e293b);
 }
 
-.text-success { color: #67c23a; }
-.text-danger { color: #f56c6c; }
-.text-warning { color: #e6a23c; }
-.text-primary { color: #409eff; }
+.project-customer {
+  font-size: 12px;
+  color: var(--text-muted, #94a3b8);
+}
+
+.text-success { color: #10b981; }
+.text-danger  { color: #ef4444; }
+.text-warning { color: #f59e0b; }
+.text-primary { color: var(--primary, #4361ee); }
 
 @media (max-width: 768px) {
-  .dashboard { padding: 10px; }
+  .dashboard { padding: 12px; }
   .kpi-value { font-size: 22px; }
   .alert-card { height: auto; min-height: 200px; }
 }

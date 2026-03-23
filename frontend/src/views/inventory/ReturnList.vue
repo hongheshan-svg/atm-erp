@@ -287,6 +287,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Warning } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { usePermissionStore } from '@/stores/permission'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -296,9 +297,12 @@ const list = ref([])
 const projects = ref([])
 const warehouses = ref([])
 const aftersalesOrders = ref([])
+const projectsLoaded = ref(false)
+const aftersalesOrdersLoaded = ref(false)
 const searchedItems = ref([])
 const itemSearch = ref('')
 const selectedItems = ref([])
+const permissionStore = usePermissionStore()
 
 const searchForm = reactive({
   return_type: '',
@@ -378,11 +382,20 @@ const loadList = async () => {
 }
 
 const loadProjects = async () => {
+  if (projectsLoaded.value) {
+    return true
+  }
+
   try {
     const response = await request.get('/projects/projects/')
     projects.value = response.results || response || []
+    projectsLoaded.value = true
+    return true
   } catch (error) {
-    console.error('加载项目失败:', error)
+    if (error?.response?.status !== 403) {
+      console.error('加载项目失败:', error)
+    }
+    return false
   }
 }
 
@@ -396,12 +409,35 @@ const loadWarehouses = async () => {
 }
 
 const loadAftersalesOrders = async () => {
+  if (aftersalesOrdersLoaded.value) {
+    return true
+  }
+
   try {
     const response = await request.get('/projects/aftersales/')
     aftersalesOrders.value = response.results || response || []
+    aftersalesOrdersLoaded.value = true
+    return true
   } catch (error) {
-    console.error('加载售后工单失败:', error)
+    if (error?.response?.status !== 403) {
+      console.error('加载售后工单失败:', error)
+    }
+    return false
   }
+}
+
+const ensureProjectSelectorsLoaded = async () => {
+  if (!permissionStore.hasPermission('projects:list')) {
+    projects.value = []
+    projectsLoaded.value = false
+    return false
+  }
+
+  return loadProjects()
+}
+
+const ensureAftersalesOrdersLoaded = async () => {
+  return loadAftersalesOrders()
 }
 
 const searchItems = async () => {
@@ -452,7 +488,8 @@ const resetSearch = () => {
   loadList()
 }
 
-const handleAdd = () => {
+const handleAdd = async () => {
+  await Promise.all([ensureProjectSelectorsLoaded(), ensureAftersalesOrdersLoaded()])
   dialogTitle.value = '新建退料单'
   isEdit.value = false
   Object.assign(form, {
@@ -471,6 +508,7 @@ const handleAdd = () => {
 }
 
 const handleEdit = async (row) => {
+  await Promise.all([ensureProjectSelectorsLoaded(), ensureAftersalesOrdersLoaded()])
   dialogTitle.value = '编辑退料单'
   isEdit.value = true
   
@@ -651,9 +689,7 @@ const confirmReject = async () => {
 
 onMounted(() => {
   loadList()
-  loadProjects()
   loadWarehouses()
-  loadAftersalesOrders()
 })
 </script>
 

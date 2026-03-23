@@ -5,6 +5,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from apps.core.permission_service import has_permission
 
 from .models import WorkflowDefinition, WorkflowStep, WorkflowInstance, WorkflowTask
 from .serializers import (
@@ -17,14 +18,10 @@ from .services import WorkflowService
 
 
 def is_admin(user):
-    """Check if user is an admin."""
+    """Check if user can manage workflow configuration."""
     if user.is_superuser:
         return True
-    if hasattr(user, 'role') and user.role:
-        # Allow ADMIN, SUPER_ADMIN, 系统管理员(ROLEDC4E40), 总经理(ROLEF8477A)
-        admin_roles = ['ADMIN', 'SUPER_ADMIN', 'ROLEDC4E40', 'ROLEF8477A']
-        return user.role.code in admin_roles
-    return False
+    return has_permission(user, 'workflow:config')
 
 
 class WorkflowDefinitionViewSet(viewsets.ModelViewSet):

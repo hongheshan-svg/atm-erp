@@ -2,14 +2,12 @@
 Custom permission classes for data scope filtering.
 """
 from rest_framework import permissions
+from apps.core.permission_service import resolve_data_scope, get_department_tree_ids
 
 
 class DataScopePermission(permissions.BasePermission):
     """
-    Permission class that enforces data scope based on user's role.
-    - SELF: User can only see their own data
-    - DEPARTMENT: User can see their department's data
-    - ALL: User can see all data
+    Permission class that enforces data scope via DataScope records.
     """
     
     def has_permission(self, request, view):
@@ -24,24 +22,39 @@ class DataScopePermission(permissions.BasePermission):
         if user.is_superuser:
             return True
         
-        # Get user's data scope from role
-        if not hasattr(user, 'role') or not user.role:
-            return False
-        
-        data_scope = user.role.data_scope
-        
-        if data_scope == 'ALL':
+        module_name = getattr(view, 'permission_module', None) or obj._meta.app_label
+        scope_type, custom_dept_ids = resolve_data_scope(user, module_name)
+
+        if scope_type == 'all':
             return True
-        elif data_scope == 'DEPARTMENT':
-            # Check if object belongs to same department
-            if hasattr(obj, 'created_by') and obj.created_by:
-                return obj.created_by.department == user.department
-            return True
-        elif data_scope == 'SELF':
-            # Check if user created this object
+
+        if scope_type == 'self':
             if hasattr(obj, 'created_by'):
                 return obj.created_by == user
-            return True
+            return hasattr(obj, 'user') and obj.user == user
+
+        if scope_type == 'dept':
+            if hasattr(obj, 'department') and user.department:
+                return obj.department_id == user.department.id
+            if hasattr(obj, 'created_by') and obj.created_by and user.department:
+                return obj.created_by.department_id == user.department.id
+            if hasattr(obj, 'user') and obj.user and user.department:
+                return obj.user.department_id == user.department.id
+            return False
+
+        if scope_type in {'dept_tree', 'custom'}:
+            if scope_type == 'dept_tree' and user.department:
+                allowed_dept_ids = set(get_department_tree_ids(user.department.id))
+            else:
+                allowed_dept_ids = set(custom_dept_ids)
+
+            if hasattr(obj, 'department') and obj.department_id:
+                return obj.department_id in allowed_dept_ids
+            if hasattr(obj, 'created_by') and obj.created_by and obj.created_by.department_id:
+                return obj.created_by.department_id in allowed_dept_ids
+            if hasattr(obj, 'user') and obj.user and obj.user.department_id:
+                return obj.user.department_id in allowed_dept_ids
+            return False
         
         return False
 

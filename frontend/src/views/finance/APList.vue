@@ -360,6 +360,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Download, Connection } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { usePermissionStore } from '@/stores/permission'
 
 const loading = ref(false)
 const bankLoading = ref(false)
@@ -367,12 +368,14 @@ const submitting = ref(false)
 const autoMatching = ref(false)
 const matching = ref(false)
 const activeTab = ref('payables')
+const permissionStore = usePermissionStore()
 
 const dataList = ref([])
 const bankStatements = ref([])
 const selectedBankStatements = ref([])
 const suppliers = ref([])
 const purchaseOrders = ref([])
+const purchaseOrdersLoaded = ref(false)
 const currentRow = ref(null)
 const currentBankStatement = ref(null)
 const importResult = ref(null)
@@ -463,10 +466,31 @@ const loadSuppliers = async () => {
 }
 
 const loadPurchaseOrders = async () => {
+  if (purchaseOrdersLoaded.value) {
+    return true
+  }
+
   try {
     const res = await request.get('/purchase/orders/', { params: { page_size: 500 } })
     purchaseOrders.value = res.results || res || []
-  } catch (error) { console.error('加载采购订单失败') }
+    purchaseOrdersLoaded.value = true
+    return true
+  } catch (error) {
+    if (error?.response?.status !== 403) {
+      console.error('加载采购订单失败')
+    }
+    return false
+  }
+}
+
+const ensurePurchaseOrdersLoaded = async () => {
+  if (!permissionStore.hasPermission('purchase:orders')) {
+    purchaseOrders.value = []
+    purchaseOrdersLoaded.value = false
+    return false
+  }
+
+  return loadPurchaseOrders()
 }
 
 const resetSearch = () => { searchForm.supplier = null; searchForm.status = null; pagination.page = 1; loadData() }
@@ -543,7 +567,8 @@ const handleBatchDelete = async () => {
 
 const handleViewBank = (row) => { currentBankStatement.value = row; bankDetailVisible.value = true }
 
-const handleMatchBank = (row) => {
+const handleMatchBank = async (row) => {
+  await ensurePurchaseOrdersLoaded()
   currentBankStatement.value = row
   bankMatchForm.supplier_id = row.supplier || null
   bankMatchForm.purchase_order_id = null
@@ -596,7 +621,6 @@ const autoMatchAll = async () => {
 onMounted(() => {
   loadData()
   loadSuppliers()
-  loadPurchaseOrders()
 })
 </script>
 

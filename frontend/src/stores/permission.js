@@ -1,5 +1,27 @@
 import { defineStore } from 'pinia'
 
+const normalizeDataScope = (scope) => {
+  const normalized = {
+    ALL: 'all',
+    all: 'all',
+    GLOBAL: 'all',
+    global: 'all',
+    DEPARTMENT: 'dept_tree',
+    department_and_below: 'dept_tree',
+    DEPT_TREE: 'dept_tree',
+    dept_tree: 'dept_tree',
+    DEPT: 'dept',
+    dept: 'dept',
+    department: 'dept',
+    SELF: 'self',
+    self: 'self',
+    CUSTOM: 'custom',
+    custom: 'custom'
+  }
+
+  return normalized[scope] || scope
+}
+
 export const usePermissionStore = defineStore('permission', {
   state: () => ({
     permissions: new Set(),
@@ -17,7 +39,9 @@ export const usePermissionStore = defineStore('permission', {
     },
 
     setDataScopes(scopes) {
-      this.dataScopes = scopes
+      this.dataScopes = Object.fromEntries(
+        Object.entries(scopes || {}).map(([module, scope]) => [module, normalizeDataScope(scope)])
+      )
     },
 
     hasPermission(code) {

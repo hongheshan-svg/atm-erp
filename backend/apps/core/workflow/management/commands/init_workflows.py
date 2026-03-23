@@ -4,6 +4,22 @@ Initialize default workflow definitions for all modules.
 from django.core.management.base import BaseCommand
 from apps.core.workflow.models import WorkflowDefinition, WorkflowStep
 from apps.accounts.models import Role
+from apps.core.permission_models_new import DataScope
+
+
+def ensure_default_scope(role, scope_type):
+    scope_map = {
+        'ALL': 'all',
+        'DEPARTMENT': 'dept_tree',
+        'SELF': 'self',
+    }
+    DataScope.objects.filter(role=role, module='__default__').delete()
+    scope, _ = DataScope.objects.update_or_create(
+        role=role,
+        module='',
+        defaults={'scope_type': scope_map.get(scope_type, 'self')}
+    )
+    scope.custom_departments.clear()
 
 
 class Command(BaseCommand):
@@ -15,32 +31,39 @@ class Command(BaseCommand):
         # Get or create roles
         finance_role, _ = Role.objects.get_or_create(
             code='FINANCE',
-            defaults={'name': '财务', 'data_scope': 'ALL'}
+            defaults={'name': '财务', 'permissions': {}}
         )
+        ensure_default_scope(finance_role, 'ALL')
         manager_role, _ = Role.objects.get_or_create(
             code='MANAGER',
-            defaults={'name': '经理', 'data_scope': 'DEPARTMENT'}
+            defaults={'name': '经理', 'permissions': {}}
         )
+        ensure_default_scope(manager_role, 'DEPARTMENT')
         sales_role, _ = Role.objects.get_or_create(
             code='SALES',
-            defaults={'name': '销售', 'data_scope': 'SELF'}
+            defaults={'name': '销售', 'permissions': {}}
         )
+        ensure_default_scope(sales_role, 'SELF')
         purchase_role, _ = Role.objects.get_or_create(
             code='PURCHASE',
-            defaults={'name': '采购', 'data_scope': 'SELF'}
+            defaults={'name': '采购', 'permissions': {}}
         )
+        ensure_default_scope(purchase_role, 'SELF')
         admin_role, _ = Role.objects.get_or_create(
             code='ADMIN',
-            defaults={'name': '管理员', 'data_scope': 'ALL'}
+            defaults={'name': '管理员', 'permissions': {}}
         )
+        ensure_default_scope(admin_role, 'ALL')
         hr_role, _ = Role.objects.get_or_create(
             code='HR',
-            defaults={'name': '人事', 'data_scope': 'ALL'}
+            defaults={'name': '人事', 'permissions': {}}
         )
+        ensure_default_scope(hr_role, 'ALL')
         warehouse_role, _ = Role.objects.get_or_create(
             code='WAREHOUSE',
-            defaults={'name': '仓库', 'data_scope': 'DEPARTMENT'}
+            defaults={'name': '仓库', 'permissions': {}}
         )
+        ensure_default_scope(warehouse_role, 'DEPARTMENT')
         
         # ============ 采购管理模块 ============
         self._create_purchase_request_workflows(finance_role, admin_role)

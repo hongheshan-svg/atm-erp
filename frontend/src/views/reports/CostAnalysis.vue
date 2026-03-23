@@ -8,8 +8,10 @@
             v-model="selectedProject" 
             filterable 
             clearable
+            :loading="projectLoading"
             placeholder="选择项目"
             @change="fetchCostAnalysis"
+            @visible-change="handleProjectSelectorVisibleChange"
             style="width: 300px"
           >
             <el-option
@@ -145,13 +147,16 @@ import { ref, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import request from '@/utils/request'
+import { usePermissionStore } from '@/stores/permission'
 
 const selectedProject = ref(null)
 const hourlyRate = ref(100)
 const projectOptions = ref([])
 const projectLoading = ref(false)
+const projectsLoaded = ref(false)
 const costData = ref(null)
 const comparisonData = ref([])
+const permissionStore = usePermissionStore()
 
 const pieChart = ref(null)
 const comparisonChart = ref(null)
@@ -175,14 +180,40 @@ const formatNumber = (num) => {
 const getTaskTypeName = (type) => taskTypeMap[type] || type || '未分类'
 
 const loadProjects = async () => {
+  if (projectsLoaded.value) {
+    return true
+  }
+
   projectLoading.value = true
   try {
     const res = await request.get('/projects/projects/', { params: { page_size: 500 } })
     projectOptions.value = res.results || res || []
+    projectsLoaded.value = true
+    return true
   } catch (e) {
-    console.error('加载项目列表失败:', e)
+    if (e?.response?.status !== 403) {
+      console.error('加载项目列表失败:', e)
+    }
+    projectOptions.value = []
+    return false
   } finally {
     projectLoading.value = false
+  }
+}
+
+const ensureProjectsLoaded = async () => {
+  if (!permissionStore.hasPermission('projects:list')) {
+    projectOptions.value = []
+    projectsLoaded.value = false
+    return false
+  }
+
+  return loadProjects()
+}
+
+const handleProjectSelectorVisibleChange = async (visible) => {
+  if (visible) {
+    await ensureProjectsLoaded()
   }
 }
 
@@ -294,7 +325,6 @@ const renderComparisonChart = () => {
 }
 
 onMounted(() => {
-  loadProjects()
   fetchComparison()
 })
 </script>

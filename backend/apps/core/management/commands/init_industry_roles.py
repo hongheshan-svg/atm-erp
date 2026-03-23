@@ -9,7 +9,25 @@
 5. 技术密集：需要大量技术文档管理
 """
 from django.core.management.base import BaseCommand
+from django.db import transaction
 from apps.accounts.models import Role
+from apps.core.permission_models_new import Permission, DataScope
+from apps.core.permission_service import on_role_permission_change
+
+
+SCOPE_MAP = {
+    'ALL': 'all',
+    'all': 'all',
+    'DEPARTMENT': 'dept_tree',
+    'department': 'dept',
+    'department_and_below': 'dept_tree',
+    'dept': 'dept',
+    'dept_tree': 'dept_tree',
+    'SELF': 'self',
+    'self': 'self',
+    'CUSTOM': 'custom',
+    'custom': 'custom',
+}
 
 
 # 非标自动化行业预设角色权限配置
@@ -24,12 +42,16 @@ INDUSTRY_ROLES = [
             'dashboard',
             # 全部模块权限
             'projects', 'plm', 'sales', 'purchase', 'inventory', 'production',
-            'mes', 'equipment', 'finance', 'reports', 'analytics', 'oa',
-            'workflow', 'masterdata', 'knowledge', 'aftersales', 'accounts',
-            # 报表分析（重点）
+            'mes', 'equipment', 'finance', 'reports', 'oa',
+            'workflow', 'masterdata', 'knowledge', 'aftersales', 'accounts', 'system',
+            # 报表分析（重点，分析看板已合并进报表分析）
             'reports:profitability', 'reports:cost-analysis', 'reports:cash-flow',
-            'reports:aging', 'reports:industry',
+            'reports:aging', 'reports:slow-moving', 'reports:timelog',
+            'reports:project-profitability', 'reports:equipment-lifecycle',
+            'reports:capacity-utilization', 'reports:customer-value',
             'analytics:project', 'analytics:inventory',
+            # 生产扩展菜单
+            'production:workstations', 'production:resources',
         ],
         'sort_order': 1
     },
@@ -100,6 +122,7 @@ INDUSTRY_ROLES = [
             'sales:quotations', 'sales:quote-estimation', 'sales:orders',
             'sales:contracts', 'sales:delivery-orders', 'sales:quote-templates',
             'sales:contract-templates', 'sales:performance', 'sales:analysis',
+            'sales:training',
             'sales:quote',
             # 客户管理
             'masterdata', 'masterdata:customers', 'masterdata:customer-contacts',
@@ -149,9 +172,11 @@ INDUSTRY_ROLES = [
             'dashboard',
             # 采购管理（核心）
             'purchase', 'purchase:requests', 'purchase:comparisons', 'purchase:orders',
-            'purchase:goods-receipts', 'purchase:outsource', 'purchase:evaluations',
+            'purchase:goods-receipts', 'purchase:rfqs', 'purchase:outsource', 'purchase:evaluations',
             'purchase:blacklist', 'purchase:budgets', 'purchase:collaboration',
             'purchase:portal',
+            # 项目查询（采购需查看项目背景与归属）
+            'projects:list',
             # 供应商管理
             'masterdata', 'masterdata:suppliers',
             # MRP
@@ -176,7 +201,9 @@ INDUSTRY_ROLES = [
             'dashboard',
             # 采购（核心）
             'purchase', 'purchase:requests', 'purchase:comparisons', 'purchase:orders',
-            'purchase:goods-receipts', 'purchase:outsource',
+            'purchase:goods-receipts', 'purchase:rfqs', 'purchase:outsource',
+            # 项目查询（采购单据关联项目）
+            'projects:list',
             # 供应商
             'masterdata', 'masterdata:suppliers',
             # MRP
@@ -197,8 +224,8 @@ INDUSTRY_ROLES = [
             'dashboard',
             # 库存管理（核心）
             'inventory', 'inventory:stocks', 'inventory:batches', 'inventory:moves',
-            'inventory:transfer', 'inventory:adjustment', 'inventory:alert',
-            'inventory:alerts', 'inventory:requisitions', 'inventory:returns',
+            'inventory:transfer', 'inventory:adjustment', 'inventory:alerts',
+            'inventory:requisitions', 'inventory:returns',
             'inventory:cost-accounting', 'inventory:spare-parts', 'inventory:data-accuracy',
             # 基础数据
             'masterdata', 'masterdata:items', 'masterdata:warehouses', 'masterdata:locations',
@@ -245,8 +272,9 @@ INDUSTRY_ROLES = [
             # 生产管理（核心）
             'production', 'production:processes', 'production:plans',
             'production:debug-records', 'production:inspections',
-            'production:serial-numbers', 'production:routing', 'production:assembly',
-            'production:scheduling', 'production:capacity',
+            'production:serial-numbers', 'production:routing', 'production:workstations',
+            'production:assembly', 'mes:scheduling', 'production:capacity',
+            'production:resources',
             # MES
             'mes', 'mes:kanban', 'mes:andon', 'mes:data-acquisition',
             # 工单
@@ -324,7 +352,7 @@ INDUSTRY_ROLES = [
             'reports', 'reports:profitability', 'reports:cost-analysis',
             'reports:aging', 'reports:cash-flow',
             # 数据分析
-            'analytics', 'analytics:project', 'analytics:inventory',
+            'analytics:project', 'analytics:inventory',
             # 审批
             'workflow', 'workflow:tasks', 'workflow:my-submissions',
             # OA
@@ -358,7 +386,7 @@ INDUSTRY_ROLES = [
             'dashboard',
             # 售后服务（核心）
             'aftersales', 'aftersales:orders',
-            'sales', 'sales:service',
+            'sales', 'sales:service', 'sales:training',
             'projects', 'projects:service',
             # 设备档案
             'projects:equipment-archives', 'projects:acceptances',
@@ -412,6 +440,49 @@ INDUSTRY_ROLES = [
 class Command(BaseCommand):
     help = '初始化非标自动化行业预设角色和权限配置'
 
+    def _normalize_scope_type(self, scope_type):
+        return SCOPE_MAP.get(scope_type, scope_type or 'self')
+
+    def _collect_permission_ids(self, selected_codes):
+        permissions = list(Permission.active.select_related('parent'))
+        permissions_by_code = {permission.code: permission for permission in permissions}
+        permissions_by_id = {permission.id: permission for permission in permissions}
+        children_by_parent = {}
+
+        for permission in permissions:
+            children_by_parent.setdefault(permission.parent_id, []).append(permission)
+
+        selected_ids = set()
+        stack = [permissions_by_code[code] for code in selected_codes if code in permissions_by_code]
+
+        while stack:
+            permission = stack.pop()
+            if permission.id in selected_ids:
+                continue
+
+            selected_ids.add(permission.id)
+
+            if permission.parent_id and permission.parent_id in permissions_by_id:
+                stack.append(permissions_by_id[permission.parent_id])
+
+            stack.extend(children_by_parent.get(permission.id, []))
+
+        return list(selected_ids)
+
+    def _sync_role_scope(self, role, scope_type):
+        DataScope.objects.filter(role=role, module='__default__').delete()
+        scope, _ = DataScope.objects.update_or_create(
+            role=role,
+            module='',
+            defaults={'scope_type': self._normalize_scope_type(scope_type)},
+        )
+        scope.custom_departments.clear()
+
+    def _sync_role_permissions(self, role, menu_ids):
+        permission_ids = self._collect_permission_ids(menu_ids)
+        role.permissions_new.set(Permission.active.filter(id__in=permission_ids))
+        on_role_permission_change(role)
+
     def add_arguments(self, parser):
         parser.add_argument(
             '--force',
@@ -428,42 +499,53 @@ class Command(BaseCommand):
         self.stdout.write(self.style.NOTICE('开始初始化非标自动化行业预设角色...'))
         self.stdout.write('')
 
-        for role_data in INDUSTRY_ROLES:
-            code = role_data['code']
-            name = role_data['name']
-            
-            # 构建权限配置
-            permissions = {
-                'menu_ids': role_data['menu_ids'],
-                'permissions': self._generate_permissions(role_data['menu_ids'])
-            }
-            
-            try:
-                role = Role.objects.get(code=code)
-                if force:
-                    role.name = name
-                    role.description = role_data['description']
-                    role.data_scope = role_data['data_scope']
-                    role.permissions = permissions
-                    role.sort_order = role_data['sort_order']
-                    role.save()
-                    updated_count += 1
-                    self.stdout.write(f'  [更新] {name} ({code})')
-                else:
-                    skipped_count += 1
-                    self.stdout.write(f'  [跳过] {name} ({code}) - 已存在')
-            except Role.DoesNotExist:
-                Role.objects.create(
-                    name=name,
-                    code=code,
-                    description=role_data['description'],
-                    data_scope=role_data['data_scope'],
-                    permissions=permissions,
-                    sort_order=role_data['sort_order'],
-                    is_active=True
-                )
-                created_count += 1
-                self.stdout.write(self.style.SUCCESS(f'  [创建] {name} ({code})'))
+        with transaction.atomic():
+            for role_data in INDUSTRY_ROLES:
+                code = role_data['code']
+                name = role_data['name']
+
+                try:
+                    role = Role.objects.get(code=code)
+                    if force:
+                        role.name = name
+                        role.description = role_data['description']
+                        role.permissions = {}
+                        role.sort_order = role_data['sort_order']
+                        role.is_active = True
+                        role.save(update_fields=['name', 'description', 'permissions', 'sort_order', 'is_active', 'updated_at'])
+                        self._sync_role_scope(role, role_data['data_scope'])
+                        self._sync_role_permissions(role, role_data['menu_ids'])
+                        updated_count += 1
+                        self.stdout.write(f'  [更新] {name} ({code})')
+                    else:
+                        skipped_count += 1
+                        self.stdout.write(f'  [跳过] {name} ({code}) - 已存在')
+                except Role.DoesNotExist:
+                    existing_by_name = Role.objects.filter(name=name).first()
+                    if existing_by_name:
+                        existing_by_name.code = code
+                        existing_by_name.description = role_data['description']
+                        existing_by_name.permissions = {}
+                        existing_by_name.sort_order = role_data['sort_order']
+                        existing_by_name.is_active = True
+                        existing_by_name.save(update_fields=['code', 'description', 'permissions', 'sort_order', 'is_active', 'updated_at'])
+                        self._sync_role_scope(existing_by_name, role_data['data_scope'])
+                        self._sync_role_permissions(existing_by_name, role_data['menu_ids'])
+                        updated_count += 1
+                        self.stdout.write(f'  [更新] {name} ({code}) - 按名称收敛')
+                    else:
+                        role = Role.objects.create(
+                            name=name,
+                            code=code,
+                            description=role_data['description'],
+                            permissions={},
+                            sort_order=role_data['sort_order'],
+                            is_active=True
+                        )
+                        self._sync_role_scope(role, role_data['data_scope'])
+                        self._sync_role_permissions(role, role_data['menu_ids'])
+                        created_count += 1
+                        self.stdout.write(self.style.SUCCESS(f'  [创建] {name} ({code})'))
 
         self.stdout.write('')
         self.stdout.write(self.style.SUCCESS(
@@ -498,19 +580,3 @@ class Command(BaseCommand):
         for name, desc in summaries:
             self.stdout.write(f'  {name}: {desc}')
 
-    def _generate_permissions(self, menu_ids):
-        """根据 menu_ids 生成详细权限列表"""
-        permissions = []
-        for menu_id in menu_ids:
-            if ':' in menu_id:
-                # 子菜单，生成 CRUD 权限
-                permissions.extend([
-                    f'{menu_id}:view',
-                    f'{menu_id}:add',
-                    f'{menu_id}:edit',
-                    f'{menu_id}:delete',
-                ])
-            else:
-                # 模块级权限
-                permissions.append(f'{menu_id}:view')
-        return permissions

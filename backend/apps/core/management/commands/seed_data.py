@@ -5,6 +5,7 @@ from django.db.models import Sum
 from datetime import timedelta
 from decimal import Decimal
 from apps.accounts.models import Department, Role
+from apps.core.permission_models_new import DataScope
 from apps.masterdata.models import Customer, Supplier, Warehouse, Item, ItemCategory
 from apps.projects.models import Project, ProjectMember, ProjectTask, ProjectBOM
 from apps.purchase.models import PurchaseRequest, PurchaseRequestLine, PurchaseOrder, PurchaseOrderLine
@@ -13,6 +14,21 @@ from apps.inventory.models import Stock, StockMove
 from apps.finance.models import Expense, AccountReceivable
 
 User = get_user_model()
+
+
+def sync_default_scope(role, scope_type):
+    scope_map = {
+        'ALL': 'all',
+        'DEPARTMENT': 'dept_tree',
+        'SELF': 'self',
+    }
+    DataScope.objects.filter(role=role, module='__default__').delete()
+    scope, _ = DataScope.objects.update_or_create(
+        role=role,
+        module='',
+        defaults={'scope_type': scope_map.get(scope_type, 'self')}
+    )
+    scope.custom_departments.clear()
 
 class Command(BaseCommand):
     help = 'Seed the database with sample data'
@@ -58,20 +74,23 @@ class Command(BaseCommand):
             name='Project Manager',
             code='PM',
             description='Can manage projects and view all data',
-            data_scope='ALL'
+            permissions={}
         )
+        sync_default_scope(role_manager, 'ALL')
         role_engineer = Role.objects.create(
             name='Engineer',
             code='ENG',
             description='Can work on assigned tasks',
-            data_scope='DEPARTMENT'
+            permissions={}
         )
+        sync_default_scope(role_engineer, 'DEPARTMENT')
         role_buyer = Role.objects.create(
             name='Buyer',
             code='BUYER',
             description='Can create purchase orders',
-            data_scope='DEPARTMENT'
+            permissions={}
         )
+        sync_default_scope(role_buyer, 'DEPARTMENT')
         
         # 3. Create Users
         self.stdout.write('Creating users...')
@@ -86,6 +105,7 @@ class Command(BaseCommand):
             role=role_manager,
             is_staff=True
         )
+        user_john.roles.add(role_manager)
         
         user_sarah = User.objects.create_user(
             username='sarah.johnson',
@@ -97,6 +117,7 @@ class Command(BaseCommand):
             department=dept_engineering,
             role=role_engineer
         )
+        user_sarah.roles.add(role_engineer)
         
         user_mike = User.objects.create_user(
             username='mike.chen',
@@ -108,6 +129,7 @@ class Command(BaseCommand):
             department=dept_procurement,
             role=role_buyer
         )
+        user_mike.roles.add(role_buyer)
         
         # 4. Create Customers
         self.stdout.write('Creating customers...')

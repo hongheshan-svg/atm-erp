@@ -12,6 +12,7 @@ import pandas as pd
 from io import BytesIO
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.permission_service import resolve_data_scope, get_department_tree_ids
 from apps.masterdata.models import Item
 from .models import (
     Project, ProjectMember, ProjectTask, ProjectBOM, TimeLog, 
@@ -2349,10 +2350,25 @@ class TimeLogViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         """Filter by current user unless admin."""
         queryset = super().get_queryset()
         user = self.request.user
-        
-        # If not admin, only show own time logs
-        if user.role and user.role.data_scope != 'ALL':
+
+        scope_type, custom_dept_ids = resolve_data_scope(user, 'projects')
+        if scope_type == 'self':
             queryset = queryset.filter(user=user)
+        elif scope_type == 'dept':
+            if user.department:
+                queryset = queryset.filter(user__department=user.department)
+            else:
+                queryset = queryset.filter(user=user)
+        elif scope_type == 'dept_tree':
+            if user.department:
+                queryset = queryset.filter(user__department_id__in=get_department_tree_ids(user.department.id))
+            else:
+                queryset = queryset.filter(user=user)
+        elif scope_type == 'custom':
+            if custom_dept_ids:
+                queryset = queryset.filter(user__department_id__in=custom_dept_ids)
+            else:
+                queryset = queryset.none()
         
         # Filter by date range
         start_date = self.request.query_params.get('start_date')

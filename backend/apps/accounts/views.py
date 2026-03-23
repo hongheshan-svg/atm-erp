@@ -2,7 +2,9 @@
 Views for accounts app.
 """
 from django.db import models
+from django.conf import settings
 from rest_framework import viewsets, status, permissions
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -34,6 +36,8 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     """Custom JWT login view."""
     serializer_class = CustomTokenObtainPairSerializer
     permission_classes = []  # 登录接口不需要认证
+    throttle_scope = 'login'
+    throttle_classes = [ScopedRateThrottle] if settings.LOGIN_THROTTLE_ENABLED else []
 
 
 class DepartmentViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
@@ -69,9 +73,12 @@ class RoleViewSet(viewsets.ModelViewSet):
     ViewSet for Role management.
     角色使用物理删除，以便删除后可以创建同名角色。
     """
-    queryset = Role.objects.filter(is_deleted=False)
+    queryset = Role.objects.filter(is_deleted=False).prefetch_related(
+        'permissions_new',
+        'data_scopes__custom_departments',
+    )
     serializer_class = RoleSerializer
-    filterset_fields = ['data_scope', 'is_active']
+    filterset_fields = ['is_active']
     search_fields = ['code', 'name']
     ordering_fields = ['sort_order', 'code', 'created_at']
     

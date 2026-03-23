@@ -381,12 +381,12 @@ class ResolveDataScopeTest(TestCase):
         DataScope.objects.create(
             role=self.role_manager,
             module='__default__',
-            scope_type='global'
+            scope_type='all'
         )
 
         scope_type, custom_dept_ids = resolve_data_scope(self.user, 'projects')
 
-        self.assertEqual(scope_type, 'global')
+        self.assertEqual(scope_type, 'all')
         self.assertEqual(custom_dept_ids, [])
 
     def test_module_override(self):
@@ -401,12 +401,12 @@ class ResolveDataScopeTest(TestCase):
         DataScope.objects.create(
             role=self.role_manager,
             module='projects',
-            scope_type='department_and_below'
+            scope_type='dept_tree'
         )
 
         scope_type, custom_dept_ids = resolve_data_scope(self.user, 'projects')
 
-        self.assertEqual(scope_type, 'department_and_below')
+        self.assertEqual(scope_type, 'dept_tree')
         self.assertEqual(custom_dept_ids, [])
 
     def test_multi_role_takes_widest(self):
@@ -419,13 +419,13 @@ class ResolveDataScopeTest(TestCase):
         DataScope.objects.create(
             role=self.role_manager,
             module='projects',
-            scope_type='global'
+            scope_type='all'
         )
 
         scope_type, custom_dept_ids = resolve_data_scope(self.user, 'projects')
 
         # Should get global scope (widest)
-        self.assertEqual(scope_type, 'global')
+        self.assertEqual(scope_type, 'all')
         self.assertEqual(custom_dept_ids, [])
 
     def test_custom_scope_collects_departments(self):
@@ -436,7 +436,7 @@ class ResolveDataScopeTest(TestCase):
             module='projects',
             scope_type='custom'
         )
-        data_scope.departments.add(self.dept_sales, self.dept_purchase)
+        data_scope.custom_departments.add(self.dept_sales, self.dept_purchase)
 
         scope_type, custom_dept_ids = resolve_data_scope(self.user, 'projects')
 

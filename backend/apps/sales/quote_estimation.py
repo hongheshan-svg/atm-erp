@@ -612,28 +612,39 @@ class ProjectCostHistorySerializer(serializers.ModelSerializer):
 
 class CostCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """成本类别管理"""
-    queryset = CostCategory.objects.filter(is_deleted=False, parent__isnull=True)
+    queryset = CostCategory.objects.none()
     serializer_class = CostCategorySerializer
     permission_classes = [IsAuthenticated]
     filterset_fields = ['is_active']
     search_fields = ['code', 'name']
 
+    def get_queryset(self):
+        return CostCategory.objects.filter(is_deleted=False, parent__isnull=True)
+
 
 class LaborRateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """人工费率管理"""
-    queryset = LaborRate.objects.filter(is_deleted=False)
+    queryset = LaborRate.objects.none()
     serializer_class = LaborRateSerializer
+
+    def get_queryset(self):
+        return LaborRate.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['work_type', 'is_active']
 
 
 class QuoteEstimationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """报价估算管理"""
-    queryset = QuoteEstimation.objects.filter(is_deleted=False)
+    queryset = QuoteEstimation.objects.none()
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'customer', 'sales_person', 'project_type']
     search_fields = ['estimation_no', 'name', 'customer__name']
     ordering_fields = ['created_at', 'total_cost', 'final_price']
+
+    def get_queryset(self):
+        return QuoteEstimation.objects.filter(is_deleted=False).select_related(
+            'customer', 'sales_person', 'opportunity', 'reference_project'
+        )
     
     def get_serializer_class(self):
         if self.action == 'list':
@@ -822,8 +833,11 @@ class QuoteEstimationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
 
 class EstimationMaterialItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """估算材料明细"""
-    queryset = EstimationMaterialItem.objects.filter(is_deleted=False)
+    queryset = EstimationMaterialItem.objects.none()
     serializer_class = EstimationMaterialItemSerializer
+
+    def get_queryset(self):
+        return EstimationMaterialItem.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['estimation', 'category', 'source']
     
@@ -843,8 +857,11 @@ class EstimationMaterialItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets
 
 class EstimationLaborItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """估算人工明细"""
-    queryset = EstimationLaborItem.objects.filter(is_deleted=False)
+    queryset = EstimationLaborItem.objects.none()
     serializer_class = EstimationLaborItemSerializer
+
+    def get_queryset(self):
+        return EstimationLaborItem.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['estimation', 'work_type']
     
@@ -859,8 +876,11 @@ class EstimationLaborItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
 
 class EstimationOutsourceItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """估算外协明细"""
-    queryset = EstimationOutsourceItem.objects.filter(is_deleted=False)
+    queryset = EstimationOutsourceItem.objects.none()
     serializer_class = EstimationOutsourceItemSerializer
+
+    def get_queryset(self):
+        return EstimationOutsourceItem.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['estimation', 'supplier']
 

@@ -153,6 +153,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'accounts.User'
 
 # REST Framework settings
+LOGIN_THROTTLE_ENABLED = config('LOGIN_THROTTLE_ENABLED', default=True, cast=bool)
+LOGIN_THROTTLE_RATE = config('LOGIN_THROTTLE_RATE', default='5/minute')
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -186,6 +189,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '100/hour',
         'user': '1000/hour',
+        'login': LOGIN_THROTTLE_RATE,
     },
 }
 

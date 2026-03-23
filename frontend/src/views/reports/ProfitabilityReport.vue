@@ -85,10 +85,13 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
+import { usePermissionStore } from '@/stores/permission'
 
 const loading = ref(false)
 const reportData = ref([])
 const projects = ref([])
+const projectsLoaded = ref(false)
+const permissionStore = usePermissionStore()
 
 const searchForm = reactive({
   project: null,
@@ -163,11 +166,20 @@ const loadReport = async () => {
 }
 
 const loadProjects = async () => {
+  if (projectsLoaded.value) {
+    return true
+  }
+
   try {
     const response = await request.get('/projects/projects/')
     projects.value = response.results || response || []
+    projectsLoaded.value = true
+    return true
   } catch (error) {
-    console.error('加载项目失败:', error)
+    if (error?.response?.status !== 403) {
+      console.error('加载项目失败:', error)
+    }
+    return false
   }
 }
 
@@ -197,7 +209,9 @@ const exportExcel = () => {
 
 onMounted(() => {
   loadReport()
-  loadProjects()
+  if (permissionStore.hasPermission('projects:list')) {
+    loadProjects()
+  }
 })
 </script>
 

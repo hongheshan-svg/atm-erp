@@ -238,9 +238,11 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { usePermissionStore } from '@/stores/permission'
 
 // 权限检查
 const { canDelete } = usePermission()
+const permissionStore = usePermissionStore()
 
 // 批量删除功能
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
@@ -251,6 +253,7 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 const loading = ref(false)
 const expenses = ref([])
 const projects = ref([])
+const projectsLoaded = ref(false)
 
 const searchForm = reactive({
   category: null,
@@ -325,12 +328,31 @@ const loadData = async () => {
 }
 
 const loadProjects = async () => {
+  if (projectsLoaded.value) {
+    return true
+  }
+
   try {
     const response = await request.get('/projects/projects/', { params: { is_deleted: false, page_size: 100 } })
     projects.value = response.results || response || [] || []
+    projectsLoaded.value = true
+    return true
   } catch (error) {
-    console.error('加载项目失败:', error)
+    if (error?.response?.status !== 403) {
+      console.error('加载项目失败:', error)
+    }
+    return false
   }
+}
+
+const ensureProjectsLoaded = async () => {
+  if (!permissionStore.hasPermission('projects:list')) {
+    projects.value = []
+    projectsLoaded.value = false
+    return false
+  }
+
+  return loadProjects()
 }
 
 const resetSearch = () => {
@@ -399,7 +421,8 @@ const handleView = async (expense) => {
   }
 }
 
-const handleAllocate = (expense) => {
+const handleAllocate = async (expense) => {
+  await ensureProjectsLoaded()
   currentExpense.value = expense
   selectedProjectIds.value = []
   customRatios.value = {}
@@ -489,7 +512,6 @@ watch(selectedProjectIds, () => {
 
 onMounted(() => {
   loadData()
-  loadProjects()
 })
 </script>
 

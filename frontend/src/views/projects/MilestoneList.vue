@@ -260,6 +260,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { usePermissionStore } from '@/stores/permission'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -278,6 +279,8 @@ const currentMilestone = ref(null)
 const projects = ref([])
 const users = ref([])
 const milestoneTypes = ref([])
+const usersLoaded = ref(false)
+const permissionStore = usePermissionStore()
 
 const queryParams = reactive({
   page: 1,
@@ -354,15 +357,35 @@ const fetchProjects = async () => {
 }
 
 const fetchUsers = async () => {
+  if (usersLoaded.value) {
+    return true
+  }
+
   try {
     const data = await request.get('/auth/users/', { params: { page_size: 200 } })
     users.value = (data.results || data).map(u => ({
       id: u.id,
       name: u.first_name || u.last_name || u.username
     }))
+    usersLoaded.value = true
+    return true
   } catch (e) {
-    console.error(e)
+    if (e?.response?.status !== 403) {
+      console.error(e)
+    }
+    users.value = []
+    return false
   }
+}
+
+const ensureUsersLoaded = async () => {
+  if (!permissionStore.hasPermission('system:users')) {
+    users.value = []
+    usersLoaded.value = false
+    return false
+  }
+
+  return fetchUsers()
 }
 
 const fetchMilestoneTypes = async () => {
@@ -397,7 +420,8 @@ const filterByStatus = (status) => {
   fetchData()
 }
 
-const handleAdd = () => {
+const handleAdd = async () => {
+  await ensureUsersLoaded()
   isEdit.value = false
   dialogTitle.value = '新增里程碑'
   Object.assign(form, {
@@ -416,7 +440,8 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = async (row) => {
+  await ensureUsersLoaded()
   isEdit.value = true
   dialogTitle.value = '编辑里程碑'
   Object.assign(form, row)
@@ -551,7 +576,6 @@ const getProgressColor = (progress, isOverdue) => {
 onMounted(() => {
   fetchData()
   fetchProjects()
-  fetchUsers()
   fetchMilestoneTypes()
 })
 </script>

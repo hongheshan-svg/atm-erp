@@ -136,7 +136,9 @@ class WebSocketService {
   }
 
   connect(endpoint) {
-    const wsUrl = `ws://localhost:8000/ws/${endpoint}/`
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const host = window.location.host
+    const wsUrl = `${protocol}//${host}/ws/${endpoint}/`
     this.ws = new WebSocket(wsUrl)
     
     this.ws.onopen = () => {

@@ -1,11 +1,15 @@
 <template>
   <el-container class="layout-container">
-    <el-aside :width="isCollapse ? '64px' : '220px'" class="sidebar">
-      <div class="logo">
-        <h2 v-if="!isCollapse">{{ companyShortName || 'ERP' }}</h2>
-        <h2 v-else>{{ (companyShortName || 'ERP').charAt(0) }}</h2>
+    <el-aside :width="isCollapse ? '64px' : '240px'" class="sidebar">
+      <div class="logo" @click="$router.push('/')">
+        <div class="logo-icon">
+          <el-icon :size="isCollapse ? 24 : 20"><Cpu /></el-icon>
+        </div>
+        <transition name="logo-text">
+          <span v-if="!isCollapse" class="logo-title">{{ companyShortName || 'ERP' }}</span>
+        </transition>
       </div>
-      
+
       <el-menu
         :default-active="$route.path"
         class="sidebar-menu"
@@ -15,48 +19,64 @@
       >
         <DynamicMenu :menus="permissionStore.menus" />
       </el-menu>
+
+      <div class="sidebar-footer" @click="toggleCollapse">
+        <el-icon :size="16">
+          <Fold v-if="!isCollapse" />
+          <Expand v-else />
+        </el-icon>
+        <span v-if="!isCollapse" class="collapse-label">收起菜单</span>
+      </div>
     </el-aside>
-    
-    <el-container>
-      <el-header class="header">
+
+    <el-container class="main-container">
+      <el-header class="header" height="56px">
         <div class="header-left">
-          <el-icon class="collapse-icon" @click="toggleCollapse">
-            <Fold v-if="!isCollapse" />
-            <Expand v-else />
-          </el-icon>
           <el-breadcrumb separator="/">
             <el-breadcrumb-item :to="{ path: '/' }">首页</el-breadcrumb-item>
             <el-breadcrumb-item v-if="$route.meta.title">{{ $route.meta.title }}</el-breadcrumb-item>
           </el-breadcrumb>
         </div>
-        
+
         <div class="header-right">
-          <el-dropdown @command="handleCommand">
-            <span class="user-info">
-              <el-avatar :size="32" :icon="UserFilled" />
+          <el-tooltip content="全屏" placement="bottom">
+            <el-icon class="header-action" @click="toggleFullscreen"><FullScreen /></el-icon>
+          </el-tooltip>
+          <el-dropdown @command="handleCommand" trigger="click">
+            <div class="user-block">
+              <el-avatar :size="30" class="user-avatar">
+                {{ (userStore.userInfo?.username || 'U').charAt(0).toUpperCase() }}
+              </el-avatar>
               <span class="username">{{ userStore.userInfo?.username || '用户' }}</span>
-            </span>
+              <el-icon :size="12"><ArrowDown /></el-icon>
+            </div>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="profile">个人中心</el-dropdown-item>
-                <el-dropdown-item command="password">修改密码</el-dropdown-item>
-                <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
+                <el-dropdown-item command="profile">
+                  <el-icon><User /></el-icon>个人中心
+                </el-dropdown-item>
+                <el-dropdown-item command="password">
+                  <el-icon><Lock /></el-icon>修改密码
+                </el-dropdown-item>
+                <el-dropdown-item divided command="logout">
+                  <el-icon><SwitchButton /></el-icon>退出登录
+                </el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
         </div>
       </el-header>
-      
+
       <el-main class="main-content">
         <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
+          <transition name="page" mode="out-in">
             <component :is="Component" />
           </transition>
         </router-view>
       </el-main>
-      
-      <el-footer class="footer">
-        <span>Copyright © {{ new Date().getFullYear() }} 深圳市奥特迈智能装备有限公司 版权所有</span>
+
+      <el-footer class="footer" height="36px">
+        <span>© {{ new Date().getFullYear() }} {{ companyName || '深圳市奥特迈智能装备有限公司' }}</span>
         <span class="version">v{{ appVersion }}</span>
       </el-footer>
     </el-container>
@@ -67,7 +87,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
-import { Fold, Expand, UserFilled } from '@element-plus/icons-vue'
+import { Fold, Expand, User, Lock, SwitchButton, Cpu, FullScreen, ArrowDown } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { usePermissionStore } from '@/stores/permission'
 import { APP_VERSION } from '@/config/version'
@@ -84,6 +104,14 @@ const appVersion = APP_VERSION
 
 const toggleCollapse = () => {
   isCollapse.value = !isCollapse.value
+}
+
+const toggleFullscreen = () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen()
+  } else {
+    document.exitFullscreen()
+  }
 }
 
 const handleCommand = (command) => {
@@ -113,176 +141,271 @@ onMounted(async () => {
 <style scoped>
 .layout-container {
   height: 100vh;
+  overflow: hidden;
 }
 
+/* ---- Sidebar ---- */
 .sidebar {
-  background: linear-gradient(180deg, #1a1f36 0%, #0d1117 100%);
-  transition: width 0.3s;
+  background: var(--bg-sidebar);
+  display: flex;
+  flex-direction: column;
+  transition: width 0.28s var(--transition);
+  border-right: none;
+  overflow: hidden;
 }
 
 .logo {
-  height: 60px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.logo-icon {
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--primary);
+  border-radius: var(--radius-sm);
   color: #fff;
-  font-size: 18px;
-  font-weight: bold;
-  background: rgba(255, 255, 255, 0.05);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
 }
 
+.logo-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #f1f5f9;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.logo-text-enter-active,
+.logo-text-leave-active {
+  transition: opacity 0.2s, transform 0.2s;
+}
+.logo-text-enter-from,
+.logo-text-leave-to {
+  opacity: 0;
+  transform: translateX(-8px);
+}
+
+/* Sidebar Menu */
 .sidebar-menu {
-  border-right: none;
-  background: transparent;
-  height: calc(100vh - 60px);
+  border-right: none !important;
+  background: transparent !important;
+  flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 0;
+}
+
+.sidebar-menu :deep(.el-menu) {
+  background-color: transparent !important;
+  border: none !important;
 }
 
 .sidebar-menu :deep(.el-menu-item),
 .sidebar-menu :deep(.el-sub-menu__title) {
-  color: rgba(255, 255, 255, 0.75);
+  height: 40px;
+  line-height: 40px;
+  color: rgba(255, 255, 255, 0.6) !important;
+  font-size: 13px;
+  margin: 1px 8px;
+  border-radius: var(--radius-sm);
+  padding-right: 12px !important;
+  transition: all 0.2s;
+}
+
+.sidebar-menu :deep(.el-menu-item .el-icon),
+.sidebar-menu :deep(.el-sub-menu__title .el-icon) {
+  font-size: 16px;
+  margin-right: 8px;
+  width: 16px;
 }
 
 .sidebar-menu :deep(.el-menu-item:hover),
 .sidebar-menu :deep(.el-sub-menu__title:hover) {
-  background-color: rgba(255, 255, 255, 0.08) !important;
+  background-color: rgba(255, 255, 255, 0.06) !important;
   color: #fff !important;
 }
 
 .sidebar-menu :deep(.el-menu-item.is-active) {
-  background: linear-gradient(90deg, #409eff 0%, #66b1ff 100%) !important;
+  background: var(--primary) !important;
   color: #fff !important;
-  border-radius: 4px;
-  margin: 2px 8px;
-  width: calc(100% - 16px);
-}
-
-.sidebar-menu :deep(.el-sub-menu .el-menu-item),
-.sidebar-menu :deep(.el-menu--inline .el-menu-item) {
-  background-color: rgba(0, 0, 0, 0.2) !important;
-  color: rgba(255, 255, 255, 0.75) !important;
-  padding-left: 50px !important;
-}
-
-.sidebar-menu :deep(.el-sub-menu .el-menu-item:hover),
-.sidebar-menu :deep(.el-menu--inline .el-menu-item:hover) {
-  background-color: rgba(255, 255, 255, 0.1) !important;
-  color: #fff !important;
-}
-
-.sidebar-menu :deep(.el-sub-menu .el-menu-item.is-active),
-.sidebar-menu :deep(.el-menu--inline .el-menu-item.is-active) {
-  background: linear-gradient(90deg, #409eff 0%, #66b1ff 100%) !important;
-  color: #fff !important;
-}
-
-/* 确保所有子菜单项文字颜色正确 */
-.sidebar-menu :deep(.el-menu) {
-  background-color: transparent !important;
-}
-
-.sidebar-menu :deep(.el-sub-menu__title),
-.sidebar-menu :deep(.el-menu-item) {
-  color: rgba(255, 255, 255, 0.75) !important;
+  font-weight: 500;
 }
 
 .sidebar-menu :deep(.el-sub-menu.is-opened > .el-sub-menu__title) {
   color: #fff !important;
 }
 
-.sidebar-menu :deep(.el-menu-item-group__title) {
-  color: rgba(255, 255, 255, 0.4);
+.sidebar-menu :deep(.el-sub-menu .el-menu-item) {
+  background-color: transparent !important;
+  padding-left: 48px !important;
+  height: 36px;
+  line-height: 36px;
+  font-size: 13px;
+  margin: 0 8px;
+}
+
+.sidebar-menu :deep(.el-sub-menu .el-menu-item:hover) {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+  color: #fff !important;
+}
+
+.sidebar-menu :deep(.el-sub-menu .el-menu-item.is-active) {
+  background: rgba(67, 97, 238, 0.15) !important;
+  color: var(--primary-light) !important;
+  font-weight: 500;
+}
+
+.sidebar-menu :deep(.el-sub-menu__icon-arrow) {
+  color: rgba(255, 255, 255, 0.3);
   font-size: 12px;
-  padding-left: 20px;
 }
 
+/* Sidebar scrollbar */
 .sidebar-menu::-webkit-scrollbar {
-  width: 4px;
+  width: 3px;
 }
-
 .sidebar-menu::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.15);
-  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
 }
-
 .sidebar-menu::-webkit-scrollbar-track {
-  background-color: transparent;
+  background: transparent;
 }
 
+/* Sidebar collapse toggle */
+.sidebar-footer {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 12px;
+  cursor: pointer;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+  transition: color 0.2s;
+}
+.sidebar-footer:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+.collapse-label {
+  white-space: nowrap;
+}
+
+/* ---- Header ---- */
 .header {
-  background-color: #fff;
-  border-bottom: 1px solid #e6e6e6;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
+  padding: 0 24px;
+  flex-shrink: 0;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 20px;
-}
-
-.collapse-icon {
-  font-size: 20px;
-  cursor: pointer;
-  color: #606266;
-}
-
-.collapse-icon:hover {
-  color: #409eff;
 }
 
 .header-right {
   display: flex;
   align-items: center;
+  gap: 8px;
 }
 
-.user-info {
+.header-action {
+  font-size: 18px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s;
+}
+.header-action:hover {
+  color: var(--primary);
+  background: #f0f5ff;
+}
+
+.user-block {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: background 0.2s;
+}
+.user-block:hover {
+  background: var(--border-light);
+}
+
+.user-avatar {
+  background: var(--primary) !important;
+  color: #fff !important;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .username {
-  font-size: 14px;
-  color: #303133;
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* ---- Main Content ---- */
+.main-container {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .main-content {
-  background-color: #f5f7fa;
+  background: var(--bg-page);
   padding: 20px;
   overflow-y: auto;
+  flex: 1;
 }
 
+/* ---- Footer ---- */
 .footer {
-  height: 40px;
-  background-color: #fff;
-  border-top: 1px solid #e6e6e6;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border-light);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #909399;
-  font-size: 12px;
-  gap: 20px;
-}
-
-.footer .version {
-  color: #c0c4cc;
+  gap: 16px;
+  color: var(--text-muted);
   font-size: 11px;
+  flex-shrink: 0;
+}
+.footer .version {
+  color: #cbd5e1;
 }
 
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s;
+/* ---- Page Transition ---- */
+.page-enter-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
 }
-
-.fade-enter-from,
-.fade-leave-to {
+.page-leave-active {
+  transition: opacity 0.18s ease;
+}
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.page-leave-to {
   opacity: 0;
 }
 </style>

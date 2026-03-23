@@ -5,8 +5,15 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from apps.accounts.models import Department, Role
+from apps.core.permission_models_new import DataScope
 
 User = get_user_model()
+
+SCOPE_MAP = {
+    'ALL': 'all',
+    'DEPARTMENT': 'dept_tree',
+    'SELF': 'self',
+}
 
 class Command(BaseCommand):
     help = '初始化系统基础数据'
@@ -46,70 +53,100 @@ class Command(BaseCommand):
         roles = [
             {
                 'name': '系统管理员',
-                'code': 'ADMIN',
+                'code': 'admin',
                 'description': '系统超级管理员，拥有所有权限',
                 'data_scope': 'ALL'
             },
             {
                 'name': '总经理',
-                'code': 'GM',
+                'code': 'general_manager',
                 'description': '总经理，查看所有数据',
                 'data_scope': 'ALL'
             },
             {
                 'name': '销售经理',
-                'code': 'SALES_MANAGER',
+                'code': 'sales_manager',
                 'description': '销售部门经理',
                 'data_scope': 'DEPARTMENT'
             },
             {
-                'name': '销售员',
-                'code': 'SALES',
+                'name': '销售人员',
+                'code': 'salesperson',
                 'description': '销售人员',
                 'data_scope': 'SELF'
             },
             {
                 'name': '采购经理',
-                'code': 'PURCHASE_MANAGER',
+                'code': 'purchase_manager',
                 'description': '采购部门经理',
                 'data_scope': 'DEPARTMENT'
             },
             {
-                'name': '采购员',
-                'code': 'PURCHASE',
+                'name': '采购人员',
+                'code': 'purchaser',
                 'description': '采购人员',
                 'data_scope': 'SELF'
             },
             {
                 'name': '仓库管理员',
-                'code': 'WAREHOUSE_ADMIN',
+                'code': 'warehouse_keeper',
                 'description': '仓库管理人员',
                 'data_scope': 'DEPARTMENT'
             },
             {
                 'name': '项目经理',
-                'code': 'PROJECT_MANAGER',
+                'code': 'project_manager',
                 'description': '项目管理人员',
                 'data_scope': 'SELF'
             },
             {
                 'name': '财务人员',
-                'code': 'FINANCE',
+                'code': 'accountant',
                 'description': '财务管理人员',
                 'data_scope': 'ALL'
+            },
+            {
+                'name': '普通员工',
+                'code': 'employee',
+                'description': '基础权限员工',
+                'data_scope': 'SELF'
             },
         ]
         
         role_objs = {}
         for role_data in roles:
-            role, created = Role.objects.get_or_create(
-                code=role_data['code'],
-                defaults={
-                    'name': role_data['name'],
-                    'description': role_data['description'],
-                    'data_scope': role_data['data_scope']
-                }
+            created = False
+            role = Role.objects.filter(code=role_data['code']).first()
+            if role:
+                role.name = role_data['name']
+                role.description = role_data['description']
+                role.permissions = {}
+                role.is_active = True
+                role.save(update_fields=['name', 'description', 'permissions', 'is_active', 'updated_at'])
+            else:
+                role = Role.objects.filter(name=role_data['name']).first()
+                if role:
+                    role.code = role_data['code']
+                    role.description = role_data['description']
+                    role.permissions = {}
+                    role.is_active = True
+                    role.save(update_fields=['code', 'description', 'permissions', 'is_active', 'updated_at'])
+                else:
+                    role = Role.objects.create(
+                        code=role_data['code'],
+                        name=role_data['name'],
+                        description=role_data['description'],
+                        permissions={},
+                        is_active=True,
+                    )
+                    created = True
+            DataScope.objects.filter(role=role, module='__default__').delete()
+            scope, _ = DataScope.objects.update_or_create(
+                role=role,
+                module='',
+                defaults={'scope_type': SCOPE_MAP.get(role_data['data_scope'], 'self')}
             )
+            scope.custom_departments.clear()
             role_objs[role_data['code']] = role
             if created:
                 self.stdout.write(self.style.SUCCESS(f'  ✓ 创建角色: {role.name}'))
@@ -127,10 +164,11 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS('  ✓ 更新admin用户信息'))
             
             # 为admin分配系统管理员角色
-            if not admin.role or admin.role.code != 'ADMIN':
-                admin.role = role_objs['ADMIN']
+            if not admin.role or admin.role.code != 'admin':
+                admin.role = role_objs['admin']
                 admin.save()
                 self.stdout.write(self.style.SUCCESS('  ✓ 为admin分配系统管理员角色'))
+            admin.roles.set([role_objs['admin']])
         except User.DoesNotExist:
             self.stdout.write(self.style.WARNING('  ! admin用户不存在'))
         
@@ -144,17 +182,17 @@ class Command(BaseCommand):
                 'last_name': '销售经理',
                 'employee_id': 'EMP002',
                 'department': 'SALES',
-                'role': 'SALES_MANAGER',
+                'role': 'sales_manager',
                 'password': 'erp123456'
             },
             {
                 'username': 'sales01',
                 'email': 'sales01@erp.com',
                 'first_name': '李',
-                'last_name': '销售员',
+                'last_name': '销售人员',
                 'employee_id': 'EMP003',
                 'department': 'SALES',
-                'role': 'SALES',
+                'role': 'salesperson',
                 'password': 'erp123456'
             },
             {
@@ -164,17 +202,37 @@ class Command(BaseCommand):
                 'last_name': '采购经理',
                 'employee_id': 'EMP004',
                 'department': 'PURCHASE',
-                'role': 'PURCHASE_MANAGER',
+                'role': 'purchase_manager',
                 'password': 'erp123456'
             },
             {
                 'username': 'purchase01',
                 'email': 'purchase01@erp.com',
                 'first_name': '赵',
-                'last_name': '采购员',
+                'last_name': '采购人员',
                 'employee_id': 'EMP005',
                 'department': 'PURCHASE',
-                'role': 'PURCHASE',
+                'role': 'purchaser',
+                'password': 'erp123456'
+            },
+            {
+                'username': 'finance01',
+                'email': 'finance01@erp.com',
+                'first_name': '钱',
+                'last_name': '财务人员',
+                'employee_id': 'EMP006',
+                'department': 'FINANCE',
+                'role': 'accountant',
+                'password': 'erp123456'
+            },
+            {
+                'username': 'employee01',
+                'email': 'employee01@erp.com',
+                'first_name': '孙',
+                'last_name': '普通员工',
+                'employee_id': 'EMP007',
+                'department': 'IT',
+                'role': 'employee',
                 'password': 'erp123456'
             },
         ]
@@ -192,20 +250,30 @@ class Command(BaseCommand):
                     'is_active': True
                 }
             )
+            user.email = user_data['email']
+            user.first_name = user_data['first_name']
+            user.last_name = user_data['last_name']
+            user.employee_id = user_data['employee_id']
+            user.department = dept_objs[user_data['department']]
+            user.role = role_objs[user_data['role']]
+            user.is_active = True
+            user.set_password(user_data['password'])
+            user.save()
+            user.roles.set([role_objs[user_data['role']]])
             if created:
-                user.set_password(user_data['password'])
-                user.save()
                 self.stdout.write(self.style.SUCCESS(
                     f'  ✓ 创建用户: {user.username} ({user.first_name}{user.last_name})'
                 ))
             else:
-                self.stdout.write(f'  - 用户已存在: {user.username}')
+                self.stdout.write(f'  - 用户已更新: {user.username}')
         
         self.stdout.write(self.style.SUCCESS('\n数据初始化完成！'))
         self.stdout.write(self.style.SUCCESS('\n可用的测试账号：'))
-        self.stdout.write('  admin / admin (系统管理员)')
+        self.stdout.write('  admin / admin123 (系统管理员)')
         self.stdout.write('  sales_manager / erp123456 (销售经理)')
         self.stdout.write('  sales01 / erp123456 (销售员)')
         self.stdout.write('  purchase_manager / erp123456 (采购经理)')
         self.stdout.write('  purchase01 / erp123456 (采购员)')
+        self.stdout.write('  finance01 / erp123456 (财务人员)')
+        self.stdout.write('  employee01 / erp123456 (普通员工)')
 
