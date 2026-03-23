@@ -152,7 +152,7 @@ const routes = [
         path: 'projects/ecn',
         name: 'ECNList',
         component: () => import('@/views/projects/ECNList.vue'),
-        meta: { title: '设计变更', icon: 'Edit', menuId: 'projects:ecn' }
+        meta: { title: '设计变更', icon: 'Edit', menuId: 'design:ecn' }
       },
       // Bug跟踪
       {
@@ -172,7 +172,7 @@ const routes = [
         path: 'projects/drawings',
         name: 'DrawingList',
         component: () => import('@/views/projects/DrawingList.vue'),
-        meta: { title: '图纸文档', icon: 'Picture', menuId: 'projects:drawings' }
+        meta: { title: '图纸文档', icon: 'Picture', menuId: 'design:drawings' }
       },
       // After Sales - 售后管理
       {
@@ -755,7 +755,7 @@ const routes = [
         path: 'projects/equipment-archives',
         name: 'EquipmentArchives',
         component: () => import('@/views/projects/EquipmentArchiveList.vue'),
-        meta: { title: '设备台账', icon: 'Files', menuId: 'projects:equipment-archives' }
+        meta: { title: '设备台账', icon: 'Files', menuId: 'equipment:archives' }
       },
       // 项目 - 验收管理
       {
@@ -819,13 +819,13 @@ const routes = [
         path: 'projects/batch-drawing-import',
         name: 'BatchDrawingImport',
         component: () => import('@/views/projects/BatchDrawingImport.vue'),
-        meta: { title: '批量图纸导入', icon: 'FolderOpened', menuId: 'projects:batch-drawing' }
+        meta: { title: '批量图纸导入', icon: 'FolderOpened', menuId: 'design:batch-drawing' }
       },
       {
         path: 'projects/drawing-bom-link',
         name: 'DrawingBOMLink',
         component: () => import('@/views/projects/DrawingBOMLink.vue'),
-        meta: { title: '图纸-BOM关联', icon: 'Connection', menuId: 'projects:drawing-bom-link' }
+        meta: { title: '图纸-BOM关联', icon: 'Connection', menuId: 'design:drawing-bom-link' }
       },
       // OA - 日程会议
       {
@@ -952,19 +952,19 @@ const routes = [
         path: 'projects/service-orders',
         name: 'ServiceOrderList',
         component: () => import('@/views/projects/ServiceOrder.vue'),
-        meta: { title: '售后服务', icon: 'Van', menuId: 'projects:service' }
+        meta: { title: '售后服务', icon: 'Van', menuId: 'aftersales:service' }
       },
       {
         path: 'projects/service-order/:id',
         name: 'ServiceOrderDetail',
         component: () => import('@/views/projects/ServiceOrderDetail.vue'),
-        meta: { title: '服务详情', menuId: 'projects:service' }
+        meta: { title: '服务详情', menuId: 'aftersales:service' }
       },
       {
         path: 'projects/technicians',
         name: 'TechnicianList',
         component: () => import('@/views/projects/TechnicianList.vue'),
-        meta: { title: '技术人员', icon: 'User', menuId: 'projects:service' }
+        meta: { title: '技术人员', icon: 'User', menuId: 'aftersales:service' }
       },
       // 项目成本看板
       {
@@ -1003,19 +1003,19 @@ const routes = [
         path: 'projects/equipment-monitoring',
         name: 'EquipmentMonitoring',
         component: () => import('@/views/projects/EquipmentMonitoring.vue'),
-        meta: { title: '设备监控', icon: 'Monitor', menuId: 'projects:monitoring' }
+        meta: { title: '设备监控', icon: 'Monitor', menuId: 'equipment:monitoring' }
       },
       {
         path: 'projects/equipment-alarms',
         name: 'EquipmentAlarmList',
         component: () => import('@/views/projects/EquipmentAlarmList.vue'),
-        meta: { title: '设备报警', icon: 'Warning', menuId: 'projects:monitoring' }
+        meta: { title: '设备报警', icon: 'Warning', menuId: 'equipment:monitoring' }
       },
       {
         path: 'projects/diagnostic-sessions',
         name: 'DiagnosticSessionList',
         component: () => import('@/views/projects/DiagnosticSessionList.vue'),
-        meta: { title: '远程诊断', icon: 'Service', menuId: 'projects:monitoring' }
+        meta: { title: '远程诊断', icon: 'Service', menuId: 'equipment:monitoring' }
       },
       // 工艺路线管理
       {
@@ -1138,7 +1138,7 @@ const routes = [
         path: 'projects/tech-documents',
         name: 'TechDocumentList',
         component: () => import('@/views/projects/TechDocumentList.vue'),
-        meta: { title: '技术文档', icon: 'Document', menuId: 'projects:documents' }
+        meta: { title: '技术文档', icon: 'Document', menuId: 'design:documents' }
       },
       // 售后服务管理
       {

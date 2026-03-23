@@ -7,30 +7,31 @@ from apps.core.permission_models_new import Permission
 
 
 TOP_LEVEL_MENUS = {
-    # 非标自动化行业核心业务流程：商务→项目→设计→采购→生产→交付→结算
-    'dashboard': {'name': '工作台', 'icon': 'DataAnalysis', 'route_path': '/dashboard', 'sort_order': 0},
-    'projects': {'name': '项目中心', 'icon': 'Folder', 'route_path': '/projects', 'sort_order': 10},
-    'sales': {'name': '商务销售', 'icon': 'TrendCharts', 'route_path': '/sales/crm-dashboard', 'sort_order': 20},
-    'purchase': {'name': '采购供应', 'icon': 'ShoppingCart', 'route_path': '/purchase/requests', 'sort_order': 30},
-    'production': {'name': '生产制造', 'icon': 'Operation', 'route_path': '/production/processes', 'sort_order': 40},
-    'inventory': {'name': '仓储物料', 'icon': 'Goods', 'route_path': '/inventory/stocks', 'sort_order': 50},
-    'finance': {'name': '财务核算', 'icon': 'Money', 'route_path': '/finance/expenses', 'sort_order': 60},
-    'masterdata': {'name': '基础数据', 'icon': 'Box', 'route_path': '/masterdata/items', 'sort_order': 70},
-    'reports': {'name': '数据分析', 'icon': 'PieChart', 'route_path': '/reports/profitability', 'sort_order': 80},
-    'workflow': {'name': '审批中心', 'icon': 'Connection', 'route_path': '/workflow/tasks', 'sort_order': 90},
-    'oa': {'name': '协同办公', 'icon': 'OfficeBuilding', 'route_path': '/oa/schedule', 'sort_order': 100},
-    'system': {'name': '系统设置', 'icon': 'Setting', 'route_path': '/system/users', 'sort_order': 999},
+    # 非标自动化行业(100人规模)优化菜单: 商务→项目→研发→采购→生产→仓储→财务
+    'dashboard':  {'name': '工作台',   'icon': 'DataAnalysis',    'route_path': '/dashboard',              'sort_order': 0},
+    'projects':   {'name': '项目管理', 'icon': 'Folder',          'route_path': '/projects',               'sort_order': 10},
+    'design':     {'name': '研发设计', 'icon': 'EditPen',         'route_path': '/plm/requirements',       'sort_order': 15},
+    'sales':      {'name': '商务销售', 'icon': 'TrendCharts',     'route_path': '/sales/crm-dashboard',    'sort_order': 20},
+    'purchase':   {'name': '采购供应', 'icon': 'ShoppingCart',    'route_path': '/purchase/requests',      'sort_order': 30},
+    'production': {'name': '生产制造', 'icon': 'Operation',       'route_path': '/production/processes',   'sort_order': 40},
+    'inventory':  {'name': '仓储物料', 'icon': 'Goods',           'route_path': '/inventory/stocks',       'sort_order': 50},
+    'finance':    {'name': '财务管理', 'icon': 'Money',           'route_path': '/finance/expenses',       'sort_order': 60},
+    'masterdata': {'name': '基础数据', 'icon': 'Box',             'route_path': '/masterdata/items',       'sort_order': 70},
+    'reports':    {'name': '经营分析', 'icon': 'PieChart',        'route_path': '/reports/profitability',  'sort_order': 80},
+    'oa':         {'name': '协同办公', 'icon': 'OfficeBuilding',  'route_path': '/oa/schedule',            'sort_order': 90},
+    'system':     {'name': '系统设置', 'icon': 'Setting',         'route_path': '/system/users',           'sort_order': 999},
 }
 
 # 将前端细分业务前缀收敛到既有一级菜单，避免改变原始菜单结构。
 PREFIX_PARENT_OVERRIDES = {
-    'aftersales': 'sales',
-    'equipment': 'projects',
-    'knowledge': 'projects',
-    'plm': 'projects',
-    'mes': 'production',
-    'accounts': 'oa',
-    'analytics': 'reports',  # 将分析看板合并到报表分析中
+    'aftersales': 'sales',       # 售后归入商务销售
+    'equipment':  'production',  # 设备管理归入生产制造
+    'knowledge':  'design',      # 知识库归入研发设计
+    'plm':        'design',      # PLM归入研发设计
+    'mes':        'production',  # MES归入生产制造
+    'accounts':   'oa',          # 考勤归入协同办公
+    'workflow':   'oa',          # 审批归入协同办公
+    'analytics':  'reports',     # 分析看板归入经营分析
 }
 
 LEGACY_TOP_LEVEL_CODES = tuple(PREFIX_PARENT_OVERRIDES.keys())

@@ -41,7 +41,7 @@ INDUSTRY_ROLES = [
             # 仪表盘
             'dashboard',
             # 全部模块权限
-            'projects', 'plm', 'sales', 'purchase', 'inventory', 'production',
+            'projects', 'design', 'sales', 'purchase', 'inventory', 'production',
             'mes', 'equipment', 'finance', 'reports', 'oa',
             'workflow', 'masterdata', 'knowledge', 'aftersales', 'accounts', 'system',
             # 报表分析（重点，分析看板已合并进报表分析）
@@ -65,13 +65,12 @@ INDUSTRY_ROLES = [
             # 项目管理（核心）
             'projects', 'projects:list', 'projects:dashboard', 'projects:tasks',
             'projects:members', 'projects:bom', 'projects:time-logs', 'projects:gantt',
-            'projects:milestones', 'projects:alerts', 'projects:equipment-archives',
+            'projects:milestones', 'projects:alerts', 'equipment:archives',
             'projects:acceptances', 'projects:archives', 'projects:cost',
-            'projects:monitoring', 'projects:work-orders',
-            # PLM产品研发
-            'plm', 'plm:requirements', 'plm:proposals', 'plm:agreements',
-            # 技术文档
-            'projects:drawings', 'projects:documents', 'projects:ecn',
+            'equipment:monitoring', 'projects:work-orders',
+            # 研发设计
+            'design', 'plm', 'plm:requirements', 'plm:proposals', 'plm:agreements',
+            'design:drawings', 'design:documents', 'design:ecn',
             'plm:cad-bom', 'plm:bom-compare',
             # 知识库
             'knowledge', 'knowledge:articles', 'knowledge:issues', 'knowledge:components',
@@ -91,14 +90,14 @@ INDUSTRY_ROLES = [
         'data_scope': 'DEPARTMENT',
         'menu_ids': [
             'dashboard',
-            # PLM产品研发（核心）
-            'plm', 'plm:requirements', 'plm:proposals',
+            # 研发设计（核心）
+            'design', 'plm', 'plm:requirements', 'plm:proposals',
             'plm:agreements', 'plm:model-viewer', 'plm:cad-bom', 'plm:bom-compare',
             # 项目相关
             'projects', 'projects:list', 'projects:tasks', 'projects:bom',
-            'projects:drawings', 'projects:documents', 'projects:ecn',
-            'projects:bugs', 'projects:time-logs', 'projects:batch-drawing',
-            'projects:drawing-bom-link',
+            'design:drawings', 'design:documents', 'design:ecn',
+            'projects:bugs', 'projects:time-logs', 'design:batch-drawing',
+            'design:drawing-bom-link',
             # 知识库
             'knowledge', 'knowledge:articles', 'knowledge:issues', 'knowledge:components',
             # 基础数据（物料查询）
@@ -325,8 +324,8 @@ INDUSTRY_ROLES = [
             'purchase', 'purchase:goods-receipts',
             # 项目验收
             'projects', 'projects:acceptances', 'projects:bugs',
-            # 知识库
-            'knowledge', 'knowledge:issues',
+            # 知识库(研发设计)
+            'design', 'knowledge', 'knowledge:issues',
             # 审批
             'workflow', 'workflow:tasks', 'workflow:my-submissions',
             # OA
@@ -387,11 +386,11 @@ INDUSTRY_ROLES = [
             # 售后服务（核心）
             'aftersales', 'aftersales:orders',
             'sales', 'sales:service', 'sales:training',
-            'projects', 'projects:service',
+            'projects', 'aftersales:service',
             # 设备档案
-            'projects:equipment-archives', 'projects:acceptances',
-            # 技术文档
-            'projects:drawings', 'projects:documents',
+            'equipment:archives', 'projects:acceptances',
+            # 研发设计(文档查询)
+            'design', 'design:drawings', 'design:documents',
             # 知识库
             'knowledge', 'knowledge:articles', 'knowledge:issues',
             # 审批
