@@ -10,8 +10,8 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('masterdata', '0006_supplier_settlement_method_alter_item_barcode_and_more'),
-        ('projects', '0012_acceptance_acceptancecheckitem_acceptanceissue_and_more'),
+        ('masterdata', '0005_automation_bom_fields'),
+        ('projects', '0012_serviceorder'),
         ('sales', '0006_campaignrecipient_salesprediction_and_more'),
     ]
 
