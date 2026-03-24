@@ -280,27 +280,48 @@ class UserProfileSerializer(serializers.ModelSerializer):
         return list(get_user_permissions(obj))
 
     def get_menus(self, obj):
-        """返回用户可访问的菜单树"""
+        """返回用户可访问的菜单树（支持三级分组）"""
         from apps.core.permission_models_new import Permission
         from apps.core.permission_service import get_user_permissions
+        from django.db.models import Q
 
         if obj.is_superuser:
-            menu_perms = Permission.active.filter(type='menu').order_by('sort_order')
+            all_menus = list(Permission.active.filter(type='menu').order_by('sort_order'))
         else:
             user_perms = get_user_permissions(obj)
-            menu_perms = Permission.active.filter(type='menu', code__in=user_perms).order_by('sort_order')
+            user_menus = Permission.active.filter(type='menu', code__in=user_perms)
+            # 自动补全祖先节点(分组容器、一级菜单)，保证树结构完整
+            parent_ids = set(user_menus.exclude(parent_id=None).values_list('parent_id', flat=True))
+            grandparent_ids = set(
+                Permission.active.filter(id__in=parent_ids, parent_id__isnull=False)
+                .values_list('parent_id', flat=True)
+            )
+            ancestor_ids = parent_ids | grandparent_ids
+            all_menus = list(
+                Permission.active.filter(type='menu')
+                .filter(Q(code__in=user_perms) | Q(id__in=ancestor_ids))
+                .order_by('sort_order')
+            )
+
+        # 按 parent_id 分组，内存中构建树（单次查询）
+        children_map = {}
+        for menu in all_menus:
+            children_map.setdefault(menu.parent_id, []).append(menu)
 
         def build_tree(parent_id=None):
             nodes = []
-            for perm in menu_perms.filter(parent_id=parent_id):
-                node = {
+            for perm in children_map.get(parent_id, []):
+                children = build_tree(perm.id)
+                # 跳过没有可见子项的空分组容器
+                if not perm.route_path and not children:
+                    continue
+                nodes.append({
                     'code': perm.code,
                     'name': perm.name,
                     'icon': perm.icon,
                     'route': perm.route_path,
-                    'children': build_tree(perm.id)
-                }
-                nodes.append(node)
+                    'children': children,
+                })
             return nodes
 
         return build_tree()

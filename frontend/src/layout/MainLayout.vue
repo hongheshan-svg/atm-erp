@@ -265,6 +265,49 @@ onMounted(async () => {
   font-weight: 500;
 }
 
+/* ── 三级菜单：二级分组标题 ── */
+.sidebar-menu :deep(.el-sub-menu .el-sub-menu > .el-sub-menu__title) {
+  height: 30px;
+  line-height: 30px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.38) !important;
+  padding-left: 44px !important;
+  margin: 6px 8px 2px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.sidebar-menu :deep(.el-sub-menu .el-sub-menu > .el-sub-menu__title:hover) {
+  color: rgba(255, 255, 255, 0.65) !important;
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+.sidebar-menu :deep(.el-sub-menu .el-sub-menu.is-opened > .el-sub-menu__title) {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+/* ── 三级菜单：叶子项 ── */
+.sidebar-menu :deep(.el-sub-menu .el-sub-menu .el-menu-item) {
+  padding-left: 56px !important;
+  height: 34px;
+  line-height: 34px;
+  font-size: 13px;
+  margin: 0 8px;
+}
+
+.sidebar-menu :deep(.el-sub-menu .el-sub-menu .el-menu-item.is-active) {
+  background: rgba(67, 97, 238, 0.15) !important;
+  color: var(--primary-light) !important;
+  font-weight: 500;
+}
+
+/* ── 分组箭头图标 ── */
+.sidebar-menu :deep(.el-sub-menu .el-sub-menu .el-sub-menu__icon-arrow) {
+  color: rgba(255, 255, 255, 0.2);
+  font-size: 10px;
+}
+
 .sidebar-menu :deep(.el-sub-menu__icon-arrow) {
   color: rgba(255, 255, 255, 0.3);
   font-size: 12px;

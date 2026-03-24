@@ -7,7 +7,7 @@ from apps.core.permission_models_new import Permission
 
 
 TOP_LEVEL_MENUS = {
-    # 非标自动化行业(100人规模)优化菜单: 商务→项目→研发→采购→生产→仓储→财务
+    # 非标自动化行业(100人规模)优化菜单
     'dashboard':  {'name': '工作台',   'icon': 'DataAnalysis',    'route_path': '/dashboard',              'sort_order': 0},
     'projects':   {'name': '项目管理', 'icon': 'Folder',          'route_path': '/projects',               'sort_order': 10},
     'design':     {'name': '研发设计', 'icon': 'EditPen',         'route_path': '/plm/requirements',       'sort_order': 15},
@@ -22,19 +22,82 @@ TOP_LEVEL_MENUS = {
     'system':     {'name': '系统设置', 'icon': 'Setting',         'route_path': '/system/users',           'sort_order': 999},
 }
 
-# 将前端细分业务前缀收敛到既有一级菜单，避免改变原始菜单结构。
+# 将前端细分业务前缀收敛到既有一级菜单
 PREFIX_PARENT_OVERRIDES = {
-    'aftersales': 'sales',       # 售后归入商务销售
-    'equipment':  'production',  # 设备管理归入生产制造
-    'knowledge':  'design',      # 知识库归入研发设计
-    'plm':        'design',      # PLM归入研发设计
-    'mes':        'production',  # MES归入生产制造
-    'accounts':   'oa',          # 考勤归入协同办公
-    'workflow':   'oa',          # 审批归入协同办公
-    'analytics':  'reports',     # 分析看板归入经营分析
+    'aftersales': 'sales',
+    'equipment':  'production',
+    'knowledge':  'design',
+    'plm':        'design',
+    'mes':        'production',
+    'accounts':   'oa',
+    'workflow':   'oa',
+    'analytics':  'reports',
 }
 
 LEGACY_TOP_LEVEL_CODES = tuple(PREFIX_PARENT_OVERRIDES.keys())
+
+# ── 二级分组：将扁平子菜单按业务场景分组，降低视觉复杂度 ──
+# 格式: { '一级code': [ ('分组后缀', '分组名', [menuId ...]), ... ] }
+MENU_GROUPS = {
+    'projects': [
+        ('exec',     '项目执行', ['projects:list', 'projects:dashboard', 'projects:tasks', 'projects:gantt', 'projects:milestones', 'projects:members']),
+        ('delivery', '项目交付', ['projects:bom', 'projects:work-orders', 'projects:acceptances', 'projects:bugs']),
+        ('analysis', '项目分析', ['projects:time-logs', 'projects:cost', 'projects:archives', 'projects:alerts']),
+    ],
+    'design': [
+        ('manage',    '设计管理', ['design:ecn', 'design:drawings', 'design:batch-drawing', 'design:drawing-bom-link', 'design:documents']),
+        ('plm',       'PLM',     ['plm:requirements', 'plm:proposals', 'plm:agreements', 'plm:model-viewer', 'plm:cad-bom', 'plm:bom-compare']),
+        ('knowledge', '知识库',   ['knowledge:articles', 'knowledge:issues', 'knowledge:components']),
+    ],
+    'sales': [
+        ('crm',        '客户管理', ['sales:crm-dashboard', 'sales:leads', 'sales:opportunities', 'sales:performance', 'sales:analysis']),
+        ('order',      '报价合同', ['sales:quotations', 'sales:quote-estimation', 'sales:quote', 'sales:orders', 'sales:contracts', 'sales:contract-templates', 'sales:quote-templates']),
+        ('aftersales', '发货售后', ['sales:delivery-orders', 'sales:training', 'sales:service', 'aftersales:orders', 'aftersales:service']),
+    ],
+    'purchase': [
+        ('business', '采购业务',   ['purchase:requests', 'purchase:orders', 'purchase:goods-receipts', 'purchase:budgets']),
+        ('supplier', '供应商管理', ['purchase:comparisons', 'purchase:evaluations', 'purchase:blacklist']),
+        ('collab',   '委外协同',   ['purchase:outsource', 'purchase:collaboration', 'purchase:portal']),
+    ],
+    'production': [
+        ('process',   '工艺管理', ['production:processes', 'production:routing', 'production:workstations', 'production:capacity', 'production:resources']),
+        ('execute',   '生产执行', ['production:plans', 'production:assembly', 'production:debug-records', 'production:serial-numbers', 'production:inspections']),
+        ('equipment', '设备管理', ['equipment:list', 'equipment:fixtures', 'equipment:inspection', 'equipment:archives', 'equipment:maintenance', 'equipment:oee', 'equipment:monitoring']),
+        ('mes',       'MES',     ['mes:scheduling', 'mes:kanban', 'mes:andon', 'mes:data-acquisition']),
+    ],
+    'inventory': [
+        ('inout',   '出入库',   ['inventory:stocks', 'inventory:moves', 'inventory:requisitions', 'inventory:returns', 'inventory:transfer']),
+        ('manage',  '库存管理', ['inventory:batches', 'inventory:adjustment', 'inventory:alerts', 'inventory:cost-accounting']),
+        ('plan',    '物料计划', ['inventory:mrp', 'inventory:spare-parts', 'inventory:data-accuracy']),
+    ],
+    'finance': [
+        ('cashflow',  '费用管理', ['finance:expenses', 'finance:shared-expenses', 'finance:collection']),
+        ('reconcile', '对账结算', ['finance:ar', 'finance:ap', 'finance:sales-reconciliation', 'finance:purchase-reconciliation', 'finance:invoices']),
+        ('assets',    '资产成本', ['finance:project-costs', 'finance:assets']),
+    ],
+    'masterdata': [
+        ('base',    '物料仓库',   ['masterdata:items', 'masterdata:warehouses', 'masterdata:locations']),
+        ('partner', '客户供应商', ['masterdata:customers', 'masterdata:suppliers', 'masterdata:customer-followups', 'masterdata:customer-contacts', 'masterdata:credit']),
+    ],
+    'reports': [
+        ('finance',   '财务报表', ['reports:profitability', 'reports:aging', 'reports:cash-flow', 'reports:cost-analysis', 'reports:project-profitability']),
+        ('operation', '运营报表', ['reports:timelog', 'reports:slow-moving', 'reports:equipment-lifecycle', 'reports:capacity-utilization', 'reports:customer-value']),
+        ('bi',        '综合分析', ['analytics:project', 'analytics:inventory']),
+    ],
+    'oa': [
+        ('office',     '日常办公', ['oa:schedule', 'oa:meeting', 'oa:im', 'oa:announcement']),
+        ('attendance', '考勤假期', ['oa:attendance', 'oa:attendance-import', 'oa:leave', 'accounts:attendance']),
+        ('workflow',   '审批流程', ['workflow:tasks', 'workflow:my-submissions', 'workflow:config']),
+        ('admin',      '行政管理', ['oa:vehicles', 'oa:vehicle-request', 'oa:assets']),
+    ],
+    'system': [
+        ('auth',   '组织权限', ['system:users', 'system:roles', 'system:departments']),
+        ('config', '基础配置', ['system:code-rules', 'system:config', 'system:dashboard-config', 'system:data-dictionary', 'system:custom-fields']),
+        ('notify', '消息通知', ['system:notification-settings', 'system:email-templates', 'system:notifications', 'system:announcements']),
+        ('audit',  '安全审计', ['system:audit-log', 'system:login-logs', 'system:webhooks', 'system:audit-analytics']),
+        ('ops',    '运维管理', ['system:monitor', 'system:backup']),
+    ],
+}
 
 
 class Command(BaseCommand):
@@ -52,14 +115,16 @@ class Command(BaseCommand):
 
         route_text = router_path.read_text(encoding='utf-8')
         raw_routes = self.route_pattern.findall(route_text)
-        # 排除 redirect 路由路径，防止正则跨路由对象边界误匹配
         redirect_paths = set(re.findall(r"path:\s*'([^']+)'\s*,\s*redirect:", route_text))
-        raw_routes = [(p, t, m) for p, t, m in raw_routes if p not in redirect_paths]
+        # 排除注释掉的路由: 查找被 // 注释的 path 行
+        commented_paths = set(re.findall(r"//\s*path:\s*'([^']+)'", route_text))
+        raw_routes = [(p, t, m) for p, t, m in raw_routes if p not in redirect_paths and p not in commented_paths]
         selected_routes = self._select_routes(raw_routes)
 
         created = 0
         updated = 0
 
+        # ── 1. 一级菜单 ──
         for code, meta in TOP_LEVEL_MENUS.items():
             _, was_created = Permission.objects.update_or_create(
                 code=code,
@@ -77,30 +142,56 @@ class Command(BaseCommand):
 
         Permission.objects.filter(code__in=LEGACY_TOP_LEVEL_CODES, parent__isnull=True).update(is_active=False)
 
+        # ── 2. 二级分组容器 ──
+        group_parent_map = {}  # menuId → group Permission
+        for top_code, groups in MENU_GROUPS.items():
+            top_perm = Permission.objects.filter(code=top_code).first()
+            if not top_perm:
+                continue
+            for idx, (suffix, name, items) in enumerate(groups):
+                grp_code = f'{top_code}:g-{suffix}'
+                grp_perm, was_created = Permission.objects.update_or_create(
+                    code=grp_code,
+                    defaults={
+                        'name': name,
+                        'type': 'menu',
+                        'icon': '',
+                        'route_path': '',
+                        'sort_order': top_perm.sort_order * 10 + idx + 1,
+                        'is_active': True,
+                        'parent': top_perm,
+                    },
+                )
+                created += int(was_created)
+                updated += int(not was_created)
+                for item_code in items:
+                    group_parent_map[item_code] = grp_perm
+
+        # ── 3. 三级叶子菜单 ──
         for menu_id, route in selected_routes.items():
             if ':' not in menu_id:
-                # 顶级菜单已由映射表维护
                 continue
 
-            prefix = menu_id.split(':', 1)[0]
-            parent_code = PREFIX_PARENT_OVERRIDES.get(prefix, prefix)
-            parent = Permission.objects.filter(code=parent_code).first()
-            if not parent:
-                self.stdout.write(self.style.WARNING(f'跳过 {menu_id}: 缺少父菜单 {parent_code}'))
-                continue
+            if menu_id in group_parent_map:
+                parent = group_parent_map[menu_id]
+            else:
+                prefix = menu_id.split(':', 1)[0]
+                parent_code = PREFIX_PARENT_OVERRIDES.get(prefix, prefix)
+                parent = Permission.objects.filter(code=parent_code).first()
+                if not parent:
+                    self.stdout.write(self.style.WARNING(f'跳过 {menu_id}: 缺少父菜单 {parent_code}'))
+                    continue
 
             defaults = {
                 'name': route['title'],
                 'type': 'menu',
+                'icon': '',
                 'route_path': route['route_path'],
                 'sort_order': route['sort_order'],
                 'is_active': True,
                 'parent': parent,
             }
-            permission, was_created = Permission.objects.update_or_create(code=menu_id, defaults=defaults)
-            if permission.icon != parent.icon:
-                permission.icon = parent.icon
-                permission.save(update_fields=['icon'])
+            _, was_created = Permission.objects.update_or_create(code=menu_id, defaults=defaults)
             created += int(was_created)
             updated += int(not was_created)
 
