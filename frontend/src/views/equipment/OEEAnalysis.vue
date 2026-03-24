@@ -132,96 +132,129 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
+import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 
 const dateRange = ref([])
 const selectedEquipment = ref(null)
 const equipments = ref([])
 const oeeData = ref({
-  oee: 0.85,
-  availability: 0.92,
-  performance: 0.95,
-  quality: 0.98,
-  planned_time: 480,
-  actual_running_time: 442,
-  ideal_output: 1000,
-  actual_output: 950,
-  total_output: 950,
-  good_output: 931
+  oee: 0, availability: 0, performance: 0, quality: 0,
+  planned_time: 0, actual_running_time: 0,
+  ideal_output: 0, actual_output: 0,
+  total_output: 0, good_output: 0
 })
 const equipmentRanking = ref([])
+const trendData = ref([])
+const downtimeData = ref([])
 
 const trendChart = ref(null)
 const downtimeChart = ref(null)
 let trendChartInstance = null
 let downtimeChartInstance = null
 
-const loadData = async () => {
+const formatDateParam = (d) => {
+  if (!d) return ''
+  const dt = new Date(d)
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`
+}
+
+const buildParams = () => {
+  const params = {}
+  if (selectedEquipment.value) params.equipment_id = selectedEquipment.value
+  if (dateRange.value && dateRange.value.length === 2) {
+    params.start_date = formatDateParam(dateRange.value[0])
+    params.end_date = formatDateParam(dateRange.value[1])
+  }
+  return params
+}
+
+const loadEquipments = async () => {
   try {
-    // 加载设备列表
-    const equipRes = await request.get('/projects/equipment/')
-    equipments.value = equipRes.results || equipRes || []
-    
-    // TODO: 加载OEE数据
-    // 使用模拟数据
-    initCharts()
-    loadRanking()
+    const res = await request.get('/projects/equipment/', { params: { page_size: 1000 } })
+    equipments.value = res.data?.results || res.results || res || []
   } catch (error) {
-    console.error(error)
+    // silent
   }
 }
 
-const loadRanking = () => {
-  // 模拟数据
-  equipmentRanking.value = [
-    { equipment_name: 'CNC加工中心-01', oee: 0.92, availability: 0.95, performance: 0.98, quality: 0.99, total_downtime: 4 },
-    { equipment_name: '激光切割机-02', oee: 0.88, availability: 0.92, performance: 0.96, quality: 0.99, total_downtime: 6.5 },
-    { equipment_name: '焊接机器人-01', oee: 0.85, availability: 0.90, performance: 0.95, quality: 0.99, total_downtime: 8 },
-    { equipment_name: '装配线-A', oee: 0.82, availability: 0.88, performance: 0.94, quality: 0.99, total_downtime: 9.6 },
-    { equipment_name: 'CNC加工中心-02', oee: 0.78, availability: 0.85, performance: 0.92, quality: 0.99, total_downtime: 12 }
-  ]
+const loadOEESummary = async () => {
+  try {
+    const res = await request.get('/projects/oee-records/summary/', { params: buildParams() })
+    const d = res.data || res
+    oeeData.value = {
+      oee: d.oee || 0,
+      availability: d.availability || 0,
+      performance: d.performance || 0,
+      quality: d.quality || 0,
+      planned_time: d.planned_time || 0,
+      actual_running_time: d.actual_running_time || 0,
+      ideal_output: d.ideal_output || 0,
+      actual_output: d.actual_output || 0,
+      total_output: d.total_output || 0,
+      good_output: d.good_output || 0
+    }
+  } catch {
+    // If API not available, keep zeros
+  }
+}
+
+const loadRanking = async () => {
+  try {
+    const res = await request.get('/projects/oee-records/ranking/', { params: buildParams() })
+    equipmentRanking.value = res.data?.results || res.results || res.data || res || []
+  } catch {
+    equipmentRanking.value = []
+  }
+}
+
+const loadTrendData = async () => {
+  try {
+    const res = await request.get('/projects/oee-records/trend/', { params: buildParams() })
+    trendData.value = res.data || res || []
+  } catch {
+    trendData.value = []
+  }
+}
+
+const loadDowntimeData = async () => {
+  try {
+    const res = await request.get('/projects/oee-records/downtime/', { params: buildParams() })
+    downtimeData.value = res.data || res || []
+  } catch {
+    downtimeData.value = []
+  }
 }
 
 const initCharts = () => {
   // OEE趋势图
   if (trendChart.value) {
     trendChartInstance = echarts.init(trendChart.value)
-    const days = []
-    const oeeValues = []
-    const availabilityValues = []
-    const performanceValues = []
-    const qualityValues = []
-    
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date()
-      d.setDate(d.getDate() - i)
-      days.push(`${d.getMonth() + 1}/${d.getDate()}`)
-      oeeValues.push((85 + Math.random() * 10).toFixed(1))
-      availabilityValues.push((90 + Math.random() * 8).toFixed(1))
-      performanceValues.push((92 + Math.random() * 6).toFixed(1))
-      qualityValues.push((97 + Math.random() * 3).toFixed(1))
-    }
-    
+    const days = trendData.value.map(t => t.date || t.day || '')
     trendChartInstance.setOption({
       tooltip: { trigger: 'axis' },
       legend: { data: ['OEE', '可用率', '性能率', '质量率'] },
       grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
       xAxis: { type: 'category', data: days },
-      yAxis: { type: 'value', min: 70, max: 100, axisLabel: { formatter: '{value}%' } },
+      yAxis: { type: 'value', min: 0, max: 100, axisLabel: { formatter: '{value}%' } },
       series: [
-        { name: 'OEE', type: 'line', data: oeeValues, smooth: true, lineStyle: { width: 3 } },
-        { name: '可用率', type: 'line', data: availabilityValues, smooth: true },
-        { name: '性能率', type: 'line', data: performanceValues, smooth: true },
-        { name: '质量率', type: 'line', data: qualityValues, smooth: true }
+        { name: 'OEE', type: 'line', data: trendData.value.map(t => ((t.oee || 0) * 100).toFixed(1)), smooth: true, lineStyle: { width: 3 } },
+        { name: '可用率', type: 'line', data: trendData.value.map(t => ((t.availability || 0) * 100).toFixed(1)), smooth: true },
+        { name: '性能率', type: 'line', data: trendData.value.map(t => ((t.performance || 0) * 100).toFixed(1)), smooth: true },
+        { name: '质量率', type: 'line', data: trendData.value.map(t => ((t.quality || 0) * 100).toFixed(1)), smooth: true }
       ]
     })
   }
-  
+
   // 停机原因图
   if (downtimeChart.value) {
     downtimeChartInstance = echarts.init(downtimeChart.value)
+    const pieData = downtimeData.value.map(d => ({
+      value: d.duration || d.value || 0,
+      name: d.reason || d.name || '未知'
+    }))
     downtimeChartInstance.setOption({
       tooltip: { trigger: 'item' },
       series: [{
@@ -230,16 +263,17 @@ const initCharts = () => {
         avoidLabelOverlap: false,
         itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
         label: { show: true, formatter: '{b}: {d}%' },
-        data: [
-          { value: 35, name: '计划停机', itemStyle: { color: '#909399' } },
-          { value: 25, name: '设备故障', itemStyle: { color: '#F56C6C' } },
-          { value: 20, name: '换模换型', itemStyle: { color: '#E6A23C' } },
-          { value: 12, name: '缺料等待', itemStyle: { color: '#409EFF' } },
-          { value: 8, name: '其他', itemStyle: { color: '#67C23A' } }
-        ]
+        data: pieData.length ? pieData : [{ value: 0, name: '暂无数据' }]
       }]
     })
   }
+}
+
+const loadData = async () => {
+  await loadEquipments()
+  await Promise.all([loadOEESummary(), loadRanking(), loadTrendData(), loadDowntimeData()])
+  await nextTick()
+  initCharts()
 }
 
 const getOEEColor = (value) => {
@@ -263,78 +297,25 @@ onMounted(() => {
 })
 
 watch([dateRange, selectedEquipment], () => {
-  if (trendChartInstance) trendChartInstance.dispose()
-  if (downtimeChartInstance) downtimeChartInstance.dispose()
+  if (trendChartInstance) { trendChartInstance.dispose(); trendChartInstance = null }
+  if (downtimeChartInstance) { downtimeChartInstance.dispose(); downtimeChartInstance = null }
   loadData()
 })
 </script>
 
 <style scoped>
-.oee-analysis {
-  padding: 0;
-}
-
-.header-card {
-  margin-bottom: 16px;
-}
-
-.header-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.header-content h2 {
-  margin: 0;
-}
-
-.header-filters {
-  display: flex;
-  gap: 12px;
-}
-
-.oee-overview {
-  margin-bottom: 16px;
-}
-
-.oee-card {
-  text-align: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
-}
-
-.oee-gauge {
-  padding: 20px;
-}
-
-.oee-value {
-  font-size: 48px;
-  font-weight: bold;
-}
-
-.oee-label {
-  font-size: 14px;
-  opacity: 0.9;
-}
-
-.factor-card {
-  padding: 8px;
-}
-
-.factor-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.factor-header strong {
-  font-size: 20px;
-}
-
-.factor-detail {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #909399;
-}
+.oee-analysis { padding: 0; }
+.header-card { margin-bottom: 16px; }
+.header-content { display: flex; justify-content: space-between; align-items: center; }
+.header-content h2 { margin: 0; }
+.header-filters { display: flex; gap: 12px; }
+.oee-overview { margin-bottom: 16px; }
+.oee-card { text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; }
+.oee-gauge { padding: 20px; }
+.oee-value { font-size: 48px; font-weight: bold; }
+.oee-label { font-size: 14px; opacity: 0.9; }
+.factor-card { padding: 8px; }
+.factor-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.factor-header strong { font-size: 20px; }
+.factor-detail { margin-top: 8px; font-size: 12px; color: #909399; }
 </style>

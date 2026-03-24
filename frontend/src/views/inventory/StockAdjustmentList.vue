@@ -45,10 +45,12 @@
           </template>
         </el-table-column>
         <el-table-column prop="created_by_name" label="创建人" width="100" />
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column label="操作" width="340" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
-            <el-button size="small" type="success" @click="handleConfirm(row)" v-if="row.status === 'DRAFT'">确认盘点</el-button>
+            <el-button size="small" type="warning" @click="handleSubmitApproval(row)" v-if="row.status === 'DRAFT' || row.status === 'REJECTED'">提交审批</el-button>
+            <el-button size="small" type="info" @click="showWorkflowProgress(row)" v-if="row.status === 'PENDING'">审批进度</el-button>
+            <el-button size="small" type="success" @click="handleConfirm(row)" v-if="row.status === 'DRAFT' || row.status === 'APPROVED'">确认盘点</el-button>
             <el-button 
               v-if="canDelete"
               size="small" 
@@ -113,10 +115,45 @@
         <el-button type="primary" @click="submitAdjustment">提交盘点</el-button>
       </template>
     </el-dialog>
+
+    <!-- 查看详情 -->
+    <el-dialog v-model="viewDialogVisible" title="盘点详情" width="700px">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="盘点单号">{{ viewDetail.adjustment_no }}</el-descriptions-item>
+        <el-descriptions-item label="仓库">{{ viewDetail.warehouse_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">{{ viewDetail.status_display || viewDetail.status }}</el-descriptions-item>
+        <el-descriptions-item label="盘点类型">{{ viewDetail.adjustment_type_display || viewDetail.adjustment_type }}</el-descriptions-item>
+        <el-descriptions-item label="创建人">{{ viewDetail.created_by_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="创建时间">{{ viewDetail.created_at }}</el-descriptions-item>
+        <el-descriptions-item label="备注" :span="2">{{ viewDetail.remarks || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <el-table :data="viewDetail.items || []" stripe style="margin-top: 16px">
+        <el-table-column prop="material_name" label="物料" />
+        <el-table-column prop="system_qty" label="系统数量" width="100" align="right" />
+        <el-table-column prop="actual_qty" label="实际数量" width="100" align="right" />
+        <el-table-column label="差异" width="100" align="right">
+          <template #default="{ row }">
+            <span :style="{ color: (row.qty_diff || 0) < 0 ? '#F56C6C' : '#67C23A' }">{{ row.qty_diff || 0 }}</span>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="viewDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
-</template>
+
+    <!-- 审批进度弹窗 -->
+    <WorkflowProgress
+      v-model="workflowDialogVisible"
+      :business-type="workflowBusinessType"
+      :business-id="workflowBusinessId"
+    />
+  </template>
 
 <script setup>
+import WorkflowProgress from '@/components/WorkflowProgress.vue'
+
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
@@ -137,7 +174,18 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
   }
 )
 
+const workflowDialogVisible = ref(false)
+const workflowBusinessId = ref(null)
+const workflowBusinessType = 'STOCK_ADJUSTMENT'
+
+const showWorkflowProgress = (row) => {
+  workflowBusinessId.value = row.id
+  workflowDialogVisible.value = true
+}
+
 const loading = ref(false)
+const viewDialogVisible = ref(false)
+const viewDetail = ref({})
 const adjustments = ref([])
 const warehouses = ref([])
 const dialogVisible = ref(false)
@@ -240,10 +288,30 @@ const handleCreate = () => {
 const handleView = async (row) => {
   try {
     const response = await request.get(`/inventory/adjustments/${row.id}/`)
-    ElMessage.info('查看盘点详情功能待完善')
-    console.log(data)
+    viewDetail.value = response.data || response
+    viewDialogVisible.value = true
   } catch (error) {
-    ElMessage.error('加载详情失败')
+    viewDetail.value = row
+    viewDialogVisible.value = true
+  }
+}
+
+const handleSubmitApproval = async (row) => {
+  try {
+    await ElMessageBox.confirm('确定要提交该盘点单进行审批吗？', '提交审批', { type: 'warning' })
+    const response = await request.post(`/inventory/adjustments/${row.id}/submit/`)
+    const data = response.data || response
+    if (data.workflow_started) {
+      ElMessage.success(data.message || '已提交审批')
+    } else {
+      ElMessage.success(data.message || '操作成功')
+    }
+    loadAdjustments()
+  } catch (error) {
+    if (error !== 'cancel') {
+      const msg = error.response?.data?.error || '提交失败'
+      ElMessage.error(msg)
+    }
   }
 }
 

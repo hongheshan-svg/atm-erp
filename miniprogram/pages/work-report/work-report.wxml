@@ -1,0 +1,29 @@
+<view class="container">
+  <view class="header"><text class="title">生产报工</text></view>
+  <view class="section">
+    <text class="section-title">选择工单</text>
+    <view class="task-list">
+      <view wx:for="{{taskList}}" wx:key="id" class="task-item {{currentTask && currentTask.id === item.id ? 'active' : ''}}" bindtap="selectTask" data-task="{{item}}">
+        <text class="task-code">{{item.order_number}}</text>
+        <text class="task-name">{{item.product_name}}</text>
+      </view>
+    </view>
+    <view wx:if="{{taskList.length === 0 && !loading}}" class="empty">暂无待报工工单</view>
+  </view>
+  <view class="section" wx:if="{{currentTask}}">
+    <text class="section-title">报工信息</text>
+    <view class="form-item">
+      <text class="label">完成数量</text>
+      <input type="number" value="{{reportForm.quantity}}" bindinput="onInput" data-field="quantity" placeholder="请输入" />
+    </view>
+    <view class="form-item">
+      <text class="label">工时(小时)</text>
+      <input type="digit" value="{{reportForm.hours}}" bindinput="onInput" data-field="hours" placeholder="请输入" />
+    </view>
+    <view class="form-item">
+      <text class="label">备注</text>
+      <textarea value="{{reportForm.notes}}" bindinput="onInput" data-field="notes" placeholder="选填" />
+    </view>
+    <button class="submit-btn" bindtap="submitReport">提交报工</button>
+  </view>
+</view>

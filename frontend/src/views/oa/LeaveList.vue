@@ -190,7 +190,6 @@ const loadData = async () => {
       ...searchForm
     }
     const res = await request.get('/oa/leave-requests/', { params })
-    console.log('Leave requests response:', res)
     // res 已经是 response.data，因为响应拦截器返回的是 response.data
     if (Array.isArray(res)) {
       list.value = res

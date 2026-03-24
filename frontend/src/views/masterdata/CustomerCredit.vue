@@ -213,6 +213,24 @@
         <el-button type="primary" @click="submitStatus" :loading="submitLoading">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 信用详情 -->
+    <el-dialog v-model="creditDetailVisible" title="客户信用详情" width="700px">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="客户">{{ creditDetail.customer_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="信用额度">¥{{ creditDetail.credit_limit?.toLocaleString() || 0 }}</el-descriptions-item>
+        <el-descriptions-item label="已用额度">¥{{ creditDetail.used_amount?.toLocaleString() || 0 }}</el-descriptions-item>
+        <el-descriptions-item label="剩余额度">¥{{ creditDetail.available_amount?.toLocaleString() || 0 }}</el-descriptions-item>
+        <el-descriptions-item label="信用等级">{{ creditDetail.credit_grade || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">{{ creditDetail.status_display || creditDetail.status }}</el-descriptions-item>
+        <el-descriptions-item label="最后评估日期">{{ creditDetail.last_evaluation_date || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="创建时间">{{ creditDetail.created_at || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="备注" :span="2">{{ creditDetail.remarks || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button @click="creditDetailVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -223,6 +241,8 @@ import request from '@/utils/request'
 
 const activeTab = ref('list')
 const loading = ref(false)
+const creditDetailVisible = ref(false)
+const creditDetail = ref({})
 const submitLoading = ref(false)
 
 const creditList = ref([])
@@ -343,8 +363,14 @@ const handleChangeStatus = (row) => {
   statusDialogVisible.value = true
 }
 
-const handleViewDetail = (row) => {
-  ElMessage.info('详情页面开发中')
+const handleViewDetail = async (row) => {
+  try {
+    const res = await request.get(`/masterdata/customer-credits/${row.id}/`)
+    creditDetail.value = res.data || res
+  } catch {
+    creditDetail.value = row
+  }
+  creditDetailVisible.value = true
 }
 
 const submitAdjust = async () => {

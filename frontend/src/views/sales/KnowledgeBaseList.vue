@@ -290,11 +290,11 @@ const loadPopularTags = async () => {
 
 const viewArticle = async (article) => {
   try {
-    const res = await request.get(`/api/sales/knowledge-base/${article.id}/`)
+    const res = await request.get(`/sales/knowledge-base/${article.id}/`)
     currentArticle.value = res
     showDetailDrawer.value = true
     // 增加查看次数
-    request.post(`/api/sales/knowledge-base/${article.id}/view/`)
+    request.post(`/sales/knowledge-base/${article.id}/view/`)
   } catch (e) {
     ElMessage.error('加载文章详情失败')
   }
@@ -337,10 +337,10 @@ const publishArticle = async () => {
 
 const markHelpful = async (helpful) => {
   try {
-    await request.post(`/api/sales/knowledge-base/${currentArticle.value.id}/feedback/`, { helpful })
+    await request.post(`/sales/knowledge-base/${currentArticle.value.id}/feedback/`, { helpful })
     ElMessage.success('感谢您的反馈')
     // 刷新文章
-    const res = await request.get(`/api/sales/knowledge-base/${currentArticle.value.id}/`)
+    const res = await request.get(`/sales/knowledge-base/${currentArticle.value.id}/`)
     currentArticle.value = res
   } catch (e) {
     ElMessage.error('反馈失败')

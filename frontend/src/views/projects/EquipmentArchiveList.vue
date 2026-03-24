@@ -310,6 +310,23 @@
         <el-button type="primary" @click="printNameplate">打印</el-button>
       </template>
     </el-dialog>
+    <!-- 维保记录 -->
+    <el-dialog v-model="maintDialogVisible" :title="'维保记录 - ' + (currentEquipment?.equipment_no || '')" width="700px">
+      <el-table :data="maintRecords" v-loading="maintLoading" stripe>
+        <el-table-column prop="maintenance_date" label="维保日期" width="120" />
+        <el-table-column prop="maintenance_type_display" label="类型" width="100" />
+        <el-table-column prop="description" label="描述" show-overflow-tooltip />
+        <el-table-column prop="cost" label="费用" width="100" align="right">
+          <template #default="{ row }">¥{{ row.cost?.toLocaleString() || 0 }}</template>
+        </el-table-column>
+        <el-table-column prop="performed_by_name" label="执行人" width="100" />
+        <el-table-column prop="next_date" label="下次维保" width="120" />
+      </el-table>
+      <el-empty v-if="!maintLoading && maintRecords.length === 0" description="暂无维保记录" />
+      <template #footer>
+        <el-button @click="maintDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -320,6 +337,10 @@ import { Plus } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 const loading = ref(false)
+const maintDialogVisible = ref(false)
+const maintRecords = ref([])
+const maintLoading = ref(false)
+const currentEquipment = ref(null)
 const tableData = ref([])
 const projects = ref([])
 const customers = ref([])
@@ -328,7 +349,6 @@ const nameplateVisible = ref(false)
 const dialogTitle = ref('新增设备档案')
 const formRef = ref(null)
 const activeTab = ref('basic')
-const currentEquipment = ref(null)
 
 const stats = reactive({
   total: 0,
@@ -507,8 +527,18 @@ const handleNameplate = async (row) => {
   }
 }
 
-const handleMaintenance = (row) => {
-  ElMessage.info('查看维保记录: ' + row.equipment_no)
+const handleMaintenance = async (row) => {
+  currentEquipment.value = row
+  maintDialogVisible.value = true
+  maintLoading.value = true
+  try {
+    const res = await request.get(`/projects/equipment-archives/${row.id}/maintenance-records/`)
+    maintRecords.value = res.data?.results || res.results || res.data || []
+  } catch {
+    maintRecords.value = []
+  } finally {
+    maintLoading.value = false
+  }
 }
 
 const printNameplate = () => {

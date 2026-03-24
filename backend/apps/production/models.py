@@ -651,3 +651,8 @@ class InspectionItem(BaseModel):
     def __str__(self):
         return f"{self.inspection.inspection_no} - {self.item_name}"
 
+
+# Import new improvement module models
+from .finite_capacity import FiniteCapacityPlan, ScheduledTask  # noqa: E402, F401
+from .equipment_capability import EquipmentCapability  # noqa: E402, F401
+from .kanban_wip import KanbanWIPRule, KanbanWIPAlert  # noqa: E402, F401

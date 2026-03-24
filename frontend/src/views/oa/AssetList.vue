@@ -206,6 +206,28 @@
         <el-button type="primary" @click="confirmAssign" :loading="saving">确认分配</el-button>
       </template>
     </el-dialog>
+
+    <!-- 借用 -->
+    <el-dialog v-model="borrowDialogVisible" title="资产借用" width="500px">
+      <el-form label-width="100px">
+        <el-form-item label="资产">{{ borrowRow?.name }}</el-form-item>
+        <el-form-item label="借用人">
+          <el-select v-model="borrowForm.borrower" placeholder="选择借用人" filterable style="width: 100%">
+            <el-option v-for="u in users" :key="u.id" :label="u.full_name || u.username" :value="u.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="预计归还">
+          <el-date-picker v-model="borrowForm.expected_return_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="用途">
+          <el-input v-model="borrowForm.purpose" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="borrowDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="borrowSaving" @click="handleBorrowSave">确认借用</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -217,6 +239,10 @@ import request from '@/utils/request'
 
 const loading = ref(false)
 const saving = ref(false)
+const borrowDialogVisible = ref(false)
+const borrowRow = ref(null)
+const borrowForm = reactive({ borrower: null, expected_return_date: '', purpose: '' })
+const borrowSaving = ref(false)
 const list = ref([])
 const categories = ref([])
 const users = ref([])
@@ -435,7 +461,36 @@ const handleReclaim = async (row) => {
 }
 
 const handleBorrow = (row) => {
-  ElMessage.info('借用功能开发中')
+  borrowRow.value = row
+  Object.assign(borrowForm, { borrower: null, expected_return_date: '', purpose: '' })
+  borrowDialogVisible.value = true
+}
+
+const handleBorrowSave = async () => {
+  borrowSaving.value = true
+  try {
+    const res = await request.post('/oa/asset-borrows/', {
+      asset: borrowRow.value.id,
+      ...borrowForm
+    })
+    // 自动提交审批
+    const borrowId = (res.data || res).id
+    if (borrowId) {
+      try {
+        await request.post(`/oa/asset-borrows/${borrowId}/submit/`)
+      } catch (e) {
+        // 审批提交失败不影响借用记录创建
+      }
+    }
+    ElMessage.success('借用成功')
+    borrowDialogVisible.value = false
+    loadList()
+  } catch (error) {
+    if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
+    else ElMessage.error('操作失败')
+  } finally {
+    borrowSaving.value = false
+  }
 }
 
 const handleDelete = async (row) => {

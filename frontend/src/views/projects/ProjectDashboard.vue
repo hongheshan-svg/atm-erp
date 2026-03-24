@@ -240,6 +240,26 @@
     </template>
     
     <el-empty v-else-if="!loading" description="请选择一个项目查看仪表盘" />
+    <!-- BOM成本详情 -->
+    <el-dialog v-model="bomDialogVisible" title="BOM成本详情" width="800px">
+      <el-table :data="bomItems" v-loading="bomLoading" stripe max-height="500">
+        <el-table-column prop="material_code" label="物料编码" width="120" />
+        <el-table-column prop="material_name" label="物料名称" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="specification" label="规格" width="120" />
+        <el-table-column prop="quantity" label="数量" width="80" align="right" />
+        <el-table-column prop="unit" label="单位" width="60" />
+        <el-table-column label="单价" width="100" align="right">
+          <template #default="{ row }">¥{{ row.unit_price?.toLocaleString() || 0 }}</template>
+        </el-table-column>
+        <el-table-column label="金额" width="120" align="right">
+          <template #default="{ row }">¥{{ (row.amount || (row.quantity * row.unit_price) || 0).toLocaleString() }}</template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!bomLoading && bomItems.length === 0" description="暂无BOM数据" />
+      <template #footer>
+        <el-button @click="bomDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -253,6 +273,9 @@ const loading = ref(false)
 const projects = ref([])
 const selectedProjectId = ref(null)
 const dashboard = ref(null)
+const bomDialogVisible = ref(false)
+const bomItems = ref([])
+const bomLoading = ref(false)
 
 const statusMap = {
   'DRAFT': '草稿',
@@ -317,8 +340,17 @@ const loadDashboard = async () => {
 }
 
 const loadBOMCost = async () => {
-  // TODO: 打开BOM成本详情弹窗
-  ElMessage.info('BOM成本详情功能开发中')
+  if (!selectedProjectId.value) return
+  bomDialogVisible.value = true
+  bomLoading.value = true
+  try {
+    const res = await request.get(`/projects/projects/${selectedProjectId.value}/bom-items/`)
+    bomItems.value = res.data?.results || res.results || res.data || []
+  } catch {
+    bomItems.value = []
+  } finally {
+    bomLoading.value = false
+  }
 }
 
 onMounted(() => {

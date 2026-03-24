@@ -248,8 +248,24 @@ const renderPieChart = () => {
   })
 }
 
-const exportReport = () => {
-  ElMessage.info('导出功能开发中')
+const exportReport = async () => {
+  try {
+    const res = await request.get('/reports/timelog-report/export/', {
+      params: { ...queryParams },
+      responseType: 'blob'
+    })
+    const url = window.URL.createObjectURL(new Blob([res.data || res]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', '工时报表.xlsx')
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('导出成功')
+  } catch (error) {
+    ElMessage.error('导出失败')
+  }
 }
 
 onMounted(async () => {

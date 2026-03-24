@@ -224,6 +224,29 @@
         <el-button type="primary" @click="confirmGenerate" :loading="generating">生成</el-button>
       </template>
     </el-dialog>
+
+    <!-- 成本配置 -->
+    <el-dialog v-model="configDialogVisible" :title="configIsEdit ? '编辑配置' : '添加配置'" width="500px">
+      <el-form label-width="100px">
+        <el-form-item label="配置名称">
+          <el-input v-model="configForm.name" />
+        </el-form-item>
+        <el-form-item label="计算方法">
+          <el-select v-model="configForm.method" style="width: 100%">
+            <el-option label="加权平均" value="WEIGHTED_AVERAGE" />
+            <el-option label="先进先出" value="FIFO" />
+            <el-option label="标准成本" value="STANDARD" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="configForm.description" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="configDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="configSaving" @click="handleConfigSave">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -265,6 +288,10 @@ const configs = ref([])
 const recordLoading = ref(false)
 const generateDialogVisible = ref(false)
 const generating = ref(false)
+const configDialogVisible = ref(false)
+const configIsEdit = ref(false)
+const configSaving = ref(false)
+const configForm = reactive({ id: null, name: '', method: 'WEIGHTED_AVERAGE', description: '' })
 
 const fetchValuation = async () => {
   try {
@@ -333,11 +360,35 @@ const handleSetDefault = async (row) => {
 }
 
 const handleAddConfig = () => {
-  ElMessage.info('配置添加功能开发中')
+  configIsEdit.value = false
+  Object.assign(configForm, { id: null, name: '', method: 'WEIGHTED_AVERAGE', description: '' })
+  configDialogVisible.value = true
 }
 
 const handleEditConfig = (row) => {
-  ElMessage.info('配置编辑功能开发中')
+  configIsEdit.value = true
+  Object.assign(configForm, { id: row.id, name: row.name, method: row.method, description: row.description })
+  configDialogVisible.value = true
+}
+
+const handleConfigSave = async () => {
+  configSaving.value = true
+  try {
+    if (configIsEdit.value) {
+      await request.put(`/inventory/cost-configs/${configForm.id}/`, configForm)
+      ElMessage.success('更新成功')
+    } else {
+      await request.post('/inventory/cost-configs/', configForm)
+      ElMessage.success('创建成功')
+    }
+    configDialogVisible.value = false
+    loadConfigs()
+  } catch (error) {
+    if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
+    else ElMessage.error('操作失败')
+  } finally {
+    configSaving.value = false
+  }
 }
 
 const renderCharts = () => {

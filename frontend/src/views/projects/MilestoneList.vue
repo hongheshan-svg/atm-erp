@@ -252,6 +252,25 @@
         <el-button type="primary" @click="confirmInit" :loading="initLoading">初始化</el-button>
       </template>
     </el-dialog>
+
+    <!-- 里程碑详情 -->
+    <el-dialog v-model="viewDialogVisible" title="里程碑详情" width="700px">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="名称">{{ viewDetail.name }}</el-descriptions-item>
+        <el-descriptions-item label="项目">{{ viewDetail.project_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="计划日期">{{ viewDetail.planned_date || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="实际日期">{{ viewDetail.actual_date || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">{{ viewDetail.status_display || viewDetail.status }}</el-descriptions-item>
+        <el-descriptions-item label="负责人">{{ viewDetail.owner_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="完成率">{{ viewDetail.progress || 0 }}%</el-descriptions-item>
+        <el-descriptions-item label="权重">{{ viewDetail.weight || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="描述" :span="2">{{ viewDetail.description || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="验收标准" :span="2">{{ viewDetail.acceptance_criteria || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button @click="viewDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -263,6 +282,8 @@ import request from '@/utils/request'
 import { usePermissionStore } from '@/stores/permission'
 
 const loading = ref(false)
+const viewDialogVisible = ref(false)
+const viewDetail = ref({})
 const submitLoading = ref(false)
 const progressLoading = ref(false)
 const initLoading = ref(false)
@@ -362,7 +383,7 @@ const fetchUsers = async () => {
   }
 
   try {
-    const data = await request.get('/auth/users/', { params: { page_size: 200 } })
+    const data = await request.get('/accounts/users/', { params: { page_size: 200 } })
     users.value = (data.results || data).map(u => ({
       id: u.id,
       name: u.first_name || u.last_name || u.username
@@ -448,8 +469,14 @@ const handleEdit = async (row) => {
   dialogVisible.value = true
 }
 
-const handleView = (row) => {
-  ElMessage.info('详情页面开发中')
+const handleView = async (row) => {
+  try {
+    const res = await request.get(`/projects/milestones/${row.id}/`)
+    viewDetail.value = res.data || res
+  } catch {
+    viewDetail.value = row
+  }
+  viewDialogVisible.value = true
 }
 
 const handleSubmit = async () => {

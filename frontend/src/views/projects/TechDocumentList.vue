@@ -212,6 +212,20 @@
         </el-timeline>
       </template>
     </el-drawer>
+
+    <!-- 发放 -->
+    <el-dialog v-model="distributeDialogVisible" title="文档发放" width="500px">
+      <el-form label-width="100px">
+        <el-form-item label="文档">{{ distributeRow?.title || distributeRow?.document_no }}</el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="distributeForm.remarks" type="textarea" :rows="2" placeholder="发放说明" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="distributeDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="distributeSaving" @click="handleDistributeSave">确认发放</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -225,6 +239,10 @@ const loading = ref(false)
 const uploading = ref(false)
 const showUploadDialog = ref(false)
 const showDetailDrawer = ref(false)
+const distributeDialogVisible = ref(false)
+const distributeRow = ref(null)
+const distributeForm = reactive({ recipients: [], remarks: '' })
+const distributeSaving = ref(false)
 const showAnnotationDialog = ref(false)
 
 const documents = ref([])
@@ -413,16 +431,32 @@ const handleCommand = async (cmd, row) => {
       })
       break
     case 'distribute':
-      ElMessage.info('发放功能开发中')
+      distributeRow.value = row
+      Object.assign(distributeForm, { recipients: [], remarks: '' })
+      distributeDialogVisible.value = true
       break
     case 'log':
       const logs = await request.get(`/projects/tech-documents/${row.id}/access_log/`)
-      console.log('访问日志:', logs)
       ElMessage.info(`共 ${logs.length} 条访问记录`)
       break
   }
 }
 
+
+const handleDistributeSave = async () => {
+  distributeSaving.value = true
+  try {
+    await request.post(`/projects/tech-documents/${distributeRow.value.id}/distribute/`, distributeForm)
+    ElMessage.success('发放成功')
+    distributeDialogVisible.value = false
+    loadDocuments()
+  } catch (error) {
+    if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
+    else ElMessage.error('发放失败')
+  } finally {
+    distributeSaving.value = false
+  }
+}
 onMounted(() => {
   loadDocuments()
   loadCategories()

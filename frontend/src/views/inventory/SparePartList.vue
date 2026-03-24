@@ -32,31 +32,89 @@
         <el-table-column prop="unit_price" label="单价" width="100" align="right">
           <template #default="{ row }">¥ {{ row.unit_price }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
             <el-button link type="primary" @click="handleConsume(row)">消耗</el-button>
+            <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
       
       <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total" layout="total, prev, pager, next" @current-change="loadData" />
     </el-card>
+
+    <!-- 新增/编辑 -->
+    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑备件' : '新增备件'" width="600px">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
+        <el-form-item label="备件名称" prop="name">
+          <el-input v-model="form.name" />
+        </el-form-item>
+        <el-form-item label="分类">
+          <el-select v-model="form.category" placeholder="选择分类" style="width: 100%">
+            <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="规格">
+          <el-input v-model="form.specification" />
+        </el-form-item>
+        <el-form-item label="单价">
+          <el-input-number v-model="form.unit_price" :min="0" :precision="2" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="安全库存">
+          <el-input-number v-model="form.safety_stock" :min="0" style="width: 100%" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 消耗 -->
+    <el-dialog v-model="consumeDialogVisible" title="备件消耗" width="500px">
+      <el-form ref="consumeFormRef" :model="consumeForm" :rules="consumeRules" label-width="100px">
+        <el-form-item label="备件">{{ currentRow?.name }}</el-form-item>
+        <el-form-item label="当前库存">{{ currentRow?.current_stock }}</el-form-item>
+        <el-form-item label="消耗数量" prop="quantity">
+          <el-input-number v-model="consumeForm.quantity" :min="1" :max="currentRow?.current_stock || 99999" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="消耗原因">
+          <el-input v-model="consumeForm.reason" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="consumeDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="handleConsumeSubmit">确认消耗</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, reactive, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 
 const loading = ref(false)
+const saving = ref(false)
 const tableData = ref([])
 const categories = ref([])
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
 const filters = ref({ category: null, search: '' })
+const dialogVisible = ref(false)
+const consumeDialogVisible = ref(false)
+const isEdit = ref(false)
+const currentRow = ref(null)
+const formRef = ref(null)
+const consumeFormRef = ref(null)
+
+const form = reactive({ id: null, name: '', category: null, specification: '', unit_price: 0, safety_stock: 0 })
+const consumeForm = reactive({ quantity: 1, reason: '' })
+const rules = { name: [{ required: true, message: '请输入备件名称', trigger: 'blur' }] }
+const consumeRules = { quantity: [{ required: true, message: '请输入消耗数量', trigger: 'change' }] }
 
 const loadData = async () => {
   loading.value = true
@@ -76,12 +134,74 @@ const loadCategories = async () => {
   try {
     const res = await request.get('/inventory/spare-part-categories/')
     categories.value = res.data?.results || res.results || []
-  } catch (error) { console.error(error) }
+  } catch {}
 }
 
-const handleCreate = () => ElMessage.info('功能开发中')
-const handleEdit = () => ElMessage.info('功能开发中')
-const handleConsume = () => ElMessage.info('功能开发中')
+const handleCreate = () => {
+  isEdit.value = false
+  Object.assign(form, { id: null, name: '', category: null, specification: '', unit_price: 0, safety_stock: 0 })
+  formRef.value?.resetFields()
+  dialogVisible.value = true
+}
+
+const handleEdit = (row) => {
+  isEdit.value = true
+  Object.assign(form, { id: row.id, name: row.name, category: row.category, specification: row.specification, unit_price: row.unit_price, safety_stock: row.safety_stock })
+  dialogVisible.value = true
+}
+
+const handleSave = async () => {
+  try {
+    await formRef.value?.validate()
+    saving.value = true
+    if (isEdit.value) {
+      await request.put(`/inventory/spare-parts/${form.id}/`, form)
+      ElMessage.success('更新成功')
+    } else {
+      await request.post('/inventory/spare-parts/', form)
+      ElMessage.success('创建成功')
+    }
+    dialogVisible.value = false
+    loadData()
+  } catch (error) {
+    if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
+  } finally {
+    saving.value = false
+  }
+}
+
+const handleConsume = (row) => {
+  currentRow.value = row
+  Object.assign(consumeForm, { quantity: 1, reason: '' })
+  consumeFormRef.value?.resetFields()
+  consumeDialogVisible.value = true
+}
+
+const handleConsumeSubmit = async () => {
+  try {
+    await consumeFormRef.value?.validate()
+    saving.value = true
+    await request.post(`/inventory/spare-parts/${currentRow.value.id}/consume/`, consumeForm)
+    ElMessage.success('消耗记录已保存')
+    consumeDialogVisible.value = false
+    loadData()
+  } catch (error) {
+    ElMessage.error('操作失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+const handleDelete = async (row) => {
+  try {
+    await ElMessageBox.confirm('确定要删除该备件吗？', '提示', { type: 'warning' })
+    await request.delete(`/inventory/spare-parts/${row.id}/`)
+    ElMessage.success('删除成功')
+    loadData()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error('删除失败')
+  }
+}
 
 onMounted(() => { loadCategories(); loadData() })
 </script>

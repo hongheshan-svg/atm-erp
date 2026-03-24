@@ -263,7 +263,7 @@ const refreshData = () => {
 
 const handleAckAlarm = async (alarm) => {
   try {
-    await request.post(`/api/projects/equipment-alarms/${alarm.id}/acknowledge/`)
+    await request.post(`/projects/equipment-alarms/${alarm.id}/acknowledge/`)
     ElMessage.success('报警已确认')
     loadDashboard()
   } catch (e) {
@@ -277,7 +277,7 @@ const handleActionPM = async (pm) => {
       confirmButtonText: '确认',
       cancelButtonText: '取消'
     })
-    await request.post(`/api/projects/pm-results/${pm.id}/take_action/`, { action_taken: value })
+    await request.post(`/projects/pm-results/${pm.id}/take_action/`, { action_taken: value })
     ElMessage.success('已标记处理')
     loadDashboard()
   } catch (e) {
@@ -287,7 +287,7 @@ const handleActionPM = async (pm) => {
 
 const toggleCollection = async (conn) => {
   try {
-    await request.patch(`/api/projects/equipment-connections/${conn.id}/`, {
+    await request.patch(`/projects/equipment-connections/${conn.id}/`, {
       is_enabled: conn.is_enabled
     })
     ElMessage.success(conn.is_enabled ? '采集已启用' : '采集已停止')
@@ -299,7 +299,7 @@ const toggleCollection = async (conn) => {
 
 const testConnection = async (conn) => {
   try {
-    const res = await request.post(`/api/projects/equipment-connections/${conn.id}/test_connection/`)
+    const res = await request.post(`/projects/equipment-connections/${conn.id}/test_connection/`)
     if (res.data.success) {
       ElMessage.success(`连接正常，延迟: ${res.data.latency_ms}ms`)
     } else {

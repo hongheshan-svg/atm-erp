@@ -103,6 +103,12 @@ from .document_collaboration import (
     TechDocumentCategoryViewSet,
     TechnicalDocumentViewSet, DocumentAnnotationViewSet, DocumentReviewViewSet
 )
+from .bom_cost_rollup import BOMCostSnapshotViewSet, BOMCostDetailViewSet
+from .drawing_version import DrawingVersionViewSet, DrawingAffectedPartViewSet
+from .installation import (
+    InstallationTaskViewSet, SiteLogViewSet, CommissioningRecordViewSet,
+    SiteIssueViewSet, CustomerAcceptanceViewSet
+)
 
 router = DefaultRouter()
 router.register(r'projects', ProjectViewSet, basename='project')
@@ -275,6 +281,21 @@ router.register(r'tech-doc-categories', TechDocumentCategoryViewSet, basename='t
 router.register(r'tech-documents', TechnicalDocumentViewSet, basename='tech-document')
 router.register(r'doc-annotations', DocumentAnnotationViewSet, basename='doc-annotation')
 router.register(r'doc-reviews', DocumentReviewViewSet, basename='doc-review')
+
+# BOM多层级成本卷积
+router.register(r'bom-cost-snapshots', BOMCostSnapshotViewSet, basename='bom-cost-snapshot')
+router.register(r'bom-cost-details', BOMCostDetailViewSet, basename='bom-cost-detail')
+
+# 图纸版本管理
+router.register(r'drawing-versions', DrawingVersionViewSet, basename='drawing-version')
+router.register(r'drawing-affected-parts', DrawingAffectedPartViewSet, basename='drawing-affected-part')
+
+# 安装调试现场管理
+router.register(r'installation-tasks', InstallationTaskViewSet, basename='installation-task')
+router.register(r'site-logs', SiteLogViewSet, basename='site-log')
+router.register(r'commissioning-records', CommissioningRecordViewSet, basename='commissioning-record')
+router.register(r'site-issues', SiteIssueViewSet, basename='site-issue')
+router.register(r'customer-acceptances', CustomerAcceptanceViewSet, basename='customer-acceptance')
 
 urlpatterns = [
     path('', include(router.urls)),

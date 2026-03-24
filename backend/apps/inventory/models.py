@@ -351,3 +351,12 @@ from .material_models import (
     MaterialRequisition, MaterialRequisitionLine,
     MaterialReturn, MaterialReturnLine
 )
+
+# Import new improvement module models
+from .spare_parts import (  # noqa: E402, F401
+    SparePartCategory, SparePart, SparePartEquipmentRelation,
+    SparePartConsumption, SparePartForecast, SparePartAlert
+)
+from .spare_parts_prediction import (  # noqa: E402, F401
+    SparePartLifecyclePrediction, PurchaseSuggestion
+)

@@ -350,6 +350,35 @@
         <el-button type="primary" @click="submitDepreciate" :loading="submitLoading">开始计提</el-button>
       </template>
     </el-dialog>
+
+    <!-- 资产盘点 -->
+    <el-dialog v-model="inventoryDialogVisible" title="资产盘点" width="900px">
+      <el-table :data="inventoryResults" v-loading="inventoryLoading" max-height="450">
+        <el-table-column width="50">
+          <template #default="{ row }">
+            <el-checkbox v-model="row.checked" />
+          </template>
+        </el-table-column>
+        <el-table-column prop="asset_code" label="资产编号" width="140" />
+        <el-table-column prop="name" label="资产名称" width="160" />
+        <el-table-column prop="category_name" label="类别" width="100" />
+        <el-table-column prop="department_name" label="部门" width="120" />
+        <el-table-column label="是否匹配" width="100">
+          <template #default="{ row }">
+            <el-switch v-model="row.match" active-text="是" inactive-text="否" />
+          </template>
+        </el-table-column>
+        <el-table-column label="备注">
+          <template #default="{ row }">
+            <el-input v-model="row.remark" size="small" placeholder="盘点备注" />
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="inventoryDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitInventory">提交盘点</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -420,6 +449,9 @@ const transferForm = reactive({
 
 // 折旧
 const depreciateDialogVisible = ref(false)
+const inventoryDialogVisible = ref(false)
+const inventoryLoading = ref(false)
+const inventoryResults = ref([])
 const depreciateForm = reactive({
   year: new Date().getFullYear(),
   month: new Date().getMonth() + 1
@@ -459,8 +491,8 @@ const fetchOptions = async () => {
   try {
     const [catRes, deptRes, userRes] = await Promise.all([
       request.get('/finance/asset-categories/'),
-      request.get('/auth/departments/'),
-      request.get('/auth/users/')
+      request.get('/accounts/departments/'),
+      request.get('/accounts/users/')
     ])
     categoryTree.value = catRes.results || catRes || []
     departments.value = deptRes.results || deptRes || []
@@ -615,9 +647,30 @@ const submitDepreciate = async () => {
   }
 }
 
-const handleInventory = () => {
-  // 跳转到盘点页面或打开盘点对话框
-  ElMessage.info('资产盘点功能')
+const handleInventory = async () => {
+  inventoryDialogVisible.value = true
+  inventoryLoading.value = true
+  try {
+    const res = await request.get('/finance/fixed-assets/', { params: { page_size: 200 } })
+    const list = res.data?.results || res.results || []
+    inventoryResults.value = list.map(a => ({ ...a, checked: false, match: true, remark: '' }))
+  } catch {
+    inventoryResults.value = []
+  } finally {
+    inventoryLoading.value = false
+  }
+}
+
+const submitInventory = async () => {
+  const items = inventoryResults.value.filter(r => r.checked)
+  if (!items.length) return ElMessage.warning('请至少勾选一项')
+  try {
+    await request.post('/finance/fixed-assets/asset-inventory/', { items: items.map(i => ({ asset_id: i.id, match: i.match, remark: i.remark })) })
+    ElMessage.success('盘点提交成功')
+    inventoryDialogVisible.value = false
+  } catch (error) {
+    ElMessage.error(error.response?.data?.detail || '提交失败')
+  }
 }
 
 const getStatusType = (status) => {

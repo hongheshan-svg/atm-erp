@@ -280,6 +280,27 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 图纸详情 -->
+    <el-dialog v-model="viewDialogVisible" title="图纸详情" width="700px">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="图号">{{ viewDetail.drawing_no }}</el-descriptions-item>
+        <el-descriptions-item label="名称">{{ viewDetail.name }}</el-descriptions-item>
+        <el-descriptions-item label="版本">{{ viewDetail.version || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="格式">{{ viewDetail.format || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="项目">{{ viewDetail.project_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">{{ viewDetail.status_display || viewDetail.status }}</el-descriptions-item>
+        <el-descriptions-item label="上传人">{{ viewDetail.uploader_name || viewDetail.created_by_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="上传时间">{{ viewDetail.created_at || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="描述" :span="2">{{ viewDetail.description || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <div v-if="viewDetail.file_url" style="margin-top: 16px; text-align: center">
+        <el-button type="primary" @click="() => { globalThis.open(viewDetail.file_url) }">下载文件</el-button>
+      </div>
+      <template #footer>
+        <el-button @click="viewDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -343,6 +364,8 @@ const revisionForm = reactive({
 
 // 导入导出相关
 const importDialogVisible = ref(false)
+const viewDialogVisible = ref(false)
+const viewDetail = ref({})
 const importFile = ref(null)
 const importing = ref(false)
 const importResult = ref(null)
@@ -462,8 +485,14 @@ const handleEdit = async (row) => {
   dialogVisible.value = true
 }
 
-const handleView = (row) => {
-  ElMessage.info(`查看图纸: ${row.drawing_no} - ${row.name}`)
+const handleView = async (row) => {
+  try {
+    const res = await request.get(`/projects/drawings/${row.id}/`)
+    viewDetail.value = res.data || res
+  } catch {
+    viewDetail.value = row
+  }
+  viewDialogVisible.value = true
 }
 
 const handleSave = async () => {

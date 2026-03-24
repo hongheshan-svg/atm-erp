@@ -287,9 +287,18 @@
       </template>
     </el-dialog>
   </div>
-</template>
+
+    <!-- 审批进度弹窗 -->
+    <WorkflowProgress
+      v-model="workflowDialogVisible"
+      :business-type="workflowBusinessType"
+      :business-id="workflowBusinessId"
+    />
+  </template>
 
 <script setup>
+import WorkflowProgress from '@/components/WorkflowProgress.vue'
+
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -308,6 +317,15 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
   '/sales/delivery-orders/',
   { onSuccess: () => loadDeliveryOrders(), confirmTitle: '删除发货单', confirmMessage: '确定要删除该发货单吗？' }
 )
+
+const workflowDialogVisible = ref(false)
+const workflowBusinessId = ref(null)
+const workflowBusinessType = 'DELIVERY_ORDER'
+
+const showWorkflowProgress = (row) => {
+  workflowBusinessId.value = row.id
+  workflowDialogVisible.value = true
+}
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -446,10 +464,9 @@ const handleSubmit = async (row) => {
   }
 }
 
-// 查看审批进度 - 跳转到审批中心
+// 查看审批进度
 const viewWorkflow = (row) => {
-  // 跳转到审批中心查看审批进度
-  router.push('/workflow/my-submissions')
+  showWorkflowProgress(row)
 }
 
 // 确认备货完成

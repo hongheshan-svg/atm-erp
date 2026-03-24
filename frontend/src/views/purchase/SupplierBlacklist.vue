@@ -100,6 +100,25 @@
         <el-button type="success" @click="confirmLift">确认解除</el-button>
       </template>
     </el-dialog>
+
+    <!-- 黑名单详情 -->
+    <el-dialog v-model="viewDialogVisible" title="黑名单详情" width="600px">
+      <el-descriptions :column="1" border>
+        <el-descriptions-item label="供应商">{{ viewDetail.supplier_name }}</el-descriptions-item>
+        <el-descriptions-item label="列入日期">{{ viewDetail.blacklist_date }}</el-descriptions-item>
+        <el-descriptions-item label="列入原因">{{ viewDetail.reason }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="viewDetail.status === 'ACTIVE' ? 'danger' : 'success'">{{ viewDetail.status === 'ACTIVE' ? '有效' : '已解除' }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item v-if="viewDetail.lifted_date" label="解除日期">{{ viewDetail.lifted_date }}</el-descriptions-item>
+        <el-descriptions-item v-if="viewDetail.lift_reason" label="解除原因">{{ viewDetail.lift_reason }}</el-descriptions-item>
+        <el-descriptions-item label="操作人">{{ viewDetail.created_by_name || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button @click="viewDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
   </div>
 </template>
 
@@ -166,8 +185,12 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleView = (row) => {
-  ElMessage.info('查看功能开发中')
+const viewDialogVisible = ref(false)
+const viewDetail = ref({})
+
+const handleView = async (row) => {
+  viewDetail.value = row
+  viewDialogVisible.value = true
 }
 
 const handleLift = (row) => {

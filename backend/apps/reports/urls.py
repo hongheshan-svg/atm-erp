@@ -4,6 +4,7 @@ URL configuration for reports app.
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
+from .views import TimelogReportExportView, ProjectProfitabilityExportView
 from .timelog_report import (
     TimelogStatisticsView, TimelogByUserView, TimelogByProjectView,
     TimelogWeeklyReportView, TimelogOvertimeView
@@ -12,6 +13,11 @@ from .cost_analysis import (
     ProjectCostAnalysisView, ProjectCostComparisonView, CostTrendView
 )
 from .export_service import ExportTemplateViewSet, ExportHistoryViewSet, ScheduledExportViewSet
+from .report_builder import ReportTemplateViewSet, ReportExecutionViewSet
+from .prediction import (
+    PredictionModelViewSet, PredictionResultViewSet, RiskAlertViewSet,
+    CostTrendView as PredictiveCostTrendView, DeliveryRiskView, CapacityLoadView
+)
 from .industry_reports import (
     ProjectProfitabilityReportView, EquipmentLifecycleReportView,
     CapacityUtilizationReportView, CustomerValueReportView,
@@ -22,6 +28,15 @@ router = DefaultRouter()
 router.register(r'export-templates', ExportTemplateViewSet, basename='export-template')
 router.register(r'export-history', ExportHistoryViewSet, basename='export-history')
 router.register(r'scheduled-exports', ScheduledExportViewSet, basename='scheduled-export')
+
+# 可配置报表
+router.register(r'report-templates', ReportTemplateViewSet, basename='report-template')
+router.register(r'report-executions', ReportExecutionViewSet, basename='report-execution')
+
+# 预测分析
+router.register(r'prediction-models', PredictionModelViewSet, basename='prediction-model')
+router.register(r'prediction-results', PredictionResultViewSet, basename='prediction-result')
+router.register(r'risk-alerts', RiskAlertViewSet, basename='risk-alert')
 
 urlpatterns = [
     path('profitability/', views.project_profitability, name='project-profitability'),
@@ -52,5 +67,13 @@ urlpatterns = [
     path('industry/customer-value/', CustomerValueReportView.as_view(), name='customer-value-report'),
     path('industry/project-delivery/', ProjectDeliveryReportView.as_view(), name='project-delivery-report'),
     path('industry/outsource-analysis/', OutsourceAnalysisReportView.as_view(), name='outsource-analysis-report'),
+    
+    # 预测分析API
+    path('prediction/cost-trend/', PredictiveCostTrendView.as_view(), name='predictive-cost-trend'),
+    path('prediction/delivery-risk/', DeliveryRiskView.as_view(), name='delivery-risk'),
+    path('prediction/capacity-load/', CapacityLoadView.as_view(), name='capacity-load'),
+    # 报表导出
+    path('timelog-report/export/', TimelogReportExportView.as_view(), name='timelog-report-export'),
+    path('project-profitability/export/', ProjectProfitabilityExportView.as_view(), name='project-profitability-export'),
 ]
 

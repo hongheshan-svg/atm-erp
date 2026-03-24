@@ -258,7 +258,7 @@ const handleSubmit = async () => {
   submitting.value = true
   try {
     if (form.id) {
-      await request.patch(`/api/production/routing-templates/${form.id}/`, form)
+      await request.patch(`/production/routing-templates/${form.id}/`, form)
       ElMessage.success('保存成功')
     } else {
       const res = await request.post('/production/routing-templates/', form)
@@ -280,13 +280,13 @@ const handleCommand = async (cmd, row) => {
     switch (cmd) {
       case 'approve':
         await ElMessageBox.confirm('确定审批通过此工艺模板?', '提示')
-        await request.post(`/api/production/routing-templates/${row.id}/approve/`)
+        await request.post(`/production/routing-templates/${row.id}/approve/`)
         ElMessage.success('审批通过')
         loadData()
         break
       case 'new_version':
         await ElMessageBox.confirm('确定创建新版本?', '提示')
-        const res = await request.post(`/api/production/routing-templates/${row.id}/create_version/`)
+        const res = await request.post(`/production/routing-templates/${row.id}/create_version/`)
         ElMessage.success('新版本创建成功')
         router.push(`/production/routing-template/${res.data.id}`)
         break
@@ -320,7 +320,7 @@ const handleApplyToProject = async () => {
   
   submitting.value = true
   try {
-    await request.post(`/api/production/routing-templates/${currentTemplate.value.id}/apply_to_project/`, applyForm)
+    await request.post(`/production/routing-templates/${currentTemplate.value.id}/apply_to_project/`, applyForm)
     ElMessage.success('工艺已应用到项目')
     applyDialogVisible.value = false
   } catch (e) {

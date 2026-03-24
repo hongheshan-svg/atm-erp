@@ -183,6 +183,35 @@
         <el-button type="primary" @click="handleSubmit">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 查看详情对话框 -->
+    <el-dialog v-model="viewDialogVisible" title="验收详情" width="700px">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="验收单号">{{ viewDetail.acceptance_no }}</el-descriptions-item>
+        <el-descriptions-item label="验收类型">{{ viewDetail.acceptance_type }}</el-descriptions-item>
+        <el-descriptions-item label="项目">{{ viewDetail.project_name }}</el-descriptions-item>
+        <el-descriptions-item label="客户">{{ viewDetail.customer_name }}</el-descriptions-item>
+        <el-descriptions-item label="设备">{{ viewDetail.equipment_name }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag>{{ viewDetail.status_display || viewDetail.status }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="计划日期">{{ viewDetail.planned_date }}</el-descriptions-item>
+        <el-descriptions-item label="地点">{{ viewDetail.location }}</el-descriptions-item>
+      </el-descriptions>
+      <template v-if="viewDetail.items && viewDetail.items.length">
+        <h4 style="margin: 16px 0 8px">检查项目</h4>
+        <el-table :data="viewDetail.items" stripe size="small">
+          <el-table-column prop="name" label="检查项" />
+          <el-table-column prop="result" label="结果" width="100" />
+          <el-table-column prop="remarks" label="备注" />
+        </el-table>
+      </template>
+      <template #footer>
+        <el-button @click="viewDialogVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="reportLoading" @click="handleReport(viewDetail)">生成报告</el-button>
+      </template>
+    </el-dialog>
+
   </div>
 </template>
 
@@ -202,6 +231,9 @@ const dialogVisible = ref(false)
 const dialogTitle = ref('新增验收')
 const formRef = ref(null)
 const selectedTemplate = ref(null)
+const viewDialogVisible = ref(false)
+const viewDetail = ref({})
+const reportLoading = ref(false)
 
 const stats = reactive({
   total: 0,
@@ -368,13 +400,38 @@ const handleEdit = (row) => {
 }
 
 const handleView = (row) => {
-  // TODO: 跳转到详情页
-  ElMessage.info('查看详情: ' + row.acceptance_no)
+  viewDetail.value = row
+  viewDialogVisible.value = true
+  loadAcceptanceDetail(row.id)
 }
 
-const handleReport = (row) => {
-  // TODO: 生成报告
-  ElMessage.info('生成报告: ' + row.acceptance_no)
+const loadAcceptanceDetail = async (id) => {
+  try {
+    const res = await request.get(`/projects/acceptances/${id}/`)
+    viewDetail.value = res
+  } catch (error) {
+    ElMessage.error('加载详情失败')
+  }
+}
+
+const handleReport = async (row) => {
+  try {
+    reportLoading.value = true
+    const res = await request.get(`/projects/acceptances/${row.id}/report/`, { responseType: 'blob' })
+    const url = window.URL.createObjectURL(new Blob([res]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `验收报告_${row.acceptance_no}.pdf`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('报告已下载')
+  } catch (error) {
+    ElMessage.error('生成报告失败')
+  } finally {
+    reportLoading.value = false
+  }
 }
 
 const applyTemplate = async () => {

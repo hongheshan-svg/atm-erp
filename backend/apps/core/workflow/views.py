@@ -24,6 +24,20 @@ def is_admin(user):
     return has_permission(user, 'workflow:config')
 
 
+def _get_step_approver_label(step):
+    """Get a display label for who will approve this step."""
+    if step.approver_type == 'USER' and step.approver_user:
+        return step.approver_user.get_full_name() or step.approver_user.username
+    if step.approver_type == 'ROLE' and step.approver_role:
+        return f'{step.approver_role.name}(角色)'
+    labels = {
+        'DEPARTMENT_MANAGER': '部门经理',
+        'PROJECT_MANAGER': '项目经理',
+        'SUPERIOR': '上级主管',
+    }
+    return labels.get(step.approver_type, '待分配')
+
+
 class WorkflowDefinitionViewSet(viewsets.ModelViewSet):
     """ViewSet for workflow definitions."""
     queryset = WorkflowDefinition.objects.filter(is_deleted=False)
@@ -79,6 +93,90 @@ class WorkflowInstanceViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(workflows, many=True)
         return Response(serializer.data)
     
+    @action(detail=True, methods=['get'])
+    def progress(self, request, pk=None):
+        """Get workflow progress with all definition steps and task status."""
+        instance = self.get_object()
+        definition = instance.workflow
+        all_steps = definition.steps.filter(is_deleted=False).order_by('step_order')
+        tasks = instance.tasks.filter(is_deleted=False).select_related('step', 'assignee')
+        
+        # Build a map of step_id -> task
+        task_map = {t.step_id: t for t in tasks}
+        
+        nodes = []
+        for step in all_steps:
+            task = task_map.get(step.id)
+            node = {
+                'step_order': step.step_order,
+                'step_name': step.name,
+                'approver_type': step.approver_type,
+                'approver_type_display': step.get_approver_type_display(),
+            }
+            if task:
+                node.update({
+                    'task_id': task.id,
+                    'status': task.status,
+                    'status_display': task.get_status_display(),
+                    'assignee_name': task.assignee.get_full_name() if task.assignee else '',
+                    'action_time': task.action_time,
+                    'comment': task.comment,
+                    'created_at': task.created_at,
+                })
+            else:
+                # Future step - not yet reached
+                node.update({
+                    'task_id': None,
+                    'status': 'WAITING',
+                    'status_display': '等待中',
+                    'assignee_name': _get_step_approver_label(step),
+                    'action_time': None,
+                    'comment': '',
+                    'created_at': None,
+                })
+            nodes.append(node)
+        
+        return Response({
+            'id': instance.id,
+            'workflow_name': definition.name,
+            'business_type': instance.business_type,
+            'business_type_display': definition.get_business_type_display(),
+            'business_no': instance.business_no,
+            'submitter_name': instance.submitter.get_full_name() if instance.submitter else '',
+            'submit_time': instance.submit_time,
+            'status': instance.status,
+            'status_display': instance.get_status_display(),
+            'current_step': instance.current_step,
+            'total_steps': all_steps.count(),
+            'amount': str(instance.amount) if instance.amount else None,
+            'completed_at': instance.completed_at,
+            'nodes': nodes,
+        })
+
+    @action(detail=False, methods=['get'])
+    def by_business(self, request):
+        """Get latest workflow instance for a business object."""
+        business_type = request.query_params.get('business_type')
+        business_id = request.query_params.get('business_id')
+        
+        if not business_type or not business_id:
+            return Response(
+                {'error': '请提供 business_type 和 business_id'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        instance = WorkflowInstance.objects.filter(
+            business_type=business_type,
+            business_id=int(business_id),
+            is_deleted=False
+        ).order_by('-submit_time').first()
+        
+        if not instance:
+            return Response({'instance': None})
+        
+        serializer = self.get_serializer(instance)
+        return Response({'instance': serializer.data})
+
     @action(detail=True, methods=['delete'])
     def admin_delete(self, request, pk=None):
         """Delete a workflow instance (admin only)."""

@@ -474,8 +474,15 @@ const handleSubmitOvertime = async (row) => {
   }
 }
 
-const handleCancelLeave = (row) => {
-  ElMessage.info('撤回功能开发中')
+const handleCancelLeave = async (row) => {
+  try {
+    await ElMessageBox.confirm('确定要撤回该请假申请吗？', '提示', { type: 'warning' })
+    await request.post(`/accounts/leave-requests/${row.id}/cancel/`)
+    ElMessage.success('撤回成功')
+    loadLeaveRequests()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error(error.response?.data?.error || '撤回失败')
+  }
 }
 
 const formatTime = (dateTimeStr) => {

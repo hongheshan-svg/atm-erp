@@ -249,7 +249,7 @@ class ServiceOrder(BaseModel):
     
     # 服务时间
     priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='NORMAL', verbose_name='优先级')
-    requested_date = models.DateField(verbose_name='期望日期')
+    requested_date = models.DateField(verbose_name='期望日期', null=True, blank=True)
     planned_start_date = models.DateField(null=True, blank=True, verbose_name='计划开始')
     planned_end_date = models.DateField(null=True, blank=True, verbose_name='计划结束')
     actual_start_date = models.DateField(null=True, blank=True, verbose_name='实际开始')

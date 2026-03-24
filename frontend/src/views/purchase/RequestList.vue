@@ -246,6 +246,7 @@
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button size="small" type="warning" @click="handleSubmit(row)" v-if="row.status === 'DRAFT'">提交</el-button>
+            <el-button size="small" type="info" @click="showWorkflowProgress(row)" v-if="row.status === 'SUBMITTED'">审批进度</el-button>
             <el-button size="small" type="success" @click="handleApprove(row)" v-if="row.status === 'SUBMITTED'">批准</el-button>
             <el-button size="small" type="danger" @click="handleReject(row)" v-if="row.status === 'SUBMITTED'">拒绝</el-button>
             <el-button size="small" type="info" @click="handleWithdraw(row)" v-if="row.status === 'SUBMITTED' || row.status === 'APPROVED'">撤回</el-button>
@@ -584,9 +585,18 @@
       </template>
     </el-dialog>
   </div>
-</template>
+
+    <!-- 审批进度弹窗 -->
+    <WorkflowProgress
+      v-model="workflowDialogVisible"
+      :business-type="workflowBusinessType"
+      :business-id="workflowBusinessId"
+    />
+  </template>
 
 <script setup>
+import WorkflowProgress from '@/components/WorkflowProgress.vue'
+
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -609,6 +619,15 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
     confirmMessage: '确定要删除该采购申请吗？删除后不可恢复！'
   }
 )
+
+const workflowDialogVisible = ref(false)
+const workflowBusinessId = ref(null)
+const workflowBusinessType = 'PURCHASE_REQUEST'
+
+const showWorkflowProgress = (row) => {
+  workflowBusinessId.value = row.id
+  workflowDialogVisible.value = true
+}
 
 const loading = ref(false)
 const saving = ref(false)

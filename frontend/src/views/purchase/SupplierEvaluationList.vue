@@ -222,6 +222,41 @@
         <el-button type="primary" @click="handleSave">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 评价详情对话框 -->
+    <el-dialog v-model="viewDialogVisible" title="评价详情" width="700px">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="供应商">{{ viewDetail.supplier_name }}</el-descriptions-item>
+        <el-descriptions-item label="评价周期">{{ viewDetail.period_type_display || viewDetail.period_type }}</el-descriptions-item>
+        <el-descriptions-item label="评价日期">{{ viewDetail.evaluation_date }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag>{{ viewDetail.status_display || viewDetail.status }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="综合得分" :span="2">
+          <span style="font-size: 24px; font-weight: bold; color: #409EFF">{{ viewDetail.total_score || 0 }}</span> 分
+        </el-descriptions-item>
+        <el-descriptions-item label="评级">
+          <el-tag :type="viewDetail.grade === 'A' ? 'success' : viewDetail.grade === 'D' ? 'danger' : ''">{{ viewDetail.grade || '-' }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="评价周期">{{ viewDetail.period_start }} ~ {{ viewDetail.period_end }}</el-descriptions-item>
+        <el-descriptions-item label="评审意见" :span="2">{{ viewDetail.comments || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="改进建议" :span="2">{{ viewDetail.improvement_suggestions || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <template v-if="viewDetail.scores && viewDetail.scores.length">
+        <h4 style="margin: 16px 0 8px">评分明细</h4>
+        <el-table :data="viewDetail.scores" stripe size="small">
+          <el-table-column prop="criteria_name" label="评价项" />
+          <el-table-column prop="score" label="得分" width="80" align="center" />
+          <el-table-column prop="weight" label="权重" width="80" align="center" />
+          <el-table-column prop="weighted_score" label="加权分" width="80" align="center" />
+          <el-table-column prop="comments" label="备注" />
+        </el-table>
+      </template>
+      <template #footer>
+        <el-button @click="viewDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
   </div>
 </template>
 
@@ -370,8 +405,17 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleView = (row) => {
-  ElMessage.info('查看功能开发中')
+const viewDialogVisible = ref(false)
+const viewDetail = ref({})
+
+const handleView = async (row) => {
+  try {
+    const res = await getEvaluation(row.id)
+    viewDetail.value = res.data || res
+    viewDialogVisible.value = true
+  } catch (error) {
+    ElMessage.error('加载详情失败')
+  }
 }
 
 const handleSubmit = async (row) => {

@@ -1,7 +1,11 @@
 """
 Views for reports app.
 """
+import csv
+import io
+from django.http import HttpResponse
 from rest_framework import viewsets, status
+from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -290,3 +294,65 @@ def aging_report(request):
         'type': report_type
     })
 
+
+
+class TimelogReportExportView(APIView):
+    """工时报表导出"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        from apps.projects.models import WorkLog
+        qs = WorkLog.objects.filter(is_deleted=False).select_related('project', 'task', 'user')
+        
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        if start_date:
+            qs = qs.filter(work_date__gte=start_date)
+        if end_date:
+            qs = qs.filter(work_date__lte=end_date)
+        
+        response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+        response['Content-Disposition'] = 'attachment; filename="timelog_report.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow(['日期', '项目', '任务', '人员', '工时(小时)', '描述'])
+        for log in qs[:5000]:
+            writer.writerow([
+                str(log.work_date) if hasattr(log, 'work_date') else '',
+                str(log.project) if log.project else '',
+                str(log.task) if hasattr(log, 'task') and log.task else '',
+                str(log.user) if log.user else '',
+                log.hours if hasattr(log, 'hours') else '',
+                log.description if hasattr(log, 'description') else '',
+            ])
+        return response
+
+
+class ProjectProfitabilityExportView(APIView):
+    """项目利润分析导出"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        from apps.projects.models import Project
+        projects = Project.objects.filter(is_deleted=False)
+        
+        response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+        response['Content-Disposition'] = 'attachment; filename="project_profitability.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow(['项目编号', '项目名称', '状态', '合同金额', '实际成本', '利润', '利润率'])
+        for p in projects[:5000]:
+            contract = float(p.contract_amount) if hasattr(p, 'contract_amount') and p.contract_amount else 0
+            cost = float(p.actual_cost) if hasattr(p, 'actual_cost') and p.actual_cost else 0
+            profit = contract - cost
+            rate = f"{profit/contract*100:.1f}%" if contract > 0 else "N/A"
+            writer.writerow([
+                p.project_no if hasattr(p, 'project_no') else p.id,
+                p.name if hasattr(p, 'name') else str(p),
+                p.status if hasattr(p, 'status') else '',
+                contract,
+                cost,
+                profit,
+                rate,
+            ])
+        return response

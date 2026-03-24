@@ -348,7 +348,7 @@ const createMaintenance = async () => {
 
 const viewMaintenance = async (row) => {
   try {
-    const res = await request.get(`/api/sales/preventive-maintenance/${row.id}/`)
+    const res = await request.get(`/sales/preventive-maintenance/${row.id}/`)
     currentMaintenance.value = res
     showDetailDrawer.value = true
   } catch (e) {
@@ -358,7 +358,7 @@ const viewMaintenance = async (row) => {
 
 const startMaintenance = async (row) => {
   try {
-    await request.post(`/api/sales/preventive-maintenance/${row.id}/start/`)
+    await request.post(`/sales/preventive-maintenance/${row.id}/start/`)
     ElMessage.success('维护已开始')
     loadMaintenances()
   } catch (e) {
@@ -368,7 +368,7 @@ const startMaintenance = async (row) => {
 
 const completeMaintenance = async (row) => {
   ElMessageBox.prompt('请输入完成备注', '完成维护').then(async ({ value }) => {
-    await request.post(`/api/sales/preventive-maintenance/${row.id}/complete/`, { 
+    await request.post(`/sales/preventive-maintenance/${row.id}/complete/`, { 
       notes: value,
       actual_duration: row.estimated_duration
     })

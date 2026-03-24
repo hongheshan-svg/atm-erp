@@ -913,6 +913,61 @@ const routes = [
         component: () => import('@/views/equipment/OEEAnalysis.vue'),
         meta: { title: 'OEE分析', icon: 'DataAnalysis', menuId: 'equipment:oee' }
       },
+      // 图纸版本管理
+      {
+        path: 'projects/drawing-versions',
+        name: 'DrawingVersionList',
+        component: () => import('@/views/projects/DrawingVersionList.vue'),
+        meta: { title: '图纸版本', icon: 'Document', menuId: 'projects:drawing-versions' }
+      },
+      // BOM成本卷积
+      {
+        path: 'projects/bom-cost',
+        name: 'BOMCostRollup',
+        component: () => import('@/views/projects/BOMCostRollup.vue'),
+        meta: { title: 'BOM成本分析', icon: 'Money', menuId: 'projects:bom-cost' }
+      },
+      // 安装调试任务
+      {
+        path: 'projects/installation-tasks',
+        name: 'InstallationTaskList',
+        component: () => import('@/views/projects/InstallationTaskList.vue'),
+        meta: { title: '安装调试', icon: 'SetUp', menuId: 'projects:installation' }
+      },
+      {
+        path: 'projects/installation-task/:id',
+        name: 'InstallationTaskDetail',
+        component: () => import('@/views/projects/InstallationTaskDetail.vue'),
+        meta: { title: '安装详情', menuId: 'projects:installation' }
+      },
+      // 可配置报表
+      {
+        path: 'reports/builder',
+        name: 'ReportBuilder',
+        component: () => import('@/views/reports/ReportBuilder.vue'),
+        meta: { title: '报表构建器', icon: 'DataBoard', menuId: 'reports:builder' }
+      },
+      // 预测分析
+      {
+        path: 'reports/prediction',
+        name: 'PredictiveAnalysis',
+        component: () => import('@/views/reports/PredictiveAnalysis.vue'),
+        meta: { title: '智能预测', icon: 'TrendCharts', menuId: 'reports:prediction' }
+      },
+      // 风险预警
+      {
+        path: 'reports/risk-alerts',
+        name: 'RiskAlertList',
+        component: () => import('@/views/reports/RiskAlertList.vue'),
+        meta: { title: '风险预警', icon: 'WarningFilled', menuId: 'reports:risk-alerts' }
+      },
+      // 备件预测
+      {
+        path: 'inventory/spare-part-prediction',
+        name: 'SparePartPrediction',
+        component: () => import('@/views/inventory/SparePartPrediction.vue'),
+        meta: { title: '备件预测', icon: 'Histogram', menuId: 'inventory:spare-part-prediction' }
+      },
       // 系统公告
       {
         path: 'system/announcements',
@@ -1184,6 +1239,28 @@ const routes = [
         name: 'ResourceTypeList',
         component: () => import('@/views/production/ResourceTypeList.vue'),
         meta: { title: '资源类型', icon: 'Files', menuId: 'production:resources' }
+      },
+      // ====== 非标自动化行业增强 ======
+      // 有限产能排程
+      {
+        path: 'production/finite-capacity',
+        name: 'FiniteCapacityList',
+        component: () => import('@/views/production/FiniteCapacityList.vue'),
+        meta: { title: '有限产能排程', icon: 'Timer', menuId: 'production:finite-capacity' }
+      },
+      // 设备能力矩阵
+      {
+        path: 'production/equipment-capability',
+        name: 'EquipmentCapabilityMatrix',
+        component: () => import('@/views/production/EquipmentCapabilityMatrix.vue'),
+        meta: { title: '设备能力矩阵', icon: 'Grid', menuId: 'production:equipment-capability' }
+      },
+      // 看板WIP管理
+      {
+        path: 'production/kanban-wip',
+        name: 'KanbanWIPManagement',
+        component: () => import('@/views/production/KanbanWIPManagement.vue'),
+        meta: { title: 'WIP管理', icon: 'Stopwatch', menuId: 'production:kanban-wip' }
       },
       // User Profile - 这些是公共页面，所有登录用户都可以访问
       {

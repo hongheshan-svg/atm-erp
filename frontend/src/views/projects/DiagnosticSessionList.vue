@@ -24,6 +24,26 @@
       
       <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total" layout="total, prev, pager, next" @current-change="loadData" />
     </el-card>
+
+    <el-dialog v-model="viewDialogVisible" title="诊断会话详情" width="700px">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="会话编号">{{ viewDetail.session_no }}</el-descriptions-item>
+        <el-descriptions-item label="设备">{{ viewDetail.equipment_name }}</el-descriptions-item>
+        <el-descriptions-item label="诊断原因">{{ viewDetail.reason_display || viewDetail.reason }}</el-descriptions-item>
+        <el-descriptions-item label="技术员">{{ viewDetail.technician_name }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="getStatusType(viewDetail.status)">{{ viewDetail.status_display || viewDetail.status }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="开始时间">{{ viewDetail.started_at }}</el-descriptions-item>
+        <el-descriptions-item label="结束时间">{{ viewDetail.ended_at || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="持续时间">{{ viewDetail.duration || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="诊断结果" :span="2">{{ viewDetail.findings || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="建议措施" :span="2">{{ viewDetail.recommendations || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button @click="viewDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -37,6 +57,8 @@ const tableData = ref([])
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
+const viewDialogVisible = ref(false)
+const viewDetail = ref({})
 
 const getStatusType = (s) => ({ 'IN_PROGRESS': 'primary', 'COMPLETED': 'success', 'PENDING': 'warning' }[s] || 'info')
 
@@ -53,7 +75,16 @@ const loadData = async () => {
   }
 }
 
-const handleView = () => ElMessage.info('功能开发中')
+const handleView = async (row) => {
+  try {
+    const res = await request.get(`/projects/diagnostic-sessions/${row.id}/`)
+    viewDetail.value = res.data || res
+    viewDialogVisible.value = true
+  } catch {
+    viewDetail.value = row
+    viewDialogVisible.value = true
+  }
+}
 
 onMounted(() => loadData())
 </script>

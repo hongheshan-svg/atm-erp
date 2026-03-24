@@ -227,6 +227,90 @@
         <el-button type="primary" @click="confirmHandle" :loading="handleLoading">确认处理</el-button>
       </template>
     </el-dialog>
+
+    <!-- 模板编辑 -->
+    <el-dialog v-model="templateDialogVisible" :title="templateIsEdit ? '编辑模板' : '添加模板'" width="600px">
+      <el-form label-width="100px">
+        <el-form-item label="模板编码">
+          <el-input v-model="templateForm.code" placeholder="留空自动生成" />
+        </el-form-item>
+        <el-form-item label="模板名称">
+          <el-input v-model="templateForm.name" />
+        </el-form-item>
+        <el-form-item label="设备类型">
+          <el-input v-model="templateForm.equipment_type" />
+        </el-form-item>
+        <el-form-item label="点检频率">
+          <el-select v-model="templateForm.frequency" style="width: 100%">
+            <el-option label="每日" value="DAILY" />
+            <el-option label="每周" value="WEEKLY" />
+            <el-option label="每月" value="MONTHLY" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="templateForm.description" type="textarea" :rows="3" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="templateDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="templateSaving" @click="handleTemplateSave">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 模板详情 -->
+    <el-dialog v-model="templateDetailVisible" title="模板详情" width="600px">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="编码">{{ templateDetail.code }}</el-descriptions-item>
+        <el-descriptions-item label="名称">{{ templateDetail.name }}</el-descriptions-item>
+        <el-descriptions-item label="设备类型">{{ templateDetail.equipment_type || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="频率">{{ templateDetail.frequency_display || templateDetail.frequency }}</el-descriptions-item>
+        <el-descriptions-item label="检查项数">{{ templateDetail.items_count || 0 }}</el-descriptions-item>
+        <el-descriptions-item label="状态">{{ templateDetail.is_active ? '启用' : '停用' }}</el-descriptions-item>
+        <el-descriptions-item label="描述" :span="2">{{ templateDetail.description || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button @click="templateDetailVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 点检详情 -->
+    <el-dialog v-model="inspectionViewVisible" title="点检详情" width="700px">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="设备">{{ inspectionDetail.equipment_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="模板">{{ inspectionDetail.template_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="计划日期">{{ inspectionDetail.planned_date || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="实际日期">{{ inspectionDetail.actual_date || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">{{ inspectionDetail.status_display || inspectionDetail.status }}</el-descriptions-item>
+        <el-descriptions-item label="执行人">{{ inspectionDetail.inspector_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="结果" :span="2">{{ inspectionDetail.result || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="备注" :span="2">{{ inspectionDetail.remarks || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button @click="inspectionViewVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 执行点检 -->
+    <el-dialog v-model="doInspectionVisible" title="执行点检" width="600px">
+      <el-alert title="请逐项检查并记录结果" type="info" :closable="false" style="margin-bottom: 16px" />
+      <el-form label-width="100px">
+        <el-form-item label="设备">{{ doInspectionRow?.equipment_name }}</el-form-item>
+        <el-form-item label="检查结果">
+          <el-radio-group v-model="inspectionResults.overall">
+            <el-radio label="PASS">合格</el-radio>
+            <el-radio label="FAIL">不合格</el-radio>
+            <el-radio label="NEED_REPAIR">需维修</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="inspectionResults.remarks" type="textarea" :rows="3" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="doInspectionVisible = false">取消</el-button>
+        <el-button type="primary" :loading="doInspectionSaving" @click="submitInspection">提交</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -243,6 +327,18 @@ const handleLoading = ref(false)
 const tableData = ref([])
 const total = ref(0)
 const templates = ref([])
+const templateDialogVisible = ref(false)
+const templateIsEdit = ref(false)
+const templateSaving = ref(false)
+const templateForm = reactive({ id: null, code: '', name: '', equipment_type: '', frequency: 'DAILY', items_count: 0, description: '' })
+const templateDetail = ref({})
+const inspectionViewVisible = ref(false)
+const inspectionDetail = ref({})
+const doInspectionVisible = ref(false)
+const doInspectionRow = ref(null)
+const inspectionResults = reactive([])
+const doInspectionSaving = ref(false)
+const templateDetailVisible = ref(false)
 const equipments = ref([])
 const unhandledAbnormal = ref([])
 const todayStats = ref({})
@@ -353,24 +449,76 @@ const confirmCreate = async () => {
   }
 }
 
-const handleView = (row) => {
-  ElMessage.info('详情页面开发中')
+const handleView = async (row) => {
+  try {
+    const res = await request.get(`/projects/inspection-records/${row.id}/`)
+    inspectionDetail.value = res.data || res
+  } catch {
+    inspectionDetail.value = row
+  }
+  inspectionViewVisible.value = true
 }
 
-const handleDoInspection = (row) => {
-  ElMessage.info('点检执行页面开发中')
+const handleDoInspection = async (row) => {
+  doInspectionRow.value = row
+  doInspectionVisible.value = true
+}
+
+const submitInspection = async () => {
+  doInspectionSaving.value = true
+  try {
+    await request.post(`/projects/inspection-records/${doInspectionRow.value.id}/complete/`, { results: inspectionResults })
+    ElMessage.success('点检完成')
+    doInspectionVisible.value = false
+    loadInspections()
+  } catch (error) {
+    if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
+    else ElMessage.error('提交失败')
+  } finally {
+    doInspectionSaving.value = false
+  }
 }
 
 const handleAddTemplate = () => {
-  ElMessage.info('模板添加功能开发中')
+  templateIsEdit.value = false
+  Object.assign(templateForm, { id: null, code: '', name: '', equipment_type: '', frequency: 'DAILY', description: '' })
+  templateDialogVisible.value = true
 }
 
-const handleViewTemplate = (row) => {
-  ElMessage.info('模板详情页面开发中')
+const handleViewTemplate = async (row) => {
+  try {
+    const res = await request.get(`/projects/inspection-templates/${row.id}/`)
+    templateDetail.value = res.data || res
+  } catch {
+    templateDetail.value = row
+  }
+  templateDetailVisible.value = true
 }
 
 const handleEditTemplate = (row) => {
-  ElMessage.info('模板编辑功能开发中')
+  templateIsEdit.value = true
+  Object.assign(templateForm, { id: row.id, code: row.code, name: row.name, equipment_type: row.equipment_type, frequency: row.frequency, description: row.description })
+  templateDialogVisible.value = true
+}
+
+const handleTemplateSave = async () => {
+  templateSaving.value = true
+  try {
+    if (templateIsEdit.value) {
+      await request.put(`/projects/inspection-templates/${templateForm.id}/`, templateForm)
+      ElMessage.success('更新成功')
+    } else {
+      await request.post('/projects/inspection-templates/', templateForm)
+      ElMessage.success('创建成功')
+    }
+    templateDialogVisible.value = false
+    loadTemplates()
+  } catch (error) {
+    if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
+    else ElMessage.error('操作失败')
+  } finally {
+    templateSaving.value = false
+  }
 }
 
 const handleCopyTemplate = async (row) => {

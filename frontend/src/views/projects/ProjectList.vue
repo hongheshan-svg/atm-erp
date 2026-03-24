@@ -210,9 +210,18 @@
       />
     </el-dialog>
   </div>
-</template>
+
+    <!-- 审批进度弹窗 -->
+    <WorkflowProgress
+      v-model="workflowDialogVisible"
+      :business-type="workflowBusinessType"
+      :business-id="workflowBusinessId"
+    />
+  </template>
 
 <script setup>
+import WorkflowProgress from '@/components/WorkflowProgress.vue'
+
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
@@ -241,6 +250,15 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 )
 
 const router = useRouter()
+const workflowDialogVisible = ref(false)
+const workflowBusinessId = ref(null)
+const workflowBusinessType = 'PROJECT'
+
+const showWorkflowProgress = (row) => {
+  workflowBusinessId.value = row.id
+  workflowDialogVisible.value = true
+}
+
 const loading = ref(false)
 const projects = ref([])
 const customers = ref([])
@@ -517,27 +535,8 @@ const handleSubmitApproval = async (row) => {
 }
 
 // 查看审批流程进度
-const handleViewWorkflow = async (row) => {
-  try {
-    // 查询该项目的审批实例
-    const response = await request.get('/workflow/instances/', {
-      params: { business_type: 'PROJECT', business_id: row.id }
-    })
-    
-    const instances = response.results || response || []
-    if (instances.length > 0) {
-      // 跳转到审批中心查看详情
-      router.push({
-        name: 'ApprovalCenter',
-        query: { instance_id: instances[0].id }
-      })
-    } else {
-      ElMessage.info('暂无审批记录')
-    }
-  } catch (error) {
-    console.error('查询审批进度失败:', error)
-    ElMessage.error('查询审批进度失败')
-  }
+const handleViewWorkflow = (row) => {
+  showWorkflowProgress(row)
 }
 
 onMounted(() => {

@@ -35,6 +35,13 @@ export function updateWorkflowDefinition(id, data) {
   })
 }
 
+export function deleteWorkflowDefinition(id) {
+  return request({
+    url: `/core/workflow/definitions/${id}/`,
+    method: 'delete'
+  })
+}
+
 // Workflow Steps
 export function getWorkflowSteps(params) {
   return request({
@@ -76,6 +83,28 @@ export function getWorkflowInstances(params) {
   })
 }
 
+
+export function getWorkflowInstance(id) {
+  return request({
+    url: `/core/workflow/instances/${id}/`,
+    method: 'get'
+  })
+}
+
+export function getWorkflowProgress(id) {
+  return request({
+    url: `/core/workflow/instances/${id}/progress/`,
+    method: 'get'
+  })
+}
+
+export function getWorkflowByBusiness(businessType, businessId) {
+  return request({
+    url: '/core/workflow/instances/by_business/',
+    method: 'get',
+    params: { business_type: businessType, business_id: businessId }
+  })
+}
 export function getMySubmittedWorkflows() {
   return request({
     url: '/core/workflow/instances/my_submitted/',

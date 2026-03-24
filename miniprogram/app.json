@@ -7,7 +7,10 @@
     "pages/project/list",
     "pages/project/detail",
     "pages/dashboard/dashboard",
-    "pages/profile/profile"
+    "pages/profile/profile",
+    "pages/work-report/work-report",
+    "pages/quality-check/quality-check",
+    "pages/inventory/inventory"
   ],
   "window": {
     "backgroundTextStyle": "light",

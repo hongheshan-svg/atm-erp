@@ -29,6 +29,8 @@
         <el-form-item label="状态">
           <el-select v-model="searchForm.status" placeholder="请选择状态" clearable>
             <el-option label="草稿" value="DRAFT" />
+            <el-option label="审批中" value="PENDING" />
+            <el-option label="已审批" value="APPROVED" />
             <el-option label="已发送" value="SENT" />
             <el-option label="已接受" value="ACCEPTED" />
             <el-option label="已拒绝" value="REJECTED" />
@@ -85,10 +87,12 @@
           </template>
         </el-table-column>
         <el-table-column prop="created_by_name" label="创建人" width="100" />
-        <el-table-column label="操作" :width="canDelete ? 380 : 320" fixed="right">
+        <el-table-column label="操作" :width="canDelete ? 460 : 400" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
+            <el-button size="small" type="warning" @click="handleSubmitApproval(row)" v-if="row.status === 'DRAFT' || row.status === 'REJECTED'">提交审批</el-button>
+            <el-button size="small" type="info" @click="showWorkflowProgress(row)" v-if="row.status === 'PENDING'">审批进度</el-button>
             <el-button size="small" type="success" @click="handleCreateVersion(row)">
               新版本
             </el-button>
@@ -191,9 +195,18 @@
       </template>
     </el-dialog>
   </div>
-</template>
+
+    <!-- 审批进度弹窗 -->
+    <WorkflowProgress
+      v-model="workflowDialogVisible"
+      :business-type="workflowBusinessType"
+      :business-id="workflowBusinessId"
+    />
+  </template>
 
 <script setup>
+import WorkflowProgress from '@/components/WorkflowProgress.vue'
+
 import { ref, reactive, onMounted } from 'vue'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
@@ -220,6 +233,15 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
   }
 )
 
+const workflowDialogVisible = ref(false)
+const workflowBusinessId = ref(null)
+const workflowBusinessType = 'QUOTATION'
+
+const showWorkflowProgress = (row) => {
+  workflowBusinessId.value = row.id
+  workflowDialogVisible.value = true
+}
+
 const loading = ref(false)
 const quotations = ref([])
 const customers = ref([])
@@ -242,6 +264,8 @@ const pagination = reactive({
 const getStatusType = (status) => {
   const types = {
     'DRAFT': 'info',
+    'PENDING': 'warning',
+    'APPROVED': 'success',
     'SENT': 'warning',
     'ACCEPTED': 'success',
     'REJECTED': 'danger',
@@ -253,6 +277,8 @@ const getStatusType = (status) => {
 const getStatusLabel = (status) => {
   const labels = {
     'DRAFT': '草稿',
+    'PENDING': '审批中',
+    'APPROVED': '已审批',
     'SENT': '已发送',
     'ACCEPTED': '已接受',
     'REJECTED': '已拒绝',
@@ -328,6 +354,25 @@ const handleView = async (row) => {
 
 const handleEdit = (row) => {
   router.push(`/sales/quotations/${row.id}/edit`)
+}
+
+const handleSubmitApproval = async (row) => {
+  try {
+    await ElMessageBox.confirm('确定要提交该报价单进行审批吗？', '提交审批', { type: 'warning' })
+    const response = await request.post(`/sales/quotations/${row.id}/submit/`)
+    const data = response.data || response
+    if (data.workflow_started) {
+      ElMessage.success(data.message || '已提交审批')
+    } else {
+      ElMessage.success(data.message || '操作成功')
+    }
+    loadQuotations()
+  } catch (error) {
+    if (error !== 'cancel') {
+      const msg = error.response?.data?.error || '提交失败'
+      ElMessage.error(msg)
+    }
+  }
 }
 
 const handleCreateVersion = async (row) => {

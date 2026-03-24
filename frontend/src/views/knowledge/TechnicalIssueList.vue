@@ -41,11 +41,9 @@
           </template>
         </el-table-column>
         <el-table-column prop="created_at" label="创建时间" width="160">
-          <template #default="{ row }">
-            {{ formatDate(row.created_at) }}
-          </template>
+          <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button v-if="row.status === 'RESOLVED'" size="small" type="success" @click="handleConvert(row)">转知识</el-button>
@@ -63,6 +61,57 @@
         @current-change="fetchData"
       />
     </el-card>
+
+    <!-- 查看详情 -->
+    <el-dialog v-model="viewDialogVisible" title="问题详情" width="700px">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="标题" :span="2">{{ viewDetail.title }}</el-descriptions-item>
+        <el-descriptions-item label="关联项目">{{ viewDetail.project_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="分类">{{ viewDetail.category_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="严重程度">
+          <el-tag :type="getSeverityType(viewDetail.severity)">{{ viewDetail.severity_display || viewDetail.severity }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="getStatusType(viewDetail.status)">{{ viewDetail.status_display || viewDetail.status }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="问题描述" :span="2">{{ viewDetail.description || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="解决方案" :span="2">{{ viewDetail.solution || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="创建时间">{{ formatDate(viewDetail.created_at) }}</el-descriptions-item>
+        <el-descriptions-item label="创建人">{{ viewDetail.created_by_name || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button @click="viewDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 新建问题 -->
+    <el-dialog v-model="createDialogVisible" title="新建技术问题" width="600px">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
+        <el-form-item label="问题标题" prop="title">
+          <el-input v-model="form.title" />
+        </el-form-item>
+        <el-form-item label="关联项目">
+          <el-select v-model="form.project" placeholder="选择项目" filterable clearable style="width: 100%">
+            <el-option v-for="p in projectList" :key="p.id" :label="p.name" :value="p.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="严重程度" prop="severity">
+          <el-select v-model="form.severity" style="width: 100%">
+            <el-option label="低" value="LOW" />
+            <el-option label="中" value="MEDIUM" />
+            <el-option label="高" value="HIGH" />
+            <el-option label="严重" value="CRITICAL" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="问题描述" prop="description">
+          <el-input v-model="form.description" type="textarea" :rows="4" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -70,34 +119,29 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
-import { getTechnicalIssueList, convertIssueToKnowledge } from '@/api/projects/knowledge'
+import { getTechnicalIssueList, getTechnicalIssue, createTechnicalIssue, convertIssueToKnowledge } from '@/api/projects/knowledge'
+import request from '@/utils/request'
 
 const loading = ref(false)
+const saving = ref(false)
 const issues = ref([])
 const total = ref(0)
+const viewDialogVisible = ref(false)
+const createDialogVisible = ref(false)
+const viewDetail = ref({})
+const projectList = ref([])
+const formRef = ref(null)
 
-const queryParams = reactive({
-  search: '',
-  severity: '',
-  status: '',
-  page: 1,
-  page_size: 20
-})
-
-const getSeverityType = (severity) => {
-  const map = { LOW: 'info', MEDIUM: '', HIGH: 'warning', CRITICAL: 'danger' }
-  return map[severity] || ''
+const queryParams = reactive({ search: '', severity: '', status: '', page: 1, page_size: 20 })
+const form = reactive({ title: '', project: null, severity: 'MEDIUM', description: '' })
+const rules = {
+  title: [{ required: true, message: '请输入问题标题', trigger: 'blur' }],
+  severity: [{ required: true, message: '请选择严重程度', trigger: 'change' }]
 }
 
-const getStatusType = (status) => {
-  const map = { OPEN: 'info', IN_PROGRESS: 'warning', RESOLVED: 'success', CLOSED: '' }
-  return map[status] || ''
-}
-
-const formatDate = (dateStr) => {
-  if (!dateStr) return ''
-  return new Date(dateStr).toLocaleString('zh-CN')
-}
+const getSeverityType = (severity) => ({ LOW: 'info', MEDIUM: '', HIGH: 'warning', CRITICAL: 'danger' }[severity] || '')
+const getStatusType = (status) => ({ OPEN: 'info', IN_PROGRESS: 'warning', RESOLVED: 'success', CLOSED: '' }[status] || '')
+const formatDate = (dateStr) => dateStr ? new Date(dateStr).toLocaleString('zh-CN') : ''
 
 const fetchData = async () => {
   loading.value = true
@@ -106,18 +150,49 @@ const fetchData = async () => {
     issues.value = res.results || res || []
     total.value = res.count || issues.value.length
   } catch (error) {
-    console.error('获取数据失败', error)
+    ElMessage.error('获取数据失败')
   } finally {
     loading.value = false
   }
 }
 
-const handleCreate = () => {
-  ElMessage.info('新建功能开发中')
+const loadProjects = async () => {
+  try {
+    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    projectList.value = res.data?.results || res.results || []
+  } catch {}
 }
 
-const handleView = (row) => {
-  ElMessage.info('查看功能开发中')
+const handleCreate = () => {
+  Object.assign(form, { title: '', project: null, severity: 'MEDIUM', description: '' })
+  formRef.value?.resetFields()
+  createDialogVisible.value = true
+}
+
+const handleView = async (row) => {
+  try {
+    const res = await getTechnicalIssue(row.id)
+    viewDetail.value = res.data || res
+    viewDialogVisible.value = true
+  } catch {
+    viewDetail.value = row
+    viewDialogVisible.value = true
+  }
+}
+
+const handleSave = async () => {
+  try {
+    await formRef.value?.validate()
+    saving.value = true
+    await createTechnicalIssue(form)
+    ElMessage.success('创建成功')
+    createDialogVisible.value = false
+    fetchData()
+  } catch (error) {
+    if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
+  } finally {
+    saving.value = false
+  }
 }
 
 const handleConvert = async (row) => {
@@ -130,23 +205,11 @@ const handleConvert = async (row) => {
   }
 }
 
-onMounted(() => {
-  fetchData()
-})
+onMounted(() => { loadProjects(); fetchData() })
 </script>
 
 <style scoped>
-.issue-container {
-  padding: 20px;
-}
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.filter-area {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
+.issue-container { padding: 20px; }
+.card-header { display: flex; justify-content: space-between; align-items: center; }
+.filter-area { display: flex; gap: 12px; flex-wrap: wrap; }
 </style>

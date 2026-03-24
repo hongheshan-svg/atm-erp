@@ -506,7 +506,7 @@ class WorkflowService:
                 from apps.sales.models import SalesContract
                 contract = SalesContract.objects.get(id=instance.business_id)
                 if result == 'APPROVED':
-                    contract.status = 'ACTIVE'  # 合同生效
+                    contract.status = 'APPROVED'  # 审批通过
                     contract.save()
                     logger.info(f"Sales contract {contract.contract_no} approved")
                 elif result == 'REJECTED':

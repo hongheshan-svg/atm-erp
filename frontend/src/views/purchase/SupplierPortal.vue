@@ -295,7 +295,7 @@ const createAccount = async () => {
 const resetPassword = async (row) => {
   try {
     await ElMessageBox.confirm('确定要重置该账户的密码吗？', '确认')
-    const res = await request.post(`/api/purchase/supplier-accounts/${row.id}/reset_password/`)
+    const res = await request.post(`/purchase/supplier-accounts/${row.id}/reset_password/`)
     ElMessage.success(`密码已重置为: ${res.new_password}`)
   } catch (e) {
     if (e !== 'cancel') ElMessage.error('重置失败')
@@ -304,7 +304,7 @@ const resetPassword = async (row) => {
 
 const toggleActive = async (row) => {
   try {
-    await request.post(`/api/purchase/supplier-accounts/${row.id}/toggle_active/`)
+    await request.post(`/purchase/supplier-accounts/${row.id}/toggle_active/`)
     ElMessage.success('状态已更新')
     loadAccounts()
   } catch (e) {

@@ -25,6 +25,10 @@ python manage.py migrate --noinput
 echo "Collecting static files..."
 python manage.py collectstatic --noinput
 
+# Initialize default workflow definitions
+echo "Initializing workflow definitions..."
+python manage.py init_workflows 2>/dev/null || echo "Workflow initialization skipped (may need migration first)"
+
 # Create superuser if not exists
 echo "Checking for admin user..."
 python manage.py shell << EOF

@@ -1642,3 +1642,10 @@ from .document_collaboration import (
 from .creo_integration import (
     CreoBOMImportSession, CreoBOMImportItem
 )
+
+# Import new improvement module models
+from .drawing_version import DrawingVersion, DrawingAffectedPart  # noqa: E402, F401
+from .bom_cost_rollup import BOMCostSnapshot, BOMCostDetail  # noqa: E402, F401
+from .installation import (  # noqa: E402, F401
+    InstallationTask, SiteLog, CommissioningRecord, SiteIssue, CustomerAcceptance
+)

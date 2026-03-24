@@ -615,6 +615,29 @@ class FixedAssetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
             'by_category': list(by_category)
         })
 
+    @action(detail=False, methods=['post'], url_path='asset-inventory')
+    def asset_inventory(self, request):
+        """资产盘点提交"""
+        items = request.data.get('items', [])
+        if not items:
+            return Response({'detail': '盘点项目不能为空'}, status=400)
+        
+        results = []
+        for item in items:
+            asset_id = item.get('asset_id')
+            match = item.get('match', True)
+            remark = item.get('remark', '')
+            try:
+                asset = FixedAsset.objects.get(id=asset_id, is_deleted=False)
+                # Record inventory result as a note
+                if not match:
+                    asset.notes = f'{asset.notes or ""}\n[盘点异常] {remark}'.strip()
+                    asset.save()
+                results.append({'asset_id': asset_id, 'status': 'ok'})
+            except FixedAsset.DoesNotExist:
+                results.append({'asset_id': asset_id, 'status': 'not_found'})
+        
+        return Response({'success': True, 'results': results})
 
 class AssetDepreciationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 

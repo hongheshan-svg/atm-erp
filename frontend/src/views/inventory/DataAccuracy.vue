@@ -438,7 +438,7 @@ const handleIssue = (issue) => {
 
 const ignoreIssue = async (issue) => {
   try {
-    await request.post(`/api/inventory/validation-results/${issue.id}/handle/`, {
+    await request.post(`/inventory/validation-results/${issue.id}/handle/`, {
       status: 'IGNORED',
       resolution: '手动忽略'
     })
@@ -453,7 +453,7 @@ const ignoreIssue = async (issue) => {
 const submitHandle = async () => {
   submitting.value = true
   try {
-    await request.post(`/api/inventory/validation-results/${currentIssue.value.id}/handle/`, handleForm)
+    await request.post(`/inventory/validation-results/${currentIssue.value.id}/handle/`, handleForm)
     ElMessage.success('处理成功')
     handleDialogVisible.value = false
     loadPendingIssues()
@@ -481,7 +481,7 @@ const initDefaultRules = async () => {
 
 const toggleRule = async (rule) => {
   try {
-    await request.patch(`/api/inventory/validation-rules/${rule.id}/`, {
+    await request.patch(`/inventory/validation-rules/${rule.id}/`, {
       is_active: rule.is_active
     })
   } catch (e) {

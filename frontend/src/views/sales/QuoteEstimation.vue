@@ -280,7 +280,7 @@ const handleSubmit = async () => {
   submitting.value = true
   try {
     if (form.id) {
-      await request.patch(`/api/sales/quote-estimations/${form.id}/`, form)
+      await request.patch(`/sales/quote-estimations/${form.id}/`, form)
       ElMessage.success('保存成功')
     } else {
       const res = await request.post('/sales/quote-estimations/', form)
@@ -301,25 +301,25 @@ const handleCommand = async (cmd, row) => {
   try {
     switch (cmd) {
       case 'calculate':
-        await request.post(`/api/sales/quote-estimations/${row.id}/calculate/`)
+        await request.post(`/sales/quote-estimations/${row.id}/calculate/`)
         ElMessage.success('计算完成')
         loadData()
         break
       case 'submit':
         await ElMessageBox.confirm('确定提交评审?', '提示')
-        await request.post(`/api/sales/quote-estimations/${row.id}/submit_review/`)
+        await request.post(`/sales/quote-estimations/${row.id}/submit_review/`)
         ElMessage.success('已提交评审')
         loadData()
         break
       case 'approve':
         await ElMessageBox.confirm('确定审批通过?', '提示')
-        await request.post(`/api/sales/quote-estimations/${row.id}/approve/`)
+        await request.post(`/sales/quote-estimations/${row.id}/approve/`)
         ElMessage.success('审批通过')
         loadData()
         break
       case 'create_quote':
         await ElMessageBox.confirm('确定生成正式报价单?', '提示')
-        const res = await request.post(`/api/sales/quote-estimations/${row.id}/create_quotation/`)
+        const res = await request.post(`/sales/quote-estimations/${row.id}/create_quotation/`)
         ElMessage.success(`报价单 ${res.data.quotation_no} 创建成功`)
         loadData()
         break

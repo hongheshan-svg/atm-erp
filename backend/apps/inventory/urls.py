@@ -29,6 +29,10 @@ from .data_accuracy import (
     DataValidationRuleViewSet, DataValidationResultViewSet,
     ReconciliationSessionViewSet, InventoryAccuracyReportView, InOutBalanceReportView
 )
+from .mrp_enhanced import MRPExplosionView, MRPAutoGenerateView
+from .spare_parts_prediction import (
+    LifecyclePredictionView, PurchaseSuggestionView, SparePartCostAnalysisView
+)
 
 router = DefaultRouter()
 router.register(r'stocks', StockViewSet, basename='stock')
@@ -77,5 +81,14 @@ urlpatterns = [
     # 数据准确性报表
     path('reports/accuracy/', InventoryAccuracyReportView.as_view(), name='inventory-accuracy-report'),
     path('reports/in-out-balance/', InOutBalanceReportView.as_view(), name='in-out-balance-report'),
+    
+    # MRP增强（多层BOM展开）
+    path('mrp/explosion/', MRPExplosionView.as_view(), name='mrp-explosion'),
+    path('mrp/auto-generate/', MRPAutoGenerateView.as_view(), name='mrp-auto-generate'),
+    
+    # 备件智能预测
+    path('spare-parts/lifecycle-prediction/', LifecyclePredictionView.as_view(), name='lifecycle-prediction'),
+    path('spare-parts/purchase-suggestions/', PurchaseSuggestionView.as_view(), name='purchase-suggestions'),
+    path('spare-parts/cost-analysis/', SparePartCostAnalysisView.as_view(), name='spare-part-cost-analysis'),
 ]
 

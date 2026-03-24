@@ -48,6 +48,22 @@
         </el-table-column>
       </el-table>
     </el-card>
+
+    <!-- 库存历史 -->
+    <el-dialog v-model="historyVisible" :title="'库存历史 - ' + (historyItem?.item_name || '')" width="800px">
+      <el-table :data="historyList" v-loading="historyLoading" max-height="400">
+        <el-table-column prop="movement_no" label="单号" width="160" />
+        <el-table-column prop="movement_type_display" label="类型" width="100" />
+        <el-table-column prop="quantity" label="数量" width="100" />
+        <el-table-column prop="from_warehouse_name" label="来源仓库" />
+        <el-table-column prop="to_warehouse_name" label="目标仓库" />
+        <el-table-column prop="created_at" label="时间" width="160" />
+        <el-table-column prop="remarks" label="备注" />
+      </el-table>
+      <template #footer>
+        <el-button @click="historyVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -59,6 +75,10 @@ import request from '@/utils/request'
 
 const router = useRouter()
 const loading = ref(false)
+const historyVisible = ref(false)
+const historyLoading = ref(false)
+const historyList = ref([])
+const historyItem = ref(null)
 const stocks = ref([])
 const warehouses = ref([])
 
@@ -93,8 +113,18 @@ const handleAdjustment = () => {
   router.push('/inventory/adjustment')
 }
 
-const viewHistory = (row) => {
-  ElMessage.info(`查看 ${row.item_name} 的库存历史`)
+const viewHistory = async (row) => {
+  historyItem.value = row
+  historyVisible.value = true
+  historyLoading.value = true
+  try {
+    const res = await request.get('/inventory/stock-moves/', { params: { item: row.item, warehouse: row.warehouse, page_size: 50 } })
+    historyList.value = res.data?.results || res.results || []
+  } catch {
+    historyList.value = []
+  } finally {
+    historyLoading.value = false
+  }
 }
 
 const resetSearch = () => {

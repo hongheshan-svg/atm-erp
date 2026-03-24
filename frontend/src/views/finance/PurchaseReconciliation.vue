@@ -628,7 +628,7 @@ const handleDelete = async (row) => {
 
 const confirmReceipt = async (line) => {
   try {
-    await request.post(`/finance/purchase-reconciliation-lines/${line.id}/confirm_receipt/`)
+    await request.post(`/finance/purchase-reconciliations/${currentReconciliation.value.id}/confirm_receipt/${line.id}/`)
     ElMessage.success('确认收货成功')
     handleDetail(currentReconciliation.value)
   } catch (error) {

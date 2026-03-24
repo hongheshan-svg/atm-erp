@@ -558,3 +558,7 @@ from .supplier_portal import (
     SupplierDocument, SupplierQualityRecord, SupplierMessage
 )
 
+
+# Import new improvement module models
+from .supply_chain_collaboration import RFQCollaboration  # noqa: E402, F401
+from .outsource_tracking import OutsourceInspection  # noqa: E402, F401

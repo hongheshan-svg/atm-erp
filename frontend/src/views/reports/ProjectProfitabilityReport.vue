@@ -85,7 +85,24 @@ const renderChart = () => {
   })
 }
 
-const handleExport = () => ElMessage.info('导出功能开发中')
+const handleExport = async () => {
+  try {
+    const res = await request.get('/reports/project-profitability/export/', {
+      responseType: 'blob'
+    })
+    const url = window.URL.createObjectURL(new Blob([res.data || res]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', '项目利润率报表.xlsx')
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('导出成功')
+  } catch (error) {
+    ElMessage.error('导出失败')
+  }
+}
 
 onMounted(() => loadData())
 </script>

@@ -1,0 +1,41 @@
+<view class="container">
+  <view class="header"><text class="title">质检拍照</text></view>
+  <view class="section">
+    <view class="form-item">
+      <text class="label">工单号</text>
+      <input value="{{form.work_order}}" bindinput="onInput" data-field="work_order" placeholder="请输入工单号" />
+    </view>
+    <view class="form-item">
+      <text class="label">检验结果</text>
+      <radio-group bindchange="onResultChange">
+        <radio value="pass" checked="{{form.result === 'pass'}}" color="#67c23a">合格</radio>
+        <radio value="fail" checked="{{form.result === 'fail'}}" color="#f56c6c">不合格</radio>
+        <radio value="conditional" checked="{{form.result === 'conditional'}}" color="#e6a23c">有条件放行</radio>
+      </radio-group>
+    </view>
+    <view class="form-item" wx:if="{{form.result !== 'pass'}}">
+      <text class="label">缺陷描述</text>
+      <textarea value="{{form.defect_description}}" bindinput="onInput" data-field="defect_description" placeholder="请描述缺陷" />
+    </view>
+  </view>
+  <view class="section">
+    <text class="section-title">拍照记录</text>
+    <view class="photo-grid">
+      <view wx:for="{{photos}}" wx:key="index" class="photo-item">
+        <image src="{{item}}" mode="aspectFill" />
+        <view class="photo-delete" bindtap="removePhoto" data-index="{{index}}">×</view>
+      </view>
+      <view class="photo-add" bindtap="takePhoto" wx:if="{{photos.length < 9}}">
+        <text class="photo-add-icon">+</text>
+        <text class="photo-add-text">拍照/相册</text>
+      </view>
+    </view>
+  </view>
+  <view class="section">
+    <view class="form-item">
+      <text class="label">备注</text>
+      <textarea value="{{form.notes}}" bindinput="onInput" data-field="notes" placeholder="选填" />
+    </view>
+    <button class="submit-btn" bindtap="submitInspection" loading="{{loading}}">提交质检</button>
+  </view>
+</view>

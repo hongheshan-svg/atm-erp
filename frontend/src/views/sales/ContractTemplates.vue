@@ -258,6 +258,28 @@
     <el-dialog v-model="previewDialogVisible" title="合同预览" width="900px" destroy-on-close>
       <div class="preview-container" v-html="previewContent"></div>
     </el-dialog>
+
+    <!-- 条款编辑 -->
+    <el-dialog v-model="clauseDialogVisible" :title="clauseIsEdit ? '编辑条款' : '添加条款'" width="600px">
+      <el-form label-width="100px">
+        <el-form-item label="条款标题">
+          <el-input v-model="clauseForm.title" />
+        </el-form-item>
+        <el-form-item label="条款内容">
+          <el-input v-model="clauseForm.content" type="textarea" :rows="5" />
+        </el-form-item>
+        <el-form-item label="排序">
+          <el-input-number v-model="clauseForm.sort_order" :min="0" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="是否必需">
+          <el-switch v-model="clauseForm.is_required" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="clauseDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="clauseSaving" @click="handleClauseSave">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -270,6 +292,10 @@ import request from '@/utils/request'
 const activeTab = ref('templates')
 const loading = ref(false)
 const clauseLoading = ref(false)
+const clauseDialogVisible = ref(false)
+const clauseIsEdit = ref(false)
+const clauseSaving = ref(false)
+const clauseForm = reactive({ id: null, title: '', content: '', sort_order: 0, is_required: true })
 const generatedLoading = ref(false)
 const submitLoading = ref(false)
 const generateLoading = ref(false)
@@ -471,15 +497,46 @@ const removePaymentTerm = (index) => {
 }
 
 const handleAddClause = () => {
-  ElMessage.info('条款添加功能开发中')
+  clauseIsEdit.value = false
+  Object.assign(clauseForm, { id: null, title: '', content: '', sort_order: clauses.value.length + 1, is_required: true })
+  clauseDialogVisible.value = true
 }
 
 const handleEditClause = (row) => {
-  ElMessage.info('条款编辑功能开发中')
+  clauseIsEdit.value = true
+  Object.assign(clauseForm, { id: row.id, title: row.title, content: row.content, sort_order: row.sort_order, is_required: row.is_required })
+  clauseDialogVisible.value = true
 }
 
-const handleDeleteClause = (row) => {
-  ElMessage.info('条款删除功能开发中')
+const handleClauseSave = async () => {
+  clauseSaving.value = true
+  try {
+    if (clauseIsEdit.value) {
+      await request.put(`/sales/contract-clauses/${clauseForm.id}/`, clauseForm)
+      ElMessage.success('更新成功')
+    } else {
+      await request.post('/sales/contract-clauses/', { ...clauseForm, template: currentTemplateId.value })
+      ElMessage.success('创建成功')
+    }
+    clauseDialogVisible.value = false
+    loadClauses(currentTemplateId.value)
+  } catch (error) {
+    if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
+    else ElMessage.error('操作失败')
+  } finally {
+    clauseSaving.value = false
+  }
+}
+
+const handleDeleteClause = async (row) => {
+  try {
+    await ElMessageBox.confirm('确定要删除该条款吗？', '提示', { type: 'warning' })
+    await request.delete(`/sales/contract-clauses/${row.id}/`)
+    ElMessage.success('删除成功')
+    loadClauses(currentTemplateId.value)
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error('删除失败')
+  }
 }
 
 const handleGenerateContract = () => {

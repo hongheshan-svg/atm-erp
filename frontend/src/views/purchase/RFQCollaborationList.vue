@@ -23,27 +23,116 @@
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="handleView(row)">查看</el-button>
-            <el-button v-if="row.status === 'OPEN'" link type="success" @click="handleCompare(row)">比价</el-button>
+            <el-button v-if="row.response_count > 0" link type="success" @click="handleCompare(row)">比价</el-button>
           </template>
         </el-table-column>
       </el-table>
       
       <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total" layout="total, prev, pager, next" @current-change="loadData" />
     </el-card>
+
+    <!-- 查看详情 -->
+    <el-dialog v-model="viewDialogVisible" title="询价详情" width="800px">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="询价单号">{{ viewDetail.rfq_no }}</el-descriptions-item>
+        <el-descriptions-item label="标题">{{ viewDetail.title }}</el-descriptions-item>
+        <el-descriptions-item label="截止日期">{{ viewDetail.deadline }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="getStatusType(viewDetail.status)">{{ viewDetail.status_display || viewDetail.status }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="备注" :span="2">{{ viewDetail.remarks || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <template v-if="viewDetail.items && viewDetail.items.length">
+        <h4 style="margin: 16px 0 8px">询价物料</h4>
+        <el-table :data="viewDetail.items" stripe size="small">
+          <el-table-column prop="material_name" label="物料名称" />
+          <el-table-column prop="quantity" label="数量" width="100" align="right" />
+          <el-table-column prop="unit" label="单位" width="80" />
+          <el-table-column prop="required_date" label="需求日期" width="120" />
+        </el-table>
+      </template>
+      <template v-if="viewDetail.responses && viewDetail.responses.length">
+        <h4 style="margin: 16px 0 8px">供应商响应</h4>
+        <el-table :data="viewDetail.responses" stripe size="small">
+          <el-table-column prop="supplier_name" label="供应商" />
+          <el-table-column prop="total_price" label="报价总额" width="120" align="right">
+            <template #default="{ row }">¥ {{ row.total_price?.toLocaleString() }}</template>
+          </el-table-column>
+          <el-table-column prop="delivery_days" label="交期(天)" width="100" />
+          <el-table-column prop="responded_at" label="响应时间" width="160" />
+        </el-table>
+      </template>
+      <template #footer>
+        <el-button @click="viewDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 发起询价 -->
+    <el-dialog v-model="dialogVisible" title="发起询价" width="600px">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
+        <el-form-item label="标题" prop="title">
+          <el-input v-model="form.title" />
+        </el-form-item>
+        <el-form-item label="截止日期" prop="deadline">
+          <el-date-picker v-model="form.deadline" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="form.remarks" type="textarea" :rows="3" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 比价对话框 -->
+    <el-dialog v-model="compareDialogVisible" title="供应商比价" width="900px">
+      <el-table :data="compareData" stripe>
+        <el-table-column prop="supplier_name" label="供应商" />
+        <el-table-column prop="total_price" label="报价总额" align="right">
+          <template #default="{ row }">¥ {{ row.total_price?.toLocaleString() }}</template>
+        </el-table-column>
+        <el-table-column prop="delivery_days" label="交期(天)" width="100" align="center" />
+        <el-table-column prop="quality_rating" label="质量评级" width="100" align="center" />
+        <el-table-column prop="remarks" label="备注" />
+        <el-table-column label="操作" width="100">
+          <template #default="{ row }">
+            <el-button type="primary" size="small" @click="selectSupplier(row)">选定</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="compareDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, reactive, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 
 const loading = ref(false)
+const saving = ref(false)
 const tableData = ref([])
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
+const dialogVisible = ref(false)
+const viewDialogVisible = ref(false)
+const compareDialogVisible = ref(false)
+const formRef = ref(null)
+const viewDetail = ref({})
+const compareData = ref([])
+const currentRFQId = ref(null)
 
+const form = reactive({ title: '', deadline: '', remarks: '' })
+const rules = {
+  title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
+  deadline: [{ required: true, message: '请选择截止日期', trigger: 'change' }]
+}
 const getStatusType = (s) => ({ 'DRAFT': 'info', 'OPEN': 'primary', 'CLOSED': 'success', 'CANCELLED': 'danger' }[s] || 'info')
 
 const loadData = async () => {
@@ -59,9 +148,60 @@ const loadData = async () => {
   }
 }
 
-const handleCreate = () => ElMessage.info('功能开发中')
-const handleView = () => ElMessage.info('功能开发中')
-const handleCompare = () => ElMessage.info('功能开发中')
+const handleCreate = () => {
+  Object.assign(form, { title: '', deadline: '', remarks: '' })
+  formRef.value?.resetFields()
+  dialogVisible.value = true
+}
+
+const handleView = async (row) => {
+  try {
+    const res = await request.get(`/purchase/rfq-collaborations/${row.id}/`)
+    viewDetail.value = res.data || res
+    viewDialogVisible.value = true
+  } catch {
+    viewDetail.value = row
+    viewDialogVisible.value = true
+  }
+}
+
+const handleCompare = async (row) => {
+  try {
+    const res = await request.get(`/purchase/rfq-collaborations/${row.id}/compare/`)
+    compareData.value = res.data?.results || res.results || res.data || res || []
+    currentRFQId.value = row.id
+    compareDialogVisible.value = true
+  } catch {
+    ElMessage.error('加载比价数据失败')
+  }
+}
+
+const selectSupplier = async (row) => {
+  try {
+    await ElMessageBox.confirm(`确定选定 ${row.supplier_name} 吗？`, '确认')
+    await request.post(`/purchase/rfq-collaborations/${currentRFQId.value}/select/`, { supplier_id: row.supplier_id || row.id })
+    ElMessage.success('选定成功')
+    compareDialogVisible.value = false
+    loadData()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error('操作失败')
+  }
+}
+
+const handleSave = async () => {
+  try {
+    await formRef.value?.validate()
+    saving.value = true
+    await request.post('/purchase/rfq-collaborations/', form)
+    ElMessage.success('创建成功')
+    dialogVisible.value = false
+    loadData()
+  } catch (error) {
+    if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
+  } finally {
+    saving.value = false
+  }
+}
 
 onMounted(() => loadData())
 </script>

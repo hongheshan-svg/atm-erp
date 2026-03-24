@@ -45,20 +45,50 @@
       
       <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total" layout="total, prev, pager, next" @current-change="loadData" />
     </el-card>
+
+    <el-dialog v-model="progressDialogVisible" title="更新进度" width="500px">
+      <el-form :model="progressForm" label-width="100px">
+        <el-form-item label="外协单号">
+          <el-input :model-value="currentRow?.order_no" disabled />
+        </el-form-item>
+        <el-form-item label="当前进度">
+          <el-slider v-model="progressForm.progress" :min="0" :max="100" show-input />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="progressForm.status" style="width: 100%">
+            <el-option label="待处理" value="PENDING" />
+            <el-option label="进行中" value="IN_PROGRESS" />
+            <el-option label="已完成" value="COMPLETED" />
+            <el-option label="延期" value="DELAYED" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="progressForm.remarks" type="textarea" :rows="3" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="progressDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="saveProgress">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 
 const loading = ref(false)
+const saving = ref(false)
 const tableData = ref([])
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
 const stats = ref({ in_progress: 0, pending_inspection: 0, completed_this_month: 0, delayed: 0 })
+const progressDialogVisible = ref(false)
+const currentRow = ref(null)
+const progressForm = reactive({ progress: 0, status: '', remarks: '' })
 
 const getStatusType = (s) => ({ 'PENDING': 'info', 'IN_PROGRESS': 'primary', 'COMPLETED': 'success', 'DELAYED': 'danger' }[s] || 'info')
 
@@ -75,9 +105,37 @@ const loadData = async () => {
   }
 }
 
-const handleProgress = () => ElMessage.info('功能开发中')
+const loadStats = async () => {
+  try {
+    const res = await request.get('/purchase/outsource-progress/statistics/')
+    stats.value = res.data || res || stats.value
+  } catch {}
+}
 
-onMounted(() => loadData())
+const handleProgress = (row) => {
+  currentRow.value = row
+  progressForm.progress = row.progress || 0
+  progressForm.status = row.status || 'IN_PROGRESS'
+  progressForm.remarks = ''
+  progressDialogVisible.value = true
+}
+
+const saveProgress = async () => {
+  try {
+    saving.value = true
+    await request.patch(`/purchase/outsource-progress/${currentRow.value.id}/`, progressForm)
+    ElMessage.success('进度更新成功')
+    progressDialogVisible.value = false
+    loadData()
+    loadStats()
+  } catch (error) {
+    ElMessage.error('更新失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+onMounted(() => { loadData(); loadStats() })
 </script>
 
 <style scoped>

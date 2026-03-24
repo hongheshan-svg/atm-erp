@@ -38,6 +38,10 @@ from .capacity_planning import (
     CapacityResourceConflictViewSet,
     CapacityDashboardView
 )
+from .finite_capacity import FiniteCapacityPlanViewSet, ScheduledTaskViewSet
+from .equipment_capability import EquipmentCapabilityViewSet
+from apps.projects.equipment_oee import EquipmentOEERecordViewSet
+from .kanban_wip import KanbanWIPRuleViewSet, KanbanWIPAlertViewSet, KanbanWIPStatusView
 
 router = DefaultRouter()
 router.register(r'processes', ProductionProcessViewSet, basename='process')
@@ -90,6 +94,18 @@ router.register(r'resources', ResourceViewSet, basename='resource')
 router.register(r'resource-allocations', ResourceAllocationViewSet, basename='resource-allocation')
 router.register(r'capacity-conflicts', CapacityResourceConflictViewSet, basename='capacity-conflict')
 
+# APS有限产能排程
+router.register(r'finite-capacity-plans', FiniteCapacityPlanViewSet, basename='finite-capacity-plan')
+router.register(r'scheduled-tasks', ScheduledTaskViewSet, basename='scheduled-task')
+
+# 设备能力矩阵与OEE
+router.register(r'equipment-capabilities', EquipmentCapabilityViewSet, basename='equipment-capability')
+router.register(r'equipment-oee', EquipmentOEERecordViewSet, basename='equipment-oee')
+
+# 看板WIP限制
+router.register(r'kanban-wip-rules', KanbanWIPRuleViewSet, basename='kanban-wip-rule')
+router.register(r'kanban-wip-alerts', KanbanWIPAlertViewSet, basename='kanban-wip-alert')
+
 urlpatterns = [
     path('', include(router.urls)),
     
@@ -101,4 +117,7 @@ urlpatterns = [
     
     # 产能资源规划看板
     path('capacity/dashboard/', CapacityDashboardView.as_view(), name='capacity-dashboard'),
+    
+    # 看板WIP状态
+    path('kanban/wip-status/', KanbanWIPStatusView.as_view(), name='kanban-wip-status'),
 ]

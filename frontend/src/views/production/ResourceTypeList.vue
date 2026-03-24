@@ -149,7 +149,7 @@ const saveType = async () => {
     submitting.value = true
     
     if (isEdit.value) {
-      await request.put(`/api/production/resource-types/${editingId.value}/`, typeForm)
+      await request.put(`/production/resource-types/${editingId.value}/`, typeForm)
       ElMessage.success('资源类型已更新')
     } else {
       await request.post('/production/resource-types/', typeForm)
@@ -167,7 +167,7 @@ const saveType = async () => {
 
 const toggleActive = async (row) => {
   try {
-    await request.patch(`/api/production/resource-types/${row.id}/`, { is_active: !row.is_active })
+    await request.patch(`/production/resource-types/${row.id}/`, { is_active: !row.is_active })
     ElMessage.success('状态已更新')
     loadResourceTypes()
   } catch (e) {

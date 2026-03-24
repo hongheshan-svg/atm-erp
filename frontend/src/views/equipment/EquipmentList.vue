@@ -237,6 +237,22 @@
         <el-descriptions-item label="联系电话">{{ currentEquipment.installation_phone }}</el-descriptions-item>
       </el-descriptions>
     </el-drawer>
+    <!-- 操作确认对话框 -->
+    <el-dialog v-model="actionDialogVisible" :title="actionTitles[actionType] || '操作确认'" width="500px">
+      <el-form label-width="100px">
+        <el-form-item label="设备">{{ actionRow?.equipment_no }} - {{ actionRow?.name }}</el-form-item>
+        <el-form-item :label="actionType === 'ship' ? '发货日期' : actionType === 'install' ? '安装日期' : '验收日期'">
+          <el-date-picker v-model="actionForm.date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="actionForm.remarks" type="textarea" :rows="3" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="actionDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="actionSaving" @click="handleActionSave">确认</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -261,6 +277,11 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 
 const loading = ref(false)
 const submitting = ref(false)
+const actionDialogVisible = ref(false)
+const actionType = ref('')
+const actionRow = ref(null)
+const actionSaving = ref(false)
+const actionForm = reactive({ date: new Date().toISOString().split('T')[0], remarks: '' })
 const dialogVisible = ref(false)
 const detailVisible = ref(false)
 const dialogMode = ref('add')
@@ -401,16 +422,34 @@ const submitForm = async () => {
   }
 }
 
+
+const actionTitles = { ship: '发货确认', install: '安装确认', accept: '验收确认' }
+const actionEndpoints = { ship: 'ship', install: 'install', accept: 'accept' }
+
+const handleActionSave = async () => {
+  actionSaving.value = true
+  try {
+    await request.post(`/projects/equipment-archives/${actionRow.value.id}/${actionEndpoints[actionType.value]}/`, actionForm)
+    ElMessage.success('操作成功')
+    actionDialogVisible.value = false
+    loadData()
+  } catch (error) {
+    if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
+    else ElMessage.error('操作失败')
+  } finally {
+    actionSaving.value = false
+  }
+}
 const handleCommand = async (command, row) => {
   switch (command) {
     case 'ship':
-      ElMessage.info('发货功能开发中')
-      break
     case 'install':
-      ElMessage.info('安装功能开发中')
-      break
     case 'accept':
-      ElMessage.info('验收功能开发中')
+      actionType.value = command
+      actionRow.value = row
+      actionForm.date = new Date().toISOString().split('T')[0]
+      actionForm.remarks = ''
+      actionDialogVisible.value = true
       break
     case 'delete':
       if (canDelete.value) {

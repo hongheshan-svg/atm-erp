@@ -357,7 +357,7 @@ const createContract = async () => {
 
 const viewContract = async (row) => {
   try {
-    const res = await request.get(`/api/sales/service-contracts/${row.id}/`)
+    const res = await request.get(`/sales/service-contracts/${row.id}/`)
     currentContract.value = res
     showDetailDrawer.value = true
   } catch (e) {
@@ -367,7 +367,7 @@ const viewContract = async (row) => {
 
 const activateContract = async (row) => {
   try {
-    await request.post(`/api/sales/service-contracts/${row.id}/activate/`)
+    await request.post(`/sales/service-contracts/${row.id}/activate/`)
     ElMessage.success('合同已激活')
     loadContracts()
     loadStats()
@@ -378,8 +378,7 @@ const activateContract = async (row) => {
 
 const viewServiceHistory = async (row) => {
   try {
-    const res = await request.get(`/api/sales/service-contracts/${row.id}/service_history/`)
-    console.log('服务历史:', res)
+    const res = await request.get(`/sales/service-contracts/${row.id}/service_history/`)
     ElMessage.info(`服务请求: ${res.service_requests?.length || 0} 条, 预防维护: ${res.pm_records?.length || 0} 条`)
   } catch (e) {
     ElMessage.error('获取服务历史失败')

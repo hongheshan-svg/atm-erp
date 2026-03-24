@@ -91,7 +91,9 @@
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
-            <el-button size="small" type="warning" @click="handleConfirm(row)" v-if="row.status === 'DRAFT'">确认</el-button>
+            <el-button size="small" type="warning" @click="handleSubmitApproval(row)" v-if="row.status === 'DRAFT' || row.status === 'REJECTED'">提交审批</el-button>
+            <el-button size="small" type="info" @click="showWorkflowProgress(row)" v-if="row.status === 'PENDING'">审批进度</el-button>
+            <el-button size="small" type="warning" @click="handleConfirm(row)" v-if="row.status === 'APPROVED'">确认</el-button>
             <el-button size="small" type="warning" @click="handleViewAttachments(row)">附件</el-button>
             <el-button size="small" type="success" @click="createDelivery(row)" v-if="row.status === 'CONFIRMED' || row.status === 'PARTIAL'">发货</el-button>
             <el-button size="small" type="danger" @click="handleCancel(row)" v-if="row.status === 'DRAFT' || row.status === 'CONFIRMED'">取消</el-button>
@@ -333,9 +335,18 @@
     </el-dialog>
 
   </div>
-</template>
+
+    <!-- 审批进度弹窗 -->
+    <WorkflowProgress
+      v-model="workflowDialogVisible"
+      :business-type="workflowBusinessType"
+      :business-id="workflowBusinessId"
+    />
+  </template>
 
 <script setup>
+import WorkflowProgress from '@/components/WorkflowProgress.vue'
+
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -346,6 +357,15 @@ import { usePermissionStore } from '@/stores/permission'
 
 const router = useRouter()
 const permissionStore = usePermissionStore()
+const workflowDialogVisible = ref(false)
+const workflowBusinessId = ref(null)
+const workflowBusinessType = 'SALES_ORDER'
+
+const showWorkflowProgress = (row) => {
+  workflowBusinessId.value = row.id
+  workflowDialogVisible.value = true
+}
+
 const loading = ref(false)
 const saving = ref(false)
 const orders = ref([])
@@ -633,6 +653,25 @@ const handleSave = async () => {
     }
   } finally {
     saving.value = false
+  }
+}
+
+const handleSubmitApproval = async (row) => {
+  try {
+    await ElMessageBox.confirm('确定要提交该销售订单进行审批吗？', '提交审批', { type: 'warning' })
+    const response = await request.post(`/sales/orders/${row.id}/submit/`)
+    const data = response.data || response
+    if (data.workflow_started) {
+      ElMessage.success(data.message || '已提交审批')
+    } else {
+      ElMessage.success(data.message || '订单已确认')
+    }
+    loadOrders()
+  } catch (error) {
+    if (error !== 'cancel') {
+      const msg = error.response?.data?.error || '提交失败'
+      ElMessage.error(msg)
+    }
   }
 }
 

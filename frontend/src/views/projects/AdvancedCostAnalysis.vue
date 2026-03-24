@@ -179,11 +179,38 @@
     </div>
 
     <el-empty v-else description="请选择项目查看成本分析" />
+    <!-- 添加成本 -->
+    <el-dialog v-model="addCostDialogVisible" title="添加成本记录" width="500px">
+      <el-form label-width="100px">
+        <el-form-item label="成本类型">
+          <el-select v-model="costForm.cost_type" style="width: 100%">
+            <el-option label="物料成本" value="MATERIAL" />
+            <el-option label="人工成本" value="LABOR" />
+            <el-option label="制造费用" value="MANUFACTURING" />
+            <el-option label="外协成本" value="OUTSOURCE" />
+            <el-option label="其他费用" value="OTHER" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="costForm.description" type="textarea" :rows="2" />
+        </el-form-item>
+        <el-form-item label="金额">
+          <el-input-number v-model="costForm.amount" :min="0" :precision="2" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="日期">
+          <el-date-picker v-model="costForm.cost_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="addCostDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="addCostSaving" @click="handleAddCostSave">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Check, Close } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
@@ -202,6 +229,9 @@ const topVariances = ref([])
 const costDetails = ref([])
 const detailPage = ref(1)
 const detailPageSize = ref(10)
+const addCostDialogVisible = ref(false)
+const addCostSaving = ref(false)
+const costForm = reactive({ cost_type: 'MATERIAL', description: '', amount: 0, cost_date: new Date().toISOString().split('T')[0] })
 const detailTotal = ref(0)
 const elementFilter = ref('')
 
@@ -270,7 +300,7 @@ const loadProjectCost = async () => {
   
   loading.value = true
   try {
-    const res = await request.get(`/api/projects/cost/analysis/${selectedProject.value}/`)
+    const res = await request.get(`/projects/cost/analysis/${selectedProject.value}/`)
     summary.value = res.data.summary
     analysisData.value = res.data.analysis
     trendData.value = res.data.trend || []
@@ -382,7 +412,28 @@ const viewAllVariances = () => {
 }
 
 const showAddDialog = () => {
-  // TODO: 打开添加成本对话框
+  if (!selectedProject.value) {
+    ElMessage.warning('请先选择项目')
+    return
+  }
+  Object.assign(costForm, { cost_type: 'MATERIAL', description: '', amount: 0, cost_date: new Date().toISOString().split('T')[0] })
+  addCostDialogVisible.value = true
+}
+
+const handleAddCostSave = async () => {
+  addCostSaving.value = true
+  try {
+    await request.post('/projects/project-cost-records/', { ...costForm, project: selectedProject.value })
+    ElMessage.success('成本记录已添加')
+    addCostDialogVisible.value = false
+    loadProjectCost()
+    loadDetails()
+  } catch (error) {
+    if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
+    else ElMessage.error('添加失败')
+  } finally {
+    addCostSaving.value = false
+  }
 }
 
 watch(() => selectedProject.value, () => {

@@ -190,6 +190,9 @@ const currentConversation = ref(null)
 const messages = ref([])
 const messageInput = ref('')
 const loadingMessages = ref(false)
+const hasMoreMessages = ref(true)
+const messagePage = ref(1)
+const loadingMore = ref(false)
 const sendingMessage = ref(false)
 const messagesContainer = ref(null)
 
@@ -209,7 +212,6 @@ const loadConversations = async () => {
     const data = await request.get('/core/conversations/')
     conversations.value = data.results || data
   } catch (e) {
-    console.error(e)
   } finally {
     loadingConversations.value = false
   }
@@ -229,11 +231,12 @@ const loadMessages = async (convId) => {
     const data = await request.get('/core/messages/', {
       params: { conversation: convId, page_size: 50 }
     })
+    messagePage.value = 1
+    hasMoreMessages.value = true
     messages.value = (data.results || data).reverse()
     await nextTick()
     scrollToBottom()
   } catch (e) {
-    console.error(e)
   } finally {
     loadingMessages.value = false
   }
@@ -331,7 +334,6 @@ const loadUserList = async () => {
     const data = await request.get('/auth/users/', { params: { page_size: 200 } })
     userList.value = (data.results || data).filter(u => u.id !== currentUserId.value)
   } catch (e) {
-    console.error(e)
   }
 }
 
@@ -341,10 +343,34 @@ const scrollToBottom = () => {
   }
 }
 
+const loadMore = async () => {
+  if (!currentConversation.value || loadingMore.value || !hasMoreMessages.value) return
+  loadingMore.value = true
+  try {
+    messagePage.value++
+    const data = await request.get('/core/messages/', {
+      params: { conversation: currentConversation.value.id, page_size: 50, page: messagePage.value }
+    })
+    const older = (data.results || data).reverse()
+    if (older.length === 0) {
+      hasMoreMessages.value = false
+    } else {
+      const container = messagesContainer.value
+      const prevHeight = container.scrollHeight
+      messages.value = [...older, ...messages.value]
+      await nextTick()
+      container.scrollTop = container.scrollHeight - prevHeight
+    }
+  } catch (e) {
+    messagePage.value--
+  } finally {
+    loadingMore.value = false
+  }
+}
+
 const handleScroll = (e) => {
-  // 滚动到顶部时加载更多
   if (e.target.scrollTop < 50) {
-    // TODO: loadMore()
+    loadMore()
   }
 }
 

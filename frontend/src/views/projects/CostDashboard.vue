@@ -324,7 +324,7 @@ const loadProjectCost = async () => {
   
   loading.value = true
   try {
-    const res = await request.get(`/api/projects/cost/dashboard/${selectedProject.value}/`)
+    const res = await request.get(`/projects/cost/dashboard/${selectedProject.value}/`)
     projectData.value = res.data
     await nextTick()
     renderCharts()

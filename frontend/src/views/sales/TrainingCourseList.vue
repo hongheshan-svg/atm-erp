@@ -27,19 +27,59 @@
       
       <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total" layout="total, prev, pager, next" @current-change="loadData" />
     </el-card>
+
+    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑课程' : '新建课程'" width="600px">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
+        <el-form-item label="课程名称" prop="name">
+          <el-input v-model="form.name" />
+        </el-form-item>
+        <el-form-item label="课程类型" prop="course_type">
+          <el-select v-model="form.course_type" style="width: 100%">
+            <el-option label="操作培训" value="OPERATION" />
+            <el-option label="维护培训" value="MAINTENANCE" />
+            <el-option label="安全培训" value="SAFETY" />
+            <el-option label="编程培训" value="PROGRAMMING" />
+            <el-option label="其他" value="OTHER" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="时长(小时)" prop="duration_hours">
+          <el-input-number v-model="form.duration_hours" :min="0.5" :step="0.5" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="课程描述">
+          <el-input v-model="form.description" type="textarea" :rows="3" />
+        </el-form-item>
+        <el-form-item label="启用">
+          <el-switch v-model="form.is_active" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 
 const loading = ref(false)
+const saving = ref(false)
 const tableData = ref([])
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
+const dialogVisible = ref(false)
+const isEdit = ref(false)
+const formRef = ref(null)
+
+const form = reactive({ id: null, name: '', course_type: '', duration_hours: 1, description: '', is_active: true })
+const rules = {
+  name: [{ required: true, message: '请输入课程名称', trigger: 'blur' }],
+  course_type: [{ required: true, message: '请选择课程类型', trigger: 'change' }]
+}
 
 const loadData = async () => {
   loading.value = true
@@ -54,8 +94,38 @@ const loadData = async () => {
   }
 }
 
-const handleCreate = () => ElMessage.info('功能开发中')
-const handleEdit = () => ElMessage.info('功能开发中')
+const handleCreate = () => {
+  isEdit.value = false
+  Object.assign(form, { id: null, name: '', course_type: '', duration_hours: 1, description: '', is_active: true })
+  formRef.value?.resetFields()
+  dialogVisible.value = true
+}
+
+const handleEdit = (row) => {
+  isEdit.value = true
+  Object.assign(form, { id: row.id, name: row.name, course_type: row.course_type, duration_hours: row.duration_hours, description: row.description, is_active: row.is_active })
+  dialogVisible.value = true
+}
+
+const handleSave = async () => {
+  try {
+    await formRef.value?.validate()
+    saving.value = true
+    if (isEdit.value) {
+      await request.put(`/sales/training-courses/${form.id}/`, form)
+      ElMessage.success('更新成功')
+    } else {
+      await request.post('/sales/training-courses/', form)
+      ElMessage.success('创建成功')
+    }
+    dialogVisible.value = false
+    loadData()
+  } catch (error) {
+    if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
+  } finally {
+    saving.value = false
+  }
+}
 
 onMounted(() => loadData())
 </script>

@@ -1,0 +1,25 @@
+<view class="container">
+  <view class="search-bar">
+    <input placeholder="搜索物料编码/名称" value="{{searchKeyword}}" bindinput="onInput" bindconfirm="onSearch" />
+    <button size="mini" bindtap="onSearch">搜索</button>
+  </view>
+  <view class="stock-list">
+    <view wx:for="{{stockList}}" wx:key="id" class="stock-item">
+      <view class="stock-main">
+        <text class="stock-code">{{item.material_code}}</text>
+        <text class="stock-name">{{item.material_name}}</text>
+      </view>
+      <view class="stock-detail">
+        <view class="stock-info"><text class="info-label">库存:</text><text class="info-value {{item.quantity <= item.safety_stock ? 'danger' : ''}}">{{item.quantity}} {{item.unit}}</text></view>
+        <view class="stock-info"><text class="info-label">仓库:</text><text class="info-value">{{item.warehouse_name}}</text></view>
+        <view class="stock-info"><text class="info-label">库位:</text><text class="info-value">{{item.location || '-'}}</text></view>
+      </view>
+      <view class="stock-warning" wx:if="{{item.quantity <= item.safety_stock}}">
+        <text class="warning-text">⚠ 低于安全库存 ({{item.safety_stock}})</text>
+      </view>
+    </view>
+    <view wx:if="{{stockList.length === 0 && !loading}}" class="empty">暂无库存数据</view>
+    <view wx:if="{{loading}}" class="loading-tip">加载中...</view>
+    <view wx:if="{{!hasMore && stockList.length > 0}}" class="no-more">没有更多了</view>
+  </view>
+</view>

@@ -28,6 +28,14 @@
         </el-timeline-item>
       </el-timeline>
     </el-card>
+
+    <!-- 3D模型查看 -->
+    <el-dialog v-model="modelDialogVisible" title="3D模型查看" width="80%" top="5vh">
+      <div style="height: 70vh; display: flex; align-items: center; justify-content: center; background: #f5f5f5; border-radius: 8px;">
+        <iframe v-if="guide?.model_url" :src="guide.model_url" style="width: 100%; height: 100%; border: none;" />
+        <el-empty v-else description="暂无3D模型" />
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -57,7 +65,14 @@ const loadData = async () => {
 }
 
 const goBack = () => router.push({ name: 'AssemblyGuideList' })
-const viewModel = () => ElMessage.info('3D模型查看功能开发中')
+const modelDialogVisible = ref(false)
+const viewModel = () => {
+  if (guide.value?.model_url) {
+    modelDialogVisible.value = true
+  } else {
+    ElMessage.warning('该指导未关联3D模型文件')
+  }
+}
 
 onMounted(() => loadData())
 </script>

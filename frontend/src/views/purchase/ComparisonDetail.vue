@@ -559,7 +559,7 @@ const getReliabilityColor = (score) => {
 // 应用权重模板
 const applyWeightTemplate = async (template) => {
   try {
-    await request.post(`/purchase/quotation-comparisons/${route.params.id}/apply_template/`, {
+    await request.post(`/purchase/comparisons/${route.params.id}/apply_template/`, {
       template: template
     })
     ElMessage.success('已应用权重模板')

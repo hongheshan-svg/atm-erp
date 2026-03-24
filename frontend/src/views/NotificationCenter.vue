@@ -266,7 +266,6 @@ const connectWebSocket = () => {
     
     wsConnection.value.onopen = () => {
       wsConnected.value = true
-      console.log('WebSocket connected')
     }
     
     wsConnection.value.onmessage = (event) => {

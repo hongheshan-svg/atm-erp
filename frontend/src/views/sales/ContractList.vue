@@ -25,6 +25,7 @@
             <el-option label="草稿" value="DRAFT" />
             <el-option label="待审批" value="PENDING" />
             <el-option label="已审批" value="APPROVED" />
+            <el-option label="已拒绝" value="REJECTED" />
             <el-option label="已签署" value="SIGNED" />
             <el-option label="已完成" value="COMPLETED" />
             <el-option label="已取消" value="CANCELLED" />
@@ -61,11 +62,13 @@
         </el-table-column>
         <el-table-column prop="contract_date" label="合同日期" width="110" />
         <el-table-column prop="signed_date" label="签署日期" width="110" />
-        <el-table-column label="操作" width="320" fixed="right">
+        <el-table-column label="操作" width="400" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
-            <el-button size="small" type="warning" @click="handleApprove(row)" v-if="row.status === 'DRAFT' || row.status === 'PENDING'">审批</el-button>
+            <el-button size="small" type="warning" @click="handleSubmitApproval(row)" v-if="row.status === 'DRAFT' || row.status === 'REJECTED'">提交审批</el-button>
+            <el-button size="small" type="info" @click="showWorkflowProgress(row)" v-if="row.status === 'PENDING'">审批进度</el-button>
+            <el-button size="small" type="warning" @click="handleApprove(row)" v-if="row.status === 'PENDING'">审批</el-button>
             <el-button size="small" type="success" @click="handleSign(row)" v-if="row.status === 'APPROVED'">签署</el-button>
             <el-button size="small" type="info" @click="handlePrint(row)">打印</el-button>
             <el-button v-if="canDelete && row.status === 'DRAFT'" size="small" type="danger" @click="deleteRow(row)" :loading="deleteLoading">删除</el-button>
@@ -260,9 +263,18 @@
     </el-dialog>
     
   </div>
-</template>
+
+    <!-- 审批进度弹窗 -->
+    <WorkflowProgress
+      v-model="workflowDialogVisible"
+      :business-type="workflowBusinessType"
+      :business-id="workflowBusinessId"
+    />
+  </template>
 
 <script setup>
+import WorkflowProgress from '@/components/WorkflowProgress.vue'
+
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
@@ -278,6 +290,15 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
   '/sales/contracts/',
   { onSuccess: () => loadContracts(), confirmTitle: '删除合同', confirmMessage: '确定要删除该合同吗？' }
 )
+
+const workflowDialogVisible = ref(false)
+const workflowBusinessId = ref(null)
+const workflowBusinessType = 'SALES_CONTRACT'
+
+const showWorkflowProgress = (row) => {
+  workflowBusinessId.value = row.id
+  workflowDialogVisible.value = true
+}
 
 const loading = ref(false)
 const saving = ref(false)
@@ -350,6 +371,7 @@ const getStatusType = (status) => {
     DRAFT: 'info', 
     PENDING: 'warning',
     APPROVED: 'success',
+    REJECTED: 'danger',
     SIGNED: 'success',
     COMPLETED: '', 
     CANCELLED: 'danger' 
@@ -362,6 +384,7 @@ const getStatusLabel = (status) => {
     DRAFT: '草稿', 
     PENDING: '待审批',
     APPROVED: '已审批',
+    REJECTED: '已拒绝',
     SIGNED: '已签署',
     COMPLETED: '已完成', 
     CANCELLED: '已取消' 
@@ -516,6 +539,25 @@ const handleSave = async () => {
     }
   } finally {
     saving.value = false
+  }
+}
+
+const handleSubmitApproval = async (row) => {
+  try {
+    await ElMessageBox.confirm('确定要提交该合同进行审批吗？', '提交审批', { type: 'warning' })
+    const response = await request.post(`/sales/contracts/${row.id}/submit/`)
+    const data = response.data || response
+    if (data.workflow_started) {
+      ElMessage.success(data.message || '已提交审批')
+    } else {
+      ElMessage.success(data.message || '操作成功')
+    }
+    loadContracts()
+  } catch (error) {
+    if (error !== 'cancel') {
+      const msg = error.response?.data?.error || '提交失败'
+      ElMessage.error(msg)
+    }
   }
 }
 

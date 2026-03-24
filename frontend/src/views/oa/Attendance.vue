@@ -212,7 +212,6 @@ const loadTodayStatus = async () => {
     const res = await request.get('/oa/attendance-records/today/')
     // res 已经是 response.data
     todayRecord.value = res
-    console.log('Today status:', res)
   } catch (error) {
     console.error('加载今日状态失败', error)
     // 设置默认值
@@ -226,7 +225,6 @@ const loadRecords = async () => {
     const res = await request.get('/oa/attendance-records/', {
       params: { month: selectedMonth.value }
     })
-    console.log('Attendance records:', res)
     // res 已经是 response.data
     if (Array.isArray(res)) {
       records.value = res
@@ -248,7 +246,6 @@ const loadMonthlySummary = async () => {
     const res = await request.get('/oa/attendance-records/monthly_summary/', {
       params: { month: selectedMonth.value }
     })
-    console.log('Monthly summary:', res)
     // res 已经是 response.data
     if (Array.isArray(res) && res.length > 0) {
       monthSummary.value = res[0]

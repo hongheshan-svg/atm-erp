@@ -462,8 +462,7 @@ const createAllocation = async () => {
 
 const viewResourceLoad = async (row) => {
   try {
-    const res = await request.get(`/api/production/resources/${row.id}/load/`)
-    console.log('资源负荷详情:', res)
+    const res = await request.get(`/production/resources/${row.id}/load/`)
     ElMessage.info(`负荷率: ${res.utilization_rate}%, 已分配: ${res.allocated_hours}小时`)
   } catch (e) {
     ElMessage.error('获取负荷详情失败')
@@ -472,8 +471,7 @@ const viewResourceLoad = async (row) => {
 
 const viewConflicts = async (row) => {
   try {
-    const res = await request.get(`/api/production/resources/${row.id}/conflicts/`)
-    console.log('资源冲突:', res)
+    const res = await request.get(`/production/resources/${row.id}/conflicts/`)
     ElMessage.info(`共 ${res.length} 个冲突`)
   } catch (e) {
     ElMessage.error('获取冲突信息失败')

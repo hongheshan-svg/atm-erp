@@ -503,6 +503,32 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 询价单详情 -->
+    <el-dialog v-model="rfqViewVisible" title="询价单详情" width="800px">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="询价编号">{{ rfqDetail.rfq_no }}</el-descriptions-item>
+        <el-descriptions-item label="项目">{{ rfqDetail.project_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">{{ rfqDetail.status_display || rfqDetail.status }}</el-descriptions-item>
+        <el-descriptions-item label="创建人">{{ rfqDetail.created_by_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="创建时间">{{ rfqDetail.created_at || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="截止日期">{{ rfqDetail.deadline || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="备注" :span="2">{{ rfqDetail.remarks || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <div v-if="rfqDetail.items?.length" style="margin-top: 16px">
+        <h4>询价明细</h4>
+        <el-table :data="rfqDetail.items" border size="small">
+          <el-table-column prop="item_name" label="物料" />
+          <el-table-column prop="quantity" label="数量" width="100" />
+          <el-table-column prop="unit" label="单位" width="80" />
+          <el-table-column prop="required_date" label="需求日期" width="120" />
+          <el-table-column prop="remarks" label="备注" />
+        </el-table>
+      </div>
+      <template #footer>
+        <el-button @click="rfqViewVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -545,6 +571,8 @@ const pendingQuoteCount = ref(0)
 const quoteImportDialogVisible = ref(false)
 const quoteImportFile = ref(null)
 const quoteImporting = ref(false)
+const rfqViewVisible = ref(false)
+const rfqDetail = ref({})
 const quoteUploadRef = ref(null)
 
 // 待询价物料相关
@@ -1171,9 +1199,14 @@ const handleSave = async () => {
 }
 
 // 查看
-const handleView = (row) => {
-  // 可以导航到详情页或打开对话框
-  ElMessage.info(`查看询价单: ${row.rfq_no}`)
+const handleView = async (row) => {
+  try {
+    const res = await request.get(`/purchase/rfqs/${row.id}/`)
+    rfqDetail.value = res.data || res
+  } catch {
+    rfqDetail.value = row
+  }
+  rfqViewVisible.value = true
 }
 
 // 发送询价

@@ -391,7 +391,7 @@ const handleDispatch = async (row) => {
 const handleComplete = async (row) => {
   try {
     await ElMessageBox.confirm('确定完成此服务单?', '提示')
-    await request.post(`/api/projects/service-orders/${row.id}/complete/`)
+    await request.post(`/projects/service-orders/${row.id}/complete/`)
     ElMessage.success('服务已完成')
     loadData()
     loadStats()
@@ -427,7 +427,7 @@ const handleSubmitDispatch = async () => {
   
   submitting.value = true
   try {
-    await request.post(`/api/projects/service-orders/${currentOrder.value.id}/dispatch/`, dispatchForm)
+    await request.post(`/projects/service-orders/${currentOrder.value.id}/dispatch/`, dispatchForm)
     ElMessage.success('派工成功')
     dispatchDialogVisible.value = false
     loadData()

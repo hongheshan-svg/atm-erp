@@ -24,19 +24,67 @@
       
       <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total" layout="total, prev, pager, next" @current-change="loadData" />
     </el-card>
+
+    <!-- 查看详情 -->
+    <el-dialog v-model="viewDialogVisible" title="送货详情" width="700px">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="协作编号">{{ viewDetail.collaboration_no }}</el-descriptions-item>
+        <el-descriptions-item label="采购订单">{{ viewDetail.purchase_order_no }}</el-descriptions-item>
+        <el-descriptions-item label="供应商">{{ viewDetail.supplier_name }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="getStatusType(viewDetail.status)">{{ viewDetail.status_display || viewDetail.status }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="计划送货日">{{ viewDetail.planned_delivery_date }}</el-descriptions-item>
+        <el-descriptions-item label="实际送货日">{{ viewDetail.actual_delivery_date || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="备注" :span="2">{{ viewDetail.remarks || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <template v-if="viewDetail.items && viewDetail.items.length">
+        <h4 style="margin: 16px 0 8px">送货明细</h4>
+        <el-table :data="viewDetail.items" stripe size="small">
+          <el-table-column prop="material_name" label="物料" />
+          <el-table-column prop="quantity" label="计划数量" width="100" align="right" />
+          <el-table-column prop="actual_quantity" label="实收数量" width="100" align="right" />
+        </el-table>
+      </template>
+      <template #footer>
+        <el-button @click="viewDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 确认收货 -->
+    <el-dialog v-model="confirmDialogVisible" title="确认收货" width="500px">
+      <el-form :model="confirmForm" label-width="100px">
+        <el-form-item label="实际送货日">
+          <el-date-picker v-model="confirmForm.actual_delivery_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="confirmForm.remarks" type="textarea" :rows="3" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="confirmDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="saveConfirm">确认收货</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 
 const loading = ref(false)
+const saving = ref(false)
 const tableData = ref([])
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
+const viewDialogVisible = ref(false)
+const confirmDialogVisible = ref(false)
+const viewDetail = ref({})
+const currentRow = ref(null)
+const confirmForm = reactive({ actual_delivery_date: '', remarks: '' })
 
 const getStatusType = (s) => ({ 'PENDING': 'warning', 'CONFIRMED': 'primary', 'DELIVERED': 'success', 'REJECTED': 'danger' }[s] || 'info')
 
@@ -53,8 +101,37 @@ const loadData = async () => {
   }
 }
 
-const handleView = () => ElMessage.info('功能开发中')
-const handleConfirm = () => ElMessage.info('功能开发中')
+const handleView = async (row) => {
+  try {
+    const res = await request.get(`/purchase/delivery-collaborations/${row.id}/`)
+    viewDetail.value = res.data || res
+    viewDialogVisible.value = true
+  } catch {
+    viewDetail.value = row
+    viewDialogVisible.value = true
+  }
+}
+
+const handleConfirm = (row) => {
+  currentRow.value = row
+  confirmForm.actual_delivery_date = new Date().toISOString().split('T')[0]
+  confirmForm.remarks = ''
+  confirmDialogVisible.value = true
+}
+
+const saveConfirm = async () => {
+  try {
+    saving.value = true
+    await request.post(`/purchase/delivery-collaborations/${currentRow.value.id}/confirm/`, confirmForm)
+    ElMessage.success('确认收货成功')
+    confirmDialogVisible.value = false
+    loadData()
+  } catch (error) {
+    ElMessage.error('确认失败')
+  } finally {
+    saving.value = false
+  }
+}
 
 onMounted(() => loadData())
 </script>

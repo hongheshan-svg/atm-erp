@@ -163,6 +163,30 @@
         <el-button type="primary" @click="confirmReturn" :loading="saving">确认还车</el-button>
       </template>
     </el-dialog>
+
+    <!-- 查看详情 -->
+    <el-dialog v-model="viewDialogVisible" title="用车申请详情" width="700px">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="申请人">{{ viewDetail.applicant_name }}</el-descriptions-item>
+        <el-descriptions-item label="部门">{{ viewDetail.department_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="车辆">{{ viewDetail.vehicle_plate || viewDetail.vehicle_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="用途">{{ viewDetail.purpose_display || viewDetail.purpose }}</el-descriptions-item>
+        <el-descriptions-item label="开始时间">{{ viewDetail.start_time }}</el-descriptions-item>
+        <el-descriptions-item label="结束时间">{{ viewDetail.end_time || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="目的地">{{ viewDetail.destination || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="乘客数">{{ viewDetail.passengers || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">{{ viewDetail.status_display || viewDetail.status }}</el-descriptions-item>
+        <el-descriptions-item label="起始里程">{{ viewDetail.start_mileage || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="结束里程">{{ viewDetail.end_mileage || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="燃油费">{{ viewDetail.fuel_cost || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="过路费">{{ viewDetail.toll_cost || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="停车费">{{ viewDetail.parking_cost || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="备注" :span="2">{{ viewDetail.remarks || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button @click="viewDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -174,6 +198,8 @@ import request from '@/utils/request'
 
 const loading = ref(false)
 const saving = ref(false)
+const viewDialogVisible = ref(false)
+const viewDetail = ref({})
 const list = ref([])
 const availableVehicles = ref([])
 const dialogVisible = ref(false)
@@ -294,8 +320,14 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleView = (row) => {
-  ElMessage.info('查看详情功能开发中')
+const handleView = async (row) => {
+  try {
+    const res = await request.get(`/oa/vehicle-requests/${row.id}/`)
+    viewDetail.value = res.data || res
+  } catch {
+    viewDetail.value = row
+  }
+  viewDialogVisible.value = true
 }
 
 const handleSave = async () => {

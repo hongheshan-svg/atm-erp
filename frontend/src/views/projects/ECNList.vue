@@ -382,9 +382,18 @@
       </template>
     </el-dialog>
   </div>
-</template>
+
+    <!-- 审批进度弹窗 -->
+    <WorkflowProgress
+      v-model="workflowDialogVisible"
+      :business-type="workflowBusinessType"
+      :business-id="workflowBusinessId"
+    />
+  </template>
 
 <script setup>
+import WorkflowProgress from '@/components/WorkflowProgress.vue'
+
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -405,6 +414,15 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 )
 
 // 数据
+const workflowDialogVisible = ref(false)
+const workflowBusinessId = ref(null)
+const workflowBusinessType = 'ECN'
+
+const showWorkflowProgress = (row) => {
+  workflowBusinessId.value = row.id
+  workflowDialogVisible.value = true
+}
+
 const loading = ref(false)
 const saving = ref(false)
 const approving = ref(false)
@@ -728,7 +746,7 @@ const handleSubmit = async (row) => {
 
 // 查看审批进度
 const viewWorkflow = (row) => {
-  router.push('/workflow/my-submissions')
+  showWorkflowProgress(row)
 }
 
 // 批准

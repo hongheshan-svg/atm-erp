@@ -452,7 +452,7 @@ const createQuote = async () => {
 
 const viewQuote = async (row) => {
   try {
-    const res = await request.get(`/api/sales/quote-versions/${row.id}/`)
+    const res = await request.get(`/sales/quote-versions/${row.id}/`)
     currentQuote.value = res
     showDetailDrawer.value = true
   } catch (e) {
@@ -462,7 +462,7 @@ const viewQuote = async (row) => {
 
 const createNewVersion = async (row) => {
   try {
-    const res = await request.post(`/api/sales/quote-versions/${row.id}/create_new_version/`)
+    const res = await request.post(`/sales/quote-versions/${row.id}/create_new_version/`)
     ElMessage.success(`新版本 V${res.version} 已创建`)
     loadQuotes()
   } catch (e) {
@@ -472,7 +472,7 @@ const createNewVersion = async (row) => {
 
 const predictProfit = async (row) => {
   try {
-    const res = await request.get(`/api/sales/quote-versions/${row.id}/profit_prediction/`)
+    const res = await request.get(`/sales/quote-versions/${row.id}/profit_prediction/`)
     const riskColors = { LOW: '#67C23A', MEDIUM: '#E6A23C', HIGH: '#F56C6C' }
     ElMessage({
       message: `预期利润: ¥${formatMoney(res.expected_profit)}, 利润率: ${res.profit_margin}%, 风险: ${res.risk_level}`,
@@ -486,7 +486,7 @@ const predictProfit = async (row) => {
 const estimateFromReference = async (projectId) => {
   if (!projectId) return
   try {
-    const res = await request.post(`/api/sales/quote-versions/${currentQuote.value?.id || 0}/estimate_from_reference/`, {
+    const res = await request.post(`/sales/quote-versions/${currentQuote.value?.id || 0}/estimate_from_reference/`, {
       reference_project_id: projectId,
       adjustment_factor: 1.0
     })

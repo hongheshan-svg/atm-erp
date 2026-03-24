@@ -368,7 +368,7 @@ const createRequest = async () => {
 
 const viewRequest = async (row) => {
   try {
-    const res = await request.get(`/api/sales/service-requests/${row.id}/`)
+    const res = await request.get(`/sales/service-requests/${row.id}/`)
     currentRequest.value = res
     showDetailDrawer.value = true
   } catch (e) {
@@ -378,7 +378,7 @@ const viewRequest = async (row) => {
 
 const assignRequest = async (row) => {
   ElMessageBox.prompt('请输入负责人ID', '分配任务').then(async ({ value }) => {
-    await request.post(`/api/sales/service-requests/${row.id}/assign/`, { assigned_to: parseInt(value) })
+    await request.post(`/sales/service-requests/${row.id}/assign/`, { assigned_to: parseInt(value) })
     ElMessage.success('分配成功')
     loadRequests()
   })
@@ -386,7 +386,7 @@ const assignRequest = async (row) => {
 
 const completeRequest = async (row) => {
   ElMessageBox.prompt('请输入处理结果', '完成请求').then(async ({ value }) => {
-    await request.post(`/api/sales/service-requests/${row.id}/complete/`, { resolution: value })
+    await request.post(`/sales/service-requests/${row.id}/complete/`, { resolution: value })
     ElMessage.success('请求已完成')
     loadRequests()
   })

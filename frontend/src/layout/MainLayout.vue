@@ -3,7 +3,16 @@
     <el-aside :width="isCollapse ? '64px' : '240px'" class="sidebar">
       <div class="logo" @click="$router.push('/')">
         <div class="logo-icon">
-          <el-icon :size="isCollapse ? 24 : 20"><Cpu /></el-icon>
+          <svg :width="isCollapse ? 24 : 20" :height="isCollapse ? 24 : 20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="5" y="7" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/>
+            <rect x="9" y="3" width="6" height="4" rx="1" stroke="currentColor" stroke-width="1.8" fill="none"/>
+            <circle cx="9.5" cy="12" r="1.5" fill="currentColor"/>
+            <circle cx="14.5" cy="12" r="1.5" fill="currentColor"/>
+            <path d="M10 16h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M2 11v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M22 11v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M12 1v2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
         </div>
         <transition name="logo-text">
           <span v-if="!isCollapse" class="logo-title">{{ companyShortName || 'ERP' }}</span>
@@ -87,7 +96,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
-import { Fold, Expand, User, Lock, SwitchButton, Cpu, FullScreen, ArrowDown } from '@element-plus/icons-vue'
+import { Fold, Expand, User, Lock, SwitchButton, FullScreen, ArrowDown } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { usePermissionStore } from '@/stores/permission'
 import { APP_VERSION } from '@/config/version'

@@ -514,7 +514,10 @@ class SparePartAlertSerializer(serializers.ModelSerializer):
 
 class SparePartCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """备件类别管理"""
-    queryset = SparePartCategory.objects.filter(is_deleted=False, parent__isnull=True)
+    queryset = SparePartCategory.objects.filter(is_deleted=False)
+
+    def get_queryset(self):
+        return SparePartCategory.objects.filter(is_deleted=False, parent__isnull=True)
     serializer_class = SparePartCategorySerializer
     permission_classes = [IsAuthenticated]
     search_fields = ['code', 'name']

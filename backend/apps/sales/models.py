@@ -12,6 +12,8 @@ class SalesQuotation(BaseModel):
     """
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
+        ('PENDING', '审批中'),
+        ('APPROVED', '已审批'),
         ('SENT', '已发送'),
         ('ACCEPTED', '已接受'),
         ('REJECTED', '已拒绝'),
@@ -525,6 +527,7 @@ class SalesContract(BaseModel):
         ('DRAFT', '草稿'),
         ('PENDING', '待审批'),
         ('APPROVED', '已审批'),
+        ('REJECTED', '已拒绝'),
         ('SIGNED', '已签署'),
         ('COMPLETED', '已完成'),
         ('CANCELLED', '已取消'),

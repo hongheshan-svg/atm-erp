@@ -1,0 +1,13 @@
+.container { padding: 20rpx; }
+.header { text-align: center; padding: 20rpx 0; }
+.title { font-size: 36rpx; font-weight: bold; }
+.section { background: #fff; border-radius: 12rpx; padding: 24rpx; margin-bottom: 20rpx; }
+.section-title { font-size: 30rpx; font-weight: bold; margin-bottom: 16rpx; display: block; }
+.task-item { display: flex; justify-content: space-between; padding: 16rpx; border: 1rpx solid #eee; border-radius: 8rpx; margin-bottom: 12rpx; }
+.task-item.active { border-color: #409eff; background: #ecf5ff; }
+.task-code { color: #409eff; font-weight: bold; }
+.form-item { margin-bottom: 20rpx; }
+.label { font-size: 28rpx; color: #666; margin-bottom: 8rpx; display: block; }
+.form-item input, .form-item textarea { border: 1rpx solid #ddd; border-radius: 8rpx; padding: 16rpx; width: 100%; box-sizing: border-box; }
+.submit-btn { background: #409eff; color: #fff; border-radius: 8rpx; margin-top: 20rpx; }
+.empty { text-align: center; color: #999; padding: 40rpx; }

@@ -294,6 +294,54 @@
         </el-descriptions-item>
       </el-descriptions>
     </el-drawer>
+    <!-- 校验对话框 -->
+    <el-dialog v-model="calibrateDialogVisible" title="工装校验" width="500px">
+      <el-form label-width="100px">
+        <el-form-item label="校验日期">
+          <el-date-picker v-model="calibrateForm.calibration_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="校验结果">
+          <el-select v-model="calibrateForm.result" style="width: 100%">
+            <el-option label="合格" value="PASS" />
+            <el-option label="不合格" value="FAIL" />
+            <el-option label="需调整" value="ADJUST" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="calibrateForm.notes" type="textarea" :rows="3" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="calibrateDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="opSaving" @click="handleCalibrateSave">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 维护对话框 -->
+    <el-dialog v-model="maintainDialogVisible" title="工装维护" width="500px">
+      <el-form label-width="100px">
+        <el-form-item label="维护日期">
+          <el-date-picker v-model="maintainForm.maintenance_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="维护类型">
+          <el-select v-model="maintainForm.maintenance_type" style="width: 100%">
+            <el-option label="日常保养" value="ROUTINE" />
+            <el-option label="维修" value="REPAIR" />
+            <el-option label="更换零件" value="REPLACE_PARTS" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="maintainForm.description" type="textarea" :rows="3" />
+        </el-form-item>
+        <el-form-item label="费用">
+          <el-input-number v-model="maintainForm.cost" :min="0" :precision="2" style="width: 100%" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="maintainDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="opSaving" @click="handleMaintainSave">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -317,6 +365,12 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 )
 
 const loading = ref(false)
+const calibrateDialogVisible = ref(false)
+const maintainDialogVisible = ref(false)
+const opRow = ref(null)
+const calibrateForm = reactive({ calibration_date: '', result: 'PASS', notes: '' })
+const maintainForm = reactive({ maintenance_date: '', maintenance_type: 'ROUTINE', description: '', cost: 0 })
+const opSaving = ref(false)
 const submitting = ref(false)
 const dialogVisible = ref(false)
 const categoryDialogVisible = ref(false)
@@ -547,10 +601,14 @@ const handleCommand = async (command, row) => {
       }
       break
     case 'calibrate':
-      ElMessage.info('校验功能开发中')
+      opRow.value = row
+      Object.assign(calibrateForm, { calibration_date: new Date().toISOString().split('T')[0], result: 'PASS', notes: '' })
+      calibrateDialogVisible.value = true
       break
     case 'maintain':
-      ElMessage.info('维护功能开发中')
+      opRow.value = row
+      Object.assign(maintainForm, { maintenance_date: new Date().toISOString().split('T')[0], maintenance_type: 'ROUTINE', description: '', cost: 0 })
+      maintainDialogVisible.value = true
       break
     case 'delete':
       if (canDelete.value) {
@@ -559,6 +617,35 @@ const handleCommand = async (command, row) => {
         ElMessage.warning('您没有删除权限')
       }
       break
+  }
+}
+
+
+const handleCalibrateSave = async () => {
+  opSaving.value = true
+  try {
+    await request.post(`/projects/fixtures/${opRow.value.id}/calibrate/`, calibrateForm)
+    ElMessage.success('校验记录已保存')
+    calibrateDialogVisible.value = false
+    fetchData()
+  } catch (error) {
+    ElMessage.error('保存失败')
+  } finally {
+    opSaving.value = false
+  }
+}
+
+const handleMaintainSave = async () => {
+  opSaving.value = true
+  try {
+    await request.post(`/projects/fixtures/${opRow.value.id}/maintain/`, maintainForm)
+    ElMessage.success('维护记录已保存')
+    maintainDialogVisible.value = false
+    fetchData()
+  } catch (error) {
+    ElMessage.error('保存失败')
+  } finally {
+    opSaving.value = false
   }
 }
 

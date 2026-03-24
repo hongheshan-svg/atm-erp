@@ -233,6 +233,26 @@
         <el-button type="primary" @click="confirmDispatch" :loading="dispatchLoading">确认派工</el-button>
       </template>
     </el-dialog>
+
+    <!-- 工单详情 -->
+    <el-dialog v-model="viewDialogVisible" title="工单详情" width="700px">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="工单编号">{{ viewDetail.order_no }}</el-descriptions-item>
+        <el-descriptions-item label="项目">{{ viewDetail.project_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="类型">{{ viewDetail.order_type_display || viewDetail.order_type }}</el-descriptions-item>
+        <el-descriptions-item label="优先级">{{ viewDetail.priority_display || viewDetail.priority }}</el-descriptions-item>
+        <el-descriptions-item label="状态">{{ viewDetail.status_display || viewDetail.status }}</el-descriptions-item>
+        <el-descriptions-item label="负责人">{{ viewDetail.assignee_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="计划开始">{{ viewDetail.planned_start || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="计划完成">{{ viewDetail.planned_end || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="实际开始">{{ viewDetail.actual_start || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="实际完成">{{ viewDetail.actual_end || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="描述" :span="2">{{ viewDetail.description || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button @click="viewDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -243,6 +263,8 @@ import { Plus } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 const loading = ref(false)
+const viewDialogVisible = ref(false)
+const viewDetail = ref({})
 const submitLoading = ref(false)
 const dispatchLoading = ref(false)
 const tableData = ref([])
@@ -327,7 +349,7 @@ const fetchProjects = async () => {
 
 const fetchUsers = async () => {
   try {
-    const data = await request.get('/auth/users/', { params: { page_size: 200 } })
+    const data = await request.get('/accounts/users/', { params: { page_size: 200 } })
     users.value = (data.results || data).map(u => ({
       id: u.id,
       name: u.first_name || u.last_name || u.username
@@ -391,8 +413,14 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleView = (row) => {
-  ElMessage.info('详情页面开发中')
+const handleView = async (row) => {
+  try {
+    const res = await request.get(`/projects/work-orders/${row.id}/`)
+    viewDetail.value = res.data || res
+  } catch {
+    viewDetail.value = row
+  }
+  viewDialogVisible.value = true
 }
 
 const handleSubmit = async () => {

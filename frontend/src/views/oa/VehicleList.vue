@@ -168,6 +168,24 @@
         <el-button type="primary" @click="handleSave" :loading="saving">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 维护记录 -->
+    <el-dialog v-model="maintDialogVisible" :title="'维护记录 - ' + (currentVehicle?.plate_number || '')" width="700px">
+      <el-table :data="maintRecords" v-loading="maintLoading" stripe>
+        <el-table-column prop="maintenance_date" label="维护日期" width="120" />
+        <el-table-column prop="maintenance_type_display" label="类型" width="100" />
+        <el-table-column prop="description" label="描述" show-overflow-tooltip />
+        <el-table-column prop="cost" label="费用" width="100" align="right">
+          <template #default="{ row }">¥{{ row.cost?.toLocaleString() || 0 }}</template>
+        </el-table-column>
+        <el-table-column prop="service_provider" label="服务商" width="120" />
+        <el-table-column prop="next_maintenance_date" label="下次维护" width="120" />
+      </el-table>
+      <el-empty v-if="!maintLoading && maintRecords.length === 0" description="暂无维护记录" />
+      <template #footer>
+        <el-button @click="maintDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -179,6 +197,10 @@ import request from '@/utils/request'
 
 const loading = ref(false)
 const saving = ref(false)
+const maintDialogVisible = ref(false)
+const maintRecords = ref([])
+const maintLoading = ref(false)
+const currentVehicle = ref(null)
 const list = ref([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
@@ -307,9 +329,18 @@ const handleSave = async () => {
   }
 }
 
-const handleMaintenance = (row) => {
-  // TODO: 打开维护记录页面
-  ElMessage.info('维护记录功能开发中')
+const handleMaintenance = async (row) => {
+  currentVehicle.value = row
+  maintDialogVisible.value = true
+  maintLoading.value = true
+  try {
+    const res = await request.get(`/oa/vehicles/${row.id}/maintenance-records/`)
+    maintRecords.value = res.data?.results || res.results || []
+  } catch {
+    maintRecords.value = []
+  } finally {
+    maintLoading.value = false
+  }
 }
 
 const handleDelete = async (row) => {

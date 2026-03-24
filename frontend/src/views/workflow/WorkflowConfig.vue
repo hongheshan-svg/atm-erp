@@ -369,7 +369,7 @@ import {
   UserFilled, Avatar, OfficeBuilding, Connection
 } from '@element-plus/icons-vue'
 import { 
-  getWorkflowDefinitions, createWorkflowDefinition, updateWorkflowDefinition,
+  getWorkflowDefinitions, createWorkflowDefinition, updateWorkflowDefinition, deleteWorkflowDefinition,
   getWorkflowSteps, createWorkflowStep, updateWorkflowStep, deleteWorkflowStep
 } from '@/api/workflow'
 import { getUsers, getRoles } from '@/api/auth'
@@ -483,7 +483,7 @@ const treeData = computed(() => {
 })
 
 const estimatedDays = computed(() => {
-  return steps.value.reduce((sum, s) => sum + (s.timeout_days || 1), 0)
+  return steps.value.reduce((sum, s) => sum + Math.ceil((s.timeout_hours || 24) / 24), 0)
 })
 
 // 方法
@@ -545,7 +545,7 @@ const loadSteps = async () => {
   stepsLoading.value = true
   try {
     const res = await getWorkflowSteps({ workflow: selectedWorkflow.value.id })
-    steps.value = (res.results || res || []).sort((a, b) => a.order - b.order)
+    steps.value = (res.results || res || []).sort((a, b) => (a.step_order || a.order || 0) - (b.step_order || b.order || 0))
   } catch (error) {
     steps.value = []
   } finally {
@@ -645,7 +645,7 @@ const toggleStatus = async (workflow) => {
 const deleteWorkflow = async (workflow) => {
   try {
     await ElMessageBox.confirm(`确定要删除流程"${workflow.name}"吗？此操作不可恢复。`, '删除确认', { type: 'warning' })
-    // 这里需要添加删除API
+    await deleteWorkflowDefinition(workflow.id)
     ElMessage.success('删除成功')
     selectedWorkflow.value = null
     loadWorkflows()
@@ -671,6 +671,9 @@ const editStep = async (step) => {
   isEditStep.value = true
   stepForm.value = { 
     ...step,
+    approver: step.approver_user || null,
+    role: step.approver_role || null,
+    timeout_days: Math.ceil((step.timeout_hours || 24) / 24),
     cc_users: step.cc_users || [],
     cc_roles: step.cc_roles || []
   }
@@ -690,10 +693,19 @@ const saveStep = async () => {
   }
   stepSaving.value = true
   try {
+    const formData = stepForm.value
     const data = { 
-      ...stepForm.value, 
-      workflow: selectedWorkflow.value.id, 
-      order: isEditStep.value ? stepForm.value.order : steps.value.length + 1 
+      name: formData.name,
+      workflow: selectedWorkflow.value.id,
+      step_order: isEditStep.value ? (formData.step_order || formData.order) : steps.value.length + 1,
+      approver_type: formData.approver_type,
+      approver_user: formData.approver_type === 'USER' ? formData.approver : null,
+      approver_role: formData.approver_type === 'ROLE' ? formData.role : null,
+      action_type: formData.action_type || 'APPROVE',
+      timeout_hours: (formData.timeout_days || 3) * 24,
+      can_reject: formData.can_reject !== false,
+      cc_users: formData.cc_users || [],
+      cc_roles: formData.cc_roles || []
     }
     if (isEditStep.value) {
       await updateWorkflowStep(stepForm.value.id, data)
@@ -728,8 +740,8 @@ const moveStep = async (index, direction) => {
   const step2 = steps.value[newIndex]
   try {
     await Promise.all([
-      updateWorkflowStep(step1.id, { ...step1, order: step2.order }),
-      updateWorkflowStep(step2.id, { ...step2, order: step1.order })
+      updateWorkflowStep(step1.id, { ...step1, step_order: step2.step_order }),
+      updateWorkflowStep(step2.id, { ...step2, step_order: step1.step_order })
     ])
     await loadSteps()
   } catch (error) {
