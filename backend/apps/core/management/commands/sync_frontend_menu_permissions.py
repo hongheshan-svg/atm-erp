@@ -53,9 +53,11 @@ MENU_GROUPS = {
         ('crm',        '客户管理', ['sales:crm-dashboard', 'sales:leads', 'sales:opportunities', 'sales:performance', 'sales:analysis']),
         ('order',      '报价合同', ['sales:quotations', 'sales:quote-estimation', 'sales:quote', 'sales:orders', 'sales:contracts', 'sales:contract-templates', 'sales:quote-templates']),
         ('aftersales', '发货售后', ['sales:delivery-orders', 'sales:training', 'sales:service', 'aftersales:orders', 'aftersales:service']),
+        ('reconcile',  '销售对账', ['finance:sales-reconciliation']),
     ],
     'purchase': [
         ('business', '采购业务',   ['purchase:requests', 'purchase:orders', 'purchase:goods-receipts', 'purchase:budgets']),
+        ('reconcile', '采购对账',  ['finance:purchase-reconciliation']),
         ('supplier', '供应商管理', ['purchase:comparisons', 'purchase:evaluations', 'purchase:blacklist']),
         ('collab',   '委外协同',   ['purchase:outsource', 'purchase:collaboration', 'purchase:portal']),
     ],
@@ -72,7 +74,7 @@ MENU_GROUPS = {
     ],
     'finance': [
         ('cashflow',  '费用管理', ['finance:expenses', 'finance:shared-expenses', 'finance:collection']),
-        ('reconcile', '对账结算', ['finance:ar', 'finance:ap', 'finance:sales-reconciliation', 'finance:purchase-reconciliation', 'finance:invoices']),
+        ('reconcile', '对账结算', ['finance:ar', 'finance:ap', 'finance:invoices']),
         ('assets',    '资产成本', ['finance:project-costs', 'finance:assets']),
     ],
     'masterdata': [
