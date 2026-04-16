@@ -1,5 +1,5 @@
 <template>
-  <el-container class="layout-container">
+  <el-container v-if="userStore.profileReady" class="layout-container">
     <el-aside :width="isCollapse ? '64px' : '240px'" class="sidebar">
       <div class="logo" @click="$router.push('/')">
         <div class="logo-icon">
@@ -77,11 +77,7 @@
       </el-header>
 
       <el-main class="main-content">
-        <router-view v-slot="{ Component }">
-          <transition name="page" mode="out-in">
-            <component :is="Component" />
-          </transition>
-        </router-view>
+        <router-view />
       </el-main>
 
       <el-footer class="footer" height="36px">
@@ -90,6 +86,9 @@
       </el-footer>
     </el-container>
   </el-container>
+  <div v-else class="app-loading">
+    <div class="app-loading-spinner"></div>
+  </div>
 </template>
 
 <script setup>
@@ -140,9 +139,6 @@ const handleCommand = (command) => {
 }
 
 onMounted(async () => {
-  if (!userStore.userInfo) {
-    await userStore.getProfile()
-  }
   await loadCompanyConfig()
 })
 </script>
@@ -459,5 +455,25 @@ onMounted(async () => {
 }
 .page-leave-to {
   opacity: 0;
+}
+
+/* ---- App Loading ---- */
+.app-loading {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-page);
+}
+.app-loading-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>

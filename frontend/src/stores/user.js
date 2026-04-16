@@ -6,6 +6,7 @@ import router from '@/router'
 
 export const useUserStore = defineStore('user', () => {
   const userInfo = ref(null)
+  const profileReady = ref(false)
 
   // Login
   async function login(username, password) {
@@ -24,6 +25,7 @@ export const useUserStore = defineStore('user', () => {
       permissionStore.setMenus(data.user.menus || [])
       permissionStore.setDataScopes(data.user.data_scopes || {})
 
+      profileReady.value = true
       return true
     } catch (error) {
       console.error('Login failed:', error)
@@ -34,6 +36,7 @@ export const useUserStore = defineStore('user', () => {
   // Logout
   function logout() {
     userInfo.value = null
+    profileReady.value = false
     localStorage.clear()
 
     const permissionStore = usePermissionStore()
@@ -44,24 +47,22 @@ export const useUserStore = defineStore('user', () => {
 
   // Get user profile
   async function getProfile() {
-    try {
-      const response = await getUserProfile()
-      const data = response.data || response
-      userInfo.value = data
+    const response = await getUserProfile()
+    const data = response.data || response
+    userInfo.value = data
 
-      // 设置权限数据到 Permission Store
-      const permissionStore = usePermissionStore()
-      permissionStore.setPermissions(data.permissions || [])
-      permissionStore.setMenus(data.menus || [])
-      permissionStore.setDataScopes(data.data_scopes || {})
-    } catch (error) {
-      console.error('Get profile failed:', error)
-      logout()
-    }
+    // 设置权限数据到 Permission Store
+    const permissionStore = usePermissionStore()
+    permissionStore.setPermissions(data.permissions || [])
+    permissionStore.setMenus(data.menus || [])
+    permissionStore.setDataScopes(data.data_scopes || {})
+
+    profileReady.value = true
   }
 
   return {
     userInfo,
+    profileReady,
     login,
     logout,
     getProfile

@@ -1310,9 +1310,18 @@ router.beforeEach(async (to, from, next) => {
         await userStore.getProfile()
       } catch (error) {
         console.error('Failed to load user profile:', error)
+        // 清理无效状态
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('refresh_token')
         next('/login')
         return
       }
+    }
+
+    // 二次验证：确认 profile 确实加载成功
+    if (!userStore.userInfo) {
+      next('/login')
+      return
     }
 
     // 公共页面（如个人中心、修改密码）不检查权限
@@ -1339,6 +1348,21 @@ router.beforeEach(async (to, from, next) => {
   }
 
   next()
+})
+
+// 当懒加载组件的 chunk 文件加载失败时（通常因为新版本部署后旧 chunk 不存在），
+// 自动刷新页面以获取最新的 index.html 和正确的 chunk 引用
+router.onError((error) => {
+  const isChunkError = error.message && (
+    error.message.includes('Failed to fetch dynamically imported module') ||
+    error.message.includes('Loading chunk') ||
+    error.message.includes('Loading CSS chunk') ||
+    error.message.includes('Unable to preload CSS')
+  )
+  if (isChunkError) {
+    console.warn('Chunk load error detected, reloading page...', error.message)
+    window.location.reload()
+  }
 })
 
 export default router

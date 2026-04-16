@@ -7,6 +7,46 @@ const service = axios.create({
   timeout: 30000
 })
 
+// JWT refresh state management - prevents concurrent refresh attempts
+let isRefreshing = false
+let failedQueue = []
+
+const syncUserProfile = async (accessToken) => {
+  try {
+    const response = await axios.get('/api/auth/users/profile/', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    })
+    const profile = response.data?.data || response.data
+    const [{ useUserStore }, { usePermissionStore }] = await Promise.all([
+      import('@/stores/user'),
+      import('@/stores/permission')
+    ])
+    const userStore = useUserStore()
+    const permissionStore = usePermissionStore()
+
+    userStore.userInfo = profile
+    permissionStore.setPermissions(profile.permissions || [])
+    permissionStore.setMenus(profile.menus || [])
+    permissionStore.setDataScopes(profile.data_scopes || {})
+    userStore.profileReady = true
+  } catch (syncError) {
+    console.warn('Failed to sync user profile after token refresh:', syncError)
+  }
+}
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error)
+    } else {
+      prom.resolve(token)
+    }
+  })
+  failedQueue = []
+}
+
 // Request interceptor
 service.interceptors.request.use(
   config => {
@@ -33,37 +73,58 @@ service.interceptors.response.use(
     return response.data
   },
   async error => {
+    const originalRequest = error.config
+
     if (error.response) {
       const { status, data } = error.response
       
-      if (status === 401) {
+      if (status === 401 && !originalRequest._retry) {
         // Token expired or invalid
         const refreshToken = localStorage.getItem('refresh_token')
-        if (refreshToken) {
-          try {
-            // Try to refresh token
-            const response = await axios.post('/api/auth/refresh/', {
-              refresh: refreshToken
-            })
-            
-            const { access } = response.data
-            localStorage.setItem('access_token', access)
-            
-            // Retry original request
-            error.config.headers['Authorization'] = `Bearer ${access}`
-            return service.request(error.config)
-          } catch (refreshError) {
-            // Refresh failed, redirect to login
-            localStorage.clear()
-            router.push('/login')
-            ElMessage.error('登录已过期，请重新登录')
-            return Promise.reject(refreshError)
-          }
-        } else {
-          // No refresh token, redirect to login
+        
+        if (!refreshToken) {
           localStorage.clear()
           router.push('/login')
           ElMessage.error('请先登录')
+          return Promise.reject(error)
+        }
+
+        // If already refreshing, queue this request
+        if (isRefreshing) {
+          return new Promise((resolve, reject) => {
+            failedQueue.push({ resolve, reject })
+          }).then(token => {
+            originalRequest.headers['Authorization'] = `Bearer ${token}`
+            return service.request(originalRequest)
+          }).catch(err => Promise.reject(err))
+        }
+
+        originalRequest._retry = true
+        isRefreshing = true
+
+        try {
+          const response = await axios.post('/api/accounts/refresh/', {
+            refresh: refreshToken
+          })
+          
+          const { access } = response.data
+          localStorage.setItem('access_token', access)
+          await syncUserProfile(access)
+          
+          // Process queued requests with new token
+          processQueue(null, access)
+          
+          // Retry original request
+          originalRequest.headers['Authorization'] = `Bearer ${access}`
+          return service.request(originalRequest)
+        } catch (refreshError) {
+          processQueue(refreshError, null)
+          localStorage.clear()
+          router.push('/login')
+          ElMessage.error('登录已过期，请重新登录')
+          return Promise.reject(refreshError)
+        } finally {
+          isRefreshing = false
         }
       } else if (status === 403) {
         ElMessage.error('没有权限执行此操作')
@@ -72,7 +133,7 @@ service.interceptors.response.use(
       } else if (status === 500) {
         ElMessage.error('服务器错误，请稍后再试')
       } else {
-        ElMessage.error(data.detail || data.error || '请求失败')
+        ElMessage.error(data?.detail || data?.error || '请求失败')
       }
     } else {
       ElMessage.error('网络错误，请检查您的网络连接')
@@ -83,4 +144,3 @@ service.interceptors.response.use(
 )
 
 export default service
-
