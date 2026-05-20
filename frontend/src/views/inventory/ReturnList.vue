@@ -489,7 +489,12 @@ const resetSearch = () => {
 }
 
 const handleAdd = async () => {
-  await Promise.all([ensureProjectSelectorsLoaded(), ensureAftersalesOrdersLoaded()])
+  try {
+    await Promise.all([ensureProjectSelectorsLoaded(), ensureAftersalesOrdersLoaded()])
+  } catch (error) {
+    console.error('加载数据失败', error)
+    ElMessage.error('加载数据失败')
+  }
   dialogTitle.value = '新建退料单'
   isEdit.value = false
   Object.assign(form, {
@@ -508,7 +513,12 @@ const handleAdd = async () => {
 }
 
 const handleEdit = async (row) => {
-  await Promise.all([ensureProjectSelectorsLoaded(), ensureAftersalesOrdersLoaded()])
+  try {
+    await Promise.all([ensureProjectSelectorsLoaded(), ensureAftersalesOrdersLoaded()])
+  } catch (error) {
+    console.error('加载数据失败', error)
+    ElMessage.error('加载数据失败')
+  }
   dialogTitle.value = '编辑退料单'
   isEdit.value = true
   

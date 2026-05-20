@@ -604,7 +604,12 @@ const handleBatchDelete = async () => {
 const handleViewBank = (row) => { currentBankStatement.value = row; bankDetailVisible.value = true }
 
 const handleMatchBank = async (row) => {
-  await Promise.all([ensureProjectsLoaded(), ensureSalesOrdersLoaded()])
+  try {
+    await Promise.all([ensureProjectsLoaded(), ensureSalesOrdersLoaded()])
+  } catch (error) {
+    console.error('加载数据失败', error)
+    ElMessage.error('加载数据失败')
+  }
   currentBankStatement.value = row
   bankMatchForm.customer_id = row.customer || null
   bankMatchForm.project_id = null
