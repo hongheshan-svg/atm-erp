@@ -1,0 +1,36 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^backend/
+      - id: ruff-format
+        files: ^backend/
+
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint (frontend)
+        language: system
+        entry: bash -c 'cd frontend && npx eslint --max-warnings 0'
+        files: ^frontend/src/.*\.(js|vue)$
+        pass_filenames: false
+
+      - id: no-commit-to-main
+        name: prevent direct commits to main
+        language: system
+        entry: bash -c 'branch=$(git rev-parse --abbrev-ref HEAD); if [ "$branch" = "main" ]; then echo "ERROR: Direct commits to main are not allowed. Use a feature branch."; exit 1; fi'
+        always_run: true
+        pass_filenames: false
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(frontend/package-lock\.json|.*\.min\.js)$
+      - id: end-of-file-fixer
+        exclude: ^(frontend/package-lock\.json|.*\.min\.js)$
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=500']

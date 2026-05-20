@@ -603,8 +603,13 @@ const savePermissions = async () => {
   }
 }
 
-onMounted(() => {
-  Promise.all([loadPermissionCatalog(), loadRoles()])
+onMounted(async () => {
+  try {
+    await Promise.all([loadPermissionCatalog(), loadRoles()])
+  } catch (error) {
+    console.error('加载数据失败', error)
+    ElMessage.error('加载数据失败')
+  }
 })
 </script>
 

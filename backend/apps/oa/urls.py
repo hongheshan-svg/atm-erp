@@ -1,42 +1,47 @@
 """
 OA协同办公模块 URL 配置
 """
-from django.urls import path, include
+
+import json
+
+from django.http import JsonResponse
+from django.urls import include, path
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework.routers import DefaultRouter
 
-from .im import IMConversationViewSet, IMMessageViewSet
-from .archive import (
-    ArchiveCategoryViewSet, ArchiveViewSet, ArchiveBorrowViewSet,
-    ArchiveTransferViewSet, ArchiveDestructionViewSet
-)
-from .electronic_signature import (
-    SignatureSealViewSet, SignatureDocumentViewSet, SignatureLogViewSet
-)
-from .vehicle import VehicleViewSet, VehicleRequestViewSet, VehicleMaintenanceViewSet
-from .asset import (
-    AssetCategoryViewSet, AssetViewSet, AssetBorrowViewSet,
-    AssetTransferViewSet, AssetMaintenanceViewSet
-)
-from apps.core.schedule import ScheduleViewSet, MeetingViewSet, MeetingRoomViewSet
-from apps.core.announcement import AnnouncementViewSet
 from apps.accounts.attendance import (
-    AttendanceRecordViewSet, AttendanceConfigViewSet,
-    LeaveRequestViewSet, OvertimeRequestViewSet
+    AttendanceConfigViewSet,
+    AttendanceRecordViewSet,
+    LeaveRequestViewSet,
+    OvertimeRequestViewSet,
 )
+from apps.core.announcement import AnnouncementViewSet
+from apps.core.schedule import MeetingRoomViewSet, MeetingViewSet, ScheduleViewSet
+
+from .archive import (
+    ArchiveBorrowViewSet,
+    ArchiveCategoryViewSet,
+    ArchiveDestructionViewSet,
+    ArchiveTransferViewSet,
+    ArchiveViewSet,
+)
+from .asset import AssetBorrowViewSet, AssetCategoryViewSet, AssetMaintenanceViewSet, AssetTransferViewSet, AssetViewSet
 from .attendance_device import (
-    AttendanceDeviceViewSet, DeviceUserMappingViewSet,
-    DeviceAttendanceLogViewSet, DeviceSyncLogViewSet
-)
-from .wechat_work import (
-    WechatWorkConfigViewSet, WechatUserMappingViewSet,
-    WechatCheckinRecordViewSet, WechatSyncLogViewSet
+    AttendanceDeviceViewSet,
+    DeviceAttendanceLogViewSet,
+    DeviceSyncLogViewSet,
+    DeviceUserMappingViewSet,
 )
 from .attendance_sync_service import ZKTECOWebhookHandler
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse
-import json
+from .electronic_signature import SignatureDocumentViewSet, SignatureLogViewSet, SignatureSealViewSet
+from .im import IMConversationViewSet, IMMessageViewSet
+from .vehicle import VehicleMaintenanceViewSet, VehicleRequestViewSet, VehicleViewSet
+from .wechat_work import (
+    WechatCheckinRecordViewSet,
+    WechatSyncLogViewSet,
+    WechatUserMappingViewSet,
+    WechatWorkConfigViewSet,
+)
 
 router = DefaultRouter()
 router.register(r'conversations', IMConversationViewSet, basename='im-conversation')
@@ -100,7 +105,7 @@ def device_webhook(request, device_sn):
     """
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
-    
+
     try:
         # 尝试解析JSON
         if request.content_type == 'application/json':
@@ -117,14 +122,14 @@ def device_webhook(request, device_sn):
                     if '=' in line:
                         k, v = line.split('=', 1)
                         data[k] = v
-        
+
         result = ZKTECOWebhookHandler.handle_push_data(device_sn, data)
-        
+
         if result['success']:
             return JsonResponse({'OK': ''})  # iclock 协议要求返回 OK
         else:
             return JsonResponse({'error': result['message']}, status=400)
-            
+
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -136,11 +141,11 @@ def device_webhook_iclock(request):
     设备会以 GET 请求获取命令，POST 请求推送数据
     """
     device_sn = request.GET.get('SN', '') or request.POST.get('SN', '')
-    
+
     if request.method == 'GET':
         # 设备请求命令
         return JsonResponse({'OK': ''})
-    
+
     if request.method == 'POST':
         # 设备推送数据
         if device_sn:
@@ -150,10 +155,10 @@ def device_webhook_iclock(request):
             if request.body:
                 body_str = request.body.decode('utf-8', errors='ignore')
                 data['body'] = body_str
-            
+
             result = ZKTECOWebhookHandler.handle_push_data(device_sn, data)
             return JsonResponse({'OK': ''})
-    
+
     return JsonResponse({'error': 'Invalid request'}, status=400)
 
 

@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import Project, ProjectMember, ProjectTask, ProjectBOM
+
+from .models import Project, ProjectBOM, ProjectMember, ProjectTask
 
 
 @admin.register(Project)
@@ -32,4 +33,3 @@ class ProjectBOMAdmin(admin.ModelAdmin):
     list_filter = ['is_deleted', 'created_at']
     search_fields = ['project__code', 'item__sku']
     ordering = ['-created_at']
-

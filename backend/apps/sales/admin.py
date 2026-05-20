@@ -1,9 +1,6 @@
 from django.contrib import admin
-from .models import (
-    SalesQuotation, SalesQuotationLine,
-    SalesOrder, SalesOrderLine,
-    DeliveryOrder, DeliveryOrderLine
-)
+
+from .models import DeliveryOrder, DeliveryOrderLine, SalesOrder, SalesOrderLine, SalesQuotation, SalesQuotationLine
 
 
 class SalesQuotationLineInline(admin.TabularInline):
@@ -46,4 +43,3 @@ class DeliveryOrderAdmin(admin.ModelAdmin):
     search_fields = ['delivery_no']
     inlines = [DeliveryOrderLineInline]
     ordering = ['-created_at']
-

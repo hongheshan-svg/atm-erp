@@ -1,15 +1,17 @@
 """
 Installation Site Management for Non-standard Automation Equipment
 """
-from django.db import models
+
 from django.conf import settings
+from django.db import models
 from django.utils import timezone
-from rest_framework import serializers, viewsets, status
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class InstallationTask(BaseModel):
@@ -25,16 +27,17 @@ class InstallationTask(BaseModel):
     ]
 
     project = models.ForeignKey(
-        'projects.Project', on_delete=models.CASCADE,
-        related_name='installation_tasks', verbose_name='项目'
+        'projects.Project', on_delete=models.CASCADE, related_name='installation_tasks', verbose_name='项目'
     )
     task_number = models.CharField(max_length=50, unique=True, verbose_name='任务编号')
-    status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='状态')
     leader = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
-        null=True, blank=True, related_name='installation_tasks_led', verbose_name='负责人'
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='installation_tasks_led',
+        verbose_name='负责人',
     )
     site_address = models.TextField(verbose_name='现场地址')
     site_contact = models.CharField(max_length=100, blank=True, default='', verbose_name='现场联系人')
@@ -61,7 +64,7 @@ class InstallationTask(BaseModel):
         if not self.task_number:
             last = InstallationTask.objects.order_by('-id').first()
             num = (last.id + 1) if last else 1
-            self.task_number = f"INST-{num:06d}"
+            self.task_number = f'INST-{num:06d}'
         super().save(*args, **kwargs)
 
 
@@ -74,23 +77,22 @@ class SiteLog(BaseModel):
     ]
 
     task = models.ForeignKey(
-        InstallationTask, on_delete=models.CASCADE,
-        related_name='site_logs', verbose_name='安装任务'
+        InstallationTask, on_delete=models.CASCADE, related_name='site_logs', verbose_name='安装任务'
     )
-    log_type = models.CharField(
-        max_length=20, choices=LOG_TYPE_CHOICES, verbose_name='日志类型'
-    )
+    log_type = models.CharField(max_length=20, choices=LOG_TYPE_CHOICES, verbose_name='日志类型')
     log_date = models.DateField(verbose_name='日志日期')
     content = models.TextField(verbose_name='内容')
-    work_hours = models.DecimalField(
-        max_digits=6, decimal_places=1, null=True, blank=True, verbose_name='工时'
-    )
+    work_hours = models.DecimalField(max_digits=6, decimal_places=1, null=True, blank=True, verbose_name='工时')
     workers_count = models.IntegerField(default=1, verbose_name='人数')
     gps_location = models.CharField(max_length=100, blank=True, default='', verbose_name='GPS位置')
     images = models.JSONField(default=list, verbose_name='图片')
     created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
-        null=True, blank=True, related_name='site_logs_created', verbose_name='记录人'
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='site_logs_created',
+        verbose_name='记录人',
     )
 
     class Meta:
@@ -100,7 +102,7 @@ class SiteLog(BaseModel):
         verbose_name_plural = '现场日志'
 
     def __str__(self):
-        return f"{self.task.task_number} - {self.log_date}"
+        return f'{self.task.task_number} - {self.log_date}'
 
 
 class CommissioningRecord(BaseModel):
@@ -111,20 +113,21 @@ class CommissioningRecord(BaseModel):
     ]
 
     task = models.ForeignKey(
-        InstallationTask, on_delete=models.CASCADE,
-        related_name='commissioning_records', verbose_name='安装任务'
+        InstallationTask, on_delete=models.CASCADE, related_name='commissioning_records', verbose_name='安装任务'
     )
     test_item = models.CharField(max_length=200, verbose_name='测试项目')
     test_date = models.DateField(verbose_name='测试日期')
     parameters = models.JSONField(default=dict, verbose_name='测试参数')
     standard = models.JSONField(default=dict, verbose_name='验收标准')
-    result = models.CharField(
-        max_length=20, choices=RESULT_CHOICES, verbose_name='测试结果'
-    )
+    result = models.CharField(max_length=20, choices=RESULT_CHOICES, verbose_name='测试结果')
     actual_values = models.JSONField(default=dict, verbose_name='实际值')
     tester = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
-        null=True, blank=True, related_name='commissioning_tests', verbose_name='测试人'
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='commissioning_tests',
+        verbose_name='测试人',
     )
     notes = models.TextField(blank=True, default='', verbose_name='备注')
 
@@ -135,7 +138,7 @@ class CommissioningRecord(BaseModel):
         verbose_name_plural = '调试记录'
 
     def __str__(self):
-        return f"{self.test_item} - {self.get_result_display()}"
+        return f'{self.test_item} - {self.get_result_display()}'
 
 
 class SiteIssue(BaseModel):
@@ -153,23 +156,22 @@ class SiteIssue(BaseModel):
     ]
 
     task = models.ForeignKey(
-        InstallationTask, on_delete=models.CASCADE,
-        related_name='site_issues', verbose_name='安装任务'
+        InstallationTask, on_delete=models.CASCADE, related_name='site_issues', verbose_name='安装任务'
     )
     title = models.CharField(max_length=300, verbose_name='问题标题')
     description = models.TextField(verbose_name='问题描述')
-    severity = models.CharField(
-        max_length=10, choices=SEVERITY_CHOICES, verbose_name='严重程度'
-    )
-    status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default='open', verbose_name='状态'
-    )
+    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, verbose_name='严重程度')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open', verbose_name='状态')
     images = models.JSONField(default=list, verbose_name='图片')
     resolution = models.TextField(blank=True, default='', verbose_name='解决方案')
     need_return = models.BooleanField(default=False, verbose_name='是否需要返厂')
     reported_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
-        null=True, blank=True, related_name='site_issues_reported', verbose_name='报告人'
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='site_issues_reported',
+        verbose_name='报告人',
     )
 
     class Meta:
@@ -190,14 +192,11 @@ class CustomerAcceptance(BaseModel):
     ]
 
     task = models.ForeignKey(
-        InstallationTask, on_delete=models.CASCADE,
-        related_name='acceptances', verbose_name='安装任务'
+        InstallationTask, on_delete=models.CASCADE, related_name='acceptances', verbose_name='安装任务'
     )
     acceptance_date = models.DateField(verbose_name='验收日期')
     checklist = models.JSONField(default=list, verbose_name='验收清单')
-    result = models.CharField(
-        max_length=20, choices=RESULT_CHOICES, verbose_name='验收结果'
-    )
+    result = models.CharField(max_length=20, choices=RESULT_CHOICES, verbose_name='验收结果')
     customer_representative = models.CharField(max_length=100, verbose_name='客户代表')
     signature_data = models.TextField(blank=True, default='', verbose_name='签名数据')
     notes = models.TextField(blank=True, default='', verbose_name='备注')
@@ -209,10 +208,11 @@ class CustomerAcceptance(BaseModel):
         verbose_name_plural = '客户验收'
 
     def __str__(self):
-        return f"{self.task.task_number} - {self.get_result_display()}"
+        return f'{self.task.task_number} - {self.get_result_display()}'
 
 
 # ─── Serializers ────────────────────────────────────────────────
+
 
 class SiteLogSerializer(serializers.ModelSerializer):
     log_type_display = serializers.CharField(source='get_log_type_display', read_only=True)
@@ -263,7 +263,8 @@ class InstallationTaskSerializer(serializers.ModelSerializer):
 
 # ─── ViewSets ───────────────────────────────────────────────────
 
-class InstallationTaskViewSet(viewsets.ModelViewSet):
+
+class InstallationTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = InstallationTaskSerializer
     permission_classes = [IsAuthenticated]
 
@@ -315,14 +316,17 @@ class InstallationTaskViewSet(viewsets.ModelViewSet):
     def summary(self, request):
         qs = self.get_queryset()
         from django.db.models import Count
+
         summary = qs.values('status').annotate(count=Count('id'))
-        return Response({
-            'total': qs.count(),
-            'by_status': list(summary),
-        })
+        return Response(
+            {
+                'total': qs.count(),
+                'by_status': list(summary),
+            }
+        )
 
 
-class SiteLogViewSet(viewsets.ModelViewSet):
+class SiteLogViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = SiteLogSerializer
     permission_classes = [IsAuthenticated]
 
@@ -337,7 +341,7 @@ class SiteLogViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
 
-class CommissioningRecordViewSet(viewsets.ModelViewSet):
+class CommissioningRecordViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = CommissioningRecordSerializer
     permission_classes = [IsAuthenticated]
 
@@ -352,7 +356,7 @@ class CommissioningRecordViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
 
-class SiteIssueViewSet(viewsets.ModelViewSet):
+class SiteIssueViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = SiteIssueSerializer
     permission_classes = [IsAuthenticated]
 
@@ -377,7 +381,7 @@ class SiteIssueViewSet(viewsets.ModelViewSet):
         return Response(SiteIssueSerializer(issue).data)
 
 
-class CustomerAcceptanceViewSet(viewsets.ModelViewSet):
+class CustomerAcceptanceViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = CustomerAcceptanceSerializer
     permission_classes = [IsAuthenticated]
 

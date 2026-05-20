@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import ItemCategory, Item, Customer, Supplier, Warehouse
+
+from .models import Customer, Item, ItemCategory, Supplier, Warehouse
 
 
 @admin.register(ItemCategory)
@@ -40,4 +41,3 @@ class WarehouseAdmin(admin.ModelAdmin):
     list_filter = ['warehouse_type', 'is_active', 'is_deleted', 'created_at']
     search_fields = ['code', 'name', 'location']
     ordering = ['code']
-

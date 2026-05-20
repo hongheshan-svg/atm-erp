@@ -1,51 +1,81 @@
 """
 URL configuration for purchase app.
 """
-from django.urls import path, include
+
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from .views import (
-    PurchaseRequestViewSet, PurchaseRequestLineViewSet,
-    PurchaseOrderViewSet, PurchaseOrderLineViewSet,
-    GoodsReceiptViewSet, GoodsReceiptLineViewSet,
-    PurchaseContractViewSet
-)
-from .rfq_views import (
-    RFQViewSet, RFQLineViewSet, RFQSupplierViewSet,
-    SupplierQuotationViewSet, SupplierQuotationLineViewSet,
-    QuotationComparisonViewSet, QuotationScoreViewSet, ItemPriceHistoryViewSet,
-    RFQTemplateViewSet, SupplierCapabilityViewSet, SupplierCapabilityMappingViewSet,
-    RFQAttachmentViewSet
-)
-from .outsource_views import (
-    OutsourceOrderViewSet, OutsourceOrderLineViewSet,
-    OutsourceMaterialIssueViewSet, OutsourceMaterialIssueLineViewSet,
-    OutsourceReceiptViewSet, OutsourceReceiptLineViewSet
+
+from .budget import BudgetLineViewSet, PurchaseBudgetViewSet
+from .contract_execution import (
+    ContractExecutionViewSet,
+    ContractIssueViewSet,
+    DeliveryRecordViewSet,
+    PaymentRecordViewSet,
 )
 from .evaluation_views import (
-    SupplierEvaluationTemplateViewSet, EvaluationCriteriaViewSet,
-    SupplierEvaluationViewSet, EvaluationScoreItemViewSet,
-    SupplierGradeHistoryViewSet, SupplierBlacklistViewSet
-)
-from .budget import PurchaseBudgetViewSet, BudgetLineViewSet
-from .supplier_qualification import (
-    QualificationTypeViewSet, SupplierQualificationViewSet, QualificationReminderViewSet
-)
-from .contract_execution import (
-    ContractExecutionViewSet, DeliveryRecordViewSet, PaymentRecordViewSet, ContractIssueViewSet
+    EvaluationCriteriaViewSet,
+    EvaluationScoreItemViewSet,
+    SupplierBlacklistViewSet,
+    SupplierEvaluationTemplateViewSet,
+    SupplierEvaluationViewSet,
+    SupplierGradeHistoryViewSet,
 )
 from .outsource_tracking import (
-    OutsourceCapabilityViewSet, OutsourceProgressViewSet,
-    OutsourceInspectionViewSet, OutsourceClaimViewSet
+    OutsourceCapabilityViewSet,
+    OutsourceClaimViewSet,
+    OutsourceInspectionViewSet,
+    OutsourceProgressViewSet,
 )
-from .supply_chain_collaboration import (
-    SupplierPortalUserViewSet, RFQCollaborationViewSet,
-    DeliveryCollaborationViewSet, QualityCollaborationViewSet,
-    ReconciliationCollaborationViewSet, SupplierNotificationViewSet
+from .outsource_views import (
+    OutsourceMaterialIssueLineViewSet,
+    OutsourceMaterialIssueViewSet,
+    OutsourceOrderLineViewSet,
+    OutsourceOrderViewSet,
+    OutsourceReceiptLineViewSet,
+    OutsourceReceiptViewSet,
+)
+from .rfq_views import (
+    ItemPriceHistoryViewSet,
+    QuotationComparisonViewSet,
+    QuotationScoreViewSet,
+    RFQAttachmentViewSet,
+    RFQLineViewSet,
+    RFQSupplierViewSet,
+    RFQTemplateViewSet,
+    RFQViewSet,
+    SupplierCapabilityMappingViewSet,
+    SupplierCapabilityViewSet,
+    SupplierQuotationLineViewSet,
+    SupplierQuotationViewSet,
 )
 from .supplier_portal import (
-    SupplierAccountViewSet, SupplierOrderViewViewSet, SupplierQualityRecordViewSet,
-    SupplierPortalLoginView, SupplierPortalOrdersView, SupplierPortalOrderDetailView,
-    SupplierPortalQualityView, SupplierPortalMessagesView, SupplierDashboardView
+    SupplierAccountViewSet,
+    SupplierDashboardView,
+    SupplierOrderViewViewSet,
+    SupplierPortalLoginView,
+    SupplierPortalMessagesView,
+    SupplierPortalOrderDetailView,
+    SupplierPortalOrdersView,
+    SupplierPortalQualityView,
+    SupplierQualityRecordViewSet,
+)
+from .supplier_qualification import QualificationReminderViewSet, QualificationTypeViewSet, SupplierQualificationViewSet
+from .supply_chain_collaboration import (
+    DeliveryCollaborationViewSet,
+    QualityCollaborationViewSet,
+    ReconciliationCollaborationViewSet,
+    RFQCollaborationViewSet,
+    SupplierNotificationViewSet,
+    SupplierPortalUserViewSet,
+)
+from .views import (
+    GoodsReceiptLineViewSet,
+    GoodsReceiptViewSet,
+    PurchaseContractViewSet,
+    PurchaseOrderLineViewSet,
+    PurchaseOrderViewSet,
+    PurchaseRequestLineViewSet,
+    PurchaseRequestViewSet,
 )
 
 router = DefaultRouter()
@@ -70,7 +100,9 @@ router.register(r'price-history', ItemPriceHistoryViewSet, basename='price-histo
 router.register(r'rfq-templates', RFQTemplateViewSet, basename='rfq-template')
 router.register(r'rfq-attachments', RFQAttachmentViewSet, basename='rfq-attachment')
 router.register(r'supplier-capabilities', SupplierCapabilityViewSet, basename='supplier-capability')
-router.register(r'supplier-capability-mappings', SupplierCapabilityMappingViewSet, basename='supplier-capability-mapping')
+router.register(
+    r'supplier-capability-mappings', SupplierCapabilityMappingViewSet, basename='supplier-capability-mapping'
+)
 
 # 外协加工
 router.register(r'outsource-orders', OutsourceOrderViewSet, basename='outsource-order')
@@ -124,13 +156,25 @@ router.register(r'supplier-quality-records', SupplierQualityRecordViewSet, basen
 
 urlpatterns = [
     path('', include(router.urls)),
-    
     # 供应商门户API
     path('supplier-portal/login/', SupplierPortalLoginView.as_view(), name='supplier-portal-login'),
-    path('supplier-portal/<int:supplier_id>/orders/', SupplierPortalOrdersView.as_view(), name='supplier-portal-orders'),
-    path('supplier-portal/<int:supplier_id>/orders/<int:order_view_id>/', SupplierPortalOrderDetailView.as_view(), name='supplier-portal-order-detail'),
-    path('supplier-portal/<int:supplier_id>/quality/', SupplierPortalQualityView.as_view(), name='supplier-portal-quality'),
-    path('supplier-portal/<int:supplier_id>/messages/', SupplierPortalMessagesView.as_view(), name='supplier-portal-messages'),
+    path(
+        'supplier-portal/<int:supplier_id>/orders/', SupplierPortalOrdersView.as_view(), name='supplier-portal-orders'
+    ),
+    path(
+        'supplier-portal/<int:supplier_id>/orders/<int:order_view_id>/',
+        SupplierPortalOrderDetailView.as_view(),
+        name='supplier-portal-order-detail',
+    ),
+    path(
+        'supplier-portal/<int:supplier_id>/quality/',
+        SupplierPortalQualityView.as_view(),
+        name='supplier-portal-quality',
+    ),
+    path(
+        'supplier-portal/<int:supplier_id>/messages/',
+        SupplierPortalMessagesView.as_view(),
+        name='supplier-portal-messages',
+    ),
     path('supplier-portal/dashboard/', SupplierDashboardView.as_view(), name='supplier-portal-dashboard'),
 ]
-

@@ -1,8 +1,10 @@
 """
 Django settings for ERP project.
 """
-from pathlib import Path
+
 from datetime import timedelta
+from pathlib import Path
+
 from decouple import config
 
 # Build paths inside the project
@@ -26,7 +28,6 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
     # Third party apps
     'rest_framework',
     'rest_framework_simplejwt',
@@ -37,7 +38,6 @@ INSTALLED_APPS = [
     'channels',
     'django_elasticsearch_dsl',
     'django_elasticsearch_dsl_drf',
-    
     # Local apps
     'apps.core',
     'apps.core.workflow',
@@ -92,16 +92,14 @@ CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [(config('REDIS_HOST', default='redis'), 6379)],
+            'hosts': [(config('REDIS_HOST', default='redis'), 6379)],
         },
     },
 }
 
 # Elasticsearch configuration
 ELASTICSEARCH_DSL = {
-    'default': {
-        'hosts': config('ELASTICSEARCH_HOST', default='elasticsearch:9200')
-    },
+    'default': {'hosts': config('ELASTICSEARCH_HOST', default='elasticsearch:9200')},
 }
 
 # Database
@@ -157,12 +155,8 @@ LOGIN_THROTTLE_ENABLED = config('LOGIN_THROTTLE_ENABLED', default=True, cast=boo
 LOGIN_THROTTLE_RATE = config('LOGIN_THROTTLE_RATE', default='5/minute')
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
-    'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.IsAuthenticated',
-    ),
+    'DEFAULT_AUTHENTICATION_CLASSES': ('rest_framework_simplejwt.authentication.JWTAuthentication',),
+    'DEFAULT_PERMISSION_CLASSES': ('rest_framework.permissions.IsAuthenticated',),
     'DEFAULT_PARSER_CLASSES': [
         'rest_framework.parsers.JSONParser',
         'rest_framework.parsers.FormParser',
@@ -209,7 +203,7 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = config(
     'CORS_ALLOWED_ORIGINS',
     default='http://localhost:5173,http://127.0.0.1:5173',
-    cast=lambda v: [s.strip() for s in v.split(',')]
+    cast=lambda v: [s.strip() for s in v.split(',')],
 )
 CORS_ALLOW_CREDENTIALS = True
 
@@ -220,7 +214,7 @@ CACHES = {
         'LOCATION': config('REDIS_URL', default='redis://redis:6379/1'),
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-        }
+        },
     }
 }
 
@@ -242,7 +236,6 @@ SPECTACULAR_SETTINGS = {
 }
 
 # Logging
-import os
 LOG_DIR = BASE_DIR / 'logs'  # Use /app/logs in Docker
 try:
     if not LOG_DIR.exists():
@@ -296,9 +289,7 @@ FRONTEND_URL = config('FRONTEND_URL', default='http://localhost')
 
 # Enable notification channels
 NOTIFICATION_CHANNELS_ENABLED = config(
-    'NOTIFICATION_CHANNELS_ENABLED',
-    default='email,wechat_work',
-    cast=lambda v: [s.strip() for s in v.split(',')]
+    'NOTIFICATION_CHANNELS_ENABLED', default='email,wechat_work', cast=lambda v: [s.strip() for s in v.split(',')]
 )
 
 # =============================================================================
@@ -306,13 +297,10 @@ NOTIFICATION_CHANNELS_ENABLED = config(
 # =============================================================================
 WECHAT_WORK_WEBHOOK_URL = config(
     'WECHAT_WORK_WEBHOOK_URL',
-    default='https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=***REMOVED***'
+    default='https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=***REMOVED***',
 )
 WECHAT_WORK_CORP_ID = config('WECHAT_WORK_CORP_ID', default='ww338f2a2b8bb31d89')
-WECHAT_WORK_CORP_SECRET = config(
-    'WECHAT_WORK_CORP_SECRET',
-    default='***REMOVED***'
-)
+WECHAT_WORK_CORP_SECRET = config('WECHAT_WORK_CORP_SECRET', default='***REMOVED***')
 WECHAT_WORK_AGENT_ID = config('WECHAT_WORK_AGENT_ID', default='1000019')
 
 # =============================================================================
@@ -349,7 +337,7 @@ X_FRAME_OPTIONS = 'DENY'
 CSRF_TRUSTED_ORIGINS = config(
     'CSRF_TRUSTED_ORIGINS',
     default='http://localhost:3000,http://localhost:5173',
-    cast=lambda v: [s.strip() for s in v.split(',')]
+    cast=lambda v: [s.strip() for s in v.split(',')],
 )
 
 # Password Policy Settings
@@ -363,4 +351,3 @@ PASSWORD_EXPIRY_DAYS = config('PASSWORD_EXPIRY_DAYS', default=90, cast=int)
 # Login Security
 MAX_LOGIN_ATTEMPTS = config('MAX_LOGIN_ATTEMPTS', default=5, cast=int)
 LOCKOUT_DURATION_MINUTES = config('LOCKOUT_DURATION_MINUTES', default=30, cast=int)
-

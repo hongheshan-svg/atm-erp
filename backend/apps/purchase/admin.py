@@ -1,8 +1,12 @@
 from django.contrib import admin
+
 from .models import (
-    PurchaseRequest, PurchaseRequestLine,
-    PurchaseOrder, PurchaseOrderLine,
-    GoodsReceipt, GoodsReceiptLine
+    GoodsReceipt,
+    GoodsReceiptLine,
+    PurchaseOrder,
+    PurchaseOrderLine,
+    PurchaseRequest,
+    PurchaseRequestLine,
 )
 
 
@@ -46,4 +50,3 @@ class GoodsReceiptAdmin(admin.ModelAdmin):
     search_fields = ['receipt_no']
     inlines = [GoodsReceiptLineInline]
     ordering = ['-created_at']
-

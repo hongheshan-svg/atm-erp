@@ -130,6 +130,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Monitor, CircleCheck, User, Tickets, Refresh } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
@@ -205,13 +206,19 @@ const fetchRecentLogs = async () => {
 
 const refreshStatus = async () => {
   loading.value = true
-  await Promise.all([
-    fetchHealthStatus(),
-    fetchSystemStatus(),
-    fetchSecurityStatus(),
-    fetchRecentLogs()
-  ])
-  loading.value = false
+  try {
+    await Promise.all([
+      fetchHealthStatus(),
+      fetchSystemStatus(),
+      fetchSecurityStatus(),
+      fetchRecentLogs()
+    ])
+  } catch (error) {
+    console.error('加载数据失败', error)
+    ElMessage.error('加载数据失败')
+  } finally {
+    loading.value = false
+  }
 }
 
 let refreshInterval

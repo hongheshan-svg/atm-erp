@@ -2,18 +2,21 @@
 批量导入模板服务
 Import Template Service - Generate downloadable import templates
 """
-import pandas as pd
+
 from io import BytesIO
+
+import pandas as pd
 from django.http import HttpResponse
-from rest_framework.views import APIView
-from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 
 class ImportTemplateConfig:
     """
     导入模板配置
     """
+
     TEMPLATES = {
         'items': {
             'name': '物料导入模板',
@@ -35,7 +38,7 @@ class ImportTemplateConfig:
                 '2. 物料编码不能重复',
                 '3. 单位必须与系统中已有单位匹配',
                 '4. 采购价请填写数字，无需货币符号',
-            ]
+            ],
         },
         'suppliers': {
             'name': '供应商导入模板',
@@ -58,7 +61,7 @@ class ImportTemplateConfig:
                 '1. 供应商编码和名称为必填项',
                 '2. 供应商编码不能重复',
                 '3. 联系电话请填写11位手机号或座机号',
-            ]
+            ],
         },
         'customers': {
             'name': '客户导入模板',
@@ -80,7 +83,7 @@ class ImportTemplateConfig:
                 '1. 客户编码和名称为必填项',
                 '2. 客户编码不能重复',
                 '3. 信用额度请填写数字',
-            ]
+            ],
         },
         'bom': {
             'name': 'BOM导入模板',
@@ -100,7 +103,7 @@ class ImportTemplateConfig:
                 '2. 项目编号必须与系统中已有项目匹配',
                 '3. 物料编码必须与系统中已有物料匹配',
                 '4. 父级物料编码留空表示顶层BOM',
-            ]
+            ],
         },
         'equipment': {
             'name': '设备台账导入模板',
@@ -121,26 +124,24 @@ class ImportTemplateConfig:
                 '1. 设备编号、名称、项目编号、客户编码为必填项',
                 '2. 日期格式：YYYY-MM-DD',
                 '3. 项目编号和客户编码必须与系统中已有数据匹配',
-            ]
-        }
+            ],
+        },
     }
-    
+
     @classmethod
     def get_template_config(cls, template_type):
         return cls.TEMPLATES.get(template_type)
-    
+
     @classmethod
     def list_templates(cls):
-        return [
-            {'key': k, 'name': v['name'], 'filename': v['filename']}
-            for k, v in cls.TEMPLATES.items()
-        ]
+        return [{'key': k, 'name': v['name'], 'filename': v['filename']} for k, v in cls.TEMPLATES.items()]
 
 
 class ImportTemplateListView(APIView):
     """获取可用的导入模板列表"""
+
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
         templates = ImportTemplateConfig.list_templates()
         return Response(templates)
@@ -148,71 +149,65 @@ class ImportTemplateListView(APIView):
 
 class ImportTemplateDownloadView(APIView):
     """下载导入模板"""
+
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request, template_type):
         config = ImportTemplateConfig.get_template_config(template_type)
-        
+
         if not config:
             return Response({'error': '模板不存在'}, status=404)
-        
+
         # 创建Excel文件
         output = BytesIO()
-        
+
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             workbook = writer.book
-            
+
             # 数据Sheet
             columns = config['columns']
             headers = [c['label'] for c in columns]
             examples = [[c['example'] for c in columns]]
-            
+
             df = pd.DataFrame(examples, columns=headers)
             df.to_excel(writer, sheet_name='数据', index=False, startrow=0)
-            
+
             # 格式化数据Sheet
             worksheet = writer.sheets['数据']
-            header_format = workbook.add_format({
-                'bold': True,
-                'bg_color': '#4472C4',
-                'font_color': 'white',
-                'border': 1
-            })
-            required_format = workbook.add_format({
-                'bold': True,
-                'bg_color': '#FF6B6B',
-                'font_color': 'white',
-                'border': 1
-            })
-            
+            header_format = workbook.add_format(
+                {'bold': True, 'bg_color': '#4472C4', 'font_color': 'white', 'border': 1}
+            )
+            required_format = workbook.add_format(
+                {'bold': True, 'bg_color': '#FF6B6B', 'font_color': 'white', 'border': 1}
+            )
+
             for col_num, column in enumerate(columns):
                 if column['required']:
                     worksheet.write(0, col_num, column['label'], required_format)
                 else:
                     worksheet.write(0, col_num, column['label'], header_format)
                 worksheet.set_column(col_num, col_num, 15)
-            
+
             # 说明Sheet
-            instructions_df = pd.DataFrame({
-                '填写说明': config['instructions']
-            })
+            instructions_df = pd.DataFrame({'填写说明': config['instructions']})
             instructions_df.to_excel(writer, sheet_name='填写说明', index=False)
-            
+
             # 字段说明Sheet
-            field_info = pd.DataFrame({
-                '字段名': [c['label'] for c in columns],
-                '字段代码': [c['field'] for c in columns],
-                '是否必填': ['是' if c['required'] else '否' for c in columns],
-                '示例值': [c['example'] for c in columns],
-            })
+            field_info = pd.DataFrame(
+                {
+                    '字段名': [c['label'] for c in columns],
+                    '字段代码': [c['field'] for c in columns],
+                    '是否必填': ['是' if c['required'] else '否' for c in columns],
+                    '示例值': [c['example'] for c in columns],
+                }
+            )
             field_info.to_excel(writer, sheet_name='字段说明', index=False)
-        
+
         output.seek(0)
-        
+
         response = HttpResponse(
-            output.getvalue(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            output.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         response['Content-Disposition'] = f'attachment; filename="{config["filename"]}"'
-        
+
         return response

@@ -1,15 +1,17 @@
 """
 Equipment Capability Matrix with Process Types and Precision Grades
 """
+
 from decimal import Decimal
+
 from django.db import models
-from django.conf import settings
-from rest_framework import serializers, viewsets, status
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class EquipmentCapability(BaseModel):
@@ -39,21 +41,21 @@ class EquipmentCapability(BaseModel):
     ]
 
     equipment = models.ForeignKey(
-        'projects.Equipment', on_delete=models.CASCADE,
-        null=True, blank=True, related_name='capabilities', verbose_name='设备'
+        'projects.Equipment',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='capabilities',
+        verbose_name='设备',
     )
-    process_type = models.CharField(
-        max_length=30, choices=PROCESS_TYPE_CHOICES, verbose_name='工艺类型'
-    )
+    process_type = models.CharField(max_length=30, choices=PROCESS_TYPE_CHOICES, verbose_name='工艺类型')
     precision_grade = models.CharField(
         max_length=20, choices=PRECISION_GRADE_CHOICES, default='standard', verbose_name='精度等级'
     )
     max_length = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True, verbose_name='最大长度(mm)'
     )
-    max_width = models.DecimalField(
-        max_digits=10, decimal_places=2, null=True, blank=True, verbose_name='最大宽度(mm)'
-    )
+    max_width = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name='最大宽度(mm)')
     max_height = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True, verbose_name='最大高度(mm)'
     )
@@ -72,12 +74,8 @@ class EquipmentCapability(BaseModel):
     surface_finish_ra = models.DecimalField(
         max_digits=6, decimal_places=3, null=True, blank=True, verbose_name='表面粗糙度Ra'
     )
-    spindle_speed_range = models.CharField(
-        max_length=100, null=True, blank=True, verbose_name='主轴转速范围'
-    )
-    feed_rate_range = models.CharField(
-        max_length=100, null=True, blank=True, verbose_name='进给速度范围'
-    )
+    spindle_speed_range = models.CharField(max_length=100, null=True, blank=True, verbose_name='主轴转速范围')
+    feed_rate_range = models.CharField(max_length=100, null=True, blank=True, verbose_name='进给速度范围')
 
     class Meta:
         db_table = 'production_equipment_capability'
@@ -86,10 +84,11 @@ class EquipmentCapability(BaseModel):
         verbose_name_plural = '设备能力'
 
     def __str__(self):
-        return f"{self.equipment} - {self.get_process_type_display()}"
+        return f'{self.equipment} - {self.get_process_type_display()}'
 
 
 # ─── Serializers ────────────────────────────────────────────────
+
 
 class EquipmentCapabilitySerializer(serializers.ModelSerializer):
     process_type_display = serializers.CharField(source='get_process_type_display', read_only=True)
@@ -103,7 +102,8 @@ class EquipmentCapabilitySerializer(serializers.ModelSerializer):
 
 # ─── ViewSets ───────────────────────────────────────────────────
 
-class EquipmentCapabilityViewSet(viewsets.ModelViewSet):
+
+class EquipmentCapabilityViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = EquipmentCapabilitySerializer
     permission_classes = [IsAuthenticated]
 
@@ -127,18 +127,16 @@ class EquipmentCapabilityViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def matrix(self, request):
-        qs = self.get_queryset().values(
-            'equipment__id', 'process_type', 'precision_grade'
-        ).distinct()
+        qs = self.get_queryset().values('equipment__id', 'process_type', 'precision_grade').distinct()
         matrix_data = {}
         for item in qs:
             eq_id = item['equipment__id']
             if eq_id not in matrix_data:
                 matrix_data[eq_id] = []
-            matrix_data[eq_id].append({
-                'process_type': item['process_type'],
-                'precision_grade': item['precision_grade'],
-            })
+            matrix_data[eq_id].append(
+                {
+                    'process_type': item['process_type'],
+                    'precision_grade': item['precision_grade'],
+                }
+            )
         return Response(matrix_data)
-
-

@@ -1,8 +1,14 @@
 from django.contrib import admin
+
 from .models import (
-    ProductionProcess, ProductionPlan, ProductionPlanProcess,
-    ProductionLog, DebugRecord, DebugCheckItem,
-    QualityInspection, InspectionItem
+    DebugCheckItem,
+    DebugRecord,
+    InspectionItem,
+    ProductionLog,
+    ProductionPlan,
+    ProductionPlanProcess,
+    ProductionProcess,
+    QualityInspection,
 )
 
 
@@ -56,4 +62,3 @@ class QualityInspectionAdmin(admin.ModelAdmin):
 class InspectionItemAdmin(admin.ModelAdmin):
     list_display = ['inspection', 'sequence', 'item_name', 'result']
     list_filter = ['result']
-

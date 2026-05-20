@@ -1,10 +1,11 @@
 """
 URL configuration for ERP project.
 """
-from django.contrib import admin
-from django.urls import path, include
+
 from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib import admin
+from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny
@@ -21,14 +22,11 @@ def api_health_check(request):
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    
     # Health check (for Docker/K8s)
     path('api/v1/health/', api_health_check, name='api-health'),
-    
     # API Documentation
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
-    
     # API endpoints
     path('api/auth/', include('apps.accounts.urls')),
     path('api/accounts/', include('apps.accounts.urls')),  # 别名
@@ -48,4 +46,3 @@ urlpatterns = [
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
-

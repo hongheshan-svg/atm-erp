@@ -1,0 +1,41 @@
+name: Frontend Lint & Build
+on:
+  push:
+    branches: [main, 'feat/**', 'fix/**', 'chore/**']
+    paths:
+      - 'frontend/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+
+stages:
+  - name: lint-and-build
+    jobs:
+      - name: eslint-and-vite-build
+        runsOn: public/China-1C2G
+        steps:
+          - name: Checkout
+            step: aliyun/aliyun-cli@1
+            with:
+              checkout: true
+
+          - name: Setup Node.js
+            step: aliyun/setup-nodejs@1
+            with:
+              nodeVersion: '18'
+
+          - name: Install dependencies
+            script: |
+              cd frontend
+              npm ci
+
+          - name: ESLint (zero warnings)
+            script: |
+              cd frontend
+              npx eslint src --max-warnings 0
+
+          - name: Vite Build
+            script: |
+              cd frontend
+              npm run build

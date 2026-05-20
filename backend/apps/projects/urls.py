@@ -1,114 +1,147 @@
 """
 URL configuration for projects app.
 """
-from django.urls import path, include
+
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from .views import (
-    ProjectViewSet,
-    ProjectMemberViewSet,
-    ProjectTaskViewSet,
-    ProjectBOMViewSet,
-    TimeLogViewSet,
-    ECNViewSet,
-    ECNItemViewSet,
-    AfterSalesOrderViewSet,
-    ServiceRecordViewSet,
-    SparePartUsageViewSet,
-    DrawingViewSet,
-    DrawingChangeNoticeViewSet
+
+from .acceptance import AcceptanceCheckItemViewSet, AcceptanceIssueViewSet, AcceptanceTemplateViewSet, AcceptanceViewSet
+from .advanced_cost_tracking import (
+    CostComparisonReportView,
+    CostElementReportView,
+    CostVarianceAnalysisViewSet,
+    LaborRateStandardViewSet,
+    ProjectCostAnalysisDashboardView,
+    ProjectCostDetailViewSet,
+    ProjectCostSummaryViewSet,
+    StandardCostCategoryViewSet,
 )
-from .bug_views import BugViewSet, BugCommentViewSet, BugAttachmentViewSet
-from .equipment_views import (
-    EquipmentViewSet, EquipmentShipmentViewSet, EquipmentInstallationViewSet,
-    InstallationLogViewSet, EquipmentAcceptanceViewSet, MaintenanceScheduleViewSet,
-    TrainingRecordViewSet, FixtureCategoryViewSet, FixtureViewSet,
-    FixtureUsageRecordViewSet, FixtureCalibrationViewSet, FixtureMaintenanceViewSet
-)
-from .knowledge_views import (
-    KnowledgeCategoryViewSet, KnowledgeArticleViewSet, ProjectArchiveViewSet,
-    TechnicalIssueViewSet, StandardComponentViewSet
-)
-from .maintenance_views import MaintenanceReminderView
-from .milestone import MilestoneViewSet, MilestoneChecklistViewSet
-from .work_dispatch import WorkOrderViewSet, WorkDispatchViewSet, WorkLogViewSet
-from .equipment_inspection import (
-    InspectionTemplateViewSet, InspectionItemViewSet,
-    InspectionRecordViewSet, InspectionResultViewSet
-)
-from .document import DocumentCategoryViewSet, ProjectDocumentViewSet, DocumentShareViewSet
-from .equipment_oee import EquipmentShiftViewSet, DowntimeReasonViewSet, EquipmentOEERecordViewSet
-from .progress_alert import ProjectAlertRuleViewSet, ProjectAlertViewSet
-from .maintenance_calendar import (
-    MaintenanceCalendarView, MaintenanceStatisticsView, EquipmentMaintenanceHistoryView
-)
-from .dashboard import (
-    ProjectDashboardView, ProjectListDashboardView, BOMCostRollupView,
-    DeliveryTrackingView, ProcurementTrackingView, ProductionProgressView
-)
-from .requirement import (
-    RequirementCategoryViewSet, RequirementViewSet, RequirementChangeViewSet
-)
-from .proposal import (
-    ProposalCategoryViewSet, TechnicalProposalViewSet,
-    ProposalReviewViewSet, ProposalDocumentViewSet
-)
-from .requirement_review import (
-    ReviewTemplateViewSet, RequirementReviewViewSet, ReviewActionItemViewSet
-)
-from .bom_advanced import (
-    BOMSubstituteViewSet, BOMVersionViewSet, BOMComparisonViewSet, BOMCompareView
-)
-from .cad_integration import (
-    CADSoftwareViewSet, CADSessionViewSet, CADFileViewSet,
-    CADBOMImportViewSet, CADPropertyMappingViewSet
-)
-from .creo_integration import CreoBOMImportViewSet
-from .drawing_import import DrawingImportViewSet
+from .bom_advanced import BOMCompareView, BOMComparisonViewSet, BOMSubstituteViewSet, BOMVersionViewSet
 from .bom_compare import BOMCompareViewSet, BOMSnapshotViewSet
+from .bom_cost_rollup import BOMCostDetailViewSet, BOMCostSnapshotViewSet
 from .bom_integration import BOMIntegrationViewSet
-from .technical_agreement import (
-    TechnicalAgreementTemplateViewSet, TechnicalAgreementViewSet, TechnicalAgreementChangeViewSet
-)
-from .equipment_archive import (
-    EquipmentArchiveViewSet, EquipmentMaintenancePlanViewSet,
-    EquipmentMaintenanceRecordViewSet, EquipmentSparePartViewSet
-)
-from .acceptance import (
-    AcceptanceTemplateViewSet, AcceptanceViewSet,
-    AcceptanceCheckItemViewSet, AcceptanceIssueViewSet
-)
-from .field_service import (
-    SkillCategoryViewSet, SkillViewSet, TechnicianProfileViewSet,
-    TechnicianSkillViewSet, ServiceOrderViewSet, ServiceDispatchViewSet,
-    ServiceCheckInViewSet, ServiceLogViewSet, ServiceExpenseViewSet,
-    TechnicianScheduleViewSet
+from .bug_views import BugAttachmentViewSet, BugCommentViewSet, BugViewSet
+from .cad_integration import (
+    CADBOMImportViewSet,
+    CADFileViewSet,
+    CADPropertyMappingViewSet,
+    CADSessionViewSet,
+    CADSoftwareViewSet,
 )
 from .cost_tracking import (
-    ProjectBudgetViewSet, ProjectCostRecordViewSet, CostAlertViewSet,
-    ProjectCostDashboardView, CostOverviewDashboardView
+    CostAlertViewSet,
+    CostOverviewDashboardView,
+    ProjectBudgetViewSet,
+    ProjectCostDashboardView,
+    ProjectCostRecordViewSet,
 )
-from .remote_monitoring import (
-    EquipmentDataPointViewSet, EquipmentConnectionViewSet,
-    EquipmentDataRecordViewSet, EquipmentAlarmViewSet,
-    DiagnosticSessionViewSet, PredictiveMaintenanceResultViewSet,
-    EquipmentMonitoringDashboardView
+from .creo_integration import CreoBOMImportViewSet
+from .dashboard import (
+    BOMCostRollupView,
+    DeliveryTrackingView,
+    ProcurementTrackingView,
+    ProductionProgressView,
+    ProjectDashboardView,
+    ProjectListDashboardView,
 )
-from .advanced_cost_tracking import (
-    StandardCostCategoryViewSet, LaborRateStandardViewSet,
-    ProjectCostDetailViewSet, ProjectCostSummaryViewSet,
-    CostVarianceAnalysisViewSet, ProjectCostAnalysisDashboardView,
-    CostComparisonReportView, CostElementReportView
-)
+from .document import DocumentCategoryViewSet, DocumentShareViewSet, ProjectDocumentViewSet
 from .document_collaboration import (
+    DocumentAnnotationViewSet,
+    DocumentReviewViewSet,
     TechDocumentCategoryViewSet,
-    TechnicalDocumentViewSet, DocumentAnnotationViewSet, DocumentReviewViewSet
+    TechnicalDocumentViewSet,
 )
-from .bom_cost_rollup import BOMCostSnapshotViewSet, BOMCostDetailViewSet
-from .drawing_version import DrawingVersionViewSet, DrawingAffectedPartViewSet
+from .drawing_import import DrawingImportViewSet
+from .drawing_version import DrawingAffectedPartViewSet, DrawingVersionViewSet
+from .equipment_archive import (
+    EquipmentArchiveViewSet,
+    EquipmentMaintenancePlanViewSet,
+    EquipmentMaintenanceRecordViewSet,
+    EquipmentSparePartViewSet,
+)
+from .equipment_inspection import (
+    InspectionItemViewSet,
+    InspectionRecordViewSet,
+    InspectionResultViewSet,
+    InspectionTemplateViewSet,
+)
+from .equipment_oee import DowntimeReasonViewSet, EquipmentOEERecordViewSet, EquipmentShiftViewSet
+from .equipment_views import (
+    EquipmentAcceptanceViewSet,
+    EquipmentInstallationViewSet,
+    EquipmentShipmentViewSet,
+    EquipmentViewSet,
+    FixtureCalibrationViewSet,
+    FixtureCategoryViewSet,
+    FixtureMaintenanceViewSet,
+    FixtureUsageRecordViewSet,
+    FixtureViewSet,
+    InstallationLogViewSet,
+    MaintenanceScheduleViewSet,
+    TrainingRecordViewSet,
+)
+from .field_service import (
+    ServiceCheckInViewSet,
+    ServiceDispatchViewSet,
+    ServiceExpenseViewSet,
+    ServiceLogViewSet,
+    ServiceOrderViewSet,
+    SkillCategoryViewSet,
+    SkillViewSet,
+    TechnicianProfileViewSet,
+    TechnicianScheduleViewSet,
+    TechnicianSkillViewSet,
+)
 from .installation import (
-    InstallationTaskViewSet, SiteLogViewSet, CommissioningRecordViewSet,
-    SiteIssueViewSet, CustomerAcceptanceViewSet
+    CommissioningRecordViewSet,
+    CustomerAcceptanceViewSet,
+    InstallationTaskViewSet,
+    SiteIssueViewSet,
+    SiteLogViewSet,
 )
+from .knowledge_views import (
+    KnowledgeArticleViewSet,
+    KnowledgeCategoryViewSet,
+    ProjectArchiveViewSet,
+    StandardComponentViewSet,
+    TechnicalIssueViewSet,
+)
+from .maintenance_calendar import EquipmentMaintenanceHistoryView, MaintenanceCalendarView, MaintenanceStatisticsView
+from .maintenance_views import MaintenanceReminderView
+from .milestone import MilestoneChecklistViewSet, MilestoneViewSet
+from .progress_alert import ProjectAlertRuleViewSet, ProjectAlertViewSet
+from .proposal import ProposalCategoryViewSet, ProposalDocumentViewSet, ProposalReviewViewSet, TechnicalProposalViewSet
+from .remote_monitoring import (
+    DiagnosticSessionViewSet,
+    EquipmentAlarmViewSet,
+    EquipmentConnectionViewSet,
+    EquipmentDataPointViewSet,
+    EquipmentDataRecordViewSet,
+    EquipmentMonitoringDashboardView,
+    PredictiveMaintenanceResultViewSet,
+)
+from .requirement import RequirementCategoryViewSet, RequirementChangeViewSet, RequirementViewSet
+from .requirement_review import RequirementReviewViewSet, ReviewActionItemViewSet, ReviewTemplateViewSet
+from .technical_agreement import (
+    TechnicalAgreementChangeViewSet,
+    TechnicalAgreementTemplateViewSet,
+    TechnicalAgreementViewSet,
+)
+from .views import (
+    AfterSalesOrderViewSet,
+    DrawingChangeNoticeViewSet,
+    DrawingViewSet,
+    ECNItemViewSet,
+    ECNViewSet,
+    ProjectBOMViewSet,
+    ProjectMemberViewSet,
+    ProjectTaskViewSet,
+    ProjectViewSet,
+    ServiceRecordViewSet,
+    SparePartUsageViewSet,
+    TimeLogViewSet,
+)
+from .work_dispatch import WorkDispatchViewSet, WorkLogViewSet, WorkOrderViewSet
 
 router = DefaultRouter()
 router.register(r'projects', ProjectViewSet, basename='project')
@@ -235,7 +268,9 @@ router.register(r'agreement-changes', TechnicalAgreementChangeViewSet, basename=
 # 设备档案管理
 router.register(r'equipment-archives', EquipmentArchiveViewSet, basename='equipment-archive')
 router.register(r'archive-maintenance-plans', EquipmentMaintenancePlanViewSet, basename='archive-maintenance-plan')
-router.register(r'archive-maintenance-records', EquipmentMaintenanceRecordViewSet, basename='archive-maintenance-record')
+router.register(
+    r'archive-maintenance-records', EquipmentMaintenanceRecordViewSet, basename='archive-maintenance-record'
+)
 router.register(r'archive-spare-parts', EquipmentSparePartViewSet, basename='archive-spare-part')
 
 # FAT/SAT验收管理
@@ -299,32 +334,27 @@ router.register(r'customer-acceptances', CustomerAcceptanceViewSet, basename='cu
 
 urlpatterns = [
     path('', include(router.urls)),
-    
     # 设备维护日历
     path('maintenance/calendar/', MaintenanceCalendarView.as_view(), name='maintenance-calendar'),
     path('maintenance/statistics/', MaintenanceStatisticsView.as_view(), name='maintenance-statistics'),
-    path('maintenance/history/<int:equipment_id>/', EquipmentMaintenanceHistoryView.as_view(), name='maintenance-history'),
-    
+    path(
+        'maintenance/history/<int:equipment_id>/', EquipmentMaintenanceHistoryView.as_view(), name='maintenance-history'
+    ),
     # BOM对比
     path('bom/compare/', BOMCompareView.as_view(), name='bom-compare'),
-    
     # 项目仪表盘增强
     path('dashboard/<int:project_id>/', ProjectDashboardView.as_view(), name='project-dashboard'),
     path('dashboard/overview/', ProjectListDashboardView.as_view(), name='project-list-dashboard'),
     path('dashboard/<int:project_id>/bom-cost/', BOMCostRollupView.as_view(), name='bom-cost-rollup'),
-    
     # 业务跟踪仪表盘
     path('tracking/delivery/', DeliveryTrackingView.as_view(), name='delivery-tracking'),
     path('tracking/procurement/', ProcurementTrackingView.as_view(), name='procurement-tracking'),
     path('tracking/production/', ProductionProgressView.as_view(), name='production-progress'),
-    
     # 项目成本看板
     path('cost/dashboard/<int:project_id>/', ProjectCostDashboardView.as_view(), name='project-cost-dashboard'),
     path('cost/overview/', CostOverviewDashboardView.as_view(), name='cost-overview-dashboard'),
-    
     # 设备监控看板
     path('monitoring/dashboard/', EquipmentMonitoringDashboardView.as_view(), name='equipment-monitoring-dashboard'),
-    
     # 高级成本分析报表
     path('cost/analysis/<int:project_id>/', ProjectCostAnalysisDashboardView.as_view(), name='project-cost-analysis'),
     path('cost/comparison/', CostComparisonReportView.as_view(), name='cost-comparison-report'),

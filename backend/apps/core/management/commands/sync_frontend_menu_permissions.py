@@ -5,33 +5,32 @@ from django.core.management.base import BaseCommand, CommandError
 
 from apps.core.permission_models_new import Permission
 
-
 TOP_LEVEL_MENUS = {
     # 非标自动化行业(100人规模)优化菜单
-    'dashboard':  {'name': '工作台',   'icon': 'DataAnalysis',    'route_path': '/dashboard',              'sort_order': 0},
-    'projects':   {'name': '项目管理', 'icon': 'Folder',          'route_path': '/projects',               'sort_order': 10},
-    'design':     {'name': '研发设计', 'icon': 'EditPen',         'route_path': '/plm/requirements',       'sort_order': 15},
-    'sales':      {'name': '商务销售', 'icon': 'TrendCharts',     'route_path': '/sales/crm-dashboard',    'sort_order': 20},
-    'purchase':   {'name': '采购供应', 'icon': 'ShoppingCart',    'route_path': '/purchase/requests',      'sort_order': 30},
-    'production': {'name': '生产制造', 'icon': 'Operation',       'route_path': '/production/processes',   'sort_order': 40},
-    'inventory':  {'name': '仓储物料', 'icon': 'Goods',           'route_path': '/inventory/stocks',       'sort_order': 50},
-    'finance':    {'name': '财务管理', 'icon': 'Money',           'route_path': '/finance/expenses',       'sort_order': 60},
-    'masterdata': {'name': '基础数据', 'icon': 'Box',             'route_path': '/masterdata/items',       'sort_order': 70},
-    'reports':    {'name': '经营分析', 'icon': 'PieChart',        'route_path': '/reports/profitability',  'sort_order': 80},
-    'oa':         {'name': '协同办公', 'icon': 'OfficeBuilding',  'route_path': '/oa/schedule',            'sort_order': 90},
-    'system':     {'name': '系统设置', 'icon': 'Setting',         'route_path': '/system/users',           'sort_order': 999},
+    'dashboard': {'name': '工作台', 'icon': 'DataAnalysis', 'route_path': '/dashboard', 'sort_order': 0},
+    'projects': {'name': '项目管理', 'icon': 'Folder', 'route_path': '/projects', 'sort_order': 10},
+    'design': {'name': '研发设计', 'icon': 'EditPen', 'route_path': '/plm/requirements', 'sort_order': 15},
+    'sales': {'name': '商务销售', 'icon': 'TrendCharts', 'route_path': '/sales/crm-dashboard', 'sort_order': 20},
+    'purchase': {'name': '采购供应', 'icon': 'ShoppingCart', 'route_path': '/purchase/requests', 'sort_order': 30},
+    'production': {'name': '生产制造', 'icon': 'Operation', 'route_path': '/production/processes', 'sort_order': 40},
+    'inventory': {'name': '仓储物料', 'icon': 'Goods', 'route_path': '/inventory/stocks', 'sort_order': 50},
+    'finance': {'name': '财务管理', 'icon': 'Money', 'route_path': '/finance/expenses', 'sort_order': 60},
+    'masterdata': {'name': '基础数据', 'icon': 'Box', 'route_path': '/masterdata/items', 'sort_order': 70},
+    'reports': {'name': '经营分析', 'icon': 'PieChart', 'route_path': '/reports/profitability', 'sort_order': 80},
+    'oa': {'name': '协同办公', 'icon': 'OfficeBuilding', 'route_path': '/oa/schedule', 'sort_order': 90},
+    'system': {'name': '系统设置', 'icon': 'Setting', 'route_path': '/system/users', 'sort_order': 999},
 }
 
 # 将前端细分业务前缀收敛到既有一级菜单
 PREFIX_PARENT_OVERRIDES = {
     'aftersales': 'sales',
-    'equipment':  'production',
-    'knowledge':  'design',
-    'plm':        'design',
-    'mes':        'production',
-    'accounts':   'oa',
-    'workflow':   'oa',
-    'analytics':  'reports',
+    'equipment': 'production',
+    'knowledge': 'design',
+    'plm': 'design',
+    'mes': 'production',
+    'accounts': 'oa',
+    'workflow': 'oa',
+    'analytics': 'reports',
 }
 
 LEGACY_TOP_LEVEL_CODES = tuple(PREFIX_PARENT_OVERRIDES.keys())
@@ -40,64 +39,204 @@ LEGACY_TOP_LEVEL_CODES = tuple(PREFIX_PARENT_OVERRIDES.keys())
 # 格式: { '一级code': [ ('分组后缀', '分组名', [menuId ...]), ... ] }
 MENU_GROUPS = {
     'projects': [
-        ('exec',     '项目执行', ['projects:list', 'projects:dashboard', 'projects:tasks', 'projects:gantt', 'projects:milestones', 'projects:members']),
+        (
+            'exec',
+            '项目执行',
+            [
+                'projects:list',
+                'projects:dashboard',
+                'projects:tasks',
+                'projects:gantt',
+                'projects:milestones',
+                'projects:members',
+            ],
+        ),
         ('delivery', '项目交付', ['projects:bom', 'projects:work-orders', 'projects:acceptances', 'projects:bugs']),
         ('analysis', '项目分析', ['projects:time-logs', 'projects:cost', 'projects:archives', 'projects:alerts']),
     ],
     'design': [
-        ('manage',    '设计管理', ['design:ecn', 'design:drawings', 'design:batch-drawing', 'design:drawing-bom-link', 'design:documents']),
-        ('plm',       'PLM',     ['plm:requirements', 'plm:proposals', 'plm:agreements', 'plm:model-viewer', 'plm:cad-bom', 'plm:bom-compare']),
-        ('knowledge', '知识库',   ['knowledge:articles', 'knowledge:issues', 'knowledge:components']),
+        (
+            'manage',
+            '设计管理',
+            ['design:ecn', 'design:drawings', 'design:batch-drawing', 'design:drawing-bom-link', 'design:documents'],
+        ),
+        (
+            'plm',
+            'PLM',
+            [
+                'plm:requirements',
+                'plm:proposals',
+                'plm:agreements',
+                'plm:model-viewer',
+                'plm:cad-bom',
+                'plm:bom-compare',
+            ],
+        ),
+        ('knowledge', '知识库', ['knowledge:articles', 'knowledge:issues', 'knowledge:components']),
     ],
     'sales': [
-        ('crm',        '客户管理', ['sales:crm-dashboard', 'sales:leads', 'sales:opportunities', 'sales:performance', 'sales:analysis']),
-        ('order',      '报价合同', ['sales:quotations', 'sales:quote-estimation', 'sales:quote', 'sales:orders', 'sales:contracts', 'sales:contract-templates', 'sales:quote-templates']),
-        ('aftersales', '发货售后', ['sales:delivery-orders', 'sales:training', 'sales:service', 'aftersales:orders', 'aftersales:service']),
-        ('reconcile',  '销售对账', ['finance:sales-reconciliation']),
+        (
+            'crm',
+            '客户管理',
+            ['sales:crm-dashboard', 'sales:leads', 'sales:opportunities', 'sales:performance', 'sales:analysis'],
+        ),
+        (
+            'order',
+            '报价合同',
+            [
+                'sales:quotations',
+                'sales:quote-estimation',
+                'sales:quote',
+                'sales:orders',
+                'sales:contracts',
+                'sales:contract-templates',
+                'sales:quote-templates',
+            ],
+        ),
+        (
+            'aftersales',
+            '发货售后',
+            ['sales:delivery-orders', 'sales:training', 'sales:service', 'aftersales:orders', 'aftersales:service'],
+        ),
+        ('reconcile', '销售对账', ['finance:sales-reconciliation']),
     ],
     'purchase': [
-        ('business', '采购业务',   ['purchase:requests', 'purchase:orders', 'purchase:goods-receipts', 'purchase:budgets']),
-        ('reconcile', '采购对账',  ['finance:purchase-reconciliation']),
+        (
+            'business',
+            '采购业务',
+            ['purchase:requests', 'purchase:orders', 'purchase:goods-receipts', 'purchase:budgets'],
+        ),
+        ('reconcile', '采购对账', ['finance:purchase-reconciliation']),
         ('supplier', '供应商管理', ['purchase:comparisons', 'purchase:evaluations', 'purchase:blacklist']),
-        ('collab',   '委外协同',   ['purchase:outsource', 'purchase:collaboration', 'purchase:portal']),
+        ('collab', '委外协同', ['purchase:outsource', 'purchase:collaboration', 'purchase:portal']),
     ],
     'production': [
-        ('process',   '工艺管理', ['production:processes', 'production:routing', 'production:workstations', 'production:capacity', 'production:resources']),
-        ('execute',   '生产执行', ['production:plans', 'production:assembly', 'production:debug-records', 'production:serial-numbers', 'production:inspections']),
-        ('equipment', '设备管理', ['equipment:list', 'equipment:fixtures', 'equipment:inspection', 'equipment:archives', 'equipment:maintenance', 'equipment:oee', 'equipment:monitoring']),
-        ('mes',       'MES',     ['mes:scheduling', 'mes:kanban', 'mes:andon', 'mes:data-acquisition']),
+        (
+            'process',
+            '工艺管理',
+            [
+                'production:processes',
+                'production:routing',
+                'production:workstations',
+                'production:capacity',
+                'production:resources',
+            ],
+        ),
+        (
+            'execute',
+            '生产执行',
+            [
+                'production:plans',
+                'production:assembly',
+                'production:debug-records',
+                'production:serial-numbers',
+                'production:inspections',
+            ],
+        ),
+        (
+            'equipment',
+            '设备管理',
+            [
+                'equipment:list',
+                'equipment:fixtures',
+                'equipment:inspection',
+                'equipment:archives',
+                'equipment:maintenance',
+                'equipment:oee',
+                'equipment:monitoring',
+            ],
+        ),
+        ('mes', 'MES', ['mes:scheduling', 'mes:kanban', 'mes:andon', 'mes:data-acquisition']),
     ],
     'inventory': [
-        ('inout',   '出入库',   ['inventory:stocks', 'inventory:moves', 'inventory:requisitions', 'inventory:returns', 'inventory:transfer']),
-        ('manage',  '库存管理', ['inventory:batches', 'inventory:adjustment', 'inventory:alerts', 'inventory:cost-accounting']),
-        ('plan',    '物料计划', ['inventory:mrp', 'inventory:spare-parts', 'inventory:data-accuracy']),
+        (
+            'inout',
+            '出入库',
+            [
+                'inventory:stocks',
+                'inventory:moves',
+                'inventory:requisitions',
+                'inventory:returns',
+                'inventory:transfer',
+            ],
+        ),
+        (
+            'manage',
+            '库存管理',
+            ['inventory:batches', 'inventory:adjustment', 'inventory:alerts', 'inventory:cost-accounting'],
+        ),
+        ('plan', '物料计划', ['inventory:mrp', 'inventory:spare-parts', 'inventory:data-accuracy']),
     ],
     'finance': [
-        ('cashflow',  '费用管理', ['finance:expenses', 'finance:shared-expenses', 'finance:collection']),
+        ('cashflow', '费用管理', ['finance:expenses', 'finance:shared-expenses', 'finance:collection']),
         ('reconcile', '对账结算', ['finance:ar', 'finance:ap', 'finance:invoices']),
-        ('assets',    '资产成本', ['finance:project-costs', 'finance:assets']),
+        ('assets', '资产成本', ['finance:project-costs', 'finance:assets']),
     ],
     'masterdata': [
-        ('base',    '物料仓库',   ['masterdata:items', 'masterdata:warehouses', 'masterdata:locations']),
-        ('partner', '客户供应商', ['masterdata:customers', 'masterdata:suppliers', 'masterdata:customer-followups', 'masterdata:customer-contacts', 'masterdata:credit']),
+        ('base', '物料仓库', ['masterdata:items', 'masterdata:warehouses', 'masterdata:locations']),
+        (
+            'partner',
+            '客户供应商',
+            [
+                'masterdata:customers',
+                'masterdata:suppliers',
+                'masterdata:customer-followups',
+                'masterdata:customer-contacts',
+                'masterdata:credit',
+            ],
+        ),
     ],
     'reports': [
-        ('finance',   '财务报表', ['reports:profitability', 'reports:aging', 'reports:cash-flow', 'reports:cost-analysis', 'reports:project-profitability']),
-        ('operation', '运营报表', ['reports:timelog', 'reports:slow-moving', 'reports:equipment-lifecycle', 'reports:capacity-utilization', 'reports:customer-value']),
-        ('bi',        '综合分析', ['analytics:project', 'analytics:inventory']),
+        (
+            'finance',
+            '财务报表',
+            [
+                'reports:profitability',
+                'reports:aging',
+                'reports:cash-flow',
+                'reports:cost-analysis',
+                'reports:project-profitability',
+            ],
+        ),
+        (
+            'operation',
+            '运营报表',
+            [
+                'reports:timelog',
+                'reports:slow-moving',
+                'reports:equipment-lifecycle',
+                'reports:capacity-utilization',
+                'reports:customer-value',
+            ],
+        ),
+        ('bi', '综合分析', ['analytics:project', 'analytics:inventory']),
     ],
     'oa': [
-        ('office',     '日常办公', ['oa:schedule', 'oa:meeting', 'oa:im', 'oa:announcement']),
+        ('office', '日常办公', ['oa:schedule', 'oa:meeting', 'oa:im', 'oa:announcement']),
         ('attendance', '考勤假期', ['oa:attendance', 'oa:attendance-import', 'oa:leave', 'accounts:attendance']),
-        ('workflow',   '审批流程', ['workflow:tasks', 'workflow:my-submissions', 'workflow:config']),
-        ('admin',      '行政管理', ['oa:vehicles', 'oa:vehicle-request', 'oa:assets']),
+        ('workflow', '审批流程', ['workflow:tasks', 'workflow:my-submissions', 'workflow:config']),
+        ('admin', '行政管理', ['oa:vehicles', 'oa:vehicle-request', 'oa:assets']),
     ],
     'system': [
-        ('auth',   '组织权限', ['system:users', 'system:roles', 'system:departments']),
-        ('config', '基础配置', ['system:code-rules', 'system:config', 'system:dashboard-config', 'system:data-dictionary', 'system:custom-fields']),
-        ('notify', '消息通知', ['system:notification-settings', 'system:email-templates', 'system:notifications', 'system:announcements']),
-        ('audit',  '安全审计', ['system:audit-log', 'system:login-logs', 'system:webhooks', 'system:audit-analytics']),
-        ('ops',    '运维管理', ['system:monitor', 'system:backup']),
+        ('auth', '组织权限', ['system:users', 'system:roles', 'system:departments']),
+        (
+            'config',
+            '基础配置',
+            [
+                'system:code-rules',
+                'system:config',
+                'system:dashboard-config',
+                'system:data-dictionary',
+                'system:custom-fields',
+            ],
+        ),
+        (
+            'notify',
+            '消息通知',
+            ['system:notification-settings', 'system:email-templates', 'system:notifications', 'system:announcements'],
+        ),
+        ('audit', '安全审计', ['system:audit-log', 'system:login-logs', 'system:webhooks', 'system:audit-analytics']),
+        ('ops', '运维管理', ['system:monitor', 'system:backup']),
     ],
 }
 

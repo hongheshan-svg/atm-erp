@@ -1,16 +1,18 @@
 """
 APS Finite Capacity Scheduling
 """
+
 from decimal import Decimal
+
 from django.db import models
-from django.conf import settings
 from django.utils import timezone
-from rest_framework import serializers, viewsets, status
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class FiniteCapacityPlan(BaseModel):
@@ -31,9 +33,7 @@ class FiniteCapacityPlan(BaseModel):
     name = models.CharField(max_length=200, verbose_name='计划名称')
     plan_start = models.DateField(verbose_name='计划开始日期')
     plan_end = models.DateField(verbose_name='计划结束日期')
-    status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default='draft', verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft', verbose_name='状态')
     scheduling_strategy = models.CharField(
         max_length=30, choices=STRATEGY_CHOICES, default='earliest_start', verbose_name='排程策略'
     )
@@ -62,8 +62,7 @@ class ScheduledTask(BaseModel):
     ]
 
     plan = models.ForeignKey(
-        FiniteCapacityPlan, on_delete=models.CASCADE,
-        related_name='tasks', verbose_name='排程计划'
+        FiniteCapacityPlan, on_delete=models.CASCADE, related_name='tasks', verbose_name='排程计划'
     )
     work_order = models.CharField(max_length=100, verbose_name='工单号')
     resource = models.CharField(max_length=200, verbose_name='资源')
@@ -72,9 +71,7 @@ class ScheduledTask(BaseModel):
     setup_time_minutes = models.IntegerField(default=0, verbose_name='换型时间(分钟)')
     processing_time_minutes = models.IntegerField(verbose_name='加工时间(分钟)')
     sequence = models.IntegerField(default=0, verbose_name='排序')
-    status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='状态')
 
     class Meta:
         db_table = 'production_scheduled_task'
@@ -83,7 +80,7 @@ class ScheduledTask(BaseModel):
         verbose_name_plural = '排程任务'
 
     def __str__(self):
-        return f"{self.work_order} @ {self.resource}"
+        return f'{self.work_order} @ {self.resource}'
 
 
 class FiniteCapacityScheduler:
@@ -96,9 +93,7 @@ class FiniteCapacityScheduler:
         plan.save(update_fields=['status'])
 
         try:
-            tasks = ScheduledTask.objects.filter(
-                plan=plan, is_deleted=False
-            ).order_by('sequence')
+            tasks = ScheduledTask.objects.filter(plan=plan, is_deleted=False).order_by('sequence')
 
             resource_end_times = {}
             for task in tasks:
@@ -128,6 +123,7 @@ class FiniteCapacityScheduler:
 
 # ─── Serializers ────────────────────────────────────────────────
 
+
 class ScheduledTaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = ScheduledTask
@@ -146,7 +142,8 @@ class FiniteCapacityPlanSerializer(serializers.ModelSerializer):
 
 # ─── ViewSets ───────────────────────────────────────────────────
 
-class FiniteCapacityPlanViewSet(viewsets.ModelViewSet):
+
+class FiniteCapacityPlanViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = FiniteCapacityPlanSerializer
     permission_classes = [IsAuthenticated]
 
@@ -176,7 +173,7 @@ class FiniteCapacityPlanViewSet(viewsets.ModelViewSet):
         return Response(FiniteCapacityPlanSerializer(plan).data)
 
 
-class ScheduledTaskViewSet(viewsets.ModelViewSet):
+class ScheduledTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = ScheduledTaskSerializer
     permission_classes = [IsAuthenticated]
 

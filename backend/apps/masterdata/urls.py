@@ -1,21 +1,19 @@
 """
 URL configuration for masterdata app.
 """
-from django.urls import path, include
+
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter
+
+from .credit_management import CreditAdjustmentViewSet, CreditLevelViewSet, CustomerCreditViewSet
+from .customer_follow import CustomerContactViewSet, CustomerFollowUpViewSet, CustomerReminderViewSet
 from .views import (
+    CustomerViewSet,
     ItemCategoryViewSet,
     ItemViewSet,
-    CustomerViewSet,
     SupplierViewSet,
+    WarehouseLocationViewSet,
     WarehouseViewSet,
-    WarehouseLocationViewSet
-)
-from .customer_follow import (
-    CustomerFollowUpViewSet, CustomerReminderViewSet, CustomerContactViewSet
-)
-from .credit_management import (
-    CreditLevelViewSet, CustomerCreditViewSet, CreditAdjustmentViewSet
 )
 
 router = DefaultRouter()
@@ -40,4 +38,3 @@ router.register(r'credit-adjustments', CreditAdjustmentViewSet, basename='credit
 urlpatterns = [
     path('', include(router.urls)),
 ]
-

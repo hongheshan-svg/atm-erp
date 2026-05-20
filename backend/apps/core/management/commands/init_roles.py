@@ -5,13 +5,14 @@
     python manage.py init_roles
     python manage.py init_roles --force  # 强制重置所有角色
 """
+
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from apps.accounts.models import Role
-from apps.core.permission_models_new import Permission, DataScope
-from apps.core.permission_service import on_role_permission_change
-from apps.core.permission_config import DEFAULT_ROLES
 
+from apps.accounts.models import Role
+from apps.core.permission_config import DEFAULT_ROLES
+from apps.core.permission_models_new import DataScope, Permission
+from apps.core.permission_service import on_role_permission_change
 
 SCOPE_MAP = {
     'ALL': 'all',
@@ -80,30 +81,30 @@ class Command(BaseCommand):
         permission_ids = self._collect_permission_ids(selected_codes)
         role.permissions_new.set(Permission.active.filter(id__in=permission_ids))
         on_role_permission_change(role)
-    
+
     def add_arguments(self, parser):
         parser.add_argument(
             '--force',
             action='store_true',
             help='强制更新所有角色配置（覆盖现有配置）',
         )
-    
+
     def handle(self, *args, **options):
         force = options.get('force', False)
-        
+
         self.stdout.write(self.style.NOTICE('开始初始化角色...'))
-        
+
         created_count = 0
         updated_count = 0
         skipped_count = 0
-        
+
         with transaction.atomic():
             for role_config in DEFAULT_ROLES:
                 code = role_config['code']
-                
+
                 try:
                     role = Role.objects.get(code=code)
-                    
+
                     if force:
                         # 强制更新
                         role.name = role_config['name']
@@ -111,7 +112,16 @@ class Command(BaseCommand):
                         role.permissions = {}
                         role.is_active = True
                         role.sort_order = DEFAULT_ROLES.index(role_config) * 10
-                        role.save(update_fields=['name', 'description', 'permissions', 'is_active', 'sort_order', 'updated_at'])
+                        role.save(
+                            update_fields=[
+                                'name',
+                                'description',
+                                'permissions',
+                                'is_active',
+                                'sort_order',
+                                'updated_at',
+                            ]
+                        )
                         self._sync_default_scope(role, role_config.get('data_scope', 'self'))
                         self._sync_permissions(role, role_config)
                         updated_count += 1
@@ -119,7 +129,7 @@ class Command(BaseCommand):
                     else:
                         skipped_count += 1
                         self.stdout.write(f'  跳过已存在: {code}')
-                
+
                 except Role.DoesNotExist:
                     # 检查是否有同名角色
                     existing_by_name = Role.objects.filter(name=role_config['name']).first()
@@ -130,7 +140,16 @@ class Command(BaseCommand):
                         existing_by_name.permissions = {}
                         existing_by_name.is_active = True
                         existing_by_name.sort_order = DEFAULT_ROLES.index(role_config) * 10
-                        existing_by_name.save(update_fields=['code', 'description', 'permissions', 'is_active', 'sort_order', 'updated_at'])
+                        existing_by_name.save(
+                            update_fields=[
+                                'code',
+                                'description',
+                                'permissions',
+                                'is_active',
+                                'sort_order',
+                                'updated_at',
+                            ]
+                        )
                         self._sync_default_scope(existing_by_name, role_config.get('data_scope', 'self'))
                         self._sync_permissions(existing_by_name, role_config)
                         updated_count += 1
@@ -143,13 +162,13 @@ class Command(BaseCommand):
                             description=role_config.get('description', ''),
                             permissions={},
                             is_active=True,
-                            sort_order=DEFAULT_ROLES.index(role_config) * 10
+                            sort_order=DEFAULT_ROLES.index(role_config) * 10,
                         )
                         self._sync_default_scope(role, role_config.get('data_scope', 'self'))
                         self._sync_permissions(role, role_config)
                         created_count += 1
                         self.stdout.write(self.style.SUCCESS(f'  创建角色: {code} ({role_config["name"]})'))
-        
+
         # 输出统计
         self.stdout.write('')
         self.stdout.write(self.style.SUCCESS('=' * 50))
@@ -157,7 +176,7 @@ class Command(BaseCommand):
         self.stdout.write(f'更新: {updated_count} 个角色')
         self.stdout.write(f'跳过: {skipped_count} 个角色')
         self.stdout.write(self.style.SUCCESS('角色初始化完成！'))
-        
+
         # 显示权限说明
         self.stdout.write('')
         self.stdout.write(self.style.NOTICE('权限配置说明：'))

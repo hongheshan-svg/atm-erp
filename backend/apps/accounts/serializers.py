@@ -1,11 +1,14 @@
 """
 Serializers for accounts app.
 """
-from rest_framework import serializers
+
 from django.contrib.auth.password_validation import validate_password
-from apps.core.permission_models_new import Permission, DataScope
+from rest_framework import serializers
+
+from apps.core.permission_models_new import DataScope, Permission
 from apps.core.permission_service import normalize_scope_type, on_role_permission_change
-from .models import User, Role, Department
+
+from .models import Department, Role, User
 
 
 class RoleDataScopeConfigSerializer(serializers.Serializer):
@@ -21,34 +24,47 @@ class RoleDataScopeConfigSerializer(serializers.Serializer):
 
 class DepartmentSerializer(serializers.ModelSerializer):
     """Department serializer."""
+
     parent_name = serializers.CharField(source='parent.name', read_only=True)
     manager_name = serializers.SerializerMethodField()
-    
+
     def get_manager_name(self, obj):
         if obj.manager:
             # 中文姓名：姓在前，名在后
             if obj.manager.last_name or obj.manager.first_name:
-                return f"{obj.manager.last_name}{obj.manager.first_name}"
+                return f'{obj.manager.last_name}{obj.manager.first_name}'
             return obj.manager.username
         return ''
-    
+
     class Meta:
         model = Department
         fields = [
-            'id', 'code', 'name', 'parent', 'parent_name', 'manager', 'manager_name',
-            'description', 'sort_order', 'is_deleted', 'created_at', 'updated_at'
+            'id',
+            'code',
+            'name',
+            'parent',
+            'parent_name',
+            'manager',
+            'manager_name',
+            'description',
+            'sort_order',
+            'is_deleted',
+            'created_at',
+            'updated_at',
         ]
         read_only_fields = ['code', 'created_at', 'updated_at']
-    
+
     def create(self, validated_data):
         import uuid
+
         # 自动生成部门编码
-        validated_data['code'] = f"DEPT{uuid.uuid4().hex[:6].upper()}"
+        validated_data['code'] = f'DEPT{uuid.uuid4().hex[:6].upper()}'
         return super().create(validated_data)
 
 
 class RoleSerializer(serializers.ModelSerializer):
     """Role serializer."""
+
     user_count = serializers.SerializerMethodField()
     code = serializers.CharField(max_length=50, required=False, allow_blank=True)
     permission_ids = serializers.ListField(
@@ -61,9 +77,17 @@ class RoleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Role
         fields = [
-            'id', 'code', 'name', 'description', 'permission_ids', 'data_scopes',
-            'is_active', 'sort_order', 'user_count',
-            'created_at', 'updated_at'
+            'id',
+            'code',
+            'name',
+            'description',
+            'permission_ids',
+            'data_scopes',
+            'is_active',
+            'sort_order',
+            'user_count',
+            'created_at',
+            'updated_at',
         ]
         read_only_fields = ['created_at', 'updated_at']
 
@@ -111,8 +135,9 @@ class RoleSerializer(serializers.ModelSerializer):
         permission_ids = validated_data.pop('permission_ids', [])
         data_scopes = validated_data.pop('data_scopes', [])
         import uuid
+
         if not validated_data.get('code'):
-            validated_data['code'] = f"ROLE{uuid.uuid4().hex[:6].upper()}"
+            validated_data['code'] = f'ROLE{uuid.uuid4().hex[:6].upper()}'
         role = super().create(validated_data)
         self._save_permissions(role, permission_ids)
         self._save_data_scopes(role, data_scopes)
@@ -168,38 +193,70 @@ class RoleSerializer(serializers.ModelSerializer):
                 scope.delete()
 
 
-
 class UserSerializer(serializers.ModelSerializer):
     """User serializer for list and retrieve."""
+
     department_name = serializers.CharField(source='department.name', read_only=True)
     role_name = serializers.CharField(source='role.name', read_only=True)
-    
+
     class Meta:
         model = User
         fields = [
-            'id', 'username', 'employee_id', 'email', 'first_name', 'last_name',
-            'phone', 'avatar', 'gender', 'birth_date', 'department', 'department_name',
-            'role', 'role_name', 'position', 'hire_date', 'is_active', 'is_staff',
-            'is_superuser', 'last_login', 'date_joined', 'created_at', 'updated_at',
-            'wechat_work_id', 'dingtalk_id'
+            'id',
+            'username',
+            'employee_id',
+            'email',
+            'first_name',
+            'last_name',
+            'phone',
+            'avatar',
+            'gender',
+            'birth_date',
+            'department',
+            'department_name',
+            'role',
+            'role_name',
+            'position',
+            'hire_date',
+            'is_active',
+            'is_staff',
+            'is_superuser',
+            'last_login',
+            'date_joined',
+            'created_at',
+            'updated_at',
+            'wechat_work_id',
+            'dingtalk_id',
         ]
         read_only_fields = ['last_login', 'date_joined', 'created_at', 'updated_at']
-        extra_kwargs = {
-            'password': {'write_only': True}
-        }
+        extra_kwargs = {'password': {'write_only': True}}
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
     """User serializer for creation."""
+
     password = serializers.CharField(write_only=True, required=True, min_length=6)
     password_confirm = serializers.CharField(write_only=True, required=True)
-    
+
     class Meta:
         model = User
         fields = [
-            'username', 'employee_id', 'email', 'password', 'password_confirm',
-            'first_name', 'last_name', 'phone', 'gender', 'birth_date',
-            'department', 'role', 'position', 'hire_date', 'is_active', 'is_staff'
+            'username',
+            'employee_id',
+            'email',
+            'password',
+            'password_confirm',
+            'first_name',
+            'last_name',
+            'phone',
+            'gender',
+            'birth_date',
+            'department',
+            'role',
+            'position',
+            'hire_date',
+            'is_active',
+            'is_staff',
         ]
         extra_kwargs = {
             'employee_id': {'required': False, 'allow_blank': True},
@@ -208,18 +265,19 @@ class UserCreateSerializer(serializers.ModelSerializer):
             'last_name': {'required': False, 'allow_blank': True},
             'phone': {'required': False, 'allow_blank': True},
         }
-    
+
     def validate(self, attrs):
         if attrs['password'] != attrs['password_confirm']:
-            raise serializers.ValidationError({"password_confirm": "两次密码不一致"})
+            raise serializers.ValidationError({'password_confirm': '两次密码不一致'})
         return attrs
-    
+
     def create(self, validated_data):
         validated_data.pop('password_confirm')
         # 如果 employee_id 为空，自动生成一个
         if not validated_data.get('employee_id'):
             import uuid
-            validated_data['employee_id'] = f"EMP{uuid.uuid4().hex[:8].upper()}"
+
+            validated_data['employee_id'] = f'EMP{uuid.uuid4().hex[:8].upper()}'
         # 移除空字符串字段（但保留 employee_id）
         validated_data = {k: v for k, v in validated_data.items() if v not in [None, ''] or k == 'employee_id'}
         user = User.objects.create_user(**validated_data)
@@ -228,30 +286,42 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
 class UserUpdateSerializer(serializers.ModelSerializer):
     """User serializer for update."""
-    
+
     class Meta:
         model = User
         fields = [
-            'email', 'first_name', 'last_name', 'phone', 'avatar', 'gender',
-            'birth_date', 'department', 'role', 'position', 'hire_date',
-            'is_active', 'is_staff'
+            'email',
+            'first_name',
+            'last_name',
+            'phone',
+            'avatar',
+            'gender',
+            'birth_date',
+            'department',
+            'role',
+            'position',
+            'hire_date',
+            'is_active',
+            'is_staff',
         ]
 
 
 class ChangePasswordSerializer(serializers.Serializer):
     """Serializer for password change."""
+
     old_password = serializers.CharField(required=True)
     new_password = serializers.CharField(required=True, validators=[validate_password])
     new_password_confirm = serializers.CharField(required=True)
-    
+
     def validate(self, attrs):
         if attrs['new_password'] != attrs['new_password_confirm']:
-            raise serializers.ValidationError({"new_password": "两次密码不一致"})
+            raise serializers.ValidationError({'new_password': '两次密码不一致'})
         return attrs
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
     """User profile serializer with additional info."""
+
     department_info = DepartmentSerializer(source='department', read_only=True)
     role_info = RoleSerializer(source='role', read_only=True)
     roles = serializers.SerializerMethodField()
@@ -262,10 +332,30 @@ class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'id', 'username', 'employee_id', 'email', 'first_name', 'last_name',
-            'phone', 'avatar', 'gender', 'birth_date', 'department', 'department_info',
-            'role', 'role_info', 'roles', 'position', 'hire_date', 'is_active', 'is_staff',
-            'is_superuser', 'permissions', 'menus', 'data_scopes', 'last_login'
+            'id',
+            'username',
+            'employee_id',
+            'email',
+            'first_name',
+            'last_name',
+            'phone',
+            'avatar',
+            'gender',
+            'birth_date',
+            'department',
+            'department_info',
+            'role',
+            'role_info',
+            'roles',
+            'position',
+            'hire_date',
+            'is_active',
+            'is_staff',
+            'is_superuser',
+            'permissions',
+            'menus',
+            'data_scopes',
+            'last_login',
         ]
 
     def get_roles(self, obj):
@@ -275,15 +365,17 @@ class UserProfileSerializer(serializers.ModelSerializer):
     def get_permissions(self, obj):
         """返回用户的所有权限代码"""
         from apps.core.permission_service import get_user_permissions
+
         if obj.is_superuser:
             return ['*']
         return list(get_user_permissions(obj))
 
     def get_menus(self, obj):
         """返回用户可访问的菜单树（支持三级分组）"""
+        from django.db.models import Q
+
         from apps.core.permission_models_new import Permission
         from apps.core.permission_service import get_user_permissions
-        from django.db.models import Q
 
         if obj.is_superuser:
             all_menus = list(Permission.active.filter(type='menu').order_by('sort_order'))
@@ -293,8 +385,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             # 自动补全祖先节点(分组容器、一级菜单)，保证树结构完整
             parent_ids = set(user_menus.exclude(parent_id=None).values_list('parent_id', flat=True))
             grandparent_ids = set(
-                Permission.active.filter(id__in=parent_ids, parent_id__isnull=False)
-                .values_list('parent_id', flat=True)
+                Permission.active.filter(id__in=parent_ids, parent_id__isnull=False).values_list('parent_id', flat=True)
             )
             ancestor_ids = parent_ids | grandparent_ids
             all_menus = list(
@@ -315,13 +406,15 @@ class UserProfileSerializer(serializers.ModelSerializer):
                 # 跳过没有可见子项的空分组容器
                 if not perm.route_path and not children:
                     continue
-                nodes.append({
-                    'code': perm.code,
-                    'name': perm.name,
-                    'icon': perm.icon,
-                    'route': perm.route_path,
-                    'children': children,
-                })
+                nodes.append(
+                    {
+                        'code': perm.code,
+                        'name': perm.name,
+                        'icon': perm.icon,
+                        'route': perm.route_path,
+                        'children': children,
+                    }
+                )
             return nodes
 
         return build_tree()
@@ -340,4 +433,3 @@ class UserProfileSerializer(serializers.ModelSerializer):
             scopes[module] = scope_type
 
         return scopes
-

@@ -1,17 +1,18 @@
 """
 Predictive Analytics for ERP
 """
-from decimal import Decimal
-from django.db import models
+
 from django.conf import settings
+from django.db import models
 from django.utils import timezone
-from rest_framework import serializers, viewsets, status
-from rest_framework.views import APIView
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class PredictionModel(BaseModel):
@@ -24,9 +25,7 @@ class PredictionModel(BaseModel):
     ]
 
     name = models.CharField(max_length=200, verbose_name='模型名称')
-    model_type = models.CharField(
-        max_length=30, choices=MODEL_TYPE_CHOICES, verbose_name='模型类型'
-    )
+    model_type = models.CharField(max_length=30, choices=MODEL_TYPE_CHOICES, verbose_name='模型类型')
     config = models.JSONField(default=dict, verbose_name='配置')
     is_active = models.BooleanField(default=True, verbose_name='是否启用')
 
@@ -42,14 +41,11 @@ class PredictionModel(BaseModel):
 
 class PredictionResult(BaseModel):
     model = models.ForeignKey(
-        PredictionModel, on_delete=models.CASCADE,
-        related_name='results', verbose_name='预测模型'
+        PredictionModel, on_delete=models.CASCADE, related_name='results', verbose_name='预测模型'
     )
     result_type = models.CharField(max_length=100, verbose_name='结果类型')
     result_data = models.JSONField(default=dict, verbose_name='结果数据')
-    confidence = models.DecimalField(
-        max_digits=5, decimal_places=2, null=True, blank=True, verbose_name='置信度'
-    )
+    confidence = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name='置信度')
     valid_until = models.DateTimeField(null=True, blank=True, verbose_name='有效期至')
 
     class Meta:
@@ -59,7 +55,7 @@ class PredictionResult(BaseModel):
         verbose_name_plural = '预测结果'
 
     def __str__(self):
-        return f"{self.model.name} - {self.result_type}"
+        return f'{self.model.name} - {self.result_type}'
 
 
 class RiskAlert(BaseModel):
@@ -84,28 +80,28 @@ class RiskAlert(BaseModel):
         ('closed', '已关闭'),
     ]
 
-    alert_type = models.CharField(
-        max_length=30, choices=ALERT_TYPE_CHOICES, verbose_name='告警类型'
-    )
-    severity = models.CharField(
-        max_length=10, choices=SEVERITY_CHOICES, verbose_name='严重程度'
-    )
+    alert_type = models.CharField(max_length=30, choices=ALERT_TYPE_CHOICES, verbose_name='告警类型')
+    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, verbose_name='严重程度')
     title = models.CharField(max_length=300, verbose_name='标题')
     description = models.TextField(verbose_name='描述')
-    related_object_type = models.CharField(
-        max_length=100, blank=True, default='', verbose_name='关联对象类型'
-    )
+    related_object_type = models.CharField(max_length=100, blank=True, default='', verbose_name='关联对象类型')
     related_object_id = models.IntegerField(null=True, blank=True, verbose_name='关联对象ID')
-    status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default='open', verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open', verbose_name='状态')
     acknowledged_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
-        null=True, blank=True, related_name='acknowledged_risk_alerts', verbose_name='确认人'
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='acknowledged_risk_alerts',
+        verbose_name='确认人',
     )
     resolved_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
-        null=True, blank=True, related_name='resolved_risk_alerts', verbose_name='解决人'
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='resolved_risk_alerts',
+        verbose_name='解决人',
     )
     resolution = models.TextField(blank=True, default='', verbose_name='解决方案')
 
@@ -116,7 +112,7 @@ class RiskAlert(BaseModel):
         verbose_name_plural = '风险告警'
 
     def __str__(self):
-        return f"[{self.get_severity_display()}] {self.title}"
+        return f'[{self.get_severity_display()}] {self.title}'
 
 
 class PredictionService:
@@ -124,16 +120,22 @@ class PredictionService:
 
     @staticmethod
     def analyze_cost_trend():
-        from django.db.models import Sum, Count
+        from django.db.models import Count, Sum
         from django.db.models.functions import TruncMonth
+
         try:
             from apps.projects.models import Project
-            projects = Project.objects.filter(is_deleted=False).annotate(
-                month=TruncMonth('created_at')
-            ).values('month').annotate(
-                count=Count('id'),
-                total_budget=Sum('budget'),
-            ).order_by('month')
+
+            projects = (
+                Project.objects.filter(is_deleted=False)
+                .annotate(month=TruncMonth('created_at'))
+                .values('month')
+                .annotate(
+                    count=Count('id'),
+                    total_budget=Sum('budget'),
+                )
+                .order_by('month')
+            )
             return list(projects)
         except Exception:
             return []
@@ -142,20 +144,21 @@ class PredictionService:
     def analyze_delivery_risk():
         try:
             from apps.projects.models import Project
-            projects = Project.objects.filter(
-                is_deleted=False, status__in=['in_progress', 'active']
-            )
+
+            projects = Project.objects.filter(is_deleted=False, status__in=['in_progress', 'active'])
             risks = []
             for proj in projects:
                 planned_end = getattr(proj, 'planned_end_date', None) or getattr(proj, 'end_date', None)
                 if planned_end and planned_end < timezone.now().date():
-                    risks.append({
-                        'project_id': proj.id,
-                        'project_name': str(proj),
-                        'planned_end': str(planned_end),
-                        'days_overdue': (timezone.now().date() - planned_end).days,
-                        'risk_level': 'high',
-                    })
+                    risks.append(
+                        {
+                            'project_id': proj.id,
+                            'project_name': str(proj),
+                            'planned_end': str(planned_end),
+                            'days_overdue': (timezone.now().date() - planned_end).days,
+                            'risk_level': 'high',
+                        }
+                    )
             return risks
         except Exception:
             return []
@@ -163,19 +166,23 @@ class PredictionService:
     @staticmethod
     def analyze_capacity_load():
         try:
-            from apps.production.models import ProductionOrder
             from django.db.models import Count
-            load = ProductionOrder.objects.filter(
-                is_deleted=False, status='in_progress'
-            ).values('work_center').annotate(
-                active_orders=Count('id')
-            ).order_by('-active_orders')
+
+            from apps.production.models import ProductionOrder
+
+            load = (
+                ProductionOrder.objects.filter(is_deleted=False, status='in_progress')
+                .values('work_center')
+                .annotate(active_orders=Count('id'))
+                .order_by('-active_orders')
+            )
             return list(load)
         except Exception:
             return []
 
 
 # ─── Serializers ────────────────────────────────────────────────
+
 
 class PredictionModelSerializer(serializers.ModelSerializer):
     model_type_display = serializers.CharField(source='get_model_type_display', read_only=True)
@@ -208,7 +215,8 @@ class RiskAlertSerializer(serializers.ModelSerializer):
 
 # ─── ViewSets ───────────────────────────────────────────────────
 
-class PredictionModelViewSet(viewsets.ModelViewSet):
+
+class PredictionModelViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = PredictionModelSerializer
     permission_classes = [IsAuthenticated]
 
@@ -219,7 +227,7 @@ class PredictionModelViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
 
-class PredictionResultViewSet(viewsets.ModelViewSet):
+class PredictionResultViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = PredictionResultSerializer
     permission_classes = [IsAuthenticated]
 
@@ -234,7 +242,7 @@ class PredictionResultViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
 
-class RiskAlertViewSet(viewsets.ModelViewSet):
+class RiskAlertViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = RiskAlertSerializer
     permission_classes = [IsAuthenticated]
 
@@ -274,6 +282,7 @@ class RiskAlertViewSet(viewsets.ModelViewSet):
 
 
 # ─── APIViews ───────────────────────────────────────────────────
+
 
 class CostTrendView(APIView):
     permission_classes = [IsAuthenticated]
