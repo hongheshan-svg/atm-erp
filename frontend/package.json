@@ -7,6 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit",
+    "test": "vitest run",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix"
   },
@@ -26,11 +30,20 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@types/node": "^25.9.1",
     "@vitejs/plugin-vue": "^5.0.0",
+    "@vitest/coverage-v8": "^4.1.7",
+    "@vitest/ui": "^4.1.7",
+    "@vue/test-utils": "^2.4.10",
     "eslint": "^9.39.0",
     "eslint-plugin-vue": "^9.33.0",
     "globals": "^17.6.0",
+    "jsdom": "^29.1.1",
     "sass": "^1.69.5",
-    "vite": "^5.0.8"
+    "typescript": "^6.0.3",
+    "vite": "^5.0.8",
+    "vitest": "^4.1.7",
+    "vue-tsc": "^3.3.1"
   }
 }

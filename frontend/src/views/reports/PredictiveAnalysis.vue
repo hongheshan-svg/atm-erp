@@ -36,7 +36,13 @@
               <el-button type="primary" @click="loadDeliveryRisk" :loading="deliveryLoading">刷新</el-button>
             </div>
           </template>
-          <el-table :data="deliveryRisks" v-loading="deliveryLoading" stripe>
+          <!-- 批量操作 -->
+          <div v-if="selectedRows.length > 0" class="batch-toolbar">
+            <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+            <el-button size="small" @click="batchExport">导出选中</el-button>
+          </div>
+          <el-table :data="deliveryRisks" v-loading="deliveryLoading" stripe @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="45" />
             <el-table-column prop="project_name" label="项目" min-width="180" />
             <el-table-column label="风险等级" width="100" align="center">
               <template #default="{ row }">
@@ -92,9 +98,13 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { getCostTrend, getDeliveryRisk, getCapacityLoad } from '@/api/reports'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/reports/')
+
 
 const activeTab = ref('cost')
 const costLoading = ref(false)

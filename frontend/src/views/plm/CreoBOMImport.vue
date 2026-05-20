@@ -61,7 +61,14 @@
 
     <!-- 导入记录列表 -->
     <el-card class="list-card">
-      <el-table :data="sessions" v-loading="loading" border stripe>
+      <!-- 批量操作 -->
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      </div>
+      <el-table :data="sessions" v-loading="loading" border stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="name" label="导入名称" min-width="180" />
         <el-table-column label="CAD软件" width="120">
@@ -316,13 +323,17 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { getCreoBOMImportList, getCreoBOMImport, uploadCreoBOM, createCreoBOMItems, importCreoBOM, importCreoBOMHierarchy, manualMatchCreoBOM } from '@/api/plm/creo'
 import { getProjectList } from '@/api/projects/project'
 import { getItemList } from '@/api/masterdata'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Plus, Download, DocumentAdd, Connection } from '@element-plus/icons-vue'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/plm_creo/')
+
 
 const loading = ref(false)
 const uploading = ref(false)

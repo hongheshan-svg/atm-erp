@@ -59,7 +59,20 @@
         </div>
       </template>
       
-      <el-table :data="services" stripe>
+      <!-- 批量操作 -->
+      
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+      
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+      
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+      
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      
+      </div>
+      
+      <el-table :data="services" stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="name" label="服务名称" width="200" />
         <el-table-column label="状态" width="120">
           <template #default="{ row }">
@@ -128,10 +141,14 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import request from '@/utils/request'
 import { Monitor, CircleCheck, User, Tickets, Refresh } from '@element-plus/icons-vue'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/unknown/')
+
 
 
 const loading = ref(false)

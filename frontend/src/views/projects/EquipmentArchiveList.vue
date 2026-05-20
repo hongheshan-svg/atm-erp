@@ -64,7 +64,14 @@
       </el-form>
       
       <!-- 数据表格 -->
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <!-- 批量操作 -->
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      </div>
+      <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="equipment_no" label="设备编号" width="130" />
         <el-table-column prop="serial_number" label="出厂序列号" width="150" />
         <el-table-column prop="name" label="设备名称" min-width="180" />
@@ -330,13 +337,17 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getEquipmentArchiveList, createEquipmentArchive, updateEquipmentArchive, getEquipmentArchiveStatistics, getEquipmentArchiveNameplate, getEquipmentArchiveMaintenanceRecords } from '@/api/projects/equipment-monitoring'
 import { getProjectList } from '@/api/projects/project'
 import { getCustomerList } from '@/api/masterdata'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_equipment-monitoring/')
+
 
 const loading = ref(false)
 const maintDialogVisible = ref(false)

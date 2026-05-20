@@ -46,7 +46,20 @@
         </div>
       </template>
 
-      <el-table :data="documents" v-loading="loading" stripe @row-click="viewDocument">
+      <!-- 批量操作 -->
+
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+
+      </div>
+
+      <el-table :data="documents" v-loading="loading" stripe @row-click="viewDocument" @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="doc_no" label="文档编号" width="140" />
         <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
         <el-table-column prop="category_name" label="分类" width="120" />
@@ -229,12 +242,16 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Upload, Document, UploadFilled } from '@element-plus/icons-vue'
 import { getTechDocumentList, getTechDocument, createTechDocument, getTechDocCategoryTree, logTechDocAccess, submitTechDocReview, approveTechDocument, releaseTechDocument, newTechDocRevision, getTechDocAccessLog, distributeTechDocument } from '@/api/projects/tech-document'
 import { getProjectList } from '@/api/projects/project'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_tech-document/')
+
 
 const loading = ref(false)
 const uploading = ref(false)

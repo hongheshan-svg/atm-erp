@@ -24,7 +24,20 @@
         </el-form-item>
       </el-form>
       
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <!-- 批量操作 -->
+      
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+      
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+      
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+      
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      
+      </div>
+      
+      <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="project_name" label="项目" width="150" />
         <el-table-column prop="cost_type_display" label="成本类型" width="100" />
         <el-table-column prop="description" label="描述" />
@@ -80,10 +93,14 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getProjectList, getCostRecordList, createCostRecord, deleteCostRecord } from '@/api/projects/project'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_project/')
+
 
 const loading = ref(false)
 const saving = ref(false)

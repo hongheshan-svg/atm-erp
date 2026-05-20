@@ -111,7 +111,14 @@
       <!-- 今日排程列表 -->
       <el-col :span="16">
         <el-card shadow="never" header="今日排程" class="schedule-card">
-          <el-table :data="todaySchedules" size="small" stripe border>
+          <!-- 批量操作 -->
+          <div v-if="selectedRows.length > 0" class="batch-toolbar">
+            <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+            <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+            <el-button size="small" @click="batchExport">导出选中</el-button>
+          </div>
+          <el-table :data="todaySchedules" size="small" stripe border @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="45" />
             <el-table-column prop="schedule_no" label="排程编号" width="120" />
             <el-table-column prop="project_name" label="项目" min-width="150" show-overflow-tooltip />
             <el-table-column prop="work_center" label="工作中心" width="120" />
@@ -158,11 +165,15 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { Calendar, VideoPlay, CircleCheck, WarningFilled } from '@element-plus/icons-vue'
 import { getKanbanData } from '@/api/mes'
 import { toFixedSafe } from '@/utils/number'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/mes/')
+
 
 const loading = ref(false)
 const autoRefresh = ref(true)

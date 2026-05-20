@@ -73,7 +73,14 @@
           <template #header>
             <span>库存估值明细</span>
           </template>
-          <el-table :data="valuation.details" border stripe max-height="400">
+          <!-- 批量操作 -->
+          <div v-if="selectedRows.length > 0" class="batch-toolbar">
+            <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+            <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+            <el-button size="small" @click="batchExport">导出选中</el-button>
+          </div>
+          <el-table :data="valuation.details" border stripe max-height="400" @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="45" />
             <el-table-column prop="item_code" label="物料编码" width="120" />
             <el-table-column prop="item_name" label="物料名称" min-width="150" show-overflow-tooltip />
             <el-table-column prop="warehouse_name" label="仓库" width="100" />
@@ -250,11 +257,15 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getInventoryValuation, getCostRecords, getCostConfigs, generatePeriodSummary, setCostConfigDefault, updateCostConfig, createCostConfig } from '@/api/inventory'
 import * as echarts from 'echarts'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/')
+
 
 const activeTab = ref('valuation')
 const warehouseChart = ref(null)

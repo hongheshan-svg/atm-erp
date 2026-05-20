@@ -22,7 +22,20 @@
         </el-form-item>
       </el-form>
       
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <!-- 批量操作 -->
+      
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+      
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+      
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+      
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      
+      </div>
+      
+      <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="spare_part_no" label="备件编号" width="140" />
         <el-table-column prop="name" label="备件名称" />
         <el-table-column prop="category_name" label="分类" width="120" />
@@ -91,10 +104,14 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getSpareParts, getSparePartCategories, updateSparePart, createSparePart, consumeSparePart, deleteSparePart } from '@/api/inventory'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/')
+
 
 const loading = ref(false)
 const saving = ref(false)

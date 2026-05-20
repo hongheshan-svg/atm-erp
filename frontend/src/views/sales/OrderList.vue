@@ -42,14 +42,16 @@
         <el-form-item label="状态">
           <el-select v-model="searchForm.status" placeholder="选择状态" clearable style="width: 120px;">
             <el-option label="草稿" value="DRAFT" />
-            <el-option label="待审批" value="PENDING_APPROVAL" />
+            <el-option label="已提交" value="SUBMITTED" />
             <el-option label="审批中" value="PENDING" />
             <el-option label="已审批" value="APPROVED" />
-            <el-option label="已拒绝" value="REJECTED" />
-            <el-option label="已确认" value="CONFIRMED" />
-            <el-option label="部分发货" value="PARTIAL" />
+            <el-option label="备货中" value="PREPARING" />
+            <el-option label="预约物流中" value="LOGISTICS_BOOKING" />
+            <el-option label="待客户签收" value="CUSTOMER_SIGNING" />
+            <el-option label="待上传送货单" value="UPLOADING_RECEIPT" />
+            <el-option label="待项目确认" value="PROJECT_CONFIRMING" />
             <el-option label="已完成" value="COMPLETED" />
-            <el-option label="已取消" value="CANCELLED" />
+            <el-option label="已拒绝" value="REJECTED" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -344,7 +346,7 @@
     />
   </template>
 
-<script setup>
+<script setup lang="ts">
 import WorkflowProgress from '@/components/WorkflowProgress.vue'
 
 import { ref, reactive, onMounted } from 'vue'
@@ -414,31 +416,35 @@ const rules = {
 }
 
 const getStatusType = (status) => {
-  const types = { 
-    DRAFT: 'info', 
-    PENDING_APPROVAL: 'warning',
+  const types = {
+    DRAFT: 'info',
+    SUBMITTED: 'warning',
     PENDING: 'warning',
     APPROVED: 'success',
-    REJECTED: 'danger',
-    CONFIRMED: 'success', 
-    PARTIAL: 'warning',
-    COMPLETED: '', 
-    CANCELLED: 'danger' 
+    PREPARING: 'primary',
+    LOGISTICS_BOOKING: 'primary',
+    CUSTOMER_SIGNING: 'primary',
+    UPLOADING_RECEIPT: 'primary',
+    PROJECT_CONFIRMING: 'primary',
+    COMPLETED: '',
+    REJECTED: 'danger'
   }
   return types[status] || 'info'
 }
 
 const getStatusLabel = (status) => {
-  const labels = { 
-    DRAFT: '草稿', 
-    PENDING_APPROVAL: '待审批',
+  const labels = {
+    DRAFT: '草稿',
+    SUBMITTED: '已提交',
     PENDING: '审批中',
     APPROVED: '已审批',
-    REJECTED: '已拒绝',
-    CONFIRMED: '已确认', 
-    PARTIAL: '部分发货',
-    COMPLETED: '已完成', 
-    CANCELLED: '已取消' 
+    PREPARING: '备货中',
+    LOGISTICS_BOOKING: '预约物流中',
+    CUSTOMER_SIGNING: '待客户签收',
+    UPLOADING_RECEIPT: '待上传送货单',
+    PROJECT_CONFIRMING: '待项目确认',
+    COMPLETED: '已完成',
+    REJECTED: '已拒绝'
   }
   return labels[status] || status
 }

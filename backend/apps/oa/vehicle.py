@@ -10,7 +10,7 @@ Vehicle Management
 """
 import logging
 from datetime import date, datetime, timedelta
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from rest_framework import viewsets, serializers, status
 from rest_framework.decorators import action
@@ -515,15 +515,15 @@ class VehicleRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
         req = self.get_object()
         if req.status != 'APPROVED':
             return Response({'error': '只有已批准的申请可以取车'}, status=400)
-        
-        req.status = 'IN_USE'
-        req.start_mileage = req.vehicle.current_mileage
-        req.save()
-        
-        # 更新车辆状态
-        req.vehicle.status = 'IN_USE'
-        req.vehicle.save()
-        
+
+        with transaction.atomic():
+            req.status = 'IN_USE'
+            req.start_mileage = req.vehicle.current_mileage
+            req.save()
+
+            req.vehicle.status = 'IN_USE'
+            req.vehicle.save()
+
         return Response(self.get_serializer(req).data)
     
     @action(detail=True, methods=['post'])
@@ -532,23 +532,23 @@ class VehicleRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
         req = self.get_object()
         if req.status != 'IN_USE':
             return Response({'error': '只有使用中的申请可以还车'}, status=400)
-        
+
         end_mileage = request.data.get('end_mileage', req.vehicle.current_mileage)
-        
-        req.status = 'RETURNED'
-        req.actual_end_time = timezone.now()
-        req.end_mileage = end_mileage
-        req.fuel_cost = request.data.get('fuel_cost', 0)
-        req.toll_cost = request.data.get('toll_cost', 0)
-        req.parking_cost = request.data.get('parking_cost', 0)
-        req.other_cost = request.data.get('other_cost', 0)
-        req.save()
-        
-        # 更新车辆里程和状态
-        req.vehicle.current_mileage = end_mileage
-        req.vehicle.status = 'AVAILABLE'
-        req.vehicle.save()
-        
+
+        with transaction.atomic():
+            req.status = 'RETURNED'
+            req.actual_end_time = timezone.now()
+            req.end_mileage = end_mileage
+            req.fuel_cost = request.data.get('fuel_cost', 0)
+            req.toll_cost = request.data.get('toll_cost', 0)
+            req.parking_cost = request.data.get('parking_cost', 0)
+            req.other_cost = request.data.get('other_cost', 0)
+            req.save()
+
+            req.vehicle.current_mileage = end_mileage
+            req.vehicle.status = 'AVAILABLE'
+            req.vehicle.save()
+
         return Response(self.get_serializer(req).data)
 
 

@@ -1,0 +1,77 @@
+import request from '@/utils/request'
+
+export function login(username: string, password: string) {
+  return request({
+    url: '/auth/login/',
+    method: 'post',
+    data: { username, password }
+  })
+}
+
+export function getUserProfile() {
+  return request({ url: '/auth/users/profile/', method: 'get' })
+}
+
+export function updateProfile(data: any) {
+  return request({ url: '/auth/users/update_profile/', method: 'put', data })
+}
+
+export function changePassword(data: { old_password: string; new_password: string }) {
+  return request({ url: '/auth/users/change_password/', method: 'post', data })
+}
+
+export function getUsers(params?: Record<string, any>) {
+  return request({ url: '/auth/users/', method: 'get', params })
+}
+
+export function createUser(data: any) {
+  return request({ url: '/auth/users/', method: 'post', data })
+}
+
+export function updateUser(id: number, data: any) {
+  return request({ url: `/auth/users/${id}/`, method: 'put', data })
+}
+
+export function deleteUser(id: number) {
+  return request({ url: `/auth/users/${id}/`, method: 'delete' })
+}
+
+export function getRoles(params?: Record<string, any>) {
+  return request({ url: '/auth/roles/', method: 'get', params })
+}
+
+export function getDepartments(params?: Record<string, any>) {
+  return request({ url: '/auth/departments/', method: 'get', params })
+}
+
+export function getDepartmentTree() {
+  return request({ url: '/auth/departments/tree/', method: 'get' })
+}
+
+export function createRole(data: any) {
+  return request({ url: '/auth/roles/', method: 'post', data })
+}
+
+export function updateRole(id: number, data: any) {
+  return request({ url: `/auth/roles/${id}/`, method: 'put', data })
+}
+
+export function deleteRole(id: number) {
+  return request({ url: `/auth/roles/${id}/`, method: 'delete' })
+}
+
+export function createDepartment(data: any) {
+  return request({ url: '/auth/departments/', method: 'post', data })
+}
+
+export function updateDepartment(id: number, data: any) {
+  return request({ url: `/auth/departments/${id}/`, method: 'put', data })
+}
+
+export function deleteDepartment(id: number) {
+  return request({ url: `/auth/departments/${id}/`, method: 'delete' })
+}
+
+export function getDepartmentUsers(deptId: number) {
+  return request({ url: '/auth/users/', method: 'get', params: { department: deptId } })
+}

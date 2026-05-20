@@ -587,6 +587,7 @@ class PreventiveMaintenanceViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class ServiceRequestViewSet(WorkflowEnforcementMixin, PermissionMixin, viewsets.ModelViewSet):
     workflow_business_type = 'SERVICE_REQUEST'
+    workflow_no_field = 'request_no'
     """服务请求管理"""
 
     queryset = ServiceRequest.objects.filter(is_deleted=False)
@@ -625,9 +626,35 @@ class ServiceRequestViewSet(WorkflowEnforcementMixin, PermissionMixin, viewsets.
             instance.save()
 
     @action(detail=True, methods=['post'])
-    def acknowledge(self, request, pk=None):
-        """确认请求"""
+    def submit(self, request, pk=None):
+        """提交服务请求审批"""
         sr = self.get_object()
+        if sr.status != 'NEW':
+            return Response({'error': '只能提交新建状态的请求'}, status=status.HTTP_400_BAD_REQUEST)
+
+        result = self.start_workflow_or_auto_approve(
+            sr, request.user,
+            approved_status='ACKNOWLEDGED',
+            submitted_status='NEW'
+        )
+        if result['auto_approved']:
+            sr.status = 'ACKNOWLEDGED'
+            sr.acknowledged_at = timezone.now()
+            sr.save()
+        return Response({
+            'message': result['message'],
+            'workflow_started': result['workflow_started'],
+        })
+
+    @action(detail=True, methods=['post'])
+    def acknowledge(self, request, pk=None):
+        """确认请求 - 仅在无活跃工作流时允许"""
+        sr = self.get_object()
+
+        workflow_error = self.check_workflow_allows_direct_action(sr, '确认')
+        if workflow_error:
+            return workflow_error
+
         sr.status = 'ACKNOWLEDGED'
         sr.acknowledged_at = timezone.now()
         sr.save()

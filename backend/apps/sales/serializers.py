@@ -1,6 +1,7 @@
 """
 Serializers for sales app.
 """
+from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Sum
@@ -142,7 +143,7 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
                     )
 
             # Update total amount and tax
-            total = quotation.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
+            total = quotation.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or Decimal('0')
             quotation.total_amount = total
             quotation.tax_amount = total * quotation.tax_rate / 100
             quotation.total_with_tax = total + quotation.tax_amount
@@ -182,7 +183,7 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
                     )
 
             # Update total amount and tax
-            total = instance.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
+            total = instance.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or Decimal('0')
             instance.total_amount = total
             instance.tax_amount = total * instance.tax_rate / 100
             instance.total_with_tax = total + instance.tax_amount
@@ -359,7 +360,7 @@ class SalesOrderSerializer(serializers.ModelSerializer):
                     )
 
             # Update total amount and tax
-            total = so.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
+            total = so.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or Decimal('0')
             so.total_amount = total
             so.tax_amount = total * so.tax_rate / 100
             so.total_with_tax = total + so.tax_amount
@@ -399,7 +400,7 @@ class SalesOrderSerializer(serializers.ModelSerializer):
                     )
 
             # Update total amount and tax
-            total = instance.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
+            total = instance.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or Decimal('0')
             instance.total_amount = total
             instance.tax_amount = total * instance.tax_rate / 100
             instance.total_with_tax = total + instance.tax_amount

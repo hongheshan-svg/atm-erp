@@ -343,14 +343,7 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
                 {'error': '只能撤回已提交或已批准的申请'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        # 检查是否已经转为采购订单
-        if pr.status == 'CONVERTED':
-            return Response(
-                {'error': '该申请已转为采购订单，无法撤回'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
+
         with transaction.atomic():
             pr.status = 'DRAFT'
             pr.save()
@@ -871,7 +864,17 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
         } for po in queryset[:100]]  # 限制返回数量
         
         return Response(data)
-    
+
+    def update(self, request, *args, **kwargs):
+        """只允许草稿或已拒绝状态的采购订单修改明细"""
+        instance = self.get_object()
+        if instance.status not in ['DRAFT', 'REJECTED']:
+            return Response(
+                {'error': '只有草稿或已拒绝的订单可以修改'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return super().update(request, *args, **kwargs)
+
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
         """提交采购订单审批 - 审批步骤由流程配置决定"""
@@ -1091,7 +1094,7 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
             AccountPayable.objects.filter(po=po, is_deleted=False).update(is_deleted=True)
             
             # 删除付款计划
-            PurchasePaymentSchedule.objects.filter(po=po, is_deleted=False).update(is_deleted=True)
+            PurchasePaymentSchedule.objects.filter(purchase_order=po, is_deleted=False).update(is_deleted=True)
             
             # 回退BOM状态：ORDERED -> PR_APPROVED (有采购申请) 或 NOT_ORDERED (无采购申请)
             from apps.projects.models import ProjectBOM
@@ -1188,9 +1191,13 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
                         reference_id=receipt.id
                     )
                 
-                # Update received qty on PO line
-                line.po_line.received_qty += line.qty
-                line.po_line.save()
+                # Update received qty on PO line (F() for concurrency safety)
+                from django.db.models import F as DbF
+                from apps.purchase.models import PurchaseOrderLine
+                PurchaseOrderLine.objects.filter(pk=line.po_line_id).update(
+                    received_qty=DbF('received_qty') + line.qty
+                )
+                line.po_line.refresh_from_db()
                 
                 # 更新BOM的收货数量和状态
                 if po.project:
@@ -1486,6 +1493,29 @@ class PurchaseContractViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDel
         })
     
     @action(detail=True, methods=['post'])
+    def submit(self, request, pk=None):
+        """提交采购合同审批."""
+        contract = self.get_object()
+        if contract.status not in ['DRAFT', 'REJECTED']:
+            return Response(
+                {'error': '只能提交草稿或已拒绝状态的合同'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        result = self.start_workflow_or_auto_approve(
+            contract, request.user,
+            approved_status='APPROVED',
+            submitted_status='PENDING'
+        )
+        contract.status = result['new_status']
+        contract.save()
+        return Response({
+            **PurchaseContractSerializer(contract).data,
+            'workflow_started': result['workflow_started'],
+            'message': result['message'],
+        })
+
+    @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         """审批合同 - 仅在无活跃工作流时允许直接审批."""
         contract = self.get_object()
@@ -1494,12 +1524,12 @@ class PurchaseContractViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDel
                 {'error': '只能审批草稿或待审批状态的合同'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # 检查是否有活跃工作流
         workflow_error = self.check_workflow_allows_direct_action(contract, '审批')
         if workflow_error:
             return workflow_error
-        
+
         contract.status = 'APPROVED'
         contract.save()
         return Response(PurchaseContractSerializer(contract).data)

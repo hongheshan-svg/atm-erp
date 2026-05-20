@@ -98,7 +98,18 @@
             </div>
           </template>
 
-          <el-table :data="slowMovingItems" stripe border v-loading="loading">
+          <!-- 批量操作 -->
+
+          <div v-if="selectedRows.length > 0" class="batch-toolbar">
+
+            <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+
+            <el-button size="small" @click="batchExport">导出选中</el-button>
+
+          </div>
+
+          <el-table :data="slowMovingItems" stripe border v-loading="loading" @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="45" />
             <el-table-column type="index" label="#" width="50" />
             <el-table-column prop="item__sku" label="物料编码" width="120" />
             <el-table-column prop="item__name" label="物料名称" />
@@ -150,12 +161,16 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { Box, Goods, Refresh, Warning } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { getAnalyticsDashboard, getInventoryTurnover, getSlowMovingItems, getInventoryStocks } from '@/api/analytics'
 import { ElMessage } from 'element-plus'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/analytics/')
+
 
 const loading = ref(false)
 const turnoverDays = ref(30)

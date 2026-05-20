@@ -340,10 +340,10 @@ class Command(BaseCommand):
 
     def _find_router_path(self):
         candidates = [
-            Path.cwd().parent / 'frontend' / 'src' / 'router' / 'index.js',
-            Path.cwd() / 'frontend' / 'src' / 'router' / 'index.js',
-            Path(__file__).resolve().parents[4] / 'frontend' / 'src' / 'router' / 'index.js',
-            Path('/frontend/src/router/index.js'),
+            Path.cwd().parent / 'frontend' / 'src' / 'router' / 'index.ts',
+            Path.cwd() / 'frontend' / 'src' / 'router' / 'index.ts',
+            Path(__file__).resolve().parents[4] / 'frontend' / 'src' / 'router' / 'index.ts',
+            Path('/app/frontend/src/router/index.ts'),
         ]
         for candidate in candidates:
             if candidate.exists():

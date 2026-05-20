@@ -163,7 +163,14 @@
                 添加成员
               </el-button>
             </div>
-            <el-table :data="deptMembers" v-loading="membersLoading" stripe size="small">
+            <!-- 批量操作 -->
+            <div v-if="selectedRows.length > 0" class="batch-toolbar">
+              <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+              <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+              <el-button size="small" @click="batchExport">导出选中</el-button>
+            </div>
+            <el-table :data="deptMembers" v-loading="membersLoading" stripe size="small" @selection-change="handleSelectionChange">
+              <el-table-column type="selection" width="45" />
               <el-table-column prop="username" label="用户名" width="120" />
               <el-table-column prop="display_name" label="姓名" width="120" />
               <el-table-column prop="email" label="邮箱" />
@@ -249,7 +256,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
@@ -257,6 +264,10 @@ import {
   User, UserFilled, Avatar, InfoFilled, ArrowRight, Expand, Fold
 } from '@element-plus/icons-vue'
 import { getDepartments, getUsers, createDepartment, updateDepartment, deleteDepartment } from '@/api/auth'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/auth/')
+
 
 // 状态
 const loading = ref(false)

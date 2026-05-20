@@ -108,7 +108,20 @@
             </div>
           </template>
 
-          <el-table :data="filteredDrawings" border stripe max-height="500" @row-click="handleDrawingClick">
+          <!-- 批量操作 -->
+
+          <div v-if="selectedRows.length > 0" class="batch-toolbar">
+
+            <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+
+            <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+
+            <el-button size="small" @click="batchExport">导出选中</el-button>
+
+          </div>
+
+          <el-table :data="filteredDrawings" border stripe max-height="500" @row-click="handleDrawingClick" @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="45" />
             <el-table-column prop="drawing_no" label="图号" width="150" />
             <el-table-column prop="name" label="名称" min-width="150" show-overflow-tooltip />
             <el-table-column prop="version" label="版本" width="70" />
@@ -201,12 +214,16 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Connection, Link, Close, Search } from '@element-plus/icons-vue'
 import { getDrawingList, patchDrawing, autoLinkDrawings, manualLinkDrawing, getCreoBOMTree } from '@/api/projects/drawing'
 import { getProjectList } from '@/api/projects/project'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_drawing/')
+
 
 const projects = ref([])
 const projectId = ref(null)

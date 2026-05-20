@@ -360,7 +360,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
@@ -404,11 +404,17 @@ const businessTypeLabels = {
   // 采购管理
   'PURCHASE_REQUEST': '采购申请',
   'PURCHASE_ORDER': '采购订单',
+  'PURCHASE_CONTRACT': '采购合同',
+  'OUTSOURCE_MATERIAL_ISSUE': '外协发料',
+  'OUTSOURCE_RECEIPT': '外协收货',
+  'CONTRACT_EXECUTION': '合同执行',
+  'PAYMENT_RECORD': '合同付款',
   // 销售管理
   'QUOTATION': '销售报价',
   'SALES_ORDER': '销售订单',
   'SALES_CONTRACT': '销售合同',
   'DELIVERY_ORDER': '发货单',
+  'SERVICE_REQUEST': '售后服务',
   // 财务管理
   'EXPENSE': '费用报销',
   'PAYMENT': '付款申请',

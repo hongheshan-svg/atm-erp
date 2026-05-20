@@ -65,7 +65,20 @@
             </el-form>
           </template>
           
-          <el-table :data="alertList" v-loading="loading" border stripe>
+          <!-- 批量操作 -->
+          
+          <div v-if="selectedRows.length > 0" class="batch-toolbar">
+          
+            <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+          
+            <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+          
+            <el-button size="small" @click="batchExport">导出选中</el-button>
+          
+          </div>
+          
+          <el-table :data="alertList" v-loading="loading" border stripe @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="45" />
             <el-table-column width="60" align="center">
               <template #default="{ row }">
                 <el-icon :size="18" :color="getSeverityColor(row.severity)">
@@ -151,11 +164,15 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { WarningFilled, Warning, InfoFilled } from '@element-plus/icons-vue'
 import { getStockAlerts, getStockAlertRules, getStockAlertsSummary, initStockAlertRules, checkAllStockAlerts, acknowledgeStockAlert, resolveStockAlert, ignoreStockAlert } from '@/api/inventory'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/')
+
 
 const loading = ref(false)
 const activeTab = ref('alerts')

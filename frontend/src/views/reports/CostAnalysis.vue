@@ -104,7 +104,13 @@
       <!-- 人工成本按任务分析 -->
       <el-card style="margin-top: 20px">
         <template #header>人工成本按任务分析 (Top 10)</template>
-        <el-table :data="costData.labor_by_phase" stripe>
+        <!-- 批量操作 -->
+        <div v-if="selectedRows.length > 0" class="batch-toolbar">
+          <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+          <el-button size="small" @click="batchExport">导出选中</el-button>
+        </div>
+        <el-table :data="costData.labor_by_phase" stripe @selection-change="handleSelectionChange">
+          <el-table-column type="selection" width="45" />
           <el-table-column prop="task__name" label="任务名称" min-width="200" show-overflow-tooltip>
             <template #default="{ row }">
               {{ row.task__name || '未分类' }}
@@ -142,7 +148,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, nextTick } from 'vue'
 import request from '@/utils/request'
 import { getProjectList } from '@/api/projects/project'
@@ -150,6 +156,10 @@ import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import { usePermissionStore } from '@/stores/permission'
 import { toFixedSafe } from '@/utils/number'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/projects_project/')
+
 
 const selectedProject = ref(null)
 const hourlyRate = ref(100)

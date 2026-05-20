@@ -50,18 +50,18 @@ class WorkflowService:
         if not workflow:
             return None, f"未找到适用于 {business_type} 的审批流程"
         
-        # Check if there's already an active workflow for this business object
-        existing = WorkflowInstance.objects.filter(
-            business_type=business_type,
-            business_id=business_id,
-            status='PENDING',
-            is_deleted=False
-        ).first()
-        
-        if existing:
-            return None, "该单据已有进行中的审批流程"
-        
         with transaction.atomic():
+            # Check if there's already an active workflow for this business object
+            existing = WorkflowInstance.objects.select_for_update().filter(
+                business_type=business_type,
+                business_id=business_id,
+                status='PENDING',
+                is_deleted=False
+            ).first()
+
+            if existing:
+                return None, "该单据已有进行中的审批流程"
+
             # Create workflow instance
             instance = WorkflowInstance.objects.create(
                 workflow=workflow,
@@ -112,9 +112,16 @@ class WorkflowService:
         
         if not assignee:
             logger.warning(f"No assignee found for step {current_step.id}")
-            # Skip this step and try next
+            # Skip this step and try next (with depth guard to avoid infinite recursion)
             instance.current_step = current_step.step_order + 1
             instance.save()
+            max_steps = instance.workflow.steps.count()
+            if instance.current_step > max_steps:
+                instance.status = 'APPROVED'
+                instance.completed_at = timezone.now()
+                instance.save()
+                cls._on_workflow_complete(instance, 'APPROVED')
+                return None
             return cls._create_next_task(instance)
         
         # Calculate deadline
@@ -254,8 +261,28 @@ class WorkflowService:
                 if ecn.project:
                     return ecn.project.manager
             
-            # OA模块没有项目经理
-            elif instance.business_type in ['LEAVE_REQUEST', 'OVERTIME_REQUEST', 'VEHICLE_REQUEST', 'ASSET_BORROW']:
+            elif instance.business_type == 'PURCHASE_CONTRACT':
+                from apps.purchase.models import PurchaseContract
+                contract = PurchaseContract.objects.get(id=instance.business_id)
+                if contract.project:
+                    return contract.project.manager
+
+            elif instance.business_type in ['CONTRACT_EXECUTION', 'PAYMENT_RECORD']:
+                from apps.purchase.contract_execution import ContractExecution
+                if instance.business_type == 'CONTRACT_EXECUTION':
+                    execution = ContractExecution.objects.get(id=instance.business_id)
+                else:
+                    from apps.purchase.contract_execution import PaymentRecord
+                    payment = PaymentRecord.objects.get(id=instance.business_id)
+                    execution = payment.execution
+                if execution.contract and execution.contract.project:
+                    return execution.contract.project.manager
+
+            # 外协/售后/OA模块没有项目经理
+            elif instance.business_type in [
+                'OUTSOURCE_MATERIAL_ISSUE', 'OUTSOURCE_RECEIPT', 'SERVICE_REQUEST',
+                'LEAVE_REQUEST', 'OVERTIME_REQUEST', 'VEHICLE_REQUEST', 'ASSET_BORROW'
+            ]:
                 return None
                 
         except Exception as e:
@@ -600,7 +627,84 @@ class WorkflowService:
                 elif result == 'WITHDRAWN':
                     borrow.status = 'PENDING'
                     borrow.save()
-            
+
+            elif instance.business_type == 'PURCHASE_CONTRACT':
+                from apps.purchase.models import PurchaseContract
+                contract = PurchaseContract.objects.get(id=instance.business_id)
+                if result == 'APPROVED':
+                    contract.status = 'APPROVED'
+                    contract.save()
+                    logger.info(f"Purchase contract {contract.contract_no} approved")
+                elif result == 'REJECTED':
+                    contract.status = 'REJECTED'
+                    contract.save()
+                elif result == 'WITHDRAWN':
+                    contract.status = 'DRAFT'
+                    contract.save()
+
+            elif instance.business_type == 'OUTSOURCE_MATERIAL_ISSUE':
+                from apps.purchase.outsource_models import OutsourceMaterialIssue
+                issue = OutsourceMaterialIssue.objects.get(id=instance.business_id)
+                if result == 'APPROVED':
+                    issue.status = 'CONFIRMED'
+                    issue.save()
+                    logger.info(f"Outsource material issue {issue.issue_no} approved")
+                elif result in ('REJECTED', 'WITHDRAWN'):
+                    issue.status = 'DRAFT'
+                    issue.save()
+
+            elif instance.business_type == 'OUTSOURCE_RECEIPT':
+                from apps.purchase.outsource_models import OutsourceReceipt
+                receipt = OutsourceReceipt.objects.get(id=instance.business_id)
+                if result == 'APPROVED':
+                    receipt.status = 'CONFIRMED'
+                    receipt.save()
+                    logger.info(f"Outsource receipt {receipt.receipt_no} approved")
+                elif result in ('REJECTED', 'WITHDRAWN'):
+                    receipt.status = 'DRAFT'
+                    receipt.save()
+
+            elif instance.business_type == 'CONTRACT_EXECUTION':
+                from apps.purchase.contract_execution import ContractExecution
+                execution = ContractExecution.objects.get(id=instance.business_id)
+                if result == 'APPROVED':
+                    execution.status = 'IN_PROGRESS'
+                    if not execution.actual_start_date:
+                        from datetime import date
+                        execution.actual_start_date = date.today()
+                    execution.save()
+                    logger.info(f"Contract execution {execution.id} approved, now IN_PROGRESS")
+                elif result in ('REJECTED', 'WITHDRAWN'):
+                    execution.status = 'NOT_STARTED'
+                    execution.save()
+
+            elif instance.business_type == 'PAYMENT_RECORD':
+                from apps.purchase.contract_execution import PaymentRecord
+                payment = PaymentRecord.objects.get(id=instance.business_id)
+                if result == 'APPROVED':
+                    payment.status = 'APPROVED'
+                    payment.approved_at = timezone.now()
+                    payment.save()
+                    logger.info(f"Payment record {payment.payment_no} approved")
+                elif result == 'REJECTED':
+                    payment.status = 'CANCELLED'
+                    payment.save()
+                elif result == 'WITHDRAWN':
+                    payment.status = 'PENDING'
+                    payment.save()
+
+            elif instance.business_type == 'SERVICE_REQUEST':
+                from apps.sales.after_sales_service import ServiceRequest
+                sr = ServiceRequest.objects.get(id=instance.business_id)
+                if result == 'APPROVED':
+                    sr.status = 'ACKNOWLEDGED'
+                    sr.acknowledged_at = timezone.now()
+                    sr.save()
+                    logger.info(f"Service request {sr.request_no} approved/acknowledged")
+                elif result in ('REJECTED', 'WITHDRAWN'):
+                    sr.status = 'NEW'
+                    sr.save()
+
             # Notify submitter
             cls._notify_submitter(instance, result)
             

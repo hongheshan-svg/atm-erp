@@ -309,22 +309,24 @@ class OpportunityViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
     @action(detail=True, methods=['post'])
     def create_quotation(self, request, pk=None):
         """从商机创建报价"""
-        opportunity = self.get_object()
+        from datetime import timedelta
+
+        from django.utils import timezone
 
         from .models import SalesQuotation
 
+        opportunity = self.get_object()
+
         quotation = SalesQuotation.objects.create(
             customer=opportunity.customer,
-            project_name=opportunity.name,
-            contact_person=opportunity.contact_name,
-            contact_phone=opportunity.contact_phone,
+            valid_until=timezone.now().date() + timedelta(days=30),
             notes=f'来源商机: {opportunity.opportunity_no}\n{opportunity.requirement}',
             created_by=request.user,
             updated_by=request.user,
         )
 
         return Response(
-            {'message': '报价单创建成功', 'quotation_id': quotation.id, 'quotation_no': quotation.quotation_no}
+            {'message': '报价单创建成功', 'quotation_id': quotation.id, 'quotation_no': quotation.quote_no}
         )
 
 

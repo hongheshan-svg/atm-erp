@@ -37,7 +37,20 @@
             </el-form>
           </template>
           
-          <el-table :data="meetingList" v-loading="loading" border stripe>
+          <!-- 批量操作 -->
+          
+          <div v-if="selectedRows.length > 0" class="batch-toolbar">
+          
+            <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+          
+            <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+          
+            <el-button size="small" @click="batchExport">导出选中</el-button>
+          
+          </div>
+          
+          <el-table :data="meetingList" v-loading="loading" border stripe @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="45" />
             <el-table-column prop="meeting_no" label="会议编号" width="120" />
             <el-table-column prop="title" label="会议主题" min-width="200" show-overflow-tooltip />
             <el-table-column prop="start_time" label="开始时间" width="160">
@@ -238,13 +251,17 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { VideoCameraFilled, Location } from '@element-plus/icons-vue'
 import { getCoreMeetings, getCoreMeeting, getTodayMeetings, getMeetingRooms, startMeeting, completeMeeting, cancelMeeting, updateCoreMeeting, createCoreMeeting } from '@/api/oa'
 import { usePermissionStore } from '@/stores/permission'
 import { getUsers } from '@/api/auth'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/oa/')
+
 
 const loading = ref(false)
 const submitLoading = ref(false)

@@ -26,7 +26,20 @@
         </el-form>
       </template>
       
-      <el-table :data="planList" v-loading="loading" border stripe>
+      <!-- 批量操作 -->
+      
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+      
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+      
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+      
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      
+      </div>
+      
+      <el-table :data="planList" v-loading="loading" border stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="plan_no" label="计划编号" width="140" />
         <el-table-column prop="name" label="计划名称" min-width="200" show-overflow-tooltip />
         <el-table-column label="计划周期" width="200">
@@ -171,10 +184,14 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getMRPPlans, createMRPPlan, getMRPPlan, calculateMRPPlan, approveMRPPlan, generateMRPPlanPR } from '@/api/inventory'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/')
+
 
 const loading = ref(false)
 const submitLoading = ref(false)

@@ -29,7 +29,20 @@
         </div>
       </template>
 
-      <el-table :data="fields" v-loading="loading" stripe row-key="id">
+      <!-- 批量操作 -->
+
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+
+      </div>
+
+      <el-table :data="fields" v-loading="loading" stripe row-key="id" @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="field_code" label="字段编码" width="150">
           <template #default="{ row }">
             <code>{{ row.field_code }}</code>
@@ -209,11 +222,15 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete, Check, Rank } from '@element-plus/icons-vue'
 import { getCustomFieldList, createCustomField, updateCustomField, deleteCustomField, getSupportedModels, getFieldTypes, toggleFieldVisible, batchSortFields } from '@/api/system'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/system/')
+
 
 const fields = ref([])
 const loading = ref(false)

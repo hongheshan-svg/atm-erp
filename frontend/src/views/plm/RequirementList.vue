@@ -63,7 +63,20 @@
         </el-form>
       </template>
       
-      <el-table :data="requirementList" v-loading="loading" border stripe>
+      <!-- 批量操作 -->
+      
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+      
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+      
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+      
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      
+      </div>
+      
+      <el-table :data="requirementList" v-loading="loading" border stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="req_no" label="需求编号" width="130" fixed />
         <el-table-column prop="title" label="需求标题" min-width="250" show-overflow-tooltip />
         <el-table-column prop="type_display" label="类型" width="100" />
@@ -294,7 +307,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { getRequirementList, getRequirement, createRequirement, patchRequirement, getRequirementStatistics, submitRequirement, approveRequirement, decomposeRequirement } from '@/api/plm/requirement'
 import { getCustomerList } from '@/api/masterdata'
@@ -302,6 +315,10 @@ import { getProjectList } from '@/api/projects/project'
 import { getUsers } from '@/api/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Document } from '@element-plus/icons-vue'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/plm_requirement/')
+
 
 const loading = ref(false)
 const submitLoading = ref(false)

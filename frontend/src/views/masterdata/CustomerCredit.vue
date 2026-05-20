@@ -234,7 +234,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getCreditLevelList, getCustomerCreditList, getCustomerCredit, getCreditWarningList, getCreditStatistics, initCreditLevels, adjustCredit, changeCreditStatus } from '@/api/masterdata'

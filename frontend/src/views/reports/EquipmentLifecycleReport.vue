@@ -23,7 +23,18 @@
         <el-col :span="6"><el-statistic title="已退役" :value="stats.retired" /></el-col>
       </el-row>
       
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <!-- 批量操作 -->
+      
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+      
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+      
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      
+      </div>
+      
+      <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="equipment_no" label="设备编号" width="140" />
         <el-table-column prop="name" label="设备名称" />
         <el-table-column prop="customer_name" label="客户" width="150" />
@@ -40,10 +51,14 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { getEquipmentLifecycleReport } from '@/api/reports'
 import { ElMessage } from 'element-plus'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/reports/')
+
 
 const loading = ref(false)
 const tableData = ref([])

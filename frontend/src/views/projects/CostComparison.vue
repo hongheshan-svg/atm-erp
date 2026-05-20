@@ -16,7 +16,20 @@
       
       <div v-if="comparisonData.length" class="comparison-chart" ref="chartRef" style="height: 400px;"></div>
       
-      <el-table :data="comparisonData" v-loading="loading" stripe>
+      <!-- 批量操作 -->
+      
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+      
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+      
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+      
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      
+      </div>
+      
+      <el-table :data="comparisonData" v-loading="loading" stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="project_name" label="项目" />
         <el-table-column prop="contract_amount" label="合同金额" align="right">
           <template #default="{ row }">¥ {{ formatMoney(row.contract_amount) }}</template>
@@ -35,11 +48,15 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getProjectList, getProjectCostComparison } from '@/api/projects/project'
 import * as echarts from 'echarts'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_project/')
+
 
 const loading = ref(false)
 const projects = ref([])

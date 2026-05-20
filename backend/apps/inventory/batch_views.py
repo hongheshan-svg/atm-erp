@@ -14,6 +14,8 @@ from .batch_serializers import BatchSerializer, BatchMoveSerializer
 
 class BatchViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """Batch management viewset"""
+    permission_module = 'inventory'
+    permission_resource = 'batch'
     queryset = Batch.objects.all()
     serializer_class = BatchSerializer
     filterset_fields = ['item', 'warehouse', 'quality_status', 'is_deleted']
@@ -50,33 +52,38 @@ class BatchViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets
     @action(detail=True, methods=['post'])
     def adjust_qty(self, request, pk=None):
         """Adjust batch quantity"""
-        batch = self.get_object()
+        from django.db import transaction
+        from decimal import Decimal
+
         new_qty = request.data.get('qty')
         reason = request.data.get('reason', '')
-        
+
         if new_qty is None:
             return Response(
                 {'error': '请提供新数量'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        new_qty = float(new_qty)
-        qty_diff = new_qty - float(batch.qty_on_hand)
-        
-        # Create batch move record
-        BatchMove.objects.create(
-            batch=batch,
-            move_type='ADJUST',
-            qty=qty_diff,
-            reference_type='MANUAL_ADJUSTMENT',
-            reference_id=batch.id,
-            notes=reason,
-            created_by=request.user
-        )
-        
-        batch.qty_on_hand = new_qty
-        batch.save()
-        
+
+        new_qty = Decimal(str(new_qty))
+
+        with transaction.atomic():
+            batch = Batch.objects.select_for_update().get(pk=pk)
+            qty_diff = new_qty - batch.qty_on_hand
+
+            BatchMove.objects.create(
+                batch=batch,
+                move_type='ADJUST',
+                qty=qty_diff,
+                reference_type='MANUAL_ADJUSTMENT',
+                reference_id=batch.id,
+                notes=reason,
+                created_by=request.user
+            )
+
+            batch.qty_on_hand = new_qty
+            batch.save(update_fields=['qty_on_hand'])
+
+        batch.refresh_from_db()
         return Response(BatchSerializer(batch).data)
     
     @action(detail=False, methods=['get'])
@@ -101,6 +108,8 @@ class BatchViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets
 
 class BatchMoveViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """Batch move history viewset (read-only)"""
+    permission_module = 'inventory'
+    permission_resource = 'batch_move'
     queryset = BatchMove.objects.all()
     serializer_class = BatchMoveSerializer
     filterset_fields = ['batch', 'move_type']

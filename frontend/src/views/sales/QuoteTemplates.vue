@@ -80,7 +80,14 @@
           <pre class="config-preview">{{ JSON.stringify(selectedTemplate.header_config, null, 2) }}</pre>
 
           <el-divider content-position="left">列配置</el-divider>
-          <el-table :data="selectedTemplate.column_config || []" size="small" stripe>
+          <!-- 批量操作 -->
+          <div v-if="selectedRows.length > 0" class="batch-toolbar">
+            <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+            <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+            <el-button size="small" @click="batchExport">导出选中</el-button>
+          </div>
+          <el-table :data="selectedTemplate.column_config || []" size="small" stripe @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="45" />
             <el-table-column prop="key" label="字段" width="100" />
             <el-table-column prop="label" label="标题" />
             <el-table-column prop="width" label="宽度" width="80" />
@@ -257,12 +264,16 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, Document, Monitor, Delete } from '@element-plus/icons-vue'
 import { toFixedSafe } from '@/utils/number'
 import { getQuoteTemplates, createQuoteTemplate, updateQuoteTemplate, setDefaultQuoteTemplate, generateQuoteFromTemplate } from '@/api/sales'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/sales/')
+
 
 const templates = ref([])
 const selectedTemplate = ref(null)

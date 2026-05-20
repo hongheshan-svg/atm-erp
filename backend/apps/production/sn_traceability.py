@@ -276,30 +276,39 @@ class SNRule(BaseModel):
         return f"{self.code} - {self.name}"
     
     def generate_sn(self):
-        """生成序列号"""
+        """生成序列号（使用 select_for_update 防止并发重复）"""
         from datetime import datetime
-        
-        current_date = datetime.now().strftime(self.date_format.replace('YY', '%y').replace('YYYY', '%Y').replace('MM', '%m').replace('DD', '%d'))
-        
-        # 如果日期变化，重置序列
-        if current_date != self.last_date:
-            self.current_sequence = 0
-            self.last_date = current_date
-        
-        self.current_sequence += 1
-        sequence_str = str(self.current_sequence).zfill(self.sequence_length)
-        
-        parts = []
-        if self.prefix:
-            parts.append(self.prefix)
-        parts.append(current_date)
-        parts.append(sequence_str)
-        
-        sn = self.separator.join(parts)
-        if self.suffix:
-            sn += self.suffix
-        
-        self.save()
+        from django.db import transaction
+
+        with transaction.atomic():
+            rule = SNRule.objects.select_for_update().get(pk=self.pk)
+
+            current_date = datetime.now().strftime(
+                rule.date_format.replace('YY', '%y').replace('YYYY', '%Y').replace('MM', '%m').replace('DD', '%d')
+            )
+
+            if current_date != rule.last_date:
+                rule.current_sequence = 0
+                rule.last_date = current_date
+
+            rule.current_sequence += 1
+            sequence_str = str(rule.current_sequence).zfill(rule.sequence_length)
+
+            parts = []
+            if rule.prefix:
+                parts.append(rule.prefix)
+            parts.append(current_date)
+            parts.append(sequence_str)
+
+            sn = rule.separator.join(parts)
+            if rule.suffix:
+                sn += rule.suffix
+
+            rule.save(update_fields=['current_sequence', 'last_date'])
+
+        # Sync self with the updated rule state
+        self.current_sequence = rule.current_sequence
+        self.last_date = rule.last_date
         return sn
 
 
@@ -440,28 +449,29 @@ class SerialNumberViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
             return Response({'error': '规则不存在'}, status=status.HTTP_404_NOT_FOUND)
         
         from django.utils import timezone
+        from django.db import transaction
         generated_sns = []
-        
-        for _ in range(quantity):
-            sn = rule.generate_sn()
-            serial_number = SerialNumber.objects.create(
-                serial_number=sn,
-                batch_no=batch_no,
-                item_id=item_id,
-                project_id=project_id,
-                status='GENERATED'
-            )
-            
-            # 创建追溯记录
-            SNTraceRecord.objects.create(
-                serial_number=serial_number,
-                operation='GENERATE',
-                operation_time=timezone.now(),
-                description=f'使用规则 {rule.code} 生成序列号',
-                operator=request.user
-            )
-            
-            generated_sns.append(serial_number)
+
+        with transaction.atomic():
+            for _ in range(quantity):
+                sn = rule.generate_sn()
+                serial_number = SerialNumber.objects.create(
+                    serial_number=sn,
+                    batch_no=batch_no,
+                    item_id=item_id,
+                    project_id=project_id,
+                    status='GENERATED'
+                )
+
+                SNTraceRecord.objects.create(
+                    serial_number=serial_number,
+                    operation='GENERATE',
+                    operation_time=timezone.now(),
+                    description=f'使用规则 {rule.code} 生成序列号',
+                    operator=request.user
+                )
+
+                generated_sns.append(serial_number)
         
         return Response({
             'message': f'成功生成 {quantity} 个序列号',
@@ -506,38 +516,40 @@ class SerialNumberViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
     def add_trace(self, request, pk=None):
         """添加追溯记录"""
         sn = self.get_object()
-        
+
         from django.utils import timezone
-        record = SNTraceRecord.objects.create(
-            serial_number=sn,
-            operation=request.data.get('operation'),
-            operation_time=timezone.now(),
-            description=request.data.get('description', ''),
-            location=request.data.get('location', ''),
-            operator=request.user,
-            related_doc_type=request.data.get('related_doc_type', ''),
-            related_doc_no=request.data.get('related_doc_no', ''),
-            related_doc_id=request.data.get('related_doc_id'),
-            process_name=request.data.get('process_name', ''),
-            process_result=request.data.get('process_result', ''),
-            quality_data=request.data.get('quality_data', {}),
-        )
-        
-        # 更新序列号状态
-        status_map = {
-            'ASSIGN': 'ASSIGNED',
-            'PRODUCTION_START': 'IN_PRODUCTION',
-            'PRODUCTION_COMPLETE': 'COMPLETED',
-            'DELIVERY': 'DELIVERED',
-            'INSTALLATION': 'INSTALLED',
-            'RETURN': 'RETURNED',
-            'SCRAP': 'SCRAPPED',
-        }
-        operation = request.data.get('operation')
-        if operation in status_map:
-            sn.status = status_map[operation]
-            sn.save()
-        
+        from django.db import transaction
+
+        with transaction.atomic():
+            record = SNTraceRecord.objects.create(
+                serial_number=sn,
+                operation=request.data.get('operation'),
+                operation_time=timezone.now(),
+                description=request.data.get('description', ''),
+                location=request.data.get('location', ''),
+                operator=request.user,
+                related_doc_type=request.data.get('related_doc_type', ''),
+                related_doc_no=request.data.get('related_doc_no', ''),
+                related_doc_id=request.data.get('related_doc_id'),
+                process_name=request.data.get('process_name', ''),
+                process_result=request.data.get('process_result', ''),
+                quality_data=request.data.get('quality_data', {}),
+            )
+
+            status_map = {
+                'ASSIGN': 'ASSIGNED',
+                'PRODUCTION_START': 'IN_PRODUCTION',
+                'PRODUCTION_COMPLETE': 'COMPLETED',
+                'DELIVERY': 'DELIVERED',
+                'INSTALLATION': 'INSTALLED',
+                'RETURN': 'RETURNED',
+                'SCRAP': 'SCRAPPED',
+            }
+            operation = request.data.get('operation')
+            if operation in status_map:
+                sn.status = status_map[operation]
+                sn.save(update_fields=['status'])
+
         return Response(SNTraceRecordSerializer(record).data)
     
     @action(detail=True, methods=['post'])
@@ -546,32 +558,34 @@ class SerialNumberViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
         parent_sn = self.get_object()
         child_sn_id = request.data.get('child_sn_id')
         position = request.data.get('position', '')
-        
+
         try:
             child_sn = SerialNumber.objects.get(id=child_sn_id)
         except SerialNumber.DoesNotExist:
             return Response({'error': '子序列号不存在'}, status=status.HTTP_404_NOT_FOUND)
-        
+
         from django.utils import timezone
-        binding = ComponentBinding.objects.create(
-            parent_sn=parent_sn,
-            child_sn=child_sn,
-            binding_time=timezone.now(),
-            position=position,
-            operator=request.user
-        )
-        
-        # 添加追溯记录
-        for sn, desc in [(parent_sn, f'绑定子组件: {child_sn.serial_number}'), 
-                         (child_sn, f'绑定到父组件: {parent_sn.serial_number}')]:
-            SNTraceRecord.objects.create(
-                serial_number=sn,
-                operation='OTHER',
-                operation_time=timezone.now(),
-                description=desc,
+        from django.db import transaction
+
+        with transaction.atomic():
+            binding = ComponentBinding.objects.create(
+                parent_sn=parent_sn,
+                child_sn=child_sn,
+                binding_time=timezone.now(),
+                position=position,
                 operator=request.user
             )
-        
+
+            for sn, desc in [(parent_sn, f'绑定子组件: {child_sn.serial_number}'),
+                             (child_sn, f'绑定到父组件: {parent_sn.serial_number}')]:
+                SNTraceRecord.objects.create(
+                    serial_number=sn,
+                    operation='OTHER',
+                    operation_time=timezone.now(),
+                    description=desc,
+                    operator=request.user
+                )
+
         return Response(ComponentBindingSerializer(binding).data)
     
     @action(detail=False, methods=['get'])
@@ -627,22 +641,24 @@ class ComponentBindingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
     def unbind(self, request, pk=None):
         """解绑组件"""
         binding = self.get_object()
-        
+
         from django.utils import timezone
-        binding.is_active = False
-        binding.unbinding_time = timezone.now()
-        binding.unbinding_reason = request.data.get('reason', '')
-        binding.save()
-        
-        # 添加追溯记录
-        for sn, desc in [(binding.parent_sn, f'解绑子组件: {binding.child_sn.serial_number}'),
-                         (binding.child_sn, f'从父组件解绑: {binding.parent_sn.serial_number}')]:
-            SNTraceRecord.objects.create(
-                serial_number=sn,
-                operation='OTHER',
-                operation_time=timezone.now(),
-                description=desc,
-                operator=request.user
-            )
-        
+        from django.db import transaction
+
+        with transaction.atomic():
+            binding.is_active = False
+            binding.unbinding_time = timezone.now()
+            binding.unbinding_reason = request.data.get('reason', '')
+            binding.save(update_fields=['is_active', 'unbinding_time', 'unbinding_reason'])
+
+            for sn, desc in [(binding.parent_sn, f'解绑子组件: {binding.child_sn.serial_number}'),
+                             (binding.child_sn, f'从父组件解绑: {binding.parent_sn.serial_number}')]:
+                SNTraceRecord.objects.create(
+                    serial_number=sn,
+                    operation='OTHER',
+                    operation_time=timezone.now(),
+                    description=desc,
+                    operator=request.user
+                )
+
         return Response(ComponentBindingSerializer(binding).data)

@@ -55,21 +55,22 @@ class OutsourceOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
         if not order.lines.filter(is_deleted=False).exists():
             return Response({'error': '请添加加工明细'}, status=status.HTTP_400_BAD_REQUEST)
 
-        order.status = 'CONFIRMED'
-        order.save()
+        with transaction.atomic():
+            order.status = 'CONFIRMED'
+            order.save()
 
-        # 创建应付账款
-        from apps.finance.models import AccountPayable
+            # 创建应付账款
+            from apps.finance.models import AccountPayable
 
-        AccountPayable.objects.create(
-            supplier=order.supplier,
-            project=order.project,
-            invoice_date=order.order_date,
-            amount_due=order.total_with_tax,
-            due_date=order.required_date,
-            notes=f'外协加工单: {order.order_no}',
-            created_by=request.user,
-        )
+            AccountPayable.objects.create(
+                supplier=order.supplier,
+                project=order.project,
+                invoice_date=order.order_date,
+                amount_due=order.total_with_tax,
+                due_date=order.required_date,
+                notes=f'外协加工单: {order.order_no}',
+                created_by=request.user,
+            )
 
         return Response(OutsourceOrderSerializer(order).data)
 
@@ -112,6 +113,7 @@ class OutsourceOrderLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
 
 class OutsourceMaterialIssueViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     workflow_business_type = 'OUTSOURCE_MATERIAL_ISSUE'
+    workflow_no_field = 'issue_no'
     """
     外协发料单管理
     """
@@ -122,6 +124,26 @@ class OutsourceMaterialIssueViewSet(WorkflowEnforcementMixin, PermissionMixin, S
     search_fields = ['issue_no']
     ordering_fields = ['issue_date', 'created_at']
     ordering = ['-created_at']
+
+    @action(detail=True, methods=['post'])
+    def submit(self, request, pk=None):
+        """提交发料单审批"""
+        issue = self.get_object()
+        if issue.status != 'DRAFT':
+            return Response({'error': '只能提交草稿状态的发料单'}, status=status.HTTP_400_BAD_REQUEST)
+
+        result = self.start_workflow_or_auto_approve(
+            issue, request.user,
+            approved_status='CONFIRMED',
+            submitted_status='DRAFT'
+        )
+        if result['auto_approved']:
+            return self.confirm(request, pk)
+        return Response({
+            **OutsourceMaterialIssueSerializer(issue).data,
+            'workflow_started': True,
+            'message': result['message'],
+        })
 
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
@@ -148,9 +170,11 @@ class OutsourceMaterialIssueViewSet(WorkflowEnforcementMixin, PermissionMixin, S
                     created_by=request.user,
                 )
 
-                # 更新外协单明细的发料数量
-                line.outsource_line.sent_qty += line.qty
-                line.outsource_line.save()
+                # 更新外协单明细的发料数量（F() 防止并发竞争）
+                from django.db.models import F
+                OutsourceOrderLine.objects.filter(pk=line.outsource_line_id).update(
+                    sent_qty=F('sent_qty') + line.qty
+                )
 
             issue.status = 'CONFIRMED'
             issue.save()
@@ -176,6 +200,7 @@ class OutsourceMaterialIssueLineViewSet(PermissionMixin, SoftDeleteMixin, UserTr
 
 class OutsourceReceiptViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     workflow_business_type = 'OUTSOURCE_RECEIPT'
+    workflow_no_field = 'receipt_no'
     """
     外协收货单管理
     """
@@ -186,6 +211,26 @@ class OutsourceReceiptViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDel
     search_fields = ['receipt_no']
     ordering_fields = ['receipt_date', 'created_at']
     ordering = ['-created_at']
+
+    @action(detail=True, methods=['post'])
+    def submit(self, request, pk=None):
+        """提交收货单审批"""
+        receipt = self.get_object()
+        if receipt.status != 'DRAFT':
+            return Response({'error': '只能提交草稿状态的收货单'}, status=status.HTTP_400_BAD_REQUEST)
+
+        result = self.start_workflow_or_auto_approve(
+            receipt, request.user,
+            approved_status='CONFIRMED',
+            submitted_status='DRAFT'
+        )
+        if result['auto_approved']:
+            return self.confirm(request, pk)
+        return Response({
+            **OutsourceReceiptSerializer(receipt).data,
+            'workflow_started': True,
+            'message': result['message'],
+        })
 
     @action(detail=True, methods=['post'])
     def start_inspect(self, request, pk=None):
@@ -229,9 +274,11 @@ class OutsourceReceiptViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDel
                         created_by=request.user,
                     )
 
-                # 更新外协单明细的收货数量
-                line.outsource_line.received_qty += line.qualified_qty
-                line.outsource_line.save()
+                # 更新外协单明细的收货数量（F() 防止并发竞争）
+                from django.db.models import F
+                OutsourceOrderLine.objects.filter(pk=line.outsource_line_id).update(
+                    received_qty=F('received_qty') + line.qualified_qty
+                )
 
                 total_qty += line.qty
                 qualified_qty += line.qualified_qty
@@ -248,13 +295,14 @@ class OutsourceReceiptViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDel
             receipt.inspect_date = timezone.now().date()
             receipt.save()
 
-            # 检查外协单是否完成
+            # 检查外协单是否完成（从数据库重新读取以获取 F() 更新后的值）
             order = receipt.outsource_order
-            all_received = all(line.received_qty >= line.qty for line in order.lines.filter(is_deleted=False))
+            order_lines = order.lines.filter(is_deleted=False)
+            all_received = all(ol.received_qty >= ol.qty for ol in order_lines.iterator())
             if all_received:
                 order.status = 'COMPLETED'
             else:
-                any_received = any(line.received_qty > 0 for line in order.lines.filter(is_deleted=False))
+                any_received = order_lines.filter(received_qty__gt=0).exists()
                 if any_received:
                     order.status = 'PARTIAL'
             order.save()

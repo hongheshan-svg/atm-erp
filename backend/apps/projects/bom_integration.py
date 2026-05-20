@@ -12,6 +12,7 @@ from datetime import date, timedelta
 from typing import List, Dict, Optional, Tuple
 from django.db import transaction
 from django.db.models import Sum, Q, F
+from django.utils import timezone
 from rest_framework import viewsets, serializers, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -125,9 +126,10 @@ class BOMPurchaseService:
             pr = PurchaseRequest.objects.create(
                 request_no=generate_code('PR', rule_type='PURCHASE_REQUEST'),
                 project=project,
-                title=title or f"{project.code} BOM物料采购申请",
+                requestor=user,
+                required_date=timezone.now().date(),
                 status='DRAFT',
-                notes=notes,
+                notes=notes or f"{project.code} BOM物料采购申请",
                 created_by=user
             )
             
@@ -251,7 +253,7 @@ class BOMPurchaseService:
                     if bom.received_qty >= bom.planned_qty:
                         bom.order_status = 'RECEIVED'
                     elif bom.received_qty > 0:
-                        bom.order_status = 'IN_TRANSIT'
+                        bom.order_status = 'PARTIAL_RECEIVED'
                     
                     bom.save()
                     updated_bom_ids.append(bom.id)

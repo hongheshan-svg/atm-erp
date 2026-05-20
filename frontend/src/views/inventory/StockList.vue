@@ -23,7 +23,20 @@
         </el-form-item>
       </el-form>
 
-      <el-table :data="stocks" v-loading="loading" stripe border>
+      <!-- 批量操作 -->
+
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+
+      </div>
+
+      <el-table :data="stocks" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="warehouse_name" label="仓库" />
         <el-table-column prop="item_name" label="物料" />
         <el-table-column prop="item_sku" label="物料编码" width="150" />
@@ -67,12 +80,16 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getStocks, getStockMoves } from '@/api/inventory'
 import { getWarehouseList } from '@/api/masterdata'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/')
+
 
 const router = useRouter()
 const loading = ref(false)

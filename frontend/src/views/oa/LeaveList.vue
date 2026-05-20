@@ -34,7 +34,20 @@
       
       <el-empty v-if="!loading && list.length === 0" description="暂无请假记录" />
       
-      <el-table v-else :data="list" v-loading="loading" stripe border>
+      <!-- 批量操作 -->
+      
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+      
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+      
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+      
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      
+      </div>
+      
+      <el-table v-else :data="list" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="leave_type_display" label="请假类型" width="100" />
         <el-table-column prop="start_date" label="开始日期" width="110" />
         <el-table-column prop="end_date" label="结束日期" width="110" />
@@ -117,11 +130,15 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getLeaveTypes, getLeaveRequests, updateLeaveRequest, createLeaveRequest, submitLeaveRequest, deleteLeaveRequest } from '@/api/oa'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/oa/')
+
 
 const loading = ref(false)
 const saving = ref(false)

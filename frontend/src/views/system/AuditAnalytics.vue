@@ -48,7 +48,14 @@
       <el-col :span="12">
         <el-card>
           <template #header>活跃用户TOP10</template>
-          <el-table :data="stats.by_user" size="small" stripe>
+          <!-- 批量操作 -->
+          <div v-if="selectedRows.length > 0" class="batch-toolbar">
+            <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+            <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+            <el-button size="small" @click="batchExport">导出选中</el-button>
+          </div>
+          <el-table :data="stats.by_user" size="small" stripe @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="45" />
             <el-table-column prop="user__username" label="用户" />
             <el-table-column prop="count" label="操作次数" width="100" align="right">
               <template #default="{ row }">
@@ -122,11 +129,15 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, nextTick } from 'vue'
 import request from '@/utils/request'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/unknown/')
+
 
 
 const stats = ref({})

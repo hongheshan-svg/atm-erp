@@ -52,7 +52,18 @@
         </div>
       </template>
 
-      <el-table :data="alertList" v-loading="loading" stripe :row-class-name="rowClassName">
+      <!-- 批量操作 -->
+
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+
+      </div>
+
+      <el-table :data="alertList" v-loading="loading" stripe :row-class-name="rowClassName" @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column label="严重程度" width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="severityType(row.severity)" effect="dark" size="small">{{ severityLabel(row.severity) }}</el-tag>
@@ -85,10 +96,14 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getRiskAlerts, acknowledgeRiskAlert, resolveRiskAlert } from '@/api/reports'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/reports/')
+
 
 const loading = ref(false)
 const alertList = ref([])

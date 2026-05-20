@@ -12,7 +12,14 @@
               </el-button>
             </div>
           </template>
-          <el-table :data="lifecycleData" v-loading="lifecycleLoading" stripe>
+          <!-- 批量操作 -->
+          <div v-if="selectedRows.length > 0" class="batch-toolbar">
+            <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+            <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+            <el-button size="small" @click="batchExport">导出选中</el-button>
+          </div>
+          <el-table :data="lifecycleData" v-loading="lifecycleLoading" stripe @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="45" />
             <el-table-column prop="spare_part_name" label="备件名称" min-width="180" />
             <el-table-column prop="equipment_name" label="关联设备" min-width="150" />
             <el-table-column prop="predicted_life_hours" label="预测寿命(h)" width="120" align="right" />
@@ -133,14 +140,18 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import {
-  getSparePartLifecyclePrediction, getSparePartPurchaseSuggestions,
+getSparePartLifecyclePrediction, getSparePartPurchaseSuggestions,
   getSparePartCostAnalysis
 } from '@/api/inventory'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/')
+
 
 const activeTab = ref('lifecycle')
 const lifecycleLoading = ref(false)

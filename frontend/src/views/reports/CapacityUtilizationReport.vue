@@ -14,7 +14,18 @@
       
       <div ref="chartRef" style="height: 400px;" class="chart-container"></div>
       
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <!-- 批量操作 -->
+      
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+      
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+      
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      
+      </div>
+      
+      <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="work_center_name" label="工作中心" />
         <el-table-column prop="available_hours" label="可用工时" align="right" />
         <el-table-column prop="planned_hours" label="计划工时" align="right" />
@@ -32,11 +43,15 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, nextTick } from 'vue'
 import { getCapacityUtilizationReport } from '@/api/reports'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/reports/')
+
 
 const loading = ref(false)
 const tableData = ref([])

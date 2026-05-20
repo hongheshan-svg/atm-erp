@@ -516,9 +516,11 @@ class SignatureDocumentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
                 return Response({'error': '您没有使用此印章的权限'}, status=403)
             
             participant.seal = seal
-            seal.usage_count += 1
-            seal.last_used_at = timezone.now()
-            seal.save()
+            from django.db.models import F
+            type(seal).objects.filter(pk=seal.pk).update(
+                usage_count=F('usage_count') + 1,
+                last_used_at=timezone.now()
+            )
         
         # 更新签署状态
         participant.status = 'SIGNED'

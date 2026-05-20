@@ -58,7 +58,14 @@
       </el-row>
 
       <!-- Data Table -->
-      <el-table :data="batches" border v-loading="loading" style="margin-top: 20px;">
+      <!-- 批量操作 -->
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      </div>
+      <el-table :data="batches" border v-loading="loading" style="margin-top: 20px;" @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="batch_no" label="批次号" width="120" />
         <el-table-column prop="item_sku" label="物料编码" width="120" />
         <el-table-column prop="item_name" label="物料名称" min-width="150" />
@@ -254,12 +261,16 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getBatches, getBatchesExpiringSoon, getBatchesExpired, createBatch, getBatchMovesByBatch, adjustBatchQty, updateBatch } from '@/api/inventory'
 import { getItemList, getWarehouseList } from '@/api/masterdata'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/')
+
 
 const loading = ref(false)
 const batches = ref([])

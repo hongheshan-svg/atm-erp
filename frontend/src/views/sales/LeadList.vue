@@ -54,7 +54,14 @@
       </div>
 
       <!-- 表格 -->
-      <el-table :data="leads" v-loading="loading" stripe style="width: 100%; margin-top: 16px">
+      <!-- 批量操作 -->
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      </div>
+      <el-table :data="leads" v-loading="loading" stripe style="width: 100%; margin-top: 16px" @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="lead_no" label="线索编号" width="140" />
         <el-table-column prop="company_name" label="公司名称" min-width="180" />
         <el-table-column prop="contact_name" label="联系人" width="100" />
@@ -197,7 +204,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'

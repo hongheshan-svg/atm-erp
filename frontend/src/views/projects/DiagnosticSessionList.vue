@@ -3,7 +3,20 @@
     <el-card>
       <template #header><span>远程诊断会话</span></template>
       
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <!-- 批量操作 -->
+      
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+      
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+      
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+      
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      
+      </div>
+      
+      <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="session_no" label="会话编号" width="150" />
         <el-table-column prop="equipment_name" label="设备" width="150" />
         <el-table-column prop="reason_display" label="诊断原因" width="120" />
@@ -47,10 +60,14 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getDiagnosticSessionList, getDiagnosticSession } from '@/api/projects/diagnostic'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_diagnostic/')
+
 
 const loading = ref(false)
 const tableData = ref([])

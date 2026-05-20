@@ -221,7 +221,7 @@ class ExpenseViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin,
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        expense.status = 'REIMBURSED'
+        expense.status = 'PAID'
         expense.reimbursement_date = timezone.now().date()
         expense.save()
         return Response(ExpenseSerializer(expense).data)
@@ -252,23 +252,28 @@ class AccountReceivableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        payment_amount = float(payment_amount)
-        
+        from decimal import Decimal as D
+        payment_amount = D(str(payment_amount))
+
         if ar.amount_paid + payment_amount > ar.amount_due:
             return Response(
                 {'error': '付款金额超过应收金额'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        ar.amount_paid += payment_amount
-        
-        # Update status
-        if ar.amount_paid >= ar.amount_due:
-            ar.status = 'PAID'
-        elif ar.amount_paid > 0:
-            ar.status = 'PARTIAL'
-        
-        ar.save()
+
+        from django.db.models import F
+        from django.db import transaction
+        with transaction.atomic():
+            AccountReceivable.objects.filter(pk=ar.pk).update(
+                amount_paid=F('amount_paid') + payment_amount
+            )
+            ar.refresh_from_db()
+            if ar.amount_paid >= ar.amount_due:
+                ar.status = 'PAID'
+            elif ar.amount_paid > 0:
+                ar.status = 'PARTIAL'
+            ar.save(update_fields=['status'])
+
         return Response(AccountReceivableSerializer(ar).data)
     
     @action(detail=False, methods=['get'])
@@ -339,23 +344,28 @@ class AccountPayableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        payment_amount = float(payment_amount)
-        
+        from decimal import Decimal as D
+        payment_amount = D(str(payment_amount))
+
         if ap.amount_paid + payment_amount > ap.amount_due:
             return Response(
                 {'error': '付款金额超过应付金额'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        ap.amount_paid += payment_amount
-        
-        # Update status
-        if ap.amount_paid >= ap.amount_due:
-            ap.status = 'PAID'
-        elif ap.amount_paid > 0:
-            ap.status = 'PARTIAL'
-        
-        ap.save()
+
+        from django.db.models import F
+        from django.db import transaction
+        with transaction.atomic():
+            AccountPayable.objects.filter(pk=ap.pk).update(
+                amount_paid=F('amount_paid') + payment_amount
+            )
+            ap.refresh_from_db()
+            if ap.amount_paid >= ap.amount_due:
+                ap.status = 'PAID'
+            elif ap.amount_paid > 0:
+                ap.status = 'PARTIAL'
+            ap.save(update_fields=['status'])
+
         return Response(AccountPayableSerializer(ap).data)
     
     @action(detail=False, methods=['get'])
@@ -914,8 +924,10 @@ class InvoiceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, Financ
                             existing.invoice_category = invoice_category
                             existing.status = inv_status
                             existing.save()
-                            # Delete existing items for reimport
-                            existing.items.all().delete()
+                            # Soft-delete existing items for reimport
+                            existing.items.filter(is_deleted=False).update(
+                                is_deleted=True, deleted_at=timezone.now()
+                            )
                             invoice_map[invoice_no] = existing
                             update_count += 1
                         else:
@@ -1072,11 +1084,15 @@ class InvoiceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, Financ
                 attachment.file.delete(save=False)
             attachment.delete()
         
-        # 删除发票明细
-        InvoiceItem.objects.filter(invoice_id__in=ids).delete()
-        
-        # 删除发票
-        deleted_count = Invoice.objects.filter(id__in=ids).delete()[0]
+        # 软删除发票明细
+        InvoiceItem.objects.filter(invoice_id__in=ids, is_deleted=False).update(
+            is_deleted=True, deleted_at=timezone.now()
+        )
+
+        # 软删除发票
+        deleted_count = Invoice.objects.filter(id__in=ids, is_deleted=False).update(
+            is_deleted=True, deleted_at=timezone.now()
+        )
         
         return Response({
             'success': True,
@@ -1705,16 +1721,21 @@ class PaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
         except:
             return Response({'error': '金额格式错误'}, status=status.HTTP_400_BAD_REQUEST)
         
-        schedule.amount_paid += amount
-        if schedule.amount_paid >= schedule.amount_due:
-            schedule.status = 'PAID'
-            schedule.actual_paid_date = payment_date
-            schedule.reminder_status = 'COLLECTED'
-        elif schedule.amount_paid > 0:
-            schedule.status = 'PARTIAL'
-        
-        schedule.save()
-        
+        from django.db.models import F as DbF
+        from django.db import transaction
+        with transaction.atomic():
+            PaymentSchedule.objects.filter(pk=schedule.pk).update(
+                amount_paid=DbF('amount_paid') + amount
+            )
+            schedule.refresh_from_db()
+            if schedule.amount_paid >= schedule.amount_due:
+                schedule.status = 'PAID'
+                schedule.actual_paid_date = payment_date
+                schedule.reminder_status = 'COLLECTED'
+            elif schedule.amount_paid > 0:
+                schedule.status = 'PARTIAL'
+            schedule.save(update_fields=['status', 'actual_paid_date', 'reminder_status'])
+
         return Response(PaymentScheduleSerializer(schedule).data)
     
     @action(detail=False, methods=['get'])
@@ -1926,16 +1947,21 @@ class PurchasePaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrack
         except:
             return Response({'error': '金额格式错误'}, status=status.HTTP_400_BAD_REQUEST)
         
-        schedule.amount_paid += amount
-        if schedule.amount_paid >= schedule.amount_due:
-            schedule.status = 'PAID'
-            schedule.actual_paid_date = payment_date
-            schedule.reminder_status = 'PAID'
-        elif schedule.amount_paid > 0:
-            schedule.status = 'PARTIAL'
-        
-        schedule.save()
-        
+        from django.db.models import F as DbF
+        from django.db import transaction
+        with transaction.atomic():
+            PurchasePaymentSchedule.objects.filter(pk=schedule.pk).update(
+                amount_paid=DbF('amount_paid') + amount
+            )
+            schedule.refresh_from_db()
+            if schedule.amount_paid >= schedule.amount_due:
+                schedule.status = 'PAID'
+                schedule.actual_paid_date = payment_date
+                schedule.reminder_status = 'PAID'
+            elif schedule.amount_paid > 0:
+                schedule.status = 'PARTIAL'
+            schedule.save(update_fields=['status', 'actual_paid_date', 'reminder_status'])
+
         return Response(PurchasePaymentScheduleSerializer(schedule).data)
     
     @action(detail=False, methods=['get'])
@@ -2129,7 +2155,6 @@ class PaymentRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
                 amount=payment_req.amount,
                 payment_date=timezone.now().date(),
                 payment_method=request.data.get('payment_method', 'BANK_TRANSFER'),
-                reference=request.data.get('reference', ''),
                 notes=request.data.get('notes', f'付款申请: {payment_req.request_no}'),
                 created_by=request.user
             )
@@ -2142,12 +2167,16 @@ class PaymentRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
             
             # 更新应付账款
             if payment_req.ap:
-                payment_req.ap.amount_paid = (payment_req.ap.amount_paid or 0) + payment_req.amount
+                from django.db.models import F
+                AccountPayable.objects.filter(pk=payment_req.ap.pk).update(
+                    amount_paid=F('amount_paid') + payment_req.amount
+                )
+                payment_req.ap.refresh_from_db()
                 if payment_req.ap.amount_paid >= payment_req.ap.amount_due:
                     payment_req.ap.status = 'PAID'
                 else:
                     payment_req.ap.status = 'PARTIAL'
-                payment_req.ap.save()
+                payment_req.ap.save(update_fields=['status'])
         
         return Response({
             **PaymentRequestSerializer(payment_req).data,

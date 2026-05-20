@@ -37,7 +37,14 @@
       </el-form>
       
       <!-- 数据表格 -->
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <!-- 批量操作 -->
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      </div>
+      <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="agreement_no" label="协议编号" width="150" />
         <el-table-column prop="name" label="协议名称" min-width="200" />
         <el-table-column prop="project_name" label="项目" width="180" />
@@ -147,13 +154,17 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { getAgreementList, createAgreement, updateAgreement, createAgreementFromTemplate, submitAgreementReview, sendAgreementToCustomer, confirmAgreement, signAgreement, makeAgreementEffective, getActiveAgreementTemplates } from '@/api/plm/agreement'
 import { getProjectList } from '@/api/projects/project'
 import { getCustomerList } from '@/api/masterdata'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/plm_agreement/')
+
 
 const loading = ref(false)
 const tableData = ref([])

@@ -54,7 +54,7 @@ class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewse
             )
         
         # 使用项目预算作为金额
-        amount = project.budget or 0
+        amount = project.budget_total or 0
         
         try:
             from apps.core.workflow.services import WorkflowService
@@ -443,12 +443,6 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 'num_format': 'yyyy-mm-dd'
             })
             
-            # Write title
-            from datetime import datetime
-            last_col = len(headers) - 1
-            worksheet.merge_range(0, 0, 0, last_col, f'项目BOM清单 - {project.name} ({project.code})', title_format)
-            worksheet.write(1, 0, f'导出时间: {datetime.now().strftime("%Y-%m-%d %H:%M")}')
-            
             # Column headers: 精简为用户要求的字段
             headers = [
                 ('序号', 6, 'normal'),
@@ -463,7 +457,13 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 ('需求日期', 12, 'normal'),
                 ('申请人', 10, 'normal'),
             ]
-            
+
+            # Write title
+            from datetime import datetime
+            last_col = len(headers) - 1
+            worksheet.merge_range(0, 0, 0, last_col, f'项目BOM清单 - {project.name} ({project.code})', title_format)
+            worksheet.write(1, 0, f'导出时间: {datetime.now().strftime("%Y-%m-%d %H:%M")}')
+
             # Write headers (row 3)
             for col, (header, width, fmt_type) in enumerate(headers):
                 if fmt_type == 'required':
@@ -1047,20 +1047,20 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             
                 # ===== 新增字段处理 =====
                 # 物料属性
-                item_property = None
+                item_property = ''
                 if item_property_column and pd.notna(row.get(item_property_column)):
                     prop_map = {
                         '标准件': 'STANDARD', '外购件': 'PURCHASED', '外协件': 'OUTSOURCED',
                         '自制件': 'SELF_MADE', '易耗品': 'CONSUMABLE', '虚拟件': 'VIRTUAL', '组件': 'ASSEMBLY'
                     }
                     prop_val = str(row[item_property_column]).strip()
-                    item_property = prop_map.get(prop_val, None)
+                    item_property = prop_map.get(prop_val, '')
             
                 # BOM状态
                 bom_status = 'DRAFT'
                 if status_column and pd.notna(row.get(status_column)):
                     status_map = {
-                        '草稿': 'DRAFT', '已确认': 'CONFIRMED', '已下发': 'ISSUED',
+                        '草稿': 'DRAFT', '已确认': 'CONFIRMED', '已下发': 'RELEASED',
                         '已完成': 'COMPLETED', '已取消': 'CANCELLED'
                     }
                     status_val = str(row[status_column]).strip()
@@ -1932,7 +1932,6 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                     qty=needed_qty,
                     estimated_price=estimated_price,
                     project=project,
-                    supplier=supplier,
                     notes=f'BOM计划: {bom.planned_qty}, 已用: {bom.actual_qty}, 询价交期: {bom.quote_delivery_days or "-"}天',
                     created_by=request.user
                 )
@@ -2079,7 +2078,10 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         if not ids:
             return Response({'error': '请选择要删除的物料'}, status=status.HTTP_400_BAD_REQUEST)
         
-        deleted_count = ProjectBOM.objects.filter(id__in=ids).delete()[0]
+        from django.utils import timezone as tz
+        boms = ProjectBOM.objects.filter(id__in=ids, is_deleted=False)
+        deleted_count = boms.count()
+        boms.update(is_deleted=True, deleted_at=tz.now(), updated_by=request.user)
         return Response({
             'message': f'成功删除 {deleted_count} 条物料',
             'deleted_count': deleted_count
@@ -2479,14 +2481,14 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
         
         # 尝试启动工作流
         from apps.core.workflow.services import WorkflowService
-        instance = WorkflowService.start_workflow(
+        instance, error = WorkflowService.start_workflow(
             business_type='ECN',
             business_id=ecn.id,
             business_no=ecn.ecn_no,
             submitter=request.user,
             amount=amount
         )
-        
+
         if instance:
             # 有配置的工作流，使用工作流审批
             ecn.status = 'PENDING'
@@ -2639,24 +2641,26 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
             )
         
         from django.utils import timezone
-        
-        ecn.status = 'COMPLETED'
-        ecn.implemented_date = timezone.now().date()
-        ecn.implementation_notes = request.data.get('implementation_notes', '')
-        ecn.save()
-        
-        # Apply changes to BOM if applicable
-        self._apply_bom_changes(ecn)
-        
-        # Create approval record
-        ECNApproval.objects.create(
-            ecn=ecn,
-            approver=request.user,
-            action='COMPLETE',
-            comment=request.data.get('comment', '实施完成'),
-            created_by=request.user
-        )
-        
+        from django.db import transaction
+
+        with transaction.atomic():
+            ecn.status = 'COMPLETED'
+            ecn.implemented_date = timezone.now().date()
+            ecn.implementation_notes = request.data.get('implementation_notes', '')
+            ecn.save()
+
+            # Apply changes to BOM if applicable
+            self._apply_bom_changes(ecn)
+
+            # Create approval record
+            ECNApproval.objects.create(
+                ecn=ecn,
+                approver=request.user,
+                action='COMPLETE',
+                comment=request.data.get('comment', '实施完成'),
+                created_by=request.user
+            )
+
         return Response(ECNSerializer(ecn, context={'request': request}).data)
     
     def _apply_bom_changes(self, ecn):

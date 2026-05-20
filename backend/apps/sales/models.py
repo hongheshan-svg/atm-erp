@@ -144,8 +144,9 @@ class SalesQuotationLine(BaseModel):
         ordering = ['id']
     
     def __str__(self):
-        return f"{self.quotation.quote_no} - {self.item.sku}"
-    
+        item_desc = self.item.sku if self.item else (self.custom_name or '未命名')
+        return f"{self.quotation.quote_no} - {item_desc}"
+
     def save(self, *args, **kwargs):
         self.line_amount = self.qty * self.unit_price
         super().save(*args, **kwargs)
@@ -346,8 +347,9 @@ class SalesOrderLine(BaseModel):
         ordering = ['id']
     
     def __str__(self):
-        return f"{self.so.order_no} - {self.item.sku}"
-    
+        item_desc = self.item.sku if self.item else (self.custom_name or '未命名')
+        return f"{self.so.order_no} - {item_desc}"
+
     def save(self, *args, **kwargs):
         self.line_amount = self.qty * self.unit_price
         super().save(*args, **kwargs)

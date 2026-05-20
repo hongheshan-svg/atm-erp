@@ -107,7 +107,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue'
 import { Search, Box, Avatar, Management, ShoppingCart } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'

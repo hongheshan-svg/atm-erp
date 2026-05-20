@@ -36,7 +36,20 @@
         </el-form-item>
       </el-form>
       
-      <el-table :data="list" v-loading="loading" stripe border>
+      <!-- 批量操作 -->
+      
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+      
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+      
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+      
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      
+      </div>
+      
+      <el-table :data="list" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="request_no" label="申请单号" width="130" />
         <el-table-column prop="vehicle_plate" label="车辆" width="100" />
         <el-table-column prop="purpose_display" label="用途" width="100" />
@@ -190,11 +203,15 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getAvailableVehicles, getVehicleRequests, getVehicleRequest, createVehicleRequest, submitVehicleRequest, pickupVehicle, returnVehicle, deleteVehicleRequest } from '@/api/oa'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/oa/')
+
 
 const loading = ref(false)
 const saving = ref(false)

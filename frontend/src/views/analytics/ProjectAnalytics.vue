@@ -92,7 +92,18 @@
             </div>
           </template>
 
-          <el-table :data="topProjects" stripe border>
+          <!-- 批量操作 -->
+
+          <div v-if="selectedRows.length > 0" class="batch-toolbar">
+
+            <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+
+            <el-button size="small" @click="batchExport">导出选中</el-button>
+
+          </div>
+
+          <el-table :data="topProjects" stripe border @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="45" />
             <el-table-column type="index" label="#" width="50" />
             <el-table-column prop="name" label="项目名称" />
             <el-table-column prop="status" label="状态" width="100">
@@ -131,13 +142,17 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { Management, Money, TrendCharts } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { getProjectProfitability } from '@/api/analytics'
 import { ElMessage } from 'element-plus'
 import { toFixedSafe } from '@/utils/number'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/analytics/')
+
 
 const summary = reactive({
   total_projects: 0,

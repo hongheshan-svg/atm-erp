@@ -148,10 +148,13 @@ class StockMove(BaseModel):
             self.move_no = generate_code('SM', rule_type='STOCK_MOVE')
         
         is_new = self.pk is None
+        was_completed = False
+        if not is_new:
+            was_completed = StockMove.objects.filter(pk=self.pk, status='COMPLETED').exists()
         super().save(*args, **kwargs)
-        
-        # Auto-update stock when status is COMPLETED
-        if self.status == 'COMPLETED' and is_new:
+
+        # Auto-update stock when transitioning to COMPLETED
+        if self.status == 'COMPLETED' and not was_completed:
             self._update_stock()
     
     def _update_stock(self):
@@ -165,9 +168,11 @@ class StockMove(BaseModel):
             self._update_stock_out(self.warehouse_from, self.qty)
         
         elif self.move_type == 'TRANSFER':
-            # Transfer between warehouses
-            self._update_stock_out(self.warehouse_from, self.qty)
-            self._update_stock_in(self.warehouse_to, self.qty, self.unit_cost)
+            # Transfer between warehouses (atomic to prevent partial updates)
+            from django.db import transaction
+            with transaction.atomic():
+                self._update_stock_out(self.warehouse_from, self.qty)
+                self._update_stock_in(self.warehouse_to, self.qty, self.unit_cost)
         
         elif self.move_type == 'ADJUSTMENT':
             # Adjustment can be positive or negative
@@ -178,34 +183,36 @@ class StockMove(BaseModel):
     
     def _update_stock_in(self, warehouse, qty, cost):
         """Update stock for incoming movement (weighted average)."""
-        stock, created = Stock.objects.get_or_create(
-            warehouse=warehouse,
-            item=self.item,
-            defaults={'qty_on_hand': 0, 'weighted_avg_cost': 0}
-        )
-        
-        # Calculate weighted average cost
-        old_value = stock.qty_on_hand * stock.weighted_avg_cost
-        new_value = qty * cost
-        new_qty = stock.qty_on_hand + qty
-        
-        if new_qty > 0:
-            stock.weighted_avg_cost = (old_value + new_value) / new_qty
-        else:
-            stock.weighted_avg_cost = cost
-        
-        stock.qty_on_hand = new_qty
-        stock.save()
-    
+        from django.db import transaction
+        with transaction.atomic():
+            stock, created = Stock.objects.select_for_update().get_or_create(
+                warehouse=warehouse,
+                item=self.item,
+                defaults={'qty_on_hand': 0, 'weighted_avg_cost': 0}
+            )
+
+            old_value = stock.qty_on_hand * stock.weighted_avg_cost
+            new_value = qty * cost
+            new_qty = stock.qty_on_hand + qty
+
+            if new_qty > 0:
+                stock.weighted_avg_cost = (old_value + new_value) / new_qty
+            else:
+                stock.weighted_avg_cost = cost
+
+            stock.qty_on_hand = new_qty
+            stock.save(update_fields=['qty_on_hand', 'weighted_avg_cost'])
+
     def _update_stock_out(self, warehouse, qty):
         """Update stock for outgoing movement."""
-        try:
-            stock = Stock.objects.get(warehouse=warehouse, item=self.item)
-            stock.qty_on_hand -= qty
-            stock.save()
-        except Stock.DoesNotExist:
-            # This shouldn't happen, but handle gracefully
-            pass
+        from django.db import transaction
+        with transaction.atomic():
+            try:
+                stock = Stock.objects.select_for_update().get(warehouse=warehouse, item=self.item)
+                stock.qty_on_hand -= qty
+                stock.save(update_fields=['qty_on_hand'])
+            except Stock.DoesNotExist:
+                pass
 
 
 class StockAdjustment(BaseModel):

@@ -63,7 +63,13 @@
       <el-divider />
 
       <!-- 分组统计表格 -->
-      <el-table :data="groupedData" stripe v-loading="loading" style="width: 100%">
+      <!-- 批量操作 -->
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      </div>
+      <el-table :data="groupedData" stripe v-loading="loading" style="width: 100%" @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column :prop="groupBy === 'user' ? 'user__username' : 'project__name'" 
                          :label="groupBy === 'user' ? '用户' : '项目'" 
                          min-width="150" />
@@ -119,7 +125,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
 import request from '@/utils/request'
 import { exportTimelogReport } from '@/api/reports'
@@ -127,6 +133,10 @@ import { ElMessage } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { toFixedSafe } from '@/utils/number'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/reports/')
+
 
 const loading = ref(false)
 const statistics = ref({})

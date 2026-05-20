@@ -69,7 +69,14 @@
       <el-tabs v-model="activeTab">
         <!-- 待处理问题 -->
         <el-tab-pane label="待处理问题" name="issues">
-          <el-table :data="pendingIssues" v-loading="loading" stripe size="small">
+          <!-- 批量操作 -->
+          <div v-if="selectedRows.length > 0" class="batch-toolbar">
+            <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+            <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+            <el-button size="small" @click="batchExport">导出选中</el-button>
+          </div>
+          <el-table :data="pendingIssues" v-loading="loading" stripe size="small" @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="45" />
             <el-table-column label="严重程度" width="90">
               <template #default="{ row }">
                 <el-tag :type="getSeverityType(row.severity)" size="small">{{ row.severity }}</el-tag>
@@ -216,7 +223,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Document } from '@element-plus/icons-vue'
@@ -224,6 +231,10 @@ import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { getAccuracyReport, getValidationResults, getReconciliationSessions, getValidationRules, runValidationChecks, createAndRunReconciliation, handleValidationResult, initDefaultValidationRules, updateValidationRule } from '@/api/inventory'
 import { getWarehouseList } from '@/api/masterdata'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/')
+
 
 const router = useRouter()
 

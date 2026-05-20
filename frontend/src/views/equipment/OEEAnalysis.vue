@@ -91,7 +91,14 @@
     <!-- 设备OEE排名 -->
     <el-card style="margin-top: 16px;">
       <template #header>设备OEE排名</template>
-      <el-table :data="equipmentRanking" stripe>
+      <!-- 批量操作 -->
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      </div>
+      <el-table :data="equipmentRanking" stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="rank" label="排名" width="70" align="center">
           <template #default="{ $index }">
             <el-tag v-if="$index < 3" :type="$index === 0 ? 'danger' : ($index === 1 ? 'warning' : 'info')" size="small">
@@ -131,13 +138,17 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 import {
-  getEquipmentList, getOEESummary, getOEERanking, getOEETrend, getOEEDowntime
+getEquipmentList, getOEESummary, getOEERanking, getOEETrend, getOEEDowntime
 } from '@/api/equipment'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/equipment/')
+
 
 const dateRange = ref([])
 const selectedEquipment = ref(null)

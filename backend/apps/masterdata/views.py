@@ -1067,7 +1067,10 @@ class CustomerViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, views
         if not ids:
             return Response({'error': '请选择要删除的客户'}, status=status.HTTP_400_BAD_REQUEST)
         
-        deleted_count = Customer.objects.filter(id__in=ids).delete()[0]
+        from django.utils import timezone as tz
+        deleted_count = Customer.objects.filter(id__in=ids, is_deleted=False).update(
+            is_deleted=True, deleted_at=tz.now()
+        )
         return Response({
             'message': f'成功删除 {deleted_count} 个客户',
             'deleted_count': deleted_count
@@ -1310,7 +1313,10 @@ class SupplierViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, views
         if not ids:
             return Response({'error': '请选择要删除的供应商'}, status=status.HTTP_400_BAD_REQUEST)
         
-        deleted_count = Supplier.objects.filter(id__in=ids).delete()[0]
+        from django.utils import timezone as tz
+        deleted_count = Supplier.objects.filter(id__in=ids, is_deleted=False).update(
+            is_deleted=True, deleted_at=tz.now()
+        )
         return Response({
             'message': f'成功删除 {deleted_count} 个供应商',
             'deleted_count': deleted_count

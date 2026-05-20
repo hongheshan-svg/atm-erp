@@ -72,7 +72,14 @@
             </div>
 
             <!-- Child locations table -->
-            <el-table :data="childLocations" border style="margin-top: 20px;" v-if="childLocations.length > 0">
+            <!-- 批量操作 -->
+            <div v-if="selectedRows.length > 0" class="batch-toolbar">
+              <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+              <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+              <el-button size="small" @click="batchExport">导出选中</el-button>
+            </div>
+            <el-table :data="childLocations" border style="margin-top: 20px;" v-if="childLocations.length > 0" @selection-change="handleSelectionChange">
+              <el-table-column type="selection" width="45" />
               <el-table-column prop="code" label="编码" width="120" />
               <el-table-column prop="name" label="名称" />
               <el-table-column prop="type_display" label="类型" width="100" />
@@ -154,11 +161,15 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, watch, onMounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getWarehouseList, getLocationTree, getLocation, getLocationChildren, createLocation, patchLocation, deleteLocation } from '@/api/masterdata'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/masterdata/')
+
 
 const warehouses = ref([])
 const selectedWarehouse = ref(null)

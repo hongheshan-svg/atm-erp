@@ -105,8 +105,8 @@ class RoleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
             user=request.user,
             action='DELETE',
             model_name='Role',
-            object_id=instance.id,
-            details=f'删除角色: {instance.name} ({instance.code})'
+            object_id=str(instance.id),
+            object_repr=f'删除角色: {instance.name} ({instance.code})'
         )
         
         # 物理删除
@@ -215,10 +215,10 @@ class UserViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
         from apps.core.models import AuditLog
         AuditLog.objects.create(
             user=request.user,
-            action='RESET_PASSWORD',
+            action='UPDATE',
             model_name='User',
-            object_id=user.id,
-            details=f'管理员重置了用户 {user.username} 的密码'
+            object_id=str(user.id),
+            object_repr=f'管理员重置了用户 {user.username} 的密码'
         )
         
         # 安全返回：不在响应中包含明文密码

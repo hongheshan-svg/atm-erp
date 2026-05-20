@@ -42,7 +42,20 @@
             </div>
           </template>
 
-          <el-table :data="snapshots" v-loading="loading" stripe>
+          <!-- 批量操作 -->
+
+          <div v-if="selectedRows.length > 0" class="batch-toolbar">
+
+            <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+
+            <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+
+            <el-button size="small" @click="batchExport">导出选中</el-button>
+
+          </div>
+
+          <el-table :data="snapshots" v-loading="loading" stripe @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="45" />
             <el-table-column prop="project_name" label="项目" min-width="180" />
             <el-table-column prop="version_label" label="版本" width="100" />
             <el-table-column prop="total_material_cost" label="物料成本" width="130" align="right">
@@ -141,14 +154,18 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Cpu, DataLine } from '@element-plus/icons-vue'
 import {
-  getBOMCostSnapshots, getBOMCostDetails, calculateBOMCost,
+getBOMCostSnapshots, getBOMCostDetails, calculateBOMCost,
   compareBOMCost, deleteBOMCostSnapshot
 } from '@/api/projects/enhancement'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_enhancement/')
+
 
 const loading = ref(false)
 const calcLoading = ref(false)

@@ -71,7 +71,14 @@
       </div>
 
       <!-- 数据表格 -->
-      <el-table :data="evaluations" v-loading="loading" stripe style="width: 100%; margin-top: 16px">
+      <!-- 批量操作 -->
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      </div>
+      <el-table :data="evaluations" v-loading="loading" stripe style="width: 100%; margin-top: 16px" @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="evaluation_no" label="评价编号" width="140" />
         <el-table-column label="供应商" min-width="180">
           <template #default="{ row }">
@@ -260,16 +267,19 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, TrendCharts } from '@element-plus/icons-vue'
 import { toFixedSafe } from '@/utils/number'
-import { 
+import {
   getEvaluationList, getEvaluation, createEvaluation, submitEvaluation,
   approveEvaluation, getEvaluationStatistics, getSupplierRanking,
   getEvaluationTemplateList
 } from '@/api/purchase/evaluation'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase_evaluation/')
 
 const loading = ref(false)
 const evaluations = ref([])

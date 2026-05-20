@@ -42,7 +42,18 @@
             </el-col>
           </el-row>
 
-          <el-table :data="reportData" v-loading="loading" border stripe>
+          <!-- 批量操作 -->
+
+          <div v-if="selectedRows.length > 0" class="batch-toolbar">
+
+            <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+
+            <el-button size="small" @click="batchExport">导出选中</el-button>
+
+          </div>
+
+          <el-table :data="reportData" v-loading="loading" border stripe @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="45" />
             <el-table-column prop="ar_no" label="应收单号" width="150" />
             <el-table-column prop="customer_name" label="客户" width="200" />
             <el-table-column prop="invoice_no" label="发票号" width="150" />
@@ -150,7 +161,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, nextTick } from 'vue'
 import { getAgingReport } from '@/api/reports'
 import { getCustomerList } from '@/api/masterdata'
@@ -159,6 +170,10 @@ import { ElMessage } from 'element-plus'
 import { Clock, TrendCharts, Money, Warning, SuccessFilled, CircleCloseFilled } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { subtractFixedSafe, toFixedSafe } from '@/utils/number'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/reports/')
+
 
 const loading = ref(false)
 const reportData = ref([])

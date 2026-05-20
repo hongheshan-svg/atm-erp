@@ -34,7 +34,20 @@
         </el-form>
       </template>
       
-      <el-table :data="announcements" v-loading="loading" border stripe>
+      <!-- 批量操作 -->
+      
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+      
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+      
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+      
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      
+      </div>
+      
+      <el-table :data="announcements" v-loading="loading" border stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column width="50" align="center">
           <template #default="{ row }">
             <el-icon v-if="row.is_top" color="#e6a23c"><Top /></el-icon>
@@ -156,11 +169,15 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Top } from '@element-plus/icons-vue'
 import { getAnnouncementList, createAnnouncement, updateAnnouncement, deleteAnnouncement, publishAnnouncement, withdrawAnnouncement } from '@/api/system'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/system/')
+
 
 const loading = ref(false)
 const submitLoading = ref(false)

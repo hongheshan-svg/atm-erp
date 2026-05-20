@@ -66,7 +66,20 @@
         </div>
       </template>
 
-      <el-table :data="resources" v-loading="loading" stripe>
+      <!-- 批量操作 -->
+
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+
+      </div>
+
+      <el-table :data="resources" v-loading="loading" stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="code" label="资源编码" width="120" />
         <el-table-column prop="name" label="资源名称" min-width="150" />
         <el-table-column prop="resource_type_name" label="类型" width="100" />
@@ -216,17 +229,21 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, WarningFilled, CircleCheck } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { getProjectList } from '@/api/projects/project'
 import {
-  getCapacityDashboard, getResources, createResource as createResourceApi,
+getCapacityDashboard, getResources, createResource as createResourceApi,
   getResourceLoad, getResourceConflicts, getResourceAllocations,
   checkResourceAvailability, createResourceAllocation, getResourceTypes
 } from '@/api/production'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_project/')
+
 
 const loading = ref(false)
 const allocationLoading = ref(false)

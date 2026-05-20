@@ -656,8 +656,8 @@ class AssetBorrowViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
     def submit(self, request, pk=None):
         """提交申请 - 走流程配置的审批流程"""
         borrow = self.get_object()
-        if borrow.status not in ['DRAFT', 'REJECTED']:
-            return Response({'error': '只能提交草稿或已拒绝状态的申请'}, status=400)
+        if borrow.status not in ['PENDING', 'REJECTED']:
+            return Response({'error': '只能提交待审批或已拒绝状态的申请'}, status=400)
         
         try:
             from apps.core.workflow.services import WorkflowService
@@ -731,35 +731,37 @@ class AssetBorrowViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
         borrow = self.get_object()
         if borrow.status != 'APPROVED':
             return Response({'error': '只有已批准的申请可以借出'}, status=400)
-        
-        borrow.status = 'BORROWED'
-        borrow.save()
-        
-        # 更新资产状态
-        borrow.asset.status = 'IN_USE'
-        borrow.asset.current_user = borrow.borrower
-        borrow.asset.save()
-        
+
+        from django.db import transaction
+        with transaction.atomic():
+            borrow.status = 'BORROWED'
+            borrow.save()
+
+            borrow.asset.status = 'IN_USE'
+            borrow.asset.current_user = borrow.borrower
+            borrow.asset.save(update_fields=['status', 'current_user'])
+
         return Response(self.get_serializer(borrow).data)
-    
+
     @action(detail=True, methods=['post'])
     def return_asset(self, request, pk=None):
         """归还资产"""
         borrow = self.get_object()
         if borrow.status != 'BORROWED':
             return Response({'error': '只有借用中的资产可以归还'}, status=400)
-        
-        borrow.status = 'RETURNED'
-        borrow.actual_return_date = date.today()
-        borrow.return_remarks = request.data.get('remarks', '')
-        borrow.return_condition = request.data.get('condition', '完好')
-        borrow.save()
-        
-        # 更新资产状态
-        borrow.asset.status = 'IDLE'
-        borrow.asset.current_user = None
-        borrow.asset.save()
-        
+
+        from django.db import transaction
+        with transaction.atomic():
+            borrow.status = 'RETURNED'
+            borrow.actual_return_date = date.today()
+            borrow.return_remarks = request.data.get('remarks', '')
+            borrow.return_condition = request.data.get('condition', '完好')
+            borrow.save()
+
+            borrow.asset.status = 'IDLE'
+            borrow.asset.current_user = None
+            borrow.asset.save(update_fields=['status', 'current_user'])
+
         return Response(self.get_serializer(borrow).data)
 
 
@@ -794,15 +796,16 @@ class AssetTransferViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         transfer = self.get_object()
         if transfer.status != 'APPROVED':
             return Response({'error': '只有已审批的调拨可以完成'}, status=400)
-        
-        transfer.status = 'COMPLETED'
-        transfer.save()
-        
-        # 更新资产信息
-        transfer.asset.department_name = transfer.to_department_name
-        transfer.asset.current_user = transfer.to_user
-        transfer.asset.save()
-        
+
+        from django.db import transaction
+        with transaction.atomic():
+            transfer.status = 'COMPLETED'
+            transfer.save()
+
+            transfer.asset.department_name = transfer.to_department_name
+            transfer.asset.current_user = transfer.to_user
+            transfer.asset.save(update_fields=['department_name', 'current_user'])
+
         return Response(self.get_serializer(transfer).data)
 
 
@@ -818,10 +821,11 @@ class AssetMaintenanceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
     ordering_fields = ['created_at', 'start_date']
     
     def perform_create(self, serializer):
-        maintenance = serializer.save(reporter=self.request.user, created_by=self.request.user)
-        # 更新资产状态
-        maintenance.asset.status = 'REPAIR'
-        maintenance.asset.save()
+        from django.db import transaction
+        with transaction.atomic():
+            maintenance = serializer.save(reporter=self.request.user, created_by=self.request.user)
+            maintenance.asset.status = 'REPAIR'
+            maintenance.asset.save(update_fields=['status'])
     
     @action(detail=True, methods=['post'])
     def assign(self, request, pk=None):
@@ -846,15 +850,16 @@ class AssetMaintenanceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
     def complete(self, request, pk=None):
         """完成维修"""
         maintenance = self.get_object()
-        
-        maintenance.status = 'COMPLETED'
-        maintenance.end_date = date.today()
-        maintenance.result = request.data.get('result', '')
-        maintenance.cost = request.data.get('cost', 0)
-        maintenance.save()
-        
-        # 更新资产状态
-        maintenance.asset.status = 'IN_USE' if maintenance.asset.current_user else 'IDLE'
-        maintenance.asset.save()
-        
+
+        from django.db import transaction
+        with transaction.atomic():
+            maintenance.status = 'COMPLETED'
+            maintenance.end_date = date.today()
+            maintenance.result = request.data.get('result', '')
+            maintenance.cost = request.data.get('cost', 0)
+            maintenance.save()
+
+            maintenance.asset.status = 'IN_USE' if maintenance.asset.current_user else 'IDLE'
+            maintenance.asset.save(update_fields=['status'])
+
         return Response(self.get_serializer(maintenance).data)

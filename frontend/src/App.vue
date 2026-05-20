@@ -2,7 +2,7 @@
   <router-view />
 </template>
 
-<script setup>
+<script setup lang="ts">
 </script>
 
 <style>
@@ -127,5 +127,22 @@
 }
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* Batch operation toolbar */
+.batch-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 15px;
+  background: #ecf5ff;
+  border: 1px solid #b3d8ff;
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+.batch-toolbar .batch-info {
+  font-size: 13px;
+  color: #409eff;
+  margin-right: auto;
 }
 </style>

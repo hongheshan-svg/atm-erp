@@ -70,7 +70,13 @@
           </div>
 
           <!-- 结果表格 -->
-          <el-table :data="reportData" v-loading="executing" stripe max-height="500" style="margin-top: 12px">
+          <!-- 批量操作 -->
+          <div v-if="selectedRows.length > 0" class="batch-toolbar">
+            <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+            <el-button size="small" @click="batchExport">导出选中</el-button>
+          </div>
+          <el-table :data="reportData" v-loading="executing" stripe max-height="500" style="margin-top: 12px" @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="45" />
             <el-table-column v-for="col in reportColumns" :key="col.prop" :prop="col.prop" :label="col.label" :min-width="col.width || 120" />
           </el-table>
 
@@ -142,14 +148,18 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, Star, StarFilled, VideoPlay, Download } from '@element-plus/icons-vue'
 import {
-  getReportTemplates, createReportTemplate, executeReportTemplate,
+getReportTemplates, createReportTemplate, executeReportTemplate,
   favoriteReportTemplate, getMyFavoriteReports, getReportExecutions
 } from '@/api/reports'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/reports/')
+
 
 const templates = ref([])
 const favorites = ref([])

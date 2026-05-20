@@ -69,7 +69,14 @@
           <!-- Task List -->
           <div class="task-list" style="margin-top: 30px;">
             <h3>任务列表</h3>
-            <el-table :data="taskList" border stripe>
+            <!-- 批量操作 -->
+            <div v-if="selectedRows.length > 0" class="batch-toolbar">
+              <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+              <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+              <el-button size="small" @click="batchExport">导出选中</el-button>
+            </div>
+            <el-table :data="taskList" border stripe @selection-change="handleSelectionChange">
+              <el-table-column type="selection" width="45" />
               <el-table-column type="index" label="#" width="50" />
               <el-table-column prop="name" label="任务名称" />
               <el-table-column prop="assignee_name" label="负责人" width="120" />
@@ -97,12 +104,16 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import { GGanttChart, GGanttRow } from 'vue-ganttastic'
 import { getProjectList, getProject, getTaskList } from '@/api/projects/project'
 import { ElMessage } from 'element-plus'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_project/')
+
 
 const loading = ref(false)
 const projects = ref([])

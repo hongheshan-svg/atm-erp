@@ -21,7 +21,20 @@
         定期备份可以保护您的数据安全。建议每天自动备份，并保留至少30天的备份历史。
       </el-alert>
 
-      <el-table :data="backups" v-loading="loading" stripe style="width: 100%">
+      <!-- 批量操作 -->
+
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+
+      </div>
+
+      <el-table :data="backups" v-loading="loading" stripe style="width: 100%" @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="name" label="备份文件" min-width="250">
           <template #default="{ row }">
             <el-icon><Document /></el-icon>
@@ -108,11 +121,15 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import request from '@/utils/request'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Document } from '@element-plus/icons-vue'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/unknown/')
+
 
 
 const loading = ref(false)

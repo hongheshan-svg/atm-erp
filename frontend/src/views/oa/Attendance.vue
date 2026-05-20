@@ -125,7 +125,20 @@
       
       <el-empty v-if="!loading && records.length === 0" description="本月暂无考勤记录，点击上方按钮开始打卡" />
       
-      <el-table v-else :data="records" v-loading="loading" stripe border>
+      <!-- 批量操作 -->
+      
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+      
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+      
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+      
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      
+      </div>
+      
+      <el-table v-else :data="records" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="attendance_date" label="日期" width="120" />
         <el-table-column label="签到时间" width="100">
           <template #default="{ row }">
@@ -165,11 +178,15 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Clock, CircleCheck, Document, Timer, Van, Box } from '@element-plus/icons-vue'
 import { getAttendanceToday, getAttendanceRecords, getAttendanceMonthlySummary, checkIn, checkOut } from '@/api/oa'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/oa/')
+
 
 const loading = ref(false)
 const checking = ref(false)

@@ -46,6 +46,12 @@
       </el-row>
       
       <!-- 任务树表格 -->
+      <!-- 批量操作 -->
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      </div>
       <el-table
         :data="taskTree"
         row-key="id"
@@ -54,7 +60,8 @@
         v-loading="loading"
         :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
         default-expand-all
-      >
+       @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="name" label="任务名称" min-width="250">
           <template #default="{ row }">
             <span :style="{ paddingLeft: (row.level || 0) * 20 + 'px' }">
@@ -218,13 +225,17 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Top, Bottom, Refresh } from '@element-plus/icons-vue'
 import { getProjectList, getTaskList, createTask, updateTask, deleteTask, patchTask, batchRecalculateHours, getMemberList, createTimeLog } from '@/api/projects/project'
 import { usePermissionStore } from '@/stores/permission'
 import { getUsers } from '@/api/auth'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_project/')
+
 
 const loading = ref(false)
 const recalculating = ref(false)

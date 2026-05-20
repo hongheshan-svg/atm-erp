@@ -272,7 +272,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { TrendCharts, Coin, Wallet, CreditCard, Folder, Sell, ShoppingCart, Box, Money, Tickets } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'

@@ -67,7 +67,14 @@
     
     <!-- 数据表格 -->
     <el-card shadow="never">
-      <el-table :data="tableData" v-loading="loading" border stripe>
+      <!-- 批量操作 -->
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      </div>
+      <el-table :data="tableData" v-loading="loading" border stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="follow_date" label="跟进日期" width="110" />
         <el-table-column prop="customer_name" label="客户" min-width="150" />
         <el-table-column prop="subject" label="跟进主题" min-width="200" show-overflow-tooltip />
@@ -203,11 +210,15 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getCustomerList, getCustomerFollowUpList, createCustomerFollowUp, updateCustomerFollowUp, deleteCustomerFollowUp, getFollowTypes, getFollowUpStatistics } from '@/api/masterdata'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/masterdata/')
+
 
 const loading = ref(false)
 const submitLoading = ref(false)

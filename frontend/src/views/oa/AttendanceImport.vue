@@ -106,7 +106,20 @@
             </div>
           </template>
           
-          <el-table :data="previewData" max-height="400" size="small" stripe>
+          <!-- 批量操作 -->
+          
+          <div v-if="selectedRows.length > 0" class="batch-toolbar">
+          
+            <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+          
+            <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+          
+            <el-button size="small" @click="batchExport">导出选中</el-button>
+          
+          </div>
+          
+          <el-table :data="previewData" max-height="400" size="small" stripe @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="45" />
             <el-table-column type="index" width="50" label="#" />
             <el-table-column prop="employee_name" label="姓名" width="80" />
             <el-table-column prop="employee_id" label="账号" width="100" show-overflow-tooltip />
@@ -245,12 +258,16 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, UploadFilled, View, Check, Download, Calendar, List } from '@element-plus/icons-vue'
 import { batchImportAttendance, recalculateMonthAttendance, exportAttendanceReport, getAttendanceMonthStats, getAttendanceImportHistory } from '@/api/oa'
 import * as XLSX from 'xlsx'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/oa/')
+
 
 // 数据
 const uploadRef = ref(null)

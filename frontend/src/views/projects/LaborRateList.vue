@@ -8,7 +8,20 @@
         </div>
       </template>
       
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <!-- 批量操作 -->
+      
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+      
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+      
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+      
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      
+      </div>
+      
+      <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="work_type_display" label="工种" width="150" />
         <el-table-column prop="standard_rate" label="标准费率" align="right">
           <template #default="{ row }">¥ {{ row.standard_rate }}/小时</template>
@@ -67,10 +80,14 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getLaborRateList, createLaborRate, updateLaborRate } from '@/api/projects/labor-rate'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_labor-rate/')
+
 
 const loading = ref(false)
 const saving = ref(false)

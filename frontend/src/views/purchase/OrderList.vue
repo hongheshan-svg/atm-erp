@@ -283,7 +283,7 @@
     />
   </template>
 
-<script setup>
+<script setup lang="ts">
 import WorkflowProgress from '@/components/WorkflowProgress.vue'
 
 import { ref, reactive, onMounted } from 'vue'

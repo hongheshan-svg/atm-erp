@@ -56,7 +56,14 @@
               <el-button type="primary" size="small" @click="showRuleDialog = true"><el-icon><Plus /></el-icon>新增</el-button>
             </div>
           </template>
-          <el-table :data="rules" v-loading="ruleLoading" stripe size="small">
+          <!-- 批量操作 -->
+          <div v-if="selectedRows.length > 0" class="batch-toolbar">
+            <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+            <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+            <el-button size="small" @click="batchExport">导出选中</el-button>
+          </div>
+          <el-table :data="rules" v-loading="ruleLoading" stripe size="small" @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="45" />
             <el-table-column prop="process_name" label="工序" min-width="120" />
             <el-table-column prop="wip_limit" label="WIP上限" width="100" align="center" />
             <el-table-column prop="warning_threshold" label="预警阈值(%)" width="110" align="center" />
@@ -129,14 +136,18 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 import {
-  getKanbanWIPStatus, getKanbanWIPRules, createKanbanWIPRule,
+getKanbanWIPStatus, getKanbanWIPRules, createKanbanWIPRule,
   updateKanbanWIPRule, deleteKanbanWIPRule, getKanbanWIPAlerts
 } from '@/api/production'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/')
+
 
 const wipStatus = ref([])
 const rules = ref([])

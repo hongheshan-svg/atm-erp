@@ -117,7 +117,7 @@ class StockAdjustmentSerializer(serializers.ModelSerializer):
         read_only_fields = ['adjustment_no', 'created_at', 'updated_at']
     
     def get_cost_impact(self, obj):
-        return sum(line.cost_impact or 0 for line in obj.lines.all())
+        return sum(line.cost_impact or 0 for line in obj.lines.filter(is_deleted=False))
     
     def create(self, validated_data):
         """Create adjustment with lines."""
@@ -154,8 +154,11 @@ class StockAdjustmentSerializer(serializers.ModelSerializer):
                 setattr(instance, attr, value)
             instance.save()
             
-            # Delete old lines and create new ones
-            instance.lines.all().delete()
+            # Soft-delete old lines and create new ones
+            from django.utils import timezone
+            instance.lines.filter(is_deleted=False).update(
+                is_deleted=True, deleted_at=timezone.now()
+            )
             
             for line_data in lines_data:
                 if line_data.get('item'):

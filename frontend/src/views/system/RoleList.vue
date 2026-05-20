@@ -145,7 +145,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { QuestionFilled, Briefcase, Grid, OfficeBuilding, User } from '@element-plus/icons-vue'

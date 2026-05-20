@@ -82,7 +82,13 @@
                 <el-tag type="success">预计收款: ¥{{ formatNumber(overview.expectedInflow) }}</el-tag>
               </div>
             </template>
-            <el-table :data="arList" size="small" max-height="300">
+            <!-- 批量操作 -->
+            <div v-if="selectedRows.length > 0" class="batch-toolbar">
+              <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+              <el-button size="small" @click="batchExport">导出选中</el-button>
+            </div>
+            <el-table :data="arList" size="small" max-height="300" @selection-change="handleSelectionChange">
+              <el-table-column type="selection" width="45" />
               <el-table-column prop="customer_name" label="客户" min-width="120" />
               <el-table-column prop="invoice_no" label="发票号" width="120" />
               <el-table-column prop="due_date" label="到期日" width="100" />
@@ -153,13 +159,17 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { getCashFlowForecast, getAnalyticsDashboard } from '@/api/analytics'
 import { getReceivableList, getPayableList } from '@/api/finance'
 import { ElMessage } from 'element-plus'
 import { Download, Wallet, Top, Bottom, TrendCharts, Warning } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/analytics/')
+
 
 const forecastPeriod = ref('30')
 const trendChartRef = ref(null)

@@ -131,7 +131,13 @@ class SalesQuotationViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
     def convert_to_so(self, request, pk=None):
         """Convert quotation to sales order."""
         quotation = self.get_object()
-        
+
+        if quotation.status not in ['APPROVED', 'SENT', 'ACCEPTED']:
+            return Response(
+                {'error': '只能将已审批/已发送/已接受的报价单转换为订单'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         if not quotation.project:
             return Response(
                 {'error': '报价单必须关联项目才能转换为订单'},
@@ -156,8 +162,9 @@ class SalesQuotationViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
                 )
             
             # Update total
+            from decimal import Decimal as D
             from django.db.models import Sum
-            total = so.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
+            total = so.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or D('0')
             so.total_amount = total
             so.save()
             
@@ -1135,9 +1142,14 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
         delete_count = deletable_orders.count()
         skip_count = len(ids) - delete_count
         
-        # 软删除
-        deletable_orders.update(is_deleted=True)
-        
+        # 软删除（包含 deleted_at 和 updated_by 以符合 BaseModel 语义）
+        from django.utils import timezone as tz
+        deletable_orders.update(
+            is_deleted=True,
+            deleted_at=tz.now(),
+            updated_by=request.user,
+        )
+
         message = f'成功删除 {delete_count} 个订单'
         if skip_count > 0:
             message += f'，跳过 {skip_count} 个（只能删除草稿/已取消/已拒绝状态的订单）'
@@ -1308,27 +1320,32 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
         
         # 创建出库记录
         with transaction.atomic():
-            from apps.inventory.models import StockMove
+            from django.db.models import F
             from django.utils import timezone
-            
+
+            from apps.inventory.models import StockMove
+
             for line in delivery.lines.filter(is_deleted=False):
-                StockMove.objects.create(
-                    item=line.item,
-                    warehouse_from=delivery.warehouse,
-                    qty=line.qty,
-                    unit_cost=line.so_line.unit_price,
-                    move_type='OUT_SALES',
-                    reference_type='DeliveryOrder',
-                    reference_id=delivery.id,
-                    project=delivery.so.project,
-                    move_date=timezone.now().date(),
-                    status='COMPLETED',
-                    created_by=request.user
+                if line.item:
+                    StockMove.objects.create(
+                        item=line.item,
+                        warehouse_from=delivery.warehouse,
+                        qty=line.qty,
+                        unit_cost=line.so_line.unit_price,
+                        move_type='OUT_SALES',
+                        reference_type='DeliveryOrder',
+                        reference_id=delivery.id,
+                        project=delivery.so.project,
+                        move_date=timezone.now().date(),
+                        status='COMPLETED',
+                        created_by=request.user
+                    )
+
+                # 更新销售订单发货数量（使用 F() 防止并发竞争）
+                from apps.sales.models import SalesOrderLine
+                SalesOrderLine.objects.filter(pk=line.so_line_id).update(
+                    delivered_qty=F('delivered_qty') + line.qty
                 )
-                
-                # 更新销售订单发货数量
-                line.so_line.delivered_qty += line.qty
-                line.so_line.save()
         
         delivery.status = 'LOGISTICS_BOOKING'
         delivery.save()
@@ -1604,16 +1621,16 @@ class SalesContractViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                     'message': '已提交审批，请在审批中心查看审批进度'
                 })
             else:
-                contract.status = 'ACTIVE'
+                contract.status = 'APPROVED'
                 contract.save()
                 return Response({
                     **SalesContractSerializer(contract).data,
                     'workflow_started': False,
                     'message': error or '未配置审批流程，合同已直接生效'
                 })
-                
+
         except Exception as e:
-            contract.status = 'ACTIVE'
+            contract.status = 'APPROVED'
             contract.save()
             return Response({
                 **SalesContractSerializer(contract).data,

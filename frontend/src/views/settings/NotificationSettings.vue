@@ -207,7 +207,7 @@ WECHAT_WORK_AGENT_ID=xxx</pre>
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { Message, ChatDotRound, ChatLineSquare } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'

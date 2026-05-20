@@ -66,7 +66,14 @@
       </el-row>
 
       <!-- 对账单列表 -->
-      <el-table :data="reconciliations" v-loading="loading" stripe border style="margin-top: 16px;">
+      <!-- 批量操作 -->
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      </div>
+      <el-table :data="reconciliations" v-loading="loading" stripe border style="margin-top: 16px;" @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="reconciliation_no" label="对账单号" width="150" />
         <el-table-column prop="customer_name" label="客户" min-width="180" show-overflow-tooltip />
         <el-table-column label="对账期间" width="180">
@@ -332,12 +339,16 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getSalesReconciliations, getSalesReconciliation, createSalesReconciliation, deleteSalesReconciliation, getSalesReconciliationCustomerSummary, getSalesReconciliationOpeningBalance, generateSalesReconciliationLines, submitSalesReconciliation, confirmSalesReconciliation, confirmSalesReconciliationDelivery } from '@/api/finance'
 import { getCustomerList } from '@/api/masterdata'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/finance/')
+
 
 const loading = ref(false)
 const submitting = ref(false)

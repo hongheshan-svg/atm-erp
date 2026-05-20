@@ -109,7 +109,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Folder, View, Download, Delete, Document, Picture, VideoPlay, Headset, FolderOpened } from '@element-plus/icons-vue'

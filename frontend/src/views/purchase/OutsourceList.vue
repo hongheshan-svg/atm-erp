@@ -35,7 +35,14 @@
       </el-form>
 
       <!-- 数据表格 -->
-      <el-table :data="orders" v-loading="loading" stripe border>
+      <!-- 批量操作 -->
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      </div>
+      <el-table :data="orders" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="order_no" label="外协单号" width="140" />
         <el-table-column prop="supplier_name" label="外协供应商" width="150" show-overflow-tooltip />
         <el-table-column prop="project_name" label="关联项目" width="150" show-overflow-tooltip />
@@ -365,18 +372,22 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import { getItemList, getSupplierList, getWarehouseList } from '@/api/masterdata'
 import { getProjectList } from '@/api/projects/project'
 import {
-  getOutsourceOrders, getOutsourceOrder, createOutsourceOrder, updateOutsourceOrder,
+getOutsourceOrders, getOutsourceOrder, createOutsourceOrder, updateOutsourceOrder,
   confirmOutsourceOrder, cancelOutsourceOrder,
   createOutsourceIssue, confirmOutsourceIssue,
   createOutsourceReceipt, confirmOutsourceReceipt
 } from '@/api/purchase'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/masterdata/')
+
 
 const loading = ref(false)
 const saving = ref(false)

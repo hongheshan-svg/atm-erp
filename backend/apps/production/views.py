@@ -157,7 +157,7 @@ class ProductionPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
         created = []
         for process_id in process_ids:
             try:
-                process = ProductionProcess.objects.get(id=process_id, project=plan.project)
+                process = ProductionProcess.objects.get(id=process_id, project=plan.project, is_deleted=False)
                 plan_process, is_new = ProductionPlanProcess.objects.get_or_create(
                     plan=plan,
                     process=process,
@@ -247,11 +247,11 @@ class ProductionPlanProcessViewSet(PermissionMixin, SoftDeleteMixin, UserTrackin
     
     def _update_plan_progress(self, plan):
         """更新计划总进度"""
-        processes = plan.plan_processes.all()
-        if processes.exists():
-            avg_progress = sum(p.progress_percent for p in processes) / processes.count()
-            plan.progress_percent = int(avg_progress)
-            plan.save()
+        from django.db.models import Avg
+        avg = plan.plan_processes.aggregate(avg=Avg('progress_percent'))['avg']
+        if avg is not None:
+            from .models import ProductionPlan
+            ProductionPlan.objects.filter(pk=plan.pk).update(progress_percent=int(avg))
 
 
 class ProductionLogViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
@@ -271,15 +271,16 @@ class ProductionLogViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
     
     def perform_create(self, serializer):
         log = serializer.save(operator=self.request.user)
-        
-        # 更新工序实际工时和进度
+
+        # 使用数据库聚合更新工序工时和进度（避免竞态）
+        from django.db.models import Sum
+        from .models import ProductionPlanProcess
         plan_process = log.plan_process
-        total_hours = sum(l.work_hours for l in plan_process.logs.all())
-        plan_process.actual_hours = total_hours
-        
-        # 更新进度为最新日志的进度
-        plan_process.progress_percent = log.progress_percent
-        plan_process.save()
+        total = plan_process.logs.aggregate(s=Sum('work_hours'))['s'] or 0
+        ProductionPlanProcess.objects.filter(pk=plan_process.pk).update(
+            actual_hours=total,
+            progress_percent=log.progress_percent,
+        )
 
 
 class DebugRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):

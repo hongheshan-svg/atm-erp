@@ -552,8 +552,8 @@ class FixedAssetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                 asset = FixedAsset.objects.get(id=asset_id, is_deleted=False)
                 # Record inventory result as a note
                 if not match:
-                    asset.notes = f'{asset.notes or ""}\n[盘点异常] {remark}'.strip()
-                    asset.save()
+                    asset.remarks = f'{asset.remarks or ""}\n[盘点异常] {remark}'.strip()
+                    asset.save(update_fields=['remarks'])
                 results.append({'asset_id': asset_id, 'status': 'ok'})
             except FixedAsset.DoesNotExist:
                 results.append({'asset_id': asset_id, 'status': 'not_found'})

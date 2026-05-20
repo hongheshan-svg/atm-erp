@@ -3,7 +3,20 @@
     <el-card>
       <template #header><span>送货协作</span></template>
       
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <!-- 批量操作 -->
+      
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+      
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+      
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+      
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      
+      </div>
+      
+      <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="collaboration_no" label="协作编号" width="150" />
         <el-table-column prop="purchase_order_no" label="采购订单" width="150" />
         <el-table-column prop="supplier_name" label="供应商" width="150" />
@@ -69,10 +82,14 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getDeliveryCollaborations, getDeliveryCollaboration, confirmDeliveryCollaboration } from '@/api/purchase'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase/')
+
 
 const loading = ref(false)
 const saving = ref(false)

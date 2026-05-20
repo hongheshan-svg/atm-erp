@@ -64,7 +64,20 @@
             </div>
           </template>
           
-          <el-table :data="callList" v-loading="loading" border stripe>
+          <!-- 批量操作 -->
+          
+          <div v-if="selectedRows.length > 0" class="batch-toolbar">
+          
+            <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+          
+            <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+          
+            <el-button size="small" @click="batchExport">导出选中</el-button>
+          
+          </div>
+          
+          <el-table :data="callList" v-loading="loading" border stripe @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="45" />
             <el-table-column prop="call_no" label="呼叫编号" width="120" fixed />
             <el-table-column prop="title" label="异常标题" min-width="180" show-overflow-tooltip />
             <el-table-column prop="station_name" label="工位" width="110" />
@@ -283,12 +296,16 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Bell } from '@element-plus/icons-vue'
 import { getAndonCallList, getPendingAndonCalls, getAndonStatusBoard, getAndonStationList, getAndonTypeList, getAndonStatistics, createAndonCall, getAndonCallDetail, respondAndon, resolveAndon, escalateAndon } from '@/api/mes'
 import * as echarts from 'echarts'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/mes/')
+
 
 const loading = ref(false)
 const submitLoading = ref(false)

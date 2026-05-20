@@ -43,7 +43,14 @@
 
     <!-- 模板列表 -->
     <el-card shadow="never">
-      <el-table :data="templates" v-loading="loading" stripe>
+      <!-- 批量操作 -->
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      </div>
+      <el-table :data="templates" v-loading="loading" stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="code" label="模板编码" width="180" />
         <el-table-column prop="name" label="模板名称" min-width="200" />
         <el-table-column prop="template_type_display" label="类型" width="120" />
@@ -211,11 +218,15 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getEmailTemplateList, getEmailTemplateTypes, createEmailTemplate, updateEmailTemplate, deleteEmailTemplate, toggleEmailTemplate, previewEmailTemplate, testSendEmailTemplate, initSystemEmailTemplates } from '@/api/system'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/system/')
+
 
 const templates = ref([])
 const loading = ref(false)

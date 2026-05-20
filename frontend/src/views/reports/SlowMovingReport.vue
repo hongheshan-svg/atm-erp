@@ -180,7 +180,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { getSlowMovingItems } from '@/api/analytics'
 import { getStockValuation, getStockMoveList, createStockAdjustment, createStockTransfer } from '@/api/inventory'

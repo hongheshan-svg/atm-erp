@@ -131,6 +131,7 @@ class RFQViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.M
                 supplier=quotation.rfq_supplier.supplier,
                 project=rfq.project,
                 order_date=timezone.now().date(),
+                delivery_date=request.data.get('delivery_date', rfq.required_date or timezone.now().date()),
                 payment_terms=quotation.payment_terms,
                 created_by=request.user
             )

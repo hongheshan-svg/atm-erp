@@ -44,7 +44,20 @@
         </div>
       </template>
 
-      <el-table :data="quotes" v-loading="loading" stripe @row-click="viewQuote">
+      <!-- 批量操作 -->
+
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+
+      </div>
+
+      <el-table :data="quotes" v-loading="loading" stripe @row-click="viewQuote" @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="quote_no" label="报价编号" width="140">
           <template #default="{ row }">
             {{ row.quote_no }} V{{ row.version }}
@@ -317,7 +330,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Plus } from '@element-plus/icons-vue'
@@ -325,6 +338,10 @@ import { toFixedSafe } from '@/utils/number'
 import { getQuoteVersions, getQuoteVersion, createQuoteVersion, createNewQuoteVersion, getQuoteVersionProfitPrediction, estimateFromReference, findSimilarQuotes } from '@/api/sales'
 import { getCustomerList } from '@/api/masterdata'
 import { getProjectList } from '@/api/projects/project'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/sales/')
+
 
 const loading = ref(false)
 const submitting = ref(false)

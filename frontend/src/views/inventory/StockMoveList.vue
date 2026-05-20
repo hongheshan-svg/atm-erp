@@ -103,7 +103,14 @@
       </el-row>
       
       <!-- 数据表格 -->
-      <el-table :data="tableData" border stripe v-loading="loading">
+      <!-- 批量操作 -->
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      </div>
+      <el-table :data="tableData" border stripe v-loading="loading" @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="move_no" label="流水号" width="150" />
         <el-table-column prop="move_date" label="日期" width="110" />
         <el-table-column label="物料" min-width="150">
@@ -173,13 +180,17 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh, Download } from '@element-plus/icons-vue'
 import { getMoves } from '@/api/inventory'
 import { getItemList, getWarehouseList } from '@/api/masterdata'
 import { getProjectList } from '@/api/projects/project'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/')
+
 
 const loading = ref(false)
 const tableData = ref([])

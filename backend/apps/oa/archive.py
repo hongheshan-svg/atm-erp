@@ -451,9 +451,10 @@ class ArchiveViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
     
     def retrieve(self, request, *args, **kwargs):
         """获取档案详情时增加浏览次数"""
+        from django.db.models import F
         instance = self.get_object()
-        instance.view_count += 1
-        instance.save(update_fields=['view_count'])
+        type(instance).objects.filter(pk=instance.pk).update(view_count=F('view_count') + 1)
+        instance.refresh_from_db()
         return super().retrieve(request, *args, **kwargs)
     
     @action(detail=True, methods=['post'])
@@ -563,34 +564,38 @@ class ArchiveBorrowViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         borrow = self.get_object()
         if borrow.status != 'APPROVED':
             return Response({'error': '只有已批准状态可以借出'}, status=400)
-        
-        borrow.status = 'BORROWED'
-        borrow.borrow_date = date.today()
-        borrow.due_date = request.data.get('due_date', date.today() + timedelta(days=30))
-        borrow.save()
-        
-        # 更新档案状态
-        borrow.archive.status = 'BORROWED'
-        borrow.archive.borrow_count += 1
-        borrow.archive.save()
-        
+
+        from django.db import transaction
+        from django.db.models import F
+        with transaction.atomic():
+            borrow.status = 'BORROWED'
+            borrow.borrow_date = date.today()
+            borrow.due_date = request.data.get('due_date', date.today() + timedelta(days=30))
+            borrow.save()
+
+            type(borrow.archive).objects.filter(pk=borrow.archive.pk).update(
+                status='BORROWED',
+                borrow_count=F('borrow_count') + 1
+            )
+
         return Response(self.get_serializer(borrow).data)
-    
+
     @action(detail=True, methods=['post'])
     def return_archive(self, request, pk=None):
         """归还档案"""
         borrow = self.get_object()
         if borrow.status not in ['BORROWED', 'OVERDUE']:
             return Response({'error': '只有借阅中或逾期状态可以归还'}, status=400)
-        
-        borrow.status = 'RETURNED'
-        borrow.return_date = date.today()
-        borrow.save()
-        
-        # 更新档案状态
-        borrow.archive.status = 'ARCHIVED'
-        borrow.archive.save()
-        
+
+        from django.db import transaction
+        with transaction.atomic():
+            borrow.status = 'RETURNED'
+            borrow.return_date = date.today()
+            borrow.save()
+
+            borrow.archive.status = 'ARCHIVED'
+            borrow.archive.save(update_fields=['status'])
+
         return Response(self.get_serializer(borrow).data)
 
 

@@ -138,7 +138,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { getDrawingList } from '@/api/projects/drawing'
 import { ElMessage } from 'element-plus'

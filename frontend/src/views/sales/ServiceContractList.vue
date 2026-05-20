@@ -48,7 +48,20 @@
         </div>
       </template>
 
-      <el-table :data="contracts" v-loading="loading" stripe @row-click="viewContract">
+      <!-- 批量操作 -->
+
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+
+      </div>
+
+      <el-table :data="contracts" v-loading="loading" stripe @row-click="viewContract" @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="contract_no" label="合同编号" width="140" />
         <el-table-column prop="title" label="合同标题" min-width="180" show-overflow-tooltip />
         <el-table-column prop="customer_name" label="客户" width="150" show-overflow-tooltip />
@@ -217,13 +230,17 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Plus } from '@element-plus/icons-vue'
 import { getServiceContracts, getExpiringSoonServiceContracts, getServiceRequests, getUpcomingMaintenance, createServiceContract, getServiceContract, activateServiceContract, getServiceHistory } from '@/api/sales'
 import { getCustomerList } from '@/api/masterdata'
 import { getProjectList } from '@/api/projects/project'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/sales/')
+
 
 const loading = ref(false)
 const submitting = ref(false)

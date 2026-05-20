@@ -176,7 +176,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getCalendarSchedules, getTodaySchedules, getUpcomingSchedules, getCoreSchedule, updateCoreSchedule, createCoreSchedule } from '@/api/oa'

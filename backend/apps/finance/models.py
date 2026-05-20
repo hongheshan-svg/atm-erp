@@ -425,14 +425,17 @@ class Payment(BaseModel):
             self.payment_no = f'PAY{date_str}{new_seq:04d}'
         
         super().save(*args, **kwargs)
-        
-        # Update AR/AP amount_paid
-        if self.ar:
-            self.ar.amount_paid += self.amount
-            self.ar.save()
-        elif self.ap:
-            self.ap.amount_paid += self.amount
-            self.ap.save()
+
+        # Update AR/AP amount_paid using F() to avoid race conditions
+        from django.db.models import F
+        if self.ar_id:
+            AccountReceivable.objects.filter(pk=self.ar_id).update(
+                amount_paid=F('amount_paid') + self.amount
+            )
+        elif self.ap_id:
+            AccountPayable.objects.filter(pk=self.ap_id).update(
+                amount_paid=F('amount_paid') + self.amount
+            )
 
 
 class PaymentSchedule(BaseModel):
@@ -676,8 +679,11 @@ class PaymentSchedule(BaseModel):
             ],
         }
         
-        # 删除旧的付款计划
-        cls.objects.filter(sales_order=sales_order).delete()
+        # 软删除旧的付款计划
+        from django.utils import timezone
+        cls.objects.filter(sales_order=sales_order, is_deleted=False).update(
+            is_deleted=True, deleted_at=timezone.now()
+        )
         
         # 获取付款条款
         payment_terms = sales_order.payment_terms
@@ -937,8 +943,11 @@ class PurchasePaymentSchedule(BaseModel):
             ],
         }
         
-        # 删除旧的付款计划
-        cls.objects.filter(purchase_order=purchase_order).delete()
+        # 软删除旧的付款计划
+        from django.utils import timezone
+        cls.objects.filter(purchase_order=purchase_order, is_deleted=False).update(
+            is_deleted=True, deleted_at=timezone.now()
+        )
         
         # 获取付款条款
         payment_terms = purchase_order.payment_terms

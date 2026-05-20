@@ -36,7 +36,20 @@
           添加物料
         </el-button>
 
-        <el-table :data="form.lines" border>
+        <!-- 批量操作 -->
+
+        <div v-if="selectedRows.length > 0" class="batch-toolbar">
+
+          <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+
+          <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+
+          <el-button size="small" @click="batchExport">导出选中</el-button>
+
+        </div>
+
+        <el-table :data="form.lines" border @selection-change="handleSelectionChange">
+          <el-table-column type="selection" width="45" />
           <el-table-column label="物料" width="300">
             <template #default="{ row, $index }">
               <el-select v-model="row.item" placeholder="选择物料" filterable @change="handleItemChange($index)" style="width: 100%">
@@ -90,12 +103,16 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getStocks, getMoves, createTransfer } from '@/api/inventory'
 import { getWarehouseList } from '@/api/masterdata'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/')
+
 
 const formRef = ref(null)
 const submitting = ref(false)

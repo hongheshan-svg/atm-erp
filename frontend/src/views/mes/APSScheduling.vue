@@ -70,7 +70,20 @@
         </div>
       </template>
       
-      <el-table :data="orders" v-loading="loadingOrders" stripe>
+      <!-- 批量操作 -->
+      
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+      
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+      
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+      
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      
+      </div>
+      
+      <el-table :data="orders" v-loading="loadingOrders" stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="order_no" label="工单号" width="140">
           <template #default="{ row }">
             <el-link type="primary">{{ row.order_no }}</el-link>
@@ -162,7 +175,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
@@ -178,6 +191,10 @@ const Magic = {
   }
 }
 import { h } from 'vue'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/mes/')
+
 
 const loadingCapacity = ref(false)
 const loadingOrders = ref(false)

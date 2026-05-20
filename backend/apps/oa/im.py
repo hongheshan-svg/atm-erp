@@ -490,7 +490,7 @@ class IMConversationViewSet(PermissionMixin, viewsets.ModelViewSet):
             if member.role == 'OWNER':
                 # 群主需要先转让
                 return Response({'error': '请先转让群主身份'}, status=400)
-            member.delete()
+            member.soft_delete()
             
             IMMessage.objects.create(
                 conversation=conversation,

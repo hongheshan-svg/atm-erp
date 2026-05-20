@@ -80,7 +80,14 @@
             <template #header>
               <span>各阶段成本</span>
             </template>
-            <el-table :data="phaseData" size="small" max-height="300">
+            <!-- 批量操作 -->
+            <div v-if="selectedRows.length > 0" class="batch-toolbar">
+              <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+              <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+              <el-button size="small" @click="batchExport">导出选中</el-button>
+            </div>
+            <el-table :data="phaseData" size="small" max-height="300" @selection-change="handleSelectionChange">
+              <el-table-column type="selection" width="45" />
               <el-table-column prop="project_phase" label="阶段" width="120">
                 <template #default="{ row }">{{ getPhaseLabel(row.project_phase) }}</template>
               </el-table-column>
@@ -209,13 +216,17 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Check, Close } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { getProjectList, getProjectCostAnalysis, getCostDetails, createCostRecord } from '@/api/projects/project'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_project/')
+
 
 const router = useRouter()
 

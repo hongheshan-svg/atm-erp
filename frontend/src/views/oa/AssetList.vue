@@ -62,7 +62,20 @@
         </el-form-item>
       </el-form>
       
-      <el-table :data="list" v-loading="loading" stripe border>
+      <!-- 批量操作 -->
+      
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+      
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+      
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+      
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      
+      </div>
+      
+      <el-table :data="list" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="asset_no" label="资产编号" width="120" />
         <el-table-column prop="name" label="资产名称" min-width="150" show-overflow-tooltip />
         <el-table-column prop="category_name" label="分类" width="100" />
@@ -231,12 +244,16 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getAssetCategories, getAssets, createAsset, updateAsset, deleteAsset, getAssetStatistics, assignAsset, reclaimAsset, createAssetBorrow, submitAssetBorrow } from '@/api/oa'
 import { getUsers } from '@/api/auth'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/oa/')
+
 
 const loading = ref(false)
 const saving = ref(false)

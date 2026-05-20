@@ -159,7 +159,14 @@
       </el-radio-group>
 
       <!-- 变更明细 -->
-      <el-table :data="filteredChanges" border stripe max-height="500">
+      <!-- 批量操作 -->
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      </div>
+      <el-table :data="filteredChanges" border stripe max-height="500" @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="item_sku" label="物料编码" width="150" />
         <el-table-column prop="item_name" label="物料名称" min-width="200" show-overflow-tooltip />
         <el-table-column label="变更类型" width="100">
@@ -223,13 +230,17 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { getProjectList } from '@/api/projects/project'
 import { getBOMSnapshotList, createBOMSnapshot, compareBOMWithCurrent, compareBOM, exportBOMCompare } from '@/api/plm/bom-compare'
 import { getCreoBOMImportList } from '@/api/plm/creo'
 import { ElMessage } from 'element-plus'
 import { Right, Connection, Plus, Download } from '@element-plus/icons-vue'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_project/')
+
 
 const projects = ref([])
 const snapshots = ref([])

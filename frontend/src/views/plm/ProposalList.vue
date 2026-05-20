@@ -64,7 +64,20 @@
         </el-form>
       </template>
       
-      <el-table :data="proposalList" v-loading="loading" border stripe>
+      <!-- 批量操作 -->
+      
+      <div v-if="selectedRows.length > 0" class="batch-toolbar">
+      
+        <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+      
+        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+      
+        <el-button size="small" @click="batchExport">导出选中</el-button>
+      
+      </div>
+      
+      <el-table :data="proposalList" v-loading="loading" border stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="proposal_no" label="方案编号" width="130" fixed />
         <el-table-column prop="title" label="方案名称" min-width="220" show-overflow-tooltip />
         <el-table-column prop="type_display" label="类型" width="100" />
@@ -223,10 +236,14 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { getProposalList, getProposal, createProposal, patchProposal, getProposalStatistics, submitProposal, startProposalReview, approveProposal, createProposalVersion } from '@/api/plm/proposal'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/plm_proposal/')
+
 
 const loading = ref(false)
 const submitLoading = ref(false)

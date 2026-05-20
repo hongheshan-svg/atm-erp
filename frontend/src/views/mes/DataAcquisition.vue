@@ -86,7 +86,20 @@
               </el-button>
             </div>
             
-            <el-table :data="dataPoints" border stripe v-loading="loadingPoints">
+            <!-- 批量操作 -->
+            
+            <div v-if="selectedRows.length > 0" class="batch-toolbar">
+            
+              <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+            
+              <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+            
+              <el-button size="small" @click="batchExport">导出选中</el-button>
+            
+            </div>
+            
+            <el-table :data="dataPoints" border stripe v-loading="loadingPoints" @selection-change="handleSelectionChange">
+              <el-table-column type="selection" width="45" />
               <el-table-column prop="code" label="编码" width="120" />
               <el-table-column prop="name" label="名称" width="150" />
               <el-table-column prop="type_display" label="类型" width="80" />
@@ -332,12 +345,16 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Connection, Monitor, DataLine } from '@element-plus/icons-vue'
 import { getDataSourceList, getDataPointList, getDataAlarmList, updateDataSource, createDataSource, updateDataPoint, createDataPoint, deleteDataPoint, patchDataPoint, acknowledgeAlarm, resolveAlarm, getDataPointDetailHistory } from '@/api/mes'
 import * as echarts from 'echarts'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/mes/')
+
 
 // 数据
 const loadingSource = ref(false)

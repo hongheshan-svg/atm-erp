@@ -69,7 +69,14 @@
       <!-- 待导入文件列表 -->
       <div v-if="parsedFiles.length" class="parsed-files">
         <h4>待导入文件 ({{ parsedFiles.length }}个)</h4>
-        <el-table :data="parsedFiles" border stripe max-height="300">
+        <!-- 批量操作 -->
+        <div v-if="selectedRows.length > 0" class="batch-toolbar">
+          <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+          <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+          <el-button size="small" @click="batchExport">导出选中</el-button>
+        </div>
+        <el-table :data="parsedFiles" border stripe max-height="300" @selection-change="handleSelectionChange">
+          <el-table-column type="selection" width="45" />
           <el-table-column prop="original_filename" label="文件名" min-width="200" show-overflow-tooltip />
           <el-table-column prop="drawing_no" label="图号" width="150" />
           <el-table-column prop="version" label="版本" width="80" />
@@ -183,7 +190,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { 
@@ -192,6 +199,10 @@ import {
 } from '@element-plus/icons-vue'
 import { getDrawingImportSupportedFormats, batchImportDrawings } from '@/api/projects/drawing'
 import { getProjectList } from '@/api/projects/project'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_drawing/')
+
 
 const projects = ref([])
 const fileList = ref([])

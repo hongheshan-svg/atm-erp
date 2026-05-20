@@ -397,6 +397,29 @@ class ContractExecutionViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDe
         return ContractExecutionSerializer
 
     @action(detail=True, methods=['post'])
+    def submit(self, request, pk=None):
+        """提交合同执行审批（启动执行前需审批）"""
+        execution = self.get_object()
+        if execution.status != 'NOT_STARTED':
+            return Response({'error': '只能提交未开始状态的合同执行'}, status=400)
+
+        result = self.start_workflow_or_auto_approve(
+            execution, request.user,
+            approved_status='IN_PROGRESS',
+            submitted_status='NOT_STARTED'
+        )
+        if result['auto_approved']:
+            execution.status = 'IN_PROGRESS'
+            if not execution.actual_start_date:
+                execution.actual_start_date = date.today()
+            execution.save()
+        return Response({
+            **self.get_serializer(execution).data,
+            'workflow_started': result['workflow_started'],
+            'message': result['message'],
+        })
+
+    @action(detail=True, methods=['post'])
     def update_status(self, request, pk=None):
         """更新执行状态"""
         execution = self.get_object()
@@ -595,9 +618,37 @@ class PaymentRecordViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDelete
     filterset_fields = ['execution', 'status', 'payment_type']
 
     @action(detail=True, methods=['post'])
-    def approve(self, request, pk=None):
-        """审批"""
+    def submit(self, request, pk=None):
+        """提交付款审批"""
         payment = self.get_object()
+        if payment.status != 'PENDING':
+            return Response({'error': '只能提交待付款状态的记录'}, status=400)
+
+        result = self.start_workflow_or_auto_approve(
+            payment, request.user,
+            approved_status='APPROVED',
+            submitted_status='PENDING'
+        )
+        if result['auto_approved']:
+            payment.status = 'APPROVED'
+            payment.approver = request.user
+            payment.approved_at = timezone.now()
+            payment.save()
+        return Response({
+            **self.get_serializer(payment).data,
+            'workflow_started': result['workflow_started'],
+            'message': result['message'],
+        })
+
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        """直接审批 - 仅在无活跃工作流时允许"""
+        payment = self.get_object()
+
+        workflow_error = self.check_workflow_allows_direct_action(payment, '审批')
+        if workflow_error:
+            return workflow_error
+
         payment.status = 'APPROVED'
         payment.approver = request.user
         payment.approved_at = timezone.now()

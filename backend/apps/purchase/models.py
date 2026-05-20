@@ -361,6 +361,7 @@ class PurchaseContract(BaseModel):
         ('DRAFT', '草稿'),
         ('PENDING', '待审批'),
         ('APPROVED', '已审批'),
+        ('REJECTED', '已拒绝'),
         ('SIGNED', '已签署'),
         ('COMPLETED', '已完成'),
         ('CANCELLED', '已取消'),

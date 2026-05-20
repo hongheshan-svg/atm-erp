@@ -72,7 +72,20 @@
             </div>
           </div>
 
-          <el-table :data="dictItems" stripe style="width: 100%">
+          <!-- 批量操作 -->
+
+          <div v-if="selectedRows.length > 0" class="batch-toolbar">
+
+            <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
+
+            <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+
+            <el-button size="small" @click="batchExport">导出选中</el-button>
+
+          </div>
+
+          <el-table :data="dictItems" stripe style="width: 100%" @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="45" />
             <el-table-column prop="value" label="值" width="150" />
             <el-table-column prop="label" label="显示标签" min-width="200" />
             <el-table-column label="颜色" width="100">
@@ -179,11 +192,15 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, Edit, Delete } from '@element-plus/icons-vue'
 import { getDictTypeList, createDictType, updateDictType, deleteDictType, initSystemDicts, getDictItemList, createDictItem, updateDictItem, deleteDictItem, setDictItemDefault, toggleDictItemEnable } from '@/api/system'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/system/')
+
 
 const dictTypes = ref([])
 const dictItems = ref([])
