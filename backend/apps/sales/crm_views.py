@@ -9,6 +9,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.permission_mixin import PermissionMixin
 
 from .crm_models import Lead, LeadSource, Opportunity, OpportunityActivity, SalesForecast
 from .crm_serializers import (
@@ -24,7 +25,7 @@ from .crm_serializers import (
 )
 
 
-class LeadSourceViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
+class LeadSourceViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """线索来源管理"""
 
     queryset = LeadSource.objects.all()
@@ -33,7 +34,7 @@ class LeadSourceViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     search_fields = ['code', 'name']
 
 
-class LeadViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class LeadViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售线索管理"""
 
     queryset = Lead.objects.select_related('source', 'owner', 'converted_customer')
@@ -154,7 +155,7 @@ class LeadViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         return Response(LeadSerializer(lead).data)
 
 
-class OpportunityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class OpportunityViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售商机管理"""
 
     queryset = Opportunity.objects.select_related('customer', 'owner')
@@ -327,7 +328,7 @@ class OpportunityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
         )
 
 
-class OpportunityActivityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class OpportunityActivityViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """商机活动管理"""
 
     queryset = OpportunityActivity.objects.select_related('opportunity', 'recorded_by')
@@ -335,7 +336,7 @@ class OpportunityActivityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
     filterset_fields = ['opportunity', 'activity_type', 'recorded_by']
 
 
-class SalesForecastViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SalesForecastViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售预测管理"""
 
     queryset = SalesForecast.objects.select_related('owner')

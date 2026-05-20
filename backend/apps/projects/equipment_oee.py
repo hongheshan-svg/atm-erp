@@ -16,6 +16,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class EquipmentShift(BaseModel):
@@ -220,7 +221,7 @@ class EquipmentOEERecordListSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class EquipmentShiftViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class EquipmentShiftViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """班次管理"""
 
     queryset = EquipmentShift.objects.filter(is_deleted=False)
@@ -254,7 +255,7 @@ class EquipmentShiftViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         return Response({'success': True, 'created': created})
 
 
-class DowntimeReasonViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class DowntimeReasonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """停机原因管理"""
 
     queryset = DowntimeReason.objects.filter(is_deleted=False)
@@ -291,7 +292,7 @@ class DowntimeReasonViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         return Response({'success': True, 'created': created})
 
 
-class EquipmentOEERecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class EquipmentOEERecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """OEE记录管理"""
 
     queryset = EquipmentOEERecord.objects.filter(is_deleted=False)

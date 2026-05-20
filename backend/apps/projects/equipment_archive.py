@@ -10,6 +10,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 # =============================================================================
 # 模型定义
@@ -353,7 +354,7 @@ class EquipmentArchiveListSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 
-class EquipmentArchiveViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class EquipmentArchiveViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备档案管理"""
 
     queryset = EquipmentArchive.objects.all()
@@ -451,7 +452,7 @@ class EquipmentArchiveViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         return Response(stats)
 
 
-class EquipmentMaintenancePlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class EquipmentMaintenancePlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备保养计划管理"""
 
     queryset = EquipmentMaintenancePlan.objects.all()
@@ -461,7 +462,7 @@ class EquipmentMaintenancePlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewse
     ordering_fields = ['equipment', 'frequency', 'created_at']
 
 
-class EquipmentMaintenanceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class EquipmentMaintenanceRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备维护记录管理"""
 
     queryset = EquipmentMaintenanceRecord.objects.all()
@@ -523,7 +524,7 @@ class EquipmentMaintenanceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, view
         return Response(EquipmentMaintenanceRecordSerializer(record).data)
 
 
-class EquipmentSparePartViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class EquipmentSparePartViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备备件管理"""
 
     queryset = EquipmentSparePart.objects.all()

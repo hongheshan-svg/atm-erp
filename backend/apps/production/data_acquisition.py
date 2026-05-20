@@ -16,6 +16,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class DataSource(BaseModel):
@@ -334,7 +335,7 @@ class DataAlarmSerializer(serializers.ModelSerializer):
 # ============ ViewSets ============
 
 
-class DataSourceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class DataSourceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """数据源管理"""
 
     queryset = DataSource.objects.filter(is_deleted=False)
@@ -368,7 +369,7 @@ class DataSourceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         return Response({'success': True, 'message': '连接测试成功'})
 
 
-class DataPointViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class DataPointViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """数据点管理"""
 
     queryset = DataPoint.objects.filter(is_deleted=False)
@@ -456,7 +457,7 @@ class DataPointViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
         return Response(DataRecordSerializer(records, many=True).data)
 
 
-class DataRecordViewSet(viewsets.ReadOnlyModelViewSet):
+class DataRecordViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """数据记录查询"""
 
     queryset = DataRecord.objects.all()
@@ -479,7 +480,7 @@ class DataRecordViewSet(viewsets.ReadOnlyModelViewSet):
         return qs.order_by('-timestamp')[:10000]
 
 
-class DataAlarmViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class DataAlarmViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """数据告警管理"""
 
     queryset = DataAlarm.objects.filter(is_deleted=False)

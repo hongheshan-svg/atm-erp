@@ -234,7 +234,7 @@ class StockMoveViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
         return Response(list(moves))
 
 
-class StockAdjustmentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class StockAdjustmentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for StockAdjustment management.
 

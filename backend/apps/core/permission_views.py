@@ -9,11 +9,12 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 
+from apps.core.permission_mixin import PermissionMixin
 from apps.core.permission_models_new import DataScope, Permission
 from apps.core.permission_serializers import DataScopeSerializer, PermissionSerializer
 
 
-class PermissionViewSet(viewsets.ModelViewSet):
+class PermissionViewSet(PermissionMixin, viewsets.ModelViewSet):
     """权限节点管理（仅超级管理员）"""
 
     queryset = Permission.active.all()
@@ -84,7 +85,7 @@ class PermissionViewSet(viewsets.ModelViewSet):
         return (node['sort_order'], type_weight.get(node['type'], 9), node['name'], node['id'])
 
 
-class DataScopeViewSet(viewsets.ModelViewSet):
+class DataScopeViewSet(PermissionMixin, viewsets.ModelViewSet):
     """数据权限管理"""
 
     queryset = DataScope.objects.all()

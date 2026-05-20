@@ -16,6 +16,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class RequirementCategory(BaseModel):
@@ -326,7 +327,7 @@ class RequirementListSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class RequirementCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class RequirementCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """需求分类管理"""
 
     queryset = RequirementCategory.objects.filter(is_deleted=False)
@@ -350,7 +351,7 @@ class RequirementCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
         return Response([build_tree(c) for c in categories])
 
 
-class RequirementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class RequirementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """需求管理"""
 
     queryset = Requirement.objects.filter(is_deleted=False)
@@ -476,7 +477,7 @@ class RequirementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
         )
 
 
-class RequirementChangeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class RequirementChangeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """需求变更管理"""
 
     queryset = RequirementChange.objects.filter(is_deleted=False)

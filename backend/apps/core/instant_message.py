@@ -13,6 +13,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class Conversation(BaseModel):
@@ -311,7 +312,7 @@ class ConversationListSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class ConversationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ConversationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """会话管理"""
 
     queryset = Conversation.objects.filter(is_deleted=False)
@@ -431,7 +432,7 @@ class ConversationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         return Response({'success': True})
 
 
-class MessageViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class MessageViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """消息管理"""
 
     queryset = Message.objects.filter(is_deleted=False)
@@ -496,7 +497,7 @@ class MessageViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
             return Response({'error': '会话不存在'}, status=404)
 
 
-class ConversationMemberViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ConversationMemberViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """会话成员管理"""
 
     queryset = ConversationMember.objects.filter(is_deleted=False)

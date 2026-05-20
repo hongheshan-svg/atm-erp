@@ -10,6 +10,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 # =============================================================================
 # 模型定义
@@ -380,7 +381,7 @@ class AcceptanceListSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 
-class AcceptanceTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AcceptanceTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """验收模板管理"""
 
     queryset = AcceptanceTemplate.objects.all()
@@ -400,7 +401,7 @@ class AcceptanceTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
         return Response(serializer.data)
 
 
-class AcceptanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AcceptanceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """验收单管理"""
 
     queryset = Acceptance.objects.all()
@@ -586,7 +587,7 @@ class AcceptanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         return Response(stats)
 
 
-class AcceptanceCheckItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AcceptanceCheckItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """验收检查项管理"""
 
     queryset = AcceptanceCheckItem.objects.all()
@@ -623,7 +624,7 @@ class AcceptanceCheckItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
         return Response(AcceptanceCheckItemSerializer(item).data)
 
 
-class AcceptanceIssueViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AcceptanceIssueViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """验收问题管理"""
 
     queryset = AcceptanceIssue.objects.all()

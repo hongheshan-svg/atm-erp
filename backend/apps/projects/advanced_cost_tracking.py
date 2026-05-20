@@ -29,6 +29,7 @@ from rest_framework.views import APIView
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 # =============================================================================
 # 标准成本模型
@@ -489,7 +490,7 @@ class CostVarianceAnalysisSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 
-class StandardCostCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class StandardCostCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """标准成本分类"""
 
     queryset = StandardCostCategory.objects.filter(is_deleted=False)
@@ -515,7 +516,7 @@ class StandardCostCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.M
         return Response([build_tree(c) for c in categories])
 
 
-class LaborRateStandardViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class LaborRateStandardViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """人工费率标准"""
 
     queryset = LaborRateStandard.objects.filter(is_deleted=False)
@@ -535,7 +536,7 @@ class LaborRateStandardViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         return Response(self.get_serializer(rates, many=True).data)
 
 
-class ProjectCostDetailViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProjectCostDetailViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目成本明细"""
 
     queryset = ProjectCostDetail.objects.filter(is_deleted=False)
@@ -572,7 +573,7 @@ class ProjectCostDetailViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         return Response({'success': True, 'created_count': created_count, 'total': len(items)})
 
 
-class ProjectCostSummaryViewSet(viewsets.ModelViewSet):
+class ProjectCostSummaryViewSet(PermissionMixin, viewsets.ModelViewSet):
     """项目成本汇总"""
 
     queryset = ProjectCostSummary.objects.filter(is_deleted=False)
@@ -605,7 +606,7 @@ class ProjectCostSummaryViewSet(viewsets.ModelViewSet):
         return Response({'success': True, 'recalculated_count': count})
 
 
-class CostVarianceAnalysisViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
+class CostVarianceAnalysisViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """成本差异分析"""
 
     queryset = CostVarianceAnalysis.objects.filter(is_deleted=False)

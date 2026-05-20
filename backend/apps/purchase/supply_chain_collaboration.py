@@ -22,6 +22,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 # =============================================================================
 # 模型定义
@@ -564,7 +565,7 @@ class SupplierNotificationSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 
-class SupplierPortalUserViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SupplierPortalUserViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """供应商门户用户管理"""
 
     queryset = SupplierPortalUser.objects.filter(is_deleted=False)
@@ -574,7 +575,7 @@ class SupplierPortalUserViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
     search_fields = ['username', 'email']
 
 
-class RFQCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class RFQCollaborationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """询报价协同管理"""
 
     queryset = RFQCollaboration.objects.filter(is_deleted=False)
@@ -675,7 +676,7 @@ class RFQCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         return Response(comparison)
 
 
-class DeliveryCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class DeliveryCollaborationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """交期协同管理"""
 
     queryset = DeliveryCollaboration.objects.filter(is_deleted=False)
@@ -742,7 +743,7 @@ class DeliveryCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.
         return Response(DeliveryCollaborationSerializer(collabs, many=True).data)
 
 
-class QualityCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class QualityCollaborationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """质量协同管理"""
 
     queryset = QualityCollaboration.objects.filter(is_deleted=False)
@@ -781,7 +782,7 @@ class QualityCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.M
         return Response(QualityCollaborationSerializer(collab).data)
 
 
-class ReconciliationCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ReconciliationCollaborationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """对账协同管理"""
 
     queryset = ReconciliationCollaboration.objects.filter(is_deleted=False)
@@ -841,7 +842,7 @@ class ReconciliationCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, vie
         return Response(ReconciliationCollaborationSerializer(recon).data)
 
 
-class SupplierNotificationViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
+class SupplierNotificationViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """供应商通知管理"""
 
     queryset = SupplierNotification.objects.filter(is_deleted=False)

@@ -7,6 +7,8 @@ from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.core.permission_mixin import PermissionMixin
+
 from .dashboard_config import DashboardDataService, DashboardWidget, UserDashboard
 
 
@@ -31,7 +33,7 @@ class UserDashboardSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class DashboardWidgetViewSet(viewsets.ModelViewSet):
+class DashboardWidgetViewSet(PermissionMixin, viewsets.ModelViewSet):
     """仪表盘组件管理"""
 
     queryset = DashboardWidget.objects.all()
@@ -57,7 +59,7 @@ class DashboardWidgetViewSet(viewsets.ModelViewSet):
         return Response(DashboardWidgetSerializer(widgets, many=True).data)
 
 
-class UserDashboardViewSet(viewsets.ModelViewSet):
+class UserDashboardViewSet(PermissionMixin, viewsets.ModelViewSet):
     """用户仪表盘配置"""
 
     queryset = UserDashboard.objects.all()

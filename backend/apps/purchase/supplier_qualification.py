@@ -15,6 +15,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class QualificationType(BaseModel):
@@ -253,7 +254,7 @@ class QualificationReminderSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class QualificationTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class QualificationTypeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """资质类型管理"""
 
     queryset = QualificationType.objects.filter(is_deleted=False)
@@ -309,7 +310,7 @@ class QualificationTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         return Response({'success': True, 'created': created})
 
 
-class SupplierQualificationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SupplierQualificationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """供应商资质管理"""
 
     queryset = SupplierQualification.objects.filter(is_deleted=False)
@@ -425,7 +426,7 @@ class SupplierQualificationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.
         )
 
 
-class QualificationReminderViewSet(viewsets.ReadOnlyModelViewSet):
+class QualificationReminderViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """资质提醒记录"""
 
     queryset = QualificationReminder.objects.filter(is_deleted=False)

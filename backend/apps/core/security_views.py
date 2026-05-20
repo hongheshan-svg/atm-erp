@@ -8,6 +8,8 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
+from apps.core.permission_mixin import PermissionMixin
+
 from .security import LoginLog, PasswordPolicy, SecurityService, SensitiveOperationLog
 
 
@@ -56,7 +58,7 @@ class SensitiveOperationLogSerializer(serializers.ModelSerializer):
         ]
 
 
-class LoginLogViewSet(viewsets.ReadOnlyModelViewSet):
+class LoginLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """ViewSet for login logs."""
 
     serializer_class = LoginLogSerializer
@@ -124,7 +126,7 @@ class LoginLogViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(stats)
 
 
-class SensitiveOperationLogViewSet(viewsets.ReadOnlyModelViewSet):
+class SensitiveOperationLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """ViewSet for sensitive operation logs."""
 
     serializer_class = SensitiveOperationLogSerializer

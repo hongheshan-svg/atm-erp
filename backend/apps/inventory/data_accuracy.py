@@ -27,6 +27,7 @@ from rest_framework.views import APIView
 
 from apps.core.mixins import SoftDeleteMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 # =============================================================================
 # 数据校验规则模型
@@ -656,7 +657,7 @@ class ReconciliationItemSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 
-class DataValidationRuleViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
+class DataValidationRuleViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """数据校验规则"""
 
     queryset = DataValidationRule.objects.filter(is_deleted=False)
@@ -711,7 +712,7 @@ class DataValidationRuleViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
         return Response({'success': True, 'created_count': created_count, 'total_rules': len(default_rules)})
 
 
-class DataValidationResultViewSet(viewsets.ModelViewSet):
+class DataValidationResultViewSet(PermissionMixin, viewsets.ModelViewSet):
     """数据校验结果"""
 
     queryset = DataValidationResult.objects.filter(is_deleted=False)
@@ -774,7 +775,7 @@ class DataValidationResultViewSet(viewsets.ModelViewSet):
         )
 
 
-class ReconciliationSessionViewSet(viewsets.ModelViewSet):
+class ReconciliationSessionViewSet(PermissionMixin, viewsets.ModelViewSet):
     """对账会话"""
 
     queryset = ReconciliationSession.objects.filter(is_deleted=False)

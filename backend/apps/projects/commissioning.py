@@ -15,6 +15,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 User = settings.AUTH_USER_MODEL
 
@@ -367,7 +368,7 @@ class CommissioningPlanSerializer(serializers.ModelSerializer):
 # ============ ViewSets ============
 
 
-class CommissioningPlanViewSet(viewsets.ModelViewSet):
+class CommissioningPlanViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试计划视图集"""
 
     queryset = CommissioningPlan.objects.filter(is_deleted=False)
@@ -516,7 +517,7 @@ class CommissioningPlanViewSet(viewsets.ModelViewSet):
         return Response(CommissioningReportSerializer(report).data)
 
 
-class CommissioningTaskViewSet(viewsets.ModelViewSet):
+class CommissioningTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试任务视图集"""
 
     queryset = CommissioningTask.objects.filter(is_deleted=False)
@@ -560,7 +561,7 @@ class CommissioningTaskViewSet(viewsets.ModelViewSet):
         return Response({'status': 'success'})
 
 
-class CommissioningIssueViewSet(viewsets.ModelViewSet):
+class CommissioningIssueViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试问题视图集"""
 
     queryset = CommissioningIssue.objects.filter(is_deleted=False)
@@ -620,7 +621,7 @@ class CommissioningIssueViewSet(viewsets.ModelViewSet):
         return Response({'status': 'success'})
 
 
-class CommissioningParameterViewSet(viewsets.ModelViewSet):
+class CommissioningParameterViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试参数视图集"""
 
     queryset = CommissioningParameter.objects.filter(is_deleted=False)
@@ -653,7 +654,7 @@ class CommissioningParameterViewSet(viewsets.ModelViewSet):
         )
 
 
-class CommissioningReportViewSet(viewsets.ModelViewSet):
+class CommissioningReportViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试报告视图集"""
 
     queryset = CommissioningReport.objects.filter(is_deleted=False)

@@ -16,6 +16,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class InspectionTemplate(BaseModel):
@@ -361,7 +362,7 @@ class InspectionRecordListSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class InspectionTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class InspectionTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """点检模板管理"""
 
     queryset = InspectionTemplate.objects.filter(is_deleted=False)
@@ -420,7 +421,7 @@ class InspectionTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
         return Response(self.get_serializer(new_template).data)
 
 
-class InspectionItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class InspectionItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """点检项管理"""
 
     queryset = InspectionItem.objects.filter(is_deleted=False)
@@ -429,7 +430,7 @@ class InspectionItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
     filterset_fields = ['template', 'check_type', 'result_type', 'is_required']
 
 
-class InspectionRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class InspectionRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """点检记录管理"""
 
     queryset = InspectionRecord.objects.filter(is_deleted=False)
@@ -541,7 +542,7 @@ class InspectionRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         return Response({'today': today_stats, 'weekly_trend': list(weekly)})
 
 
-class InspectionResultViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class InspectionResultViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """点检结果管理"""
 
     queryset = InspectionResult.objects.filter(is_deleted=False)

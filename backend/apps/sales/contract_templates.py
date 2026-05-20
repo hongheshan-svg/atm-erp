@@ -16,6 +16,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class ContractTemplate(BaseModel):
@@ -495,7 +496,7 @@ class GeneratedContractListSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class ContractTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ContractTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """合同模板管理"""
 
     queryset = ContractTemplate.objects.filter(is_deleted=False)
@@ -626,7 +627,7 @@ class ContractTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         return Response({'success': True, 'contract_id': contract.id, 'html_content': html_content})
 
 
-class ContractClauseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ContractClauseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """合同条款管理"""
 
     queryset = ContractClause.objects.filter(is_deleted=False)
@@ -655,7 +656,7 @@ class ContractClauseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         return Response(self.get_serializer(queryset, many=True).data)
 
 
-class GeneratedContractViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class GeneratedContractViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """生成的合同管理"""
 
     queryset = GeneratedContract.objects.filter(is_deleted=False)

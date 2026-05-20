@@ -18,6 +18,7 @@ from rest_framework.views import APIView
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class WorkCenter(BaseModel):
@@ -419,7 +420,7 @@ class ProductionScheduleListSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class WorkCenterViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class WorkCenterViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """工作中心管理"""
 
     queryset = WorkCenter.objects.filter(is_deleted=False)
@@ -464,7 +465,7 @@ class WorkCenterViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         return Response({'work_center': wc.name, 'loads': loads})
 
 
-class ProductionScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProductionScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """生产排程管理"""
 
     queryset = ProductionSchedule.objects.filter(is_deleted=False)
@@ -526,7 +527,7 @@ class ProductionScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
         return Response(ProductionScheduleListSerializer(schedules, many=True).data)
 
 
-class ScheduleTaskViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ScheduleTaskViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """排程任务管理"""
 
     queryset = ScheduleTask.objects.filter(is_deleted=False)

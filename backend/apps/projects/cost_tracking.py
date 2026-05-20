@@ -24,6 +24,7 @@ from rest_framework.views import APIView
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 # =============================================================================
 # 模型定义
@@ -327,7 +328,7 @@ class CostAlertSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 
-class ProjectBudgetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProjectBudgetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目预算管理"""
 
     queryset = ProjectBudget.objects.filter(is_deleted=False)
@@ -346,7 +347,7 @@ class ProjectBudgetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         return Response(ProjectBudgetSerializer(budget).data)
 
 
-class ProjectCostRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProjectCostRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目成本记录"""
 
     queryset = ProjectCostRecord.objects.filter(is_deleted=False)
@@ -366,7 +367,7 @@ class ProjectCostRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         return Response(ProjectCostRecordSerializer(record).data)
 
 
-class CostAlertViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
+class CostAlertViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """成本预警管理"""
 
     queryset = CostAlert.objects.filter(is_deleted=False)

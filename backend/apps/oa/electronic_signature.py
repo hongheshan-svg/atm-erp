@@ -19,6 +19,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class SignatureSeal(BaseModel):
@@ -363,7 +364,7 @@ class SignatureDocumentSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class SignatureSealViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SignatureSealViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """电子印章管理"""
 
     queryset = SignatureSeal.objects.filter(is_deleted=False)
@@ -397,7 +398,7 @@ class SignatureSealViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         return Response(self.get_serializer(seal).data)
 
 
-class SignatureDocumentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SignatureDocumentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """签署文档管理"""
 
     queryset = SignatureDocument.objects.filter(is_deleted=False)
@@ -585,7 +586,7 @@ class SignatureDocumentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         )
 
 
-class SignatureLogViewSet(viewsets.ReadOnlyModelViewSet):
+class SignatureLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """签署日志查看"""
 
     queryset = SignatureLog.objects.all()

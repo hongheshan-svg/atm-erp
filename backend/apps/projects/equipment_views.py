@@ -9,6 +9,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.permission_mixin import PermissionMixin
 
 from .equipment_models import (
     Equipment,
@@ -43,7 +44,7 @@ from .fixture_models import Fixture, FixtureCalibration, FixtureCategory, Fixtur
 # ============================================================
 
 
-class EquipmentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class EquipmentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     设备台账管理
     """
@@ -154,7 +155,7 @@ class EquipmentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class EquipmentShipmentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class EquipmentShipmentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     设备发货记录管理
     """
@@ -181,7 +182,7 @@ class EquipmentShipmentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         return Response(EquipmentShipmentSerializer(shipment).data)
 
 
-class EquipmentInstallationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class EquipmentInstallationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     现场安装记录管理
     """
@@ -239,7 +240,7 @@ class EquipmentInstallationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class InstallationLogViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
+class InstallationLogViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """
     安装日志管理
     """
@@ -249,7 +250,7 @@ class InstallationLogViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     filterset_fields = ['installation']
 
 
-class EquipmentAcceptanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class EquipmentAcceptanceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     设备验收记录管理
     """
@@ -288,7 +289,7 @@ class EquipmentAcceptanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
         return Response(EquipmentAcceptanceSerializer(acceptance).data)
 
 
-class MaintenanceScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class MaintenanceScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     设备保养计划管理
     """
@@ -324,7 +325,7 @@ class MaintenanceScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
         return Response(MaintenanceScheduleSerializer(schedule).data)
 
 
-class TrainingRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TrainingRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     客户培训记录管理
     """
@@ -340,7 +341,7 @@ class TrainingRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
 # ============================================================
 
 
-class FixtureCategoryViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
+class FixtureCategoryViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """
     工装分类管理
     """
@@ -360,7 +361,7 @@ class FixtureCategoryViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
         return Response(FixtureCategoryTreeSerializer(root_categories, many=True).data)
 
 
-class FixtureViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class FixtureViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     工装夹具管理
     """
@@ -478,7 +479,7 @@ class FixtureViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class FixtureUsageRecordViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
+class FixtureUsageRecordViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """
     工装使用记录管理
     """
@@ -488,7 +489,7 @@ class FixtureUsageRecordViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     filterset_fields = ['fixture', 'project', 'used_by']
 
 
-class FixtureCalibrationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class FixtureCalibrationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     工装校验记录管理
     """
@@ -498,7 +499,7 @@ class FixtureCalibrationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
     filterset_fields = ['fixture', 'result']
 
 
-class FixtureMaintenanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class FixtureMaintenanceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     工装维护记录管理
     """

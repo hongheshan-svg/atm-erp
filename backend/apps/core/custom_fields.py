@@ -14,6 +14,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class CustomFieldDefinition(BaseModel):
@@ -390,7 +391,7 @@ class CustomFieldValueSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class CustomFieldDefinitionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class CustomFieldDefinitionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     自定义字段定义管理
     """
@@ -458,7 +459,7 @@ class CustomFieldDefinitionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.
         return Response({'success': True})
 
 
-class CustomFieldValueViewSet(viewsets.ModelViewSet):
+class CustomFieldValueViewSet(PermissionMixin, viewsets.ModelViewSet):
     """
     自定义字段值管理
     """

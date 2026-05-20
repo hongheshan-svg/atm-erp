@@ -16,6 +16,7 @@ from rest_framework.views import APIView
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class WinLossReason(BaseModel):
@@ -187,7 +188,7 @@ class OpportunityCloseRecordCreateSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class WinLossReasonViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class WinLossReasonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """赢单/丢单原因管理"""
 
     queryset = WinLossReason.objects.filter(is_deleted=False)
@@ -197,7 +198,7 @@ class WinLossReasonViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
     search_fields = ['name', 'description']
 
 
-class OpportunityCloseRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class OpportunityCloseRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """商机关闭记录管理"""
 
     queryset = OpportunityCloseRecord.objects.filter(is_deleted=False)

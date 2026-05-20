@@ -17,6 +17,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class AndonType(BaseModel):
@@ -409,7 +410,7 @@ class AndonCallListSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class AndonTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AndonTypeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """安灯类型管理"""
 
     queryset = AndonType.objects.filter(is_deleted=False)
@@ -419,7 +420,7 @@ class AndonTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
     search_fields = ['name', 'code']
 
 
-class AndonStationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AndonStationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """安灯工位管理"""
 
     queryset = AndonStation.objects.filter(is_deleted=False)
@@ -456,7 +457,7 @@ class AndonStationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         return Response({'summary': list(status_summary), 'stations': station_list})
 
 
-class AndonCallViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AndonCallViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """安灯呼叫管理"""
 
     queryset = AndonCall.objects.filter(is_deleted=False)
@@ -624,7 +625,7 @@ class AndonCallViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
         )
 
 
-class AndonActionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AndonActionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """安灯操作管理"""
 
     queryset = AndonAction.objects.filter(is_deleted=False)

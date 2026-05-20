@@ -1219,7 +1219,7 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
         return Response({'message': f'退货成功，共处理 {returned_count} 种物料', 'returned_count': returned_count})
 
 
-class GoodsReceiptLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class GoodsReceiptLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for GoodsReceiptLine management.
     """

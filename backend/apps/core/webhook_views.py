@@ -7,6 +7,8 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
+from apps.core.permission_mixin import PermissionMixin
+
 from .webhook import WebhookDelivery, WebhookEndpoint, WebhookService
 
 
@@ -73,7 +75,7 @@ class WebhookDeliverySerializer(serializers.ModelSerializer):
         ]
 
 
-class WebhookEndpointViewSet(viewsets.ModelViewSet):
+class WebhookEndpointViewSet(PermissionMixin, viewsets.ModelViewSet):
     """ViewSet for webhook endpoints."""
 
     serializer_class = WebhookEndpointSerializer
@@ -129,7 +131,7 @@ class WebhookEndpointViewSet(viewsets.ModelViewSet):
         return Response([{'value': code, 'label': label} for code, label in WebhookEndpoint.EVENT_TYPES])
 
 
-class WebhookDeliveryViewSet(viewsets.ReadOnlyModelViewSet):
+class WebhookDeliveryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """ViewSet for webhook deliveries."""
 
     serializer_class = WebhookDeliverySerializer

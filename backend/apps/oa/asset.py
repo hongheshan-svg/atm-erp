@@ -28,6 +28,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class OAAssetCategory(BaseModel):
@@ -461,7 +462,7 @@ class AssetMaintenanceSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class AssetCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AssetCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """办公资产分类管理"""
 
     queryset = OAAssetCategory.objects.filter(is_deleted=False)
@@ -477,7 +478,7 @@ class AssetCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         return Response(AssetCategorySerializer(roots, many=True).data)
 
 
-class AssetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AssetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """办公资产管理"""
 
     queryset = Asset.objects.filter(is_deleted=False)
@@ -580,7 +581,7 @@ class AssetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         )
 
 
-class AssetBorrowViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AssetBorrowViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """资产借用管理"""
 
     queryset = AssetBorrow.objects.filter(is_deleted=False)
@@ -716,7 +717,7 @@ class AssetBorrowViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
         return Response(self.get_serializer(borrow).data)
 
 
-class AssetTransferViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AssetTransferViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """办公资产调拨管理"""
 
     queryset = OAAssetTransfer.objects.filter(is_deleted=False)
@@ -758,7 +759,7 @@ class AssetTransferViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         return Response(self.get_serializer(transfer).data)
 
 
-class AssetMaintenanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AssetMaintenanceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """资产维修管理"""
 
     queryset = AssetMaintenance.objects.filter(is_deleted=False)

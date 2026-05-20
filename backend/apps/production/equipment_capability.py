@@ -11,6 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class EquipmentCapability(BaseModel):
@@ -102,7 +103,7 @@ class EquipmentCapabilitySerializer(serializers.ModelSerializer):
 # ─── ViewSets ───────────────────────────────────────────────────
 
 
-class EquipmentCapabilityViewSet(viewsets.ModelViewSet):
+class EquipmentCapabilityViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = EquipmentCapabilitySerializer
     permission_classes = [IsAuthenticated]
 

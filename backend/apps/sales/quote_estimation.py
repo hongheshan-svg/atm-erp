@@ -23,6 +23,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 # =============================================================================
 # 模型定义
@@ -603,7 +604,7 @@ class ProjectCostHistorySerializer(serializers.ModelSerializer):
 # =============================================================================
 
 
-class CostCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class CostCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """成本类别管理"""
 
     queryset = CostCategory.objects.none()
@@ -616,7 +617,7 @@ class CostCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         return CostCategory.objects.filter(is_deleted=False, parent__isnull=True)
 
 
-class LaborRateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class LaborRateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """人工费率管理"""
 
     queryset = LaborRate.objects.none()
@@ -629,7 +630,7 @@ class LaborRateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
     filterset_fields = ['work_type', 'is_active']
 
 
-class QuoteEstimationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class QuoteEstimationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """报价估算管理"""
 
     queryset = QuoteEstimation.objects.none()
@@ -823,7 +824,7 @@ class QuoteEstimationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
         return Response({'by_type': list(type_stats), 'overall': overall})
 
 
-class EstimationMaterialItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class EstimationMaterialItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """估算材料明细"""
 
     queryset = EstimationMaterialItem.objects.none()
@@ -849,7 +850,7 @@ class EstimationMaterialItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets
         estimation.calculate_costs()
 
 
-class EstimationLaborItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class EstimationLaborItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """估算人工明细"""
 
     queryset = EstimationLaborItem.objects.none()
@@ -870,7 +871,7 @@ class EstimationLaborItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
         instance.estimation.calculate_costs()
 
 
-class EstimationOutsourceItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class EstimationOutsourceItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """估算外协明细"""
 
     queryset = EstimationOutsourceItem.objects.none()
@@ -883,7 +884,7 @@ class EstimationOutsourceItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewset
     filterset_fields = ['estimation', 'supplier']
 
 
-class ProjectCostHistoryViewSet(viewsets.ReadOnlyModelViewSet):
+class ProjectCostHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """项目成本历史（只读）"""
 
     queryset = ProjectCostHistory.objects.select_related('project')

@@ -19,6 +19,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 # =============================================================================
 # 模型定义
@@ -406,7 +407,7 @@ class AssemblySessionSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 
-class AssemblyGuideViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AssemblyGuideViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """装配指导书管理"""
 
     queryset = AssemblyGuide.objects.filter(is_deleted=False)
@@ -492,7 +493,7 @@ class AssemblyGuideViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         return Response(AssemblyGuideSerializer(new_guide).data)
 
 
-class AssemblyStepViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AssemblyStepViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """装配步骤管理"""
 
     queryset = AssemblyStep.objects.filter(is_deleted=False)
@@ -509,7 +510,7 @@ class AssemblyStepViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         instance.guide.update_step_count()
 
 
-class AssemblySessionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AssemblySessionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """装配作业管理"""
 
     queryset = AssemblySession.objects.filter(is_deleted=False)

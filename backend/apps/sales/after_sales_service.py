@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 User = settings.AUTH_USER_MODEL
 
@@ -438,7 +439,7 @@ class KnowledgeBaseArticleSerializer(serializers.ModelSerializer):
 # ==================== ViewSets ====================
 
 
-class ServiceContractViewSet(viewsets.ModelViewSet):
+class ServiceContractViewSet(PermissionMixin, viewsets.ModelViewSet):
     """服务合同管理"""
 
     queryset = ServiceContract.objects.filter(is_deleted=False)
@@ -501,7 +502,7 @@ class ServiceContractViewSet(viewsets.ModelViewSet):
         )
 
 
-class PreventiveMaintenanceViewSet(viewsets.ModelViewSet):
+class PreventiveMaintenanceViewSet(PermissionMixin, viewsets.ModelViewSet):
     """预防性维护管理"""
 
     queryset = PreventiveMaintenance.objects.filter(is_deleted=False)
@@ -583,7 +584,7 @@ class PreventiveMaintenanceViewSet(viewsets.ModelViewSet):
         return Response(PreventiveMaintenanceSerializer(pms, many=True).data)
 
 
-class ServiceRequestViewSet(viewsets.ModelViewSet):
+class ServiceRequestViewSet(PermissionMixin, viewsets.ModelViewSet):
     """服务请求管理"""
 
     queryset = ServiceRequest.objects.filter(is_deleted=False)
@@ -689,7 +690,7 @@ class ServiceRequestViewSet(viewsets.ModelViewSet):
         return Response(ServiceActivitySerializer(activity).data)
 
 
-class KnowledgeBaseArticleViewSet(viewsets.ModelViewSet):
+class KnowledgeBaseArticleViewSet(PermissionMixin, viewsets.ModelViewSet):
     """知识库文章管理"""
 
     queryset = KnowledgeBaseArticle.objects.filter(is_deleted=False)

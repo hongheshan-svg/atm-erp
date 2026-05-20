@@ -14,6 +14,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class DocumentCategory(BaseModel):
@@ -326,7 +327,7 @@ class DocumentShareSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class DocumentCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class DocumentCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """文档分类管理"""
 
     queryset = DocumentCategory.objects.filter(is_deleted=False)
@@ -366,7 +367,7 @@ class DocumentCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         return Response({'success': True, 'created': created})
 
 
-class ProjectDocumentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProjectDocumentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目文档管理"""
 
     queryset = ProjectDocument.objects.filter(is_deleted=False)
@@ -553,7 +554,7 @@ class ProjectDocumentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
         )
 
 
-class DocumentShareViewSet(viewsets.ReadOnlyModelViewSet):
+class DocumentShareViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """文档分享管理"""
 
     queryset = DocumentShare.objects.filter(is_deleted=False)

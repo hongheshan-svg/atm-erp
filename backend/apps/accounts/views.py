@@ -13,6 +13,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from apps.core.mixins import SoftDeleteMixin
+from apps.core.permission_mixin import PermissionMixin
 
 from .models import Department, Role, User
 from .serializers import (
@@ -48,7 +49,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     throttle_classes = [ScopedRateThrottle] if settings.LOGIN_THROTTLE_ENABLED else []
 
 
-class DepartmentViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
+class DepartmentViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """
     ViewSet for Department management.
     """
@@ -77,7 +78,7 @@ class DepartmentViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
         return Response(tree_data)
 
 
-class RoleViewSet(viewsets.ModelViewSet):
+class RoleViewSet(PermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for Role management.
     角色使用物理删除，以便删除后可以创建同名角色。
@@ -119,7 +120,7 @@ class RoleViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class UserViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
+class UserViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """
     ViewSet for User management.
     """

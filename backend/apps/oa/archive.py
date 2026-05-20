@@ -23,6 +23,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class ArchiveCategory(BaseModel):
@@ -375,7 +376,7 @@ class ArchiveDestructionSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class ArchiveCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ArchiveCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """档案分类管理"""
 
     queryset = ArchiveCategory.objects.filter(is_deleted=False)
@@ -400,7 +401,7 @@ class ArchiveCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
         return Response([build_tree(c) for c in categories])
 
 
-class ArchiveViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ArchiveViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """电子档案管理"""
 
     queryset = Archive.objects.filter(is_deleted=False)
@@ -478,7 +479,7 @@ class ArchiveViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         )
 
 
-class ArchiveBorrowViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ArchiveBorrowViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """档案借阅管理"""
 
     queryset = ArchiveBorrow.objects.filter(is_deleted=False)
@@ -555,7 +556,7 @@ class ArchiveBorrowViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         return Response(self.get_serializer(borrow).data)
 
 
-class ArchiveTransferViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ArchiveTransferViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """档案移交管理"""
 
     queryset = ArchiveTransfer.objects.filter(is_deleted=False)
@@ -584,7 +585,7 @@ class ArchiveTransferViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
         return Response(self.get_serializer(transfer).data)
 
 
-class ArchiveDestructionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ArchiveDestructionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """档案销毁管理"""
 
     queryset = ArchiveDestruction.objects.filter(is_deleted=False)

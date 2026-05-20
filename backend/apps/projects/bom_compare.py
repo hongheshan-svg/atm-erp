@@ -21,6 +21,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 logger = logging.getLogger(__name__)
 
@@ -524,7 +525,7 @@ class BOMCompareViewSet(viewsets.ViewSet):
         return Response(report)
 
 
-class BOMSnapshotViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class BOMSnapshotViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """BOM快照管理"""
 
     queryset = BOMSnapshot.objects.filter(is_deleted=False)

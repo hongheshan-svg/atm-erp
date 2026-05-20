@@ -17,6 +17,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 # 导入现有外协模型
 from .outsource_models import OutsourceOrder, OutsourceOrderLine
@@ -300,7 +301,7 @@ class OutsourceClaimSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 
-class OutsourceCapabilityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class OutsourceCapabilityViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """外协商能力管理"""
 
     queryset = OutsourceCapability.objects.filter(is_deleted=False)
@@ -321,7 +322,7 @@ class OutsourceCapabilityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
         return Response(self.get_serializer(capabilities, many=True).data)
 
 
-class OutsourceProgressViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class OutsourceProgressViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """外协进度跟踪"""
 
     queryset = OutsourceProgress.objects.filter(is_deleted=False)
@@ -331,7 +332,7 @@ class OutsourceProgressViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
     ordering_fields = ['progress_date']
 
 
-class OutsourceInspectionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class OutsourceInspectionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """外协质量检验"""
 
     queryset = OutsourceInspection.objects.filter(is_deleted=False)
@@ -346,7 +347,7 @@ class OutsourceInspectionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
         serializer.save(inspection_no=inspection_no, inspector=self.request.user)
 
 
-class OutsourceClaimViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class OutsourceClaimViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """外协索赔管理"""
 
     queryset = OutsourceClaim.objects.filter(is_deleted=False)

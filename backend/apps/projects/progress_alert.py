@@ -17,6 +17,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class ProjectAlertRule(BaseModel):
@@ -345,7 +346,7 @@ class ProjectAlertListSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class ProjectAlertRuleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProjectAlertRuleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """预警规则管理"""
 
     queryset = ProjectAlertRule.objects.filter(is_deleted=False)
@@ -381,7 +382,7 @@ class ProjectAlertRuleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         return Response({'success': True, 'created': created})
 
 
-class ProjectAlertViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProjectAlertViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目预警管理"""
 
     queryset = ProjectAlert.objects.filter(is_deleted=False)

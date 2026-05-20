@@ -10,6 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class DrawingVersion(BaseModel):
@@ -89,7 +90,7 @@ class DrawingVersionSerializer(serializers.ModelSerializer):
 # ─── ViewSets ───────────────────────────────────────────────────
 
 
-class DrawingVersionViewSet(viewsets.ModelViewSet):
+class DrawingVersionViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = DrawingVersionSerializer
     permission_classes = [IsAuthenticated]
 
@@ -153,7 +154,7 @@ class DrawingVersionViewSet(viewsets.ModelViewSet):
         return Response(DrawingVersionSerializer(new_version).data, status=status.HTTP_201_CREATED)
 
 
-class DrawingAffectedPartViewSet(viewsets.ModelViewSet):
+class DrawingAffectedPartViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = DrawingAffectedPartSerializer
     permission_classes = [IsAuthenticated]
 

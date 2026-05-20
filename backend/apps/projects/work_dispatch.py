@@ -16,6 +16,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class WorkOrder(BaseModel):
@@ -290,7 +291,7 @@ class WorkOrderListSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class WorkOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class WorkOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """工单管理"""
 
     queryset = WorkOrder.objects.filter(is_deleted=False)
@@ -450,7 +451,7 @@ class WorkOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
         )
 
 
-class WorkDispatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class WorkDispatchViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """派工管理"""
 
     queryset = WorkDispatch.objects.filter(is_deleted=False)
@@ -579,7 +580,7 @@ class WorkDispatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         return Response(self.get_serializer(dispatch).data)
 
 
-class WorkLogViewSet(viewsets.ReadOnlyModelViewSet):
+class WorkLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """工单日志"""
 
     queryset = WorkLog.objects.filter(is_deleted=False)

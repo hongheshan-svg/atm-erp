@@ -6,6 +6,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.core.permission_mixin import PermissionMixin
 from apps.core.permission_service import has_permission
 
 from .models import WorkflowDefinition, WorkflowInstance, WorkflowStep, WorkflowTask
@@ -39,7 +40,7 @@ def _get_step_approver_label(step):
     return labels.get(step.approver_type, '待分配')
 
 
-class WorkflowDefinitionViewSet(viewsets.ModelViewSet):
+class WorkflowDefinitionViewSet(PermissionMixin, viewsets.ModelViewSet):
     """ViewSet for workflow definitions."""
 
     queryset = WorkflowDefinition.objects.filter(is_deleted=False)
@@ -48,7 +49,7 @@ class WorkflowDefinitionViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'code']
 
 
-class WorkflowStepViewSet(viewsets.ModelViewSet):
+class WorkflowStepViewSet(PermissionMixin, viewsets.ModelViewSet):
     """ViewSet for workflow steps."""
 
     queryset = WorkflowStep.objects.filter(is_deleted=False)
@@ -56,7 +57,7 @@ class WorkflowStepViewSet(viewsets.ModelViewSet):
     filterset_fields = ['workflow', 'approver_type']
 
 
-class WorkflowInstanceViewSet(viewsets.ModelViewSet):
+class WorkflowInstanceViewSet(PermissionMixin, viewsets.ModelViewSet):
     """ViewSet for workflow instances."""
 
     queryset = WorkflowInstance.objects.filter(is_deleted=False)
@@ -217,7 +218,7 @@ class WorkflowInstanceViewSet(viewsets.ModelViewSet):
         return Response({'message': f'成功删除 {count} 条记录'})
 
 
-class WorkflowTaskViewSet(viewsets.ModelViewSet):
+class WorkflowTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
     """ViewSet for workflow tasks."""
 
     queryset = WorkflowTask.objects.filter(is_deleted=False)

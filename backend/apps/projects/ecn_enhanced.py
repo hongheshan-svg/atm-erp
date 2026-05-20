@@ -15,6 +15,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 User = settings.AUTH_USER_MODEL
 
@@ -290,7 +291,7 @@ class ECNChangeRequestSerializer(serializers.ModelSerializer):
 # ==================== ViewSets ====================
 
 
-class ECNChangeRequestViewSet(viewsets.ModelViewSet):
+class ECNChangeRequestViewSet(PermissionMixin, viewsets.ModelViewSet):
     """设计变更申请管理"""
 
     queryset = ECNChangeRequest.objects.filter(is_deleted=False)
@@ -495,7 +496,7 @@ class ECNChangeRequestViewSet(viewsets.ModelViewSet):
         return Response(stats)
 
 
-class ECNAffectedItemViewSet(viewsets.ModelViewSet):
+class ECNAffectedItemViewSet(PermissionMixin, viewsets.ModelViewSet):
     """变更影响物料管理"""
 
     queryset = ECNAffectedItem.objects.filter(is_deleted=False)
@@ -510,7 +511,7 @@ class ECNAffectedItemViewSet(viewsets.ModelViewSet):
         return qs
 
 
-class ECNReviewRecordViewSet(viewsets.ModelViewSet):
+class ECNReviewRecordViewSet(PermissionMixin, viewsets.ModelViewSet):
     """变更评审记录管理"""
 
     queryset = ECNReviewRecord.objects.filter(is_deleted=False)
@@ -539,7 +540,7 @@ class ECNReviewRecordViewSet(viewsets.ModelViewSet):
         return Response({'message': '评审意见已提交'})
 
 
-class ECNImplementationViewSet(viewsets.ModelViewSet):
+class ECNImplementationViewSet(PermissionMixin, viewsets.ModelViewSet):
     """变更实施记录管理"""
 
     queryset = ECNImplementation.objects.filter(is_deleted=False)

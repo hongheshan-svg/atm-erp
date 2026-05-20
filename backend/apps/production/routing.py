@@ -23,6 +23,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 # =============================================================================
 # 模型定义
@@ -516,7 +517,7 @@ class ProjectRoutingSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 
-class WorkStationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class WorkStationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """工位管理"""
 
     queryset = WorkStation.objects.filter(is_deleted=False)
@@ -538,7 +539,7 @@ class WorkStationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
         return Response({'total_stations': stations.count(), 'by_type': list(by_type)})
 
 
-class RoutingTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class RoutingTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """工艺路线模板管理"""
 
     queryset = RoutingTemplate.objects.filter(is_deleted=False)
@@ -669,7 +670,7 @@ class RoutingTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
         return Response({'message': '工艺路线已应用到项目', 'routing_id': routing.id})
 
 
-class RoutingOperationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class RoutingOperationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """工艺工序管理"""
 
     queryset = RoutingOperation.objects.filter(is_deleted=False)
@@ -686,7 +687,7 @@ class RoutingOperationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         instance.routing.calculate_totals()
 
 
-class ProjectRoutingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProjectRoutingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目工艺路线管理"""
 
     queryset = ProjectRouting.objects.filter(is_deleted=False)
@@ -724,7 +725,7 @@ class ProjectRoutingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         )
 
 
-class ProjectRoutingOperationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProjectRoutingOperationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目工艺工序管理"""
 
     queryset = ProjectRoutingOperation.objects.filter(is_deleted=False)

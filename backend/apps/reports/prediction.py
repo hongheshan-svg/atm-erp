@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class PredictionModel(BaseModel):
@@ -215,7 +216,7 @@ class RiskAlertSerializer(serializers.ModelSerializer):
 # ─── ViewSets ───────────────────────────────────────────────────
 
 
-class PredictionModelViewSet(viewsets.ModelViewSet):
+class PredictionModelViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = PredictionModelSerializer
     permission_classes = [IsAuthenticated]
 
@@ -226,7 +227,7 @@ class PredictionModelViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
 
-class PredictionResultViewSet(viewsets.ModelViewSet):
+class PredictionResultViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = PredictionResultSerializer
     permission_classes = [IsAuthenticated]
 
@@ -241,7 +242,7 @@ class PredictionResultViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
 
-class RiskAlertViewSet(viewsets.ModelViewSet):
+class RiskAlertViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = RiskAlertSerializer
     permission_classes = [IsAuthenticated]
 

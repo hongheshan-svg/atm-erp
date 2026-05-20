@@ -16,6 +16,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class EmailTemplate(BaseModel):
@@ -293,7 +294,7 @@ class EmailService:
 # =====================
 
 
-class EmailTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class EmailTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     邮件模板管理
     """
@@ -515,7 +516,7 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height
         return Response({'message': f'初始化完成，创建了 {created_count} 个新模板'})
 
 
-class EmailLogViewSet(viewsets.ReadOnlyModelViewSet):
+class EmailLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """
     邮件日志（只读）
     """

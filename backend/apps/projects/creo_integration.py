@@ -22,6 +22,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 logger = logging.getLogger(__name__)
 
@@ -1077,7 +1078,7 @@ class CreoBOMUploadSerializer(serializers.Serializer):
 
 
 # ViewSet
-class CreoBOMImportViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class CreoBOMImportViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     queryset = CreoBOMImportSession.objects.filter(is_deleted=False)
     serializer_class = CreoBOMImportSessionSerializer
     permission_classes = [IsAuthenticated]

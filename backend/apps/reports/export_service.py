@@ -18,6 +18,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class ExportTemplate(BaseModel):
@@ -380,7 +381,7 @@ class ScheduledExportSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class ExportTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ExportTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """导出模板管理"""
 
     queryset = ExportTemplate.objects.filter(is_deleted=False)
@@ -510,7 +511,7 @@ class ExportTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         return response
 
 
-class ExportHistoryViewSet(viewsets.ReadOnlyModelViewSet):
+class ExportHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """导出历史"""
 
     queryset = ExportHistory.objects.filter(is_deleted=False)
@@ -525,7 +526,7 @@ class ExportHistoryViewSet(viewsets.ReadOnlyModelViewSet):
         return self.queryset.filter(created_by=self.request.user)
 
 
-class ScheduledExportViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ScheduledExportViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """定时导出管理"""
 
     queryset = ScheduledExport.objects.filter(is_deleted=False)

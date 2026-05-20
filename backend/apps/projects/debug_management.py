@@ -13,6 +13,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 User = settings.AUTH_USER_MODEL
 
@@ -393,7 +394,7 @@ class DebugPlanSerializer(serializers.ModelSerializer):
 # ==================== ViewSets ====================
 
 
-class DebugPlanViewSet(viewsets.ModelViewSet):
+class DebugPlanViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试计划管理"""
 
     queryset = DebugPlan.objects.filter(is_deleted=False)
@@ -565,7 +566,7 @@ class DebugPlanViewSet(viewsets.ModelViewSet):
         return Response(stats)
 
 
-class DebugTaskViewSet(viewsets.ModelViewSet):
+class DebugTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试任务管理"""
 
     queryset = DebugTask.objects.filter(is_deleted=False)
@@ -601,7 +602,7 @@ class DebugTaskViewSet(viewsets.ModelViewSet):
         return Response({'message': '任务已完成'})
 
 
-class DebugIssueViewSet(viewsets.ModelViewSet):
+class DebugIssueViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试问题管理"""
 
     queryset = DebugIssue.objects.filter(is_deleted=False)
@@ -656,7 +657,7 @@ class DebugIssueViewSet(viewsets.ModelViewSet):
         return Response(DebugIssueSerializer(qs[:50], many=True).data)
 
 
-class DebugParameterViewSet(viewsets.ModelViewSet):
+class DebugParameterViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试参数管理"""
 
     queryset = DebugParameter.objects.filter(is_deleted=False)
@@ -709,7 +710,7 @@ class DebugParameterViewSet(viewsets.ModelViewSet):
         return Response({'message': f'已记录{len(created)}个参数', 'ids': created})
 
 
-class DebugLogViewSet(viewsets.ModelViewSet):
+class DebugLogViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试日志管理"""
 
     queryset = DebugLog.objects.filter(is_deleted=False)

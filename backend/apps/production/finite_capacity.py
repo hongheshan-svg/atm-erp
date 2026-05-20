@@ -12,6 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class FiniteCapacityPlan(BaseModel):
@@ -142,7 +143,7 @@ class FiniteCapacityPlanSerializer(serializers.ModelSerializer):
 # ─── ViewSets ───────────────────────────────────────────────────
 
 
-class FiniteCapacityPlanViewSet(viewsets.ModelViewSet):
+class FiniteCapacityPlanViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = FiniteCapacityPlanSerializer
     permission_classes = [IsAuthenticated]
 
@@ -172,7 +173,7 @@ class FiniteCapacityPlanViewSet(viewsets.ModelViewSet):
         return Response(FiniteCapacityPlanSerializer(plan).data)
 
 
-class ScheduledTaskViewSet(viewsets.ModelViewSet):
+class ScheduledTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = ScheduledTaskSerializer
     permission_classes = [IsAuthenticated]
 

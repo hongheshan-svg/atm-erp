@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class KanbanWIPRule(BaseModel):
@@ -133,7 +134,7 @@ class KanbanWIPAlertSerializer(serializers.ModelSerializer):
 # ─── ViewSets ───────────────────────────────────────────────────
 
 
-class KanbanWIPRuleViewSet(viewsets.ModelViewSet):
+class KanbanWIPRuleViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = KanbanWIPRuleSerializer
     permission_classes = [IsAuthenticated]
 
@@ -144,7 +145,7 @@ class KanbanWIPRuleViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
 
-class KanbanWIPAlertViewSet(viewsets.ModelViewSet):
+class KanbanWIPAlertViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = KanbanWIPAlertSerializer
     permission_classes = [IsAuthenticated]
 

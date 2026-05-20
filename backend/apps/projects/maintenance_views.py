@@ -13,9 +13,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.permission_mixin import PermissionMixin
 
 
-class MaintenanceScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class MaintenanceScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """维保计划管理"""
 
     permission_classes = [IsAuthenticated]

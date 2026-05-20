@@ -10,12 +10,13 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.permission_mixin import PermissionMixin
 
 from .batch_models import Batch, BatchMove
 from .batch_serializers import BatchMoveSerializer, BatchSerializer
 
 
-class BatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class BatchViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """Batch management viewset"""
 
     queryset = Batch.objects.all()
@@ -91,7 +92,7 @@ class BatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class BatchMoveViewSet(viewsets.ReadOnlyModelViewSet):
+class BatchMoveViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """Batch move history viewset (read-only)"""
 
     queryset = BatchMove.objects.all()

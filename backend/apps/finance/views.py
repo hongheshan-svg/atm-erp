@@ -100,7 +100,7 @@ class CurrencyViewSet(PermissionMixin, viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class PaymentViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, viewsets.ModelViewSet):
+class PaymentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, viewsets.ModelViewSet):
     """
     ViewSet for Payment management.
     财务敏感数据 - 仅财务人员和管理层可访问
@@ -227,7 +227,9 @@ class ExpenseViewSet(
         return Response(ExpenseSerializer(expense).data)
 
 
-class AccountReceivableViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, viewsets.ModelViewSet):
+class AccountReceivableViewSet(
+    PermissionMixin, SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, viewsets.ModelViewSet
+):
     """
     ViewSet for AccountReceivable management.
     财务敏感数据 - 仅财务人员和管理层可访问
@@ -304,7 +306,9 @@ class AccountReceivableViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMi
         return Response(aging_data)
 
 
-class AccountPayableViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, viewsets.ModelViewSet):
+class AccountPayableViewSet(
+    PermissionMixin, SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, viewsets.ModelViewSet
+):
     """
     ViewSet for AccountPayable management.
     财务敏感数据 - 仅财务人员和管理层可访问
@@ -350,7 +354,7 @@ class AccountPayableViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin
         return Response(serializer.data)
 
 
-class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, viewsets.ModelViewSet):
+class InvoiceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, viewsets.ModelViewSet):
     """
     ViewSet for Invoice management.
     财务敏感数据 - 仅财务人员和管理层可访问

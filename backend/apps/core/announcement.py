@@ -13,6 +13,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class Announcement(BaseModel):
@@ -199,7 +200,7 @@ class AnnouncementReadSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class AnnouncementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AnnouncementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """系统公告管理"""
 
     queryset = Announcement.objects.filter(is_deleted=False)

@@ -22,6 +22,7 @@ from rest_framework.views import APIView
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 # =============================================================================
 # 模型定义
@@ -522,7 +523,7 @@ class PredictiveMaintenanceResultSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 
-class EquipmentDataPointViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class EquipmentDataPointViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备数据点管理"""
 
     queryset = EquipmentDataPoint.objects.filter(is_deleted=False)
@@ -532,7 +533,7 @@ class EquipmentDataPointViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
     search_fields = ['code', 'name']
 
 
-class EquipmentConnectionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class EquipmentConnectionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备连接管理"""
 
     queryset = EquipmentConnection.objects.filter(is_deleted=False)
@@ -558,7 +559,7 @@ class EquipmentConnectionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
         return Response({'status': 'ok'})
 
 
-class EquipmentDataRecordViewSet(viewsets.ReadOnlyModelViewSet):
+class EquipmentDataRecordViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """设备数据记录（只读）"""
 
     queryset = EquipmentDataRecord.objects.all()
@@ -638,7 +639,7 @@ class EquipmentDataRecordViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(EquipmentDataRecordSerializer(queryset, many=True).data)
 
 
-class EquipmentAlarmViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class EquipmentAlarmViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备报警管理"""
 
     queryset = EquipmentAlarm.objects.filter(is_deleted=False)
@@ -704,7 +705,7 @@ class EquipmentAlarmViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         )
 
 
-class DiagnosticSessionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class DiagnosticSessionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """远程诊断会话管理"""
 
     queryset = DiagnosticSession.objects.filter(is_deleted=False)
@@ -761,7 +762,7 @@ class DiagnosticSessionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         return Response(DiagnosticSessionSerializer(session).data)
 
 
-class PredictiveMaintenanceResultViewSet(viewsets.ReadOnlyModelViewSet):
+class PredictiveMaintenanceResultViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """预测性维护结果"""
 
     queryset = PredictiveMaintenanceResult.objects.filter(is_deleted=False)

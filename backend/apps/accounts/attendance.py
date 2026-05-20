@@ -18,6 +18,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 from apps.core.workflow.mixins import WorkflowEnforcementMixin
 
 logger = logging.getLogger(__name__)
@@ -321,7 +322,7 @@ class OvertimeRequestSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class AttendanceConfigViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AttendanceConfigViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """考勤配置管理"""
 
     queryset = AttendanceConfig.objects.filter(is_deleted=False)
@@ -337,7 +338,7 @@ class AttendanceConfigViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         return Response(self.get_serializer(config).data)
 
 
-class AttendanceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AttendanceRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """考勤记录管理"""
 
     queryset = AttendanceRecord.objects.filter(is_deleted=False)
@@ -922,7 +923,9 @@ class AttendanceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         return response
 
 
-class LeaveRequestViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class LeaveRequestViewSet(
+    PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
+):
     """请假申请管理"""
 
     queryset = LeaveRequest.objects.filter(is_deleted=False)
@@ -1106,7 +1109,9 @@ class LeaveRequestViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackin
         )
 
 
-class OvertimeRequestViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class OvertimeRequestViewSet(
+    PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
+):
     """加班申请管理"""
 
     queryset = OvertimeRequest.objects.filter(is_deleted=False)

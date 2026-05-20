@@ -13,6 +13,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin
+from apps.core.permission_mixin import PermissionMixin
 
 from .bug_models import Bug, BugAttachment, BugComment, BugHistory
 from .bug_serializers import (
@@ -25,7 +26,7 @@ from .bug_serializers import (
 )
 
 
-class BugViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
+class BugViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """
     Bug管理视图集
     """
@@ -259,7 +260,7 @@ class BugViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class BugCommentViewSet(viewsets.ModelViewSet):
+class BugCommentViewSet(PermissionMixin, viewsets.ModelViewSet):
     """
     Bug评论视图集
     """
@@ -281,7 +282,7 @@ class BugCommentViewSet(viewsets.ModelViewSet):
         return super().destroy(request, *args, **kwargs)
 
 
-class BugAttachmentViewSet(viewsets.ModelViewSet):
+class BugAttachmentViewSet(PermissionMixin, viewsets.ModelViewSet):
     """
     Bug附件视图集
     """

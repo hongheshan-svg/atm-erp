@@ -109,7 +109,7 @@ class OutsourceOrderLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
     search_fields = ['item__sku', 'item__name', 'drawing_no']
 
 
-class OutsourceMaterialIssueViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class OutsourceMaterialIssueViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     外协发料单管理
     """
@@ -162,7 +162,7 @@ class OutsourceMaterialIssueViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets
         return Response(OutsourceMaterialIssueSerializer(issue).data)
 
 
-class OutsourceMaterialIssueLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class OutsourceMaterialIssueLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     外协发料单明细管理
     """
@@ -172,7 +172,7 @@ class OutsourceMaterialIssueLineViewSet(SoftDeleteMixin, UserTrackingMixin, view
     filterset_fields = ['issue', 'item', 'is_deleted']
 
 
-class OutsourceReceiptViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class OutsourceReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     外协收货单管理
     """
@@ -259,7 +259,7 @@ class OutsourceReceiptViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         return Response(OutsourceReceiptSerializer(receipt).data)
 
 
-class OutsourceReceiptLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class OutsourceReceiptLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     外协收货单明细管理
     """

@@ -34,6 +34,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class MRPPlan(BaseModel):
@@ -427,7 +428,7 @@ class MRPPlanListSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class MRPPlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class MRPPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """MRP计划管理"""
 
     queryset = MRPPlan.objects.filter(is_deleted=False)
@@ -526,7 +527,7 @@ class MRPPlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         )
 
 
-class MRPLineViewSet(viewsets.ReadOnlyModelViewSet):
+class MRPLineViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """MRP明细"""
 
     queryset = MRPLine.objects.filter(is_deleted=False)

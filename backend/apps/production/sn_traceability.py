@@ -11,6 +11,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 # =============================================================================
 # 模型定义
@@ -396,7 +397,7 @@ class SNRuleSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 
-class SNRuleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SNRuleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """序列号规则管理"""
 
     queryset = SNRule.objects.all()
@@ -406,7 +407,7 @@ class SNRuleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     ordering_fields = ['code', 'created_at']
 
 
-class SerialNumberViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SerialNumberViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """序列号管理"""
 
     queryset = SerialNumber.objects.all()
@@ -610,7 +611,7 @@ class SerialNumberViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         return Response(stats)
 
 
-class SNTraceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SNTraceRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """序列号追溯记录管理"""
 
     queryset = SNTraceRecord.objects.all()
@@ -620,7 +621,7 @@ class SNTraceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
     ordering_fields = ['operation_time', 'created_at']
 
 
-class ComponentBindingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ComponentBindingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """组件绑定管理"""
 
     queryset = ComponentBinding.objects.all()

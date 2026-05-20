@@ -22,6 +22,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 # =============================================================================
 # 模型定义
@@ -688,7 +689,7 @@ class TechnicianScheduleSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 
-class SkillCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SkillCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技能类别管理"""
 
     queryset = SkillCategory.objects.filter(is_deleted=False)
@@ -697,7 +698,7 @@ class SkillCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
     search_fields = ['code', 'name']
 
 
-class SkillViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SkillViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技能管理"""
 
     queryset = Skill.objects.filter(is_deleted=False)
@@ -707,7 +708,7 @@ class SkillViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     search_fields = ['code', 'name']
 
 
-class TechnicianProfileViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TechnicianProfileViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术人员档案管理"""
 
     queryset = TechnicianProfile.objects.filter(is_deleted=False)
@@ -763,7 +764,7 @@ class TechnicianProfileViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         return Response(TechnicianProfileSerializer(profiles, many=True).data)
 
 
-class TechnicianSkillViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TechnicianSkillViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术人员技能管理"""
 
     queryset = TechnicianSkill.objects.filter(is_deleted=False)
@@ -772,7 +773,7 @@ class TechnicianSkillViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
     filterset_fields = ['technician', 'skill', 'level', 'certified']
 
 
-class ServiceOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ServiceOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """现场服务单管理"""
 
     queryset = ServiceOrder.objects.filter(is_deleted=False)
@@ -893,7 +894,7 @@ class ServiceOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         )
 
 
-class ServiceDispatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ServiceDispatchViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """服务派工管理"""
 
     queryset = ServiceDispatch.objects.filter(is_deleted=False)
@@ -937,7 +938,7 @@ class ServiceDispatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
         return Response(ServiceDispatchSerializer(dispatches, many=True).data)
 
 
-class ServiceCheckInViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ServiceCheckInViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """现场打卡管理"""
 
     queryset = ServiceCheckIn.objects.filter(is_deleted=False)
@@ -959,7 +960,7 @@ class ServiceCheckInViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         dispatch.save()
 
 
-class ServiceLogViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ServiceLogViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """服务日志管理"""
 
     queryset = ServiceLog.objects.filter(is_deleted=False)
@@ -968,7 +969,7 @@ class ServiceLogViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
     filterset_fields = ['dispatch', 'log_date']
 
 
-class ServiceExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ServiceExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """服务费用管理"""
 
     queryset = ServiceExpense.objects.filter(is_deleted=False)
@@ -1006,7 +1007,7 @@ class ServiceExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         return Response(ServiceExpenseSerializer(expense).data)
 
 
-class TechnicianScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TechnicianScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术人员日程管理"""
 
     queryset = TechnicianSchedule.objects.filter(is_deleted=False)

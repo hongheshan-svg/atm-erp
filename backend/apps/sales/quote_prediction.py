@@ -15,6 +15,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 User = settings.AUTH_USER_MODEL
 
@@ -356,7 +357,7 @@ class QuoteProjectCostRefSerializer(serializers.ModelSerializer):
 # ==================== ViewSets ====================
 
 
-class QuoteVersionViewSet(viewsets.ModelViewSet):
+class QuoteVersionViewSet(PermissionMixin, viewsets.ModelViewSet):
     """报价版本管理"""
 
     queryset = QuoteVersion.objects.filter(is_deleted=False)
@@ -476,7 +477,7 @@ class QuoteVersionViewSet(viewsets.ModelViewSet):
         return Response(similar)
 
 
-class QuoteCostItemViewSet(viewsets.ModelViewSet):
+class QuoteCostItemViewSet(PermissionMixin, viewsets.ModelViewSet):
     """报价成本明细管理"""
 
     queryset = QuoteCostItem.objects.filter(is_deleted=False)
@@ -491,7 +492,7 @@ class QuoteCostItemViewSet(viewsets.ModelViewSet):
         return qs
 
 
-class QuoteComparisonViewSet(viewsets.ModelViewSet):
+class QuoteComparisonViewSet(PermissionMixin, viewsets.ModelViewSet):
     """报价对比管理"""
 
     queryset = QuoteComparison.objects.filter(is_deleted=False)
@@ -550,7 +551,7 @@ class QuoteComparisonViewSet(viewsets.ModelViewSet):
         return Response(comparison_data)
 
 
-class QuoteProjectCostRefViewSet(viewsets.ModelViewSet):
+class QuoteProjectCostRefViewSet(PermissionMixin, viewsets.ModelViewSet):
     """报价参考成本历史管理"""
 
     queryset = QuoteProjectCostRef.objects.filter(is_deleted=False)

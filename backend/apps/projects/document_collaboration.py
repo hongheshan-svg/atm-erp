@@ -13,6 +13,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 User = settings.AUTH_USER_MODEL
 
@@ -356,7 +357,7 @@ class TechnicalDocumentDetailSerializer(TechnicalDocumentSerializer):
 # ==================== ViewSets ====================
 
 
-class TechDocumentCategoryViewSet(viewsets.ModelViewSet):
+class TechDocumentCategoryViewSet(PermissionMixin, viewsets.ModelViewSet):
     """技术文档分类管理"""
 
     queryset = TechDocumentCategory.objects.filter(is_deleted=False)
@@ -370,7 +371,7 @@ class TechDocumentCategoryViewSet(viewsets.ModelViewSet):
         return Response(TechDocumentCategorySerializer(roots, many=True).data)
 
 
-class TechnicalDocumentViewSet(viewsets.ModelViewSet):
+class TechnicalDocumentViewSet(PermissionMixin, viewsets.ModelViewSet):
     """技术文档管理"""
 
     queryset = TechnicalDocument.objects.filter(is_deleted=False)
@@ -546,7 +547,7 @@ class TechnicalDocumentViewSet(viewsets.ModelViewSet):
         return Response({'message': '已记录'})
 
 
-class DocumentAnnotationViewSet(viewsets.ModelViewSet):
+class DocumentAnnotationViewSet(PermissionMixin, viewsets.ModelViewSet):
     """文档批注管理"""
 
     queryset = DocumentAnnotation.objects.filter(is_deleted=False)
@@ -573,7 +574,7 @@ class DocumentAnnotationViewSet(viewsets.ModelViewSet):
         return Response({'message': '批注已解决'})
 
 
-class DocumentReviewViewSet(viewsets.ModelViewSet):
+class DocumentReviewViewSet(PermissionMixin, viewsets.ModelViewSet):
     """文档评审管理"""
 
     queryset = DocumentReview.objects.filter(is_deleted=False)

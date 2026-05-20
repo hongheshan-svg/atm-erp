@@ -8,11 +8,13 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
+from apps.core.permission_mixin import PermissionMixin
+
 from .code_rule_models import CodeHistory, CodeRule
 from .code_rule_serializers import CodeHistorySerializer, CodeRuleSerializer
 
 
-class CodeRuleViewSet(viewsets.ModelViewSet):
+class CodeRuleViewSet(PermissionMixin, viewsets.ModelViewSet):
     """
     编码规则管理
     只有管理员可以操作
@@ -157,7 +159,7 @@ class CodeRuleViewSet(viewsets.ModelViewSet):
         return Response({'message': '默认规则初始化完成', 'created': created_count, 'skipped': skipped_count})
 
 
-class CodeHistoryViewSet(viewsets.ReadOnlyModelViewSet):
+class CodeHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """
     编码历史查询
     只读接口

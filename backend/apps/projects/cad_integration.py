@@ -15,6 +15,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class CADSoftware(BaseModel):
@@ -727,7 +728,7 @@ class CADPropertyMappingSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class CADSoftwareViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class CADSoftwareViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """CAD软件管理"""
 
     queryset = CADSoftware.objects.filter(is_deleted=False)
@@ -783,7 +784,7 @@ class CADSoftwareViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
         return Response({'message': 'Creo配置初始化成功', 'data': CADSoftwareSerializer(creo).data})
 
 
-class CADSessionViewSet(viewsets.ModelViewSet):
+class CADSessionViewSet(PermissionMixin, viewsets.ModelViewSet):
     """CAD会话管理"""
 
     queryset = CADSession.objects.filter(is_deleted=False)
@@ -826,7 +827,7 @@ class CADSessionViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(session).data)
 
 
-class CADFileViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class CADFileViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """CAD文件管理"""
 
     queryset = CADFile.objects.filter(is_deleted=False)
@@ -886,7 +887,7 @@ class CADFileViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         return Response(CADBOMImportSerializer(bom_import).data)
 
 
-class CADBOMImportViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class CADBOMImportViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """CAD BOM导入管理"""
 
     queryset = CADBOMImport.objects.filter(is_deleted=False)
@@ -968,7 +969,7 @@ class CADBOMImportViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         return Response(self.get_serializer(bom_import).data)
 
 
-class CADPropertyMappingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class CADPropertyMappingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """CAD属性映射管理"""
 
     queryset = CADPropertyMapping.objects.filter(is_deleted=False)

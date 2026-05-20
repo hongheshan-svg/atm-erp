@@ -28,6 +28,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class CreditLevel(BaseModel):
@@ -305,7 +306,7 @@ class CreditAdjustmentSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class CreditLevelViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class CreditLevelViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """信用等级管理"""
 
     queryset = CreditLevel.objects.filter(is_deleted=False)
@@ -344,7 +345,7 @@ class CreditLevelViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
         return Response({'success': True, 'created': created})
 
 
-class CustomerCreditViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class CustomerCreditViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """客户信用管理"""
 
     queryset = CustomerCredit.objects.filter(is_deleted=False)
@@ -497,7 +498,7 @@ class CustomerCreditViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         )
 
 
-class CreditAdjustmentViewSet(viewsets.ReadOnlyModelViewSet):
+class CreditAdjustmentViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """信用调整记录"""
 
     queryset = CreditAdjustment.objects.filter(is_deleted=False)

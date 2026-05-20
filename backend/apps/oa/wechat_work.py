@@ -17,6 +17,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 logger = logging.getLogger(__name__)
 
@@ -620,7 +621,7 @@ class WechatSyncLogSerializer(serializers.ModelSerializer):
 # ============================================
 
 
-class WechatWorkConfigViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class WechatWorkConfigViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """企业微信配置管理"""
 
     queryset = WechatWorkConfig.objects.filter(is_deleted=False)
@@ -734,7 +735,7 @@ class WechatWorkConfigViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         )
 
 
-class WechatUserMappingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class WechatUserMappingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """企业微信用户映射管理"""
 
     queryset = WechatUserMapping.objects.filter(is_deleted=False)
@@ -743,7 +744,7 @@ class WechatUserMappingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
     search_fields = ['wechat_userid', 'wechat_name', 'employee__first_name']
 
 
-class WechatCheckinRecordViewSet(viewsets.ReadOnlyModelViewSet):
+class WechatCheckinRecordViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """企业微信打卡记录（只读）"""
 
     queryset = WechatCheckinRecord.objects.filter(is_deleted=False)
@@ -766,7 +767,7 @@ class WechatCheckinRecordViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset.select_related('employee')
 
 
-class WechatSyncLogViewSet(viewsets.ReadOnlyModelViewSet):
+class WechatSyncLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """企业微信同步日志（只读）"""
 
     queryset = WechatSyncLog.objects.all()

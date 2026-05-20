@@ -17,6 +17,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class ContractExecution(BaseModel):
@@ -378,7 +379,7 @@ class ContractExecutionListSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class ContractExecutionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ContractExecutionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """合同执行管理"""
 
     queryset = ContractExecution.objects.filter(is_deleted=False)
@@ -527,7 +528,7 @@ class ContractExecutionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         )
 
 
-class DeliveryRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class DeliveryRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """交货记录管理"""
 
     queryset = DeliveryRecord.objects.filter(is_deleted=False)
@@ -580,7 +581,7 @@ class DeliveryRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         return Response(self.get_serializer(delivery).data)
 
 
-class PaymentRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class PaymentRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """付款记录管理"""
 
     queryset = PaymentRecord.objects.filter(is_deleted=False)
@@ -618,7 +619,7 @@ class PaymentRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         return Response(self.get_serializer(payment).data)
 
 
-class ContractIssueViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ContractIssueViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """合同问题管理"""
 
     queryset = ContractIssue.objects.filter(is_deleted=False)

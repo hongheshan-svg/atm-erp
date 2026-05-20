@@ -301,7 +301,7 @@ class RFQLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
     permission_resource = 'rfq_line'
 
 
-class RFQSupplierViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class RFQSupplierViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """RFQ supplier viewset"""
 
     queryset = RFQSupplier.objects.all()
@@ -658,7 +658,7 @@ class ItemPriceHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
 # ==================== 非标自动化增强ViewSet ====================
 
 
-class RFQTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class RFQTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """询价模板管理"""
 
     queryset = RFQTemplate.objects.filter(is_deleted=False)
@@ -761,7 +761,7 @@ class RFQTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
         return Response({'message': '物料添加成功'})
 
 
-class SupplierCapabilityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SupplierCapabilityViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """供应商能力标签管理"""
 
     queryset = SupplierCapability.objects.filter(is_deleted=False)
@@ -817,7 +817,7 @@ class SupplierCapabilityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
         return Response(result)
 
 
-class SupplierCapabilityMappingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SupplierCapabilityMappingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """供应商能力关联管理"""
 
     queryset = SupplierCapabilityMapping.objects.filter(is_deleted=False)
@@ -870,7 +870,7 @@ class SupplierCapabilityMappingViewSet(SoftDeleteMixin, UserTrackingMixin, views
         return Response(result)
 
 
-class RFQAttachmentViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
+class RFQAttachmentViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """询价单附件管理"""
 
     queryset = RFQAttachment.objects.filter(is_deleted=False)

@@ -10,6 +10,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 # =============================================================================
 # 模型定义
@@ -270,7 +271,7 @@ class TechnicalAgreementListSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 
-class TechnicalAgreementTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TechnicalAgreementTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术协议模板管理"""
 
     queryset = TechnicalAgreementTemplate.objects.all()
@@ -287,7 +288,7 @@ class TechnicalAgreementTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, view
         return Response(serializer.data)
 
 
-class TechnicalAgreementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TechnicalAgreementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术协议管理"""
 
     queryset = TechnicalAgreement.objects.all()
@@ -387,7 +388,7 @@ class TechnicalAgreementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
             return Response({'error': '模板不存在'}, status=status.HTTP_404_NOT_FOUND)
 
 
-class TechnicalAgreementChangeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TechnicalAgreementChangeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术协议变更管理"""
 
     queryset = TechnicalAgreementChange.objects.all()

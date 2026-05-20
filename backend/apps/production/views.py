@@ -11,6 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.permission_mixin import PermissionMixin
 
 from .models import (
     DebugCheckItem,
@@ -34,7 +35,7 @@ from .serializers import (
 )
 
 
-class ProductionProcessViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProductionProcessViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     生产工序管理 ViewSet
     """
@@ -80,7 +81,7 @@ class ProductionProcessViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         return Response(serializer.data)
 
 
-class ProductionPlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProductionPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     生产计划管理 ViewSet
     """
@@ -183,7 +184,7 @@ class ProductionPlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         return Response({'plan': serializer.data, 'created_count': len(created)})
 
 
-class ProductionPlanProcessViewSet(UserTrackingMixin, viewsets.ModelViewSet):
+class ProductionPlanProcessViewSet(PermissionMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     生产计划工序管理 ViewSet
     """
@@ -257,7 +258,7 @@ class ProductionPlanProcessViewSet(UserTrackingMixin, viewsets.ModelViewSet):
             plan.save()
 
 
-class ProductionLogViewSet(UserTrackingMixin, viewsets.ModelViewSet):
+class ProductionLogViewSet(PermissionMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     生产日志管理 ViewSet
     """
@@ -284,7 +285,7 @@ class ProductionLogViewSet(UserTrackingMixin, viewsets.ModelViewSet):
         plan_process.save()
 
 
-class DebugRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class DebugRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     调试记录管理 ViewSet
     """
@@ -384,7 +385,7 @@ class DebugRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
         return Response(serializer.data)
 
 
-class DebugCheckItemViewSet(UserTrackingMixin, viewsets.ModelViewSet):
+class DebugCheckItemViewSet(PermissionMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     调试检查项管理 ViewSet
     """
@@ -399,7 +400,7 @@ class DebugCheckItemViewSet(UserTrackingMixin, viewsets.ModelViewSet):
     ordering = ['debug_record', 'sequence']
 
 
-class QualityInspectionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class QualityInspectionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     质量检验管理 ViewSet
     """
@@ -510,7 +511,7 @@ class QualityInspectionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         return Response(serializer.data)
 
 
-class InspectionItemViewSet(UserTrackingMixin, viewsets.ModelViewSet):
+class InspectionItemViewSet(PermissionMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     检验项目管理 ViewSet
     """

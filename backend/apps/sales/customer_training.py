@@ -22,6 +22,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 # =============================================================================
 # 模型定义
@@ -517,7 +518,7 @@ class TrainingPlanListSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 
-class TrainingCourseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TrainingCourseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """培训课程管理"""
 
     queryset = TrainingCourse.objects.filter(is_deleted=False)
@@ -528,7 +529,7 @@ class TrainingCourseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
     ordering_fields = ['course_code', 'duration_hours', 'standard_fee']
 
 
-class TrainingMaterialViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TrainingMaterialViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """培训资料管理"""
 
     queryset = TrainingMaterial.objects.filter(is_deleted=False)
@@ -538,7 +539,7 @@ class TrainingMaterialViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
     search_fields = ['title']
 
 
-class TrainingPlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TrainingPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """培训计划管理"""
 
     queryset = TrainingPlan.objects.filter(is_deleted=False)
@@ -694,7 +695,7 @@ class TrainingPlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         )
 
 
-class TraineeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TraineeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """学员管理"""
 
     queryset = Trainee.objects.filter(is_deleted=False)
@@ -713,7 +714,7 @@ class TraineeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         return Response(TraineeSerializer(trainee).data)
 
 
-class TrainingExamViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TrainingExamViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """培训考核管理"""
 
     queryset = TrainingExam.objects.filter(is_deleted=False)
@@ -764,7 +765,7 @@ class TrainingExamViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         return Response({'message': f'成功提交 {submitted} 份成绩', 'submitted_count': submitted})
 
 
-class TrainingFeedbackViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TrainingFeedbackViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """培训反馈管理"""
 
     queryset = TrainingFeedback.objects.filter(is_deleted=False)

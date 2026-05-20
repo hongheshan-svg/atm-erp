@@ -26,7 +26,7 @@ from .serializers import (
 )
 
 
-class ItemCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ItemCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for ItemCategory management.
     """
@@ -831,7 +831,7 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
             )
 
 
-class CustomerViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class CustomerViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for Customer management.
     NOTE: 客户是主数据，所有用户都可以查看，不应用数据范围限制
@@ -1123,7 +1123,7 @@ class CustomerViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
         return Response({'message': f'成功删除 {deleted_count} 个客户', 'deleted_count': deleted_count})
 
 
-class SupplierViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SupplierViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for Supplier management.
     NOTE: 供应商是主数据，所有用户都可以查看，不应用数据范围限制
@@ -1392,7 +1392,7 @@ class SupplierViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
         return Response({'message': f'成功删除 {deleted_count} 个供应商', 'deleted_count': deleted_count})
 
 
-class WarehouseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class WarehouseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for Warehouse management.
     """
@@ -1422,7 +1422,7 @@ class WarehouseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
         return Response(serializer.data)
 
 
-class WarehouseLocationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class WarehouseLocationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for WarehouseLocation management.
     """

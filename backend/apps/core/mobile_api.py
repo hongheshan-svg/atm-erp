@@ -20,6 +20,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 User = settings.AUTH_USER_MODEL
 
@@ -341,7 +342,7 @@ class MobileNotificationSerializer(serializers.ModelSerializer):
 # ==================== ViewSets ====================
 
 
-class MobileTimeEntryViewSet(viewsets.ModelViewSet):
+class MobileTimeEntryViewSet(PermissionMixin, viewsets.ModelViewSet):
     """移动工时填报"""
 
     queryset = MobileTimeEntry.objects.filter(is_deleted=False)
@@ -423,7 +424,7 @@ class MobileTimeEntryViewSet(viewsets.ModelViewSet):
         return Response({'message': '已提交审批'})
 
 
-class MobilePhotoViewSet(viewsets.ModelViewSet):
+class MobilePhotoViewSet(PermissionMixin, viewsets.ModelViewSet):
     """移动端照片管理"""
 
     queryset = MobilePhoto.objects.filter(is_deleted=False)
@@ -472,7 +473,7 @@ class MobilePhotoViewSet(viewsets.ModelViewSet):
         return Response(MobilePhotoSerializer(photo).data)
 
 
-class MobileScanRecordViewSet(viewsets.ModelViewSet):
+class MobileScanRecordViewSet(PermissionMixin, viewsets.ModelViewSet):
     """扫码记录管理"""
 
     queryset = MobileScanRecord.objects.filter(is_deleted=False)
@@ -592,7 +593,7 @@ class MobileScanRecordViewSet(viewsets.ModelViewSet):
         )
 
 
-class MobileApprovalViewSet(viewsets.ModelViewSet):
+class MobileApprovalViewSet(PermissionMixin, viewsets.ModelViewSet):
     """移动审批管理"""
 
     queryset = MobileApproval.objects.filter(is_deleted=False)
@@ -730,7 +731,7 @@ class MobileApprovalViewSet(viewsets.ModelViewSet):
                 pass
 
 
-class MobileNotificationViewSet(viewsets.ModelViewSet):
+class MobileNotificationViewSet(PermissionMixin, viewsets.ModelViewSet):
     """移动通知管理"""
 
     queryset = MobileNotification.objects.filter(is_deleted=False)

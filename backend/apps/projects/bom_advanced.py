@@ -18,6 +18,7 @@ from rest_framework.views import APIView
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class BOMSubstitute(BaseModel):
@@ -342,7 +343,7 @@ class BOMComparisonSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class BOMSubstituteViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class BOMSubstituteViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """BOM替代料管理"""
 
     queryset = BOMSubstitute.objects.filter(is_deleted=False)
@@ -394,7 +395,7 @@ class BOMSubstituteViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         return Response(self.get_serializer(qs, many=True).data)
 
 
-class BOMVersionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class BOMVersionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """BOM版本管理"""
 
     queryset = BOMVersion.objects.filter(is_deleted=False)
@@ -450,7 +451,7 @@ class BOMVersionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         return Response(self.get_serializer(version).data, status=status.HTTP_201_CREATED)
 
 
-class BOMComparisonViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class BOMComparisonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """BOM对比管理"""
 
     queryset = BOMComparison.objects.filter(is_deleted=False)

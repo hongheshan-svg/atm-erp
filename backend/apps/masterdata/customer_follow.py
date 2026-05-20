@@ -13,6 +13,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class CustomerFollowUp(BaseModel):
@@ -291,7 +292,7 @@ class CustomerContactSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class CustomerFollowUpViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class CustomerFollowUpViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """客户跟进记录管理"""
 
     queryset = CustomerFollowUp.objects.filter(is_deleted=False)
@@ -398,7 +399,7 @@ class CustomerFollowUpViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         )
 
 
-class CustomerReminderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class CustomerReminderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """客户提醒管理"""
 
     queryset = CustomerReminder.objects.filter(is_deleted=False)
@@ -437,7 +438,7 @@ class CustomerReminderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         return Response(self.get_serializer(reminder).data)
 
 
-class CustomerContactViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class CustomerContactViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """客户联系人管理"""
 
     queryset = CustomerContact.objects.filter(is_deleted=False)

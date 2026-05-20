@@ -21,6 +21,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 from apps.core.workflow.mixins import WorkflowEnforcementMixin
 
 logger = logging.getLogger(__name__)
@@ -327,7 +328,7 @@ class VehicleMaintenanceSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class VehicleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class VehicleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """车辆管理"""
 
     queryset = Vehicle.objects.filter(is_deleted=False)
@@ -372,7 +373,9 @@ class VehicleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         return Response(self.get_serializer(vehicle).data)
 
 
-class VehicleRequestViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class VehicleRequestViewSet(
+    PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
+):
     """用车申请管理"""
 
     queryset = VehicleRequest.objects.filter(is_deleted=False)
@@ -543,7 +546,7 @@ class VehicleRequestViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrack
         return Response(self.get_serializer(req).data)
 
 
-class VehicleMaintenanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class VehicleMaintenanceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """车辆维护管理"""
 
     queryset = VehicleMaintenance.objects.filter(is_deleted=False)

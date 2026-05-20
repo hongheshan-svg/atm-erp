@@ -34,6 +34,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 # =============================================================================
 # 模型定义
@@ -505,7 +506,7 @@ class SparePartAlertSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 
-class SparePartCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SparePartCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """备件类别管理"""
 
     queryset = SparePartCategory.objects.filter(is_deleted=False)
@@ -518,7 +519,7 @@ class SparePartCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
     search_fields = ['code', 'name']
 
 
-class SparePartViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SparePartViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """备件管理"""
 
     queryset = SparePart.objects.filter(is_deleted=False)
@@ -594,7 +595,7 @@ class SparePartViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
         return Response(SparePartForecastSerializer(forecasts, many=True).data)
 
 
-class SparePartEquipmentRelationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SparePartEquipmentRelationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备备件关联管理"""
 
     queryset = SparePartEquipmentRelation.objects.filter(is_deleted=False)
@@ -638,7 +639,7 @@ class SparePartEquipmentRelationViewSet(SoftDeleteMixin, UserTrackingMixin, view
         return Response({'message': '更换记录已创建', 'consumption_id': consumption.id})
 
 
-class SparePartConsumptionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SparePartConsumptionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """备件消耗记录"""
 
     queryset = SparePartConsumption.objects.filter(is_deleted=False)
@@ -689,7 +690,7 @@ class SparePartConsumptionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.M
         )
 
 
-class SparePartAlertViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
+class SparePartAlertViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """备件预警管理"""
 
     queryset = SparePartAlert.objects.filter(is_deleted=False)

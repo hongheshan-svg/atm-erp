@@ -12,6 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class ReportTemplate(BaseModel):
@@ -219,7 +220,7 @@ class ReportFavoriteSerializer(serializers.ModelSerializer):
 # ─── ViewSets ───────────────────────────────────────────────────
 
 
-class ReportTemplateViewSet(viewsets.ModelViewSet):
+class ReportTemplateViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = ReportTemplateSerializer
     permission_classes = [IsAuthenticated]
 
@@ -276,7 +277,7 @@ class ReportTemplateViewSet(viewsets.ModelViewSet):
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class ReportExecutionViewSet(viewsets.ReadOnlyModelViewSet):
+class ReportExecutionViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     serializer_class = ReportExecutionSerializer
     permission_classes = [IsAuthenticated]
 

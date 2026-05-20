@@ -9,6 +9,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.permission_mixin import PermissionMixin
 
 from .knowledge_models import KnowledgeArticle, KnowledgeCategory, ProjectArchive, StandardComponent, TechnicalIssue
 from .knowledge_serializers import (
@@ -24,7 +25,7 @@ from .knowledge_serializers import (
 )
 
 
-class KnowledgeCategoryViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
+class KnowledgeCategoryViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """知识分类管理"""
 
     queryset = KnowledgeCategory.objects.all()
@@ -42,7 +43,7 @@ class KnowledgeCategoryViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
         return Response(KnowledgeCategoryTreeSerializer(root_categories, many=True).data)
 
 
-class KnowledgeArticleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class KnowledgeArticleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """知识文章管理"""
 
     queryset = KnowledgeArticle.objects.select_related('category', 'project', 'author')
@@ -147,7 +148,7 @@ class KnowledgeArticleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         return Response(KnowledgeArticleListSerializer(results, many=True).data)
 
 
-class ProjectArchiveViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProjectArchiveViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目归档报告管理"""
 
     queryset = ProjectArchive.objects.select_related('project', 'reviewer')
@@ -229,7 +230,7 @@ class ProjectArchiveViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         return Response({'error': '归档报告缺少技术总结内容'}, status=status.HTTP_400_BAD_REQUEST)
 
 
-class TechnicalIssueViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TechnicalIssueViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术问题记录管理"""
 
     queryset = TechnicalIssue.objects.select_related('project', 'category', 'reported_by', 'resolved_by')
@@ -297,7 +298,7 @@ class TechnicalIssueViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         return Response({'message': '知识文章已创建', 'article_id': article.id})
 
 
-class StandardComponentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class StandardComponentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """标准部件管理"""
 
     queryset = StandardComponent.objects.select_related('category', 'maintainer')

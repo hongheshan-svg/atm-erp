@@ -17,6 +17,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class IMConversation(BaseModel):
@@ -342,7 +343,7 @@ class IMConversationDetailSerializer(IMConversationSerializer):
 # ============ ViewSets ============
 
 
-class IMConversationViewSet(viewsets.ModelViewSet):
+class IMConversationViewSet(PermissionMixin, viewsets.ModelViewSet):
     """IM会话管理"""
 
     serializer_class = IMConversationSerializer
@@ -513,7 +514,7 @@ class IMConversationViewSet(viewsets.ModelViewSet):
         return Response({'message': '已标记已读'})
 
 
-class IMMessageViewSet(viewsets.ModelViewSet):
+class IMMessageViewSet(PermissionMixin, viewsets.ModelViewSet):
     """IM消息管理"""
 
     serializer_class = IMMessageSerializer

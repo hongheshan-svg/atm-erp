@@ -16,6 +16,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class InventoryCostConfig(BaseModel):
@@ -467,7 +468,7 @@ class PeriodCostSummarySerializer(serializers.ModelSerializer):
 # =====================
 
 
-class InventoryCostConfigViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class InventoryCostConfigViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """库存成本配置管理"""
 
     queryset = InventoryCostConfig.objects.filter(is_deleted=False)
@@ -488,7 +489,7 @@ class InventoryCostConfigViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
         return Response([{'value': m[0], 'label': m[1]} for m in InventoryCostConfig.COSTING_METHODS])
 
 
-class ItemCostRecordViewSet(viewsets.ReadOnlyModelViewSet):
+class ItemCostRecordViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """物料成本记录"""
 
     queryset = ItemCostRecord.objects.filter(is_deleted=False)
@@ -536,7 +537,7 @@ class ItemCostRecordViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
 
-class PeriodCostSummaryViewSet(viewsets.ReadOnlyModelViewSet):
+class PeriodCostSummaryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """期间成本汇总"""
 
     queryset = PeriodCostSummary.objects.filter(is_deleted=False)

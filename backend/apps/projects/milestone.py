@@ -15,6 +15,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class Milestone(BaseModel):
@@ -271,7 +272,7 @@ class MilestoneListSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class MilestoneViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class MilestoneViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目里程碑管理"""
 
     queryset = Milestone.objects.filter(is_deleted=False)
@@ -479,7 +480,7 @@ class MilestoneViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
         project.save()
 
 
-class MilestoneChecklistViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class MilestoneChecklistViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """里程碑检查项管理"""
 
     queryset = MilestoneChecklist.objects.filter(is_deleted=False)

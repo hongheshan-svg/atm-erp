@@ -31,7 +31,7 @@ from .evaluation_serializers import (
 )
 
 
-class SupplierEvaluationTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SupplierEvaluationTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     评价模板管理
     """
@@ -96,7 +96,7 @@ class SupplierEvaluationTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, view
         return Response(self.get_serializer(new_template).data, status=status.HTTP_201_CREATED)
 
 
-class EvaluationCriteriaViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class EvaluationCriteriaViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     评价指标管理
     """
@@ -263,7 +263,7 @@ class SupplierEvaluationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
         return Response(rankings)
 
 
-class EvaluationScoreItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class EvaluationScoreItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     评价得分明细管理
     """
@@ -274,7 +274,7 @@ class EvaluationScoreItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
     filterset_fields = ['evaluation', 'criteria']
 
 
-class SupplierGradeHistoryViewSet(viewsets.ReadOnlyModelViewSet):
+class SupplierGradeHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """
     供应商等级变更历史（只读）
     """

@@ -18,6 +18,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class ReviewTemplate(BaseModel):
@@ -375,7 +376,7 @@ class RequirementReviewListSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class ReviewTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ReviewTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """评审模板管理"""
 
     queryset = ReviewTemplate.objects.filter(is_deleted=False)
@@ -402,7 +403,7 @@ class ReviewTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         return Response(ReviewCheckItemSerializer(item).data, status=status.HTTP_201_CREATED)
 
 
-class RequirementReviewViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class RequirementReviewViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """需求评审管理"""
 
     queryset = RequirementReview.objects.filter(is_deleted=False)
@@ -543,7 +544,7 @@ class RequirementReviewViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         )
 
 
-class ReviewActionItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ReviewActionItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """评审行动项管理"""
 
     queryset = ReviewActionItem.objects.filter(is_deleted=False)

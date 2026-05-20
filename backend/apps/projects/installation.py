@@ -11,6 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class InstallationTask(BaseModel):
@@ -263,7 +264,7 @@ class InstallationTaskSerializer(serializers.ModelSerializer):
 # ─── ViewSets ───────────────────────────────────────────────────
 
 
-class InstallationTaskViewSet(viewsets.ModelViewSet):
+class InstallationTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = InstallationTaskSerializer
     permission_classes = [IsAuthenticated]
 
@@ -325,7 +326,7 @@ class InstallationTaskViewSet(viewsets.ModelViewSet):
         )
 
 
-class SiteLogViewSet(viewsets.ModelViewSet):
+class SiteLogViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = SiteLogSerializer
     permission_classes = [IsAuthenticated]
 
@@ -340,7 +341,7 @@ class SiteLogViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
 
-class CommissioningRecordViewSet(viewsets.ModelViewSet):
+class CommissioningRecordViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = CommissioningRecordSerializer
     permission_classes = [IsAuthenticated]
 
@@ -355,7 +356,7 @@ class CommissioningRecordViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
 
-class SiteIssueViewSet(viewsets.ModelViewSet):
+class SiteIssueViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = SiteIssueSerializer
     permission_classes = [IsAuthenticated]
 
@@ -380,7 +381,7 @@ class SiteIssueViewSet(viewsets.ModelViewSet):
         return Response(SiteIssueSerializer(issue).data)
 
 
-class CustomerAcceptanceViewSet(viewsets.ModelViewSet):
+class CustomerAcceptanceViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = CustomerAcceptanceSerializer
     permission_classes = [IsAuthenticated]
 

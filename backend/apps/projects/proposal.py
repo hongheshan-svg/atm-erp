@@ -15,6 +15,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class ProposalCategory(BaseModel):
@@ -368,7 +369,7 @@ class TechnicalProposalListSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class ProposalCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProposalCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """方案分类管理"""
 
     queryset = ProposalCategory.objects.filter(is_deleted=False)
@@ -392,7 +393,7 @@ class ProposalCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         return Response([build_tree(c) for c in categories])
 
 
-class TechnicalProposalViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TechnicalProposalViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术方案管理"""
 
     queryset = TechnicalProposal.objects.filter(is_deleted=False)
@@ -536,7 +537,7 @@ class TechnicalProposalViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         )
 
 
-class ProposalReviewViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProposalReviewViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """方案评审管理"""
 
     queryset = ProposalReview.objects.filter(is_deleted=False)
@@ -587,7 +588,7 @@ class ProposalReviewViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         return Response(self.get_serializer(review).data)
 
 
-class ProposalDocumentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProposalDocumentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """方案文档管理"""
 
     queryset = ProposalDocument.objects.filter(is_deleted=False)

@@ -12,6 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class BOMCostSnapshot(BaseModel):
@@ -167,7 +168,7 @@ class BOMCostSnapshotSerializer(serializers.ModelSerializer):
 # ─── ViewSets ───────────────────────────────────────────────────
 
 
-class BOMCostSnapshotViewSet(viewsets.ModelViewSet):
+class BOMCostSnapshotViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = BOMCostSnapshotSerializer
     permission_classes = [IsAuthenticated]
 
@@ -195,7 +196,7 @@ class BOMCostSnapshotViewSet(viewsets.ModelViewSet):
         return Response(BOMCostSnapshotSerializer(snapshots, many=True).data)
 
 
-class BOMCostDetailViewSet(viewsets.ReadOnlyModelViewSet):
+class BOMCostDetailViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     serializer_class = BOMCostDetailSerializer
     permission_classes = [IsAuthenticated]
 

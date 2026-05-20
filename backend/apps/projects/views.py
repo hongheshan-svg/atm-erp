@@ -175,7 +175,7 @@ class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewse
         )
 
 
-class ProjectMemberViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProjectMemberViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for ProjectMember management.
     """
@@ -201,7 +201,7 @@ class ProjectMemberViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         return Response(ProjectMemberSerializer(member).data)
 
 
-class ProjectTaskViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProjectTaskViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for ProjectTask management.
     """
@@ -304,7 +304,7 @@ class ProjectTaskViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
         return Response({'message': f'已重新计算 {updated_count} 个任务的工时', 'updated_count': updated_count})
 
 
-class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for ProjectBOM management.
     """
@@ -2316,7 +2316,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         return Response({'message': f'成功更新 {updated_count} 条记录', 'updated_count': updated_count})
 
 
-class TimeLogViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TimeLogViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for TimeLog management.
     """
@@ -2715,7 +2715,7 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
             return Response({'error': '明细不存在'}, status=status.HTTP_404_NOT_FOUND)
 
 
-class ECNItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ECNItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for ECN Item management.
     """
@@ -2917,7 +2917,7 @@ class AfterSalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin
         return Response({'message': '成本更新成功', 'total_cost': order.total_cost})
 
 
-class ServiceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ServiceRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     服务记录管理视图
     """
@@ -2944,7 +2944,7 @@ class ServiceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         order.save()
 
 
-class SparePartUsageViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SparePartUsageViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     备件使用记录管理视图
     """
@@ -2970,7 +2970,7 @@ class SparePartUsageViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         order.save()
 
 
-class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class DrawingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     图纸管理视图
     """
@@ -3403,7 +3403,7 @@ class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
             pass  # 邮件发送失败不影响主流程
 
 
-class DrawingChangeNoticeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class DrawingChangeNoticeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     图纸变更通知视图
     """

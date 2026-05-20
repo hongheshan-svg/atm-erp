@@ -18,6 +18,7 @@ from rest_framework.views import APIView
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class SalesTarget(BaseModel):
@@ -350,7 +351,7 @@ class SalesCommissionSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class SalesTargetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SalesTargetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售目标管理"""
 
     queryset = SalesTarget.objects.none()
@@ -436,7 +437,7 @@ class SalesTargetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
         )
 
 
-class SalesCommissionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SalesCommissionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售提成管理"""
 
     queryset = SalesCommission.objects.none()

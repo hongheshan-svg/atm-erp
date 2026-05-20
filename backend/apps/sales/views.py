@@ -177,7 +177,7 @@ class SalesQuotationViewSet(
         return Response(SalesOrderSerializer(so).data, status=status.HTTP_201_CREATED)
 
 
-class SalesQuotationLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SalesQuotationLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for SalesQuotationLine management.
     """
@@ -1176,7 +1176,7 @@ class SalesOrderViewSet(
         return Response({'message': message, 'delete_count': delete_count, 'skip_count': skip_count})
 
 
-class SalesOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SalesOrderLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for SalesOrderLine management.
     """
@@ -1468,7 +1468,7 @@ class DeliveryOrderViewSet(
         return Response({**DeliveryOrderSerializer(delivery).data, 'message': '已拒绝'})
 
 
-class DeliveryOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class DeliveryOrderLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for DeliveryOrderLine management.
     """
@@ -1479,7 +1479,9 @@ class DeliveryOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
     search_fields = ['item__sku', 'item__name', 'custom_name', 'custom_spec']
 
 
-class SalesContractViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SalesContractViewSet(
+    PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
+):
     """
     ViewSet for SalesContract management.
     """

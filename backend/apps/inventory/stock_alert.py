@@ -26,6 +26,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class StockAlertRule(BaseModel):
@@ -427,7 +428,7 @@ class StockAlertListSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class StockAlertRuleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class StockAlertRuleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """库存预警规则管理"""
 
     queryset = StockAlertRule.objects.filter(is_deleted=False)
@@ -465,7 +466,7 @@ class StockAlertRuleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         return Response({'success': True, 'created': created})
 
 
-class StockAlertViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class StockAlertViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """库存预警管理"""
 
     queryset = StockAlert.objects.filter(is_deleted=False)

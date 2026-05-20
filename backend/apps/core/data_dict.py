@@ -12,6 +12,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class DictType(BaseModel):
@@ -115,7 +116,7 @@ class DictTypeListSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class DictTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class DictTypeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     字典类型管理
     """
@@ -291,7 +292,7 @@ class DictTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
         return Response({'message': f'初始化完成，创建了 {created_count} 个新字典类型'})
 
 
-class DictItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class DictItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     字典项管理
     """

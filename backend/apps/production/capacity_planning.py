@@ -29,6 +29,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 User = settings.AUTH_USER_MODEL
 
@@ -408,7 +409,7 @@ class CapacityResourceConflictSerializer(serializers.ModelSerializer):
 # ==================== ViewSets ====================
 
 
-class ResourceTypeViewSet(viewsets.ModelViewSet):
+class ResourceTypeViewSet(PermissionMixin, viewsets.ModelViewSet):
     """资源类型管理"""
 
     queryset = ResourceType.objects.filter(is_deleted=False)
@@ -416,7 +417,7 @@ class ResourceTypeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
 
-class ResourceViewSet(viewsets.ModelViewSet):
+class ResourceViewSet(PermissionMixin, viewsets.ModelViewSet):
     """资源管理"""
 
     queryset = Resource.objects.filter(is_deleted=False)
@@ -481,7 +482,7 @@ class ResourceViewSet(viewsets.ModelViewSet):
         return Response(conflicts)
 
 
-class ResourceAllocationViewSet(viewsets.ModelViewSet):
+class ResourceAllocationViewSet(PermissionMixin, viewsets.ModelViewSet):
     """资源分配管理"""
 
     queryset = ResourceAllocation.objects.filter(is_deleted=False)
@@ -628,7 +629,7 @@ class CapacityDashboardView(APIView):
         return Response(dashboard_data)
 
 
-class CapacityResourceConflictViewSet(viewsets.ModelViewSet):
+class CapacityResourceConflictViewSet(PermissionMixin, viewsets.ModelViewSet):
     """产能资源冲突管理"""
 
     queryset = CapacityResourceConflict.objects.filter(is_deleted=False)

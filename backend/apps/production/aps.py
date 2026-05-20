@@ -26,6 +26,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 # 从scheduling导入WorkCenter，避免重复定义
 from .scheduling import WorkCenter
@@ -388,7 +389,7 @@ class ScheduleOrderListSerializer(serializers.ModelSerializer):
 # WorkCenterViewSet已在scheduling.py中定义
 
 
-class ScheduleOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ScheduleOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """排程工单管理"""
 
     queryset = ScheduleOrder.objects.filter(is_deleted=False)
@@ -461,7 +462,7 @@ class ScheduleOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         return Response(data)
 
 
-class APSScheduleTaskViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class APSScheduleTaskViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """APS排程任务管理"""
 
     queryset = APSScheduleTask.objects.filter(is_deleted=False)

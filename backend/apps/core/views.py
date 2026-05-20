@@ -10,6 +10,8 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
+from apps.core.permission_mixin import PermissionMixin
+
 from .models import Attachment, AuditLog, SystemConfig, SystemNotification
 from .serializers import AttachmentSerializer, AttachmentUploadSerializer, SystemConfigSerializer
 
@@ -41,7 +43,7 @@ class NotificationSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'read_at']
 
 
-class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
+class AuditLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """Audit log viewing (read-only)"""
 
     queryset = AuditLog.objects.all()
@@ -78,7 +80,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset.order_by('-timestamp')[:1000]  # Limit to last 1000 entries
 
 
-class NotificationViewSet(viewsets.ModelViewSet):
+class NotificationViewSet(PermissionMixin, viewsets.ModelViewSet):
     """User notification management"""
 
     queryset = SystemNotification.objects.all()
@@ -111,7 +113,7 @@ class NotificationViewSet(viewsets.ModelViewSet):
         return Response({'count': count})
 
 
-class AttachmentViewSet(viewsets.ModelViewSet):
+class AttachmentViewSet(PermissionMixin, viewsets.ModelViewSet):
     """
     附件管理视图集
     支持上传、下载、删除附件

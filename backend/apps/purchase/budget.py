@@ -15,6 +15,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class PurchaseBudget(BaseModel):
@@ -426,7 +427,7 @@ class BudgetUsageRecordSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class PurchaseBudgetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class PurchaseBudgetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """采购预算管理"""
 
     queryset = PurchaseBudget.objects.filter(is_deleted=False)
@@ -559,7 +560,7 @@ class PurchaseBudgetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         )
 
 
-class BudgetLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class BudgetLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """预算明细管理"""
 
     queryset = BudgetLine.objects.filter(is_deleted=False)

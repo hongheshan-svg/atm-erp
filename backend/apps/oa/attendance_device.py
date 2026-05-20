@@ -14,6 +14,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 logger = logging.getLogger(__name__)
 
@@ -456,7 +457,7 @@ class DeviceSyncLogSerializer(serializers.ModelSerializer):
 # ============================================
 
 
-class AttendanceDeviceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AttendanceDeviceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     考勤设备管理视图集
     """
@@ -617,7 +618,7 @@ class AttendanceDeviceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         return Response(stats)
 
 
-class DeviceUserMappingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class DeviceUserMappingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     设备用户映射视图集
     """
@@ -682,7 +683,7 @@ class DeviceUserMappingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         )
 
 
-class DeviceAttendanceLogViewSet(viewsets.ReadOnlyModelViewSet):
+class DeviceAttendanceLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """
     设备打卡记录视图集（只读）
     """
@@ -761,7 +762,7 @@ class DeviceAttendanceLogViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(stats)
 
 
-class DeviceSyncLogViewSet(viewsets.ReadOnlyModelViewSet):
+class DeviceSyncLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """
     设备同步日志视图集（只读）
     """

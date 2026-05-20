@@ -29,6 +29,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class QuoteTemplate(BaseModel):
@@ -497,7 +498,7 @@ class QuoteGenerateSerializer(serializers.Serializer):
 # =====================
 
 
-class QuoteTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class QuoteTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     报价单模板管理
     """
@@ -680,7 +681,7 @@ class QuoteTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
             return Response({'template': QuoteTemplateSerializer(template).data, 'sample_data': sample_data})
 
 
-class QuoteHistoryViewSet(viewsets.ReadOnlyModelViewSet):
+class QuoteHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """
     报价单历史（只读）
     """

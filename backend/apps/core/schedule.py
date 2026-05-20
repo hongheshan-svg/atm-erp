@@ -16,6 +16,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
 
 
 class Schedule(BaseModel):
@@ -333,7 +334,7 @@ class MeetingListSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class ScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """日程管理"""
 
     queryset = Schedule.objects.filter(is_deleted=False)
@@ -405,7 +406,7 @@ class ScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
         return Response(ScheduleListSerializer(schedules, many=True).data)
 
 
-class MeetingRoomViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class MeetingRoomViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """会议室管理"""
 
     queryset = MeetingRoom.objects.filter(is_deleted=False)
@@ -434,7 +435,7 @@ class MeetingRoomViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
         return Response({'room': room.name, 'date': date_str, 'booked_slots': booked_slots})
 
 
-class MeetingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class MeetingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """会议管理"""
 
     queryset = Meeting.objects.filter(is_deleted=False)
