@@ -1,0 +1,25 @@
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["migrations", "*/migrations/*", "venv", ".venv"]
+
+[tool.ruff.lint]
+select = [
+  "E",    # pycodestyle errors
+  "F",    # pyflakes — undefined names, unused imports
+  "W",    # pycodestyle warnings
+  "I",    # isort
+  "B",    # bugbear
+  "DJ",   # django-specific
+]
+ignore = [
+  "E501",  # line too long — ruff format handles most cases
+  "B008",  # function call in default argument — DRF/Django use this idiom
+]
+
+[tool.ruff.lint.per-file-ignores]
+"config/settings.py" = ["F405", "F403"]
+"*/migrations/*" = ["E501", "F401"]
+
+[tool.ruff.format]
+quote-style = "single"
