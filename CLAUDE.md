@@ -57,6 +57,26 @@ docker compose logs -f celery
 docker compose up -d --build backend
 ```
 
+### Pre-commit Hooks
+
+```bash
+# 安装 pre-commit（首次）
+pip install pre-commit
+pre-commit install
+
+# 手动运行所有 hooks
+pre-commit run --all-files
+```
+
+### Integration Tests (pytest)
+
+```bash
+# 在 backend/ 目录下，需要 Docker 服务运行中
+cd /home/administrator/erp/backend
+pip install -r requirements-dev.txt
+pytest tests/integration -v --tb=short
+```
+
 ### Celery (异步任务)
 
 ```bash

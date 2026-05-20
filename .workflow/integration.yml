@@ -1,0 +1,75 @@
+name: Integration Tests
+on:
+  push:
+    branches: [main, 'feat/**', 'fix/**', 'chore/**']
+    paths:
+      - 'backend/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+
+stages:
+  - name: integration
+    jobs:
+      - name: pytest-integration
+        runsOn: public/China-2C4G
+        services:
+          postgres:
+            image: postgres:15
+            env:
+              POSTGRES_DB: erp_db
+              POSTGRES_USER: erp_user
+              POSTGRES_PASSWORD: erp_pass
+            ports:
+              - 5432:5432
+          redis:
+            image: redis:7
+            ports:
+              - 6379:6379
+        steps:
+          - name: Checkout
+            step: aliyun/aliyun-cli@1
+            with:
+              checkout: true
+
+          - name: Setup Python
+            step: aliyun/setup-python@1
+            with:
+              pythonVersion: '3.11'
+
+          - name: Install dependencies
+            script: |
+              cd backend
+              pip install -r requirements.txt -r requirements-dev.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+          - name: Bootstrap database
+            script: |
+              cd backend
+              python manage.py migrate --run-syncdb
+              python manage.py init_permissions
+              python manage.py init_roles --force
+              python manage.py init_industry_roles --force
+            env:
+              DB_HOST: postgres
+              DB_PORT: '5432'
+              DB_NAME: erp_db
+              DB_USER: erp_user
+              DB_PASSWORD: erp_pass
+              REDIS_URL: redis://redis:6379/0
+              SECRET_KEY: ci-test-secret-key
+              DJANGO_SETTINGS_MODULE: config.settings
+
+          - name: Run integration tests
+            script: |
+              cd backend
+              pytest tests/integration -v --tb=short -m integration
+            env:
+              DB_HOST: postgres
+              DB_PORT: '5432'
+              DB_NAME: erp_db
+              DB_USER: erp_user
+              DB_PASSWORD: erp_pass
+              REDIS_URL: redis://redis:6379/0
+              SECRET_KEY: ci-test-secret-key
+              DJANGO_SETTINGS_MODULE: config.settings
