@@ -1,6 +1,7 @@
 """
 Core API views for audit logs, notifications and attachments
 """
+
 from django.http import FileResponse
 from django.utils import timezone
 from rest_framework import serializers, status, viewsets
@@ -18,8 +19,18 @@ class AuditLogSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AuditLog
-        fields = ['id', 'user', 'username', 'action', 'model_name', 'object_id',
-                  'object_repr', 'changes', 'ip_address', 'timestamp']
+        fields = [
+            'id',
+            'user',
+            'username',
+            'action',
+            'model_name',
+            'object_id',
+            'object_repr',
+            'changes',
+            'ip_address',
+            'timestamp',
+        ]
         read_only_fields = fields
 
 
@@ -32,6 +43,7 @@ class NotificationSerializer(serializers.ModelSerializer):
 
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     """Audit log viewing (read-only)"""
+
     queryset = AuditLog.objects.all()
     serializer_class = AuditLogSerializer
     permission_classes = [IsAuthenticated]
@@ -68,6 +80,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
 
 class NotificationViewSet(viewsets.ModelViewSet):
     """User notification management"""
+
     queryset = SystemNotification.objects.all()
     serializer_class = NotificationSerializer
     permission_classes = [IsAuthenticated]
@@ -88,10 +101,7 @@ class NotificationViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def mark_all_read(self, request):
         """Mark all notifications as read"""
-        self.get_queryset().filter(is_read=False).update(
-            is_read=True,
-            read_at=timezone.now()
-        )
+        self.get_queryset().filter(is_read=False).update(is_read=True, read_at=timezone.now())
         return Response({'status': 'all marked as read'})
 
     @action(detail=False, methods=['get'])
@@ -106,6 +116,7 @@ class AttachmentViewSet(viewsets.ModelViewSet):
     附件管理视图集
     支持上传、下载、删除附件
     """
+
     queryset = Attachment.objects.all()
     serializer_class = AttachmentSerializer
     permission_classes = [IsAuthenticated]
@@ -144,19 +155,13 @@ class AttachmentViewSet(viewsets.ModelViewSet):
         # 获取上传的文件
         file = request.FILES.get('file')
         if not file:
-            return Response(
-                {'error': '请选择要上传的文件'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请选择要上传的文件'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 安全验证
         try:
             validate_uploaded_file(file)
         except DjangoValidationError as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         # 清理文件名
         file.name = sanitize_filename(file.name)
@@ -174,17 +179,10 @@ class AttachmentViewSet(viewsets.ModelViewSet):
         """下载附件"""
         attachment = self.get_object()
         try:
-            response = FileResponse(
-                attachment.file.open('rb'),
-                as_attachment=True,
-                filename=attachment.original_name
-            )
+            response = FileResponse(attachment.file.open('rb'), as_attachment=True, filename=attachment.original_name)
             return response
         except Exception as e:
-            return Response(
-                {'error': f'文件下载失败: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            return Response({'error': f'文件下载失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['post'])
     def batch_upload(self, request):
@@ -199,23 +197,14 @@ class AttachmentViewSet(viewsets.ModelViewSet):
         category = request.data.get('category', 'OTHER')
 
         if not files:
-            return Response(
-                {'error': '请选择要上传的文件'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请选择要上传的文件'}, status=status.HTTP_400_BAD_REQUEST)
 
         if not related_model or not related_id:
-            return Response(
-                {'error': '请指定关联对象'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请指定关联对象'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 限制批量上传数量
         if len(files) > 10:
-            return Response(
-                {'error': '一次最多上传10个文件'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '一次最多上传10个文件'}, status=status.HTTP_400_BAD_REQUEST)
 
         attachments = []
         errors = []
@@ -232,14 +221,11 @@ class AttachmentViewSet(viewsets.ModelViewSet):
                     related_model=related_model,
                     related_id=related_id,
                     category=category,
-                    uploaded_by=request.user
+                    uploaded_by=request.user,
                 )
                 attachments.append(attachment)
             except DjangoValidationError as e:
-                errors.append({
-                    'filename': file.name,
-                    'error': str(e)
-                })
+                errors.append({'filename': file.name, 'error': str(e)})
 
         serializer = AttachmentSerializer(attachments, many=True, context={'request': request})
         response_data = {
@@ -247,7 +233,7 @@ class AttachmentViewSet(viewsets.ModelViewSet):
             'errors': errors,
             'total': len(files),
             'uploaded': len(attachments),
-            'failed': len(errors)
+            'failed': len(errors),
         }
         return Response(response_data, status=status.HTTP_201_CREATED)
 
@@ -256,10 +242,7 @@ class AttachmentViewSet(viewsets.ModelViewSet):
         """批量删除附件"""
         ids = request.data.get('ids', [])
         if not ids:
-            return Response(
-                {'error': '请指定要删除的附件ID'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请指定要删除的附件ID'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 删除文件和数据库记录
         attachments = Attachment.objects.filter(id__in=ids)
@@ -275,6 +258,7 @@ class NotificationChannelViewSet(viewsets.ViewSet):
     Notification channel management and testing.
     Supports DingTalk (钉钉) and WeChat Work (企业微信).
     """
+
     permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['get'])
@@ -290,21 +274,25 @@ class NotificationChannelViewSet(viewsets.ViewSet):
             'dingtalk': {
                 'webhook_enabled': bool(getattr(settings, 'DINGTALK_WEBHOOK_URL', '')),
                 'app_enabled': bool(getattr(settings, 'DINGTALK_APP_KEY', '')),
-                'configured': bool(getattr(settings, 'DINGTALK_WEBHOOK_URL', '')) or bool(getattr(settings, 'DINGTALK_APP_KEY', '')),
+                'configured': bool(getattr(settings, 'DINGTALK_WEBHOOK_URL', ''))
+                or bool(getattr(settings, 'DINGTALK_APP_KEY', '')),
             },
             'wechat_work': {
                 'webhook_enabled': bool(getattr(settings, 'WECHAT_WORK_WEBHOOK_URL', '')),
                 'app_enabled': bool(getattr(settings, 'WECHAT_WORK_CORP_ID', '')),
-                'configured': bool(getattr(settings, 'WECHAT_WORK_WEBHOOK_URL', '')) or bool(getattr(settings, 'WECHAT_WORK_CORP_ID', '')),
+                'configured': bool(getattr(settings, 'WECHAT_WORK_WEBHOOK_URL', ''))
+                or bool(getattr(settings, 'WECHAT_WORK_CORP_ID', '')),
             },
         }
 
         enabled_channels = getattr(settings, 'NOTIFICATION_CHANNELS_ENABLED', ['email'])
 
-        return Response({
-            'channels': channels,
-            'enabled': enabled_channels,
-        })
+        return Response(
+            {
+                'channels': channels,
+                'enabled': enabled_channels,
+            }
+        )
 
     @action(detail=False, methods=['post'])
     def test_dingtalk(self, request):
@@ -320,8 +308,7 @@ class NotificationChannelViewSet(viewsets.ViewSet):
             return Response({'status': 'success', 'message': '钉钉通知发送成功'})
         else:
             return Response(
-                {'status': 'failed', 'message': '钉钉通知发送失败，请检查配置'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'status': 'failed', 'message': '钉钉通知发送失败，请检查配置'}, status=status.HTTP_400_BAD_REQUEST
             )
 
     @action(detail=False, methods=['post'])
@@ -338,8 +325,7 @@ class NotificationChannelViewSet(viewsets.ViewSet):
             return Response({'status': 'success', 'message': '企业微信通知发送成功'})
         else:
             return Response(
-                {'status': 'failed', 'message': '企业微信通知发送失败，请检查配置'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'status': 'failed', 'message': '企业微信通知发送失败，请检查配置'}, status=status.HTTP_400_BAD_REQUEST
             )
 
     @action(detail=False, methods=['post'])
@@ -352,23 +338,18 @@ class NotificationChannelViewSet(viewsets.ViewSet):
         channels = request.data.get('channels')  # Optional: list of channel names
 
         if not title or not content:
-            return Response(
-                {'error': '请提供通知标题和内容'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供通知标题和内容'}, status=status.HTTP_400_BAD_REQUEST)
 
         results = broadcast_notification(title, content, channels)
 
-        return Response({
-            'status': 'completed',
-            'results': results
-        })
+        return Response({'status': 'completed', 'results': results})
 
 
 class SystemConfigViewSet(viewsets.ViewSet):
     """
     系统配置管理 - 单例模式，只有一条记录
     """
+
     permission_classes = [IsAuthenticated]
 
     def get_permissions(self):
@@ -396,8 +377,4 @@ class SystemConfigViewSet(viewsets.ViewSet):
     def company_name(self, request):
         """快速获取公司名称（供其他模块调用）"""
         config = SystemConfig.get_config()
-        return Response({
-            'company_name': config.company_name,
-            'company_tax_no': config.company_tax_no
-        })
-
+        return Response({'company_name': config.company_name, 'company_tax_no': config.company_tax_no})

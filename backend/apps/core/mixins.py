@@ -1,6 +1,7 @@
 """
 Mixins for views and viewsets.
 """
+
 from .utils import apply_data_scope_filter
 
 
@@ -8,6 +9,7 @@ class UserTrackingMixin:
     """
     Mixin to automatically set created_by and updated_by fields.
     """
+
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
@@ -20,6 +22,7 @@ class DataScopeMixin:
     Mixin to automatically apply data scope filtering to queryset.
     支持模块级权限控制：特定角色可以查看特定模块的全部数据
     """
+
     data_scope_field = 'created_by'  # Can be overridden in view
     module_name = None  # 模块名称，用于模块级权限控制
 
@@ -33,12 +36,7 @@ class DataScopeMixin:
             if module:
                 module = module.app_label
 
-        return apply_data_scope_filter(
-            queryset,
-            self.request.user,
-            self.data_scope_field,
-            module_name=module
-        )
+        return apply_data_scope_filter(queryset, self.request.user, self.data_scope_field, module_name=module)
 
 
 class SoftDeleteMixin:
@@ -46,6 +44,7 @@ class SoftDeleteMixin:
     Mixin for ViewSet - 优先使用模型自己的软删除实现。
     对不支持软删除的模型，回退到物理删除。
     """
+
     def perform_destroy(self, instance):
         if hasattr(instance, 'soft_delete'):
             instance.soft_delete()

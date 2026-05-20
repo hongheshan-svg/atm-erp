@@ -3,6 +3,7 @@
 Purchase Contract Execution Tracking
 跟踪采购合同的执行进度、交货情况、付款情况等
 """
+
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -22,6 +23,7 @@ class ContractExecution(BaseModel):
     """
     合同执行记录
     """
+
     EXECUTION_STATUS = [
         ('NOT_STARTED', '未开始'),
         ('IN_PROGRESS', '执行中'),
@@ -31,19 +33,11 @@ class ContractExecution(BaseModel):
     ]
 
     contract = models.OneToOneField(
-        'purchase.PurchaseContract',
-        on_delete=models.CASCADE,
-        related_name='execution',
-        verbose_name='采购合同'
+        'purchase.PurchaseContract', on_delete=models.CASCADE, related_name='execution', verbose_name='采购合同'
     )
 
     # 执行状态
-    status = models.CharField(
-        max_length=20,
-        choices=EXECUTION_STATUS,
-        default='NOT_STARTED',
-        verbose_name='执行状态'
-    )
+    status = models.CharField(max_length=20, choices=EXECUTION_STATUS, default='NOT_STARTED', verbose_name='执行状态')
 
     # 交货进度
     total_qty = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='总数量')
@@ -116,6 +110,7 @@ class DeliveryRecord(BaseModel):
     """
     交货记录
     """
+
     DELIVERY_STATUS = [
         ('PENDING', '待收货'),
         ('RECEIVED', '已收货'),
@@ -126,10 +121,7 @@ class DeliveryRecord(BaseModel):
     ]
 
     execution = models.ForeignKey(
-        ContractExecution,
-        on_delete=models.CASCADE,
-        related_name='deliveries',
-        verbose_name='合同执行'
+        ContractExecution, on_delete=models.CASCADE, related_name='deliveries', verbose_name='合同执行'
     )
 
     # 交货信息
@@ -143,12 +135,7 @@ class DeliveryRecord(BaseModel):
     qualified_qty = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='合格数量')
     rejected_qty = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='不合格数量')
 
-    status = models.CharField(
-        max_length=20,
-        choices=DELIVERY_STATUS,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=DELIVERY_STATUS, default='PENDING', verbose_name='状态')
 
     # 检验
     inspector = models.ForeignKey(
@@ -157,7 +144,7 @@ class DeliveryRecord(BaseModel):
         null=True,
         blank=True,
         related_name='inspected_deliveries',
-        verbose_name='检验员'
+        verbose_name='检验员',
     )
     inspection_date = models.DateField(null=True, blank=True, verbose_name='检验日期')
     inspection_result = models.TextField(blank=True, verbose_name='检验结果')
@@ -178,6 +165,7 @@ class PaymentRecord(BaseModel):
     """
     付款记录
     """
+
     PAYMENT_TYPES = [
         ('ADVANCE', '预付款'),
         ('PROGRESS', '进度款'),
@@ -195,18 +183,10 @@ class PaymentRecord(BaseModel):
     ]
 
     execution = models.ForeignKey(
-        ContractExecution,
-        on_delete=models.CASCADE,
-        related_name='payments',
-        verbose_name='合同执行'
+        ContractExecution, on_delete=models.CASCADE, related_name='payments', verbose_name='合同执行'
     )
 
-    payment_type = models.CharField(
-        max_length=20,
-        choices=PAYMENT_TYPES,
-        default='PROGRESS',
-        verbose_name='付款类型'
-    )
+    payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPES, default='PROGRESS', verbose_name='付款类型')
 
     # 付款信息
     payment_no = models.CharField(max_length=50, verbose_name='付款单号')
@@ -217,12 +197,7 @@ class PaymentRecord(BaseModel):
     amount = models.DecimalField(max_digits=18, decimal_places=2, verbose_name='付款金额')
 
     # 状态
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
 
     # 审批
     approver = models.ForeignKey(
@@ -231,7 +206,7 @@ class PaymentRecord(BaseModel):
         null=True,
         blank=True,
         related_name='approved_contract_payments',
-        verbose_name='审批人'
+        verbose_name='审批人',
     )
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name='审批时间')
 
@@ -251,6 +226,7 @@ class ContractIssue(BaseModel):
     """
     合同执行问题
     """
+
     ISSUE_TYPES = [
         ('QUALITY', '质量问题'),
         ('DELIVERY', '交期问题'),
@@ -275,41 +251,24 @@ class ContractIssue(BaseModel):
     ]
 
     execution = models.ForeignKey(
-        ContractExecution,
-        on_delete=models.CASCADE,
-        related_name='issues',
-        verbose_name='合同执行'
+        ContractExecution, on_delete=models.CASCADE, related_name='issues', verbose_name='合同执行'
     )
 
-    issue_type = models.CharField(
-        max_length=20,
-        choices=ISSUE_TYPES,
-        verbose_name='问题类型'
-    )
-    severity = models.CharField(
-        max_length=20,
-        choices=SEVERITY_LEVELS,
-        default='MEDIUM',
-        verbose_name='严重程度'
-    )
+    issue_type = models.CharField(max_length=20, choices=ISSUE_TYPES, verbose_name='问题类型')
+    severity = models.CharField(max_length=20, choices=SEVERITY_LEVELS, default='MEDIUM', verbose_name='严重程度')
 
     title = models.CharField(max_length=200, verbose_name='问题标题')
     description = models.TextField(verbose_name='问题描述')
 
     # 处理
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='OPEN',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='OPEN', verbose_name='状态')
     handler = models.ForeignKey(
         'accounts.User',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='handled_contract_issues',
-        verbose_name='处理人'
+        verbose_name='处理人',
     )
     solution = models.TextField(blank=True, verbose_name='解决方案')
     resolved_at = models.DateTimeField(null=True, blank=True, verbose_name='解决时间')
@@ -327,6 +286,7 @@ class ContractIssue(BaseModel):
 # =====================
 # Serializers
 # =====================
+
 
 class DeliveryRecordSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
@@ -392,9 +352,21 @@ class ContractExecutionListSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContractExecution
         fields = [
-            'id', 'contract', 'contract_no', 'supplier_name', 'status', 'status_display',
-            'contract_amount', 'paid_amount', 'total_qty', 'delivered_qty',
-            'delivery_rate', 'payment_rate', 'is_overdue', 'planned_end_date', 'issue_count'
+            'id',
+            'contract',
+            'contract_no',
+            'supplier_name',
+            'status',
+            'status_display',
+            'contract_amount',
+            'paid_amount',
+            'total_qty',
+            'delivered_qty',
+            'delivery_rate',
+            'payment_rate',
+            'is_overdue',
+            'planned_end_date',
+            'issue_count',
         ]
 
     def get_issue_count(self, obj):
@@ -405,8 +377,10 @@ class ContractExecutionListSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class ContractExecutionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """合同执行管理"""
+
     queryset = ContractExecution.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'contract__supplier']
@@ -447,13 +421,11 @@ class ContractExecutionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
             delivery_date=request.data.get('delivery_date'),
             delivery_qty=request.data.get('delivery_qty'),
             remarks=request.data.get('remarks', ''),
-            created_by=request.user
+            created_by=request.user,
         )
 
         # 更新执行数据
-        execution.delivered_qty = execution.deliveries.aggregate(
-            total=Sum('received_qty')
-        )['total'] or 0
+        execution.delivered_qty = execution.deliveries.aggregate(total=Sum('received_qty'))['total'] or 0
         execution.save()
 
         return Response(DeliveryRecordSerializer(delivery).data)
@@ -470,7 +442,7 @@ class ContractExecutionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
             planned_date=request.data.get('planned_date'),
             amount=request.data.get('amount'),
             remarks=request.data.get('remarks', ''),
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(PaymentRecordSerializer(payment).data)
@@ -486,7 +458,7 @@ class ContractExecutionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
             severity=request.data.get('severity', 'MEDIUM'),
             title=request.data.get('title'),
             description=request.data.get('description'),
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(ContractIssueSerializer(issue).data)
@@ -507,10 +479,11 @@ class ContractExecutionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
     def overdue_list(self, request):
         """逾期合同列表"""
         today = date.today()
-        executions = self.get_queryset().filter(
-            status__in=['NOT_STARTED', 'IN_PROGRESS', 'DELAYED'],
-            planned_end_date__lt=today
-        ).order_by('planned_end_date')
+        executions = (
+            self.get_queryset()
+            .filter(status__in=['NOT_STARTED', 'IN_PROGRESS', 'DELAYED'], planned_end_date__lt=today)
+            .order_by('planned_end_date')
+        )
 
         return Response(ContractExecutionListSerializer(executions, many=True).data)
 
@@ -520,11 +493,11 @@ class ContractExecutionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         days = int(request.query_params.get('days', 7))
         end_date = date.today() + timedelta(days=days)
 
-        payments = PaymentRecord.objects.filter(
-            status='PENDING',
-            planned_date__lte=end_date,
-            is_deleted=False
-        ).select_related('execution', 'execution__contract').order_by('planned_date')
+        payments = (
+            PaymentRecord.objects.filter(status='PENDING', planned_date__lte=end_date, is_deleted=False)
+            .select_related('execution', 'execution__contract')
+            .order_by('planned_date')
+        )
 
         return Response(PaymentRecordSerializer(payments, many=True).data)
 
@@ -533,31 +506,30 @@ class ContractExecutionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         """执行统计"""
         qs = self.get_queryset()
 
-        by_status = qs.values('status').annotate(
-            count=Count('id'),
-            total_amount=Sum('contract_amount')
-        )
+        by_status = qs.values('status').annotate(count=Count('id'), total_amount=Sum('contract_amount'))
 
         total_amount = qs.aggregate(total=Sum('contract_amount'))['total'] or 0
         total_paid = qs.aggregate(total=Sum('paid_amount'))['total'] or 0
 
         overdue_count = qs.filter(
-            status__in=['NOT_STARTED', 'IN_PROGRESS', 'DELAYED'],
-            planned_end_date__lt=date.today()
+            status__in=['NOT_STARTED', 'IN_PROGRESS', 'DELAYED'], planned_end_date__lt=date.today()
         ).count()
 
-        return Response({
-            'total_contracts': qs.count(),
-            'total_amount': float(total_amount),
-            'total_paid': float(total_paid),
-            'payment_rate': round(float(total_paid) / float(total_amount) * 100, 2) if total_amount > 0 else 0,
-            'overdue_count': overdue_count,
-            'by_status': list(by_status)
-        })
+        return Response(
+            {
+                'total_contracts': qs.count(),
+                'total_amount': float(total_amount),
+                'total_paid': float(total_paid),
+                'payment_rate': round(float(total_paid) / float(total_amount) * 100, 2) if total_amount > 0 else 0,
+                'overdue_count': overdue_count,
+                'by_status': list(by_status),
+            }
+        )
 
 
 class DeliveryRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """交货记录管理"""
+
     queryset = DeliveryRecord.objects.filter(is_deleted=False)
     serializer_class = DeliveryRecordSerializer
     permission_classes = [IsAuthenticated]
@@ -598,9 +570,7 @@ class DeliveryRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         # 更新执行记录
         execution = delivery.execution
         agg = execution.deliveries.aggregate(
-            delivered=Sum('received_qty'),
-            qualified=Sum('qualified_qty'),
-            rejected=Sum('rejected_qty')
+            delivered=Sum('received_qty'), qualified=Sum('qualified_qty'), rejected=Sum('rejected_qty')
         )
         execution.delivered_qty = agg['delivered'] or 0
         execution.qualified_qty = agg['qualified'] or 0
@@ -612,6 +582,7 @@ class DeliveryRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
 
 class PaymentRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """付款记录管理"""
+
     queryset = PaymentRecord.objects.filter(is_deleted=False)
     serializer_class = PaymentRecordSerializer
     permission_classes = [IsAuthenticated]
@@ -641,9 +612,7 @@ class PaymentRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
 
         # 更新执行记录
         execution = payment.execution
-        execution.paid_amount = execution.payments.filter(status='PAID').aggregate(
-            total=Sum('amount')
-        )['total'] or 0
+        execution.paid_amount = execution.payments.filter(status='PAID').aggregate(total=Sum('amount'))['total'] or 0
         execution.save()
 
         return Response(self.get_serializer(payment).data)
@@ -651,6 +620,7 @@ class PaymentRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
 
 class ContractIssueViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """合同问题管理"""
+
     queryset = ContractIssue.objects.filter(is_deleted=False)
     serializer_class = ContractIssueSerializer
     permission_classes = [IsAuthenticated]
@@ -664,6 +634,7 @@ class ContractIssueViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         handler_id = request.data.get('handler_id')
 
         from apps.accounts.models import User
+
         issue.handler = User.objects.get(id=handler_id)
         issue.status = 'IN_PROGRESS'
         issue.save()

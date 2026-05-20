@@ -1,6 +1,7 @@
 """
 外协加工管理序列化器
 """
+
 from django.db import transaction
 from rest_framework import serializers
 
@@ -16,6 +17,7 @@ from .outsource_models import (
 
 class OutsourceOrderLineSerializer(serializers.ModelSerializer):
     """外协加工单明细序列化器"""
+
     item_name = serializers.CharField(source='item.name', read_only=True)
     item_sku = serializers.CharField(source='item.sku', read_only=True)
     process_type_display = serializers.CharField(source='get_process_type_display', read_only=True)
@@ -25,12 +27,27 @@ class OutsourceOrderLineSerializer(serializers.ModelSerializer):
     class Meta:
         model = OutsourceOrderLine
         fields = [
-            'id', 'outsource_order', 'item', 'item_name', 'item_sku',
-            'process_type', 'process_type_display', 'process_content', 'drawing_no',
-            'qty', 'unit_price', 'process_amount',
-            'material_provided', 'material_weight',
-            'sent_qty', 'received_qty', 'remaining_send_qty', 'remaining_receive_qty',
-            'required_date', 'notes', 'is_deleted'
+            'id',
+            'outsource_order',
+            'item',
+            'item_name',
+            'item_sku',
+            'process_type',
+            'process_type_display',
+            'process_content',
+            'drawing_no',
+            'qty',
+            'unit_price',
+            'process_amount',
+            'material_provided',
+            'material_weight',
+            'sent_qty',
+            'received_qty',
+            'remaining_send_qty',
+            'remaining_receive_qty',
+            'required_date',
+            'notes',
+            'is_deleted',
         ]
         read_only_fields = ['process_amount', 'sent_qty', 'received_qty']
 
@@ -43,6 +60,7 @@ class OutsourceOrderLineSerializer(serializers.ModelSerializer):
 
 class OutsourceOrderSerializer(serializers.ModelSerializer):
     """外协加工单序列化器"""
+
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
@@ -52,12 +70,39 @@ class OutsourceOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = OutsourceOrder
         fields = [
-            'id', 'order_no', 'supplier', 'supplier_name', 'project', 'project_name',
-            'order_date', 'required_date', 'total_amount', 'tax_rate', 'tax_amount', 'total_with_tax',
-            'status', 'status_display', 'contact_person', 'contact_phone', 'delivery_address',
-            'notes', 'lines', 'lines_count', 'is_deleted', 'created_at', 'updated_at'
+            'id',
+            'order_no',
+            'supplier',
+            'supplier_name',
+            'project',
+            'project_name',
+            'order_date',
+            'required_date',
+            'total_amount',
+            'tax_rate',
+            'tax_amount',
+            'total_with_tax',
+            'status',
+            'status_display',
+            'contact_person',
+            'contact_phone',
+            'delivery_address',
+            'notes',
+            'lines',
+            'lines_count',
+            'is_deleted',
+            'created_at',
+            'updated_at',
         ]
-        read_only_fields = ['order_no', 'order_date', 'total_amount', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
+        read_only_fields = [
+            'order_no',
+            'order_date',
+            'total_amount',
+            'tax_amount',
+            'total_with_tax',
+            'created_at',
+            'updated_at',
+        ]
 
     def get_lines_count(self, obj):
         return obj.lines.filter(is_deleted=False).count()
@@ -82,7 +127,7 @@ class OutsourceOrderSerializer(serializers.ModelSerializer):
                         material_weight=line_data.get('material_weight', 0),
                         required_date=line_data.get('required_date'),
                         notes=line_data.get('notes', ''),
-                        created_by=order.created_by
+                        created_by=order.created_by,
                     )
 
             order.update_totals()
@@ -114,7 +159,7 @@ class OutsourceOrderSerializer(serializers.ModelSerializer):
                         material_weight=line_data.get('material_weight', 0),
                         required_date=line_data.get('required_date'),
                         notes=line_data.get('notes', ''),
-                        created_by=instance.created_by
+                        created_by=instance.created_by,
                     )
 
             instance.update_totals()
@@ -124,19 +169,29 @@ class OutsourceOrderSerializer(serializers.ModelSerializer):
 
 class OutsourceMaterialIssueLineSerializer(serializers.ModelSerializer):
     """外协发料单明细序列化器"""
+
     item_name = serializers.CharField(source='item.name', read_only=True)
     item_sku = serializers.CharField(source='item.sku', read_only=True)
 
     class Meta:
         model = OutsourceMaterialIssueLine
         fields = [
-            'id', 'issue', 'outsource_line', 'item', 'item_name', 'item_sku',
-            'qty', 'weight', 'notes', 'is_deleted'
+            'id',
+            'issue',
+            'outsource_line',
+            'item',
+            'item_name',
+            'item_sku',
+            'qty',
+            'weight',
+            'notes',
+            'is_deleted',
         ]
 
 
 class OutsourceMaterialIssueSerializer(serializers.ModelSerializer):
     """外协发料单序列化器"""
+
     outsource_order_no = serializers.CharField(source='outsource_order.order_no', read_only=True)
     supplier_name = serializers.CharField(source='outsource_order.supplier.name', read_only=True)
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
@@ -146,10 +201,23 @@ class OutsourceMaterialIssueSerializer(serializers.ModelSerializer):
     class Meta:
         model = OutsourceMaterialIssue
         fields = [
-            'id', 'issue_no', 'outsource_order', 'outsource_order_no', 'supplier_name',
-            'warehouse', 'warehouse_name', 'issue_date', 'status', 'status_display',
-            'logistics_company', 'tracking_number', 'notes', 'lines',
-            'is_deleted', 'created_at', 'updated_at'
+            'id',
+            'issue_no',
+            'outsource_order',
+            'outsource_order_no',
+            'supplier_name',
+            'warehouse',
+            'warehouse_name',
+            'issue_date',
+            'status',
+            'status_display',
+            'logistics_company',
+            'tracking_number',
+            'notes',
+            'lines',
+            'is_deleted',
+            'created_at',
+            'updated_at',
         ]
         read_only_fields = ['issue_no', 'created_at', 'updated_at']
 
@@ -168,7 +236,7 @@ class OutsourceMaterialIssueSerializer(serializers.ModelSerializer):
                         qty=line_data['qty'],
                         weight=line_data.get('weight', 0),
                         notes=line_data.get('notes', ''),
-                        created_by=issue.created_by
+                        created_by=issue.created_by,
                     )
 
         return issue
@@ -176,6 +244,7 @@ class OutsourceMaterialIssueSerializer(serializers.ModelSerializer):
 
 class OutsourceReceiptLineSerializer(serializers.ModelSerializer):
     """外协收货单明细序列化器"""
+
     item_name = serializers.CharField(source='item.name', read_only=True)
     item_sku = serializers.CharField(source='item.sku', read_only=True)
     quality_status_display = serializers.CharField(source='get_quality_status_display', read_only=True)
@@ -183,14 +252,26 @@ class OutsourceReceiptLineSerializer(serializers.ModelSerializer):
     class Meta:
         model = OutsourceReceiptLine
         fields = [
-            'id', 'receipt', 'outsource_line', 'item', 'item_name', 'item_sku',
-            'qty', 'qualified_qty', 'rejected_qty',
-            'quality_status', 'quality_status_display', 'quality_notes', 'notes', 'is_deleted'
+            'id',
+            'receipt',
+            'outsource_line',
+            'item',
+            'item_name',
+            'item_sku',
+            'qty',
+            'qualified_qty',
+            'rejected_qty',
+            'quality_status',
+            'quality_status_display',
+            'quality_notes',
+            'notes',
+            'is_deleted',
         ]
 
 
 class OutsourceReceiptSerializer(serializers.ModelSerializer):
     """外协收货单序列化器"""
+
     outsource_order_no = serializers.CharField(source='outsource_order.order_no', read_only=True)
     supplier_name = serializers.CharField(source='outsource_order.supplier.name', read_only=True)
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
@@ -202,11 +283,27 @@ class OutsourceReceiptSerializer(serializers.ModelSerializer):
     class Meta:
         model = OutsourceReceipt
         fields = [
-            'id', 'receipt_no', 'outsource_order', 'outsource_order_no', 'supplier_name',
-            'warehouse', 'warehouse_name', 'receipt_date', 'status', 'status_display',
-            'quality_status', 'quality_status_display',
-            'inspector', 'inspector_name', 'inspect_date', 'inspect_notes',
-            'notes', 'lines', 'is_deleted', 'created_at', 'updated_at'
+            'id',
+            'receipt_no',
+            'outsource_order',
+            'outsource_order_no',
+            'supplier_name',
+            'warehouse',
+            'warehouse_name',
+            'receipt_date',
+            'status',
+            'status_display',
+            'quality_status',
+            'quality_status_display',
+            'inspector',
+            'inspector_name',
+            'inspect_date',
+            'inspect_notes',
+            'notes',
+            'lines',
+            'is_deleted',
+            'created_at',
+            'updated_at',
         ]
         read_only_fields = ['receipt_no', 'created_at', 'updated_at']
 
@@ -228,8 +325,7 @@ class OutsourceReceiptSerializer(serializers.ModelSerializer):
                         quality_status=line_data.get('quality_status', 'PENDING'),
                         quality_notes=line_data.get('quality_notes', ''),
                         notes=line_data.get('notes', ''),
-                        created_by=receipt.created_by
+                        created_by=receipt.created_by,
                     )
 
         return receipt
-

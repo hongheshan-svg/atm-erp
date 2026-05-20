@@ -3,6 +3,7 @@ BOM高级功能模块
 Advanced BOM Features
 替代料管理、BOM对比等
 """
+
 from datetime import date
 from decimal import Decimal
 
@@ -21,6 +22,7 @@ from apps.core.models import BaseModel
 
 class BOMSubstitute(BaseModel):
     """BOM替代料"""
+
     SUBSTITUTE_TYPE_CHOICES = [
         ('EQUIVALENT', '等效替代'),
         ('SIMILAR', '相似替代'),
@@ -36,43 +38,23 @@ class BOMSubstitute(BaseModel):
     ]
 
     bom_item = models.ForeignKey(
-        'projects.ProjectBOM',
-        on_delete=models.CASCADE,
-        related_name='substitutes',
-        verbose_name='BOM项'
+        'projects.ProjectBOM', on_delete=models.CASCADE, related_name='substitutes', verbose_name='BOM项'
     )
     original_item = models.ForeignKey(
-        'masterdata.Item',
-        on_delete=models.PROTECT,
-        related_name='substitute_originals',
-        verbose_name='原物料'
+        'masterdata.Item', on_delete=models.PROTECT, related_name='substitute_originals', verbose_name='原物料'
     )
     substitute_item = models.ForeignKey(
-        'masterdata.Item',
-        on_delete=models.PROTECT,
-        related_name='substitute_items',
-        verbose_name='替代物料'
+        'masterdata.Item', on_delete=models.PROTECT, related_name='substitute_items', verbose_name='替代物料'
     )
 
     substitute_type = models.CharField(
-        max_length=20,
-        choices=SUBSTITUTE_TYPE_CHOICES,
-        default='EQUIVALENT',
-        verbose_name='替代类型'
+        max_length=20, choices=SUBSTITUTE_TYPE_CHOICES, default='EQUIVALENT', verbose_name='替代类型'
     )
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
 
     # 替代比例
     conversion_ratio = models.DecimalField(
-        max_digits=10, decimal_places=4,
-        default=1.0,
-        verbose_name='换算比例',
-        help_text='1个原物料 = N个替代物料'
+        max_digits=10, decimal_places=4, default=1.0, verbose_name='换算比例', help_text='1个原物料 = N个替代物料'
     )
 
     # 有效期
@@ -84,18 +66,17 @@ class BOMSubstitute(BaseModel):
 
     # 价格差异
     price_difference = models.DecimalField(
-        max_digits=18, decimal_places=2,
-        null=True, blank=True,
-        verbose_name='价格差异'
+        max_digits=18, decimal_places=2, null=True, blank=True, verbose_name='价格差异'
     )
 
     # 审批信息
     approved_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         related_name='approved_substitutes',
-        verbose_name='审批人'
+        verbose_name='审批人',
     )
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name='审批时间')
 
@@ -110,7 +91,7 @@ class BOMSubstitute(BaseModel):
         unique_together = ('bom_item', 'substitute_item')
 
     def __str__(self):
-        return f"{self.original_item.sku} -> {self.substitute_item.sku}"
+        return f'{self.original_item.sku} -> {self.substitute_item.sku}'
 
     @property
     def is_valid(self):
@@ -125,11 +106,9 @@ class BOMSubstitute(BaseModel):
 
 class BOMVersion(BaseModel):
     """BOM版本记录"""
+
     project = models.ForeignKey(
-        'projects.Project',
-        on_delete=models.CASCADE,
-        related_name='bom_versions',
-        verbose_name='项目'
+        'projects.Project', on_delete=models.CASCADE, related_name='bom_versions', verbose_name='项目'
     )
     version = models.CharField(max_length=50, verbose_name='版本号')
     description = models.TextField(blank=True, verbose_name='版本说明')
@@ -139,20 +118,17 @@ class BOMVersion(BaseModel):
 
     # 统计信息
     item_count = models.IntegerField(default=0, verbose_name='物料数量')
-    total_cost = models.DecimalField(
-        max_digits=18, decimal_places=2,
-        null=True, blank=True,
-        verbose_name='总成本'
-    )
+    total_cost = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True, verbose_name='总成本')
 
     is_current = models.BooleanField(default=False, verbose_name='是否当前版本')
     released_at = models.DateTimeField(null=True, blank=True, verbose_name='发布时间')
     released_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         related_name='released_bom_versions',
-        verbose_name='发布人'
+        verbose_name='发布人',
     )
 
     class Meta:
@@ -163,31 +139,30 @@ class BOMVersion(BaseModel):
         unique_together = ('project', 'version')
 
     def __str__(self):
-        return f"{self.project.code} - v{self.version}"
+        return f'{self.project.code} - v{self.version}'
 
     def create_snapshot(self):
         """创建BOM快照"""
         from apps.projects.models import ProjectBOM
 
-        bom_items = ProjectBOM.objects.filter(
-            project=self.project,
-            is_deleted=False
-        ).select_related('item')
+        bom_items = ProjectBOM.objects.filter(project=self.project, is_deleted=False).select_related('item')
 
         snapshot = []
         for item in bom_items:
-            snapshot.append({
-                'id': item.id,
-                'item_id': item.item_id,
-                'item_sku': item.item.sku if item.item else '',
-                'item_name': item.item.name if item.item else '',
-                'planned_qty': float(item.planned_qty),
-                'unit_cost': float(item.unit_cost or 0),
-                'total_cost': float(item.planned_qty * (item.unit_cost or 0)),
-                'parent_id': item.parent_id,
-                'level': item.level,
-                'notes': item.notes or ''
-            })
+            snapshot.append(
+                {
+                    'id': item.id,
+                    'item_id': item.item_id,
+                    'item_sku': item.item.sku if item.item else '',
+                    'item_name': item.item.name if item.item else '',
+                    'planned_qty': float(item.planned_qty),
+                    'unit_cost': float(item.unit_cost or 0),
+                    'total_cost': float(item.planned_qty * (item.unit_cost or 0)),
+                    'parent_id': item.parent_id,
+                    'level': item.level,
+                    'notes': item.notes or '',
+                }
+            )
 
         self.snapshot_data = snapshot
         self.item_count = len(snapshot)
@@ -199,20 +174,15 @@ class BOMVersion(BaseModel):
 
 class BOMComparison(BaseModel):
     """BOM对比记录"""
+
     name = models.CharField(max_length=200, verbose_name='对比名称')
 
     # 对比的两个版本
     version_a = models.ForeignKey(
-        BOMVersion,
-        on_delete=models.CASCADE,
-        related_name='comparisons_as_a',
-        verbose_name='版本A'
+        BOMVersion, on_delete=models.CASCADE, related_name='comparisons_as_a', verbose_name='版本A'
     )
     version_b = models.ForeignKey(
-        BOMVersion,
-        on_delete=models.CASCADE,
-        related_name='comparisons_as_b',
-        verbose_name='版本B'
+        BOMVersion, on_delete=models.CASCADE, related_name='comparisons_as_b', verbose_name='版本B'
     )
 
     # 对比结果
@@ -225,9 +195,7 @@ class BOMComparison(BaseModel):
     unchanged_count = models.IntegerField(default=0, verbose_name='未变数量')
 
     cost_difference = models.DecimalField(
-        max_digits=18, decimal_places=2,
-        null=True, blank=True,
-        verbose_name='成本差异'
+        max_digits=18, decimal_places=2, null=True, blank=True, verbose_name='成本差异'
     )
 
     notes = models.TextField(blank=True, verbose_name='备注')
@@ -269,44 +237,41 @@ class BOMComparison(BaseModel):
                     changes['unit_cost'] = {'from': a['unit_cost'], 'to': b['unit_cost']}
 
                 if changes:
-                    changed.append({
+                    changed.append(
+                        {
+                            'item_id': item_id,
+                            'item_sku': a['item_sku'],
+                            'item_name': a['item_name'],
+                            'changes': changes,
+                            'cost_diff': b['total_cost'] - a['total_cost'],
+                        }
+                    )
+                else:
+                    unchanged.append({'item_id': item_id, 'item_sku': a['item_sku'], 'item_name': a['item_name']})
+            elif in_a and not in_b:
+                a = snapshot_a[item_id]
+                removed.append(
+                    {
                         'item_id': item_id,
                         'item_sku': a['item_sku'],
                         'item_name': a['item_name'],
-                        'changes': changes,
-                        'cost_diff': b['total_cost'] - a['total_cost']
-                    })
-                else:
-                    unchanged.append({
-                        'item_id': item_id,
-                        'item_sku': a['item_sku'],
-                        'item_name': a['item_name']
-                    })
-            elif in_a and not in_b:
-                a = snapshot_a[item_id]
-                removed.append({
-                    'item_id': item_id,
-                    'item_sku': a['item_sku'],
-                    'item_name': a['item_name'],
-                    'qty': a['planned_qty'],
-                    'cost': a['total_cost']
-                })
+                        'qty': a['planned_qty'],
+                        'cost': a['total_cost'],
+                    }
+                )
             else:
                 b = snapshot_b[item_id]
-                added.append({
-                    'item_id': item_id,
-                    'item_sku': b['item_sku'],
-                    'item_name': b['item_name'],
-                    'qty': b['planned_qty'],
-                    'cost': b['total_cost']
-                })
+                added.append(
+                    {
+                        'item_id': item_id,
+                        'item_sku': b['item_sku'],
+                        'item_name': b['item_name'],
+                        'qty': b['planned_qty'],
+                        'cost': b['total_cost'],
+                    }
+                )
 
-        self.comparison_result = {
-            'added': added,
-            'removed': removed,
-            'changed': changed,
-            'unchanged': unchanged
-        }
+        self.comparison_result = {'added': added, 'removed': removed, 'changed': changed, 'unchanged': unchanged}
 
         self.added_count = len(added)
         self.removed_count = len(removed)
@@ -325,6 +290,7 @@ class BOMComparison(BaseModel):
 # =====================
 # Serializers
 # =====================
+
 
 class BOMSubstituteSerializer(serializers.ModelSerializer):
     original_sku = serializers.CharField(source='original_item.sku', read_only=True)
@@ -360,9 +326,14 @@ class BOMComparisonSerializer(serializers.ModelSerializer):
         model = BOMComparison
         fields = '__all__'
         read_only_fields = [
-            'created_by', 'updated_by', 'comparison_result',
-            'added_count', 'removed_count', 'changed_count',
-            'unchanged_count', 'cost_difference'
+            'created_by',
+            'updated_by',
+            'comparison_result',
+            'added_count',
+            'removed_count',
+            'changed_count',
+            'unchanged_count',
+            'cost_difference',
         ]
 
 
@@ -370,8 +341,10 @@ class BOMComparisonSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class BOMSubstituteViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """BOM替代料管理"""
+
     queryset = BOMSubstitute.objects.filter(is_deleted=False)
     serializer_class = BOMSubstituteSerializer
     permission_classes = [IsAuthenticated]
@@ -384,6 +357,7 @@ class BOMSubstituteViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         substitute = self.get_object()
 
         from django.utils import timezone
+
         substitute.status = 'APPROVED'
         substitute.approved_by = request.user
         substitute.approved_at = timezone.now()
@@ -414,8 +388,7 @@ class BOMSubstituteViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         # 过滤有效期
         today = date.today()
         qs = qs.filter(
-            Q(valid_from__isnull=True) | Q(valid_from__lte=today),
-            Q(valid_to__isnull=True) | Q(valid_to__gte=today)
+            Q(valid_from__isnull=True) | Q(valid_from__lte=today), Q(valid_to__isnull=True) | Q(valid_to__gte=today)
         ).order_by('priority')
 
         return Response(self.get_serializer(qs, many=True).data)
@@ -423,6 +396,7 @@ class BOMSubstituteViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
 
 class BOMVersionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """BOM版本管理"""
+
     queryset = BOMVersion.objects.filter(is_deleted=False)
     serializer_class = BOMVersionSerializer
     permission_classes = [IsAuthenticated]
@@ -435,10 +409,7 @@ class BOMVersionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         version = self.get_object()
         snapshot = version.create_snapshot()
 
-        return Response({
-            'version': self.get_serializer(version).data,
-            'snapshot_count': len(snapshot)
-        })
+        return Response({'version': self.get_serializer(version).data, 'snapshot_count': len(snapshot)})
 
     @action(detail=True, methods=['post'])
     def release(self, request, pk=None):
@@ -448,10 +419,7 @@ class BOMVersionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         from django.utils import timezone
 
         # 取消之前的当前版本
-        BOMVersion.objects.filter(
-            project=version.project,
-            is_current=True
-        ).update(is_current=False)
+        BOMVersion.objects.filter(project=version.project, is_current=True).update(is_current=False)
 
         version.is_current = True
         version.released_at = timezone.now()
@@ -468,14 +436,12 @@ class BOMVersionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         description = request.data.get('description', '')
 
         from apps.projects.models import Project
+
         project = Project.objects.get(id=project_id)
 
         # 创建新版本
         version = BOMVersion.objects.create(
-            project=project,
-            version=version_name,
-            description=description,
-            created_by=request.user
+            project=project, version=version_name, description=description, created_by=request.user
         )
 
         # 创建快照
@@ -486,6 +452,7 @@ class BOMVersionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
 
 class BOMComparisonViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """BOM对比管理"""
+
     queryset = BOMComparison.objects.filter(is_deleted=False)
     serializer_class = BOMComparisonSerializer
     permission_classes = [IsAuthenticated]
@@ -501,21 +468,24 @@ class BOMComparisonViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         """获取对比详情"""
         comparison = self.get_object()
 
-        return Response({
-            'comparison': self.get_serializer(comparison).data,
-            'result': comparison.comparison_result,
-            'summary': {
-                'added': comparison.added_count,
-                'removed': comparison.removed_count,
-                'changed': comparison.changed_count,
-                'unchanged': comparison.unchanged_count,
-                'cost_difference': float(comparison.cost_difference or 0)
+        return Response(
+            {
+                'comparison': self.get_serializer(comparison).data,
+                'result': comparison.comparison_result,
+                'summary': {
+                    'added': comparison.added_count,
+                    'removed': comparison.removed_count,
+                    'changed': comparison.changed_count,
+                    'unchanged': comparison.unchanged_count,
+                    'cost_difference': float(comparison.cost_difference or 0),
+                },
             }
-        })
+        )
 
 
 class BOMCompareView(APIView):
     """BOM即时对比API"""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -526,21 +496,12 @@ class BOMCompareView(APIView):
         project_b_id = request.data.get('project_b_id')
 
         if not project_a_id or not project_b_id:
-            return Response(
-                {'error': '请提供两个项目ID'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供两个项目ID'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 获取两个项目的BOM
-        bom_a = ProjectBOM.objects.filter(
-            project_id=project_a_id,
-            is_deleted=False
-        ).select_related('item')
+        bom_a = ProjectBOM.objects.filter(project_id=project_a_id, is_deleted=False).select_related('item')
 
-        bom_b = ProjectBOM.objects.filter(
-            project_id=project_b_id,
-            is_deleted=False
-        ).select_related('item')
+        bom_b = ProjectBOM.objects.filter(project_id=project_b_id, is_deleted=False).select_related('item')
 
         # 转换为字典
         dict_a = {
@@ -548,7 +509,7 @@ class BOMCompareView(APIView):
                 'sku': item.item.sku if item.item else '',
                 'name': item.item.name if item.item else '',
                 'qty': float(item.planned_qty),
-                'cost': float(item.unit_cost or 0)
+                'cost': float(item.unit_cost or 0),
             }
             for item in bom_a
         }
@@ -558,19 +519,14 @@ class BOMCompareView(APIView):
                 'sku': item.item.sku if item.item else '',
                 'name': item.item.name if item.item else '',
                 'qty': float(item.planned_qty),
-                'cost': float(item.unit_cost or 0)
+                'cost': float(item.unit_cost or 0),
             }
             for item in bom_b
         }
 
         all_items = set(dict_a.keys()) | set(dict_b.keys())
 
-        result = {
-            'only_in_a': [],
-            'only_in_b': [],
-            'different': [],
-            'same': []
-        }
+        result = {'only_in_a': [], 'only_in_b': [], 'different': [], 'same': []}
 
         for item_id in all_items:
             in_a = item_id in dict_a
@@ -585,25 +541,29 @@ class BOMCompareView(APIView):
                 b = dict_b[item_id]
 
                 if a['qty'] != b['qty'] or a['cost'] != b['cost']:
-                    result['different'].append({
-                        'sku': a['sku'],
-                        'name': a['name'],
-                        'qty_a': a['qty'],
-                        'qty_b': b['qty'],
-                        'cost_a': a['cost'],
-                        'cost_b': b['cost']
-                    })
+                    result['different'].append(
+                        {
+                            'sku': a['sku'],
+                            'name': a['name'],
+                            'qty_a': a['qty'],
+                            'qty_b': b['qty'],
+                            'cost_a': a['cost'],
+                            'cost_b': b['cost'],
+                        }
+                    )
                 else:
                     result['same'].append(a)
 
-        return Response({
-            'project_a': project_a_id,
-            'project_b': project_b_id,
-            'result': result,
-            'summary': {
-                'only_in_a': len(result['only_in_a']),
-                'only_in_b': len(result['only_in_b']),
-                'different': len(result['different']),
-                'same': len(result['same'])
+        return Response(
+            {
+                'project_a': project_a_id,
+                'project_b': project_b_id,
+                'result': result,
+                'summary': {
+                    'only_in_a': len(result['only_in_a']),
+                    'only_in_b': len(result['only_in_b']),
+                    'different': len(result['different']),
+                    'same': len(result['same']),
+                },
             }
-        })
+        )

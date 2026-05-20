@@ -1,6 +1,7 @@
 """
 Batch tracking views
 """
+
 from datetime import timedelta
 
 from django.utils import timezone
@@ -16,6 +17,7 @@ from .batch_serializers import BatchMoveSerializer, BatchSerializer
 
 class BatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """Batch management viewset"""
+
     queryset = Batch.objects.all()
     serializer_class = BatchSerializer
     filterset_fields = ['item', 'warehouse', 'quality_status', 'is_deleted']
@@ -30,9 +32,7 @@ class BatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         expiry_threshold = timezone.now().date() + timedelta(days=days)
 
         expiring_batches = self.get_queryset().filter(
-            expiry_date__lte=expiry_threshold,
-            expiry_date__gte=timezone.now().date(),
-            qty_on_hand__gt=0
+            expiry_date__lte=expiry_threshold, expiry_date__gte=timezone.now().date(), qty_on_hand__gt=0
         )
 
         serializer = self.get_serializer(expiring_batches, many=True)
@@ -41,10 +41,7 @@ class BatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def expired(self, request):
         """Get expired batches"""
-        expired_batches = self.get_queryset().filter(
-            expiry_date__lt=timezone.now().date(),
-            qty_on_hand__gt=0
-        )
+        expired_batches = self.get_queryset().filter(expiry_date__lt=timezone.now().date(), qty_on_hand__gt=0)
 
         serializer = self.get_serializer(expired_batches, many=True)
         return Response(serializer.data)
@@ -57,10 +54,7 @@ class BatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         reason = request.data.get('reason', '')
 
         if new_qty is None:
-            return Response(
-                {'error': '请提供新数量'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供新数量'}, status=status.HTTP_400_BAD_REQUEST)
 
         new_qty = float(new_qty)
         qty_diff = new_qty - float(batch.qty_on_hand)
@@ -73,7 +67,7 @@ class BatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
             reference_type='MANUAL_ADJUSTMENT',
             reference_id=batch.id,
             notes=reason,
-            created_by=request.user
+            created_by=request.user,
         )
 
         batch.qty_on_hand = new_qty
@@ -87,15 +81,11 @@ class BatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         item_id = request.query_params.get('item_id')
 
         if not item_id:
-            return Response(
-                {'error': '请提供物料ID'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供物料ID'}, status=status.HTTP_400_BAD_REQUEST)
 
-        batches = self.get_queryset().filter(
-            item_id=item_id,
-            qty_on_hand__gt=0
-        ).order_by('expiry_date')  # FEFO - First Expiry, First Out
+        batches = (
+            self.get_queryset().filter(item_id=item_id, qty_on_hand__gt=0).order_by('expiry_date')
+        )  # FEFO - First Expiry, First Out
 
         serializer = self.get_serializer(batches, many=True)
         return Response(serializer.data)
@@ -103,6 +93,7 @@ class BatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 
 class BatchMoveViewSet(viewsets.ReadOnlyModelViewSet):
     """Batch move history viewset (read-only)"""
+
     queryset = BatchMove.objects.all()
     serializer_class = BatchMoveSerializer
     filterset_fields = ['batch', 'move_type']
@@ -114,12 +105,8 @@ class BatchMoveViewSet(viewsets.ReadOnlyModelViewSet):
         batch_id = request.query_params.get('batch_id')
 
         if not batch_id:
-            return Response(
-                {'error': '请提供批次ID'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供批次ID'}, status=status.HTTP_400_BAD_REQUEST)
 
         moves = self.get_queryset().filter(batch_id=batch_id)
         serializer = self.get_serializer(moves, many=True)
         return Response(serializer.data)
-

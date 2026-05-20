@@ -14,6 +14,7 @@ Customer Credit Management
 - 信用额度控制（防止超额赊销）
 - 账期管理（控制回款周期）
 """
+
 from datetime import date
 from decimal import Decimal
 
@@ -33,39 +34,20 @@ class CreditLevel(BaseModel):
     """
     信用等级
     """
+
     code = models.CharField(max_length=10, unique=True, verbose_name='等级编码')
     name = models.CharField(max_length=50, verbose_name='等级名称')
 
     # 默认额度和账期
-    default_credit_limit = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        verbose_name='默认信用额度'
-    )
+    default_credit_limit = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='默认信用额度')
     default_payment_days = models.IntegerField(default=30, verbose_name='默认账期(天)')
 
     # 折扣
-    discount_rate = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=0,
-        verbose_name='折扣率(%)'
-    )
+    discount_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name='折扣率(%)')
 
     # 规则
-    min_order_amount = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        verbose_name='最低订单金额'
-    )
-    prepayment_rate = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=0,
-        verbose_name='预付款比例(%)'
-    )
+    min_order_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='最低订单金额')
+    prepayment_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name='预付款比例(%)')
 
     color = models.CharField(max_length=20, default='#409EFF', verbose_name='显示颜色')
     sort_order = models.IntegerField(default=0, verbose_name='排序')
@@ -85,6 +67,7 @@ class CustomerCredit(BaseModel):
     """
     客户信用
     """
+
     STATUS_CHOICES = [
         ('NORMAL', '正常'),
         ('WARNING', '预警'),
@@ -93,53 +76,25 @@ class CustomerCredit(BaseModel):
     ]
 
     customer = models.OneToOneField(
-        'masterdata.Customer',
-        on_delete=models.CASCADE,
-        related_name='credit_info',
-        verbose_name='客户'
+        'masterdata.Customer', on_delete=models.CASCADE, related_name='credit_info', verbose_name='客户'
     )
     credit_level = models.ForeignKey(
-        CreditLevel,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='customers',
-        verbose_name='信用等级'
+        CreditLevel, on_delete=models.SET_NULL, null=True, blank=True, related_name='customers', verbose_name='信用等级'
     )
 
     # 信用额度
-    credit_limit = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        verbose_name='信用额度'
-    )
-    temporary_limit = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        verbose_name='临时额度'
-    )
+    credit_limit = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='信用额度')
+    temporary_limit = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='临时额度')
     temp_limit_expire = models.DateField(null=True, blank=True, verbose_name='临时额度到期日')
 
     # 已用额度（定期计算）
-    used_amount = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        verbose_name='已用额度'
-    )
+    used_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='已用额度')
 
     # 账期
     payment_days = models.IntegerField(default=30, verbose_name='账期(天)')
 
     # 状态
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='NORMAL',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='NORMAL', verbose_name='状态')
 
     # 风险评分
     risk_score = models.IntegerField(default=100, verbose_name='风险评分')
@@ -149,25 +104,12 @@ class CustomerCredit(BaseModel):
     total_overdue_days = models.IntegerField(default=0, verbose_name='累计逾期天数')
     max_overdue_days = models.IntegerField(default=0, verbose_name='最长逾期天数')
     current_overdue_amount = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        verbose_name='当前逾期金额'
+        max_digits=18, decimal_places=2, default=0, verbose_name='当前逾期金额'
     )
 
     # 历史统计
-    total_order_amount = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        verbose_name='累计订单金额'
-    )
-    total_payment_amount = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        verbose_name='累计回款金额'
-    )
+    total_order_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='累计订单金额')
+    total_payment_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='累计回款金额')
 
     # 审批
     last_reviewed_by = models.ForeignKey(
@@ -176,7 +118,7 @@ class CustomerCredit(BaseModel):
         null=True,
         blank=True,
         related_name='reviewed_credits',
-        verbose_name='最后审核人'
+        verbose_name='最后审核人',
     )
     last_reviewed_at = models.DateTimeField(null=True, blank=True, verbose_name='最后审核时间')
 
@@ -229,9 +171,7 @@ class CustomerCredit(BaseModel):
 
         # 计算未收款金额
         ar_amount = AccountsReceivable.objects.filter(
-            customer=self.customer,
-            status__in=['PENDING', 'PARTIAL'],
-            is_deleted=False
+            customer=self.customer, status__in=['PENDING', 'PARTIAL'], is_deleted=False
         ).aggregate(total=Sum('balance_amount'))['total'] or Decimal('0')
 
         self.used_amount = ar_amount
@@ -242,6 +182,7 @@ class CreditAdjustment(BaseModel):
     """
     信用额度调整记录
     """
+
     ADJUSTMENT_TYPES = [
         ('INCREASE', '增加'),
         ('DECREASE', '减少'),
@@ -250,17 +191,10 @@ class CreditAdjustment(BaseModel):
     ]
 
     customer_credit = models.ForeignKey(
-        CustomerCredit,
-        on_delete=models.CASCADE,
-        related_name='adjustments',
-        verbose_name='客户信用'
+        CustomerCredit, on_delete=models.CASCADE, related_name='adjustments', verbose_name='客户信用'
     )
 
-    adjustment_type = models.CharField(
-        max_length=20,
-        choices=ADJUSTMENT_TYPES,
-        verbose_name='调整类型'
-    )
+    adjustment_type = models.CharField(max_length=20, choices=ADJUSTMENT_TYPES, verbose_name='调整类型')
 
     # 调整金额
     before_amount = models.DecimalField(max_digits=18, decimal_places=2, verbose_name='调整前额度')
@@ -279,7 +213,7 @@ class CreditAdjustment(BaseModel):
         null=True,
         blank=True,
         related_name='approved_credit_adjustments',
-        verbose_name='审批人'
+        verbose_name='审批人',
     )
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name='审批时间')
 
@@ -296,6 +230,7 @@ class CreditAdjustment(BaseModel):
 # =====================
 # Serializers
 # =====================
+
 
 class CreditLevelSerializer(serializers.ModelSerializer):
     customer_count = serializers.SerializerMethodField()
@@ -335,9 +270,21 @@ class CustomerCreditListSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomerCredit
         fields = [
-            'id', 'customer', 'customer_name', 'customer_code', 'credit_level', 'level_name',
-            'credit_limit', 'used_amount', 'available_credit', 'usage_rate',
-            'payment_days', 'status', 'status_display', 'risk_score', 'overdue_times'
+            'id',
+            'customer',
+            'customer_name',
+            'customer_code',
+            'credit_level',
+            'level_name',
+            'credit_limit',
+            'used_amount',
+            'available_credit',
+            'usage_rate',
+            'payment_days',
+            'status',
+            'status_display',
+            'risk_score',
+            'overdue_times',
         ]
 
 
@@ -350,16 +297,17 @@ class CreditAdjustmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = CreditAdjustment
         fields = '__all__'
-        read_only_fields = ['created_by', 'updated_by', 'approved_by', 'approved_at',
-                          'before_amount', 'after_amount']
+        read_only_fields = ['created_by', 'updated_by', 'approved_by', 'approved_at', 'before_amount', 'after_amount']
 
 
 # =====================
 # ViewSets
 # =====================
 
+
 class CreditLevelViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """信用等级管理"""
+
     queryset = CreditLevel.objects.filter(is_deleted=False)
     serializer_class = CreditLevelSerializer
     permission_classes = [IsAuthenticated]
@@ -387,8 +335,8 @@ class CreditLevelViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
                     'discount_rate': discount,
                     'color': color,
                     'sort_order': i * 10,
-                    'created_by': request.user
-                }
+                    'created_by': request.user,
+                },
             )
             if c:
                 created += 1
@@ -398,6 +346,7 @@ class CreditLevelViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
 
 class CustomerCreditViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """客户信用管理"""
+
     queryset = CustomerCredit.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['credit_level', 'status']
@@ -445,7 +394,7 @@ class CustomerCreditViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
             reason=reason,
             approved_by=request.user,
             approved_at=timezone.now(),
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(self.get_serializer(credit).data)
@@ -485,22 +434,20 @@ class CustomerCreditViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         try:
             credit = CustomerCredit.objects.get(customer_id=customer_id)
         except CustomerCredit.DoesNotExist:
-            return Response({
-                'passed': True,
-                'message': '客户无信用控制',
-                'available_credit': None
-            })
+            return Response({'passed': True, 'message': '客户无信用控制', 'available_credit': None})
 
         passed, message = credit.check_credit(amount)
 
-        return Response({
-            'passed': passed,
-            'message': message,
-            'credit_limit': credit.credit_limit,
-            'used_amount': credit.used_amount,
-            'available_credit': credit.available_credit,
-            'status': credit.status
-        })
+        return Response(
+            {
+                'passed': passed,
+                'message': message,
+                'credit_limit': credit.credit_limit,
+                'used_amount': credit.used_amount,
+                'available_credit': credit.available_credit,
+                'status': credit.status,
+            }
+        )
 
     @action(detail=False, methods=['get'])
     def warning_list(self, request):
@@ -518,9 +465,11 @@ class CustomerCreditViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
     @action(detail=False, methods=['get'])
     def overdue_list(self, request):
         """逾期客户列表"""
-        credits = self.get_queryset().filter(
-            Q(current_overdue_amount__gt=0) | Q(overdue_times__gt=0)
-        ).order_by('-current_overdue_amount')
+        credits = (
+            self.get_queryset()
+            .filter(Q(current_overdue_amount__gt=0) | Q(overdue_times__gt=0))
+            .order_by('-current_overdue_amount')
+        )
 
         return Response(CustomerCreditListSerializer(credits, many=True).data)
 
@@ -532,28 +481,25 @@ class CustomerCreditViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         total_limit = qs.aggregate(total=Sum('credit_limit'))['total'] or 0
         total_used = qs.aggregate(total=Sum('used_amount'))['total'] or 0
 
-        by_status = qs.values('status').annotate(
-            count=Count('id'),
-            total_limit=Sum('credit_limit')
-        )
+        by_status = qs.values('status').annotate(count=Count('id'), total_limit=Sum('credit_limit'))
 
-        by_level = qs.values('credit_level__name').annotate(
-            count=Count('id'),
-            total_limit=Sum('credit_limit')
-        )
+        by_level = qs.values('credit_level__name').annotate(count=Count('id'), total_limit=Sum('credit_limit'))
 
-        return Response({
-            'total_customers': qs.count(),
-            'total_credit_limit': float(total_limit),
-            'total_used_amount': float(total_used),
-            'overall_usage_rate': round(float(total_used) / float(total_limit) * 100, 2) if total_limit > 0 else 0,
-            'by_status': list(by_status),
-            'by_level': list(by_level)
-        })
+        return Response(
+            {
+                'total_customers': qs.count(),
+                'total_credit_limit': float(total_limit),
+                'total_used_amount': float(total_used),
+                'overall_usage_rate': round(float(total_used) / float(total_limit) * 100, 2) if total_limit > 0 else 0,
+                'by_status': list(by_status),
+                'by_level': list(by_level),
+            }
+        )
 
 
 class CreditAdjustmentViewSet(viewsets.ReadOnlyModelViewSet):
     """信用调整记录"""
+
     queryset = CreditAdjustment.objects.filter(is_deleted=False)
     serializer_class = CreditAdjustmentSerializer
     permission_classes = [IsAuthenticated]

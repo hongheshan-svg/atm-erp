@@ -1,6 +1,7 @@
 """
 Views for bank statement import/export.
 """
+
 import io
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -27,7 +28,6 @@ from .models import AccountPayable, AccountReceivable
 
 
 class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
-
     permission_module = 'finance'
     permission_resource = 'bank_statement'
     """
@@ -83,17 +83,11 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         """
         file = request.FILES.get('file')
         if not file:
-            return Response(
-                {'error': '请上传文件'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请上传文件'}, status=status.HTTP_400_BAD_REQUEST)
 
         file_name = file.name
         if not file_name.endswith(('.xlsx', '.xls')):
-            return Response(
-                {'error': '只支持Excel文件格式(.xlsx, .xls)'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只支持Excel文件格式(.xlsx, .xls)'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             import openpyxl
@@ -137,17 +131,49 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
             # Keywords to filter out internal/non-business transactions
             SKIP_KEYWORDS = [
                 # 工资相关
-                '工资', '薪资', '薪酬', '社保', '公积金', '个税', '代扣', '代缴',
+                '工资',
+                '薪资',
+                '薪酬',
+                '社保',
+                '公积金',
+                '个税',
+                '代扣',
+                '代缴',
                 # 税费相关
-                '税款', '税费', '增值税', '附加税', '所得税', '印花税', '税收收缴', '国库',
+                '税款',
+                '税费',
+                '增值税',
+                '附加税',
+                '所得税',
+                '印花税',
+                '税收收缴',
+                '国库',
                 # 内部往来
-                '内部', '往来', '调拨', '备用金', '借款', '还款',
+                '内部',
+                '往来',
+                '调拨',
+                '备用金',
+                '借款',
+                '还款',
                 # 银行费用
-                '利息', '手续费', '银行费', '账户管理费',
+                '利息',
+                '手续费',
+                '银行费',
+                '账户管理费',
                 # 公用事业费
-                '电费', '水费', '房租', '物业费', '供电局', '自来水', '燃气',
+                '电费',
+                '水费',
+                '房租',
+                '物业费',
+                '供电局',
+                '自来水',
+                '燃气',
                 # 其他
-                '退款', '冲账', '更正', '报销费用', '差旅费'
+                '退款',
+                '冲账',
+                '更正',
+                '报销费用',
+                '差旅费',
             ]
 
             def is_internal_transaction(name, purpose, summary, postscript):
@@ -206,7 +232,9 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                         parsed_time_raw = self._parse_datetime(get_cell('交易时间'))
                         time_str = parsed_time_raw.strftime('%Y-%m-%d %H:%M:%S') if parsed_time_raw else ''
 
-                        duplicate_key = f"{voucher_no}|{time_str}|{counterparty_name}|{credit_amount_raw}|{debit_amount_raw}"
+                        duplicate_key = (
+                            f'{voucher_no}|{time_str}|{counterparty_name}|{credit_amount_raw}|{debit_amount_raw}'
+                        )
 
                         # Check for in-file duplicate
                         if duplicate_key in processed_transactions:
@@ -216,10 +244,7 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 
                         # Check for existing record in database
                         if voucher_no:
-                            existing = BankStatement.objects.filter(
-                                voucher_no=voucher_no,
-                                is_deleted=False
-                            ).first()
+                            existing = BankStatement.objects.filter(voucher_no=voucher_no, is_deleted=False).first()
                             if existing:
                                 duplicate_count += 1
                                 continue
@@ -230,7 +255,7 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                                 counterparty_name=str(counterparty_name or ''),
                                 credit_amount=credit_amount_raw,
                                 debit_amount=debit_amount_raw,
-                                is_deleted=False
+                                is_deleted=False,
                             ).first()
                             if existing:
                                 duplicate_count += 1
@@ -255,8 +280,7 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 
                         # Create a temporary object for matching
                         temp_statement = BankStatement(
-                            counterparty_name=str(counterparty_name or ''),
-                            transaction_type=transaction_type
+                            counterparty_name=str(counterparty_name or ''), transaction_type=transaction_type
                         )
 
                         if transaction_type == 'DEBIT':
@@ -293,11 +317,11 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                             customer=customer,
                             match_confidence=match_confidence,
                             match_type='AP' if supplier else ('AR' if customer else None),
-                            status='MATCHED' if match_confidence >= 70 else 'PENDING'
+                            status='MATCHED' if match_confidence >= 70 else 'PENDING',
                         )
 
                         if match_confidence >= 70:
-                                    matched_count += 1
+                            matched_count += 1
 
                         statement.save()
                         records.append(statement)
@@ -307,10 +331,7 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                         credit_total += credit_amount
 
                     except Exception as e:
-                        errors.append({
-                            'row': row,
-                            'error': str(e)
-                        })
+                        errors.append({'row': row, 'error': str(e)})
 
                 # Create import log
                 import_log = BankStatementImportLog.objects.create(
@@ -324,27 +345,26 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                     credit_total=credit_total,
                     error_details=errors,
                     notes=f'跳过{skipped_count}条非业务流水，{duplicate_count}条重复记录',
-                    created_by=request.user
+                    created_by=request.user,
                 )
 
-            return Response({
-                'batch_no': batch_no,
-                'success_count': success_count,
-                'skipped_count': skipped_count,
-                'duplicate_count': duplicate_count,
-                'error_count': len(errors),
-                'matched_count': matched_count,
-                'debit_total': float(debit_total),
-                'credit_total': float(credit_total),
-                'errors': errors[:10],  # Return first 10 errors
-                'import_log_id': import_log.id
-            })
+            return Response(
+                {
+                    'batch_no': batch_no,
+                    'success_count': success_count,
+                    'skipped_count': skipped_count,
+                    'duplicate_count': duplicate_count,
+                    'error_count': len(errors),
+                    'matched_count': matched_count,
+                    'debit_total': float(debit_total),
+                    'credit_total': float(credit_total),
+                    'errors': errors[:10],  # Return first 10 errors
+                    'import_log_id': import_log.id,
+                }
+            )
 
         except Exception as e:
-            return Response(
-                {'error': f'导入失败: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            return Response({'error': f'导入失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['get'])
     def export_excel(self, request):
@@ -382,9 +402,19 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 
             # Headers
             headers = [
-                '交易时间', '借贷标志', '对方单位', '用途', '摘要', '附言',
-                '转入金额', '转出金额', '余额', '匹配状态', '匹配供应商/客户',
-                '关联单号', '导入批次'
+                '交易时间',
+                '借贷标志',
+                '对方单位',
+                '用途',
+                '摘要',
+                '附言',
+                '转入金额',
+                '转出金额',
+                '余额',
+                '匹配状态',
+                '匹配供应商/客户',
+                '关联单号',
+                '导入批次',
             ]
 
             for col, header in enumerate(headers, 1):
@@ -432,18 +462,16 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
             output.seek(0)
 
             response = HttpResponse(
-                output.read(),
-                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             )
-            response['Content-Disposition'] = f'attachment; filename="bank_statements_{timezone.now().strftime("%Y%m%d")}.xlsx"'
+            response['Content-Disposition'] = (
+                f'attachment; filename="bank_statements_{timezone.now().strftime("%Y%m%d")}.xlsx"'
+            )
 
             return response
 
         except Exception as e:
-            return Response(
-                {'error': f'导出失败: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            return Response({'error': f'导出失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=True, methods=['post'])
     def match(self, request, pk=None):
@@ -491,6 +519,7 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
             project_id = data.get('project_id')
             if project_id:
                 from apps.projects.models import Project
+
                 statement.project = Project.objects.get(id=project_id)
             elif not statement.project:
                 # Try auto-matching project
@@ -567,11 +596,13 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                         # 付款匹配采购付款计划
                         self._try_match_purchase_payment_schedule(statement)
 
-        return Response({
-            'matched_count': matched_count,
-            'project_matched_count': project_matched_count,
-            'message': f'成功匹配 {matched_count} 条记录，其中 {project_matched_count} 条关联到项目'
-        })
+        return Response(
+            {
+                'matched_count': matched_count,
+                'project_matched_count': project_matched_count,
+                'message': f'成功匹配 {matched_count} 条记录，其中 {project_matched_count} 条关联到项目',
+            }
+        )
 
     def _try_match_payment_schedule(self, statement):
         """
@@ -590,12 +621,13 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 
         # 查找该客户待收款的付款计划
         # 优先匹配金额完全相等的
-        exact_match = PaymentSchedule.objects.filter(
-            sales_order__customer=customer,
-            status__in=['PENDING', 'PARTIAL'],
-            amount_due=amount,
-            is_deleted=False
-        ).order_by('due_date').first()
+        exact_match = (
+            PaymentSchedule.objects.filter(
+                sales_order__customer=customer, status__in=['PENDING', 'PARTIAL'], amount_due=amount, is_deleted=False
+            )
+            .order_by('due_date')
+            .first()
+        )
 
         if exact_match:
             exact_match.amount_paid += amount
@@ -617,9 +649,7 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 
         # 如果没有完全匹配，查找剩余金额接近的
         pending_schedules = PaymentSchedule.objects.filter(
-            sales_order__customer=customer,
-            status__in=['PENDING', 'PARTIAL'],
-            is_deleted=False
+            sales_order__customer=customer, status__in=['PENDING', 'PARTIAL'], is_deleted=False
         ).order_by('due_date')
 
         for schedule in pending_schedules:
@@ -661,12 +691,16 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 
         # 查找该供应商待付款的付款计划
         # 优先匹配金额完全相等的
-        exact_match = PurchasePaymentSchedule.objects.filter(
-            purchase_order__supplier=supplier,
-            status__in=['PENDING', 'PARTIAL'],
-            amount_due=amount,
-            is_deleted=False
-        ).order_by('due_date').first()
+        exact_match = (
+            PurchasePaymentSchedule.objects.filter(
+                purchase_order__supplier=supplier,
+                status__in=['PENDING', 'PARTIAL'],
+                amount_due=amount,
+                is_deleted=False,
+            )
+            .order_by('due_date')
+            .first()
+        )
 
         if exact_match:
             exact_match.amount_paid += amount
@@ -688,9 +722,7 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 
         # 如果没有完全匹配，查找剩余金额接近的
         pending_schedules = PurchasePaymentSchedule.objects.filter(
-            purchase_order__supplier=supplier,
-            status__in=['PENDING', 'PARTIAL'],
-            is_deleted=False
+            purchase_order__supplier=supplier, status__in=['PENDING', 'PARTIAL'], is_deleted=False
         ).order_by('due_date')
 
         for schedule in pending_schedules:
@@ -725,22 +757,18 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
 
-        queryset = self.get_queryset().filter(
-            transaction_type='DEBIT',
-            supplier__isnull=False
-        )
+        queryset = self.get_queryset().filter(transaction_type='DEBIT', supplier__isnull=False)
 
         if start_date:
             queryset = queryset.filter(transaction_time__date__gte=start_date)
         if end_date:
             queryset = queryset.filter(transaction_time__date__lte=end_date)
 
-        summary = queryset.values(
-            'supplier__id', 'supplier__name'
-        ).annotate(
-            total_amount=Sum('debit_amount'),
-            transaction_count=Count('id')
-        ).order_by('-total_amount')
+        summary = (
+            queryset.values('supplier__id', 'supplier__name')
+            .annotate(total_amount=Sum('debit_amount'), transaction_count=Count('id'))
+            .order_by('-total_amount')
+        )
 
         return Response(list(summary))
 
@@ -751,10 +779,7 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         """
         supplier_id = request.query_params.get('supplier_id')
 
-        queryset = self.get_queryset().filter(
-            transaction_type='DEBIT',
-            status='PENDING'
-        )
+        queryset = self.get_queryset().filter(transaction_type='DEBIT', status='PENDING')
 
         if supplier_id:
             queryset = queryset.filter(supplier_id=supplier_id)
@@ -779,14 +804,10 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         from django.utils import timezone
 
         deleted_count = BankStatement.objects.filter(id__in=ids, is_deleted=False).update(
-            is_deleted=True,
-            deleted_at=timezone.now()
+            is_deleted=True, deleted_at=timezone.now()
         )
 
-        return Response({
-            'success': True,
-            'deleted_count': deleted_count
-        })
+        return Response({'success': True, 'deleted_count': deleted_count})
 
     @action(detail=False, methods=['post'])
     def set_project(self, request):
@@ -812,16 +833,17 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 
         updated_count = BankStatement.objects.filter(id__in=statement_ids).update(project=project)
 
-        return Response({
-            'success': True,
-            'updated_count': updated_count,
-            'project_code': project.code,
-            'project_name': project.name
-        })
+        return Response(
+            {
+                'success': True,
+                'updated_count': updated_count,
+                'project_code': project.code,
+                'project_name': project.name,
+            }
+        )
 
 
 class BankStatementImportLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
-
     permission_module = 'finance'
     permission_resource = 'bank_statement_import_log'
     """
@@ -832,4 +854,3 @@ class BankStatementImportLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewS
     filterset_fields = ['batch_no']
     search_fields = ['file_name', 'batch_no']
     ordering_fields = ['import_time', 'total_count']
-

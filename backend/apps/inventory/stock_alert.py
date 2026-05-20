@@ -12,6 +12,7 @@ Stock Alert Management
 注：呆滞预警、补货预警、积压预警等对非标定制件意义不大，
 可根据实际需要选择性启用。
 """
+
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -31,6 +32,7 @@ class StockAlertRule(BaseModel):
     """
     库存预警规则
     """
+
     ALERT_TYPES = [
         ('LOW_STOCK', '低库存预警'),
         ('OVERSTOCK', '积压预警'),
@@ -46,53 +48,25 @@ class StockAlertRule(BaseModel):
     ]
 
     name = models.CharField(max_length=100, verbose_name='规则名称')
-    alert_type = models.CharField(
-        max_length=20,
-        choices=ALERT_TYPES,
-        verbose_name='预警类型'
-    )
+    alert_type = models.CharField(max_length=20, choices=ALERT_TYPES, verbose_name='预警类型')
 
     # 适用范围
-    scope = models.CharField(
-        max_length=20,
-        choices=SCOPE_CHOICES,
-        default='ALL',
-        verbose_name='适用范围'
-    )
+    scope = models.CharField(max_length=20, choices=SCOPE_CHOICES, default='ALL', verbose_name='适用范围')
     category = models.ForeignKey(
         'masterdata.ItemCategory',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='alert_rules',
-        verbose_name='物料分类'
+        verbose_name='物料分类',
     )
-    items = models.ManyToManyField(
-        'masterdata.Item',
-        blank=True,
-        related_name='alert_rules',
-        verbose_name='指定物料'
-    )
+    items = models.ManyToManyField('masterdata.Item', blank=True, related_name='alert_rules', verbose_name='指定物料')
 
     # 阈值配置
-    threshold_qty = models.DecimalField(
-        max_digits=18,
-        decimal_places=4,
-        null=True,
-        blank=True,
-        verbose_name='数量阈值'
-    )
-    threshold_days = models.IntegerField(
-        null=True,
-        blank=True,
-        verbose_name='天数阈值'
-    )
+    threshold_qty = models.DecimalField(max_digits=18, decimal_places=4, null=True, blank=True, verbose_name='数量阈值')
+    threshold_days = models.IntegerField(null=True, blank=True, verbose_name='天数阈值')
     threshold_percentage = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        verbose_name='百分比阈值'
+        max_digits=5, decimal_places=2, null=True, blank=True, verbose_name='百分比阈值'
     )
 
     # 通知设置
@@ -116,6 +90,7 @@ class StockAlert(BaseModel):
     """
     库存预警记录
     """
+
     STATUS_CHOICES = [
         ('ACTIVE', '活跃'),
         ('ACKNOWLEDGED', '已确认'),
@@ -130,18 +105,10 @@ class StockAlert(BaseModel):
     ]
 
     rule = models.ForeignKey(
-        StockAlertRule,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='alerts',
-        verbose_name='预警规则'
+        StockAlertRule, on_delete=models.SET_NULL, null=True, blank=True, related_name='alerts', verbose_name='预警规则'
     )
     item = models.ForeignKey(
-        'masterdata.Item',
-        on_delete=models.CASCADE,
-        related_name='stock_alerts',
-        verbose_name='物料'
+        'masterdata.Item', on_delete=models.CASCADE, related_name='stock_alerts', verbose_name='物料'
     )
     warehouse = models.ForeignKey(
         'masterdata.Warehouse',
@@ -149,39 +116,19 @@ class StockAlert(BaseModel):
         null=True,
         blank=True,
         related_name='stock_alerts',
-        verbose_name='仓库'
+        verbose_name='仓库',
     )
 
     alert_type = models.CharField(max_length=20, verbose_name='预警类型')
-    severity = models.CharField(
-        max_length=20,
-        choices=SEVERITY_LEVELS,
-        default='WARNING',
-        verbose_name='严重程度'
-    )
+    severity = models.CharField(max_length=20, choices=SEVERITY_LEVELS, default='WARNING', verbose_name='严重程度')
     title = models.CharField(max_length=200, verbose_name='预警标题')
     description = models.TextField(verbose_name='预警描述')
 
     # 预警数据
-    current_qty = models.DecimalField(
-        max_digits=18,
-        decimal_places=4,
-        default=0,
-        verbose_name='当前库存'
-    )
-    threshold_value = models.DecimalField(
-        max_digits=18,
-        decimal_places=4,
-        default=0,
-        verbose_name='阈值'
-    )
+    current_qty = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='当前库存')
+    threshold_value = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='阈值')
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='ACTIVE',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ACTIVE', verbose_name='状态')
 
     # 处理
     handler = models.ForeignKey(
@@ -190,7 +137,7 @@ class StockAlert(BaseModel):
         null=True,
         blank=True,
         related_name='handled_stock_alerts',
-        verbose_name='处理人'
+        verbose_name='处理人',
     )
     handled_at = models.DateTimeField(null=True, blank=True, verbose_name='处理时间')
     resolution = models.TextField(blank=True, verbose_name='解决方案')
@@ -262,9 +209,9 @@ class StockAlertService:
                 continue
 
             # 获取当前库存
-            current_qty = Stock.objects.filter(
-                item=item, is_deleted=False
-            ).aggregate(total=Sum('quantity'))['total'] or Decimal('0')
+            current_qty = Stock.objects.filter(item=item, is_deleted=False).aggregate(total=Sum('quantity'))[
+                'total'
+            ] or Decimal('0')
 
             if current_qty < threshold:
                 # 创建预警
@@ -276,7 +223,7 @@ class StockAlertService:
                     title=f'{item.name} 库存不足',
                     description=f'物料 {item.code} {item.name} 当前库存 {current_qty}，低于安全库存 {threshold}',
                     current_qty=current_qty,
-                    threshold_value=threshold
+                    threshold_value=threshold,
                 )
                 if alert:
                     alerts.append(alert)
@@ -298,9 +245,9 @@ class StockAlertService:
 
             max_stock = item.safety_stock * threshold_factor / 100
 
-            current_qty = Stock.objects.filter(
-                item=item, is_deleted=False
-            ).aggregate(total=Sum('quantity'))['total'] or Decimal('0')
+            current_qty = Stock.objects.filter(item=item, is_deleted=False).aggregate(total=Sum('quantity'))[
+                'total'
+            ] or Decimal('0')
 
             if current_qty > max_stock:
                 alert = StockAlertService._create_alert(
@@ -311,7 +258,7 @@ class StockAlertService:
                     title=f'{item.name} 库存积压',
                     description=f'物料 {item.code} {item.name} 当前库存 {current_qty}，超过建议库存 {max_stock}',
                     current_qty=current_qty,
-                    threshold_value=max_stock
+                    threshold_value=max_stock,
                 )
                 if alert:
                     alerts.append(alert)
@@ -333,9 +280,9 @@ class StockAlertService:
             if not reorder_point or reorder_point <= 0:
                 continue
 
-            current_qty = Stock.objects.filter(
-                item=item, is_deleted=False
-            ).aggregate(total=Sum('quantity'))['total'] or Decimal('0')
+            current_qty = Stock.objects.filter(item=item, is_deleted=False).aggregate(total=Sum('quantity'))[
+                'total'
+            ] or Decimal('0')
 
             if current_qty <= reorder_point:
                 alert = StockAlertService._create_alert(
@@ -346,7 +293,7 @@ class StockAlertService:
                     title=f'{item.name} 达到补货点',
                     description=f'物料 {item.code} {item.name} 当前库存 {current_qty}，已达补货点 {reorder_point}，建议补货',
                     current_qty=current_qty,
-                    threshold_value=reorder_point
+                    threshold_value=reorder_point,
                 )
                 if alert:
                     alerts.append(alert)
@@ -365,19 +312,16 @@ class StockAlertService:
         cutoff_date = date.today() - timedelta(days=days)
 
         for item in items:
-            current_qty = Stock.objects.filter(
-                item=item, is_deleted=False
-            ).aggregate(total=Sum('quantity'))['total'] or Decimal('0')
+            current_qty = Stock.objects.filter(item=item, is_deleted=False).aggregate(total=Sum('quantity'))[
+                'total'
+            ] or Decimal('0')
 
             if current_qty <= 0:
                 continue
 
             # 检查最近出库记录
             last_out = StockMove.objects.filter(
-                item=item,
-                move_type='OUT',
-                created_at__gte=cutoff_date,
-                is_deleted=False
+                item=item, move_type='OUT', created_at__gte=cutoff_date, is_deleted=False
             ).exists()
 
             if not last_out:
@@ -389,7 +333,7 @@ class StockAlertService:
                     title=f'{item.name} 呆滞物料',
                     description=f'物料 {item.code} {item.name} 库存 {current_qty}，超过 {days} 天无出库记录',
                     current_qty=current_qty,
-                    threshold_value=Decimal(days)
+                    threshold_value=Decimal(days),
                 )
                 if alert:
                     alerts.append(alert)
@@ -397,14 +341,13 @@ class StockAlertService:
         return alerts
 
     @staticmethod
-    def _create_alert(rule, item, alert_type, severity, title, description, current_qty, threshold_value, warehouse=None):
+    def _create_alert(
+        rule, item, alert_type, severity, title, description, current_qty, threshold_value, warehouse=None
+    ):
         """创建预警记录"""
         # 检查是否已存在相同的活跃预警
         existing = StockAlert.objects.filter(
-            item=item,
-            alert_type=alert_type,
-            status='ACTIVE',
-            is_deleted=False
+            item=item, alert_type=alert_type, status='ACTIVE', is_deleted=False
         ).exists()
 
         if existing:
@@ -419,13 +362,14 @@ class StockAlertService:
             title=title,
             description=description,
             current_qty=current_qty,
-            threshold_value=threshold_value
+            threshold_value=threshold_value,
         )
 
 
 # =====================
 # Serializers
 # =====================
+
 
 class StockAlertRuleSerializer(serializers.ModelSerializer):
     alert_type_display = serializers.CharField(source='get_alert_type_display', read_only=True)
@@ -462,8 +406,19 @@ class StockAlertListSerializer(serializers.ModelSerializer):
     class Meta:
         model = StockAlert
         fields = [
-            'id', 'item', 'item_code', 'item_name', 'alert_type', 'severity', 'severity_display',
-            'title', 'current_qty', 'threshold_value', 'status', 'status_display', 'created_at'
+            'id',
+            'item',
+            'item_code',
+            'item_name',
+            'alert_type',
+            'severity',
+            'severity_display',
+            'title',
+            'current_qty',
+            'threshold_value',
+            'status',
+            'status_display',
+            'created_at',
         ]
 
 
@@ -471,8 +426,10 @@ class StockAlertListSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class StockAlertRuleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """库存预警规则管理"""
+
     queryset = StockAlertRule.objects.filter(is_deleted=False)
     serializer_class = StockAlertRuleSerializer
     permission_classes = [IsAuthenticated]
@@ -499,8 +456,8 @@ class StockAlertRuleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
                     'threshold_qty': qty,
                     'threshold_days': days,
                     'threshold_percentage': pct,
-                    'created_by': request.user
-                }
+                    'created_by': request.user,
+                },
             )
             if c:
                 created += 1
@@ -510,6 +467,7 @@ class StockAlertRuleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
 
 class StockAlertViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """库存预警管理"""
+
     queryset = StockAlert.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['alert_type', 'severity', 'status', 'item']
@@ -525,11 +483,9 @@ class StockAlertViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
     def check_all(self, request):
         """检查所有预警"""
         alerts = StockAlertService.check_all_alerts()
-        return Response({
-            'success': True,
-            'alerts_created': len(alerts),
-            'alerts': StockAlertListSerializer(alerts, many=True).data
-        })
+        return Response(
+            {'success': True, 'alerts_created': len(alerts), 'alerts': StockAlertListSerializer(alerts, many=True).data}
+        )
 
     @action(detail=True, methods=['post'])
     def acknowledge(self, request, pk=None):
@@ -577,8 +533,4 @@ class StockAlertViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         by_type = qs.values('alert_type').annotate(count=Count('id'))
         by_severity = qs.values('severity').annotate(count=Count('id'))
 
-        return Response({
-            'total_active': qs.count(),
-            'by_type': list(by_type),
-            'by_severity': list(by_severity)
-        })
+        return Response({'total_active': qs.count(), 'by_type': list(by_type), 'by_severity': list(by_severity)})

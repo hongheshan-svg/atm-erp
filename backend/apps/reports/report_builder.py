@@ -1,6 +1,7 @@
 """
 Configurable Report Builder System
 """
+
 from decimal import Decimal
 
 from django.conf import settings
@@ -43,18 +44,18 @@ class ReportTemplate(BaseModel):
 
     name = models.CharField(max_length=200, verbose_name='报表名称')
     description = models.TextField(blank=True, default='', verbose_name='描述')
-    category = models.CharField(
-        max_length=20, choices=CATEGORY_CHOICES, verbose_name='分类'
-    )
-    data_source = models.CharField(
-        max_length=30, choices=DATA_SOURCE_CHOICES, verbose_name='数据源'
-    )
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, verbose_name='分类')
+    data_source = models.CharField(max_length=30, choices=DATA_SOURCE_CHOICES, verbose_name='数据源')
     config = models.JSONField(default=dict, verbose_name='配置')
     is_system = models.BooleanField(default=False, verbose_name='系统报表')
     is_active = models.BooleanField(default=True, verbose_name='是否启用')
     created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
-        null=True, blank=True, related_name='report_templates_created', verbose_name='创建人'
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='report_templates_created',
+        verbose_name='创建人',
     )
 
     class Meta:
@@ -76,12 +77,9 @@ class ReportExecution(BaseModel):
     ]
 
     template = models.ForeignKey(
-        ReportTemplate, on_delete=models.CASCADE,
-        related_name='executions', verbose_name='报表模板'
+        ReportTemplate, on_delete=models.CASCADE, related_name='executions', verbose_name='报表模板'
     )
-    status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='状态')
     parameters = models.JSONField(default=dict, verbose_name='参数')
     result_data = models.JSONField(default=dict, verbose_name='结果数据')
     row_count = models.IntegerField(default=0, verbose_name='行数')
@@ -90,8 +88,12 @@ class ReportExecution(BaseModel):
     )
     error_message = models.TextField(blank=True, default='', verbose_name='错误信息')
     created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
-        null=True, blank=True, related_name='report_executions_created', verbose_name='执行人'
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='report_executions_created',
+        verbose_name='执行人',
     )
 
     class Meta:
@@ -101,17 +103,15 @@ class ReportExecution(BaseModel):
         verbose_name_plural = '报表执行记录'
 
     def __str__(self):
-        return f"{self.template.name} - {self.status}"
+        return f'{self.template.name} - {self.status}'
 
 
 class ReportFavorite(models.Model):
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
-        related_name='report_favorites', verbose_name='用户'
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='report_favorites', verbose_name='用户'
     )
     template = models.ForeignKey(
-        ReportTemplate, on_delete=models.CASCADE,
-        related_name='favorites', verbose_name='报表模板'
+        ReportTemplate, on_delete=models.CASCADE, related_name='favorites', verbose_name='报表模板'
     )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='收藏时间')
 
@@ -139,6 +139,7 @@ class ReportQueryService:
     @staticmethod
     def execute(template_id, params, user):
         import time
+
         template = ReportTemplate.objects.get(id=template_id, is_deleted=False)
         execution = ReportExecution.objects.create(
             template=template,
@@ -150,10 +151,11 @@ class ReportQueryService:
         try:
             model_path = ReportQueryService.DATA_SOURCE_MODEL_MAP.get(template.data_source)
             if not model_path:
-                raise ValueError(f"不支持的数据源: {template.data_source}")
+                raise ValueError(f'不支持的数据源: {template.data_source}')
 
             module_path, model_name = model_path.rsplit('.', 1)
             import importlib
+
             module = importlib.import_module(module_path)
             model_cls = getattr(module, model_name)
 
@@ -186,6 +188,7 @@ class ReportQueryService:
 
 # ─── Serializers ────────────────────────────────────────────────
 
+
 class ReportTemplateSerializer(serializers.ModelSerializer):
     category_display = serializers.CharField(source='get_category_display', read_only=True)
     data_source_display = serializers.CharField(source='get_data_source_display', read_only=True)
@@ -215,6 +218,7 @@ class ReportFavoriteSerializer(serializers.ModelSerializer):
 
 # ─── ViewSets ───────────────────────────────────────────────────
 
+
 class ReportTemplateViewSet(viewsets.ModelViewSet):
     serializer_class = ReportTemplateSerializer
     permission_classes = [IsAuthenticated]
@@ -238,9 +242,7 @@ class ReportTemplateViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def favorite(self, request, pk=None):
         template = self.get_object()
-        fav, created = ReportFavorite.objects.get_or_create(
-            user=request.user, template=template
-        )
+        fav, created = ReportFavorite.objects.get_or_create(user=request.user, template=template)
         if not created:
             fav.delete()
             return Response({'status': 'unfavorited'})
@@ -261,11 +263,13 @@ class ReportTemplateViewSet(viewsets.ModelViewSet):
         try:
             module_path, model_name = model_path.rsplit('.', 1)
             import importlib
+
             module = importlib.import_module(module_path)
             model_cls = getattr(module, model_name)
             fields = [
                 {'name': f.name, 'type': f.get_internal_type(), 'verbose_name': str(f.verbose_name)}
-                for f in model_cls._meta.get_fields() if hasattr(f, 'get_internal_type')
+                for f in model_cls._meta.get_fields()
+                if hasattr(f, 'get_internal_type')
             ]
             return Response(fields)
         except Exception as e:

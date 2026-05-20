@@ -1,6 +1,7 @@
 """
 OA协同办公模块 URL 配置
 """
+
 import json
 
 from django.http import JsonResponse

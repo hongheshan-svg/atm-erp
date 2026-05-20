@@ -3,6 +3,7 @@
 Requirements Management
 客户需求收集、分解、追溯
 """
+
 from datetime import date
 
 from django.db import models
@@ -19,15 +20,11 @@ from apps.core.models import BaseModel
 
 class RequirementCategory(BaseModel):
     """需求分类"""
+
     name = models.CharField(max_length=100, verbose_name='分类名称')
     code = models.CharField(max_length=50, unique=True, verbose_name='分类编码')
     parent = models.ForeignKey(
-        'self',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='children',
-        verbose_name='上级分类'
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='children', verbose_name='上级分类'
     )
     description = models.TextField(blank=True, verbose_name='描述')
     sort_order = models.IntegerField(default=0, verbose_name='排序')
@@ -44,6 +41,7 @@ class RequirementCategory(BaseModel):
 
 class Requirement(BaseModel):
     """客户需求"""
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('SUBMITTED', '已提交'),
@@ -80,7 +78,7 @@ class Requirement(BaseModel):
         null=True,
         blank=True,
         related_name='requirements',
-        verbose_name='客户'
+        verbose_name='客户',
     )
     opportunity = models.ForeignKey(
         'sales.Opportunity',
@@ -88,7 +86,7 @@ class Requirement(BaseModel):
         null=True,
         blank=True,
         related_name='requirements',
-        verbose_name='商机'
+        verbose_name='商机',
     )
     project = models.ForeignKey(
         'projects.Project',
@@ -96,7 +94,7 @@ class Requirement(BaseModel):
         null=True,
         blank=True,
         related_name='requirements',
-        verbose_name='项目'
+        verbose_name='项目',
     )
     category = models.ForeignKey(
         RequirementCategory,
@@ -104,36 +102,16 @@ class Requirement(BaseModel):
         null=True,
         blank=True,
         related_name='requirements',
-        verbose_name='需求分类'
+        verbose_name='需求分类',
     )
     parent = models.ForeignKey(
-        'self',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='children',
-        verbose_name='上级需求'
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='children', verbose_name='上级需求'
     )
 
     # 需求详情
-    req_type = models.CharField(
-        max_length=20,
-        choices=TYPE_CHOICES,
-        default='FUNCTIONAL',
-        verbose_name='需求类型'
-    )
-    priority = models.CharField(
-        max_length=20,
-        choices=PRIORITY_CHOICES,
-        default='MEDIUM',
-        verbose_name='优先级'
-    )
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='DRAFT',
-        verbose_name='状态'
-    )
+    req_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='FUNCTIONAL', verbose_name='需求类型')
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='MEDIUM', verbose_name='优先级')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', verbose_name='状态')
 
     description = models.TextField(verbose_name='需求描述')
     acceptance_criteria = models.TextField(blank=True, verbose_name='验收标准')
@@ -147,18 +125,10 @@ class Requirement(BaseModel):
 
     # 评估
     estimated_hours = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        verbose_name='预估工时'
+        max_digits=10, decimal_places=2, null=True, blank=True, verbose_name='预估工时'
     )
     estimated_cost = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        verbose_name='预估成本'
+        max_digits=18, decimal_places=2, null=True, blank=True, verbose_name='预估成本'
     )
 
     # 负责人
@@ -168,7 +138,7 @@ class Requirement(BaseModel):
         null=True,
         blank=True,
         related_name='owned_requirements',
-        verbose_name='负责人'
+        verbose_name='负责人',
     )
 
     # 版本
@@ -189,12 +159,14 @@ class Requirement(BaseModel):
     def save(self, *args, **kwargs):
         if not self.req_no:
             from apps.core.utils import generate_code
+
             self.req_no = generate_code('REQ')
         super().save(*args, **kwargs)
 
 
 class RequirementChange(BaseModel):
     """需求变更记录"""
+
     CHANGE_TYPES = [
         ('ADD', '新增'),
         ('MODIFY', '修改'),
@@ -202,17 +174,8 @@ class RequirementChange(BaseModel):
         ('SCOPE', '范围变更'),
     ]
 
-    requirement = models.ForeignKey(
-        Requirement,
-        on_delete=models.CASCADE,
-        related_name='changes',
-        verbose_name='需求'
-    )
-    change_type = models.CharField(
-        max_length=20,
-        choices=CHANGE_TYPES,
-        verbose_name='变更类型'
-    )
+    requirement = models.ForeignKey(Requirement, on_delete=models.CASCADE, related_name='changes', verbose_name='需求')
+    change_type = models.CharField(max_length=20, choices=CHANGE_TYPES, verbose_name='变更类型')
     change_reason = models.TextField(verbose_name='变更原因')
     old_content = models.TextField(blank=True, verbose_name='原内容')
     new_content = models.TextField(blank=True, verbose_name='新内容')
@@ -226,7 +189,7 @@ class RequirementChange(BaseModel):
         null=True,
         blank=True,
         related_name='approved_req_changes',
-        verbose_name='批准人'
+        verbose_name='批准人',
     )
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name='批准时间')
 
@@ -239,6 +202,7 @@ class RequirementChange(BaseModel):
 
 class RequirementTrace(BaseModel):
     """需求追溯"""
+
     TRACE_TYPES = [
         ('DESIGN', '设计文档'),
         ('BOM', 'BOM'),
@@ -248,17 +212,8 @@ class RequirementTrace(BaseModel):
         ('CODE', '代码'),
     ]
 
-    requirement = models.ForeignKey(
-        Requirement,
-        on_delete=models.CASCADE,
-        related_name='traces',
-        verbose_name='需求'
-    )
-    trace_type = models.CharField(
-        max_length=20,
-        choices=TRACE_TYPES,
-        verbose_name='追溯类型'
-    )
+    requirement = models.ForeignKey(Requirement, on_delete=models.CASCADE, related_name='traces', verbose_name='需求')
+    trace_type = models.CharField(max_length=20, choices=TRACE_TYPES, verbose_name='追溯类型')
     target_id = models.IntegerField(verbose_name='目标ID')
     target_name = models.CharField(max_length=200, verbose_name='目标名称')
     target_url = models.CharField(max_length=500, blank=True, verbose_name='目标链接')
@@ -273,6 +228,7 @@ class RequirementTrace(BaseModel):
 # =====================
 # Serializers
 # =====================
+
 
 class RequirementCategorySerializer(serializers.ModelSerializer):
     children_count = serializers.SerializerMethodField()
@@ -339,11 +295,26 @@ class RequirementListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Requirement
         fields = [
-            'id', 'req_no', 'title', 'req_type', 'type_display',
-            'priority', 'priority_display', 'status', 'status_display',
-            'customer', 'customer_name', 'project', 'project_name',
-            'owner', 'owner_name', 'request_date', 'due_date',
-            'estimated_hours', 'children_count', 'created_at'
+            'id',
+            'req_no',
+            'title',
+            'req_type',
+            'type_display',
+            'priority',
+            'priority_display',
+            'status',
+            'status_display',
+            'customer',
+            'customer_name',
+            'project',
+            'project_name',
+            'owner',
+            'owner_name',
+            'request_date',
+            'due_date',
+            'estimated_hours',
+            'children_count',
+            'created_at',
         ]
 
     def get_children_count(self, obj):
@@ -354,8 +325,10 @@ class RequirementListSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class RequirementCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """需求分类管理"""
+
     queryset = RequirementCategory.objects.filter(is_deleted=False)
     serializer_class = RequirementCategorySerializer
     permission_classes = [IsAuthenticated]
@@ -371,7 +344,7 @@ class RequirementCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
                 'id': cat.id,
                 'name': cat.name,
                 'code': cat.code,
-                'children': [build_tree(c) for c in cat.children.filter(is_deleted=False)]
+                'children': [build_tree(c) for c in cat.children.filter(is_deleted=False)],
             }
 
         return Response([build_tree(c) for c in categories])
@@ -379,6 +352,7 @@ class RequirementCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
 
 class RequirementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """需求管理"""
+
     queryset = Requirement.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'priority', 'req_type', 'customer', 'project', 'owner', 'category']
@@ -445,15 +419,17 @@ class RequirementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
                 description=child_data.get('description', ''),
                 req_type=child_data.get('req_type', parent.req_type),
                 priority=child_data.get('priority', parent.priority),
-                created_by=request.user
+                created_by=request.user,
             )
             created.append(child)
 
-        return Response({
-            'success': True,
-            'created_count': len(created),
-            'children': RequirementListSerializer(created, many=True).data
-        })
+        return Response(
+            {
+                'success': True,
+                'created_count': len(created),
+                'children': RequirementListSerializer(created, many=True).data,
+            }
+        )
 
     @action(detail=True, methods=['post'])
     def add_trace(self, request, pk=None):
@@ -467,7 +443,7 @@ class RequirementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
             target_name=request.data.get('target_name'),
             target_url=request.data.get('target_url', ''),
             description=request.data.get('description', ''),
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(RequirementTraceSerializer(trace).data)
@@ -488,18 +464,21 @@ class RequirementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
         # 待处理
         pending = qs.filter(status__in=['SUBMITTED', 'REVIEWING', 'APPROVED']).count()
 
-        return Response({
-            'total': qs.count(),
-            'new_this_month': new_this_month,
-            'pending': pending,
-            'by_status': list(by_status),
-            'by_priority': list(by_priority),
-            'by_type': list(by_type)
-        })
+        return Response(
+            {
+                'total': qs.count(),
+                'new_this_month': new_this_month,
+                'pending': pending,
+                'by_status': list(by_status),
+                'by_priority': list(by_priority),
+                'by_type': list(by_type),
+            }
+        )
 
 
 class RequirementChangeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """需求变更管理"""
+
     queryset = RequirementChange.objects.filter(is_deleted=False)
     serializer_class = RequirementChangeSerializer
     permission_classes = [IsAuthenticated]

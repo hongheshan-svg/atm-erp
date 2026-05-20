@@ -43,4 +43,3 @@ class DeliveryOrderAdmin(admin.ModelAdmin):
     search_fields = ['delivery_no']
     inlines = [DeliveryOrderLineInline]
     ordering = ['-created_at']
-

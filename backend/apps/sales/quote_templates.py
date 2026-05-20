@@ -15,6 +15,7 @@ Quote Template Management
 - 工程服务模板（服务项目、工时、单价等）
 - 综合报价模板（设备+安装+调试+培训等）
 """
+
 import os
 from datetime import datetime
 from decimal import Decimal
@@ -34,6 +35,7 @@ class QuoteTemplate(BaseModel):
     """
     报价单模板
     """
+
     TEMPLATE_FORMATS = [
         ('EXCEL', 'Excel模板'),
         ('PDF', 'PDF模板'),
@@ -43,42 +45,15 @@ class QuoteTemplate(BaseModel):
 
     code = models.CharField(max_length=50, unique=True, verbose_name='模板编码')
     name = models.CharField(max_length=100, verbose_name='模板名称')
-    format = models.CharField(
-        max_length=20,
-        choices=TEMPLATE_FORMATS,
-        default='EXCEL',
-        verbose_name='模板格式'
-    )
-    template_file = models.FileField(
-        upload_to='templates/quotes/',
-        blank=True,
-        null=True,
-        verbose_name='模板文件'
-    )
+    format = models.CharField(max_length=20, choices=TEMPLATE_FORMATS, default='EXCEL', verbose_name='模板格式')
+    template_file = models.FileField(upload_to='templates/quotes/', blank=True, null=True, verbose_name='模板文件')
     html_content = models.TextField(blank=True, verbose_name='HTML模板内容')
     header_config = models.JSONField(
-        default=dict,
-        blank=True,
-        verbose_name='表头配置',
-        help_text='公司名称、Logo、联系方式等'
+        default=dict, blank=True, verbose_name='表头配置', help_text='公司名称、Logo、联系方式等'
     )
-    footer_config = models.JSONField(
-        default=dict,
-        blank=True,
-        verbose_name='表尾配置',
-        help_text='备注、条款、签章等'
-    )
-    column_config = models.JSONField(
-        default=list,
-        blank=True,
-        verbose_name='列配置',
-        help_text='报价明细列定义'
-    )
-    style_config = models.JSONField(
-        default=dict,
-        blank=True,
-        verbose_name='样式配置'
-    )
+    footer_config = models.JSONField(default=dict, blank=True, verbose_name='表尾配置', help_text='备注、条款、签章等')
+    column_config = models.JSONField(default=list, blank=True, verbose_name='列配置', help_text='报价明细列定义')
+    style_config = models.JSONField(default=dict, blank=True, verbose_name='样式配置')
     is_default = models.BooleanField(default=False, verbose_name='默认模板')
     is_enabled = models.BooleanField(default=True, verbose_name='是否启用')
     description = models.TextField(blank=True, verbose_name='模板说明')
@@ -103,31 +78,18 @@ class QuoteHistory(BaseModel):
     """
     报价单生成历史
     """
+
     template = models.ForeignKey(
-        QuoteTemplate,
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='histories',
-        verbose_name='使用模板'
+        QuoteTemplate, on_delete=models.SET_NULL, null=True, related_name='histories', verbose_name='使用模板'
     )
     quote_no = models.CharField(max_length=50, verbose_name='报价单号')
     customer_name = models.CharField(max_length=200, verbose_name='客户名称')
     project_name = models.CharField(max_length=200, blank=True, verbose_name='项目名称')
-    total_amount = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        verbose_name='报价总额'
-    )
+    total_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='报价总额')
     currency = models.CharField(max_length=10, default='CNY', verbose_name='币种')
     valid_until = models.DateField(null=True, blank=True, verbose_name='有效期至')
     quote_data = models.JSONField(default=dict, verbose_name='报价数据')
-    generated_file = models.FileField(
-        upload_to='quotes/generated/',
-        blank=True,
-        null=True,
-        verbose_name='生成的文件'
-    )
+    generated_file = models.FileField(upload_to='quotes/generated/', blank=True, null=True, verbose_name='生成的文件')
     status = models.CharField(
         max_length=20,
         choices=[
@@ -138,7 +100,7 @@ class QuoteHistory(BaseModel):
             ('EXPIRED', '已过期'),
         ],
         default='DRAFT',
-        verbose_name='状态'
+        verbose_name='状态',
     )
 
     class Meta:
@@ -154,6 +116,7 @@ class QuoteHistory(BaseModel):
 # =====================
 # Quote Generation Service
 # =====================
+
 
 class QuoteGenerationService:
     """报价单生成服务"""
@@ -179,10 +142,7 @@ class QuoteGenerationService:
         title_font = Font(name='微软雅黑', size=11, bold=True)
         normal_font = Font(name='微软雅黑', size=10)
         thin_border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin')
+            left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin')
         )
         header_fill = PatternFill(start_color='E0E0E0', end_color='E0E0E0', fill_type='solid')
 
@@ -334,8 +294,7 @@ class QuoteGenerationService:
             output_dir = os.path.join(settings.MEDIA_ROOT, 'quotes', 'generated')
             os.makedirs(output_dir, exist_ok=True)
             output_path = os.path.join(
-                output_dir,
-                f"{quote_data.get('quote_no', 'quote')}_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
+                output_dir, f"{quote_data.get('quote_no', 'quote')}_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
             )
 
         wb.save(output_path)
@@ -355,14 +314,16 @@ class QuoteGenerationService:
         items = quote_data.get('items', [])
         total_amount = sum(Decimal(str(item.get('amount', 0))) for item in items)
 
-        context = Context({
-            'quote': quote_data,
-            'header': self.template.header_config or {},
-            'footer': self.template.footer_config or {},
-            'items': items,
-            'total_amount': total_amount,
-            'generated_at': datetime.now(),
-        })
+        context = Context(
+            {
+                'quote': quote_data,
+                'header': self.template.header_config or {},
+                'footer': self.template.footer_config or {},
+                'items': items,
+                'total_amount': total_amount,
+                'generated_at': datetime.now(),
+            }
+        )
 
         return tpl.render(context)
 
@@ -487,6 +448,7 @@ class QuoteGenerationService:
 # Serializers
 # =====================
 
+
 class QuoteTemplateSerializer(serializers.ModelSerializer):
     format_display = serializers.CharField(source='get_format_display', read_only=True)
 
@@ -501,10 +463,7 @@ class QuoteTemplateListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = QuoteTemplate
-        fields = [
-            'id', 'code', 'name', 'format', 'format_display',
-            'is_default', 'is_enabled', 'created_at'
-        ]
+        fields = ['id', 'code', 'name', 'format', 'format_display', 'is_default', 'is_enabled', 'created_at']
 
 
 class QuoteHistorySerializer(serializers.ModelSerializer):
@@ -519,6 +478,7 @@ class QuoteHistorySerializer(serializers.ModelSerializer):
 
 class QuoteGenerateSerializer(serializers.Serializer):
     """报价单生成请求"""
+
     template_id = serializers.IntegerField(required=False, help_text='模板ID，不传则使用默认模板')
     quote_no = serializers.CharField(max_length=50)
     customer_name = serializers.CharField(max_length=200)
@@ -528,24 +488,20 @@ class QuoteGenerateSerializer(serializers.Serializer):
     contact_person = serializers.CharField(max_length=100, required=False, allow_blank=True)
     contact_phone = serializers.CharField(max_length=50, required=False, allow_blank=True)
     remarks = serializers.CharField(required=False, allow_blank=True)
-    items = serializers.ListField(
-        child=serializers.DictField(),
-        help_text='报价明细列表'
-    )
-    output_format = serializers.ChoiceField(
-        choices=['excel', 'html', 'pdf'],
-        default='excel'
-    )
+    items = serializers.ListField(child=serializers.DictField(), help_text='报价明细列表')
+    output_format = serializers.ChoiceField(choices=['excel', 'html', 'pdf'], default='excel')
 
 
 # =====================
 # ViewSets
 # =====================
 
+
 class QuoteTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     报价单模板管理
     """
+
     queryset = QuoteTemplate.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['format', 'is_default', 'is_enabled']
@@ -588,9 +544,7 @@ class QuoteTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
             except QuoteTemplate.DoesNotExist:
                 return Response({'error': '模板不存在'}, status=404)
         else:
-            template = QuoteTemplate.objects.filter(
-                is_default=True, is_enabled=True, is_deleted=False
-            ).first()
+            template = QuoteTemplate.objects.filter(is_default=True, is_enabled=True, is_deleted=False).first()
             if not template:
                 # 创建默认模板
                 template = QuoteTemplate.objects.create(
@@ -618,7 +572,7 @@ class QuoteTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                             '交货期：合同签订后45个工作日',
                         ]
                     },
-                    created_by=request.user
+                    created_by=request.user,
                 )
 
         # 准备报价数据
@@ -626,7 +580,9 @@ class QuoteTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
             'quote_no': data['quote_no'],
             'customer_name': data['customer_name'],
             'project_name': data.get('project_name', ''),
-            'quote_date': data.get('quote_date', datetime.now().date()).strftime('%Y-%m-%d') if data.get('quote_date') else datetime.now().strftime('%Y-%m-%d'),
+            'quote_date': data.get('quote_date', datetime.now().date()).strftime('%Y-%m-%d')
+            if data.get('quote_date')
+            else datetime.now().strftime('%Y-%m-%d'),
             'valid_until': data.get('valid_until').strftime('%Y-%m-%d') if data.get('valid_until') else '',
             'contact_person': data.get('contact_person', ''),
             'contact_phone': data.get('contact_phone', ''),
@@ -652,20 +608,15 @@ class QuoteTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                     valid_until=data.get('valid_until'),
                     quote_data=quote_data,
                     generated_file=file_path.replace(settings.MEDIA_ROOT, '').lstrip('/'),
-                    created_by=request.user
+                    created_by=request.user,
                 )
-                return Response({
-                    'success': True,
-                    'history_id': history.id,
-                    'download_url': f'/media/{history.generated_file}'
-                })
+                return Response(
+                    {'success': True, 'history_id': history.id, 'download_url': f'/media/{history.generated_file}'}
+                )
 
             elif output_format == 'html':
                 html_content = service.generate_html(quote_data)
-                return Response({
-                    'success': True,
-                    'html_content': html_content
-                })
+                return Response({'success': True, 'html_content': html_content})
 
             else:
                 return Response({'error': '不支持的输出格式'}, status=400)
@@ -689,10 +640,34 @@ class QuoteTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
             'contact_phone': '13800138000',
             'remarks': '以上价格均含税（增值税13%）',
             'items': [
-                {'name': '装配工位', 'spec': 'ZP-001', 'unit': '套', 'quantity': 2, 'unit_price': 50000, 'amount': 100000, 'remark': '含工装夹具'},
-                {'name': '输送线体', 'spec': 'SS-200', 'unit': '米', 'quantity': 20, 'unit_price': 3000, 'amount': 60000, 'remark': '倍速链'},
-                {'name': '控制系统', 'spec': 'PLC-S7', 'unit': '套', 'quantity': 1, 'unit_price': 35000, 'amount': 35000, 'remark': '西门子'},
-            ]
+                {
+                    'name': '装配工位',
+                    'spec': 'ZP-001',
+                    'unit': '套',
+                    'quantity': 2,
+                    'unit_price': 50000,
+                    'amount': 100000,
+                    'remark': '含工装夹具',
+                },
+                {
+                    'name': '输送线体',
+                    'spec': 'SS-200',
+                    'unit': '米',
+                    'quantity': 20,
+                    'unit_price': 3000,
+                    'amount': 60000,
+                    'remark': '倍速链',
+                },
+                {
+                    'name': '控制系统',
+                    'spec': 'PLC-S7',
+                    'unit': '套',
+                    'quantity': 1,
+                    'unit_price': 35000,
+                    'amount': 35000,
+                    'remark': '西门子',
+                },
+            ],
         }
 
         service = QuoteGenerationService(template)
@@ -702,16 +677,14 @@ class QuoteTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
             return Response({'html_content': html_content})
         else:
             # 其他格式返回基本配置信息
-            return Response({
-                'template': QuoteTemplateSerializer(template).data,
-                'sample_data': sample_data
-            })
+            return Response({'template': QuoteTemplateSerializer(template).data, 'sample_data': sample_data})
 
 
 class QuoteHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     """
     报价单历史（只读）
     """
+
     queryset = QuoteHistory.objects.all()
     serializer_class = QuoteHistorySerializer
     permission_classes = [IsAuthenticated]
@@ -741,28 +714,27 @@ class QuoteHistoryViewSet(viewsets.ReadOnlyModelViewSet):
         qs = self.get_queryset()
 
         # 按状态统计
-        by_status = qs.values('status').annotate(
-            count=Count('id'),
-            total=Sum('total_amount')
-        )
+        by_status = qs.values('status').annotate(count=Count('id'), total=Sum('total_amount'))
 
         # 按月统计
-        by_month = qs.annotate(
-            month=TruncMonth('created_at')
-        ).values('month').annotate(
-            count=Count('id'),
-            total=Sum('total_amount')
-        ).order_by('month')
+        by_month = (
+            qs.annotate(month=TruncMonth('created_at'))
+            .values('month')
+            .annotate(count=Count('id'), total=Sum('total_amount'))
+            .order_by('month')
+        )
 
         # 转化率
         total = qs.count()
         accepted = qs.filter(status='ACCEPTED').count()
 
-        return Response({
-            'total_count': total,
-            'total_amount': qs.aggregate(Sum('total_amount'))['total_amount__sum'] or 0,
-            'accepted_count': accepted,
-            'conversion_rate': round(accepted / total * 100, 2) if total > 0 else 0,
-            'by_status': list(by_status),
-            'by_month': list(by_month)
-        })
+        return Response(
+            {
+                'total_count': total,
+                'total_amount': qs.aggregate(Sum('total_amount'))['total_amount__sum'] or 0,
+                'accepted_count': accepted,
+                'conversion_rate': round(accepted / total * 100, 2) if total > 0 else 0,
+                'by_status': list(by_status),
+                'by_month': list(by_month),
+            }
+        )

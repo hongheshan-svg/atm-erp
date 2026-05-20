@@ -1,6 +1,7 @@
 """
 CRM - 商机/线索管理视图
 """
+
 from django.db.models import Count, Sum
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -25,6 +26,7 @@ from .crm_serializers import (
 
 class LeadSourceViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     """线索来源管理"""
+
     queryset = LeadSource.objects.all()
     serializer_class = LeadSourceSerializer
     filterset_fields = ['is_active']
@@ -33,6 +35,7 @@ class LeadSourceViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
 
 class LeadViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售线索管理"""
+
     queryset = Lead.objects.select_related('source', 'owner', 'converted_customer')
     serializer_class = LeadSerializer
     filterset_fields = ['status', 'source', 'owner']
@@ -56,12 +59,7 @@ class LeadViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         """线索统计"""
         queryset = self.filter_queryset(self.get_queryset())
 
-        stats = {
-            'total': queryset.count(),
-            'by_status': {},
-            'by_source': {},
-            'conversion_rate': 0
-        }
+        stats = {'total': queryset.count(), 'by_status': {}, 'by_source': {}, 'conversion_rate': 0}
 
         # 按状态统计
         status_counts = queryset.values('status').annotate(count=Count('id'))
@@ -99,6 +97,7 @@ class LeadViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         # 创建或使用已有客户
         if data.get('create_customer', True):
             from apps.masterdata.models import Customer
+
             customer = Customer.objects.create(
                 name=lead.company_name,
                 contact_person=lead.contact_name,
@@ -108,16 +107,17 @@ class LeadViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                 website=lead.website,
                 industry=lead.industry,
                 created_by=request.user,
-                updated_by=request.user
+                updated_by=request.user,
             )
         elif data.get('customer_id'):
             from apps.masterdata.models import Customer
+
             customer = Customer.objects.get(id=data['customer_id'])
 
         # 创建商机
         if data.get('create_opportunity', True) and customer:
             opportunity = Opportunity.objects.create(
-                name=data.get('opportunity_name', f"{lead.company_name}商机"),
+                name=data.get('opportunity_name', f'{lead.company_name}商机'),
                 customer=customer,
                 contact_name=lead.contact_name,
                 contact_phone=lead.contact_phone,
@@ -125,7 +125,7 @@ class LeadViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                 estimated_amount=data.get('estimated_amount', 0),
                 owner=lead.owner or request.user,
                 created_by=request.user,
-                updated_by=request.user
+                updated_by=request.user,
             )
 
         # 更新线索状态
@@ -135,11 +135,13 @@ class LeadViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         lead.converted_at = timezone.now()
         lead.save()
 
-        return Response({
-            'message': '线索转化成功',
-            'customer_id': customer.id if customer else None,
-            'opportunity_id': opportunity.id if opportunity else None
-        })
+        return Response(
+            {
+                'message': '线索转化成功',
+                'customer_id': customer.id if customer else None,
+                'opportunity_id': opportunity.id if opportunity else None,
+            }
+        )
 
     @action(detail=True, methods=['post'])
     def disqualify(self, request, pk=None):
@@ -154,6 +156,7 @@ class LeadViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 
 class OpportunityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售商机管理"""
+
     queryset = Opportunity.objects.select_related('customer', 'owner')
     serializer_class = OpportunitySerializer
     filterset_fields = ['stage', 'priority', 'customer', 'owner']
@@ -181,20 +184,18 @@ class OpportunityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
             'total_amount': float(queryset.aggregate(Sum('estimated_amount'))['estimated_amount__sum'] or 0),
             'weighted_amount': float(queryset.aggregate(Sum('weighted_amount'))['weighted_amount__sum'] or 0),
             'by_stage': {},
-            'win_rate': 0
+            'win_rate': 0,
         }
 
         # 按阶段统计
         stage_data = queryset.values('stage').annotate(
-            count=Count('id'),
-            amount=Sum('estimated_amount'),
-            weighted=Sum('weighted_amount')
+            count=Count('id'), amount=Sum('estimated_amount'), weighted=Sum('weighted_amount')
         )
         for item in stage_data:
             stats['by_stage'][item['stage']] = {
                 'count': item['count'],
                 'amount': float(item['amount'] or 0),
-                'weighted': float(item['weighted'] or 0)
+                'weighted': float(item['weighted'] or 0),
             }
 
         # 赢单率
@@ -218,22 +219,22 @@ class OpportunityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
             'QUALIFICATION': '需求确认',
             'NEEDS_ANALYSIS': '需求分析',
             'PROPOSAL': '方案报价',
-            'NEGOTIATION': '商务谈判'
+            'NEGOTIATION': '商务谈判',
         }
 
         for stage in stage_order:
             stage_data = active_queryset.filter(stage=stage).aggregate(
-                count=Count('id'),
-                total_amount=Sum('estimated_amount'),
-                weighted_amount=Sum('weighted_amount')
+                count=Count('id'), total_amount=Sum('estimated_amount'), weighted_amount=Sum('weighted_amount')
             )
-            pipeline.append({
-                'stage': stage,
-                'stage_display': stage_display[stage],
-                'count': stage_data['count'] or 0,
-                'total_amount': float(stage_data['total_amount'] or 0),
-                'weighted_amount': float(stage_data['weighted_amount'] or 0)
-            })
+            pipeline.append(
+                {
+                    'stage': stage,
+                    'stage_display': stage_display[stage],
+                    'count': stage_data['count'] or 0,
+                    'total_amount': float(stage_data['total_amount'] or 0),
+                    'weighted_amount': float(stage_data['weighted_amount'] or 0),
+                }
+            )
 
         return Response(pipeline)
 
@@ -262,7 +263,7 @@ class OpportunityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
                 'PROPOSAL': 60,
                 'NEGOTIATION': 80,
                 'CLOSED_WON': 100,
-                'CLOSED_LOST': 0
+                'CLOSED_LOST': 0,
             }
             opportunity.probability = default_probability.get(new_stage, 50)
 
@@ -284,7 +285,7 @@ class OpportunityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
             activity_date=timezone.now(),
             recorded_by=request.user,
             created_by=request.user,
-            updated_by=request.user
+            updated_by=request.user,
         )
 
         return Response(OpportunitySerializer(opportunity).data)
@@ -318,18 +319,17 @@ class OpportunityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
             contact_phone=opportunity.contact_phone,
             notes=f'来源商机: {opportunity.opportunity_no}\n{opportunity.requirement}',
             created_by=request.user,
-            updated_by=request.user
+            updated_by=request.user,
         )
 
-        return Response({
-            'message': '报价单创建成功',
-            'quotation_id': quotation.id,
-            'quotation_no': quotation.quotation_no
-        })
+        return Response(
+            {'message': '报价单创建成功', 'quotation_id': quotation.id, 'quotation_no': quotation.quotation_no}
+        )
 
 
 class OpportunityActivityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """商机活动管理"""
+
     queryset = OpportunityActivity.objects.select_related('opportunity', 'recorded_by')
     serializer_class = OpportunityActivitySerializer
     filterset_fields = ['opportunity', 'activity_type', 'recorded_by']
@@ -337,6 +337,7 @@ class OpportunityActivityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
 
 class SalesForecastViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售预测管理"""
+
     queryset = SalesForecast.objects.select_related('owner')
     serializer_class = SalesForecastSerializer
     filterset_fields = ['year', 'month', 'owner']
@@ -354,7 +355,7 @@ class SalesForecastViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
             total_actual=Sum('actual_amount'),
             total_opportunities=Sum('opportunity_count'),
             total_won=Sum('won_count'),
-            total_lost=Sum('lost_count')
+            total_lost=Sum('lost_count'),
         )
 
         # 计算达成率
@@ -363,17 +364,15 @@ class SalesForecastViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         summary['achievement_rate'] = round(actual / forecast * 100, 2) if forecast > 0 else 0
 
         # 按月明细
-        monthly = list(queryset.values('month').annotate(
-            forecast=Sum('forecast_amount'),
-            actual=Sum('actual_amount'),
-            opportunities=Sum('opportunity_count')
-        ).order_by('month'))
+        monthly = list(
+            queryset.values('month')
+            .annotate(
+                forecast=Sum('forecast_amount'), actual=Sum('actual_amount'), opportunities=Sum('opportunity_count')
+            )
+            .order_by('month')
+        )
 
-        return Response({
-            'year': year,
-            'summary': summary,
-            'monthly': monthly
-        })
+        return Response({'year': year, 'summary': summary, 'monthly': monthly})
 
     @action(detail=False, methods=['post'])
     def recalculate(self, request):
@@ -384,13 +383,12 @@ class SalesForecastViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         # 获取该月的所有商机
 
         opportunities = Opportunity.objects.filter(
-            expected_close_date__year=year,
-            expected_close_date__month=month,
-            is_deleted=False
+            expected_close_date__year=year, expected_close_date__month=month, is_deleted=False
         ).exclude(stage__in=['CLOSED_WON', 'CLOSED_LOST'])
 
         # 按销售人员汇总
         from collections import defaultdict
+
         owner_data = defaultdict(lambda: {'forecast': 0, 'weighted': 0, 'count': 0})
 
         for opp in opportunities:
@@ -409,8 +407,8 @@ class SalesForecastViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                     'forecast_amount': data['forecast'],
                     'weighted_amount': data['weighted'],
                     'opportunity_count': data['count'],
-                    'updated_by': request.user
-                }
+                    'updated_by': request.user,
+                },
             )
 
         return Response({'message': f'{year}年{month}月预测已更新'})
@@ -432,19 +430,12 @@ class CRMDashboardView(viewsets.ViewSet):
         last_month_end = month_start - timezone.timedelta(days=1)
 
         # 线索统计
-        leads_count = Lead.objects.filter(
-            is_deleted=False
-        ).exclude(status__in=['CONVERTED', 'DISQUALIFIED']).count()
+        leads_count = Lead.objects.filter(is_deleted=False).exclude(status__in=['CONVERTED', 'DISQUALIFIED']).count()
 
-        leads_this_month = Lead.objects.filter(
-            is_deleted=False,
-            created_at__gte=month_start
-        ).count()
+        leads_this_month = Lead.objects.filter(is_deleted=False, created_at__gte=month_start).count()
 
         leads_last_month = Lead.objects.filter(
-            is_deleted=False,
-            created_at__gte=last_month_start,
-            created_at__lt=month_start
+            is_deleted=False, created_at__gte=last_month_start, created_at__lt=month_start
         ).count()
 
         leads_trend = 0
@@ -452,43 +443,32 @@ class CRMDashboardView(viewsets.ViewSet):
             leads_trend = round((leads_this_month - leads_last_month) / leads_last_month * 100, 1)
 
         # 商机统计
-        active_opportunities = Opportunity.objects.filter(
-            is_deleted=False
-        ).exclude(stage__in=['CLOSED_WON', 'CLOSED_LOST'])
+        active_opportunities = Opportunity.objects.filter(is_deleted=False).exclude(
+            stage__in=['CLOSED_WON', 'CLOSED_LOST']
+        )
 
         opportunities_count = active_opportunities.count()
-        opportunities_amount = active_opportunities.aggregate(
-            total=Sum('estimated_amount')
-        )['total'] or 0
+        opportunities_amount = active_opportunities.aggregate(total=Sum('estimated_amount'))['total'] or 0
 
         # 客户统计
-        customers_count = Customer.objects.filter(
-            is_deleted=False,
-            status='ACTIVE'
-        ).count()
+        customers_count = Customer.objects.filter(is_deleted=False, status='ACTIVE').count()
 
-        new_customers = Customer.objects.filter(
-            is_deleted=False,
-            created_at__gte=month_start
-        ).count()
+        new_customers = Customer.objects.filter(is_deleted=False, created_at__gte=month_start).count()
 
         # 本月成交
         won_this_month = Opportunity.objects.filter(
-            is_deleted=False,
-            stage='CLOSED_WON',
-            actual_close_date__gte=month_start
-        ).aggregate(
-            count=Count('id'),
-            amount=Sum('estimated_amount')
-        )
+            is_deleted=False, stage='CLOSED_WON', actual_close_date__gte=month_start
+        ).aggregate(count=Count('id'), amount=Sum('estimated_amount'))
 
-        return Response({
-            'leads_count': leads_count,
-            'leads_trend': leads_trend,
-            'opportunities_count': opportunities_count,
-            'opportunities_amount': float(opportunities_amount),
-            'customers_count': customers_count,
-            'new_customers': new_customers,
-            'won_count': won_this_month['count'] or 0,
-            'won_amount': float(won_this_month['amount'] or 0)
-        })
+        return Response(
+            {
+                'leads_count': leads_count,
+                'leads_trend': leads_trend,
+                'opportunities_count': opportunities_count,
+                'opportunities_amount': float(opportunities_amount),
+                'customers_count': customers_count,
+                'new_customers': new_customers,
+                'won_count': won_this_month['count'] or 0,
+                'won_amount': float(won_this_month['amount'] or 0),
+            }
+        )

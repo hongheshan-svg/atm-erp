@@ -8,6 +8,7 @@ Remote Equipment Monitoring and Maintenance
 - 故障预警
 - 远程诊断日志
 """
+
 from datetime import date, timedelta
 
 from django.db import models
@@ -26,8 +27,10 @@ from apps.core.models import BaseModel
 # 模型定义
 # =============================================================================
 
+
 class EquipmentDataPoint(BaseModel):
     """设备数据点定义"""
+
     DATA_TYPE_CHOICES = [
         ('TEMPERATURE', '温度'),
         ('PRESSURE', '压力'),
@@ -71,6 +74,7 @@ class EquipmentDataPoint(BaseModel):
 
 class EquipmentConnection(BaseModel):
     """设备连接配置"""
+
     PROTOCOL_CHOICES = [
         ('MQTT', 'MQTT'),
         ('MODBUS_TCP', 'Modbus TCP'),
@@ -82,10 +86,7 @@ class EquipmentConnection(BaseModel):
     ]
 
     equipment = models.OneToOneField(
-        'projects.Equipment',
-        on_delete=models.CASCADE,
-        related_name='connection',
-        verbose_name='设备'
+        'projects.Equipment', on_delete=models.CASCADE, related_name='connection', verbose_name='设备'
     )
 
     # 连接信息
@@ -101,10 +102,7 @@ class EquipmentConnection(BaseModel):
 
     # 数据点映射
     data_points = models.ManyToManyField(
-        EquipmentDataPoint,
-        through='EquipmentDataMapping',
-        related_name='connections',
-        verbose_name='数据点'
+        EquipmentDataPoint, through='EquipmentDataMapping', related_name='connections', verbose_name='数据点'
     )
 
     # 状态
@@ -127,17 +125,12 @@ class EquipmentConnection(BaseModel):
 
 class EquipmentDataMapping(BaseModel):
     """设备数据点映射"""
+
     connection = models.ForeignKey(
-        EquipmentConnection,
-        on_delete=models.CASCADE,
-        related_name='mappings',
-        verbose_name='设备连接'
+        EquipmentConnection, on_delete=models.CASCADE, related_name='mappings', verbose_name='设备连接'
     )
     data_point = models.ForeignKey(
-        EquipmentDataPoint,
-        on_delete=models.CASCADE,
-        related_name='mappings',
-        verbose_name='数据点'
+        EquipmentDataPoint, on_delete=models.CASCADE, related_name='mappings', verbose_name='数据点'
     )
 
     # 协议地址
@@ -159,17 +152,12 @@ class EquipmentDataMapping(BaseModel):
 
 class EquipmentDataRecord(models.Model):
     """设备运行数据记录（时序数据）"""
+
     equipment = models.ForeignKey(
-        'projects.Equipment',
-        on_delete=models.CASCADE,
-        related_name='data_records',
-        verbose_name='设备'
+        'projects.Equipment', on_delete=models.CASCADE, related_name='data_records', verbose_name='设备'
     )
     data_point = models.ForeignKey(
-        EquipmentDataPoint,
-        on_delete=models.CASCADE,
-        related_name='records',
-        verbose_name='数据点'
+        EquipmentDataPoint, on_delete=models.CASCADE, related_name='records', verbose_name='数据点'
     )
 
     timestamp = models.DateTimeField(verbose_name='时间戳')
@@ -189,6 +177,7 @@ class EquipmentDataRecord(models.Model):
 
 class EquipmentAlarm(BaseModel):
     """设备报警"""
+
     SEVERITY_CHOICES = [
         ('INFO', '信息'),
         ('WARNING', '预警'),
@@ -197,17 +186,10 @@ class EquipmentAlarm(BaseModel):
     ]
 
     equipment = models.ForeignKey(
-        'projects.Equipment',
-        on_delete=models.CASCADE,
-        related_name='alarms',
-        verbose_name='设备'
+        'projects.Equipment', on_delete=models.CASCADE, related_name='alarms', verbose_name='设备'
     )
     data_point = models.ForeignKey(
-        EquipmentDataPoint,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='数据点'
+        EquipmentDataPoint, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='数据点'
     )
 
     alarm_code = models.CharField(max_length=50, verbose_name='报警代码')
@@ -225,7 +207,7 @@ class EquipmentAlarm(BaseModel):
         null=True,
         blank=True,
         related_name='acknowledged_alarms',
-        verbose_name='确认人'
+        verbose_name='确认人',
     )
 
     cleared_at = models.DateTimeField(null=True, blank=True, verbose_name='清除时间')
@@ -245,11 +227,9 @@ class EquipmentAlarm(BaseModel):
 
 class DiagnosticSession(BaseModel):
     """远程诊断会话"""
+
     equipment = models.ForeignKey(
-        'projects.Equipment',
-        on_delete=models.CASCADE,
-        related_name='diagnostic_sessions',
-        verbose_name='设备'
+        'projects.Equipment', on_delete=models.CASCADE, related_name='diagnostic_sessions', verbose_name='设备'
     )
 
     session_no = models.CharField(max_length=50, unique=True, verbose_name='会话编号')
@@ -263,7 +243,7 @@ class DiagnosticSession(BaseModel):
             ('REQUEST', '客户请求'),
             ('PROACTIVE', '主动巡检'),
         ],
-        verbose_name='诊断原因'
+        verbose_name='诊断原因',
     )
 
     related_alarm = models.ForeignKey(
@@ -272,7 +252,7 @@ class DiagnosticSession(BaseModel):
         null=True,
         blank=True,
         related_name='diagnostic_sessions',
-        verbose_name='关联报警'
+        verbose_name='关联报警',
     )
 
     # 时间
@@ -285,7 +265,7 @@ class DiagnosticSession(BaseModel):
         on_delete=models.SET_NULL,
         null=True,
         related_name='diagnostic_sessions',
-        verbose_name='诊断人员'
+        verbose_name='诊断人员',
     )
 
     # 诊断结果
@@ -298,7 +278,7 @@ class DiagnosticSession(BaseModel):
             ('CANCELLED', '已取消'),
         ],
         default='IN_PROGRESS',
-        verbose_name='状态'
+        verbose_name='状态',
     )
 
     findings = models.TextField(blank=True, verbose_name='诊断发现')
@@ -313,7 +293,7 @@ class DiagnosticSession(BaseModel):
         null=True,
         blank=True,
         related_name='diagnostic_sessions',
-        verbose_name='关联服务单'
+        verbose_name='关联服务单',
     )
 
     class Meta:
@@ -325,17 +305,16 @@ class DiagnosticSession(BaseModel):
     def save(self, *args, **kwargs):
         if not self.session_no:
             from apps.core.models import CodeRule
+
             self.session_no = CodeRule.generate_code('DIAG')
         super().save(*args, **kwargs)
 
 
 class DiagnosticLog(BaseModel):
     """诊断日志"""
+
     session = models.ForeignKey(
-        DiagnosticSession,
-        on_delete=models.CASCADE,
-        related_name='logs',
-        verbose_name='诊断会话'
+        DiagnosticSession, on_delete=models.CASCADE, related_name='logs', verbose_name='诊断会话'
     )
 
     log_time = models.DateTimeField(auto_now_add=True, verbose_name='记录时间')
@@ -348,7 +327,7 @@ class DiagnosticLog(BaseModel):
             ('DATA', '数据'),
             ('SCREENSHOT', '截图'),
         ],
-        verbose_name='日志类型'
+        verbose_name='日志类型',
     )
 
     content = models.TextField(verbose_name='内容')
@@ -363,11 +342,9 @@ class DiagnosticLog(BaseModel):
 
 class PredictiveMaintenanceModel(BaseModel):
     """预测性维护模型"""
+
     equipment = models.ForeignKey(
-        'projects.Equipment',
-        on_delete=models.CASCADE,
-        related_name='pm_models',
-        verbose_name='设备'
+        'projects.Equipment', on_delete=models.CASCADE, related_name='pm_models', verbose_name='设备'
     )
 
     model_name = models.CharField(max_length=200, verbose_name='模型名称')
@@ -378,15 +355,11 @@ class PredictiveMaintenanceModel(BaseModel):
             ('ANOMALY', '异常检测'),
             ('FAILURE', '故障预测'),
         ],
-        verbose_name='模型类型'
+        verbose_name='模型类型',
     )
 
     # 输入数据点
-    input_data_points = models.ManyToManyField(
-        EquipmentDataPoint,
-        related_name='pm_models',
-        verbose_name='输入数据点'
-    )
+    input_data_points = models.ManyToManyField(EquipmentDataPoint, related_name='pm_models', verbose_name='输入数据点')
 
     # 模型参数
     parameters = models.JSONField(default=dict, blank=True, verbose_name='模型参数')
@@ -406,17 +379,12 @@ class PredictiveMaintenanceModel(BaseModel):
 
 class PredictiveMaintenanceResult(BaseModel):
     """预测性维护结果"""
+
     model = models.ForeignKey(
-        PredictiveMaintenanceModel,
-        on_delete=models.CASCADE,
-        related_name='results',
-        verbose_name='模型'
+        PredictiveMaintenanceModel, on_delete=models.CASCADE, related_name='results', verbose_name='模型'
     )
     equipment = models.ForeignKey(
-        'projects.Equipment',
-        on_delete=models.CASCADE,
-        related_name='pm_results',
-        verbose_name='设备'
+        'projects.Equipment', on_delete=models.CASCADE, related_name='pm_results', verbose_name='设备'
     )
 
     prediction_time = models.DateTimeField(auto_now_add=True, verbose_name='预测时间')
@@ -429,7 +397,7 @@ class PredictiveMaintenanceResult(BaseModel):
             ('ANOMALY_SCORE', '异常分数'),
             ('FAILURE_PROB', '故障概率'),
         ],
-        verbose_name='预测类型'
+        verbose_name='预测类型',
     )
     prediction_value = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='预测值')
     confidence = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name='置信度%')
@@ -445,7 +413,7 @@ class PredictiveMaintenanceResult(BaseModel):
             ('IMMEDIATE', '立即'),
         ],
         default='LOW',
-        verbose_name='紧急程度'
+        verbose_name='紧急程度',
     )
 
     # 处理
@@ -462,6 +430,7 @@ class PredictiveMaintenanceResult(BaseModel):
 # =============================================================================
 # 序列化器
 # =============================================================================
+
 
 class EquipmentDataPointSerializer(serializers.ModelSerializer):
     data_type_display = serializers.CharField(source='get_data_type_display', read_only=True)
@@ -552,8 +521,10 @@ class PredictiveMaintenanceResultSerializer(serializers.ModelSerializer):
 # 视图集
 # =============================================================================
 
+
 class EquipmentDataPointViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备数据点管理"""
+
     queryset = EquipmentDataPoint.objects.filter(is_deleted=False)
     serializer_class = EquipmentDataPointSerializer
     permission_classes = [IsAuthenticated]
@@ -563,6 +534,7 @@ class EquipmentDataPointViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
 
 class EquipmentConnectionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备连接管理"""
+
     queryset = EquipmentConnection.objects.filter(is_deleted=False)
     serializer_class = EquipmentConnectionSerializer
     permission_classes = [IsAuthenticated]
@@ -574,11 +546,7 @@ class EquipmentConnectionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
         conn = self.get_object()
         # 模拟测试连接
         # 实际实现需要根据协议进行连接测试
-        return Response({
-            'success': True,
-            'message': '连接测试成功',
-            'latency_ms': 50
-        })
+        return Response({'success': True, 'message': '连接测试成功', 'latency_ms': 50})
 
     @action(detail=True, methods=['post'])
     def update_heartbeat(self, request, pk=None):
@@ -592,6 +560,7 @@ class EquipmentConnectionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
 
 class EquipmentDataRecordViewSet(viewsets.ReadOnlyModelViewSet):
     """设备数据记录（只读）"""
+
     queryset = EquipmentDataRecord.objects.all()
     serializer_class = EquipmentDataRecordSerializer
     permission_classes = [IsAuthenticated]
@@ -605,20 +574,19 @@ class EquipmentDataRecordViewSet(viewsets.ReadOnlyModelViewSet):
 
         records = []
         for item in data_list:
-            records.append(EquipmentDataRecord(
-                equipment_id=item['equipment_id'],
-                data_point_id=item['data_point_id'],
-                timestamp=item['timestamp'],
-                value=item['value'],
-                quality=item.get('quality', 100)
-            ))
+            records.append(
+                EquipmentDataRecord(
+                    equipment_id=item['equipment_id'],
+                    data_point_id=item['data_point_id'],
+                    timestamp=item['timestamp'],
+                    value=item['value'],
+                    quality=item.get('quality', 100),
+                )
+            )
 
         EquipmentDataRecord.objects.bulk_create(records)
 
-        return Response({
-            'success': True,
-            'count': len(records)
-        })
+        return Response({'success': True, 'count': len(records)})
 
     @action(detail=False, methods=['get'])
     def latest(self, request):
@@ -631,15 +599,16 @@ class EquipmentDataRecordViewSet(viewsets.ReadOnlyModelViewSet):
         # 获取每个数据点的最新值
         from django.db.models import OuterRef, Subquery
 
-        latest_records = EquipmentDataRecord.objects.filter(
-            equipment_id=equipment_id
-        ).values('data_point').annotate(
-            latest_time=Max('timestamp'),
-            latest_value=Subquery(
-                EquipmentDataRecord.objects.filter(
-                    equipment_id=equipment_id,
-                    data_point=OuterRef('data_point')
-                ).order_by('-timestamp').values('value')[:1]
+        latest_records = (
+            EquipmentDataRecord.objects.filter(equipment_id=equipment_id)
+            .values('data_point')
+            .annotate(
+                latest_time=Max('timestamp'),
+                latest_value=Subquery(
+                    EquipmentDataRecord.objects.filter(equipment_id=equipment_id, data_point=OuterRef('data_point'))
+                    .order_by('-timestamp')
+                    .values('value')[:1]
+                ),
             )
         )
 
@@ -656,10 +625,7 @@ class EquipmentDataRecordViewSet(viewsets.ReadOnlyModelViewSet):
         if not equipment_id or not data_point_id:
             return Response({'error': '请指定设备和数据点'}, status=400)
 
-        queryset = self.get_queryset().filter(
-            equipment_id=equipment_id,
-            data_point_id=data_point_id
-        )
+        queryset = self.get_queryset().filter(equipment_id=equipment_id, data_point_id=data_point_id)
 
         if start_time:
             queryset = queryset.filter(timestamp__gte=start_time)
@@ -674,6 +640,7 @@ class EquipmentDataRecordViewSet(viewsets.ReadOnlyModelViewSet):
 
 class EquipmentAlarmViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备报警管理"""
+
     queryset = EquipmentAlarm.objects.filter(is_deleted=False)
     serializer_class = EquipmentAlarmSerializer
     permission_classes = [IsAuthenticated]
@@ -715,30 +682,31 @@ class EquipmentAlarmViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         queryset = self.get_queryset().filter(triggered_at__gte=start_date)
 
         # 按严重程度统计
-        by_severity = queryset.values('severity').annotate(
-            count=Count('id')
-        )
+        by_severity = queryset.values('severity').annotate(count=Count('id'))
 
         # 按设备统计
-        by_equipment = queryset.values(
-            'equipment__equipment_no', 'equipment__name'
-        ).annotate(
-            count=Count('id')
-        ).order_by('-count')[:10]
+        by_equipment = (
+            queryset.values('equipment__equipment_no', 'equipment__name')
+            .annotate(count=Count('id'))
+            .order_by('-count')[:10]
+        )
 
         # 活动报警数
         active_count = queryset.filter(is_active=True).count()
 
-        return Response({
-            'by_severity': list(by_severity),
-            'by_equipment': list(by_equipment),
-            'total': queryset.count(),
-            'active': active_count
-        })
+        return Response(
+            {
+                'by_severity': list(by_severity),
+                'by_equipment': list(by_equipment),
+                'total': queryset.count(),
+                'active': active_count,
+            }
+        )
 
 
 class DiagnosticSessionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """远程诊断会话管理"""
+
     queryset = DiagnosticSession.objects.filter(is_deleted=False)
     serializer_class = DiagnosticSessionSerializer
     permission_classes = [IsAuthenticated]
@@ -754,7 +722,7 @@ class DiagnosticSessionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
             log_type=request.data.get('log_type', 'NOTE'),
             content=request.data.get('content', ''),
             attachments=request.data.get('attachments', []),
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(DiagnosticLogSerializer(log).data)
@@ -774,6 +742,7 @@ class DiagnosticSessionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         # 如果需要现场服务，可以创建服务单
         if session.on_site_required and not session.service_order:
             from apps.projects.field_service import ServiceOrder
+
             service = ServiceOrder.objects.create(
                 service_type='REPAIR',
                 title=f'[诊断] {session.equipment.name} - {session.findings[:50]}',
@@ -784,7 +753,7 @@ class DiagnosticSessionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
                 contact_phone='',
                 requested_date=date.today() + timedelta(days=3),
                 description=f'远程诊断发现：\n{session.findings}\n\n建议：\n{session.recommendations}',
-                created_by=request.user
+                created_by=request.user,
             )
             session.service_order = service
             session.save()
@@ -794,6 +763,7 @@ class DiagnosticSessionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
 
 class PredictiveMaintenanceResultViewSet(viewsets.ReadOnlyModelViewSet):
     """预测性维护结果"""
+
     queryset = PredictiveMaintenanceResult.objects.filter(is_deleted=False)
     serializer_class = PredictiveMaintenanceResultSerializer
     permission_classes = [IsAuthenticated]
@@ -811,15 +781,17 @@ class PredictiveMaintenanceResultViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'])
     def pending(self, request):
         """待处理预测"""
-        results = self.get_queryset().filter(
-            is_actioned=False,
-            urgency__in=['HIGH', 'IMMEDIATE']
-        ).order_by('-prediction_time')
+        results = (
+            self.get_queryset()
+            .filter(is_actioned=False, urgency__in=['HIGH', 'IMMEDIATE'])
+            .order_by('-prediction_time')
+        )
         return Response(PredictiveMaintenanceResultSerializer(results, many=True).data)
 
 
 class EquipmentMonitoringDashboardView(APIView):
     """设备监控看板"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -837,18 +809,17 @@ class EquipmentMonitoringDashboardView(APIView):
 
         # 预测性维护提醒
         pending_pm = PredictiveMaintenanceResult.objects.filter(
-            is_actioned=False,
-            urgency__in=['HIGH', 'IMMEDIATE']
+            is_actioned=False, urgency__in=['HIGH', 'IMMEDIATE']
         ).order_by('-prediction_time')[:5]
 
         # 诊断会话
-        active_sessions = DiagnosticSession.objects.filter(
-            status='IN_PROGRESS'
-        ).count()
+        active_sessions = DiagnosticSession.objects.filter(status='IN_PROGRESS').count()
 
-        return Response({
-            'equipment_stats': equipment_stats,
-            'active_alarms': EquipmentAlarmSerializer(active_alarms, many=True).data,
-            'pending_pm': PredictiveMaintenanceResultSerializer(pending_pm, many=True).data,
-            'active_diagnostic_sessions': active_sessions,
-        })
+        return Response(
+            {
+                'equipment_stats': equipment_stats,
+                'active_alarms': EquipmentAlarmSerializer(active_alarms, many=True).data,
+                'pending_pm': PredictiveMaintenanceResultSerializer(pending_pm, many=True).data,
+                'active_diagnostic_sessions': active_sessions,
+            }
+        )

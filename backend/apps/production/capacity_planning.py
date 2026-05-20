@@ -15,6 +15,7 @@ Project Resource Allocation
 - 检查同一时段资源冲突
 - 根据项目交付优先级调整分配
 """
+
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -34,6 +35,7 @@ User = settings.AUTH_USER_MODEL
 
 class ResourceType(BaseModel):
     """资源类型"""
+
     RESOURCE_CATEGORY_CHOICES = [
         ('WORKSTATION', '工位'),
         ('EQUIPMENT', '设备'),
@@ -53,6 +55,7 @@ class ResourceType(BaseModel):
 
 class Resource(BaseModel):
     """资源"""
+
     STATUS_CHOICES = [
         ('AVAILABLE', '可用'),
         ('OCCUPIED', '占用中'),
@@ -62,8 +65,9 @@ class Resource(BaseModel):
 
     code = models.CharField('资源编码', max_length=50, unique=True)
     name = models.CharField('资源名称', max_length=100)
-    resource_type = models.ForeignKey(ResourceType, on_delete=models.CASCADE,
-                                      related_name='resources', verbose_name='资源类型')
+    resource_type = models.ForeignKey(
+        ResourceType, on_delete=models.CASCADE, related_name='resources', verbose_name='资源类型'
+    )
 
     # 产能信息
     capacity_per_day = models.DecimalField('日产能', max_digits=10, decimal_places=2, default=8)
@@ -77,10 +81,22 @@ class Resource(BaseModel):
     status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES, default='AVAILABLE')
 
     # 关联
-    work_center = models.ForeignKey('production.WorkCenter', on_delete=models.SET_NULL,
-                                    null=True, blank=True, related_name='resources', verbose_name='工作中心')
-    responsible = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
-                                   related_name='responsible_resources', verbose_name='负责人')
+    work_center = models.ForeignKey(
+        'production.WorkCenter',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='resources',
+        verbose_name='工作中心',
+    )
+    responsible = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='responsible_resources',
+        verbose_name='负责人',
+    )
 
     # 技能/能力 (JSON)
     capabilities = models.JSONField('能力标签', default=list)
@@ -95,12 +111,13 @@ class Resource(BaseModel):
 
 class ResourceAllocation(BaseModel):
     """资源分配"""
-    resource = models.ForeignKey(Resource, on_delete=models.CASCADE,
-                                related_name='allocations', verbose_name='资源')
+
+    resource = models.ForeignKey(Resource, on_delete=models.CASCADE, related_name='allocations', verbose_name='资源')
 
     # 分配对象
-    project = models.ForeignKey('projects.Project', on_delete=models.CASCADE,
-                               related_name='resource_allocations', verbose_name='项目')
+    project = models.ForeignKey(
+        'projects.Project', on_delete=models.CASCADE, related_name='resource_allocations', verbose_name='项目'
+    )
     task_type = models.CharField('任务类型', max_length=50, blank=True)  # 调试、装配、加工等
     task_reference = models.CharField('任务引用', max_length=100, blank=True)  # 关联的任务ID
 
@@ -134,6 +151,7 @@ class ResourceAllocation(BaseModel):
 
 class CapacityResourceConflict(BaseModel):
     """产能资源冲突"""
+
     CONFLICT_TYPE_CHOICES = [
         ('OVERLAP', '时间重叠'),
         ('OVERLOAD', '超负荷'),
@@ -148,8 +166,9 @@ class CapacityResourceConflict(BaseModel):
         ('CRITICAL', '严重'),
     ]
 
-    resource = models.ForeignKey(Resource, on_delete=models.CASCADE,
-                                related_name='capacity_conflicts', verbose_name='资源')
+    resource = models.ForeignKey(
+        Resource, on_delete=models.CASCADE, related_name='capacity_conflicts', verbose_name='资源'
+    )
     conflict_type = models.CharField('冲突类型', max_length=20, choices=CONFLICT_TYPE_CHOICES)
     severity = models.CharField('严重程度', max_length=20, choices=SEVERITY_CHOICES)
 
@@ -157,17 +176,29 @@ class CapacityResourceConflict(BaseModel):
     description = models.TextField('冲突描述')
 
     # 冲突的分配
-    allocation1 = models.ForeignKey(ResourceAllocation, on_delete=models.CASCADE,
-                                   related_name='cap_conflicts_as_first', verbose_name='分配1')
-    allocation2 = models.ForeignKey(ResourceAllocation, on_delete=models.SET_NULL,
-                                   null=True, blank=True, related_name='cap_conflicts_as_second',
-                                   verbose_name='分配2')
+    allocation1 = models.ForeignKey(
+        ResourceAllocation, on_delete=models.CASCADE, related_name='cap_conflicts_as_first', verbose_name='分配1'
+    )
+    allocation2 = models.ForeignKey(
+        ResourceAllocation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='cap_conflicts_as_second',
+        verbose_name='分配2',
+    )
 
     # 解决
     resolved = models.BooleanField('已解决', default=False)
     resolution = models.TextField('解决方案', blank=True)
-    resolved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
-                                   related_name='cap_resolved_conflicts', verbose_name='解决人')
+    resolved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='cap_resolved_conflicts',
+        verbose_name='解决人',
+    )
     resolved_at = models.DateTimeField('解决时间', null=True, blank=True)
 
     class Meta:
@@ -178,8 +209,8 @@ class CapacityResourceConflict(BaseModel):
 
 class CapacityPlan(BaseModel):
     """产能计划"""
-    resource = models.ForeignKey(Resource, on_delete=models.CASCADE,
-                                related_name='capacity_plans', verbose_name='资源')
+
+    resource = models.ForeignKey(Resource, on_delete=models.CASCADE, related_name='capacity_plans', verbose_name='资源')
     plan_date = models.DateField('计划日期')
 
     # 产能
@@ -203,6 +234,7 @@ class CapacityPlan(BaseModel):
 
 # ==================== Services ====================
 
+
 class CapacityPlanningService:
     """产能规划服务"""
 
@@ -214,7 +246,7 @@ class CapacityPlanningService:
             status__in=['PLANNED', 'CONFIRMED', 'IN_PROGRESS'],
             start_date__lte=end_date,
             end_date__gte=start_date,
-            is_deleted=False
+            is_deleted=False,
         )
 
         # 按日期统计
@@ -238,12 +270,14 @@ class CapacityPlanningService:
             while current <= alloc_end:
                 if current in daily_load:
                     daily_load[current]['allocated'] += daily_hours
-                    daily_load[current]['allocations'].append({
-                        'id': alloc.id,
-                        'project_name': alloc.project.name,
-                        'hours': daily_hours,
-                        'priority': alloc.priority,
-                    })
+                    daily_load[current]['allocations'].append(
+                        {
+                            'id': alloc.id,
+                            'project_name': alloc.project.name,
+                            'hours': daily_hours,
+                            'priority': alloc.priority,
+                        }
+                    )
                 current += timedelta(days=1)
 
         # 计算利用率
@@ -265,30 +299,32 @@ class CapacityPlanningService:
                 # 超负荷冲突
                 if len(data['allocations']) >= 2:
                     allocs = sorted(data['allocations'], key=lambda x: x['priority'], reverse=True)
-                    conflicts.append({
-                        'type': 'OVERLOAD',
-                        'severity': 'HIGH' if data['utilization'] > 150 else 'MEDIUM',
-                        'date': dt,
-                        'description': f"资源{resource.name}在{dt}超负荷，利用率{data['utilization']}%",
-                        'allocations': allocs,
-                    })
+                    conflicts.append(
+                        {
+                            'type': 'OVERLOAD',
+                            'severity': 'HIGH' if data['utilization'] > 150 else 'MEDIUM',
+                            'date': dt,
+                            'description': f"资源{resource.name}在{dt}超负荷，利用率{data['utilization']}%",
+                            'allocations': allocs,
+                        }
+                    )
 
         return conflicts
 
     @staticmethod
     def find_available_slot(resource, required_hours, preferred_start, preferred_end):
         """查找可用时间段"""
-        daily_load = CapacityPlanningService.calculate_resource_load(
-            resource, preferred_start, preferred_end
-        )
+        daily_load = CapacityPlanningService.calculate_resource_load(resource, preferred_start, preferred_end)
 
         available_slots = []
         for dt, data in daily_load.items():
             if data['remaining'] >= required_hours:
-                available_slots.append({
-                    'date': dt,
-                    'available_hours': data['remaining'],
-                })
+                available_slots.append(
+                    {
+                        'date': dt,
+                        'available_hours': data['remaining'],
+                    }
+                )
 
         return available_slots
 
@@ -297,10 +333,7 @@ class CapacityPlanningService:
         """推荐替代资源"""
         alternatives = []
 
-        resources = Resource.objects.filter(
-            status='AVAILABLE',
-            is_deleted=False
-        )
+        resources = Resource.objects.filter(status='AVAILABLE', is_deleted=False)
 
         for resource in resources:
             # 检查能力匹配
@@ -312,14 +345,16 @@ class CapacityPlanningService:
             total_available = sum(d['remaining'] for d in daily_load.values())
 
             if total_available >= required_hours:
-                alternatives.append({
-                    'resource_id': resource.id,
-                    'resource_name': resource.name,
-                    'resource_code': resource.code,
-                    'available_hours': total_available,
-                    'efficiency': float(resource.efficiency),
-                    'hourly_cost': float(resource.hourly_cost),
-                })
+                alternatives.append(
+                    {
+                        'resource_id': resource.id,
+                        'resource_name': resource.name,
+                        'resource_code': resource.code,
+                        'available_hours': total_available,
+                        'efficiency': float(resource.efficiency),
+                        'hourly_cost': float(resource.hourly_cost),
+                    }
+                )
 
         # 按效率和成本排序
         alternatives.sort(key=lambda x: (-x['efficiency'], x['hourly_cost']))
@@ -328,6 +363,7 @@ class CapacityPlanningService:
 
 
 # ==================== Serializers ====================
+
 
 class ResourceTypeSerializer(serializers.ModelSerializer):
     category_display = serializers.CharField(source='get_category_display', read_only=True)
@@ -371,8 +407,10 @@ class CapacityResourceConflictSerializer(serializers.ModelSerializer):
 
 # ==================== ViewSets ====================
 
+
 class ResourceTypeViewSet(viewsets.ModelViewSet):
     """资源类型管理"""
+
     queryset = ResourceType.objects.filter(is_deleted=False)
     serializer_class = ResourceTypeSerializer
     permission_classes = [IsAuthenticated]
@@ -380,6 +418,7 @@ class ResourceTypeViewSet(viewsets.ModelViewSet):
 
 class ResourceViewSet(viewsets.ModelViewSet):
     """资源管理"""
+
     queryset = Resource.objects.filter(is_deleted=False)
     serializer_class = ResourceSerializer
     permission_classes = [IsAuthenticated]
@@ -419,16 +458,13 @@ class ResourceViewSet(viewsets.ModelViewSet):
 
         daily_load = CapacityPlanningService.calculate_resource_load(resource, start_date, end_date)
 
-        return Response({
-            'resource': ResourceSerializer(resource).data,
-            'period': {'start': start_date, 'end': end_date},
-            'daily_load': [
-                {
-                    'date': dt.isoformat(),
-                    **data
-                } for dt, data in daily_load.items()
-            ],
-        })
+        return Response(
+            {
+                'resource': ResourceSerializer(resource).data,
+                'period': {'start': start_date, 'end': end_date},
+                'daily_load': [{'date': dt.isoformat(), **data} for dt, data in daily_load.items()],
+            }
+        )
 
     @action(detail=True, methods=['get'])
     def conflicts(self, request, pk=None):
@@ -436,7 +472,9 @@ class ResourceViewSet(viewsets.ModelViewSet):
         resource = self.get_object()
 
         start_date = date.fromisoformat(request.query_params.get('start_date', timezone.now().date().isoformat()))
-        end_date = date.fromisoformat(request.query_params.get('end_date', (timezone.now().date() + timedelta(days=30)).isoformat()))
+        end_date = date.fromisoformat(
+            request.query_params.get('end_date', (timezone.now().date() + timedelta(days=30)).isoformat())
+        )
 
         conflicts = CapacityPlanningService.detect_conflicts(resource, start_date, end_date)
 
@@ -445,6 +483,7 @@ class ResourceViewSet(viewsets.ModelViewSet):
 
 class ResourceAllocationViewSet(viewsets.ModelViewSet):
     """资源分配管理"""
+
     queryset = ResourceAllocation.objects.filter(is_deleted=False)
     serializer_class = ResourceAllocationSerializer
     permission_classes = [IsAuthenticated]
@@ -474,14 +513,14 @@ class ResourceAllocationViewSet(viewsets.ModelViewSet):
 
         resource = Resource.objects.get(pk=resource_id)
 
-        slots = CapacityPlanningService.find_available_slot(
-            resource, required_hours, start_date, end_date
-        )
+        slots = CapacityPlanningService.find_available_slot(resource, required_hours, start_date, end_date)
 
-        return Response({
-            'available': len(slots) > 0,
-            'slots': slots,
-        })
+        return Response(
+            {
+                'available': len(slots) > 0,
+                'slots': slots,
+            }
+        )
 
     @action(detail=False, methods=['post'])
     def find_alternatives(self, request):
@@ -500,6 +539,7 @@ class ResourceAllocationViewSet(viewsets.ModelViewSet):
 
 class CapacityDashboardView(APIView):
     """产能看板"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -518,10 +558,7 @@ class CapacityDashboardView(APIView):
             end_date = date.fromisoformat(end_date)
 
         # 获取资源
-        resources = Resource.objects.filter(
-            status='AVAILABLE',
-            is_deleted=False
-        )
+        resources = Resource.objects.filter(status='AVAILABLE', is_deleted=False)
         if category:
             resources = resources.filter(resource_type__category=category)
 
@@ -550,7 +587,9 @@ class CapacityDashboardView(APIView):
 
             resource_capacity = sum(d['available'] for d in daily_load.values())
             resource_allocated = sum(d['allocated'] for d in daily_load.values())
-            resource_utilization = round(resource_allocated / resource_capacity * 100, 1) if resource_capacity > 0 else 0
+            resource_utilization = (
+                round(resource_allocated / resource_capacity * 100, 1) if resource_capacity > 0 else 0
+            )
 
             is_overloaded = any(d['overloaded'] for d in daily_load.values())
             if is_overloaded:
@@ -559,29 +598,30 @@ class CapacityDashboardView(APIView):
             total_capacity += resource_capacity
             total_allocated += resource_allocated
 
-            dashboard_data['resources'].append({
-                'id': resource.id,
-                'code': resource.code,
-                'name': resource.name,
-                'type': resource.resource_type.name,
-                'category': resource.resource_type.category,
-                'capacity_hours': resource_capacity,
-                'allocated_hours': resource_allocated,
-                'utilization': resource_utilization,
-                'is_overloaded': is_overloaded,
-            })
+            dashboard_data['resources'].append(
+                {
+                    'id': resource.id,
+                    'code': resource.code,
+                    'name': resource.name,
+                    'type': resource.resource_type.name,
+                    'category': resource.resource_type.category,
+                    'capacity_hours': resource_capacity,
+                    'allocated_hours': resource_allocated,
+                    'utilization': resource_utilization,
+                    'is_overloaded': is_overloaded,
+                }
+            )
 
         dashboard_data['summary']['total_capacity_hours'] = total_capacity
         dashboard_data['summary']['total_allocated_hours'] = total_allocated
-        dashboard_data['summary']['avg_utilization'] = round(total_allocated / total_capacity * 100, 1) if total_capacity > 0 else 0
+        dashboard_data['summary']['avg_utilization'] = (
+            round(total_allocated / total_capacity * 100, 1) if total_capacity > 0 else 0
+        )
         dashboard_data['summary']['overloaded_resources'] = overloaded_count
 
         # 冲突统计
         conflicts = CapacityResourceConflict.objects.filter(
-            conflict_date__gte=start_date,
-            conflict_date__lte=end_date,
-            resolved=False,
-            is_deleted=False
+            conflict_date__gte=start_date, conflict_date__lte=end_date, resolved=False, is_deleted=False
         ).count()
         dashboard_data['summary']['conflicts_count'] = conflicts
 
@@ -590,6 +630,7 @@ class CapacityDashboardView(APIView):
 
 class CapacityResourceConflictViewSet(viewsets.ModelViewSet):
     """产能资源冲突管理"""
+
     queryset = CapacityResourceConflict.objects.filter(is_deleted=False)
     serializer_class = CapacityResourceConflictSerializer
     permission_classes = [IsAuthenticated]

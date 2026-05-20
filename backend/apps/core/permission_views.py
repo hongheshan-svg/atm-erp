@@ -1,6 +1,7 @@
 """
 权限系统视图
 """
+
 from copy import deepcopy
 
 from rest_framework import viewsets
@@ -14,6 +15,7 @@ from apps.core.permission_serializers import DataScopeSerializer, PermissionSeri
 
 class PermissionViewSet(viewsets.ModelViewSet):
     """权限节点管理（仅超级管理员）"""
+
     queryset = Permission.active.all()
     serializer_class = PermissionSerializer
     permission_classes = [IsAdminUser]
@@ -48,11 +50,7 @@ class PermissionViewSet(viewsets.ModelViewSet):
             nodes_by_code[parent_code]['children'].append(nodes_by_code[perm.code])
             attached_codes.add(perm.code)
 
-        roots = [
-            deepcopy(nodes_by_code[perm.code])
-            for perm in permissions
-            if perm.code not in attached_codes
-        ]
+        roots = [deepcopy(nodes_by_code[perm.code]) for perm in permissions if perm.code not in attached_codes]
 
         self._sort_tree(roots)
         return Response(roots)
@@ -88,6 +86,7 @@ class PermissionViewSet(viewsets.ModelViewSet):
 
 class DataScopeViewSet(viewsets.ModelViewSet):
     """数据权限管理"""
+
     queryset = DataScope.objects.all()
     serializer_class = DataScopeSerializer
     permission_classes = [IsAdminUser]

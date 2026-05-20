@@ -1,6 +1,7 @@
 """
 编码规则序列化器
 """
+
 from rest_framework import serializers
 
 from .code_rule_models import CodeHistory, CodeRule
@@ -8,17 +9,31 @@ from .code_rule_models import CodeHistory, CodeRule
 
 class CodeRuleSerializer(serializers.ModelSerializer):
     """编码规则序列化器"""
+
     rule_type_display = serializers.CharField(source='get_rule_type_display', read_only=True)
     reset_mode_display = serializers.CharField(source='get_reset_mode_display', read_only=True)
 
     class Meta:
         model = CodeRule
         fields = [
-            'id', 'rule_type', 'rule_type_display', 'rule_name', 'prefix',
-            'date_format', 'seq_length', 'seq_start', 'current_seq',
-            'reset_mode', 'reset_mode_display', 'separator', 'example',
-            'is_active', 'description', 'last_reset_date',
-            'created_at', 'updated_at'
+            'id',
+            'rule_type',
+            'rule_type_display',
+            'rule_name',
+            'prefix',
+            'date_format',
+            'seq_length',
+            'seq_start',
+            'current_seq',
+            'reset_mode',
+            'reset_mode_display',
+            'separator',
+            'example',
+            'is_active',
+            'description',
+            'last_reset_date',
+            'created_at',
+            'updated_at',
         ]
         read_only_fields = ['example', 'last_reset_date', 'created_at', 'updated_at']
 
@@ -40,20 +55,20 @@ class CodeRuleSerializer(serializers.ModelSerializer):
             allowed_tokens = ['YYYY', 'YY', 'MM', 'DD']
             # 简单验证是否只包含允许的标记
             import re
+
             remaining = value
             for token in allowed_tokens:
                 remaining = remaining.replace(token, '')
             # 移除可能的分隔符
             remaining = re.sub(r'[-_/.]', '', remaining)
             if remaining:
-                raise serializers.ValidationError(
-                    f'日期格式只能包含: {", ".join(allowed_tokens)} 以及分隔符'
-                )
+                raise serializers.ValidationError(f'日期格式只能包含: {", ".join(allowed_tokens)} 以及分隔符')
         return value
 
 
 class CodeHistorySerializer(serializers.ModelSerializer):
     """编码历史序列化器"""
+
     rule_name = serializers.CharField(source='rule.rule_name', read_only=True)
     rule_type_display = serializers.CharField(source='rule.get_rule_type_display', read_only=True)
     generated_by_name = serializers.CharField(source='generated_by.username', read_only=True)
@@ -61,9 +76,16 @@ class CodeHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = CodeHistory
         fields = [
-            'id', 'rule', 'rule_name', 'rule_type_display',
-            'generated_code', 'sequence_number', 'generated_by',
-            'generated_by_name', 'generated_at', 'business_model', 'business_id'
+            'id',
+            'rule',
+            'rule_name',
+            'rule_type_display',
+            'generated_code',
+            'sequence_number',
+            'generated_by',
+            'generated_by_name',
+            'generated_at',
+            'business_model',
+            'business_id',
         ]
         read_only_fields = ['generated_at']
-

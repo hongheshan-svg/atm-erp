@@ -2,6 +2,7 @@
 技术协议管理模块 - 针对非标自动化行业
 包含：技术协议模板、协议管理、签章确认、变更追踪
 """
+
 from django.db import models
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
@@ -14,8 +15,10 @@ from apps.core.models import BaseModel
 # 模型定义
 # =============================================================================
 
+
 class TechnicalAgreementTemplate(BaseModel):
     """技术协议模板"""
+
     CATEGORY_CHOICES = [
         ('STANDARD', '标准设备'),
         ('CUSTOM', '非标设备'),
@@ -45,11 +48,12 @@ class TechnicalAgreementTemplate(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.code} - {self.name}"
+        return f'{self.code} - {self.name}'
 
 
 class TechnicalAgreement(BaseModel):
     """技术协议"""
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('INTERNAL_REVIEW', '内部评审'),
@@ -66,23 +70,13 @@ class TechnicalAgreement(BaseModel):
 
     # 关联信息
     project = models.ForeignKey(
-        'projects.Project',
-        on_delete=models.CASCADE,
-        related_name='technical_agreements',
-        verbose_name='关联项目'
+        'projects.Project', on_delete=models.CASCADE, related_name='technical_agreements', verbose_name='关联项目'
     )
     customer = models.ForeignKey(
-        'masterdata.Customer',
-        on_delete=models.PROTECT,
-        related_name='technical_agreements',
-        verbose_name='客户'
+        'masterdata.Customer', on_delete=models.PROTECT, related_name='technical_agreements', verbose_name='客户'
     )
     template = models.ForeignKey(
-        TechnicalAgreementTemplate,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='使用模板'
+        TechnicalAgreementTemplate, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='使用模板'
     )
     sales_contract = models.ForeignKey(
         'sales.SalesContract',
@@ -90,7 +84,7 @@ class TechnicalAgreement(BaseModel):
         null=True,
         blank=True,
         related_name='technical_agreements',
-        verbose_name='销售合同'
+        verbose_name='销售合同',
     )
 
     # 协议内容
@@ -112,7 +106,7 @@ class TechnicalAgreement(BaseModel):
         null=True,
         blank=True,
         related_name='signed_agreements',
-        verbose_name='我方签署人'
+        verbose_name='我方签署人',
     )
     our_sign_date = models.DateField(null=True, blank=True, verbose_name='我方签署日期')
     customer_signer = models.CharField(max_length=100, blank=True, verbose_name='客户签署人')
@@ -128,11 +122,12 @@ class TechnicalAgreement(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.agreement_no} - {self.name}"
+        return f'{self.agreement_no} - {self.name}'
 
 
 class TechnicalAgreementChange(BaseModel):
     """技术协议变更记录"""
+
     CHANGE_TYPE_CHOICES = [
         ('SPEC_CHANGE', '技术参数变更'),
         ('CRITERIA_CHANGE', '验收标准变更'),
@@ -149,10 +144,7 @@ class TechnicalAgreementChange(BaseModel):
     ]
 
     agreement = models.ForeignKey(
-        TechnicalAgreement,
-        on_delete=models.CASCADE,
-        related_name='changes',
-        verbose_name='技术协议'
+        TechnicalAgreement, on_delete=models.CASCADE, related_name='changes', verbose_name='技术协议'
     )
     change_no = models.CharField(max_length=50, verbose_name='变更编号')
     change_type = models.CharField(max_length=20, choices=CHANGE_TYPE_CHOICES, verbose_name='变更类型')
@@ -171,7 +163,7 @@ class TechnicalAgreementChange(BaseModel):
         on_delete=models.SET_NULL,
         null=True,
         related_name='agreement_change_requests',
-        verbose_name='申请人'
+        verbose_name='申请人',
     )
     approved_by = models.ForeignKey(
         'accounts.User',
@@ -179,7 +171,7 @@ class TechnicalAgreementChange(BaseModel):
         null=True,
         blank=True,
         related_name='agreement_change_approvals',
-        verbose_name='审批人'
+        verbose_name='审批人',
     )
     approved_date = models.DateTimeField(null=True, blank=True, verbose_name='审批时间')
 
@@ -194,12 +186,13 @@ class TechnicalAgreementChange(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.change_no} - {self.agreement.agreement_no}"
+        return f'{self.change_no} - {self.agreement.agreement_no}'
 
 
 # =============================================================================
 # 序列化器
 # =============================================================================
+
 
 class TechnicalAgreementTemplateSerializer(serializers.ModelSerializer):
     category_display = serializers.CharField(source='get_category_display', read_only=True)
@@ -243,6 +236,7 @@ class TechnicalAgreementSerializer(serializers.ModelSerializer):
 
 class TechnicalAgreementListSerializer(serializers.ModelSerializer):
     """列表用简化序列化器"""
+
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     customer_name = serializers.CharField(source='customer.name', read_only=True)
@@ -251,9 +245,20 @@ class TechnicalAgreementListSerializer(serializers.ModelSerializer):
     class Meta:
         model = TechnicalAgreement
         fields = [
-            'id', 'agreement_no', 'name', 'project', 'project_name',
-            'customer', 'customer_name', 'version', 'status', 'status_display',
-            'our_sign_date', 'customer_sign_date', 'change_count', 'created_at'
+            'id',
+            'agreement_no',
+            'name',
+            'project',
+            'project_name',
+            'customer',
+            'customer_name',
+            'version',
+            'status',
+            'status_display',
+            'our_sign_date',
+            'customer_sign_date',
+            'change_count',
+            'created_at',
         ]
 
     def get_change_count(self, obj):
@@ -264,8 +269,10 @@ class TechnicalAgreementListSerializer(serializers.ModelSerializer):
 # 视图集
 # =============================================================================
 
+
 class TechnicalAgreementTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术协议模板管理"""
+
     queryset = TechnicalAgreementTemplate.objects.all()
     serializer_class = TechnicalAgreementTemplateSerializer
     filterset_fields = ['category', 'is_active', 'is_deleted']
@@ -282,6 +289,7 @@ class TechnicalAgreementTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, view
 
 class TechnicalAgreementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术协议管理"""
+
     queryset = TechnicalAgreement.objects.all()
     filterset_fields = ['project', 'customer', 'status', 'is_deleted']
     search_fields = ['agreement_no', 'name']
@@ -293,9 +301,12 @@ class TechnicalAgreementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
         return TechnicalAgreementSerializer
 
     def get_queryset(self):
-        return super().get_queryset().select_related(
-            'project', 'customer', 'template', 'our_signer'
-        ).prefetch_related('changes')
+        return (
+            super()
+            .get_queryset()
+            .select_related('project', 'customer', 'template', 'our_signer')
+            .prefetch_related('changes')
+        )
 
     @action(detail=True, methods=['post'])
     def submit_review(self, request, pk=None):
@@ -378,6 +389,7 @@ class TechnicalAgreementViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
 
 class TechnicalAgreementChangeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术协议变更管理"""
+
     queryset = TechnicalAgreementChange.objects.all()
     serializer_class = TechnicalAgreementChangeSerializer
     filterset_fields = ['agreement', 'change_type', 'status', 'is_deleted']
@@ -395,6 +407,7 @@ class TechnicalAgreementChangeViewSet(SoftDeleteMixin, UserTrackingMixin, viewse
             return Response({'error': '只有待审批状态才能审批'}, status=status.HTTP_400_BAD_REQUEST)
 
         from django.utils import timezone
+
         change.status = 'APPROVED'
         change.approved_by = request.user
         change.approved_date = timezone.now()
@@ -409,6 +422,7 @@ class TechnicalAgreementChangeViewSet(SoftDeleteMixin, UserTrackingMixin, viewse
             return Response({'error': '只有待审批状态才能驳回'}, status=status.HTTP_400_BAD_REQUEST)
 
         from django.utils import timezone
+
         change.status = 'REJECTED'
         change.approved_by = request.user
         change.approved_date = timezone.now()

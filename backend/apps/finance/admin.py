@@ -25,4 +25,3 @@ class AccountPayableAdmin(admin.ModelAdmin):
     list_filter = ['status', 'due_date']
     search_fields = ['ap_no', 'supplier__name', 'invoice_no']
     ordering = ['-created_at']
-

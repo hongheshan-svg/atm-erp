@@ -3,6 +3,7 @@
 Sales Performance Analytics
 跟踪销售人员业绩、目标达成率等
 """
+
 from datetime import date
 from decimal import Decimal
 
@@ -23,6 +24,7 @@ class SalesTarget(BaseModel):
     """
     销售目标
     """
+
     TARGET_TYPES = [
         ('MONTHLY', '月度目标'),
         ('QUARTERLY', '季度目标'),
@@ -30,54 +32,26 @@ class SalesTarget(BaseModel):
     ]
 
     user = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.CASCADE,
-        related_name='sales_targets',
-        verbose_name='销售人员'
+        'accounts.User', on_delete=models.CASCADE, related_name='sales_targets', verbose_name='销售人员'
     )
 
-    target_type = models.CharField(
-        max_length=20,
-        choices=TARGET_TYPES,
-        default='MONTHLY',
-        verbose_name='目标类型'
-    )
+    target_type = models.CharField(max_length=20, choices=TARGET_TYPES, default='MONTHLY', verbose_name='目标类型')
 
     year = models.IntegerField(verbose_name='年份')
     month = models.IntegerField(null=True, blank=True, verbose_name='月份')
     quarter = models.IntegerField(null=True, blank=True, verbose_name='季度')
 
     # 目标金额
-    order_target = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        verbose_name='订单目标'
-    )
-    collection_target = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        verbose_name='回款目标'
-    )
+    order_target = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='订单目标')
+    collection_target = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='回款目标')
 
     # 目标数量
     customer_target = models.IntegerField(default=0, verbose_name='新客户目标')
     opportunity_target = models.IntegerField(default=0, verbose_name='商机目标')
 
     # 实际完成（定期计算）
-    order_actual = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        verbose_name='订单实际'
-    )
-    collection_actual = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        verbose_name='回款实际'
-    )
+    order_actual = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='订单实际')
+    collection_actual = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='回款实际')
     customer_actual = models.IntegerField(default=0, verbose_name='新客户实际')
     opportunity_actual = models.IntegerField(default=0, verbose_name='商机实际')
 
@@ -116,6 +90,7 @@ class SalesCommission(BaseModel):
     """
     销售提成
     """
+
     COMMISSION_TYPES = [
         ('ORDER', '订单提成'),
         ('COLLECTION', '回款提成'),
@@ -131,40 +106,19 @@ class SalesCommission(BaseModel):
     ]
 
     user = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.CASCADE,
-        related_name='commissions',
-        verbose_name='销售人员'
+        'accounts.User', on_delete=models.CASCADE, related_name='commissions', verbose_name='销售人员'
     )
 
-    commission_type = models.CharField(
-        max_length=20,
-        choices=COMMISSION_TYPES,
-        default='ORDER',
-        verbose_name='类型'
-    )
+    commission_type = models.CharField(max_length=20, choices=COMMISSION_TYPES, default='ORDER', verbose_name='类型')
 
     # 期间
     year = models.IntegerField(verbose_name='年份')
     month = models.IntegerField(verbose_name='月份')
 
     # 金额
-    base_amount = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        verbose_name='基数金额'
-    )
-    commission_rate = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=0,
-        verbose_name='提成比例%'
-    )
-    commission_amount = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        verbose_name='提成金额'
-    )
+    base_amount = models.DecimalField(max_digits=18, decimal_places=2, verbose_name='基数金额')
+    commission_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name='提成比例%')
+    commission_amount = models.DecimalField(max_digits=18, decimal_places=2, verbose_name='提成金额')
 
     # 关联
     order = models.ForeignKey(
@@ -173,15 +127,10 @@ class SalesCommission(BaseModel):
         null=True,
         blank=True,
         related_name='commissions',
-        verbose_name='关联订单'
+        verbose_name='关联订单',
     )
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
 
     confirmed_by = models.ForeignKey(
         'accounts.User',
@@ -189,7 +138,7 @@ class SalesCommission(BaseModel):
         null=True,
         blank=True,
         related_name='confirmed_commissions',
-        verbose_name='确认人'
+        verbose_name='确认人',
     )
     confirmed_at = models.DateTimeField(null=True, blank=True, verbose_name='确认时间')
 
@@ -207,6 +156,7 @@ class SalesCommission(BaseModel):
 
 class CustomerSegment(BaseModel):
     """客户分层定义"""
+
     code = models.CharField(max_length=20, unique=True, verbose_name='分层编码')
     name = models.CharField(max_length=50, verbose_name='分层名称')
     r_min = models.IntegerField(default=1, verbose_name='R最小值')
@@ -229,11 +179,9 @@ class CustomerSegment(BaseModel):
 
 class CustomerRFMAnalysis(BaseModel):
     """客户RFM分析结果"""
+
     customer = models.ForeignKey(
-        'masterdata.Customer',
-        on_delete=models.CASCADE,
-        related_name='rfm_records',
-        verbose_name='客户'
+        'masterdata.Customer', on_delete=models.CASCADE, related_name='rfm_records', verbose_name='客户'
     )
     analysis_date = models.DateField(verbose_name='分析日期')
     last_order_date = models.DateField(null=True, blank=True, verbose_name='最近订单日期')
@@ -258,6 +206,7 @@ class CustomerRFMAnalysis(BaseModel):
 # Performance Service
 # =====================
 
+
 class SalesPerformanceService:
     """销售业绩服务"""
 
@@ -276,19 +225,16 @@ class SalesPerformanceService:
         # 订单统计
         orders = SalesOrder.objects.filter(**filters).filter(date_filters)
         order_count = orders.count()
-        order_amount = orders.filter(status__in=['CONFIRMED', 'COMPLETED']).aggregate(
-            total=Sum('total_amount')
-        )['total'] or 0
+        order_amount = (
+            orders.filter(status__in=['CONFIRMED', 'COMPLETED']).aggregate(total=Sum('total_amount'))['total'] or 0
+        )
 
         # 报价统计
         quote_filters = Q(created_at__year=year)
         if month:
             quote_filters &= Q(created_at__month=month)
 
-        quotes = SalesQuotation.objects.filter(
-            created_by_id=user_id,
-            is_deleted=False
-        ).filter(quote_filters)
+        quotes = SalesQuotation.objects.filter(created_by_id=user_id, is_deleted=False).filter(quote_filters)
         quote_count = quotes.count()
         quote_amount = quotes.aggregate(total=Sum('total_amount'))['total'] or 0
 
@@ -301,10 +247,9 @@ class SalesPerformanceService:
         if month:
             customer_filters &= Q(created_at__month=month)
 
-        new_customers = Customer.objects.filter(
-            created_by_id=user_id,
-            is_deleted=False
-        ).filter(customer_filters).count()
+        new_customers = (
+            Customer.objects.filter(created_by_id=user_id, is_deleted=False).filter(customer_filters).count()
+        )
 
         return {
             'user_id': user_id,
@@ -315,7 +260,7 @@ class SalesPerformanceService:
             'quote_count': quote_count,
             'quote_amount': float(quote_amount),
             'conversion_rate': conversion_rate,
-            'new_customers': new_customers
+            'new_customers': new_customers,
         }
 
     @staticmethod
@@ -327,25 +272,26 @@ class SalesPerformanceService:
         if month:
             date_filters &= Q(order_date__month=month)
 
-        ranking = SalesOrder.objects.filter(
-            is_deleted=False,
-            status__in=['CONFIRMED', 'COMPLETED']
-        ).filter(date_filters).values(
-            'created_by', 'created_by__first_name', 'created_by__last_name'
-        ).annotate(
-            order_count=Count('id'),
-            total_amount=Sum('total_amount')
-        ).order_by('-total_amount')[:limit]
+        ranking = (
+            SalesOrder.objects.filter(is_deleted=False, status__in=['CONFIRMED', 'COMPLETED'])
+            .filter(date_filters)
+            .values('created_by', 'created_by__first_name', 'created_by__last_name')
+            .annotate(order_count=Count('id'), total_amount=Sum('total_amount'))
+            .order_by('-total_amount')[:limit]
+        )
 
         result = []
         for i, item in enumerate(ranking, 1):
-            result.append({
-                'rank': i,
-                'user_id': item['created_by'],
-                'name': f"{item['created_by__first_name'] or ''}{item['created_by__last_name'] or ''}".strip() or '未知',
-                'order_count': item['order_count'],
-                'total_amount': float(item['total_amount'] or 0)
-            })
+            result.append(
+                {
+                    'rank': i,
+                    'user_id': item['created_by'],
+                    'name': f"{item['created_by__first_name'] or ''}{item['created_by__last_name'] or ''}".strip()
+                    or '未知',
+                    'order_count': item['order_count'],
+                    'total_amount': float(item['total_amount'] or 0),
+                }
+            )
 
         return result
 
@@ -353,9 +299,7 @@ class SalesPerformanceService:
     def update_target_actual(target_id):
         """更新目标实际完成情况"""
         target = SalesTarget.objects.get(id=target_id)
-        performance = SalesPerformanceService.calculate_user_performance(
-            target.user_id, target.year, target.month
-        )
+        performance = SalesPerformanceService.calculate_user_performance(target.user_id, target.year, target.month)
 
         target.order_actual = performance['order_amount']
         target.customer_actual = performance['new_customers']
@@ -369,6 +313,7 @@ class SalesPerformanceService:
 # Serializers
 # =====================
 
+
 class SalesTargetSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.get_full_name', read_only=True)
     target_type_display = serializers.CharField(source='get_target_type_display', read_only=True)
@@ -378,8 +323,14 @@ class SalesTargetSerializer(serializers.ModelSerializer):
     class Meta:
         model = SalesTarget
         fields = '__all__'
-        read_only_fields = ['created_by', 'updated_by', 'order_actual', 'collection_actual',
-                          'customer_actual', 'opportunity_actual']
+        read_only_fields = [
+            'created_by',
+            'updated_by',
+            'order_actual',
+            'collection_actual',
+            'customer_actual',
+            'opportunity_actual',
+        ]
 
 
 class SalesCommissionSerializer(serializers.ModelSerializer):
@@ -398,8 +349,10 @@ class SalesCommissionSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class SalesTargetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售目标管理"""
+
     queryset = SalesTarget.objects.none()
     serializer_class = SalesTargetSerializer
     permission_classes = [IsAuthenticated]
@@ -438,10 +391,7 @@ class SalesTargetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
                     target_type='MONTHLY',
                     year=year,
                     month=month,
-                    defaults={
-                        'order_target': order_target,
-                        'created_by': request.user
-                    }
+                    defaults={'order_target': order_target, 'created_by': request.user},
                 )
                 if c:
                     created += 1
@@ -466,26 +416,29 @@ class SalesTargetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
             total_order_target=Sum('order_target'),
             total_order_actual=Sum('order_actual'),
             total_collection_target=Sum('collection_target'),
-            total_collection_actual=Sum('collection_actual')
+            total_collection_actual=Sum('collection_actual'),
         )
 
         order_target = summary['total_order_target'] or 0
         order_actual = summary['total_order_actual'] or 0
 
-        return Response({
-            'year': year,
-            'month': month,
-            'order_target': float(order_target),
-            'order_actual': float(order_actual),
-            'order_rate': round(float(order_actual) / float(order_target) * 100, 2) if order_target > 0 else 0,
-            'collection_target': float(summary['total_collection_target'] or 0),
-            'collection_actual': float(summary['total_collection_actual'] or 0),
-            'targets': self.get_serializer(targets, many=True).data
-        })
+        return Response(
+            {
+                'year': year,
+                'month': month,
+                'order_target': float(order_target),
+                'order_actual': float(order_actual),
+                'order_rate': round(float(order_actual) / float(order_target) * 100, 2) if order_target > 0 else 0,
+                'collection_target': float(summary['total_collection_target'] or 0),
+                'collection_actual': float(summary['total_collection_actual'] or 0),
+                'targets': self.get_serializer(targets, many=True).data,
+            }
+        )
 
 
 class SalesCommissionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售提成管理"""
+
     queryset = SalesCommission.objects.none()
     serializer_class = SalesCommissionSerializer
     permission_classes = [IsAuthenticated]
@@ -530,36 +483,39 @@ class SalesCommissionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
         year = int(request.query_params.get('year', date.today().year))
 
         # 按用户汇总
-        by_user = self.get_queryset().filter(
-            year=year,
-            status__in=['CONFIRMED', 'PAID']
-        ).values('user', 'user__first_name', 'user__last_name').annotate(
-            total_commission=Sum('commission_amount'),
-            total_base=Sum('base_amount'),
-            count=Count('id')
-        ).order_by('-total_commission')
+        by_user = (
+            self.get_queryset()
+            .filter(year=year, status__in=['CONFIRMED', 'PAID'])
+            .values('user', 'user__first_name', 'user__last_name')
+            .annotate(total_commission=Sum('commission_amount'), total_base=Sum('base_amount'), count=Count('id'))
+            .order_by('-total_commission')
+        )
 
         # 按月汇总
-        by_month = self.get_queryset().filter(
-            year=year,
-            status__in=['CONFIRMED', 'PAID']
-        ).values('month').annotate(
-            total=Sum('commission_amount'),
-            count=Count('id')
-        ).order_by('month')
+        by_month = (
+            self.get_queryset()
+            .filter(year=year, status__in=['CONFIRMED', 'PAID'])
+            .values('month')
+            .annotate(total=Sum('commission_amount'), count=Count('id'))
+            .order_by('month')
+        )
 
-        return Response({
-            'year': year,
-            'by_user': list(by_user),
-            'by_month': list(by_month),
-            'total': self.get_queryset().filter(
-                year=year, status__in=['CONFIRMED', 'PAID']
-            ).aggregate(total=Sum('commission_amount'))['total'] or 0
-        })
+        return Response(
+            {
+                'year': year,
+                'by_user': list(by_user),
+                'by_month': list(by_month),
+                'total': self.get_queryset()
+                .filter(year=year, status__in=['CONFIRMED', 'PAID'])
+                .aggregate(total=Sum('commission_amount'))['total']
+                or 0,
+            }
+        )
 
 
 class SalesPerformanceViewSet(viewsets.ViewSet):
     """销售业绩统计"""
+
     permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['get'])
@@ -570,9 +526,7 @@ class SalesPerformanceViewSet(viewsets.ViewSet):
         if month:
             month = int(month)
 
-        performance = SalesPerformanceService.calculate_user_performance(
-            request.user.id, year, month
-        )
+        performance = SalesPerformanceService.calculate_user_performance(request.user.id, year, month)
         return Response(performance)
 
     @action(detail=False, methods=['get'])
@@ -600,12 +554,13 @@ class SalesPerformanceViewSet(viewsets.ViewSet):
         if user_id:
             filters &= Q(salesperson_id=user_id)
 
-        monthly = SalesOrder.objects.filter(filters).annotate(
-            month=TruncMonth('order_date')
-        ).values('month').annotate(
-            order_count=Count('id'),
-            total_amount=Sum('total_amount')
-        ).order_by('month')
+        monthly = (
+            SalesOrder.objects.filter(filters)
+            .annotate(month=TruncMonth('order_date'))
+            .values('month')
+            .annotate(order_count=Count('id'), total_amount=Sum('total_amount'))
+            .order_by('month')
+        )
 
         return Response(list(monthly))
 
@@ -618,29 +573,23 @@ class SalesPerformanceViewSet(viewsets.ViewSet):
         year = int(request.query_params.get('year', date.today().year))
 
         # 客户贡献排名
-        top_customers = SalesOrder.objects.filter(
-            order_date__year=year,
-            is_deleted=False,
-            status__in=['CONFIRMED', 'COMPLETED']
-        ).values('customer', 'customer__name').annotate(
-            order_count=Count('id'),
-            total_amount=Sum('total_amount')
-        ).order_by('-total_amount')[:10]
+        top_customers = (
+            SalesOrder.objects.filter(order_date__year=year, is_deleted=False, status__in=['CONFIRMED', 'COMPLETED'])
+            .values('customer', 'customer__name')
+            .annotate(order_count=Count('id'), total_amount=Sum('total_amount'))
+            .order_by('-total_amount')[:10]
+        )
 
         # 新客户数量
-        new_customers_by_month = Customer.objects.filter(
-            created_at__year=year,
-            is_deleted=False
-        ).annotate(
-            month=TruncMonth('created_at')
-        ).values('month').annotate(
-            count=Count('id')
-        ).order_by('month')
+        new_customers_by_month = (
+            Customer.objects.filter(created_at__year=year, is_deleted=False)
+            .annotate(month=TruncMonth('created_at'))
+            .values('month')
+            .annotate(count=Count('id'))
+            .order_by('month')
+        )
 
-        return Response({
-            'top_customers': list(top_customers),
-            'new_customers_trend': list(new_customers_by_month)
-        })
+        return Response({'top_customers': list(top_customers), 'new_customers_trend': list(new_customers_by_month)})
 
     @action(detail=False, methods=['get'])
     def pipeline_analysis(self, request):
@@ -650,28 +599,24 @@ class SalesPerformanceViewSet(viewsets.ViewSet):
         year = int(request.query_params.get('year', date.today().year))
 
         # 各阶段统计
-        stages = SalesQuotation.objects.filter(
-            created_at__year=year,
-            is_deleted=False
-        ).values('status').annotate(
-            count=Count('id'),
-            total_amount=Sum('total_amount')
+        stages = (
+            SalesQuotation.objects.filter(created_at__year=year, is_deleted=False)
+            .values('status')
+            .annotate(count=Count('id'), total_amount=Sum('total_amount'))
         )
 
         # 转化率
-        total = SalesQuotation.objects.filter(
-            created_at__year=year, is_deleted=False
-        ).count()
-        won = SalesQuotation.objects.filter(
-            created_at__year=year, is_deleted=False, status='WON'
-        ).count()
+        total = SalesQuotation.objects.filter(created_at__year=year, is_deleted=False).count()
+        won = SalesQuotation.objects.filter(created_at__year=year, is_deleted=False, status='WON').count()
 
-        return Response({
-            'stages': list(stages),
-            'total_quotes': total,
-            'won_quotes': won,
-            'conversion_rate': round(won / total * 100, 2) if total > 0 else 0
-        })
+        return Response(
+            {
+                'stages': list(stages),
+                'total_quotes': total,
+                'won_quotes': won,
+                'conversion_rate': round(won / total * 100, 2) if total > 0 else 0,
+            }
+        )
 
 
 def _assign_rfm_scores(rows, key, score_key, reverse=False):
@@ -702,65 +647,67 @@ def _classify_customer_segment(r_score, f_score, m_score):
 
 class CustomerRFMSegmentSummaryView(APIView):
     """客户RFM分层汇总。"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        latest_date = CustomerRFMAnalysis.objects.filter(is_deleted=False).aggregate(
-            latest=Max('analysis_date')
-        )['latest']
+        latest_date = CustomerRFMAnalysis.objects.filter(is_deleted=False).aggregate(latest=Max('analysis_date'))[
+            'latest'
+        ]
         if not latest_date:
             return Response({'analysis_date': None, 'segments': []})
 
-        segments = CustomerRFMAnalysis.objects.filter(
-            is_deleted=False,
-            analysis_date=latest_date
-        ).values('customer_segment').annotate(
-            count=Count('id'),
-            total_monetary=Sum('monetary')
-        ).order_by('-total_monetary', 'customer_segment')
+        segments = (
+            CustomerRFMAnalysis.objects.filter(is_deleted=False, analysis_date=latest_date)
+            .values('customer_segment')
+            .annotate(count=Count('id'), total_monetary=Sum('monetary'))
+            .order_by('-total_monetary', 'customer_segment')
+        )
 
-        return Response({
-            'analysis_date': latest_date.isoformat(),
-            'segments': list(segments)
-        })
+        return Response({'analysis_date': latest_date.isoformat(), 'segments': list(segments)})
 
 
 class CustomerRFMTopCustomersView(APIView):
     """客户RFM高价值客户排名。"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        latest_date = CustomerRFMAnalysis.objects.filter(is_deleted=False).aggregate(
-            latest=Max('analysis_date')
-        )['latest']
+        latest_date = CustomerRFMAnalysis.objects.filter(is_deleted=False).aggregate(latest=Max('analysis_date'))[
+            'latest'
+        ]
         if not latest_date:
             return Response({'analysis_date': None, 'customers': []})
 
-        customers = CustomerRFMAnalysis.objects.filter(
-            is_deleted=False,
-            analysis_date=latest_date
-        ).select_related('customer').order_by('-rfm_score', '-monetary', 'customer__name')[:10]
+        customers = (
+            CustomerRFMAnalysis.objects.filter(is_deleted=False, analysis_date=latest_date)
+            .select_related('customer')
+            .order_by('-rfm_score', '-monetary', 'customer__name')[:10]
+        )
 
-        return Response({
-            'analysis_date': latest_date.isoformat(),
-            'customers': [
-                {
-                    'customer_code': item.customer.code,
-                    'customer_name': item.customer.name,
-                    'r_score': item.r_score,
-                    'f_score': item.f_score,
-                    'm_score': item.m_score,
-                    'rfm_score': float(item.rfm_score),
-                    'monetary': float(item.monetary),
-                    'customer_segment': item.customer_segment,
-                }
-                for item in customers
-            ]
-        })
+        return Response(
+            {
+                'analysis_date': latest_date.isoformat(),
+                'customers': [
+                    {
+                        'customer_code': item.customer.code,
+                        'customer_name': item.customer.name,
+                        'r_score': item.r_score,
+                        'f_score': item.f_score,
+                        'm_score': item.m_score,
+                        'rfm_score': float(item.rfm_score),
+                        'monetary': float(item.monetary),
+                        'customer_segment': item.customer_segment,
+                    }
+                    for item in customers
+                ],
+            }
+        )
 
 
 class CustomerRFMAnalyzeView(APIView):
     """执行客户RFM分析。"""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -771,17 +718,17 @@ class CustomerRFMAnalyzeView(APIView):
         customer_stats = Customer.objects.filter(is_deleted=False).annotate(
             last_order_date=Max(
                 'sales_orders__order_date',
-                filter=Q(sales_orders__is_deleted=False, sales_orders__status__in=valid_statuses)
+                filter=Q(sales_orders__is_deleted=False, sales_orders__status__in=valid_statuses),
             ),
             frequency=Count(
                 'sales_orders',
                 filter=Q(sales_orders__is_deleted=False, sales_orders__status__in=valid_statuses),
-                distinct=True
+                distinct=True,
             ),
             monetary=Sum(
                 'sales_orders__total_amount',
-                filter=Q(sales_orders__is_deleted=False, sales_orders__status__in=valid_statuses)
-            )
+                filter=Q(sales_orders__is_deleted=False, sales_orders__status__in=valid_statuses),
+            ),
         )
 
         rows = []
@@ -790,13 +737,15 @@ class CustomerRFMAnalyzeView(APIView):
                 continue
             last_order_date = customer.last_order_date
             recency_days = (analysis_date - last_order_date).days if last_order_date else 9999
-            rows.append({
-                'customer': customer,
-                'last_order_date': last_order_date,
-                'recency_days': recency_days,
-                'frequency': customer.frequency or 0,
-                'monetary': customer.monetary or Decimal('0'),
-            })
+            rows.append(
+                {
+                    'customer': customer,
+                    'last_order_date': last_order_date,
+                    'recency_days': recency_days,
+                    'frequency': customer.frequency or 0,
+                    'monetary': customer.monetary or Decimal('0'),
+                }
+            )
 
         _assign_rfm_scores(rows, 'recency_days', 'r_score', reverse=False)
         _assign_rfm_scores(rows, 'frequency', 'f_score', reverse=True)
@@ -804,9 +753,7 @@ class CustomerRFMAnalyzeView(APIView):
 
         analyzed_count = 0
         for row in rows:
-            row['customer_segment'] = _classify_customer_segment(
-                row['r_score'], row['f_score'], row['m_score']
-            )
+            row['customer_segment'] = _classify_customer_segment(row['r_score'], row['f_score'], row['m_score'])
             row['rfm_score'] = round(
                 (row['r_score'] + row['f_score'] + row['m_score']) / 3,
                 2,
@@ -834,9 +781,10 @@ class CustomerRFMAnalyzeView(APIView):
                 instance.save(update_fields=['created_by'])
             analyzed_count += 1
 
-        return Response({
-            'success': True,
-            'analysis_date': analysis_date.isoformat(),
-            'analyzed_count': analyzed_count,
-        })
-
+        return Response(
+            {
+                'success': True,
+                'analysis_date': analysis_date.isoformat(),
+                'analyzed_count': analyzed_count,
+            }
+        )

@@ -2,6 +2,7 @@
 设备档案管理模块 - 针对非标自动化行业
 包含：设备铭牌、技术参数、维保记录、备件清单
 """
+
 from django.db import models
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
@@ -14,8 +15,10 @@ from apps.core.models import BaseModel
 # 模型定义
 # =============================================================================
 
+
 class EquipmentArchive(BaseModel):
     """设备档案"""
+
     STATUS_CHOICES = [
         ('MANUFACTURING', '生产中'),
         ('TESTING', '调试中'),
@@ -45,16 +48,10 @@ class EquipmentArchive(BaseModel):
 
     # 关联信息
     project = models.ForeignKey(
-        'projects.Project',
-        on_delete=models.CASCADE,
-        related_name='equipment_archives',
-        verbose_name='所属项目'
+        'projects.Project', on_delete=models.CASCADE, related_name='equipment_archives', verbose_name='所属项目'
     )
     customer = models.ForeignKey(
-        'masterdata.Customer',
-        on_delete=models.PROTECT,
-        related_name='equipment_archives',
-        verbose_name='客户'
+        'masterdata.Customer', on_delete=models.PROTECT, related_name='equipment_archives', verbose_name='客户'
     )
 
     # 铭牌信息
@@ -97,11 +94,12 @@ class EquipmentArchive(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.equipment_no} - {self.name}"
+        return f'{self.equipment_no} - {self.name}'
 
 
 class EquipmentMaintenancePlan(BaseModel):
     """设备保养计划"""
+
     FREQUENCY_CHOICES = [
         ('DAILY', '每日'),
         ('WEEKLY', '每周'),
@@ -112,10 +110,7 @@ class EquipmentMaintenancePlan(BaseModel):
     ]
 
     equipment = models.ForeignKey(
-        EquipmentArchive,
-        on_delete=models.CASCADE,
-        related_name='maintenance_plans',
-        verbose_name='设备'
+        EquipmentArchive, on_delete=models.CASCADE, related_name='maintenance_plans', verbose_name='设备'
     )
     name = models.CharField(max_length=200, verbose_name='保养项目名称')
     frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES, verbose_name='保养频率')
@@ -138,11 +133,12 @@ class EquipmentMaintenancePlan(BaseModel):
         ordering = ['equipment', 'frequency']
 
     def __str__(self):
-        return f"{self.equipment.equipment_no} - {self.name}"
+        return f'{self.equipment.equipment_no} - {self.name}'
 
 
 class EquipmentMaintenanceRecord(BaseModel):
     """设备保养/维修记录"""
+
     TYPE_CHOICES = [
         ('PREVENTIVE', '预防性保养'),
         ('CORRECTIVE', '故障维修'),
@@ -158,10 +154,7 @@ class EquipmentMaintenanceRecord(BaseModel):
     ]
 
     equipment = models.ForeignKey(
-        EquipmentArchive,
-        on_delete=models.CASCADE,
-        related_name='maintenance_records',
-        verbose_name='设备'
+        EquipmentArchive, on_delete=models.CASCADE, related_name='maintenance_records', verbose_name='设备'
     )
     maintenance_plan = models.ForeignKey(
         EquipmentMaintenancePlan,
@@ -169,7 +162,7 @@ class EquipmentMaintenanceRecord(BaseModel):
         null=True,
         blank=True,
         related_name='records',
-        verbose_name='保养计划'
+        verbose_name='保养计划',
     )
 
     record_no = models.CharField(max_length=50, verbose_name='记录编号')
@@ -192,7 +185,7 @@ class EquipmentMaintenanceRecord(BaseModel):
         on_delete=models.SET_NULL,
         null=True,
         related_name='maintenance_records',
-        verbose_name='维护人员'
+        verbose_name='维护人员',
     )
 
     # 费用
@@ -211,11 +204,12 @@ class EquipmentMaintenanceRecord(BaseModel):
         ordering = ['-planned_date']
 
     def __str__(self):
-        return f"{self.record_no} - {self.equipment.equipment_no}"
+        return f'{self.record_no} - {self.equipment.equipment_no}'
 
 
 class EquipmentSparePart(BaseModel):
     """设备备件清单"""
+
     CRITICALITY_CHOICES = [
         ('HIGH', '高'),
         ('MEDIUM', '中'),
@@ -223,10 +217,7 @@ class EquipmentSparePart(BaseModel):
     ]
 
     equipment = models.ForeignKey(
-        EquipmentArchive,
-        on_delete=models.CASCADE,
-        related_name='spare_parts',
-        verbose_name='设备'
+        EquipmentArchive, on_delete=models.CASCADE, related_name='spare_parts', verbose_name='设备'
     )
     item = models.ForeignKey(
         'masterdata.Item',
@@ -234,7 +225,7 @@ class EquipmentSparePart(BaseModel):
         null=True,
         blank=True,
         related_name='equipment_spare_parts',
-        verbose_name='物料'
+        verbose_name='物料',
     )
 
     part_no = models.CharField(max_length=100, verbose_name='备件编号')
@@ -262,12 +253,13 @@ class EquipmentSparePart(BaseModel):
         ordering = ['equipment', '-criticality']
 
     def __str__(self):
-        return f"{self.part_no} - {self.name}"
+        return f'{self.part_no} - {self.name}'
 
 
 # =============================================================================
 # 序列化器
 # =============================================================================
+
 
 class EquipmentSparePartSerializer(serializers.ModelSerializer):
     criticality_display = serializers.CharField(source='get_criticality_display', read_only=True)
@@ -328,6 +320,7 @@ class EquipmentArchiveSerializer(serializers.ModelSerializer):
 
 class EquipmentArchiveListSerializer(serializers.ModelSerializer):
     """列表用简化序列化器"""
+
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     type_display = serializers.CharField(source='get_equipment_type_display', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
@@ -336,10 +329,22 @@ class EquipmentArchiveListSerializer(serializers.ModelSerializer):
     class Meta:
         model = EquipmentArchive
         fields = [
-            'id', 'equipment_no', 'serial_number', 'name', 'model',
-            'equipment_type', 'type_display', 'project', 'project_name',
-            'customer', 'customer_name', 'manufacture_date', 'status',
-            'status_display', 'warranty_end_date', 'created_at'
+            'id',
+            'equipment_no',
+            'serial_number',
+            'name',
+            'model',
+            'equipment_type',
+            'type_display',
+            'project',
+            'project_name',
+            'customer',
+            'customer_name',
+            'manufacture_date',
+            'status',
+            'status_display',
+            'warranty_end_date',
+            'created_at',
         ]
 
 
@@ -347,8 +352,10 @@ class EquipmentArchiveListSerializer(serializers.ModelSerializer):
 # 视图集
 # =============================================================================
 
+
 class EquipmentArchiveViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备档案管理"""
+
     queryset = EquipmentArchive.objects.all()
     filterset_fields = ['project', 'customer', 'equipment_type', 'status', 'is_deleted']
     search_fields = ['equipment_no', 'serial_number', 'name', 'model']
@@ -401,13 +408,12 @@ class EquipmentArchiveViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
     def warranty_expiring(self, request):
         """获取即将过保的设备"""
         from datetime import date, timedelta
+
         days = int(request.query_params.get('days', 30))
         expiry_date = date.today() + timedelta(days=days)
 
         equipments = self.get_queryset().filter(
-            warranty_end_date__lte=expiry_date,
-            warranty_end_date__gte=date.today(),
-            is_deleted=False
+            warranty_end_date__lte=expiry_date, warranty_end_date__gte=date.today(), is_deleted=False
         )
         serializer = EquipmentArchiveListSerializer(equipments, many=True)
         return Response(serializer.data)
@@ -436,10 +442,10 @@ class EquipmentArchiveViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
 
         # 即将过保
         from datetime import date, timedelta
+
         expiry_date = date.today() + timedelta(days=30)
         stats['warranty_expiring_30_days'] = queryset.filter(
-            warranty_end_date__lte=expiry_date,
-            warranty_end_date__gte=date.today()
+            warranty_end_date__lte=expiry_date, warranty_end_date__gte=date.today()
         ).count()
 
         return Response(stats)
@@ -447,6 +453,7 @@ class EquipmentArchiveViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
 
 class EquipmentMaintenancePlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备保养计划管理"""
+
     queryset = EquipmentMaintenancePlan.objects.all()
     serializer_class = EquipmentMaintenancePlanSerializer
     filterset_fields = ['equipment', 'frequency', 'is_active', 'is_deleted']
@@ -456,6 +463,7 @@ class EquipmentMaintenancePlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewse
 
 class EquipmentMaintenanceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备维护记录管理"""
+
     queryset = EquipmentMaintenanceRecord.objects.all()
     serializer_class = EquipmentMaintenanceRecordSerializer
     filterset_fields = ['equipment', 'maintenance_type', 'status', 'technician', 'is_deleted']
@@ -470,6 +478,7 @@ class EquipmentMaintenanceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, view
             return Response({'error': '只有已计划状态才能开始'}, status=status.HTTP_400_BAD_REQUEST)
 
         from django.utils import timezone
+
         record.status = 'IN_PROGRESS'
         record.start_time = timezone.now()
         record.save()
@@ -483,6 +492,7 @@ class EquipmentMaintenanceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, view
             return Response({'error': '只有进行中状态才能完成'}, status=status.HTTP_400_BAD_REQUEST)
 
         from django.utils import timezone
+
         record.status = 'COMPLETED'
         record.end_time = timezone.now()
         record.findings = request.data.get('findings', '')
@@ -497,9 +507,14 @@ class EquipmentMaintenanceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, view
         if record.maintenance_plan:
             plan = record.maintenance_plan
             from datetime import timedelta
+
             frequency_days = {
-                'DAILY': 1, 'WEEKLY': 7, 'MONTHLY': 30,
-                'QUARTERLY': 90, 'SEMI_ANNUAL': 180, 'ANNUAL': 365
+                'DAILY': 1,
+                'WEEKLY': 7,
+                'MONTHLY': 30,
+                'QUARTERLY': 90,
+                'SEMI_ANNUAL': 180,
+                'ANNUAL': 365,
             }
             days = frequency_days.get(plan.frequency, 30)
             plan.next_maintenance_date = timezone.now().date() + timedelta(days=days)
@@ -510,6 +525,7 @@ class EquipmentMaintenanceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, view
 
 class EquipmentSparePartViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备备件管理"""
+
     queryset = EquipmentSparePart.objects.all()
     serializer_class = EquipmentSparePartSerializer
     filterset_fields = ['equipment', 'criticality', 'is_deleted']

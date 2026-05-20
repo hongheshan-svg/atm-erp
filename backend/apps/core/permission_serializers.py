@@ -1,6 +1,7 @@
 """
 权限系统序列化器
 """
+
 from rest_framework import serializers
 
 from apps.accounts.models import Department
@@ -9,14 +10,26 @@ from apps.core.permission_models_new import DataScope, Permission
 
 class PermissionSerializer(serializers.ModelSerializer):
     """权限节点序列化器（支持树形结构）"""
+
     children = serializers.SerializerMethodField()
 
     class Meta:
         model = Permission
         fields = [
-            'id', 'parent', 'code', 'name', 'type', 'resource',
-            'field_name', 'route_path', 'icon', 'sort_order',
-            'is_active', 'children', 'created_at', 'updated_at'
+            'id',
+            'parent',
+            'code',
+            'name',
+            'type',
+            'resource',
+            'field_name',
+            'route_path',
+            'icon',
+            'sort_order',
+            'is_active',
+            'children',
+            'created_at',
+            'updated_at',
         ]
         read_only_fields = ['created_at', 'updated_at']
 
@@ -29,6 +42,7 @@ class PermissionSerializer(serializers.ModelSerializer):
 
 class PermissionTreeSerializer(serializers.ModelSerializer):
     """权限树序列化器（仅用于树形展示）"""
+
     children = serializers.SerializerMethodField()
 
     class Meta:
@@ -42,11 +56,9 @@ class PermissionTreeSerializer(serializers.ModelSerializer):
 
 class DataScopeSerializer(serializers.ModelSerializer):
     """数据权限序列化器"""
+
     custom_department_ids = serializers.PrimaryKeyRelatedField(
-        queryset=Department.objects.filter(is_deleted=False),
-        many=True,
-        source='custom_departments',
-        required=False
+        queryset=Department.objects.filter(is_deleted=False), many=True, source='custom_departments', required=False
     )
 
     class Meta:

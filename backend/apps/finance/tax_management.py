@@ -3,6 +3,7 @@
 Tax Management
 税率设置、税务申报、发票税务处理等
 """
+
 from datetime import date, timedelta
 
 from django.conf import settings
@@ -21,6 +22,7 @@ from apps.core.permission_mixin import PermissionMixin
 
 class TaxType(BaseModel):
     """税种"""
+
     code = models.CharField(max_length=20, unique=True, verbose_name='税种代码')
     name = models.CharField(max_length=100, verbose_name='税种名称')
 
@@ -34,17 +36,13 @@ class TaxType(BaseModel):
         ordering = ['code']
 
     def __str__(self):
-        return f"{self.code} - {self.name}"
+        return f'{self.code} - {self.name}'
 
 
 class TaxRate(BaseModel):
     """税率"""
-    tax_type = models.ForeignKey(
-        TaxType,
-        on_delete=models.PROTECT,
-        related_name='rates',
-        verbose_name='税种'
-    )
+
+    tax_type = models.ForeignKey(TaxType, on_delete=models.PROTECT, related_name='rates', verbose_name='税种')
 
     name = models.CharField(max_length=100, verbose_name='税率名称')
     rate = models.DecimalField(max_digits=8, decimal_places=4, verbose_name='税率')
@@ -68,7 +66,7 @@ class TaxRate(BaseModel):
         ordering = ['tax_type', '-effective_from']
 
     def __str__(self):
-        return f"{self.name} ({self.rate * 100}%)"
+        return f'{self.name} ({self.rate * 100}%)'
 
     @property
     def is_effective(self):
@@ -82,6 +80,7 @@ class TaxRate(BaseModel):
 
 class TaxPeriod(BaseModel):
     """税务申报期间"""
+
     PERIOD_TYPE_CHOICES = [
         ('MONTHLY', '月度'),
         ('QUARTERLY', '季度'),
@@ -95,10 +94,7 @@ class TaxPeriod(BaseModel):
     ]
 
     period_type = models.CharField(
-        max_length=20,
-        choices=PERIOD_TYPE_CHOICES,
-        default='MONTHLY',
-        verbose_name='期间类型'
+        max_length=20, choices=PERIOD_TYPE_CHOICES, default='MONTHLY', verbose_name='期间类型'
     )
     year = models.IntegerField(verbose_name='年度')
     period = models.IntegerField(verbose_name='期间')  # 月份(1-12)或季度(1-4)
@@ -106,12 +102,7 @@ class TaxPeriod(BaseModel):
     start_date = models.DateField(verbose_name='开始日期')
     end_date = models.DateField(verbose_name='结束日期')
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='OPEN',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='OPEN', verbose_name='状态')
 
     # 申报截止日期
     declare_deadline = models.DateField(null=True, blank=True, verbose_name='申报截止日')
@@ -124,7 +115,7 @@ class TaxPeriod(BaseModel):
         null=True,
         blank=True,
         related_name='declared_tax_periods',
-        verbose_name='申报人'
+        verbose_name='申报人',
     )
 
     notes = models.TextField(blank=True, verbose_name='备注')
@@ -138,15 +129,16 @@ class TaxPeriod(BaseModel):
 
     def __str__(self):
         if self.period_type == 'MONTHLY':
-            return f"{self.year}年{self.period}月"
+            return f'{self.year}年{self.period}月'
         elif self.period_type == 'QUARTERLY':
-            return f"{self.year}年第{self.period}季度"
+            return f'{self.year}年第{self.period}季度'
         else:
-            return f"{self.year}年度"
+            return f'{self.year}年度'
 
 
 class TaxDeclaration(BaseModel):
     """税务申报"""
+
     DECLARATION_TYPE_CHOICES = [
         ('VAT', '增值税'),
         ('INCOME', '企业所得税'),
@@ -169,70 +161,30 @@ class TaxDeclaration(BaseModel):
     declaration_no = models.CharField(max_length=50, unique=True, verbose_name='申报编号')
 
     tax_period = models.ForeignKey(
-        TaxPeriod,
-        on_delete=models.PROTECT,
-        related_name='declarations',
-        verbose_name='税务期间'
+        TaxPeriod, on_delete=models.PROTECT, related_name='declarations', verbose_name='税务期间'
     )
 
-    tax_type = models.ForeignKey(
-        TaxType,
-        on_delete=models.PROTECT,
-        related_name='declarations',
-        verbose_name='税种'
-    )
+    tax_type = models.ForeignKey(TaxType, on_delete=models.PROTECT, related_name='declarations', verbose_name='税种')
 
     declaration_type = models.CharField(
-        max_length=20,
-        choices=DECLARATION_TYPE_CHOICES,
-        default='VAT',
-        verbose_name='申报类型'
+        max_length=20, choices=DECLARATION_TYPE_CHOICES, default='VAT', verbose_name='申报类型'
     )
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='DRAFT',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', verbose_name='状态')
 
     # 金额信息
-    taxable_amount = models.DecimalField(
-        max_digits=18, decimal_places=2,
-        default=0,
-        verbose_name='应税金额'
-    )
-    tax_rate = models.DecimalField(
-        max_digits=8, decimal_places=4,
-        default=0,
-        verbose_name='税率'
-    )
-    tax_amount = models.DecimalField(
-        max_digits=18, decimal_places=2,
-        default=0,
-        verbose_name='应纳税额'
-    )
+    taxable_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='应税金额')
+    tax_rate = models.DecimalField(max_digits=8, decimal_places=4, default=0, verbose_name='税率')
+    tax_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='应纳税额')
 
     # 抵扣信息
-    deductible_amount = models.DecimalField(
-        max_digits=18, decimal_places=2,
-        default=0,
-        verbose_name='可抵扣税额'
-    )
+    deductible_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='可抵扣税额')
 
     # 实际应缴
-    payable_amount = models.DecimalField(
-        max_digits=18, decimal_places=2,
-        default=0,
-        verbose_name='应缴税额'
-    )
+    payable_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='应缴税额')
 
     # 已缴税款
-    paid_amount = models.DecimalField(
-        max_digits=18, decimal_places=2,
-        default=0,
-        verbose_name='已缴税额'
-    )
+    paid_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='已缴税额')
 
     # 申报信息
     submitted_at = models.DateTimeField(null=True, blank=True, verbose_name='提交时间')
@@ -242,7 +194,7 @@ class TaxDeclaration(BaseModel):
         null=True,
         blank=True,
         related_name='submitted_declarations',
-        verbose_name='提交人'
+        verbose_name='提交人',
     )
 
     # 审核信息
@@ -253,7 +205,7 @@ class TaxDeclaration(BaseModel):
         null=True,
         blank=True,
         related_name='approved_declarations',
-        verbose_name='审核人'
+        verbose_name='审核人',
     )
 
     # 申报信息
@@ -273,11 +225,12 @@ class TaxDeclaration(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.declaration_no}"
+        return f'{self.declaration_no}'
 
     def save(self, *args, **kwargs):
         if not self.declaration_no:
             from apps.core.utils import generate_code
+
             self.declaration_no = generate_code('TAX')
 
         # 计算应缴税额
@@ -288,11 +241,9 @@ class TaxDeclaration(BaseModel):
 
 class TaxDeclarationItem(BaseModel):
     """税务申报明细"""
+
     declaration = models.ForeignKey(
-        TaxDeclaration,
-        on_delete=models.CASCADE,
-        related_name='items',
-        verbose_name='申报单'
+        TaxDeclaration, on_delete=models.CASCADE, related_name='items', verbose_name='申报单'
     )
 
     item_type = models.CharField(max_length=50, verbose_name='项目类型')
@@ -318,6 +269,7 @@ class TaxDeclarationItem(BaseModel):
 
 class TaxInvoice(BaseModel):
     """税务发票（进项/销项）"""
+
     INVOICE_DIRECTION_CHOICES = [
         ('INPUT', '进项'),
         ('OUTPUT', '销项'),
@@ -338,16 +290,9 @@ class TaxInvoice(BaseModel):
         ('RED', '红冲'),
     ]
 
-    direction = models.CharField(
-        max_length=10,
-        choices=INVOICE_DIRECTION_CHOICES,
-        verbose_name='发票方向'
-    )
+    direction = models.CharField(max_length=10, choices=INVOICE_DIRECTION_CHOICES, verbose_name='发票方向')
     invoice_type = models.CharField(
-        max_length=20,
-        choices=INVOICE_TYPE_CHOICES,
-        default='SPECIAL',
-        verbose_name='发票类型'
+        max_length=20, choices=INVOICE_TYPE_CHOICES, default='SPECIAL', verbose_name='发票类型'
     )
 
     # 发票信息
@@ -367,12 +312,7 @@ class TaxInvoice(BaseModel):
     tax_amount = models.DecimalField(max_digits=18, decimal_places=2, verbose_name='税额')
     total_amount = models.DecimalField(max_digits=18, decimal_places=2, verbose_name='价税合计')
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='NORMAL',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='NORMAL', verbose_name='状态')
 
     # 认证信息（进项）
     verified_at = models.DateField(null=True, blank=True, verbose_name='认证日期')
@@ -382,7 +322,7 @@ class TaxInvoice(BaseModel):
         null=True,
         blank=True,
         related_name='verified_invoices',
-        verbose_name='认证期间'
+        verbose_name='认证期间',
     )
 
     # 抵扣信息
@@ -392,7 +332,7 @@ class TaxInvoice(BaseModel):
         null=True,
         blank=True,
         related_name='deducted_invoices',
-        verbose_name='抵扣期间'
+        verbose_name='抵扣期间',
     )
 
     # 关联业务
@@ -409,12 +349,13 @@ class TaxInvoice(BaseModel):
         unique_together = ['invoice_code', 'invoice_no']
 
     def __str__(self):
-        return f"{self.invoice_code}-{self.invoice_no}"
+        return f'{self.invoice_code}-{self.invoice_no}'
 
 
 # =====================
 # Serializers
 # =====================
+
 
 class TaxTypeSerializer(serializers.ModelSerializer):
     class Meta:
@@ -434,7 +375,7 @@ class TaxRateSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_by', 'updated_by']
 
     def get_rate_percent(self, obj):
-        return f"{obj.rate * 100}%"
+        return f'{obj.rate * 100}%'
 
 
 class TaxPeriodSerializer(serializers.ModelSerializer):
@@ -489,8 +430,8 @@ class TaxInvoiceSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
-class TaxTypeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 
+class TaxTypeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     permission_module = 'finance'
     permission_resource = 'tax_type'
     """税种管理"""
@@ -502,7 +443,6 @@ class TaxTypeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
 
 
 class TaxRateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
-
     permission_module = 'finance'
     permission_resource = 'tax_rate'
     """税率管理"""
@@ -516,17 +456,15 @@ class TaxRateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
     def effective(self, request):
         """获取当前有效税率"""
         today = date.today()
-        rates = self.get_queryset().filter(
-            is_active=True,
-            effective_from__lte=today
-        ).filter(
-            Q(effective_to__isnull=True) | Q(effective_to__gte=today)
+        rates = (
+            self.get_queryset()
+            .filter(is_active=True, effective_from__lte=today)
+            .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today))
         )
         return Response(self.get_serializer(rates, many=True).data)
 
 
 class TaxPeriodViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
-
     permission_module = 'finance'
     permission_resource = 'tax_period'
     """税务期间管理"""
@@ -563,11 +501,7 @@ class TaxPeriodViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
                     period_type='MONTHLY',
                     year=year,
                     period=month,
-                    defaults={
-                        'start_date': start,
-                        'end_date': end,
-                        'created_by': request.user
-                    }
+                    defaults={'start_date': start, 'end_date': end, 'created_by': request.user},
                 )
                 if created:
                     periods.append(period)
@@ -586,23 +520,17 @@ class TaxPeriodViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
                     period_type='QUARTERLY',
                     year=year,
                     period=q,
-                    defaults={
-                        'start_date': start,
-                        'end_date': end,
-                        'created_by': request.user
-                    }
+                    defaults={'start_date': start, 'end_date': end, 'created_by': request.user},
                 )
                 if created:
                     periods.append(period)
 
-        return Response({
-            'message': f'生成 {len(periods)} 个期间',
-            'periods': self.get_serializer(periods, many=True).data
-        })
+        return Response(
+            {'message': f'生成 {len(periods)} 个期间', 'periods': self.get_serializer(periods, many=True).data}
+        )
 
 
 class TaxDeclarationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
-
     permission_module = 'finance'
     permission_resource = 'tax_declaration'
     """税务申报管理"""
@@ -695,32 +623,30 @@ class TaxDeclarationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
         year = request.query_params.get('year', date.today().year)
 
         # 按税种统计
-        by_type = qs.filter(
-            tax_period__year=year,
-            status='PAID'
-        ).values('declaration_type').annotate(
-            total_amount=Sum('payable_amount'),
-            count=Count('id')
+        by_type = (
+            qs.filter(tax_period__year=year, status='PAID')
+            .values('declaration_type')
+            .annotate(total_amount=Sum('payable_amount'), count=Count('id'))
         )
 
         # 月度趋势
-        monthly = qs.filter(
-            tax_period__year=year,
-            tax_period__period_type='MONTHLY',
-            status='PAID'
-        ).values('tax_period__period').annotate(
-            total_amount=Sum('payable_amount')
-        ).order_by('tax_period__period')
+        monthly = (
+            qs.filter(tax_period__year=year, tax_period__period_type='MONTHLY', status='PAID')
+            .values('tax_period__period')
+            .annotate(total_amount=Sum('payable_amount'))
+            .order_by('tax_period__period')
+        )
 
-        return Response({
-            'by_type': list(by_type),
-            'monthly': list(monthly),
-            'total_paid': qs.filter(status='PAID').aggregate(total=Sum('paid_amount'))['total'] or 0
-        })
+        return Response(
+            {
+                'by_type': list(by_type),
+                'monthly': list(monthly),
+                'total_paid': qs.filter(status='PAID').aggregate(total=Sum('paid_amount'))['total'] or 0,
+            }
+        )
 
 
 class TaxInvoiceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
-
     permission_module = 'finance'
     permission_resource = 'tax_invoice'
     """税务发票管理"""
@@ -773,32 +699,28 @@ class TaxInvoiceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
 
         # 按方向统计
         input_total = qs.filter(direction='INPUT', status__in=['NORMAL', 'VERIFIED', 'DEDUCTED']).aggregate(
-            amount=Sum('amount'),
-            tax=Sum('tax_amount'),
-            total=Sum('total_amount')
+            amount=Sum('amount'), tax=Sum('tax_amount'), total=Sum('total_amount')
         )
 
         output_total = qs.filter(direction='OUTPUT', status='NORMAL').aggregate(
-            amount=Sum('amount'),
-            tax=Sum('tax_amount'),
-            total=Sum('total_amount')
+            amount=Sum('amount'), tax=Sum('tax_amount'), total=Sum('total_amount')
         )
 
         # 待认证进项
         pending_verify = qs.filter(direction='INPUT', status='NORMAL').aggregate(
-            count=Count('id'),
-            tax=Sum('tax_amount')
+            count=Count('id'), tax=Sum('tax_amount')
         )
 
         # 已认证未抵扣
         pending_deduct = qs.filter(direction='INPUT', status='VERIFIED').aggregate(
-            count=Count('id'),
-            tax=Sum('tax_amount')
+            count=Count('id'), tax=Sum('tax_amount')
         )
 
-        return Response({
-            'input': input_total,
-            'output': output_total,
-            'pending_verify': pending_verify,
-            'pending_deduct': pending_deduct
-        })
+        return Response(
+            {
+                'input': input_total,
+                'output': output_total,
+                'pending_verify': pending_verify,
+                'pending_deduct': pending_deduct,
+            }
+        )

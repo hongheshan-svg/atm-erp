@@ -1,6 +1,7 @@
 """
 Elasticsearch document definitions for master data
 """
+
 from django_elasticsearch_dsl import Document, fields
 from django_elasticsearch_dsl.registries import registry
 
@@ -11,18 +12,17 @@ from .models import Customer, Item, Supplier
 class ItemDocument(Document):
     """Elasticsearch document for Item model"""
 
-    category = fields.ObjectField(properties={
-        'id': fields.IntegerField(),
-        'name': fields.TextField(),
-        'code': fields.TextField(),
-    })
+    category = fields.ObjectField(
+        properties={
+            'id': fields.IntegerField(),
+            'name': fields.TextField(),
+            'code': fields.TextField(),
+        }
+    )
 
     class Index:
         name = 'items'
-        settings = {
-            'number_of_shards': 1,
-            'number_of_replicas': 0
-        }
+        settings = {'number_of_shards': 1, 'number_of_replicas': 0}
 
     class Django:
         model = Item
@@ -54,10 +54,7 @@ class CustomerDocument(Document):
 
     class Index:
         name = 'customers'
-        settings = {
-            'number_of_shards': 1,
-            'number_of_replicas': 0
-        }
+        settings = {'number_of_shards': 1, 'number_of_replicas': 0}
 
     class Django:
         model = Customer
@@ -79,10 +76,7 @@ class SupplierDocument(Document):
 
     class Index:
         name = 'suppliers'
-        settings = {
-            'number_of_shards': 1,
-            'number_of_replicas': 0
-        }
+        settings = {'number_of_shards': 1, 'number_of_replicas': 0}
 
     class Django:
         model = Supplier
@@ -96,4 +90,3 @@ class SupplierDocument(Document):
             'payment_terms',
             'status',
         ]
-

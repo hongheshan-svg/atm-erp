@@ -2,6 +2,7 @@
 外协加工管理模型
 Outsource Processing Management Models
 """
+
 from django.db import models
 from django.db.models import Sum
 
@@ -13,6 +14,7 @@ class OutsourceOrder(BaseModel):
     """
     外协加工订单 - 发外加工单
     """
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('CONFIRMED', '已确认'),
@@ -24,10 +26,7 @@ class OutsourceOrder(BaseModel):
 
     order_no = models.CharField(max_length=50, unique=True, verbose_name='外协单号')
     supplier = models.ForeignKey(
-        'masterdata.Supplier',
-        on_delete=models.PROTECT,
-        related_name='outsource_orders',
-        verbose_name='外协供应商'
+        'masterdata.Supplier', on_delete=models.PROTECT, related_name='outsource_orders', verbose_name='外协供应商'
     )
     project = models.ForeignKey(
         'projects.Project',
@@ -35,7 +34,7 @@ class OutsourceOrder(BaseModel):
         null=True,
         blank=True,
         related_name='outsource_orders',
-        verbose_name='关联项目'
+        verbose_name='关联项目',
     )
 
     order_date = models.DateField(auto_now_add=True, verbose_name='下单日期')
@@ -63,7 +62,7 @@ class OutsourceOrder(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.order_no}"
+        return f'{self.order_no}'
 
     def save(self, *args, **kwargs):
         if not self.order_no:
@@ -72,9 +71,7 @@ class OutsourceOrder(BaseModel):
 
     def update_totals(self):
         """更新合计金额"""
-        total = self.lines.filter(is_deleted=False).aggregate(
-            total=Sum('process_amount')
-        )['total'] or 0
+        total = self.lines.filter(is_deleted=False).aggregate(total=Sum('process_amount'))['total'] or 0
         self.total_amount = total
         self.tax_amount = total * self.tax_rate / 100
         self.total_with_tax = total + self.tax_amount
@@ -85,6 +82,7 @@ class OutsourceOrderLine(BaseModel):
     """
     外协加工单明细 - 每个加工件
     """
+
     PROCESS_TYPE_CHOICES = [
         ('TURNING', '车削'),
         ('MILLING', '铣削'),
@@ -102,24 +100,15 @@ class OutsourceOrderLine(BaseModel):
     ]
 
     outsource_order = models.ForeignKey(
-        OutsourceOrder,
-        on_delete=models.CASCADE,
-        related_name='lines',
-        verbose_name='外协单'
+        OutsourceOrder, on_delete=models.CASCADE, related_name='lines', verbose_name='外协单'
     )
     item = models.ForeignKey(
-        'masterdata.Item',
-        on_delete=models.PROTECT,
-        related_name='outsource_lines',
-        verbose_name='加工物料'
+        'masterdata.Item', on_delete=models.PROTECT, related_name='outsource_lines', verbose_name='加工物料'
     )
 
     # 加工信息
     process_type = models.CharField(
-        max_length=20,
-        choices=PROCESS_TYPE_CHOICES,
-        default='OTHER',
-        verbose_name='加工类型'
+        max_length=20, choices=PROCESS_TYPE_CHOICES, default='OTHER', verbose_name='加工类型'
     )
     process_content = models.CharField(max_length=500, verbose_name='加工内容')
     drawing_no = models.CharField(max_length=100, blank=True, verbose_name='图纸号')
@@ -147,7 +136,7 @@ class OutsourceOrderLine(BaseModel):
         ordering = ['id']
 
     def __str__(self):
-        return f"{self.outsource_order.order_no} - {self.item.name}"
+        return f'{self.outsource_order.order_no} - {self.item.name}'
 
     def save(self, *args, **kwargs):
         self.process_amount = self.qty * self.unit_price
@@ -158,6 +147,7 @@ class OutsourceMaterialIssue(BaseModel):
     """
     外协发料单 - 发料给外协供应商
     """
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('CONFIRMED', '已确认'),
@@ -165,16 +155,10 @@ class OutsourceMaterialIssue(BaseModel):
 
     issue_no = models.CharField(max_length=50, unique=True, verbose_name='发料单号')
     outsource_order = models.ForeignKey(
-        OutsourceOrder,
-        on_delete=models.PROTECT,
-        related_name='material_issues',
-        verbose_name='外协单'
+        OutsourceOrder, on_delete=models.PROTECT, related_name='material_issues', verbose_name='外协单'
     )
     warehouse = models.ForeignKey(
-        'masterdata.Warehouse',
-        on_delete=models.PROTECT,
-        related_name='outsource_issues',
-        verbose_name='发料仓库'
+        'masterdata.Warehouse', on_delete=models.PROTECT, related_name='outsource_issues', verbose_name='发料仓库'
     )
 
     issue_date = models.DateField(verbose_name='发料日期')
@@ -193,7 +177,7 @@ class OutsourceMaterialIssue(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.issue_no}"
+        return f'{self.issue_no}'
 
     def save(self, *args, **kwargs):
         if not self.issue_no:
@@ -205,23 +189,15 @@ class OutsourceMaterialIssueLine(BaseModel):
     """
     外协发料单明细
     """
+
     issue = models.ForeignKey(
-        OutsourceMaterialIssue,
-        on_delete=models.CASCADE,
-        related_name='lines',
-        verbose_name='发料单'
+        OutsourceMaterialIssue, on_delete=models.CASCADE, related_name='lines', verbose_name='发料单'
     )
     outsource_line = models.ForeignKey(
-        OutsourceOrderLine,
-        on_delete=models.PROTECT,
-        related_name='issue_lines',
-        verbose_name='外协单明细'
+        OutsourceOrderLine, on_delete=models.PROTECT, related_name='issue_lines', verbose_name='外协单明细'
     )
     item = models.ForeignKey(
-        'masterdata.Item',
-        on_delete=models.PROTECT,
-        related_name='outsource_issue_lines',
-        verbose_name='物料'
+        'masterdata.Item', on_delete=models.PROTECT, related_name='outsource_issue_lines', verbose_name='物料'
     )
 
     qty = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='发料数量')
@@ -240,6 +216,7 @@ class OutsourceReceipt(BaseModel):
     """
     外协收货单 - 加工件入库
     """
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('INSPECTING', '质检中'),
@@ -255,21 +232,17 @@ class OutsourceReceipt(BaseModel):
 
     receipt_no = models.CharField(max_length=50, unique=True, verbose_name='收货单号')
     outsource_order = models.ForeignKey(
-        OutsourceOrder,
-        on_delete=models.PROTECT,
-        related_name='receipts',
-        verbose_name='外协单'
+        OutsourceOrder, on_delete=models.PROTECT, related_name='receipts', verbose_name='外协单'
     )
     warehouse = models.ForeignKey(
-        'masterdata.Warehouse',
-        on_delete=models.PROTECT,
-        related_name='outsource_receipts',
-        verbose_name='入库仓库'
+        'masterdata.Warehouse', on_delete=models.PROTECT, related_name='outsource_receipts', verbose_name='入库仓库'
     )
 
     receipt_date = models.DateField(verbose_name='收货日期')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', verbose_name='状态')
-    quality_status = models.CharField(max_length=20, choices=QUALITY_CHOICES, default='PENDING', verbose_name='质检状态')
+    quality_status = models.CharField(
+        max_length=20, choices=QUALITY_CHOICES, default='PENDING', verbose_name='质检状态'
+    )
 
     inspector = models.ForeignKey(
         'accounts.User',
@@ -277,7 +250,7 @@ class OutsourceReceipt(BaseModel):
         null=True,
         blank=True,
         related_name='inspected_outsource_receipts',
-        verbose_name='质检员'
+        verbose_name='质检员',
     )
     inspect_date = models.DateField(null=True, blank=True, verbose_name='质检日期')
     inspect_notes = models.TextField(blank=True, verbose_name='质检备注')
@@ -291,7 +264,7 @@ class OutsourceReceipt(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.receipt_no}"
+        return f'{self.receipt_no}'
 
     def save(self, *args, **kwargs):
         if not self.receipt_no:
@@ -303,36 +276,28 @@ class OutsourceReceiptLine(BaseModel):
     """
     外协收货单明细
     """
+
     QUALITY_CHOICES = [
         ('PENDING', '待检'),
         ('PASSED', '合格'),
         ('FAILED', '不合格'),
     ]
 
-    receipt = models.ForeignKey(
-        OutsourceReceipt,
-        on_delete=models.CASCADE,
-        related_name='lines',
-        verbose_name='收货单'
-    )
+    receipt = models.ForeignKey(OutsourceReceipt, on_delete=models.CASCADE, related_name='lines', verbose_name='收货单')
     outsource_line = models.ForeignKey(
-        OutsourceOrderLine,
-        on_delete=models.PROTECT,
-        related_name='receipt_lines',
-        verbose_name='外协单明细'
+        OutsourceOrderLine, on_delete=models.PROTECT, related_name='receipt_lines', verbose_name='外协单明细'
     )
     item = models.ForeignKey(
-        'masterdata.Item',
-        on_delete=models.PROTECT,
-        related_name='outsource_receipt_lines',
-        verbose_name='物料'
+        'masterdata.Item', on_delete=models.PROTECT, related_name='outsource_receipt_lines', verbose_name='物料'
     )
 
     qty = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='收货数量')
     qualified_qty = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='合格数量')
     rejected_qty = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='不合格数量')
 
-    quality_status = models.CharField(max_length=20, choices=QUALITY_CHOICES, default='PENDING', verbose_name='质检状态')
+    quality_status = models.CharField(
+        max_length=20, choices=QUALITY_CHOICES, default='PENDING', verbose_name='质检状态'
+    )
     quality_notes = models.TextField(blank=True, verbose_name='质检备注')
 
     notes = models.TextField(blank=True, verbose_name='备注')
@@ -342,4 +307,3 @@ class OutsourceReceiptLine(BaseModel):
         verbose_name = '外协收货单明细'
         verbose_name_plural = verbose_name
         ordering = ['id']
-

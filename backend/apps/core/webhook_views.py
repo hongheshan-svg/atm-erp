@@ -1,6 +1,7 @@
 """
 Webhook views for managing webhook endpoints and deliveries.
 """
+
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
@@ -11,19 +12,29 @@ from .webhook import WebhookDelivery, WebhookEndpoint, WebhookService
 
 class WebhookEndpointSerializer(serializers.ModelSerializer):
     """Serializer for webhook endpoints."""
+
     delivery_count = serializers.SerializerMethodField()
     success_rate = serializers.SerializerMethodField()
 
     class Meta:
         model = WebhookEndpoint
         fields = [
-            'id', 'name', 'url', 'secret', 'events', 'headers', 'is_active',
-            'max_retries', 'retry_delay', 'timeout', 'created_at', 'updated_at',
-            'delivery_count', 'success_rate'
+            'id',
+            'name',
+            'url',
+            'secret',
+            'events',
+            'headers',
+            'is_active',
+            'max_retries',
+            'retry_delay',
+            'timeout',
+            'created_at',
+            'updated_at',
+            'delivery_count',
+            'success_rate',
         ]
-        extra_kwargs = {
-            'secret': {'write_only': True}
-        }
+        extra_kwargs = {'secret': {'write_only': True}}
 
     def get_delivery_count(self, obj):
         return obj.deliveries.count()
@@ -38,20 +49,33 @@ class WebhookEndpointSerializer(serializers.ModelSerializer):
 
 class WebhookDeliverySerializer(serializers.ModelSerializer):
     """Serializer for webhook deliveries."""
+
     endpoint_name = serializers.CharField(source='endpoint.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
 
     class Meta:
         model = WebhookDelivery
         fields = [
-            'id', 'endpoint', 'endpoint_name', 'event_type', 'payload',
-            'status', 'status_display', 'response_status', 'response_body',
-            'error_message', 'attempts', 'next_retry_at', 'created_at', 'delivered_at'
+            'id',
+            'endpoint',
+            'endpoint_name',
+            'event_type',
+            'payload',
+            'status',
+            'status_display',
+            'response_status',
+            'response_body',
+            'error_message',
+            'attempts',
+            'next_retry_at',
+            'created_at',
+            'delivered_at',
         ]
 
 
 class WebhookEndpointViewSet(viewsets.ModelViewSet):
     """ViewSet for webhook endpoints."""
+
     serializer_class = WebhookEndpointSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
     queryset = WebhookEndpoint.objects.all()
@@ -75,22 +99,20 @@ class WebhookEndpointViewSet(viewsets.ModelViewSet):
         delivery = WebhookDelivery.objects.create(
             endpoint=endpoint,
             event_type='test.ping',
-            payload={
-                'event': 'test.ping',
-                'message': 'This is a test webhook',
-                'timestamp': str(timezone.now())
-            }
+            payload={'event': 'test.ping', 'message': 'This is a test webhook', 'timestamp': str(timezone.now())},
         )
 
         # Send immediately
         WebhookService.send_delivery(delivery)
 
-        return Response({
-            'success': delivery.status == 'SUCCESS',
-            'status': delivery.status,
-            'response_status': delivery.response_status,
-            'error_message': delivery.error_message
-        })
+        return Response(
+            {
+                'success': delivery.status == 'SUCCESS',
+                'status': delivery.status,
+                'response_status': delivery.response_status,
+                'error_message': delivery.error_message,
+            }
+        )
 
     @action(detail=True, methods=['post'])
     def toggle(self, request, pk=None):
@@ -99,21 +121,17 @@ class WebhookEndpointViewSet(viewsets.ModelViewSet):
         endpoint.is_active = not endpoint.is_active
         endpoint.save()
 
-        return Response({
-            'is_active': endpoint.is_active
-        })
+        return Response({'is_active': endpoint.is_active})
 
     @action(detail=False, methods=['get'])
     def event_types(self, request):
         """Get available event types."""
-        return Response([
-            {'value': code, 'label': label}
-            for code, label in WebhookEndpoint.EVENT_TYPES
-        ])
+        return Response([{'value': code, 'label': label} for code, label in WebhookEndpoint.EVENT_TYPES])
 
 
 class WebhookDeliveryViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for webhook deliveries."""
+
     serializer_class = WebhookDeliverySerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
     queryset = WebhookDelivery.objects.all()
@@ -144,10 +162,7 @@ class WebhookDeliveryViewSet(viewsets.ReadOnlyModelViewSet):
         delivery = self.get_object()
 
         if delivery.status == 'SUCCESS':
-            return Response(
-                {'error': 'Cannot retry successful delivery'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'Cannot retry successful delivery'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Reset for retry
         delivery.status = 'PENDING'
@@ -158,10 +173,7 @@ class WebhookDeliveryViewSet(viewsets.ReadOnlyModelViewSet):
         # Send immediately
         WebhookService.send_delivery(delivery)
 
-        return Response({
-            'success': delivery.status == 'SUCCESS',
-            'status': delivery.status
-        })
+        return Response({'success': delivery.status == 'SUCCESS', 'status': delivery.status})
 
     @action(detail=False, methods=['get'])
     def statistics(self, request):

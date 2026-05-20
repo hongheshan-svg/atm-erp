@@ -1,6 +1,7 @@
 """
 Bug跟踪系统视图
 """
+
 from datetime import timedelta
 
 from django.db.models import Count, Q
@@ -28,6 +29,7 @@ class BugViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     """
     Bug管理视图集
     """
+
     queryset = Bug.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['project', 'task', 'status', 'severity', 'priority', 'bug_type', 'assignee', 'reporter']
@@ -58,9 +60,7 @@ class BugViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
         elif my_bugs == 'reported':
             queryset = queryset.filter(reporter=self.request.user)
         elif my_bugs == 'all':
-            queryset = queryset.filter(
-                Q(assignee=self.request.user) | Q(reporter=self.request.user)
-            )
+            queryset = queryset.filter(Q(assignee=self.request.user) | Q(reporter=self.request.user))
 
         return queryset
 
@@ -120,11 +120,7 @@ class BugViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
             date = start_date + timedelta(days=i)
             created = queryset.filter(created_at__date=date).count()
             resolved = queryset.filter(resolved_at__date=date).count()
-            trend_data.append({
-                'date': date.isoformat(),
-                'created': created,
-                'resolved': resolved
-            })
+            trend_data.append({'date': date.isoformat(), 'created': created, 'resolved': resolved})
 
         return Response(trend_data)
 
@@ -138,6 +134,7 @@ class BugViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
             return Response({'error': '请指定处理人'}, status=status.HTTP_400_BAD_REQUEST)
 
         from apps.accounts.models import User
+
         try:
             assignee = User.objects.get(id=assignee_id)
         except User.DoesNotExist:
@@ -158,8 +155,8 @@ class BugViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
             user=request.user,
             field_name='assignee',
             field_label='处理人',
-            old_value=f"{old_assignee.last_name}{old_assignee.first_name}" if old_assignee else '未分配',
-            new_value=f"{assignee.last_name}{assignee.first_name}"
+            old_value=f'{old_assignee.last_name}{old_assignee.first_name}' if old_assignee else '未分配',
+            new_value=f'{assignee.last_name}{assignee.first_name}',
         )
 
         return Response(BugDetailSerializer(bug).data)
@@ -206,7 +203,7 @@ class BugViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
             field_name='status',
             field_label='状态',
             old_value=old_display,
-            new_value=new_display
+            new_value=new_display,
         )
 
         return Response(BugDetailSerializer(bug).data)
@@ -222,10 +219,9 @@ class BugViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
             return Response(serializer.data)
 
         elif request.method == 'POST':
-            serializer = BugCommentSerializer(data={
-                'bug': bug.id,
-                'content': request.data.get('content', '')
-            }, context={'request': request})
+            serializer = BugCommentSerializer(
+                data={'bug': bug.id, 'content': request.data.get('content', '')}, context={'request': request}
+            )
 
             if serializer.is_valid():
                 serializer.save()
@@ -248,11 +244,7 @@ class BugViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
                 return Response({'error': '请上传文件'}, status=status.HTTP_400_BAD_REQUEST)
 
             attachment = BugAttachment.objects.create(
-                bug=bug,
-                file=file,
-                filename=file.name,
-                file_size=file.size,
-                uploaded_by=request.user
+                bug=bug, file=file, filename=file.name, file_size=file.size, uploaded_by=request.user
             )
 
             serializer = BugAttachmentSerializer(attachment)
@@ -271,6 +263,7 @@ class BugCommentViewSet(viewsets.ModelViewSet):
     """
     Bug评论视图集
     """
+
     queryset = BugComment.objects.all()
     serializer_class = BugCommentSerializer
     permission_classes = [IsAuthenticated]
@@ -284,10 +277,7 @@ class BugCommentViewSet(viewsets.ModelViewSet):
         """只能删除自己的评论"""
         comment = self.get_object()
         if comment.user != request.user and not request.user.is_staff:
-            return Response(
-                {'error': '只能删除自己的评论'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            return Response({'error': '只能删除自己的评论'}, status=status.HTTP_403_FORBIDDEN)
         return super().destroy(request, *args, **kwargs)
 
 
@@ -295,6 +285,7 @@ class BugAttachmentViewSet(viewsets.ModelViewSet):
     """
     Bug附件视图集
     """
+
     queryset = BugAttachment.objects.all()
     serializer_class = BugAttachmentSerializer
     permission_classes = [IsAuthenticated]
@@ -305,11 +296,7 @@ class BugAttachmentViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         file = self.request.FILES.get('file')
         if file:
-            serializer.save(
-                uploaded_by=self.request.user,
-                file_size=file.size,
-                filename=file.name
-            )
+            serializer.save(uploaded_by=self.request.user, file_size=file.size, filename=file.name)
         else:
             serializer.save(uploaded_by=self.request.user)
 
@@ -317,9 +304,5 @@ class BugAttachmentViewSet(viewsets.ModelViewSet):
         """只能删除自己上传的附件"""
         attachment = self.get_object()
         if attachment.uploaded_by != request.user and not request.user.is_staff:
-            return Response(
-                {'error': '只能删除自己上传的附件'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            return Response({'error': '只能删除自己上传的附件'}, status=status.HTTP_403_FORBIDDEN)
         return super().destroy(request, *args, **kwargs)
-

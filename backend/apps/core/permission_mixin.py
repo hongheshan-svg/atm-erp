@@ -13,6 +13,7 @@ Provides:
 - Object-level permission with context roles (check_object_permissions)
 - Sensitive field filtering (get_serializer)
 """
+
 from rest_framework.exceptions import PermissionDenied
 
 from apps.core.permission_service import apply_scope_filter, get_hidden_fields, has_permission, resolve_data_scope
@@ -103,9 +104,7 @@ class PermissionMixin:
 
         # Check permission
         if not has_permission(request.user, permission_code):
-            raise PermissionDenied(
-                f'You do not have permission to {permission_action} {self.permission_resource}'
-            )
+            raise PermissionDenied(f'You do not have permission to {permission_action} {self.permission_resource}')
 
     def check_object_permissions(self, request, obj):
         """
@@ -160,9 +159,7 @@ class PermissionMixin:
                         return  # Permission granted via context role
 
         # No permission found
-        raise PermissionDenied(
-            f'You do not have permission to {permission_action} this {self.permission_resource}'
-        )
+        raise PermissionDenied(f'You do not have permission to {permission_action} this {self.permission_resource}')
 
     def get_serializer(self, *args, **kwargs):
         """
@@ -178,15 +175,12 @@ class PermissionMixin:
             return serializer
 
         # Get hidden fields for user
-        hidden_fields = get_hidden_fields(
-            self.request.user,
-            self.permission_module,
-            self.permission_resource
-        )
+        hidden_fields = get_hidden_fields(self.request.user, self.permission_module, self.permission_resource)
 
         # Remove hidden fields from serializer
         # Handle ListSerializer (when many=True)
         from rest_framework.serializers import ListSerializer
+
         target_serializer = serializer.child if isinstance(serializer, ListSerializer) else serializer
 
         for field_name in hidden_fields:

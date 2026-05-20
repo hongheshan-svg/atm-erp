@@ -1,6 +1,7 @@
 """
 Webhook service for third-party system integration.
 """
+
 import hashlib
 import hmac
 import json
@@ -17,6 +18,7 @@ class WebhookEndpoint(models.Model):
     """
     Webhook endpoint configuration.
     """
+
     EVENT_TYPES = [
         ('project.created', '项目创建'),
         ('project.updated', '项目更新'),
@@ -54,13 +56,14 @@ class WebhookEndpoint(models.Model):
         verbose_name_plural = verbose_name
 
     def __str__(self):
-        return f"{self.name} ({self.url})"
+        return f'{self.name} ({self.url})'
 
 
 class WebhookDelivery(models.Model):
     """
     Webhook delivery log.
     """
+
     STATUS_CHOICES = [
         ('PENDING', '待发送'),
         ('SUCCESS', '成功'),
@@ -69,10 +72,7 @@ class WebhookDelivery(models.Model):
     ]
 
     endpoint = models.ForeignKey(
-        WebhookEndpoint,
-        on_delete=models.CASCADE,
-        related_name='deliveries',
-        verbose_name='端点'
+        WebhookEndpoint, on_delete=models.CASCADE, related_name='deliveries', verbose_name='端点'
     )
     event_type = models.CharField(max_length=50, verbose_name='事件类型')
     payload = models.JSONField(verbose_name='请求数据')
@@ -98,7 +98,7 @@ class WebhookDelivery(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.endpoint.name} - {self.event_type} - {self.status}"
+        return f'{self.endpoint.name} - {self.event_type} - {self.status}'
 
 
 class WebhookService:
@@ -110,28 +110,21 @@ class WebhookService:
     def trigger_event(cls, event_type, data, related_object=None):
         """
         Trigger a webhook event.
-        
+
         Args:
             event_type: Event type string (e.g., 'project.created')
             data: Event data dict
             related_object: Optional related Django model instance
         """
         # Find active endpoints subscribed to this event
-        endpoints = WebhookEndpoint.objects.filter(
-            is_active=True,
-            events__contains=[event_type]
-        )
+        endpoints = WebhookEndpoint.objects.filter(is_active=True, events__contains=[event_type])
 
         if not endpoints.exists():
-            logger.debug(f"No webhook endpoints for event: {event_type}")
+            logger.debug(f'No webhook endpoints for event: {event_type}')
             return
 
         # Build payload
-        payload = {
-            'event': event_type,
-            'timestamp': timezone.now().isoformat(),
-            'data': data
-        }
+        payload = {'event': event_type, 'timestamp': timezone.now().isoformat(), 'data': data}
 
         if related_object:
             payload['object_type'] = related_object.__class__.__name__
@@ -139,18 +132,15 @@ class WebhookService:
 
         # Create delivery records
         for endpoint in endpoints:
-            WebhookDelivery.objects.create(
-                endpoint=endpoint,
-                event_type=event_type,
-                payload=payload
-            )
+            WebhookDelivery.objects.create(endpoint=endpoint, event_type=event_type, payload=payload)
 
         # Trigger async delivery
         from celery import current_app
+
         try:
             current_app.send_task('apps.core.tasks.process_webhook_deliveries')
         except Exception as e:
-            logger.warning(f"Could not queue webhook task: {e}")
+            logger.warning(f'Could not queue webhook task: {e}')
             # Fallback to sync delivery
             cls.process_pending_deliveries()
 
@@ -160,16 +150,12 @@ class WebhookService:
         Process pending webhook deliveries.
         """
         pending = WebhookDelivery.objects.filter(
-            status__in=['PENDING', 'RETRYING'],
-            attempts__lt=models.F('endpoint__max_retries')
+            status__in=['PENDING', 'RETRYING'], attempts__lt=models.F('endpoint__max_retries')
         ).select_related('endpoint')
 
         # Filter by retry time
         now = timezone.now()
-        pending = pending.filter(
-            models.Q(next_retry_at__isnull=True) |
-            models.Q(next_retry_at__lte=now)
-        )
+        pending = pending.filter(models.Q(next_retry_at__isnull=True) | models.Q(next_retry_at__lte=now))
 
         for delivery in pending[:100]:  # Process in batches
             cls.send_delivery(delivery)
@@ -201,12 +187,7 @@ class WebhookService:
                 headers['X-Webhook-Signature'] = signature
 
             # Send request
-            response = requests.post(
-                endpoint.url,
-                data=payload_json,
-                headers=headers,
-                timeout=endpoint.timeout
-            )
+            response = requests.post(endpoint.url, data=payload_json, headers=headers, timeout=endpoint.timeout)
 
             delivery.attempts += 1
             delivery.response_status = response.status_code
@@ -216,18 +197,18 @@ class WebhookService:
                 delivery.status = 'SUCCESS'
                 delivery.delivered_at = timezone.now()
             else:
-                cls._handle_failure(delivery, f"HTTP {response.status_code}")
+                cls._handle_failure(delivery, f'HTTP {response.status_code}')
 
         except requests.Timeout:
             delivery.attempts += 1
-            cls._handle_failure(delivery, "Request timeout")
+            cls._handle_failure(delivery, 'Request timeout')
         except requests.RequestException as e:
             delivery.attempts += 1
             cls._handle_failure(delivery, str(e))
         except Exception as e:
             delivery.attempts += 1
-            cls._handle_failure(delivery, f"Unexpected error: {e}")
-            logger.exception(f"Webhook delivery error: {e}")
+            cls._handle_failure(delivery, f'Unexpected error: {e}')
+            logger.exception(f'Webhook delivery error: {e}')
 
         delivery.save()
 
@@ -251,11 +232,7 @@ class WebhookService:
         """
         Generate HMAC signature for payload.
         """
-        return hmac.new(
-            secret.encode('utf-8'),
-            payload.encode('utf-8'),
-            hashlib.sha256
-        ).hexdigest()
+        return hmac.new(secret.encode('utf-8'), payload.encode('utf-8'), hashlib.sha256).hexdigest()
 
     @classmethod
     def verify_signature(cls, payload, signature, secret):
@@ -269,33 +246,45 @@ class WebhookService:
 # Convenience functions for common events
 def trigger_project_event(event_type, project):
     """Trigger project-related webhook."""
-    WebhookService.trigger_event(event_type, {
-        'id': project.id,
-        'code': project.code,
-        'name': project.name,
-        'status': project.status,
-        'manager': project.manager.username if project.manager else None,
-    }, project)
+    WebhookService.trigger_event(
+        event_type,
+        {
+            'id': project.id,
+            'code': project.code,
+            'name': project.name,
+            'status': project.status,
+            'manager': project.manager.username if project.manager else None,
+        },
+        project,
+    )
 
 
 def trigger_order_event(event_type, order, order_type='sales'):
     """Trigger order-related webhook."""
-    WebhookService.trigger_event(event_type, {
-        'id': order.id,
-        'order_no': order.order_no,
-        'type': order_type,
-        'total_amount': str(order.total_amount),
-        'status': order.status,
-    }, order)
+    WebhookService.trigger_event(
+        event_type,
+        {
+            'id': order.id,
+            'order_no': order.order_no,
+            'type': order_type,
+            'total_amount': str(order.total_amount),
+            'status': order.status,
+        },
+        order,
+    )
 
 
 def trigger_approval_event(event_type, instance):
     """Trigger approval-related webhook."""
-    WebhookService.trigger_event(event_type, {
-        'id': instance.id,
-        'business_type': instance.business_type,
-        'business_no': instance.business_no,
-        'status': instance.status,
-        'submitter': instance.submitter.username,
-        'amount': str(instance.amount) if instance.amount else None,
-    }, instance)
+    WebhookService.trigger_event(
+        event_type,
+        {
+            'id': instance.id,
+            'business_type': instance.business_type,
+            'business_no': instance.business_no,
+            'status': instance.status,
+            'submitter': instance.submitter.username,
+            'amount': str(instance.amount) if instance.amount else None,
+        },
+        instance,
+    )

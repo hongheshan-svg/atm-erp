@@ -1,6 +1,7 @@
 """
 Views for sales app.
 """
+
 import logging
 
 from django.db import models, transaction
@@ -34,10 +35,13 @@ from .serializers import (
 )
 
 
-class SalesQuotationViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SalesQuotationViewSet(
+    PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
+):
     """
     ViewSet for SalesQuotation management.
     """
+
     queryset = SalesQuotation.objects.all()
     serializer_class = SalesQuotationSerializer
     filterset_fields = ['customer', 'project', 'status', 'is_deleted']
@@ -64,7 +68,7 @@ class SalesQuotationViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
                 project=old_quotation.project,
                 valid_until=request.data.get('valid_until', old_quotation.valid_until),
                 version=old_quotation.version + 1,
-                created_by=request.user
+                created_by=request.user,
             )
 
             for line in old_quotation.lines.filter(is_deleted=False):
@@ -74,11 +78,12 @@ class SalesQuotationViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
                     qty=line.qty,
                     unit_price=line.unit_price,
                     notes=line.notes,
-                    created_by=request.user
+                    created_by=request.user,
                 )
 
             # Update total
             from django.db.models import Sum
+
             total = new_quotation.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
             new_quotation.total_amount = total
             new_quotation.save()
@@ -90,10 +95,7 @@ class SalesQuotationViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
         """提交报价单审批 - 审批步骤由流程配置决定"""
         quotation = self.get_object()
         if quotation.status not in ['DRAFT', 'REJECTED']:
-            return Response(
-                {'error': '只能提交草稿或已拒绝状态的报价单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能提交草稿或已拒绝状态的报价单'}, status=status.HTTP_400_BAD_REQUEST)
 
         amount = quotation.total_amount or 0
 
@@ -105,35 +107,41 @@ class SalesQuotationViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
                 business_id=quotation.id,
                 business_no=quotation.quote_no,
                 submitter=request.user,
-                amount=amount
+                amount=amount,
             )
 
             if instance:
                 quotation.status = 'PENDING'
                 quotation.save()
-                return Response({
-                    **SalesQuotationSerializer(quotation).data,
-                    'workflow_started': True,
-                    'workflow_id': instance.id,
-                    'message': '已提交审批，请在审批中心查看审批进度'
-                })
+                return Response(
+                    {
+                        **SalesQuotationSerializer(quotation).data,
+                        'workflow_started': True,
+                        'workflow_id': instance.id,
+                        'message': '已提交审批，请在审批中心查看审批进度',
+                    }
+                )
             else:
                 quotation.status = 'APPROVED'
                 quotation.save()
-                return Response({
-                    **SalesQuotationSerializer(quotation).data,
-                    'workflow_started': False,
-                    'message': error or '未配置审批流程，报价单已直接通过'
-                })
+                return Response(
+                    {
+                        **SalesQuotationSerializer(quotation).data,
+                        'workflow_started': False,
+                        'message': error or '未配置审批流程，报价单已直接通过',
+                    }
+                )
 
         except Exception as e:
             quotation.status = 'APPROVED'
             quotation.save()
-            return Response({
-                **SalesQuotationSerializer(quotation).data,
-                'workflow_started': False,
-                'message': f'报价单已通过，但工作流服务异常: {e}'
-            })
+            return Response(
+                {
+                    **SalesQuotationSerializer(quotation).data,
+                    'workflow_started': False,
+                    'message': f'报价单已通过，但工作流服务异常: {e}',
+                }
+            )
 
     @action(detail=True, methods=['post'])
     def convert_to_so(self, request, pk=None):
@@ -141,30 +149,24 @@ class SalesQuotationViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
         quotation = self.get_object()
 
         if not quotation.project:
-            return Response(
-                {'error': '报价单必须关联项目才能转换为订单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '报价单必须关联项目才能转换为订单'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             so = SalesOrder.objects.create(
                 customer=quotation.customer,
                 project=quotation.project,
                 delivery_date=request.data.get('delivery_date'),
-                created_by=request.user
+                created_by=request.user,
             )
 
             for line in quotation.lines.filter(is_deleted=False):
                 SalesOrderLine.objects.create(
-                    so=so,
-                    item=line.item,
-                    qty=line.qty,
-                    unit_price=line.unit_price,
-                    created_by=request.user
+                    so=so, item=line.item, qty=line.qty, unit_price=line.unit_price, created_by=request.user
                 )
 
             # Update total
             from django.db.models import Sum
+
             total = so.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
             so.total_amount = total
             so.save()
@@ -179,18 +181,22 @@ class SalesQuotationLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
     """
     ViewSet for SalesQuotationLine management.
     """
+
     queryset = SalesQuotationLine.objects.all()
     serializer_class = SalesQuotationLineSerializer
     filterset_fields = ['quotation', 'item', 'is_deleted']
     search_fields = ['item__sku', 'item__name', 'custom_name', 'custom_spec']
 
 
-class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SalesOrderViewSet(
+    PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
+):
     """
     ViewSet for SalesOrder management.
 
     销售订单审批流程由审批中心的流程配置决定。
     """
+
     queryset = SalesOrder.objects.all()
     serializer_class = SalesOrderSerializer
     filterset_fields = ['customer', 'project', 'status', 'is_deleted']
@@ -218,22 +224,20 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
         linked_order_ids = Project.objects.filter(
             is_deleted=False,
             sales_order__isnull=False,
-            status__in=['DRAFT', 'PLANNING', 'PENDING', 'IN_PROGRESS', 'ACTIVE', 'PAUSED', 'COMPLETED']
+            status__in=['DRAFT', 'PLANNING', 'PENDING', 'IN_PROGRESS', 'ACTIVE', 'PAUSED', 'COMPLETED'],
         ).values_list('sales_order_id', flat=True)
 
-        queryset = SalesOrder.objects.filter(
-            is_deleted=False,
-            status__in=allowed_status
-        ).exclude(
-            id__in=linked_order_ids
-        ).order_by('-created_at')
+        queryset = (
+            SalesOrder.objects.filter(is_deleted=False, status__in=allowed_status)
+            .exclude(id__in=linked_order_ids)
+            .order_by('-created_at')
+        )
 
         # 支持搜索
         search = request.query_params.get('search', '')
         if search:
             queryset = queryset.filter(
-                models.Q(order_no__icontains=search) |
-                models.Q(customer__name__icontains=search)
+                models.Q(order_no__icontains=search) | models.Q(customer__name__icontains=search)
             )
 
         # 返回详细数据，包含明细信息供项目经理参考
@@ -242,28 +246,32 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
             # 获取订单明细
             lines = []
             for line in so.lines.filter(is_deleted=False):
-                lines.append({
-                    'id': line.id,
-                    'product_name': line.item.name if line.item else line.custom_name,
-                    'spec': line.item.spec if line.item else line.custom_spec,
-                    'qty': float(line.qty),
-                    'unit_price': float(line.unit_price),
-                    'line_amount': float(line.line_amount),
-                })
+                lines.append(
+                    {
+                        'id': line.id,
+                        'product_name': line.item.name if line.item else line.custom_name,
+                        'spec': line.item.spec if line.item else line.custom_spec,
+                        'qty': float(line.qty),
+                        'unit_price': float(line.unit_price),
+                        'line_amount': float(line.line_amount),
+                    }
+                )
 
-            data.append({
-                'id': so.id,
-                'order_no': so.order_no,
-                'customer_order_no': so.customer_order_no or '',
-                'customer': so.customer_id,
-                'customer_name': so.customer.name if so.customer else '',
-                'status': so.status,
-                'order_date': so.order_date.strftime('%Y-%m-%d') if so.order_date else '',
-                'delivery_date': so.delivery_date.strftime('%Y-%m-%d') if so.delivery_date else '',
-                'total_amount': float(so.total_amount or 0),
-                'total_with_tax': float(so.total_with_tax or 0),
-                'lines': lines,
-            })
+            data.append(
+                {
+                    'id': so.id,
+                    'order_no': so.order_no,
+                    'customer_order_no': so.customer_order_no or '',
+                    'customer': so.customer_id,
+                    'customer_name': so.customer.name if so.customer else '',
+                    'status': so.status,
+                    'order_date': so.order_date.strftime('%Y-%m-%d') if so.order_date else '',
+                    'delivery_date': so.delivery_date.strftime('%Y-%m-%d') if so.delivery_date else '',
+                    'total_amount': float(so.total_amount or 0),
+                    'total_with_tax': float(so.total_with_tax or 0),
+                    'lines': lines,
+                }
+            )
 
         return Response(data)
 
@@ -272,10 +280,7 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
         """提交销售订单审批 - 审批步骤由流程配置决定"""
         so = self.get_object()
         if so.status not in ['DRAFT', 'REJECTED']:
-            return Response(
-                {'error': '只能提交草稿或已拒绝状态的订单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能提交草稿或已拒绝状态的订单'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 计算订单金额用于流程路由
         amount = so.total_with_tax or so.total_amount or 0
@@ -288,18 +293,20 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
                 business_id=so.id,
                 business_no=so.order_no,
                 submitter=request.user,
-                amount=amount
+                amount=amount,
             )
 
             if instance:
                 so.status = 'PENDING'
                 so.save()
-                return Response({
-                    **SalesOrderSerializer(so).data,
-                    'workflow_started': True,
-                    'workflow_id': instance.id,
-                    'message': '已提交审批，请在审批中心查看审批进度'
-                })
+                return Response(
+                    {
+                        **SalesOrderSerializer(so).data,
+                        'workflow_started': True,
+                        'workflow_id': instance.id,
+                        'message': '已提交审批，请在审批中心查看审批进度',
+                    }
+                )
             else:
                 # 未配置审批流程，直接确认
                 return self._do_confirm(so, request)
@@ -313,10 +320,7 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
         """直接确认销售订单 - 仅在无活跃工作流时允许"""
         so = self.get_object()
         if so.status not in ['DRAFT', 'PENDING']:
-            return Response(
-                {'error': '只能确认草稿或待审批状态的订单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能确认草稿或待审批状态的订单'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 检查是否有活跃工作流
         workflow_error = self.check_workflow_allows_direct_action(so, '确认')
@@ -343,7 +347,7 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
                 invoice_date=so.order_date,
                 amount_due=so.total_with_tax or so.total_amount,
                 due_date=request.data.get('due_date', so.delivery_date),
-                created_by=request.user
+                created_by=request.user,
             )
 
         # 自动生成付款计划（避免重复创建）
@@ -363,10 +367,7 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
         """Cancel sales order."""
         so = self.get_object()
         if so.status in ['COMPLETED', 'CANCELLED']:
-            return Response(
-                {'error': '无法取消已完成或已取消的订单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '无法取消已完成或已取消的订单'}, status=status.HTTP_400_BAD_REQUEST)
 
         so.status = 'CANCELLED'
         so.save()
@@ -379,17 +380,11 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
 
         # 只能退回确认状态的订单
         if so.status != 'CONFIRMED':
-            return Response(
-                {'error': '只能将已确认状态的订单退回草稿'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能将已确认状态的订单退回草稿'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 检查是否已有发货记录
         if so.deliveries.filter(is_deleted=False).exists():
-            return Response(
-                {'error': '订单已有发货记录，无法退回草稿'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '订单已有发货记录，无法退回草稿'}, status=status.HTTP_400_BAD_REQUEST)
 
         so.status = 'DRAFT'
         so.save()
@@ -402,16 +397,14 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
 
         try:
             from apps.finance.invoice_generator import InvoiceGenerator
+
             pdf_buffer = InvoiceGenerator.generate_invoice(so)
 
             response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
             response['Content-Disposition'] = f'attachment; filename="invoice_{so.order_no}.pdf"'
             return response
         except Exception as e:
-            return Response(
-                {'error': f'发票生成失败: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            return Response({'error': f'发票生成失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['get'], url_path='download-template')
     def download_template(self, request):
@@ -430,17 +423,22 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
         header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
         header_font = Font(color='FFFFFF', bold=True)
         thin_border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin')
+            left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin')
         )
 
         # 表头 - 与创建表单保持一致
         headers = [
-            '销售订单号', '客户订单号', '客户名称*', '关联项目',
-            '订单日期', '交货日期*', '税率(%)',
-            '付款条款', '付款方式', '付款说明', '备注'
+            '销售订单号',
+            '客户订单号',
+            '客户名称*',
+            '关联项目',
+            '订单日期',
+            '交货日期*',
+            '税率(%)',
+            '付款条款',
+            '付款方式',
+            '付款说明',
+            '备注',
         ]
 
         for col, header in enumerate(headers, 1):
@@ -457,18 +455,24 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
 
         # 示例数据
         sample_data = [
-            '', 'CUST-001', '示例客户', '示例项目',
-            '2025-01-01', '2025-02-01', 13,
-            '30%预付/60%验收/10%质保', '电汇', '分3期付款', '示例备注'
+            '',
+            'CUST-001',
+            '示例客户',
+            '示例项目',
+            '2025-01-01',
+            '2025-02-01',
+            13,
+            '30%预付/60%验收/10%质保',
+            '电汇',
+            '分3期付款',
+            '示例备注',
         ]
         for col, value in enumerate(sample_data, 1):
             ws.cell(row=2, column=col, value=value)
 
         # 创建明细表
         ws2 = wb.create_sheet(title='订单明细')
-        detail_headers = [
-            '行号', '产品名称*', '规格型号', '单位', '数量*', '单价*', '备注'
-        ]
+        detail_headers = ['行号', '产品名称*', '规格型号', '单位', '数量*', '单价*', '备注']
 
         for col, header in enumerate(detail_headers, 1):
             cell = ws2.cell(row=1, column=col, value=header)
@@ -483,9 +487,7 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
             ws2.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
 
         # 示例数据（非标定制产品，无需物料编码）
-        detail_sample = [
-            1, '定制产品A', '按图纸加工', '件', 1, 50000.00, ''
-        ]
+        detail_sample = [1, '定制产品A', '按图纸加工', '件', 1, 50000.00, '']
         for col, value in enumerate(detail_sample, 1):
             ws2.cell(row=2, column=col, value=value)
 
@@ -534,8 +536,7 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
         buffer.seek(0)
 
         response = HttpResponse(
-            buffer.getvalue(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            buffer.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         response['Content-Disposition'] = 'attachment; filename="sales_order_template.xlsx"'
         return response
@@ -560,18 +561,28 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
         header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
         header_font = Font(color='FFFFFF', bold=True)
         thin_border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin')
+            left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin')
         )
 
         # 表头 - 与创建表单保持一致
         headers = [
-            '销售订单号', '客户订单号', '客户名称', '客户编码', '关联项目',
-            '订单日期', '交货日期', '状态', '税率(%)',
-            '不含税金额', '税额', '含税总额',
-            '付款条款', '付款方式', '付款说明', '备注', '创建时间'
+            '销售订单号',
+            '客户订单号',
+            '客户名称',
+            '客户编码',
+            '关联项目',
+            '订单日期',
+            '交货日期',
+            '状态',
+            '税率(%)',
+            '不含税金额',
+            '税额',
+            '含税总额',
+            '付款条款',
+            '付款方式',
+            '付款说明',
+            '备注',
+            '创建时间',
         ]
 
         for col, header in enumerate(headers, 1):
@@ -600,7 +611,7 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
                 so.get_payment_method_display() if so.payment_method else '',
                 so.payment_terms_detail or '',
                 so.notes or '',
-                so.created_at.strftime('%Y-%m-%d %H:%M') if so.created_at else ''
+                so.created_at.strftime('%Y-%m-%d %H:%M') if so.created_at else '',
             ]
             for col, value in enumerate(data, 1):
                 cell = ws.cell(row=row_idx, column=col, value=value)
@@ -614,8 +625,17 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
         # 创建明细表
         ws2 = wb.create_sheet(title='订单明细')
         detail_headers = [
-            '订单号', '物料编码', '物料名称', '产品名称', '规格型号',
-            '单位', '数量', '单价', '行金额', '已发货', '备注'
+            '订单号',
+            '物料编码',
+            '物料名称',
+            '产品名称',
+            '规格型号',
+            '单位',
+            '数量',
+            '单价',
+            '行金额',
+            '已发货',
+            '备注',
         ]
 
         for col, header in enumerate(detail_headers, 1):
@@ -639,7 +659,7 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
                     float(line.unit_price),
                     float(line.line_amount),
                     float(line.delivered_qty),
-                    line.notes or ''
+                    line.notes or '',
                 ]
                 for col, value in enumerate(data, 1):
                     cell = ws2.cell(row=detail_row, column=col, value=value)
@@ -657,8 +677,7 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
         buffer.seek(0)
 
         response = HttpResponse(
-            buffer.getvalue(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            buffer.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         response['Content-Disposition'] = 'attachment; filename="sales_orders_export.xlsx"'
         return response
@@ -746,6 +765,7 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
 
             # 项目缓存（按名称和编码）
             from apps.projects.models import Project
+
             project_cache = {}
             for p in Project.objects.filter(is_deleted=False):
                 project_cache[p.name] = p
@@ -889,7 +909,7 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
                                 payment_method=payment_method,
                                 payment_terms_detail=payment_terms_detail,
                                 notes=notes,
-                                created_by=request.user
+                                created_by=request.user,
                             )
                             # 更新订单日期
                             if order_date:
@@ -947,7 +967,9 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
                                             if cell.value is not None:
                                                 row_data[header_to_field[col_idx]] = cell.value
 
-                                    if not row_data or all(v is None or str(v).strip() == '' for v in row_data.values()):
+                                    if not row_data or all(
+                                        v is None or str(v).strip() == '' for v in row_data.values()
+                                    ):
                                         continue
 
                                     row_counter += 1
@@ -984,17 +1006,19 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
                                             unit_price=unit_price,
                                             line_amount=line_amount,
                                             notes='',
-                                            created_by=request.user
+                                            created_by=request.user,
                                         )
                                         line_count += 1
                                 except Exception as e:
                                     errors.append({'row': row_idx, 'error': f'读取明细失败: {str(e)}'})
                     else:
                         # 没有明细sheet，也没有明细列，给出警告
-                        errors.append({
-                            'row': 0,
-                            'error': f'警告：未找到订单明细工作表（支持的名称：订单明细、Sheet2、明细），已创建 {len(order_map)} 个订单但没有产品明细。请手动添加明细或重新导入包含明细sheet的文件。'
-                        })
+                        errors.append(
+                            {
+                                'row': 0,
+                                'error': f'警告：未找到订单明细工作表（支持的名称：订单明细、Sheet2、明细），已创建 {len(order_map)} 个订单但没有产品明细。请手动添加明细或重新导入包含明细sheet的文件。',
+                            }
+                        )
 
                 if detail_sheet:
                     detail_headers = [str(cell.value).strip() if cell.value else '' for cell in detail_sheet[1]]
@@ -1058,7 +1082,9 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
                                 so = list(order_map.values())[0]
 
                             if not so:
-                                errors.append({'row': row_idx, 'sheet': '订单明细', 'error': '无法关联订单，请填写行号或订单号'})
+                                errors.append(
+                                    {'row': row_idx, 'sheet': '订单明细', 'error': '无法关联订单，请填写行号或订单号'}
+                                )
                                 continue
 
                             qty = parse_decimal(data.get('qty'))
@@ -1097,7 +1123,7 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
                                 unit_price=unit_price,
                                 line_amount=line_amount,
                                 notes=notes,
-                                created_by=request.user
+                                created_by=request.user,
                             )
                             line_count += 1
 
@@ -1106,27 +1132,24 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
 
                 # 更新订单金额
                 for order_no, so in order_map.items():
-                    total_amount = sum(
-                        line.line_amount for line in so.lines.filter(is_deleted=False)
-                    )
+                    total_amount = sum(line.line_amount for line in so.lines.filter(is_deleted=False))
                     so.total_amount = total_amount
                     so.tax_amount = total_amount * so.tax_rate / 100
                     so.total_with_tax = total_amount + so.tax_amount
                     so.save()
 
-            return Response({
-                'success_count': success_count,
-                'update_count': update_count,
-                'skip_count': skip_count,
-                'line_count': line_count,
-                'errors': errors[:20] if errors else []
-            })
+            return Response(
+                {
+                    'success_count': success_count,
+                    'update_count': update_count,
+                    'skip_count': skip_count,
+                    'line_count': line_count,
+                    'errors': errors[:20] if errors else [],
+                }
+            )
 
         except Exception as e:
-            return Response(
-                {'error': f'导入失败: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            return Response({'error': f'导入失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['post'], url_path='bulk-delete')
     def bulk_delete(self, request):
@@ -1137,9 +1160,7 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
 
         # 只删除草稿和已取消状态的订单
         deletable_orders = SalesOrder.objects.filter(
-            id__in=ids,
-            status__in=['DRAFT', 'CANCELLED', 'REJECTED'],
-            is_deleted=False
+            id__in=ids, status__in=['DRAFT', 'CANCELLED', 'REJECTED'], is_deleted=False
         )
 
         delete_count = deletable_orders.count()
@@ -1152,24 +1173,23 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
         if skip_count > 0:
             message += f'，跳过 {skip_count} 个（只能删除草稿/已取消/已拒绝状态的订单）'
 
-        return Response({
-            'message': message,
-            'delete_count': delete_count,
-            'skip_count': skip_count
-        })
+        return Response({'message': message, 'delete_count': delete_count, 'skip_count': skip_count})
 
 
 class SalesOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for SalesOrderLine management.
     """
+
     queryset = SalesOrderLine.objects.all()
     serializer_class = SalesOrderLineSerializer
     filterset_fields = ['so', 'item', 'is_deleted']
     search_fields = ['item__sku', 'item__name', 'custom_name', 'custom_spec']
 
 
-class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class DeliveryOrderViewSet(
+    PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
+):
     """
     ViewSet for DeliveryOrder management.
 
@@ -1186,6 +1206,7 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
 
     注意: 审批步骤由审批中心的流程配置决定，修改流程配置会自动影响审批流程
     """
+
     queryset = DeliveryOrder.objects.all()
     serializer_class = DeliveryOrderSerializer
     filterset_fields = ['so', 'warehouse', 'status', 'is_deleted']
@@ -1214,10 +1235,7 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
         """提交发货申请 - 进入审批中心，审批步骤由流程配置决定"""
         delivery = self.get_object()
         if delivery.status not in ['DRAFT', 'REJECTED']:
-            return Response(
-                {'error': '只能提交草稿或已拒绝状态的发货单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能提交草稿或已拒绝状态的发货单'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 计算金额用于流程路由
         amount = self._calculate_delivery_amount(delivery)
@@ -1230,38 +1248,44 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                 business_id=delivery.id,
                 business_no=delivery.delivery_no,
                 submitter=request.user,
-                amount=amount
+                amount=amount,
             )
 
             if instance:
                 delivery.status = 'PENDING'
                 delivery.rejection_reason = ''  # 清除之前的拒绝原因
                 delivery.save()
-                return Response({
-                    **DeliveryOrderSerializer(delivery).data,
-                    'workflow_started': True,
-                    'workflow_id': instance.id,
-                    'message': '已提交审批，请在审批中心查看审批进度'
-                })
+                return Response(
+                    {
+                        **DeliveryOrderSerializer(delivery).data,
+                        'workflow_started': True,
+                        'workflow_id': instance.id,
+                        'message': '已提交审批，请在审批中心查看审批进度',
+                    }
+                )
             else:
                 # 未配置审批流程，直接进入备货
                 delivery.status = 'PREPARING'
                 delivery.save()
-                return Response({
-                    **DeliveryOrderSerializer(delivery).data,
-                    'workflow_started': False,
-                    'message': error or '未配置审批流程，已直接进入备货环节'
-                })
+                return Response(
+                    {
+                        **DeliveryOrderSerializer(delivery).data,
+                        'workflow_started': False,
+                        'message': error or '未配置审批流程，已直接进入备货环节',
+                    }
+                )
 
         except Exception as e:
             # 审批模块不可用，直接进入备货
             delivery.status = 'PREPARING'
             delivery.save()
-            return Response({
-                **DeliveryOrderSerializer(delivery).data,
-                'workflow_started': False,
-                'message': f'提交成功，但工作流服务异常: {e}'
-            })
+            return Response(
+                {
+                    **DeliveryOrderSerializer(delivery).data,
+                    'workflow_started': False,
+                    'message': f'提交成功，但工作流服务异常: {e}',
+                }
+            )
 
     # 获取当前审批状态
     @action(detail=True, methods=['get'])
@@ -1272,35 +1296,35 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
         try:
             from apps.core.workflow.models import WorkflowInstance
 
-            instance = WorkflowInstance.objects.filter(
-                business_type='DELIVERY_ORDER',
-                business_id=delivery.id,
-                is_deleted=False
-            ).order_by('-created_at').first()
+            instance = (
+                WorkflowInstance.objects.filter(
+                    business_type='DELIVERY_ORDER', business_id=delivery.id, is_deleted=False
+                )
+                .order_by('-created_at')
+                .first()
+            )
 
             if instance:
                 pending_task = instance.tasks.filter(status='PENDING', is_deleted=False).first()
-                return Response({
-                    'has_workflow': True,
-                    'workflow_id': instance.id,
-                    'workflow_status': instance.status,
-                    'current_step': instance.current_step,
-                    'pending_task': {
-                        'id': pending_task.id,
-                        'step_name': pending_task.step.name,
-                        'assignee': pending_task.assignee.username if pending_task.assignee else None,
-                    } if pending_task else None
-                })
+                return Response(
+                    {
+                        'has_workflow': True,
+                        'workflow_id': instance.id,
+                        'workflow_status': instance.status,
+                        'current_step': instance.current_step,
+                        'pending_task': {
+                            'id': pending_task.id,
+                            'step_name': pending_task.step.name,
+                            'assignee': pending_task.assignee.username if pending_task.assignee else None,
+                        }
+                        if pending_task
+                        else None,
+                    }
+                )
             else:
-                return Response({
-                    'has_workflow': False,
-                    'message': '无审批流程'
-                })
+                return Response({'has_workflow': False, 'message': '无审批流程'})
         except Exception as e:
-            return Response({
-                'has_workflow': False,
-                'error': str(e)
-            })
+            return Response({'has_workflow': False, 'error': str(e)})
 
     # 仓库确认备货完成
     @action(detail=True, methods=['post'])
@@ -1309,10 +1333,7 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
         delivery = self.get_object()
         # 允许从 APPROVED 或 PREPARING 状态确认备货
         if delivery.status not in ['APPROVED', 'PREPARING']:
-            return Response(
-                {'error': '当前状态不能确认备货'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '当前状态不能确认备货'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 创建出库记录
         with transaction.atomic():
@@ -1332,7 +1353,7 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                     project=delivery.so.project,
                     move_date=timezone.now().date(),
                     status='COMPLETED',
-                    created_by=request.user
+                    created_by=request.user,
                 )
 
                 # 更新销售订单发货数量
@@ -1342,10 +1363,7 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
         delivery.status = 'LOGISTICS_BOOKING'
         delivery.save()
 
-        return Response({
-            **DeliveryOrderSerializer(delivery).data,
-            'message': '备货完成，请采购预约物流'
-        })
+        return Response({**DeliveryOrderSerializer(delivery).data, 'message': '备货完成，请采购预约物流'})
 
     # 采购确认物流
     @action(detail=True, methods=['post'])
@@ -1353,10 +1371,7 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
         """采购确认物流信息"""
         delivery = self.get_object()
         if delivery.status != 'LOGISTICS_BOOKING':
-            return Response(
-                {'error': '当前状态不能确认物流'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '当前状态不能确认物流'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 更新物流信息
         logistics_company = request.data.get('logistics_company')
@@ -1373,10 +1388,7 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
         delivery.status = 'CUSTOMER_SIGNING'
         delivery.save()
 
-        return Response({
-            **DeliveryOrderSerializer(delivery).data,
-            'message': '物流已预约，等待客户签收'
-        })
+        return Response({**DeliveryOrderSerializer(delivery).data, 'message': '物流已预约，等待客户签收'})
 
     # Step 6 -> 7: 客户签收
     @action(detail=True, methods=['post'])
@@ -1384,10 +1396,7 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
         """确认客户已签收"""
         delivery = self.get_object()
         if delivery.status != 'CUSTOMER_SIGNING':
-            return Response(
-                {'error': '当前状态不能确认签收'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '当前状态不能确认签收'}, status=status.HTTP_400_BAD_REQUEST)
 
         signed_by = request.data.get('signed_by')
         signed_date = request.data.get('signed_date')
@@ -1400,10 +1409,7 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
         delivery.status = 'UPLOADING_RECEIPT'
         delivery.save()
 
-        return Response({
-            **DeliveryOrderSerializer(delivery).data,
-            'message': '已确认签收，请上传送货单'
-        })
+        return Response({**DeliveryOrderSerializer(delivery).data, 'message': '已确认签收，请上传送货单'})
 
     # Step 7 -> 8: 上传送货单
     @action(detail=True, methods=['post'])
@@ -1411,10 +1417,7 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
         """上传签收单据"""
         delivery = self.get_object()
         if delivery.status != 'UPLOADING_RECEIPT':
-            return Response(
-                {'error': '当前状态不能上传送货单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '当前状态不能上传送货单'}, status=status.HTTP_400_BAD_REQUEST)
 
         if 'signed_receipt' in request.FILES:
             delivery.signed_receipt = request.FILES['signed_receipt']
@@ -1422,10 +1425,7 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
         delivery.status = 'PROJECT_CONFIRMING'
         delivery.save()
 
-        return Response({
-            **DeliveryOrderSerializer(delivery).data,
-            'message': '送货单已上传，等待项目确认'
-        })
+        return Response({**DeliveryOrderSerializer(delivery).data, 'message': '送货单已上传，等待项目确认'})
 
     # Step 8 -> 9: 项目确认
     @action(detail=True, methods=['post'])
@@ -1433,10 +1433,7 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
         """项目确认完成"""
         delivery = self.get_object()
         if delivery.status != 'PROJECT_CONFIRMING':
-            return Response(
-                {'error': '当前状态不能进行项目确认'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '当前状态不能进行项目确认'}, status=status.HTTP_400_BAD_REQUEST)
 
         from django.utils import timezone
 
@@ -1446,20 +1443,14 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
 
         # 更新销售订单状态
         so = delivery.so
-        all_delivered = all(
-            line.delivered_qty >= line.qty
-            for line in so.lines.filter(is_deleted=False)
-        )
+        all_delivered = all(line.delivered_qty >= line.qty for line in so.lines.filter(is_deleted=False))
         if all_delivered:
             so.status = 'COMPLETED'
         else:
             so.status = 'PARTIAL'
         so.save()
 
-        return Response({
-            **DeliveryOrderSerializer(delivery).data,
-            'message': '发货流程已完成'
-        })
+        return Response({**DeliveryOrderSerializer(delivery).data, 'message': '发货流程已完成'})
 
     # 拒绝操作（可在任意审批环节拒绝）
     @action(detail=True, methods=['post'])
@@ -1467,26 +1458,21 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
         """拒绝发货申请"""
         delivery = self.get_object()
         if delivery.status in ['DRAFT', 'COMPLETED', 'REJECTED']:
-            return Response(
-                {'error': '当前状态不能拒绝'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '当前状态不能拒绝'}, status=status.HTTP_400_BAD_REQUEST)
 
         reason = request.data.get('reason', '')
         delivery.status = 'REJECTED'
         delivery.rejection_reason = reason
         delivery.save()
 
-        return Response({
-            **DeliveryOrderSerializer(delivery).data,
-            'message': '已拒绝'
-        })
+        return Response({**DeliveryOrderSerializer(delivery).data, 'message': '已拒绝'})
 
 
 class DeliveryOrderLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for DeliveryOrderLine management.
     """
+
     queryset = DeliveryOrderLine.objects.all()
     serializer_class = DeliveryOrderLineSerializer
     filterset_fields = ['delivery', 'item', 'is_deleted']
@@ -1497,6 +1483,7 @@ class SalesContractViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTracki
     """
     ViewSet for SalesContract management.
     """
+
     queryset = SalesContract.objects.all()
     serializer_class = SalesContractSerializer
     filterset_fields = ['so', 'customer', 'project', 'status', 'is_deleted']
@@ -1513,25 +1500,18 @@ class SalesContractViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTracki
         """从销售订单创建合同."""
         so_id = request.data.get('so_id')
         if not so_id:
-            return Response(
-                {'error': '请选择销售订单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请选择销售订单'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             so = SalesOrder.objects.get(id=so_id, is_deleted=False)
         except SalesOrder.DoesNotExist:
-            return Response(
-                {'error': '销售订单不存在'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '销售订单不存在'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 检查是否已有合同
         existing = SalesContract.objects.filter(so=so, is_deleted=False).first()
         if existing:
             return Response(
-                {'error': f'该销售订单已存在合同: {existing.contract_no}'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': f'该销售订单已存在合同: {existing.contract_no}'}, status=status.HTTP_400_BAD_REQUEST
             )
 
         from django.utils import timezone
@@ -1548,7 +1528,7 @@ class SalesContractViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTracki
             total_with_tax=so.total_with_tax,
             payment_terms=self._get_payment_terms_text(so),
             delivery_terms=f'交货日期：{so.delivery_date}',
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(SalesContractSerializer(contract).data, status=status.HTTP_201_CREATED)
@@ -1581,10 +1561,7 @@ class SalesContractViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTracki
         """提交合同审批 - 审批步骤由流程配置决定"""
         contract = self.get_object()
         if contract.status not in ['DRAFT', 'REJECTED']:
-            return Response(
-                {'error': '只能提交草稿或已拒绝状态的合同'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能提交草稿或已拒绝状态的合同'}, status=status.HTTP_400_BAD_REQUEST)
 
         amount = contract.total_with_tax or contract.total_amount or 0
 
@@ -1596,35 +1573,41 @@ class SalesContractViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTracki
                 business_id=contract.id,
                 business_no=contract.contract_no,
                 submitter=request.user,
-                amount=amount
+                amount=amount,
             )
 
             if instance:
                 contract.status = 'PENDING'
                 contract.save()
-                return Response({
-                    **SalesContractSerializer(contract).data,
-                    'workflow_started': True,
-                    'workflow_id': instance.id,
-                    'message': '已提交审批，请在审批中心查看审批进度'
-                })
+                return Response(
+                    {
+                        **SalesContractSerializer(contract).data,
+                        'workflow_started': True,
+                        'workflow_id': instance.id,
+                        'message': '已提交审批，请在审批中心查看审批进度',
+                    }
+                )
             else:
                 contract.status = 'ACTIVE'
                 contract.save()
-                return Response({
-                    **SalesContractSerializer(contract).data,
-                    'workflow_started': False,
-                    'message': error or '未配置审批流程，合同已直接生效'
-                })
+                return Response(
+                    {
+                        **SalesContractSerializer(contract).data,
+                        'workflow_started': False,
+                        'message': error or '未配置审批流程，合同已直接生效',
+                    }
+                )
 
         except Exception as e:
             contract.status = 'ACTIVE'
             contract.save()
-            return Response({
-                **SalesContractSerializer(contract).data,
-                'workflow_started': False,
-                'message': f'合同已生效，但工作流服务异常: {e}'
-            })
+            return Response(
+                {
+                    **SalesContractSerializer(contract).data,
+                    'workflow_started': False,
+                    'message': f'合同已生效，但工作流服务异常: {e}',
+                }
+            )
 
     @action(detail=True, methods=['get'])
     def print_preview(self, request, pk=None):
@@ -1634,49 +1617,51 @@ class SalesContractViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTracki
 
         # 获取公司信息
         from apps.core.models import SystemConfig
+
         company_config = SystemConfig.get_config('company', {})
 
         # 获取订单明细
         lines = []
         for line in so.lines.filter(is_deleted=False):
-            lines.append({
-                'item_sku': line.item.sku if line.item else '',
-                'item_name': line.item.name if line.item else line.custom_name,
-                'specification': (line.item.spec if line.item else line.custom_spec) or '',
-                'unit': (line.item.get_unit_display() if line.item else line.custom_unit) or '件',
-                'qty': float(line.qty),
-                'unit_price': float(line.unit_price),
-                'line_amount': float(line.line_amount),
-            })
+            lines.append(
+                {
+                    'item_sku': line.item.sku if line.item else '',
+                    'item_name': line.item.name if line.item else line.custom_name,
+                    'specification': (line.item.spec if line.item else line.custom_spec) or '',
+                    'unit': (line.item.get_unit_display() if line.item else line.custom_unit) or '件',
+                    'qty': float(line.qty),
+                    'unit_price': float(line.unit_price),
+                    'line_amount': float(line.line_amount),
+                }
+            )
 
-        return Response({
-            'contract': SalesContractSerializer(contract).data,
-            'company': {
-                'name': company_config.get('name', ''),
-                'address': company_config.get('address', ''),
-                'phone': company_config.get('phone', ''),
-                'fax': company_config.get('fax', ''),
-                'bank_name': company_config.get('bank_name', ''),
-                'bank_account': company_config.get('bank_account', ''),
-            },
-            'customer': {
-                'name': contract.customer.name,
-                'address': contract.customer.address or '',
-                'contact': contract.customer.contact or '',
-                'phone': contract.customer.phone or '',
-            },
-            'lines': lines,
-        })
+        return Response(
+            {
+                'contract': SalesContractSerializer(contract).data,
+                'company': {
+                    'name': company_config.get('name', ''),
+                    'address': company_config.get('address', ''),
+                    'phone': company_config.get('phone', ''),
+                    'fax': company_config.get('fax', ''),
+                    'bank_name': company_config.get('bank_name', ''),
+                    'bank_account': company_config.get('bank_account', ''),
+                },
+                'customer': {
+                    'name': contract.customer.name,
+                    'address': contract.customer.address or '',
+                    'contact': contract.customer.contact or '',
+                    'phone': contract.customer.phone or '',
+                },
+                'lines': lines,
+            }
+        )
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         """审批合同 - 仅在无活跃工作流时允许直接审批."""
         contract = self.get_object()
         if contract.status not in ['DRAFT', 'PENDING']:
-            return Response(
-                {'error': '只能审批草稿或待审批状态的合同'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能审批草稿或待审批状态的合同'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 检查是否有活跃工作流
         workflow_error = self.check_workflow_allows_direct_action(contract, '审批')
@@ -1692,10 +1677,7 @@ class SalesContractViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTracki
         """签署合同."""
         contract = self.get_object()
         if contract.status != 'APPROVED':
-            return Response(
-                {'error': '只能签署已审批的合同'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能签署已审批的合同'}, status=status.HTTP_400_BAD_REQUEST)
 
         from django.utils import timezone
 

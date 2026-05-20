@@ -3,6 +3,7 @@
 Andon System
 MES异常管理功能
 """
+
 from datetime import date, timedelta
 
 from django.db import models
@@ -20,6 +21,7 @@ from apps.core.models import BaseModel
 
 class AndonType(BaseModel):
     """安灯类型"""
+
     CATEGORY_CHOICES = [
         ('QUALITY', '质量异常'),
         ('EQUIPMENT', '设备故障'),
@@ -31,12 +33,7 @@ class AndonType(BaseModel):
 
     name = models.CharField(max_length=100, verbose_name='类型名称')
     code = models.CharField(max_length=50, unique=True, verbose_name='类型编码')
-    category = models.CharField(
-        max_length=20,
-        choices=CATEGORY_CHOICES,
-        default='OTHER',
-        verbose_name='分类'
-    )
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='OTHER', verbose_name='分类')
 
     # 颜色标识
     color = models.CharField(max_length=20, default='#FF4D4F', verbose_name='颜色')
@@ -49,10 +46,7 @@ class AndonType(BaseModel):
     # 通知配置
     notify_roles = models.JSONField(default=list, blank=True, verbose_name='通知角色')
     notify_users = models.ManyToManyField(
-        'accounts.User',
-        blank=True,
-        related_name='andon_type_notifications',
-        verbose_name='通知人员'
+        'accounts.User', blank=True, related_name='andon_type_notifications', verbose_name='通知人员'
     )
 
     is_active = models.BooleanField(default=True, verbose_name='启用')
@@ -71,6 +65,7 @@ class AndonType(BaseModel):
 
 class AndonStation(BaseModel):
     """安灯工位"""
+
     name = models.CharField(max_length=100, verbose_name='工位名称')
     code = models.CharField(max_length=50, unique=True, verbose_name='工位编码')
 
@@ -81,7 +76,7 @@ class AndonStation(BaseModel):
         null=True,
         blank=True,
         related_name='andon_stations',
-        verbose_name='工作中心'
+        verbose_name='工作中心',
     )
     equipment = models.ForeignKey(
         'projects.Equipment',
@@ -89,7 +84,7 @@ class AndonStation(BaseModel):
         null=True,
         blank=True,
         related_name='andon_stations',
-        verbose_name='设备'
+        verbose_name='设备',
     )
 
     location = models.CharField(max_length=200, blank=True, verbose_name='位置')
@@ -103,7 +98,7 @@ class AndonStation(BaseModel):
             ('RED', '异常'),
         ],
         default='GREEN',
-        verbose_name='当前状态'
+        verbose_name='当前状态',
     )
 
     is_active = models.BooleanField(default=True, verbose_name='启用')
@@ -121,6 +116,7 @@ class AndonStation(BaseModel):
 
 class AndonCall(BaseModel):
     """安灯呼叫"""
+
     STATUS_CHOICES = [
         ('PENDING', '待响应'),
         ('RESPONDING', '响应中'),
@@ -141,31 +137,16 @@ class AndonCall(BaseModel):
 
     # 关联
     station = models.ForeignKey(
-        AndonStation,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='calls',
-        verbose_name='工位'
+        AndonStation, on_delete=models.SET_NULL, null=True, blank=True, related_name='calls', verbose_name='工位'
     )
     andon_type = models.ForeignKey(
-        AndonType,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='calls',
-        verbose_name='异常类型'
+        AndonType, on_delete=models.SET_NULL, null=True, blank=True, related_name='calls', verbose_name='异常类型'
     )
 
     # 呼叫信息
     title = models.CharField(max_length=200, verbose_name='异常标题')
     description = models.TextField(blank=True, verbose_name='异常描述')
-    priority = models.CharField(
-        max_length=20,
-        choices=PRIORITY_CHOICES,
-        default='MEDIUM',
-        verbose_name='优先级'
-    )
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='MEDIUM', verbose_name='优先级')
 
     # 呼叫人
     caller = models.ForeignKey(
@@ -174,7 +155,7 @@ class AndonCall(BaseModel):
         null=True,
         blank=True,
         related_name='andon_calls',
-        verbose_name='呼叫人'
+        verbose_name='呼叫人',
     )
     call_time = models.DateTimeField(default=timezone.now, verbose_name='呼叫时间')
 
@@ -185,7 +166,7 @@ class AndonCall(BaseModel):
         null=True,
         blank=True,
         related_name='responded_andon_calls',
-        verbose_name='响应人'
+        verbose_name='响应人',
     )
     response_time = models.DateTimeField(null=True, blank=True, verbose_name='响应时间')
 
@@ -196,18 +177,13 @@ class AndonCall(BaseModel):
         null=True,
         blank=True,
         related_name='resolved_andon_calls',
-        verbose_name='解决人'
+        verbose_name='解决人',
     )
     resolve_time = models.DateTimeField(null=True, blank=True, verbose_name='解决时间')
     resolution = models.TextField(blank=True, verbose_name='解决方案')
 
     # 状态
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
 
     # 时间统计(分钟)
     response_duration = models.IntegerField(null=True, blank=True, verbose_name='响应时长(分钟)')
@@ -221,7 +197,7 @@ class AndonCall(BaseModel):
         null=True,
         blank=True,
         related_name='andon_calls',
-        verbose_name='项目'
+        verbose_name='项目',
     )
     batch_no = models.CharField(max_length=50, blank=True, verbose_name='批次号')
 
@@ -240,6 +216,7 @@ class AndonCall(BaseModel):
     def save(self, *args, **kwargs):
         if not self.call_no:
             from apps.core.utils import generate_code
+
             self.call_no = generate_code('ADN')
 
         # 计算时长
@@ -260,11 +237,13 @@ class AndonCall(BaseModel):
                 self.station.current_status = 'RED'
             else:
                 # 检查是否有其他未解决的呼叫
-                has_pending = AndonCall.objects.filter(
-                    station=self.station,
-                    status__in=['PENDING', 'RESPONDING', 'PROCESSING'],
-                    is_deleted=False
-                ).exclude(pk=self.pk).exists()
+                has_pending = (
+                    AndonCall.objects.filter(
+                        station=self.station, status__in=['PENDING', 'RESPONDING', 'PROCESSING'], is_deleted=False
+                    )
+                    .exclude(pk=self.pk)
+                    .exists()
+                )
 
                 self.station.current_status = 'RED' if has_pending else 'GREEN'
             self.station.save()
@@ -272,12 +251,8 @@ class AndonCall(BaseModel):
 
 class AndonEscalation(BaseModel):
     """安灯升级"""
-    call = models.ForeignKey(
-        AndonCall,
-        on_delete=models.CASCADE,
-        related_name='escalations',
-        verbose_name='呼叫'
-    )
+
+    call = models.ForeignKey(AndonCall, on_delete=models.CASCADE, related_name='escalations', verbose_name='呼叫')
 
     level = models.IntegerField(default=1, verbose_name='升级级别')
     escalation_time = models.DateTimeField(default=timezone.now, verbose_name='升级时间')
@@ -288,7 +263,7 @@ class AndonEscalation(BaseModel):
         null=True,
         blank=True,
         related_name='escalated_andon_calls',
-        verbose_name='升级给'
+        verbose_name='升级给',
     )
     reason = models.TextField(blank=True, verbose_name='升级原因')
 
@@ -302,12 +277,8 @@ class AndonEscalation(BaseModel):
 
 class AndonAction(BaseModel):
     """安灯处理记录"""
-    call = models.ForeignKey(
-        AndonCall,
-        on_delete=models.CASCADE,
-        related_name='actions',
-        verbose_name='呼叫'
-    )
+
+    call = models.ForeignKey(AndonCall, on_delete=models.CASCADE, related_name='actions', verbose_name='呼叫')
 
     action_type = models.CharField(
         max_length=20,
@@ -319,16 +290,12 @@ class AndonAction(BaseModel):
             ('RESOLVE', '解决'),
             ('CLOSE', '关闭'),
         ],
-        verbose_name='操作类型'
+        verbose_name='操作类型',
     )
     action_time = models.DateTimeField(default=timezone.now, verbose_name='操作时间')
 
     actor = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='andon_actions',
-        verbose_name='操作人'
+        'accounts.User', on_delete=models.SET_NULL, null=True, related_name='andon_actions', verbose_name='操作人'
     )
 
     content = models.TextField(blank=True, verbose_name='操作内容')
@@ -344,6 +311,7 @@ class AndonAction(BaseModel):
 # =====================
 # Serializers
 # =====================
+
 
 class AndonTypeSerializer(serializers.ModelSerializer):
     category_display = serializers.CharField(source='get_category_display', read_only=True)
@@ -398,7 +366,14 @@ class AndonCallSerializer(serializers.ModelSerializer):
     class Meta:
         model = AndonCall
         fields = '__all__'
-        read_only_fields = ['created_by', 'updated_by', 'call_no', 'response_duration', 'resolve_duration', 'total_duration']
+        read_only_fields = [
+            'created_by',
+            'updated_by',
+            'call_no',
+            'response_duration',
+            'resolve_duration',
+            'total_duration',
+        ]
 
 
 class AndonCallListSerializer(serializers.ModelSerializer):
@@ -411,10 +386,21 @@ class AndonCallListSerializer(serializers.ModelSerializer):
     class Meta:
         model = AndonCall
         fields = [
-            'id', 'call_no', 'title', 'station', 'station_name',
-            'andon_type', 'type_name', 'priority', 'priority_display',
-            'status', 'status_display', 'caller_name', 'call_time',
-            'response_duration', 'total_duration'
+            'id',
+            'call_no',
+            'title',
+            'station',
+            'station_name',
+            'andon_type',
+            'type_name',
+            'priority',
+            'priority_display',
+            'status',
+            'status_display',
+            'caller_name',
+            'call_time',
+            'response_duration',
+            'total_duration',
         ]
 
 
@@ -422,8 +408,10 @@ class AndonCallListSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class AndonTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """安灯类型管理"""
+
     queryset = AndonType.objects.filter(is_deleted=False)
     serializer_class = AndonTypeSerializer
     permission_classes = [IsAuthenticated]
@@ -433,6 +421,7 @@ class AndonTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
 
 class AndonStationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """安灯工位管理"""
+
     queryset = AndonStation.objects.filter(is_deleted=False)
     serializer_class = AndonStationSerializer
     permission_classes = [IsAuthenticated]
@@ -450,28 +439,26 @@ class AndonStationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         for station in stations:
             # 获取当前未解决的呼叫
             active_call = AndonCall.objects.filter(
-                station=station,
-                status__in=['PENDING', 'RESPONDING', 'PROCESSING'],
-                is_deleted=False
+                station=station, status__in=['PENDING', 'RESPONDING', 'PROCESSING'], is_deleted=False
             ).first()
 
-            station_list.append({
-                'id': station.id,
-                'code': station.code,
-                'name': station.name,
-                'location': station.location,
-                'status': station.current_status,
-                'active_call': AndonCallListSerializer(active_call).data if active_call else None
-            })
+            station_list.append(
+                {
+                    'id': station.id,
+                    'code': station.code,
+                    'name': station.name,
+                    'location': station.location,
+                    'status': station.current_status,
+                    'active_call': AndonCallListSerializer(active_call).data if active_call else None,
+                }
+            )
 
-        return Response({
-            'summary': list(status_summary),
-            'stations': station_list
-        })
+        return Response({'summary': list(status_summary), 'stations': station_list})
 
 
 class AndonCallViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """安灯呼叫管理"""
+
     queryset = AndonCall.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'priority', 'station', 'andon_type', 'caller']
@@ -492,7 +479,7 @@ class AndonCallViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
             action_type='UPDATE',
             actor=self.request.user,
             content='创建安灯呼叫',
-            created_by=self.request.user
+            created_by=self.request.user,
         )
 
     @action(detail=True, methods=['post'])
@@ -508,11 +495,7 @@ class AndonCallViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
         call.save()
 
         AndonAction.objects.create(
-            call=call,
-            action_type='RESPONSE',
-            actor=request.user,
-            content='响应呼叫',
-            created_by=request.user
+            call=call, action_type='RESPONSE', actor=request.user, content='响应呼叫', created_by=request.user
         )
 
         return Response(self.get_serializer(call).data)
@@ -525,11 +508,7 @@ class AndonCallViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
         call.save()
 
         AndonAction.objects.create(
-            call=call,
-            action_type='UPDATE',
-            actor=request.user,
-            content='开始处理',
-            created_by=request.user
+            call=call, action_type='UPDATE', actor=request.user, content='开始处理', created_by=request.user
         )
 
         return Response(self.get_serializer(call).data)
@@ -550,7 +529,7 @@ class AndonCallViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
             action_type='RESOLVE',
             actor=request.user,
             content=f'解决问题: {call.resolution}',
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(self.get_serializer(call).data)
@@ -572,7 +551,7 @@ class AndonCallViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
             level=new_level,
             escalated_to_id=request.data.get('escalated_to'),
             reason=request.data.get('reason', ''),
-            created_by=request.user
+            created_by=request.user,
         )
 
         AndonAction.objects.create(
@@ -580,7 +559,7 @@ class AndonCallViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
             action_type='ESCALATE',
             actor=request.user,
             content=f'升级到级别{new_level}',
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(self.get_serializer(call).data)
@@ -597,7 +576,7 @@ class AndonCallViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
             action_type='CLOSE',
             actor=request.user,
             content=f'取消呼叫: {request.data.get("reason", "")}',
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(self.get_serializer(call).data)
@@ -605,9 +584,11 @@ class AndonCallViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
     @action(detail=False, methods=['get'])
     def pending(self, request):
         """待处理呼叫"""
-        calls = self.get_queryset().filter(
-            status__in=['PENDING', 'RESPONDING', 'PROCESSING']
-        ).order_by('-priority', 'call_time')
+        calls = (
+            self.get_queryset()
+            .filter(status__in=['PENDING', 'RESPONDING', 'PROCESSING'])
+            .order_by('-priority', 'call_time')
+        )
 
         return Response(AndonCallListSerializer(calls, many=True).data)
 
@@ -625,28 +606,27 @@ class AndonCallViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
 
         # 平均响应和解决时间
         avg_times = qs.filter(status='RESOLVED').aggregate(
-            avg_response=Avg('response_duration'),
-            avg_resolve=Avg('resolve_duration'),
-            avg_total=Avg('total_duration')
+            avg_response=Avg('response_duration'), avg_resolve=Avg('resolve_duration'), avg_total=Avg('total_duration')
         )
 
         # 每日趋势
-        daily_trend = qs.annotate(day=TruncDate('call_time')).values('day').annotate(
-            count=Count('id')
-        ).order_by('day')
+        daily_trend = qs.annotate(day=TruncDate('call_time')).values('day').annotate(count=Count('id')).order_by('day')
 
-        return Response({
-            'total': qs.count(),
-            'by_status': list(by_status),
-            'by_type': list(by_type),
-            'by_station': list(by_station),
-            'avg_times': avg_times,
-            'daily_trend': list(daily_trend)
-        })
+        return Response(
+            {
+                'total': qs.count(),
+                'by_status': list(by_status),
+                'by_type': list(by_type),
+                'by_station': list(by_station),
+                'avg_times': avg_times,
+                'daily_trend': list(daily_trend),
+            }
+        )
 
 
 class AndonActionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """安灯操作管理"""
+
     queryset = AndonAction.objects.filter(is_deleted=False)
     serializer_class = AndonActionSerializer
     permission_classes = [IsAuthenticated]

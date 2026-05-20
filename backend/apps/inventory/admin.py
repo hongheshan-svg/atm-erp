@@ -13,7 +13,17 @@ class StockAdmin(admin.ModelAdmin):
 
 @admin.register(StockMove)
 class StockMoveAdmin(admin.ModelAdmin):
-    list_display = ['move_no', 'item', 'warehouse_from', 'warehouse_to', 'qty', 'move_type', 'project', 'status', 'move_date']
+    list_display = [
+        'move_no',
+        'item',
+        'warehouse_from',
+        'warehouse_to',
+        'qty',
+        'move_type',
+        'project',
+        'status',
+        'move_date',
+    ]
     list_filter = ['move_type', 'status', 'move_date']
     search_fields = ['move_no', 'item__sku']
     ordering = ['-move_date', '-created_at']
@@ -31,4 +41,3 @@ class StockAdjustmentAdmin(admin.ModelAdmin):
     search_fields = ['adjustment_no']
     inlines = [StockAdjustmentLineInline]
     ordering = ['-created_at']
-

@@ -28,18 +28,25 @@ class UserAdmin(BaseUserAdmin):
     ordering = ['-date_joined']
 
     fieldsets = BaseUserAdmin.fieldsets + (
-        ('扩展信息', {
-            'fields': ('employee_id', 'phone', 'avatar', 'gender', 'birth_date',
-                      'department', 'role', 'position', 'hire_date')
-        }),
-        ('软删除', {
-            'fields': ('is_deleted', 'deleted_at')
-        }),
+        (
+            '扩展信息',
+            {
+                'fields': (
+                    'employee_id',
+                    'phone',
+                    'avatar',
+                    'gender',
+                    'birth_date',
+                    'department',
+                    'role',
+                    'position',
+                    'hire_date',
+                )
+            },
+        ),
+        ('软删除', {'fields': ('is_deleted', 'deleted_at')}),
     )
 
     add_fieldsets = BaseUserAdmin.add_fieldsets + (
-        ('扩展信息', {
-            'fields': ('employee_id', 'phone', 'department', 'role')
-        }),
+        ('扩展信息', {'fields': ('employee_id', 'phone', 'department', 'role')}),
     )
-

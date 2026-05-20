@@ -1,6 +1,7 @@
 """
 编码规则视图
 """
+
 from django.db.models import Count
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -16,6 +17,7 @@ class CodeRuleViewSet(viewsets.ModelViewSet):
     编码规则管理
     只有管理员可以操作
     """
+
     queryset = CodeRule.objects.all()
     serializer_class = CodeRuleSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
@@ -31,10 +33,7 @@ class CodeRuleViewSet(viewsets.ModelViewSet):
         rule.last_reset_date = None
         rule.save()
 
-        return Response({
-            'message': '序列号已重置',
-            'current_seq': rule.current_seq
-        })
+        return Response({'message': '序列号已重置', 'current_seq': rule.current_seq})
 
     @action(detail=True, methods=['post'])
     def generate_test_code(self, request, pk=None):
@@ -42,10 +41,7 @@ class CodeRuleViewSet(viewsets.ModelViewSet):
         rule = self.get_object()
         test_code = rule.generate_example()
 
-        return Response({
-            'test_code': test_code,
-            'message': '这是测试编码，不会保存到系统中'
-        })
+        return Response({'test_code': test_code, 'message': '这是测试编码，不会保存到系统中'})
 
     @action(detail=True, methods=['get'])
     def history(self, request, pk=None):
@@ -59,10 +55,7 @@ class CodeRuleViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def statistics(self, request):
         """统计信息"""
-        stats = CodeRule.objects.values('rule_type').annotate(
-            count=Count('id'),
-            total_generated=Count('history')
-        )
+        stats = CodeRule.objects.values('rule_type').annotate(count=Count('id'), total_generated=Count('history'))
 
         return Response(list(stats))
 
@@ -79,7 +72,7 @@ class CodeRuleViewSet(viewsets.ModelViewSet):
                 'seq_start': 1,
                 'reset_mode': 'YEARLY',
                 'separator': '-',
-                'description': '格式：PRJ-YYYYMM-0001'
+                'description': '格式：PRJ-YYYYMM-0001',
             },
             {
                 'rule_type': 'ITEM',
@@ -91,7 +84,7 @@ class CodeRuleViewSet(viewsets.ModelViewSet):
                 'reset_mode': 'NONE',
                 'separator': '',
                 'is_active': False,
-                'description': '⚠️ 物料编码使用特殊规则，不通过此处配置。\n规则：一级代码(1位)+二级代码(1位)+年份(2位)+流水号(6位)\n请在"物料管理"页面使用"生成编码"功能。'
+                'description': '⚠️ 物料编码使用特殊规则，不通过此处配置。\n规则：一级代码(1位)+二级代码(1位)+年份(2位)+流水号(6位)\n请在"物料管理"页面使用"生成编码"功能。',
             },
             {
                 'rule_type': 'PURCHASE_CONTRACT',
@@ -102,7 +95,7 @@ class CodeRuleViewSet(viewsets.ModelViewSet):
                 'seq_start': 1,
                 'reset_mode': 'YEARLY',
                 'separator': '',
-                'description': '格式：PC20250001'
+                'description': '格式：PC20250001',
             },
             {
                 'rule_type': 'SALES_CONTRACT',
@@ -113,7 +106,7 @@ class CodeRuleViewSet(viewsets.ModelViewSet):
                 'seq_start': 1,
                 'reset_mode': 'YEARLY',
                 'separator': '',
-                'description': '格式：SC20250001'
+                'description': '格式：SC20250001',
             },
             {
                 'rule_type': 'PURCHASE_ORDER',
@@ -124,7 +117,7 @@ class CodeRuleViewSet(viewsets.ModelViewSet):
                 'seq_start': 1,
                 'reset_mode': 'MONTHLY',
                 'separator': '-',
-                'description': '格式：PO-YYYYMMDD-0001'
+                'description': '格式：PO-YYYYMMDD-0001',
             },
             {
                 'rule_type': 'SALES_ORDER',
@@ -135,7 +128,7 @@ class CodeRuleViewSet(viewsets.ModelViewSet):
                 'seq_start': 1,
                 'reset_mode': 'MONTHLY',
                 'separator': '-',
-                'description': '格式：SO-YYYYMMDD-0001'
+                'description': '格式：SO-YYYYMMDD-0001',
             },
             {
                 'rule_type': 'BUG',
@@ -146,7 +139,7 @@ class CodeRuleViewSet(viewsets.ModelViewSet):
                 'seq_start': 1,
                 'reset_mode': 'YEARLY',
                 'separator': '',
-                'description': '格式：BUG2025000001'
+                'description': '格式：BUG2025000001',
             },
         ]
 
@@ -161,11 +154,7 @@ class CodeRuleViewSet(viewsets.ModelViewSet):
             else:
                 skipped_count += 1
 
-        return Response({
-            'message': '默认规则初始化完成',
-            'created': created_count,
-            'skipped': skipped_count
-        })
+        return Response({'message': '默认规则初始化完成', 'created': created_count, 'skipped': skipped_count})
 
 
 class CodeHistoryViewSet(viewsets.ReadOnlyModelViewSet):
@@ -173,6 +162,7 @@ class CodeHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     编码历史查询
     只读接口
     """
+
     queryset = CodeHistory.objects.all()
     serializer_class = CodeHistorySerializer
     permission_classes = [IsAuthenticated]
@@ -180,4 +170,3 @@ class CodeHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     search_fields = ['generated_code']
     ordering_fields = ['generated_at']
     ordering = ['-generated_at']
-

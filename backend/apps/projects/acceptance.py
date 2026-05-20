@@ -2,6 +2,7 @@
 验收管理模块 - 针对非标自动化行业
 包含：出厂验收(FAT)、现场验收(SAT)、验收检查项、验收报告
 """
+
 from django.db import models
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
@@ -14,8 +15,10 @@ from apps.core.models import BaseModel
 # 模型定义
 # =============================================================================
 
+
 class AcceptanceTemplate(BaseModel):
     """验收模板"""
+
     TYPE_CHOICES = [
         ('FAT', '出厂验收'),
         ('SAT', '现场验收'),
@@ -40,11 +43,12 @@ class AcceptanceTemplate(BaseModel):
         ordering = ['acceptance_type', 'code']
 
     def __str__(self):
-        return f"{self.code} - {self.name}"
+        return f'{self.code} - {self.name}'
 
 
 class Acceptance(BaseModel):
     """验收单"""
+
     TYPE_CHOICES = [
         ('FAT', '出厂验收'),
         ('SAT', '现场验收'),
@@ -75,16 +79,10 @@ class Acceptance(BaseModel):
 
     # 关联信息
     project = models.ForeignKey(
-        'projects.Project',
-        on_delete=models.CASCADE,
-        related_name='acceptances',
-        verbose_name='项目'
+        'projects.Project', on_delete=models.CASCADE, related_name='acceptances', verbose_name='项目'
     )
     customer = models.ForeignKey(
-        'masterdata.Customer',
-        on_delete=models.PROTECT,
-        related_name='acceptances',
-        verbose_name='客户'
+        'masterdata.Customer', on_delete=models.PROTECT, related_name='acceptances', verbose_name='客户'
     )
     equipment = models.ForeignKey(
         'projects.EquipmentArchive',
@@ -92,14 +90,10 @@ class Acceptance(BaseModel):
         null=True,
         blank=True,
         related_name='acceptances',
-        verbose_name='设备'
+        verbose_name='设备',
     )
     template = models.ForeignKey(
-        AcceptanceTemplate,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='验收模板'
+        AcceptanceTemplate, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='验收模板'
     )
 
     # 时间信息
@@ -111,10 +105,7 @@ class Acceptance(BaseModel):
 
     # 人员
     our_participants = models.ManyToManyField(
-        'accounts.User',
-        related_name='participated_acceptances',
-        blank=True,
-        verbose_name='我方参与人员'
+        'accounts.User', related_name='participated_acceptances', blank=True, verbose_name='我方参与人员'
     )
     customer_participants = models.TextField(blank=True, verbose_name='客户参与人员')
 
@@ -137,7 +128,7 @@ class Acceptance(BaseModel):
         null=True,
         blank=True,
         related_name='signed_acceptances',
-        verbose_name='我方签字人'
+        verbose_name='我方签字人',
     )
     our_sign_date = models.DateField(null=True, blank=True, verbose_name='我方签字日期')
     customer_signer = models.CharField(max_length=100, blank=True, verbose_name='客户签字人')
@@ -153,7 +144,7 @@ class Acceptance(BaseModel):
         ordering = ['-planned_date']
 
     def __str__(self):
-        return f"{self.acceptance_no} - {self.name}"
+        return f'{self.acceptance_no} - {self.name}'
 
     def calculate_pass_rate(self):
         """计算通过率"""
@@ -166,6 +157,7 @@ class Acceptance(BaseModel):
 
 class AcceptanceCheckItem(BaseModel):
     """验收检查项"""
+
     RESULT_CHOICES = [
         ('PENDING', '待检查'),
         ('PASS', '通过'),
@@ -174,10 +166,7 @@ class AcceptanceCheckItem(BaseModel):
     ]
 
     acceptance = models.ForeignKey(
-        Acceptance,
-        on_delete=models.CASCADE,
-        related_name='check_items',
-        verbose_name='验收单'
+        Acceptance, on_delete=models.CASCADE, related_name='check_items', verbose_name='验收单'
     )
 
     # 检查项信息
@@ -199,7 +188,7 @@ class AcceptanceCheckItem(BaseModel):
         null=True,
         blank=True,
         related_name='checked_items',
-        verbose_name='检查人'
+        verbose_name='检查人',
     )
     check_time = models.DateTimeField(null=True, blank=True, verbose_name='检查时间')
 
@@ -213,11 +202,12 @@ class AcceptanceCheckItem(BaseModel):
         ordering = ['acceptance', 'category', 'sequence']
 
     def __str__(self):
-        return f"{self.acceptance.acceptance_no} - {self.name}"
+        return f'{self.acceptance.acceptance_no} - {self.name}'
 
 
 class AcceptanceIssue(BaseModel):
     """验收问题"""
+
     SEVERITY_CHOICES = [
         ('CRITICAL', '严重'),
         ('MAJOR', '主要'),
@@ -232,19 +222,14 @@ class AcceptanceIssue(BaseModel):
         ('WAIVED', '已豁免'),
     ]
 
-    acceptance = models.ForeignKey(
-        Acceptance,
-        on_delete=models.CASCADE,
-        related_name='issues',
-        verbose_name='验收单'
-    )
+    acceptance = models.ForeignKey(Acceptance, on_delete=models.CASCADE, related_name='issues', verbose_name='验收单')
     check_item = models.ForeignKey(
         AcceptanceCheckItem,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='issues',
-        verbose_name='相关检查项'
+        verbose_name='相关检查项',
     )
 
     issue_no = models.CharField(max_length=50, verbose_name='问题编号')
@@ -262,7 +247,7 @@ class AcceptanceIssue(BaseModel):
         null=True,
         blank=True,
         related_name='assigned_issues',
-        verbose_name='负责人'
+        verbose_name='负责人',
     )
     deadline = models.DateField(null=True, blank=True, verbose_name='整改期限')
     resolved_date = models.DateField(null=True, blank=True, verbose_name='解决日期')
@@ -277,12 +262,13 @@ class AcceptanceIssue(BaseModel):
         ordering = ['-severity', 'status']
 
     def __str__(self):
-        return f"{self.issue_no} - {self.title}"
+        return f'{self.issue_no} - {self.title}'
 
 
 # =============================================================================
 # 序列化器
 # =============================================================================
+
 
 class AcceptanceTemplateSerializer(serializers.ModelSerializer):
     type_display = serializers.CharField(source='get_acceptance_type_display', read_only=True)
@@ -346,6 +332,7 @@ class AcceptanceSerializer(serializers.ModelSerializer):
 
 class AcceptanceListSerializer(serializers.ModelSerializer):
     """列表用简化序列化器"""
+
     type_display = serializers.CharField(source='get_acceptance_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     result_display = serializers.CharField(source='get_result_display', read_only=True)
@@ -358,11 +345,27 @@ class AcceptanceListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Acceptance
         fields = [
-            'id', 'acceptance_no', 'name', 'acceptance_type', 'type_display',
-            'project', 'project_name', 'customer', 'customer_name',
-            'equipment', 'equipment_no', 'planned_date', 'actual_date',
-            'location', 'status', 'status_display', 'result', 'result_display',
-            'pass_rate', 'issue_count', 'created_at'
+            'id',
+            'acceptance_no',
+            'name',
+            'acceptance_type',
+            'type_display',
+            'project',
+            'project_name',
+            'customer',
+            'customer_name',
+            'equipment',
+            'equipment_no',
+            'planned_date',
+            'actual_date',
+            'location',
+            'status',
+            'status_display',
+            'result',
+            'result_display',
+            'pass_rate',
+            'issue_count',
+            'created_at',
         ]
 
     def get_pass_rate(self, obj):
@@ -376,8 +379,10 @@ class AcceptanceListSerializer(serializers.ModelSerializer):
 # 视图集
 # =============================================================================
 
+
 class AcceptanceTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """验收模板管理"""
+
     queryset = AcceptanceTemplate.objects.all()
     serializer_class = AcceptanceTemplateSerializer
     filterset_fields = ['acceptance_type', 'is_active', 'is_deleted']
@@ -397,6 +402,7 @@ class AcceptanceTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
 
 class AcceptanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """验收单管理"""
+
     queryset = Acceptance.objects.all()
     filterset_fields = ['project', 'customer', 'equipment', 'acceptance_type', 'status', 'result', 'is_deleted']
     search_fields = ['acceptance_no', 'name', 'location']
@@ -408,9 +414,7 @@ class AcceptanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         return AcceptanceSerializer
 
     def get_queryset(self):
-        return super().get_queryset().select_related(
-            'project', 'customer', 'equipment', 'our_signer'
-        )
+        return super().get_queryset().select_related('project', 'customer', 'equipment', 'our_signer')
 
     @action(detail=True, methods=['post'])
     def apply_template(self, request, pk=None):
@@ -435,7 +439,7 @@ class AcceptanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                         sequence=sequence,
                         name=item_data.get('name', ''),
                         criteria=item_data.get('criteria', ''),
-                        weight=item_data.get('weight', 10)
+                        weight=item_data.get('weight', 10),
                     )
 
             return Response(AcceptanceSerializer(acceptance).data)
@@ -450,6 +454,7 @@ class AcceptanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             return Response({'error': '只有草稿或已计划状态才能开始'}, status=status.HTTP_400_BAD_REQUEST)
 
         from datetime import date
+
         acceptance.status = 'IN_PROGRESS'
         acceptance.actual_date = date.today()
         acceptance.save()
@@ -478,11 +483,7 @@ class AcceptanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         if result not in ['PASS', 'CONDITIONAL_PASS', 'FAIL']:
             return Response({'error': '无效的验收结果'}, status=status.HTTP_400_BAD_REQUEST)
 
-        status_map = {
-            'PASS': 'PASSED',
-            'CONDITIONAL_PASS': 'CONDITIONAL',
-            'FAIL': 'FAILED'
-        }
+        status_map = {'PASS': 'PASSED', 'CONDITIONAL_PASS': 'CONDITIONAL', 'FAIL': 'FAILED'}
 
         acceptance.result = result
         acceptance.status = status_map[result]
@@ -533,7 +534,9 @@ class AcceptanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 'failed_items': failed_items,
                 'na_items': na_items,
                 'pending_items': pending_items,
-                'pass_rate': round(passed_items / (total_items - na_items) * 100, 2) if (total_items - na_items) > 0 else 0,
+                'pass_rate': round(passed_items / (total_items - na_items) * 100, 2)
+                if (total_items - na_items) > 0
+                else 0,
             },
             'categories': categories,
             'issues': {
@@ -542,7 +545,7 @@ class AcceptanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 'critical': issues.filter(severity='CRITICAL').count(),
                 'major': issues.filter(severity='MAJOR').count(),
                 'minor': issues.filter(severity='MINOR').count(),
-            }
+            },
         }
 
         return Response(report_data)
@@ -585,6 +588,7 @@ class AcceptanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
 
 class AcceptanceCheckItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """验收检查项管理"""
+
     queryset = AcceptanceCheckItem.objects.all()
     serializer_class = AcceptanceCheckItemSerializer
     filterset_fields = ['acceptance', 'category', 'result', 'is_deleted']
@@ -597,6 +601,7 @@ class AcceptanceCheckItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
         item = self.get_object()
 
         from django.utils import timezone
+
         item.result = request.data.get('result', 'PENDING')
         item.actual_value = request.data.get('actual_value', '')
         item.remarks = request.data.get('remarks', '')
@@ -609,8 +614,8 @@ class AcceptanceCheckItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
             AcceptanceIssue.objects.create(
                 acceptance=item.acceptance,
                 check_item=item,
-                issue_no=f"ISS-{item.acceptance.acceptance_no}-{item.sequence:03d}",
-                title=f"检查项不通过: {item.name}",
+                issue_no=f'ISS-{item.acceptance.acceptance_no}-{item.sequence:03d}',
+                title=f'检查项不通过: {item.name}',
                 description=request.data.get('issue_description', item.remarks),
                 severity=request.data.get('severity', 'MAJOR'),
             )
@@ -620,6 +625,7 @@ class AcceptanceCheckItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
 
 class AcceptanceIssueViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """验收问题管理"""
+
     queryset = AcceptanceIssue.objects.all()
     serializer_class = AcceptanceIssueSerializer
     filterset_fields = ['acceptance', 'severity', 'status', 'responsible_person', 'is_deleted']
@@ -634,6 +640,7 @@ class AcceptanceIssueViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
             return Response({'error': '只有待处理或处理中状态才能解决'}, status=status.HTTP_400_BAD_REQUEST)
 
         from datetime import date
+
         issue.status = 'RESOLVED'
         issue.root_cause = request.data.get('root_cause', '')
         issue.solution = request.data.get('solution', '')

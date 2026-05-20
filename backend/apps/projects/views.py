@@ -1,6 +1,7 @@
 """
 Views for projects app.
 """
+
 from io import BytesIO
 
 import pandas as pd
@@ -54,6 +55,7 @@ class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewse
     """
     ViewSet for Project management.
     """
+
     permission_module = 'projects'
     permission_resource = 'project'
 
@@ -68,10 +70,7 @@ class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewse
         """提交项目审批 - 审批步骤由流程配置决定"""
         project = self.get_object()
         if project.status not in ['DRAFT', 'PLANNING', 'REJECTED']:
-            return Response(
-                {'error': '只能提交草稿、规划中或已拒绝状态的项目'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能提交草稿、规划中或已拒绝状态的项目'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 使用项目预算作为金额
         amount = project.budget or 0
@@ -84,37 +83,43 @@ class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewse
                 business_id=project.id,
                 business_no=project.code,
                 submitter=request.user,
-                amount=amount
+                amount=amount,
             )
 
             if instance:
                 project.status = 'PENDING'
                 project.save()
-                return Response({
-                    **ProjectSerializer(project).data,
-                    'workflow_started': True,
-                    'workflow_id': instance.id,
-                    'message': '已提交审批，请在审批中心查看审批进度'
-                })
+                return Response(
+                    {
+                        **ProjectSerializer(project).data,
+                        'workflow_started': True,
+                        'workflow_id': instance.id,
+                        'message': '已提交审批，请在审批中心查看审批进度',
+                    }
+                )
             else:
                 # 未配置审批流程，直接激活
                 project.status = 'IN_PROGRESS'
                 project.save()
-                return Response({
-                    **ProjectSerializer(project).data,
-                    'workflow_started': False,
-                    'message': error or '未配置审批流程，项目已直接启动'
-                })
+                return Response(
+                    {
+                        **ProjectSerializer(project).data,
+                        'workflow_started': False,
+                        'message': error or '未配置审批流程，项目已直接启动',
+                    }
+                )
 
         except Exception as e:
             # 审批模块不可用，直接激活
             project.status = 'IN_PROGRESS'
             project.save()
-            return Response({
-                **ProjectSerializer(project).data,
-                'workflow_started': False,
-                'message': f'项目已启动，但工作流服务异常: {e}'
-            })
+            return Response(
+                {
+                    **ProjectSerializer(project).data,
+                    'workflow_started': False,
+                    'message': f'项目已启动，但工作流服务异常: {e}',
+                }
+            )
 
     @action(detail=True, methods=['post'])
     def change_status(self, request, pk=None):
@@ -123,10 +128,7 @@ class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewse
         new_status = request.data.get('status')
 
         if new_status not in dict(Project.STATUS_CHOICES):
-            return Response(
-                {'error': '无效的状态'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '无效的状态'}, status=status.HTTP_400_BAD_REQUEST)
 
         project.status = new_status
         project.save()
@@ -153,28 +155,31 @@ class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewse
         bom_items = project.bom_items.filter(is_deleted=False)
         bom_count = bom_items.count()
 
-        return Response({
-            'project': ProjectSerializer(project).data,
-            'task_stats': {
-                'total': total_tasks,
-                'completed': completed_tasks,
-                'progress': round(task_progress, 2),
-            },
-            'member_stats': {
-                'count': members.count(),
-                'allocated_hours': float(total_allocated_hours),
-                'actual_hours': float(total_actual_hours),
-            },
-            'bom_stats': {
-                'count': bom_count,
-            },
-        })
+        return Response(
+            {
+                'project': ProjectSerializer(project).data,
+                'task_stats': {
+                    'total': total_tasks,
+                    'completed': completed_tasks,
+                    'progress': round(task_progress, 2),
+                },
+                'member_stats': {
+                    'count': members.count(),
+                    'allocated_hours': float(total_allocated_hours),
+                    'actual_hours': float(total_actual_hours),
+                },
+                'bom_stats': {
+                    'count': bom_count,
+                },
+            }
+        )
 
 
 class ProjectMemberViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for ProjectMember management.
     """
+
     queryset = ProjectMember.objects.all()
     serializer_class = ProjectMemberSerializer
     filterset_fields = ['project', 'user', 'is_active', 'is_deleted']
@@ -188,10 +193,7 @@ class ProjectMemberViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         actual_hours = request.data.get('actual_hours')
 
         if actual_hours is None:
-            return Response(
-                {'error': '请提供actual_hours'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供actual_hours'}, status=status.HTTP_400_BAD_REQUEST)
 
         member.actual_hours = actual_hours
         member.save()
@@ -203,6 +205,7 @@ class ProjectTaskViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
     """
     ViewSet for ProjectTask management.
     """
+
     queryset = ProjectTask.objects.all()
     serializer_class = ProjectTaskSerializer
     filterset_fields = ['project', 'assignee', 'status', 'parent', 'is_deleted']
@@ -214,15 +217,9 @@ class ProjectTaskViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
         """Get tasks as tree structure for a project."""
         project_id = request.query_params.get('project')
         if not project_id:
-            return Response(
-                {'error': '请提供project参数'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供project参数'}, status=status.HTTP_400_BAD_REQUEST)
 
-        tasks = self.get_queryset().filter(
-            project_id=project_id,
-            is_deleted=False
-        )
+        tasks = self.get_queryset().filter(project_id=project_id, is_deleted=False)
 
         def build_tree(parent_id=None):
             result = []
@@ -263,20 +260,23 @@ class ProjectTaskViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
         task = self.get_object()
 
         # 汇总该任务下所有已审批的工时记录
-        total_hours = TimeLog.objects.filter(
-            task=task,
-            status='APPROVED',
-            is_deleted=False
-        ).aggregate(total=Sum('hours'))['total'] or 0
+        total_hours = (
+            TimeLog.objects.filter(task=task, status='APPROVED', is_deleted=False).aggregate(total=Sum('hours'))[
+                'total'
+            ]
+            or 0
+        )
 
         task.actual_hours = total_hours
         task.save(update_fields=['actual_hours'])
 
-        return Response({
-            'message': '工时已重新计算',
-            'actual_hours': float(task.actual_hours),
-            'task': ProjectTaskSerializer(task).data
-        })
+        return Response(
+            {
+                'message': '工时已重新计算',
+                'actual_hours': float(task.actual_hours),
+                'task': ProjectTaskSerializer(task).data,
+            }
+        )
 
     @action(detail=False, methods=['post'])
     def batch_recalculate_hours(self, request):
@@ -289,27 +289,26 @@ class ProjectTaskViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
 
         updated_count = 0
         for task in queryset:
-            total_hours = TimeLog.objects.filter(
-                task=task,
-                status='APPROVED',
-                is_deleted=False
-            ).aggregate(total=Sum('hours'))['total'] or 0
+            total_hours = (
+                TimeLog.objects.filter(task=task, status='APPROVED', is_deleted=False).aggregate(total=Sum('hours'))[
+                    'total'
+                ]
+                or 0
+            )
 
             if task.actual_hours != total_hours:
                 task.actual_hours = total_hours
                 task.save(update_fields=['actual_hours'])
                 updated_count += 1
 
-        return Response({
-            'message': f'已重新计算 {updated_count} 个任务的工时',
-            'updated_count': updated_count
-        })
+        return Response({'message': f'已重新计算 {updated_count} 个任务的工时', 'updated_count': updated_count})
 
 
 class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for ProjectBOM management.
     """
+
     queryset = ProjectBOM.objects.all()
     serializer_class = ProjectBOMSerializer
     filterset_fields = ['project', 'item', 'is_deleted', 'quote_status', 'order_status', 'has_drawing']
@@ -348,17 +347,11 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         items_data = request.data.get('items', [])
 
         if not project_id or not items_data:
-            return Response(
-                {'error': '请提供project和items'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供project和items'}, status=status.HTTP_400_BAD_REQUEST)
 
         created_items = []
         for item_data in items_data:
-            serializer = self.get_serializer(data={
-                'project': project_id,
-                **item_data
-            })
+            serializer = self.get_serializer(data={'project': project_id, **item_data})
             serializer.is_valid(raise_exception=True)
             serializer.save(created_by=request.user)
             created_items.append(serializer.data)
@@ -371,25 +364,19 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         project_id = request.query_params.get('project')
 
         if not project_id:
-            return Response(
-                {'error': '请提供project参数'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供project参数'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             project = Project.objects.get(id=project_id)
         except Project.DoesNotExist:
-            return Response(
-                {'error': '项目不存在'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '项目不存在'}, status=status.HTTP_400_BAD_REQUEST)
 
-        bom_items = self.get_queryset().filter(
-            project_id=project_id,
-            is_deleted=False
-        ).select_related(
-            'item', 'item__category', 'requester',
-            'work_center', 'process', 'drawing', 'purchase_order'
+        bom_items = (
+            self.get_queryset()
+            .filter(project_id=project_id, is_deleted=False)
+            .select_related(
+                'item', 'item__category', 'requester', 'work_center', 'process', 'drawing', 'purchase_order'
+            )
         )
 
         output = BytesIO()
@@ -398,67 +385,57 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             worksheet = workbook.add_worksheet('BOM清单')
 
             # Define formats
-            title_format = workbook.add_format({
-                'bold': True,
-                'font_size': 14,
-                'align': 'left',
-                'valign': 'vcenter'
-            })
-            header_format = workbook.add_format({
-                'bold': True,
-                'bg_color': '#4472C4',
-                'font_color': 'white',
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter'
-            })
-            required_header = workbook.add_format({
-                'bold': True,
-                'bg_color': '#C00000',
-                'font_color': 'white',
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter'
-            })
-            yellow_header = workbook.add_format({
-                'bold': True,
-                'bg_color': '#FFFF00',
-                'font_color': 'black',
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter'
-            })
-            green_header = workbook.add_format({
-                'bold': True,
-                'bg_color': '#92D050',
-                'font_color': 'black',
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter'
-            })
-            data_format = workbook.add_format({
-                'border': 1,
-                'align': 'left',
-                'valign': 'vcenter'
-            })
-            number_format = workbook.add_format({
-                'border': 1,
-                'align': 'right',
-                'valign': 'vcenter',
-                'num_format': '#,##0.00'
-            })
-            money_format = workbook.add_format({
-                'border': 1,
-                'align': 'right',
-                'valign': 'vcenter',
-                'num_format': '¥#,##0.00'
-            })
-            date_format = workbook.add_format({
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter',
-                'num_format': 'yyyy-mm-dd'
-            })
+            title_format = workbook.add_format({'bold': True, 'font_size': 14, 'align': 'left', 'valign': 'vcenter'})
+            header_format = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#4472C4',
+                    'font_color': 'white',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                }
+            )
+            required_header = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#C00000',
+                    'font_color': 'white',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                }
+            )
+            yellow_header = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#FFFF00',
+                    'font_color': 'black',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                }
+            )
+            green_header = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#92D050',
+                    'font_color': 'black',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                }
+            )
+            data_format = workbook.add_format({'border': 1, 'align': 'left', 'valign': 'vcenter'})
+            number_format = workbook.add_format(
+                {'border': 1, 'align': 'right', 'valign': 'vcenter', 'num_format': '#,##0.00'}
+            )
+            money_format = workbook.add_format(
+                {'border': 1, 'align': 'right', 'valign': 'vcenter', 'num_format': '¥#,##0.00'}
+            )
+            date_format = workbook.add_format(
+                {'border': 1, 'align': 'center', 'valign': 'vcenter', 'num_format': 'yyyy-mm-dd'}
+            )
 
             # Column headers: 精简为用户要求的字段
             headers = [
@@ -477,6 +454,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
 
             # Write title
             from datetime import datetime
+
             last_col = len(headers) - 1
             worksheet.merge_range(0, 0, 0, last_col, f'项目BOM清单 - {project.name} ({project.code})', title_format)
             worksheet.write(1, 0, f'导出时间: {datetime.now().strftime("%Y-%m-%d %H:%M")}')
@@ -508,26 +486,34 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 has_drawing_display = bom.get_has_drawing_display()
 
                 col = 0
-                worksheet.write(row, col, idx, data_format); col += 1
-                worksheet.write(row, col, bom.item.sku, data_format); col += 1
-                worksheet.write(row, col, has_drawing_display, data_format); col += 1
-                worksheet.write(row, col, item_type_display, data_format); col += 1
-                worksheet.write(row, col, bom.item.name, data_format); col += 1
-                worksheet.write(row, col, bom.item.specification or '', data_format); col += 1
-                worksheet.write(row, col, bom.version_brand or bom.item.brand or '', data_format); col += 1
-                worksheet.write(row, col, bom.item.get_unit_display(), data_format); col += 1
-                worksheet.write(row, col, planned, number_format); col += 1
-                worksheet.write(row, col, bom.required_date.strftime('%Y-%m-%d') if bom.required_date else '', data_format); col += 1
-                worksheet.write(row, col, bom.requester.get_full_name() if bom.requester else '', data_format); col += 1
+                worksheet.write(row, col, idx, data_format)
+                col += 1
+                worksheet.write(row, col, bom.item.sku, data_format)
+                col += 1
+                worksheet.write(row, col, has_drawing_display, data_format)
+                col += 1
+                worksheet.write(row, col, item_type_display, data_format)
+                col += 1
+                worksheet.write(row, col, bom.item.name, data_format)
+                col += 1
+                worksheet.write(row, col, bom.item.specification or '', data_format)
+                col += 1
+                worksheet.write(row, col, bom.version_brand or bom.item.brand or '', data_format)
+                col += 1
+                worksheet.write(row, col, bom.item.get_unit_display(), data_format)
+                col += 1
+                worksheet.write(row, col, planned, number_format)
+                col += 1
+                worksheet.write(
+                    row, col, bom.required_date.strftime('%Y-%m-%d') if bom.required_date else '', data_format
+                )
+                col += 1
+                worksheet.write(row, col, bom.requester.get_full_name() if bom.requester else '', data_format)
+                col += 1
                 row += 1
 
             # Write totals
-            total_format = workbook.add_format({
-                'bold': True,
-                'border': 1,
-                'bg_color': '#E2EFDA',
-                'align': 'right'
-            })
+            total_format = workbook.add_format({'bold': True, 'border': 1, 'bg_color': '#E2EFDA', 'align': 'right'})
             worksheet.write(row, 6, '合计:', total_format)  # 位于数量列前一列
             worksheet.write(row, 7, total_planned, total_format)  # 数量合计
             for col in range(8, len(headers)):
@@ -543,8 +529,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         output.seek(0)
 
         response = HttpResponse(
-            output.read(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         response['Content-Disposition'] = f'attachment; filename=BOM_{project.code}.xlsx'
         return response
@@ -561,63 +546,67 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             worksheet = workbook.add_worksheet('BOM导入数据')
 
             # Define formats
-            header_format = workbook.add_format({
-                'bold': True,
-                'bg_color': '#4472C4',
-                'font_color': 'white',
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter',
-                'text_wrap': True
-            })
-            required_format = workbook.add_format({
-                'bold': True,
-                'bg_color': '#C00000',
-                'font_color': 'white',
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter',
-                'text_wrap': True
-            })
-            readonly_format = workbook.add_format({
-                'bold': True,
-                'bg_color': '#808080',
-                'font_color': 'white',
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter',
-                'text_wrap': True
-            })
-            yellow_format = workbook.add_format({
-                'bold': True,
-                'bg_color': '#FFFF00',
-                'font_color': 'black',
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter',
-                'text_wrap': True
-            })
-            green_format = workbook.add_format({
-                'bold': True,
-                'bg_color': '#92D050',
-                'font_color': 'black',
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter',
-                'text_wrap': True
-            })
-            example_format = workbook.add_format({
-                'bg_color': '#FFF2CC',
-                'border': 1,
-                'italic': True,
-                'font_color': '#666666'
-            })
-            readonly_example_format = workbook.add_format({
-                'bg_color': '#E0E0E0',
-                'border': 1,
-                'italic': True,
-                'font_color': '#999999'
-            })
+            header_format = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#4472C4',
+                    'font_color': 'white',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                    'text_wrap': True,
+                }
+            )
+            required_format = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#C00000',
+                    'font_color': 'white',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                    'text_wrap': True,
+                }
+            )
+            readonly_format = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#808080',
+                    'font_color': 'white',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                    'text_wrap': True,
+                }
+            )
+            yellow_format = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#FFFF00',
+                    'font_color': 'black',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                    'text_wrap': True,
+                }
+            )
+            green_format = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#92D050',
+                    'font_color': 'black',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                    'text_wrap': True,
+                }
+            )
+            example_format = workbook.add_format(
+                {'bg_color': '#FFF2CC', 'border': 1, 'italic': True, 'font_color': '#666666'}
+            )
+            readonly_example_format = workbook.add_format(
+                {'bg_color': '#E0E0E0', 'border': 1, 'italic': True, 'font_color': '#999999'}
+            )
 
             # Column headers: 精简版导入模板（与用户需求一致）
             headers = [
@@ -651,34 +640,34 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
 
             # Write example data (row 1) - 精简列
             example_data = [
-                (1, readonly_example_format),                    # 序号
-                ('MAT001', example_format),                      # 物料编码*
-                ('有图', example_format),                        # 有图/无图
-                ('机械类', example_format),                      # 物料类型
-                ('(系统自动填充)', readonly_example_format),      # 物料名称
-                ('(系统自动填充)', readonly_example_format),      # 规格型号
-                ('V1.0', example_format),                        # 版本/品牌
-                ('(自动)', readonly_example_format),             # 单位
-                (100, example_format),                           # 数量*
-                ('2026-01-15', example_format),                  # 需求日期
-                ('张三', example_format),                        # 申请人
+                (1, readonly_example_format),  # 序号
+                ('MAT001', example_format),  # 物料编码*
+                ('有图', example_format),  # 有图/无图
+                ('机械类', example_format),  # 物料类型
+                ('(系统自动填充)', readonly_example_format),  # 物料名称
+                ('(系统自动填充)', readonly_example_format),  # 规格型号
+                ('V1.0', example_format),  # 版本/品牌
+                ('(自动)', readonly_example_format),  # 单位
+                (100, example_format),  # 数量*
+                ('2026-01-15', example_format),  # 需求日期
+                ('张三', example_format),  # 申请人
             ]
             for col, (value, fmt) in enumerate(example_data):
                 worksheet.write(1, col, value, fmt)
 
             # Write second example row
             example_data2 = [
-                (2, readonly_example_format),                    # 序号
-                ('MAT002', example_format),                      # 物料编码*
-                ('无图', example_format),                        # 有图/无图
-                ('电气类', example_format),                      # 物料类型
-                ('(系统自动填充)', readonly_example_format),      # 物料名称
-                ('(系统自动填充)', readonly_example_format),      # 规格型号
-                ('V2.0', example_format),                        # 版本/品牌
-                ('(自动)', readonly_example_format),             # 单位
-                (50, example_format),                            # 数量*
-                ('2026-01-20', example_format),                  # 需求日期
-                ('李四', example_format),                        # 申请人
+                (2, readonly_example_format),  # 序号
+                ('MAT002', example_format),  # 物料编码*
+                ('无图', example_format),  # 有图/无图
+                ('电气类', example_format),  # 物料类型
+                ('(系统自动填充)', readonly_example_format),  # 物料名称
+                ('(系统自动填充)', readonly_example_format),  # 规格型号
+                ('V2.0', example_format),  # 版本/品牌
+                ('(自动)', readonly_example_format),  # 单位
+                (50, example_format),  # 数量*
+                ('2026-01-20', example_format),  # 需求日期
+                ('李四', example_format),  # 申请人
             ]
             for col, (value, fmt) in enumerate(example_data2):
                 worksheet.write(2, col, value, fmt)
@@ -692,16 +681,8 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             # ========== Sheet 2: 填写说明 ==========
             help_sheet = workbook.add_worksheet('填写说明')
 
-            title_format = workbook.add_format({
-                'bold': True,
-                'font_size': 16,
-                'font_color': '#4472C4'
-            })
-            section_format = workbook.add_format({
-                'bold': True,
-                'font_size': 12,
-                'font_color': '#C00000'
-            })
+            title_format = workbook.add_format({'bold': True, 'font_size': 16, 'font_color': '#4472C4'})
+            section_format = workbook.add_format({'bold': True, 'font_size': 12, 'font_color': '#C00000'})
             bold_format = workbook.add_format({'bold': True})
 
             help_content = [
@@ -770,8 +751,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         output.seek(0)
 
         response = HttpResponse(
-            output.read(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         response['Content-Disposition'] = 'attachment; filename=BOM_import_template.xlsx'
         return response
@@ -785,32 +765,20 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         auto_create_items = request.data.get('auto_create_items', 'false').lower() == 'true'
 
         if not file:
-            return Response(
-                {'error': '请上传Excel文件'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请上传Excel文件'}, status=status.HTTP_400_BAD_REQUEST)
 
         if not project_id:
-            return Response(
-                {'error': '请选择项目'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请选择项目'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             project = Project.objects.get(id=project_id)
         except Project.DoesNotExist:
-            return Response(
-                {'error': '项目不存在'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '项目不存在'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             df = pd.read_excel(file)
         except Exception as e:
-            return Response(
-                {'error': f'Excel文件读取失败: {str(e)}'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': f'Excel文件读取失败: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Find SKU column (support multiple names)
         sku_column = None
@@ -820,10 +788,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 break
 
         if not sku_column:
-            return Response(
-                {'error': 'Excel文件必须包含"物料编码"列'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'Excel文件必须包含"物料编码"列'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Find quantity column
         qty_column = None
@@ -833,10 +798,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 break
 
         if not qty_column:
-            return Response(
-                {'error': 'Excel文件必须包含"计划数量"或"数量"列'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'Excel文件必须包含"计划数量"或"数量"列'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Find optional columns with helper function
         def find_column(df, keywords):
@@ -911,19 +873,32 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             except Item.DoesNotExist:
                 if auto_create_items:
                     # 自动创建物料
-                    item_name = str(row[item_name_column]).strip() if item_name_column and pd.notna(row.get(item_name_column)) else f'物料-{sku}'
+                    item_name = (
+                        str(row[item_name_column]).strip()
+                        if item_name_column and pd.notna(row.get(item_name_column))
+                        else f'物料-{sku}'
+                    )
                     spec = str(row[spec_column]).strip() if spec_column and pd.notna(row.get(spec_column)) else ''
                     unit_val = str(row[unit_column]).strip() if unit_column and pd.notna(row.get(unit_column)) else '个'
-                    item_type_val = str(row[item_type_column]).strip() if item_type_column and pd.notna(row.get(item_type_column)) else ''
-                    brand_val = str(row[brand_column]).strip() if brand_column and pd.notna(row.get(brand_column)) else ''
+                    item_type_val = (
+                        str(row[item_type_column]).strip()
+                        if item_type_column and pd.notna(row.get(item_type_column))
+                        else ''
+                    )
+                    brand_val = (
+                        str(row[brand_column]).strip() if brand_column and pd.notna(row.get(brand_column)) else ''
+                    )
 
                     # 推断物料属性
                     item_property = 'PURCHASED'  # 默认外购
                     if item_property_column and pd.notna(row.get(item_property_column)):
                         prop_val = str(row[item_property_column]).strip()
-                        if '自制' in prop_val: item_property = 'SELF_MADE'
-                        elif '外协' in prop_val: item_property = 'OUTSOURCED'
-                        elif '标准' in prop_val: item_property = 'STANDARD'
+                        if '自制' in prop_val:
+                            item_property = 'SELF_MADE'
+                        elif '外协' in prop_val:
+                            item_property = 'OUTSOURCED'
+                        elif '标准' in prop_val:
+                            item_property = 'STANDARD'
 
                     item = Item.objects.create(
                         sku=sku,
@@ -935,7 +910,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                         manufacturer=brand_val,
                         is_active=True,
                         created_by=request.user,
-                        updated_by=request.user
+                        updated_by=request.user,
                     )
                     items_created_count += 1
                 else:
@@ -980,6 +955,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                     elif isinstance(date_val, (int, float)):
                         # Excel日期数值格式转换 (Excel epoch: 1899-12-30)
                         from datetime import timedelta
+
                         excel_epoch = datetime(1899, 12, 30)
                         required_date = (excel_epoch + timedelta(days=int(date_val))).date()
                     else:
@@ -999,11 +975,14 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             if not requester_name:
                 error_rows.append({'row': row_num, 'error': '申请人为空'})
                 continue
-            requester = User.objects.filter(
-                Q(username=requester_name) |
-                Q(first_name__icontains=requester_name) |
-                Q(last_name__icontains=requester_name)
-            ).first() or None
+            requester = (
+                User.objects.filter(
+                    Q(username=requester_name)
+                    | Q(first_name__icontains=requester_name)
+                    | Q(last_name__icontains=requester_name)
+                ).first()
+                or None
+            )
 
             prechecked_rows.append((row_num, row, sku, item, planned_qty, required_date, requester))
 
@@ -1015,9 +994,20 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 {
                     'error': f'校验失败，未导入任何数据。问题示例：{preview}',
                     'errors': error_rows,
-                    'required_columns': ['物料编码', '有图/无图', '物料类型', '物料名称', '规格型号', '版本/品牌', '单位', '数量', '需求日期', '申请人']
+                    'required_columns': [
+                        '物料编码',
+                        '有图/无图',
+                        '物料类型',
+                        '物料名称',
+                        '规格型号',
+                        '版本/品牌',
+                        '单位',
+                        '数量',
+                        '需求日期',
+                        '申请人',
+                    ],
                 },
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # 通过校验后再处理写入
@@ -1050,7 +1040,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 # 版本/品牌：始终以物料主数据为准，忽略文件中的差异
                 brand = item.brand or ''
                 model = getattr(item, 'model', '') or ''
-                version_brand = f"{brand}/{model}".strip('/ ')
+                version_brand = f'{brand}/{model}'.strip('/ ')
 
                 # Get has_drawing (optional)
                 has_drawing = 'PENDING'
@@ -1068,8 +1058,13 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 item_property = None
                 if item_property_column and pd.notna(row.get(item_property_column)):
                     prop_map = {
-                        '标准件': 'STANDARD', '外购件': 'PURCHASED', '外协件': 'OUTSOURCED',
-                        '自制件': 'SELF_MADE', '易耗品': 'CONSUMABLE', '虚拟件': 'VIRTUAL', '组件': 'ASSEMBLY'
+                        '标准件': 'STANDARD',
+                        '外购件': 'PURCHASED',
+                        '外协件': 'OUTSOURCED',
+                        '自制件': 'SELF_MADE',
+                        '易耗品': 'CONSUMABLE',
+                        '虚拟件': 'VIRTUAL',
+                        '组件': 'ASSEMBLY',
                     }
                     prop_val = str(row[item_property_column]).strip()
                     item_property = prop_map.get(prop_val, None)
@@ -1078,8 +1073,11 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 bom_status = 'DRAFT'
                 if status_column and pd.notna(row.get(status_column)):
                     status_map = {
-                        '草稿': 'DRAFT', '已确认': 'CONFIRMED', '已下发': 'ISSUED',
-                        '已完成': 'COMPLETED', '已取消': 'CANCELLED'
+                        '草稿': 'DRAFT',
+                        '已确认': 'CONFIRMED',
+                        '已下发': 'ISSUED',
+                        '已完成': 'COMPLETED',
+                        '已取消': 'CANCELLED',
                     }
                     status_val = str(row[status_column]).strip()
                     bom_status = status_map.get(status_val, 'DRAFT')
@@ -1104,22 +1102,44 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                     is_long_lead = val in ['是', 'Y', 'Yes', 'TRUE', 'True', '1']
 
                 # 简单字符串字段
-                drawing_no = str(row[drawing_no_column]).strip() if drawing_no_column and pd.notna(row.get(drawing_no_column)) else ''
-                drawing_version = str(row[drawing_version_column]).strip() if drawing_version_column and pd.notna(row.get(drawing_version_column)) else ''
-                material_spec = str(row[material_spec_column]).strip() if material_spec_column and pd.notna(row.get(material_spec_column)) else ''
-                surface_treatment = str(row[surface_treatment_column]).strip() if surface_treatment_column and pd.notna(row.get(surface_treatment_column)) else ''
-                function_module = str(row[function_module_column]).strip() if function_module_column and pd.notna(row.get(function_module_column)) else ''
+                drawing_no = (
+                    str(row[drawing_no_column]).strip()
+                    if drawing_no_column and pd.notna(row.get(drawing_no_column))
+                    else ''
+                )
+                drawing_version = (
+                    str(row[drawing_version_column]).strip()
+                    if drawing_version_column and pd.notna(row.get(drawing_version_column))
+                    else ''
+                )
+                material_spec = (
+                    str(row[material_spec_column]).strip()
+                    if material_spec_column and pd.notna(row.get(material_spec_column))
+                    else ''
+                )
+                surface_treatment = (
+                    str(row[surface_treatment_column]).strip()
+                    if surface_treatment_column and pd.notna(row.get(surface_treatment_column))
+                    else ''
+                )
+                function_module = (
+                    str(row[function_module_column]).strip()
+                    if function_module_column and pd.notna(row.get(function_module_column))
+                    else ''
+                )
 
                 # 工作中心和工序（查找对象）
                 work_center = None
                 if work_center_column and pd.notna(row.get(work_center_column)):
                     from apps.production.scheduling import WorkCenter as WC
+
                     wc_name = str(row[work_center_column]).strip()
                     work_center = WC.objects.filter(name=wc_name).first()
 
                 process = None
                 if process_column and pd.notna(row.get(process_column)):
                     from apps.production.models import ProductionProcess as PP
+
                     process_name = str(row[process_column]).strip()
                     process = PP.objects.filter(name=process_name, project=project).first()
 
@@ -1159,11 +1179,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 # ===== 新增字段处理结束 =====
 
                 # Check if BOM item exists
-                existing_bom = ProjectBOM.objects.filter(
-                    project=project,
-                    item=item,
-                    is_deleted=False
-                ).first()
+                existing_bom = ProjectBOM.objects.filter(project=project, item=item, is_deleted=False).first()
 
                 if existing_bom:
                     if update_existing:
@@ -1212,10 +1228,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                         existing_bom.save()
                         updated_count += 1
                     else:
-                        error_rows.append({
-                            'row': row_num,
-                            'error': f'物料 {sku} 已存在于BOM中'
-                        })
+                        error_rows.append({'row': row_num, 'error': f'物料 {sku} 已存在于BOM中'})
                 else:
                     ProjectBOM.objects.create(
                         project=project,
@@ -1245,7 +1258,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                         target_cost=target_cost,
                         scrap_rate=scrap_rate,
                         latest_order_date=latest_order_date,
-                        created_by=request.user
+                        created_by=request.user,
                     )
                     created_count += 1
 
@@ -1255,14 +1268,16 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         if items_created_count > 0:
             msg_parts.append(f'自动创建物料 {items_created_count} 个')
 
-        return Response({
-            'message': f'导入完成: {", ".join(msg_parts)}',
-            'created': created_count,
-            'updated': updated_count,
-            'skip_count': skip_count,
-            'items_created': items_created_count,
-            'errors': error_rows
-        })
+        return Response(
+            {
+                'message': f'导入完成: {", ".join(msg_parts)}',
+                'created': created_count,
+                'updated': updated_count,
+                'skip_count': skip_count,
+                'items_created': items_created_count,
+                'errors': error_rows,
+            }
+        )
 
     @action(detail=False, methods=['post'])
     def export_for_quote(self, request):
@@ -1274,31 +1289,22 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         bom_ids = request.data.get('bom_ids', [])
 
         if not project_id:
-            return Response(
-                {'error': '请提供project参数'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供project参数'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             project = Project.objects.get(id=project_id)
         except Project.DoesNotExist:
-            return Response(
-                {'error': '项目不存在'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '项目不存在'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 获取BOM物料
         if bom_ids:
-            bom_items = self.get_queryset().filter(
-                id__in=bom_ids,
-                project_id=project_id,
-                is_deleted=False
-            ).select_related('item')
+            bom_items = (
+                self.get_queryset()
+                .filter(id__in=bom_ids, project_id=project_id, is_deleted=False)
+                .select_related('item')
+            )
         else:
-            bom_items = self.get_queryset().filter(
-                project_id=project_id,
-                is_deleted=False
-            ).select_related('item')
+            bom_items = self.get_queryset().filter(project_id=project_id, is_deleted=False).select_related('item')
 
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -1306,50 +1312,45 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             worksheet = workbook.add_worksheet('物料需求清单')
 
             # Define formats
-            title_format = workbook.add_format({
-                'bold': True,
-                'font_size': 14,
-                'align': 'left',
-                'valign': 'vcenter'
-            })
-            readonly_header = workbook.add_format({
-                'bold': True,
-                'bg_color': '#808080',
-                'font_color': 'white',
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter'
-            })
-            ref_header = workbook.add_format({
-                'bold': True,
-                'bg_color': '#92D050',  # 绿色 - 参考信息
-                'font_color': 'black',
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter'
-            })
-            input_header = workbook.add_format({
-                'bold': True,
-                'bg_color': '#FFC000',  # 橙色 - 需要填写
-                'font_color': 'black',
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter'
-            })
-            data_format = workbook.add_format({
-                'border': 1,
-                'align': 'left',
-                'valign': 'vcenter'
-            })
-            number_format = workbook.add_format({
-                'border': 1,
-                'align': 'right',
-                'valign': 'vcenter',
-                'num_format': '#,##0.00'
-            })
+            title_format = workbook.add_format({'bold': True, 'font_size': 14, 'align': 'left', 'valign': 'vcenter'})
+            readonly_header = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#808080',
+                    'font_color': 'white',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                }
+            )
+            ref_header = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#92D050',  # 绿色 - 参考信息
+                    'font_color': 'black',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                }
+            )
+            input_header = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#FFC000',  # 橙色 - 需要填写
+                    'font_color': 'black',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                }
+            )
+            data_format = workbook.add_format({'border': 1, 'align': 'left', 'valign': 'vcenter'})
+            number_format = workbook.add_format(
+                {'border': 1, 'align': 'right', 'valign': 'vcenter', 'num_format': '#,##0.00'}
+            )
 
             # Headers
             from datetime import datetime
+
             headers = [
                 ('序号', 6, 'readonly'),
                 ('项目号', 12, 'readonly'),
@@ -1377,11 +1378,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             worksheet.write(2, 0, '说明: 灰色=只读, 绿色=历史参考, 橙色=需要填写', data_format)
 
             # Write headers
-            format_map = {
-                'readonly': readonly_header,
-                'ref': ref_header,
-                'input': input_header
-            }
+            format_map = {'readonly': readonly_header, 'ref': ref_header, 'input': input_header}
             for col, (header, width, htype) in enumerate(headers):
                 fmt = format_map[htype]
                 worksheet.write(4, col, header, fmt)
@@ -1392,10 +1389,15 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             for idx, bom in enumerate(bom_items, 1):
                 # 查找历史采购记录（最近一次）
                 from apps.purchase.models import PurchaseOrderLine
-                last_po_line = PurchaseOrderLine.objects.filter(
-                    item=bom.item,
-                    po__status__in=['CONFIRMED', 'COMPLETED', 'PARTIAL']
-                ).select_related('po__supplier').order_by('-po__order_date').first()
+
+                last_po_line = (
+                    PurchaseOrderLine.objects.filter(
+                        item=bom.item, po__status__in=['CONFIRMED', 'COMPLETED', 'PARTIAL']
+                    )
+                    .select_related('po__supplier')
+                    .order_by('-po__order_date')
+                    .first()
+                )
 
                 history_price = ''
                 history_supplier = ''
@@ -1412,27 +1414,43 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 # 版本/品牌
                 brand = bom.item.brand or '' if bom.item else ''
                 model = bom.item.model or '' if bom.item else ''
-                version_brand = f"{brand}/{model}" if brand or model else ''
+                version_brand = f'{brand}/{model}' if brand or model else ''
                 version_brand = version_brand.strip('/')
 
                 col = 0
-                worksheet.write(row, col, idx, data_format); col += 1
-                worksheet.write(row, col, project.code, data_format); col += 1
-                worksheet.write(row, col, bom.item.sku if bom.item else '', data_format); col += 1
-                worksheet.write(row, col, has_drawing_display, data_format); col += 1
-                worksheet.write(row, col, item_type_display, data_format); col += 1
-                worksheet.write(row, col, bom.item.name if bom.item else '', data_format); col += 1
-                worksheet.write(row, col, bom.item.specification if bom.item else '', data_format); col += 1
-                worksheet.write(row, col, version_brand, data_format); col += 1
-                worksheet.write(row, col, bom.item.get_unit_display() if bom.item else '', data_format); col += 1
-                worksheet.write(row, col, float(bom.planned_qty), number_format); col += 1
-                worksheet.write(row, col, history_price, number_format); col += 1
-                worksheet.write(row, col, history_supplier, data_format); col += 1
+                worksheet.write(row, col, idx, data_format)
+                col += 1
+                worksheet.write(row, col, project.code, data_format)
+                col += 1
+                worksheet.write(row, col, bom.item.sku if bom.item else '', data_format)
+                col += 1
+                worksheet.write(row, col, has_drawing_display, data_format)
+                col += 1
+                worksheet.write(row, col, item_type_display, data_format)
+                col += 1
+                worksheet.write(row, col, bom.item.name if bom.item else '', data_format)
+                col += 1
+                worksheet.write(row, col, bom.item.specification if bom.item else '', data_format)
+                col += 1
+                worksheet.write(row, col, version_brand, data_format)
+                col += 1
+                worksheet.write(row, col, bom.item.get_unit_display() if bom.item else '', data_format)
+                col += 1
+                worksheet.write(row, col, float(bom.planned_qty), number_format)
+                col += 1
+                worksheet.write(row, col, history_price, number_format)
+                col += 1
+                worksheet.write(row, col, history_supplier, data_format)
+                col += 1
                 # 以下是需要填写的列，留空
-                worksheet.write(row, col, '', data_format); col += 1  # 供应商
-                worksheet.write(row, col, '', number_format); col += 1  # 单价
-                worksheet.write(row, col, '', data_format); col += 1  # 付款方式
-                worksheet.write(row, col, '', data_format); col += 1  # 账期
+                worksheet.write(row, col, '', data_format)
+                col += 1  # 供应商
+                worksheet.write(row, col, '', number_format)
+                col += 1  # 单价
+                worksheet.write(row, col, '', data_format)
+                col += 1  # 付款方式
+                worksheet.write(row, col, '', data_format)
+                col += 1  # 账期
                 worksheet.write(row, col, '', data_format)  # 备注
 
                 row += 1
@@ -1442,8 +1460,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
 
         output.seek(0)
         response = HttpResponse(
-            output.read(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         response['Content-Disposition'] = f'attachment; filename=Material_Request_{project.code}.xlsx'
         return response
@@ -1458,25 +1475,19 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         project_id = request.query_params.get('project')
 
         if not project_id:
-            return Response(
-                {'error': '请提供project参数'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供project参数'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             project = Project.objects.get(id=project_id)
         except Project.DoesNotExist:
-            return Response(
-                {'error': '项目不存在'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '项目不存在'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 只获取未报价的物料（quote_status = 'NOT_QUOTED'）
-        bom_items = self.get_queryset().filter(
-            project_id=project_id,
-            is_deleted=False,
-            quote_status='NOT_QUOTED'
-        ).select_related('item', 'quote_supplier')
+        bom_items = (
+            self.get_queryset()
+            .filter(project_id=project_id, is_deleted=False, quote_status='NOT_QUOTED')
+            .select_related('item', 'quote_supplier')
+        )
 
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -1484,56 +1495,48 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             worksheet = workbook.add_worksheet('询价BOM清单')
 
             # Define formats
-            title_format = workbook.add_format({
-                'bold': True,
-                'font_size': 14,
-                'align': 'left',
-                'valign': 'vcenter'
-            })
-            header_format = workbook.add_format({
-                'bold': True,
-                'bg_color': '#4472C4',
-                'font_color': 'white',
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter'
-            })
-            readonly_header = workbook.add_format({
-                'bold': True,
-                'bg_color': '#808080',
-                'font_color': 'white',
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter'
-            })
-            input_header = workbook.add_format({
-                'bold': True,
-                'bg_color': '#FFC000',
-                'font_color': 'black',
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter'
-            })
-            data_format = workbook.add_format({
-                'border': 1,
-                'align': 'left',
-                'valign': 'vcenter'
-            })
-            number_format = workbook.add_format({
-                'border': 1,
-                'align': 'right',
-                'valign': 'vcenter',
-                'num_format': '#,##0.00'
-            })
-            money_format = workbook.add_format({
-                'border': 1,
-                'align': 'right',
-                'valign': 'vcenter',
-                'num_format': '#,##0.0000'
-            })
+            title_format = workbook.add_format({'bold': True, 'font_size': 14, 'align': 'left', 'valign': 'vcenter'})
+            header_format = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#4472C4',
+                    'font_color': 'white',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                }
+            )
+            readonly_header = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#808080',
+                    'font_color': 'white',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                }
+            )
+            input_header = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#FFC000',
+                    'font_color': 'black',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                }
+            )
+            data_format = workbook.add_format({'border': 1, 'align': 'left', 'valign': 'vcenter'})
+            number_format = workbook.add_format(
+                {'border': 1, 'align': 'right', 'valign': 'vcenter', 'num_format': '#,##0.00'}
+            )
+            money_format = workbook.add_format(
+                {'border': 1, 'align': 'right', 'valign': 'vcenter', 'num_format': '#,##0.0000'}
+            )
 
             # Write title
             from datetime import datetime
+
             headers = [
                 ('序号', 6, 'readonly'),
                 ('物料编码', 15, 'readonly'),
@@ -1576,21 +1579,40 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 has_drawing_display = bom.get_has_drawing_display()
 
                 col = 0
-                worksheet.write(row, col, idx, data_format); col += 1
-                worksheet.write(row, col, bom.item.sku, data_format); col += 1
-                worksheet.write(row, col, has_drawing_display, data_format); col += 1
-                worksheet.write(row, col, item_type_display, data_format); col += 1
-                worksheet.write(row, col, bom.item.name, data_format); col += 1
-                worksheet.write(row, col, bom.item.specification or '', data_format); col += 1
-                worksheet.write(row, col, bom.version_brand or f"{bom.item.brand or ''}/{bom.item.model or ''}".strip('/'), data_format); col += 1
-                worksheet.write(row, col, bom.item.get_unit_display(), data_format); col += 1
-                worksheet.write(row, col, planned, number_format); col += 1
+                worksheet.write(row, col, idx, data_format)
+                col += 1
+                worksheet.write(row, col, bom.item.sku, data_format)
+                col += 1
+                worksheet.write(row, col, has_drawing_display, data_format)
+                col += 1
+                worksheet.write(row, col, item_type_display, data_format)
+                col += 1
+                worksheet.write(row, col, bom.item.name, data_format)
+                col += 1
+                worksheet.write(row, col, bom.item.specification or '', data_format)
+                col += 1
+                worksheet.write(
+                    row,
+                    col,
+                    bom.version_brand or f"{bom.item.brand or ''}/{bom.item.model or ''}".strip('/'),
+                    data_format,
+                )
+                col += 1
+                worksheet.write(row, col, bom.item.get_unit_display(), data_format)
+                col += 1
+                worksheet.write(row, col, planned, number_format)
+                col += 1
                 # 以下为待填写的报价信息（留空）
-                worksheet.write(row, col, '', data_format); col += 1  # 供应商名称
-                worksheet.write(row, col, '', money_format); col += 1  # 含税单价
-                worksheet.write(row, col, '', money_format); col += 1  # 未税单价
-                worksheet.write(row, col, '', data_format); col += 1  # 税率
-                worksheet.write(row, col, '', data_format); col += 1  # 交期
+                worksheet.write(row, col, '', data_format)
+                col += 1  # 供应商名称
+                worksheet.write(row, col, '', money_format)
+                col += 1  # 含税单价
+                worksheet.write(row, col, '', money_format)
+                col += 1  # 未税单价
+                worksheet.write(row, col, '', data_format)
+                col += 1  # 税率
+                worksheet.write(row, col, '', data_format)
+                col += 1  # 交期
                 row += 1
 
             # Set row heights
@@ -1603,8 +1625,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         output.seek(0)
 
         response = HttpResponse(
-            output.read(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         response['Content-Disposition'] = f'attachment; filename=Quote_BOM_{project.code}.xlsx'
         return response
@@ -1617,34 +1638,26 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         导入成功后将物料标记为已询价状态
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         file = request.FILES.get('file')
         project_id = request.data.get('project') or request.POST.get('project')
 
-        logger.info(f"import_quote_bom called: file={file}, project_id={project_id}")
-        logger.info(f"request.data keys: {list(request.data.keys())}")
-        logger.info(f"request.FILES keys: {list(request.FILES.keys())}")
+        logger.info(f'import_quote_bom called: file={file}, project_id={project_id}')
+        logger.info(f'request.data keys: {list(request.data.keys())}')
+        logger.info(f'request.FILES keys: {list(request.FILES.keys())}')
 
         if not file:
-            return Response(
-                {'error': '请上传Excel文件'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请上传Excel文件'}, status=status.HTTP_400_BAD_REQUEST)
 
         if not project_id:
-            return Response(
-                {'error': '请选择项目'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请选择项目'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             project = Project.objects.get(id=project_id)
         except Project.DoesNotExist:
-            return Response(
-                {'error': '项目不存在'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '项目不存在'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             # 先读取Excel文件，尝试找到正确的列标题行
@@ -1668,13 +1681,10 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 file.seek(0)
                 df = pd.read_excel(file)
 
-            logger.info(f"Excel columns: {list(df.columns)}")
+            logger.info(f'Excel columns: {list(df.columns)}')
         except Exception as e:
-            logger.error(f"Excel读取失败: {str(e)}")
-            return Response(
-                {'error': f'Excel文件读取失败: {str(e)}'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            logger.error(f'Excel读取失败: {str(e)}')
+            return Response({'error': f'Excel文件读取失败: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Find columns
         def find_column(df, keywords):
@@ -1693,17 +1703,11 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         delivery_days_column = find_column(df, ['交期', '交货天数'])
 
         if not sku_column:
-            return Response(
-                {'error': 'Excel文件必须包含"物料编码"列'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'Excel文件必须包含"物料编码"列'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 获取项目所有BOM物料编码
         project_bom_skus = set(
-            ProjectBOM.objects.filter(
-                project=project,
-                is_deleted=False
-            ).values_list('item__sku', flat=True)
+            ProjectBOM.objects.filter(project=project, is_deleted=False).values_list('item__sku', flat=True)
         )
 
         # 第一遍校验：检查所有物料编码是否在项目BOM中
@@ -1723,15 +1727,13 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
 
             # 检查物料编码是否在项目BOM中
             if sku not in project_bom_skus:
-                error_rows.append({
-                    'row': row_num,
-                    'sku': sku,
-                    'error': f'物料编码 {sku} 不在该项目的BOM清单中'
-                })
+                error_rows.append({'row': row_num, 'sku': sku, 'error': f'物料编码 {sku} 不在该项目的BOM清单中'})
                 continue
 
             # 检查是否有报价信息（至少要有供应商或价格）
-            supplier_name = str(row[supplier_column]).strip() if supplier_column and pd.notna(row.get(supplier_column)) else ''
+            supplier_name = (
+                str(row[supplier_column]).strip() if supplier_column and pd.notna(row.get(supplier_column)) else ''
+            )
             price_with_tax = None
             price_without_tax = None
             tax_rate = None
@@ -1763,22 +1765,22 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
 
             # 必须至少有含税单价或未税单价
             if price_with_tax is None and price_without_tax is None:
-                error_rows.append({
-                    'row': row_num,
-                    'sku': sku,
-                    'error': f'物料 {sku} 缺少价格信息（含税单价或未税单价至少填写一项）'
-                })
+                error_rows.append(
+                    {'row': row_num, 'sku': sku, 'error': f'物料 {sku} 缺少价格信息（含税单价或未税单价至少填写一项）'}
+                )
                 continue
 
-            valid_rows.append({
-                'row_num': row_num,
-                'sku': sku,
-                'supplier_name': supplier_name,
-                'price_with_tax': price_with_tax,
-                'price_without_tax': price_without_tax,
-                'tax_rate': tax_rate,
-                'delivery_days': delivery_days
-            })
+            valid_rows.append(
+                {
+                    'row_num': row_num,
+                    'sku': sku,
+                    'supplier_name': supplier_name,
+                    'price_with_tax': price_with_tax,
+                    'price_without_tax': price_without_tax,
+                    'tax_rate': tax_rate,
+                    'delivery_days': delivery_days,
+                }
+            )
 
         # 如果有错误，拒绝整个导入
         if error_rows:
@@ -1787,16 +1789,13 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 {
                     'error': f'校验失败，未导入任何数据。问题示例：{preview}',
                     'errors': error_rows,
-                    'total_errors': len(error_rows)
+                    'total_errors': len(error_rows),
                 },
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         if not valid_rows:
-            return Response(
-                {'error': '没有找到有效的报价数据'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '没有找到有效的报价数据'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 校验通过，开始更新BOM
         from datetime import date
@@ -1812,16 +1811,11 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 quote_supplier = None
                 if row_data['supplier_name']:
                     quote_supplier = Supplier.objects.filter(
-                        Q(name__icontains=row_data['supplier_name']) |
-                        Q(code__icontains=row_data['supplier_name'])
+                        Q(name__icontains=row_data['supplier_name']) | Q(code__icontains=row_data['supplier_name'])
                     ).first()
 
                 # 更新BOM项
-                bom_item = ProjectBOM.objects.filter(
-                    project=project,
-                    item__sku=sku,
-                    is_deleted=False
-                ).first()
+                bom_item = ProjectBOM.objects.filter(project=project, item__sku=sku, is_deleted=False).first()
 
                 if bom_item:
                     bom_item.quote_status = 'QUOTED'
@@ -1834,28 +1828,25 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                     bom_item.save()
                     updated_count += 1
 
-        return Response({
-            'message': f'询价导入成功: 已更新 {updated_count} 条物料的报价信息',
-            'updated': updated_count,
-            'total_rows': len(valid_rows)
-        })
+        return Response(
+            {
+                'message': f'询价导入成功: 已更新 {updated_count} 条物料的报价信息',
+                'updated': updated_count,
+                'total_rows': len(valid_rows),
+            }
+        )
 
     @action(detail=False, methods=['get'])
     def pending_quote_count(self, request):
         """获取待询价物料数量"""
         project_id = request.query_params.get('project')
 
-        queryset = self.get_queryset().filter(
-            is_deleted=False,
-            quote_status='NOT_QUOTED'
-        )
+        queryset = self.get_queryset().filter(is_deleted=False, quote_status='NOT_QUOTED')
 
         if project_id:
             queryset = queryset.filter(project_id=project_id)
 
-        return Response({
-            'count': queryset.count()
-        })
+        return Response({'count': queryset.count()})
 
     @action(detail=False, methods=['post'])
     def generate_purchase_request(self, request):
@@ -1870,24 +1861,18 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         required_date = request.data.get('required_date')
 
         if not project_id:
-            return Response(
-                {'error': '请提供项目ID'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供项目ID'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             project = Project.objects.get(id=project_id)
         except Project.DoesNotExist:
-            return Response(
-                {'error': '项目不存在'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '项目不存在'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Get BOM items to convert - 只获取已询价的物料
         bom_queryset = ProjectBOM.objects.filter(
             project=project,
             is_deleted=False,
-            quote_status='QUOTED'  # 只允许已询价的物料
+            quote_status='QUOTED',  # 只允许已询价的物料
         ).select_related('item', 'quote_supplier')
 
         if item_ids:
@@ -1896,16 +1881,14 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         # 检查是否有未询价的物料被选中
         if item_ids:
             not_quoted_items = ProjectBOM.objects.filter(
-                project=project,
-                is_deleted=False,
-                item_id__in=item_ids
+                project=project, is_deleted=False, item_id__in=item_ids
             ).exclude(quote_status='QUOTED')
 
             if not_quoted_items.exists():
                 not_quoted_skus = list(not_quoted_items.values_list('item__sku', flat=True)[:5])
                 return Response(
                     {'error': f'以下物料尚未询价，无法生成采购申请: {", ".join(not_quoted_skus)}'},
-                    status=status.HTTP_400_BAD_REQUEST
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
         # Filter items that need to be purchased (planned > actual)
@@ -1913,15 +1896,11 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         for bom in bom_queryset:
             needed_qty = bom.planned_qty - bom.actual_qty
             if needed_qty > 0:
-                bom_items.append({
-                    'bom': bom,
-                    'needed_qty': needed_qty
-                })
+                bom_items.append({'bom': bom, 'needed_qty': needed_qty})
 
         if not bom_items:
             return Response(
-                {'error': '没有需要采购的物料（计划数量已满足或物料未询价）'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': '没有需要采购的物料（计划数量已满足或物料未询价）'}, status=status.HTTP_400_BAD_REQUEST
             )
 
         with transaction.atomic():
@@ -1931,7 +1910,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 requestor=request.user,
                 required_date=required_date or project.end_date,
                 notes=f'从项目 {project.code} BOM自动生成',
-                created_by=request.user
+                created_by=request.user,
             )
 
             total_amount = 0
@@ -1953,7 +1932,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                     project=project,
                     supplier=supplier,
                     notes=f'BOM计划: {bom.planned_qty}, 已用: {bom.actual_qty}, 询价交期: {bom.quote_delivery_days or "-"}天',
-                    created_by=request.user
+                    created_by=request.user,
                 )
                 total_amount += line_amount
 
@@ -1961,10 +1940,14 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             pr.save()
 
         from apps.purchase.serializers import PurchaseRequestSerializer
-        return Response({
-            'message': f'已生成采购申请 {pr.request_no}，包含 {len(bom_items)} 项物料',
-            'purchase_request': PurchaseRequestSerializer(pr).data
-        }, status=status.HTTP_201_CREATED)
+
+        return Response(
+            {
+                'message': f'已生成采购申请 {pr.request_no}，包含 {len(bom_items)} 项物料',
+                'purchase_request': PurchaseRequestSerializer(pr).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=False, methods=['get'])
     def shortage_analysis(self, request):
@@ -1976,23 +1959,14 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         project_id = request.query_params.get('project')
 
         if not project_id:
-            return Response(
-                {'error': '请提供项目ID'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供项目ID'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             project = Project.objects.get(id=project_id)
         except Project.DoesNotExist:
-            return Response(
-                {'error': '项目不存在'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '项目不存在'}, status=status.HTTP_400_BAD_REQUEST)
 
-        bom_items = ProjectBOM.objects.filter(
-            project=project,
-            is_deleted=False
-        ).select_related('item')
+        bom_items = ProjectBOM.objects.filter(project=project, is_deleted=False).select_related('item')
 
         shortage_list = []
         for bom in bom_items:
@@ -2002,8 +1976,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
 
             # Get current stock
             stock = Stock.objects.filter(item=bom.item).aggregate(
-                total_on_hand=Sum('qty_on_hand'),
-                total_available=Sum('qty_on_hand') - Sum('qty_reserved')
+                total_on_hand=Sum('qty_on_hand'), total_available=Sum('qty_on_hand') - Sum('qty_reserved')
             )
 
             total_on_hand = stock['total_on_hand'] or 0
@@ -2011,35 +1984,39 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
 
             shortage = needed_qty - total_available
 
-            shortage_list.append({
-                'item_id': bom.item.id,
-                'item_sku': bom.item.sku,
-                'item_name': bom.item.name,
-                'unit': bom.item.get_unit_display(),
-                'planned_qty': float(bom.planned_qty),
-                'actual_qty': float(bom.actual_qty),
-                'needed_qty': float(needed_qty),
-                'stock_on_hand': float(total_on_hand),
-                'stock_available': float(total_available),
-                'shortage': float(max(0, shortage)),
-                'can_fulfill': shortage <= 0,
-                'estimated_cost': float(shortage * bom.item.standard_cost) if shortage > 0 else 0
-            })
+            shortage_list.append(
+                {
+                    'item_id': bom.item.id,
+                    'item_sku': bom.item.sku,
+                    'item_name': bom.item.name,
+                    'unit': bom.item.get_unit_display(),
+                    'planned_qty': float(bom.planned_qty),
+                    'actual_qty': float(bom.actual_qty),
+                    'needed_qty': float(needed_qty),
+                    'stock_on_hand': float(total_on_hand),
+                    'stock_available': float(total_available),
+                    'shortage': float(max(0, shortage)),
+                    'can_fulfill': shortage <= 0,
+                    'estimated_cost': float(shortage * bom.item.standard_cost) if shortage > 0 else 0,
+                }
+            )
 
         # Summary
         total_shortage_cost = sum(item['estimated_cost'] for item in shortage_list)
         items_with_shortage = [item for item in shortage_list if item['shortage'] > 0]
 
-        return Response({
-            'project_code': project.code,
-            'project_name': project.name,
-            'summary': {
-                'total_bom_items': len(shortage_list),
-                'items_with_shortage': len(items_with_shortage),
-                'total_shortage_cost': total_shortage_cost
-            },
-            'items': shortage_list
-        })
+        return Response(
+            {
+                'project_code': project.code,
+                'project_name': project.name,
+                'summary': {
+                    'total_bom_items': len(shortage_list),
+                    'items_with_shortage': len(items_with_shortage),
+                    'total_shortage_cost': total_shortage_cost,
+                },
+                'items': shortage_list,
+            }
+        )
 
     @action(detail=False, methods=['get'])
     def purchasable_items(self, request):
@@ -2051,7 +2028,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
 
         queryset = ProjectBOM.objects.filter(
             is_deleted=False,
-            quote_status='QUOTED'  # 只返回已询价的物料
+            quote_status='QUOTED',  # 只返回已询价的物料
         ).select_related('item', 'project', 'quote_supplier')
 
         if project_id:
@@ -2062,34 +2039,34 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         for bom in queryset:
             needed_qty = float(bom.planned_qty) - float(bom.actual_qty)
             if needed_qty > 0:
-                purchasable_items.append({
-                    'id': bom.id,
-                    'project_id': bom.project.id,
-                    'project_code': bom.project.code,
-                    'project_name': bom.project.name,
-                    'item_id': bom.item.id,
-                    'item_sku': bom.item.sku,
-                    'item_name': bom.item.name,
-                    'specification': bom.item.specification or '',
-                    'version_brand': bom.version_brand or f"{bom.item.brand or ''}/{bom.item.model or ''}".strip('/'),
-                    'unit': bom.item.get_unit_display(),
-                    'planned_qty': float(bom.planned_qty),
-                    'actual_qty': float(bom.actual_qty),
-                    'needed_qty': needed_qty,
-                    'quote_supplier_id': bom.quote_supplier.id if bom.quote_supplier else None,
-                    'quote_supplier_name': bom.quote_supplier.name if bom.quote_supplier else '',
-                    'price_with_tax': float(bom.price_with_tax) if bom.price_with_tax else None,
-                    'price_without_tax': float(bom.price_without_tax) if bom.price_without_tax else None,
-                    'tax_rate': float(bom.tax_rate) if bom.tax_rate else None,
-                    'quote_delivery_days': bom.quote_delivery_days,
-                    'quote_date': bom.quote_date.strftime('%Y-%m-%d') if bom.quote_date else None,
-                    'required_date': bom.required_date.strftime('%Y-%m-%d') if bom.required_date else None,
-                })
+                purchasable_items.append(
+                    {
+                        'id': bom.id,
+                        'project_id': bom.project.id,
+                        'project_code': bom.project.code,
+                        'project_name': bom.project.name,
+                        'item_id': bom.item.id,
+                        'item_sku': bom.item.sku,
+                        'item_name': bom.item.name,
+                        'specification': bom.item.specification or '',
+                        'version_brand': bom.version_brand
+                        or f"{bom.item.brand or ''}/{bom.item.model or ''}".strip('/'),
+                        'unit': bom.item.get_unit_display(),
+                        'planned_qty': float(bom.planned_qty),
+                        'actual_qty': float(bom.actual_qty),
+                        'needed_qty': needed_qty,
+                        'quote_supplier_id': bom.quote_supplier.id if bom.quote_supplier else None,
+                        'quote_supplier_name': bom.quote_supplier.name if bom.quote_supplier else '',
+                        'price_with_tax': float(bom.price_with_tax) if bom.price_with_tax else None,
+                        'price_without_tax': float(bom.price_without_tax) if bom.price_without_tax else None,
+                        'tax_rate': float(bom.tax_rate) if bom.tax_rate else None,
+                        'quote_delivery_days': bom.quote_delivery_days,
+                        'quote_date': bom.quote_date.strftime('%Y-%m-%d') if bom.quote_date else None,
+                        'required_date': bom.required_date.strftime('%Y-%m-%d') if bom.required_date else None,
+                    }
+                )
 
-        return Response({
-            'count': len(purchasable_items),
-            'items': purchasable_items
-        })
+        return Response({'count': len(purchasable_items), 'items': purchasable_items})
 
     @action(detail=False, methods=['post'])
     def bulk_delete(self, request):
@@ -2099,10 +2076,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             return Response({'error': '请选择要删除的物料'}, status=status.HTTP_400_BAD_REQUEST)
 
         deleted_count = ProjectBOM.objects.filter(id__in=ids).delete()[0]
-        return Response({
-            'message': f'成功删除 {deleted_count} 条物料',
-            'deleted_count': deleted_count
-        })
+        return Response({'message': f'成功删除 {deleted_count} 条物料', 'deleted_count': deleted_count})
 
     @action(detail=False, methods=['get', 'post'])
     def copy_from_project(self, request):
@@ -2116,30 +2090,18 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             target_project_id = request.query_params.get('target_project')
 
         if not source_project_id or not target_project_id:
-            return Response(
-                {'error': '请提供source_project和target_project参数'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供source_project和target_project参数'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             source_project = Project.objects.get(id=source_project_id)
             target_project = Project.objects.get(id=target_project_id)
         except Project.DoesNotExist:
-            return Response(
-                {'error': '项目不存在'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '项目不存在'}, status=status.HTTP_400_BAD_REQUEST)
 
-        source_boms = ProjectBOM.objects.filter(
-            project=source_project,
-            is_deleted=False
-        )
+        source_boms = ProjectBOM.objects.filter(project=source_project, is_deleted=False)
 
         if not source_boms.exists():
-            return Response(
-                {'error': '源项目没有BOM数据'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '源项目没有BOM数据'}, status=status.HTTP_400_BAD_REQUEST)
 
         created_count = 0
         skipped_count = 0
@@ -2147,9 +2109,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         for source_bom in source_boms:
             # Check if already exists in target
             existing = ProjectBOM.objects.filter(
-                project=target_project,
-                item=source_bom.item,
-                is_deleted=False
+                project=target_project, item=source_bom.item, is_deleted=False
             ).exists()
 
             if existing:
@@ -2162,15 +2122,17 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 planned_qty=source_bom.planned_qty,
                 estimated_cost=source_bom.estimated_cost,
                 notes=source_bom.notes,
-                created_by=request.user
+                created_by=request.user,
             )
             created_count += 1
 
-        return Response({
-            'message': f'复制完成: 新增 {created_count} 条, 跳过 {skipped_count} 条（已存在）',
-            'created': created_count,
-            'skipped': skipped_count
-        })
+        return Response(
+            {
+                'message': f'复制完成: 新增 {created_count} 条, 跳过 {skipped_count} 条（已存在）',
+                'created': created_count,
+                'skipped': skipped_count,
+            }
+        )
 
     @action(detail=False, methods=['get'])
     def tree(self, request):
@@ -2182,10 +2144,12 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             return Response({'error': '请提供project参数'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 获取所有BOM项
-        boms = self.get_queryset().filter(
-            project_id=project_id,
-            is_deleted=False
-        ).select_related('item', 'parent').order_by('level', 'sort_order', 'id')
+        boms = (
+            self.get_queryset()
+            .filter(project_id=project_id, is_deleted=False)
+            .select_related('item', 'parent')
+            .order_by('level', 'sort_order', 'id')
+        )
 
         def build_tree(parent_id=None, level=0):
             result = []
@@ -2216,10 +2180,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
 
         from apps.inventory.models import Stock
 
-        boms = self.get_queryset().filter(
-            project_id=project_id,
-            is_deleted=False
-        ).select_related('item')
+        boms = self.get_queryset().filter(project_id=project_id, is_deleted=False).select_related('item')
 
         results = []
         total_items = 0
@@ -2229,10 +2190,9 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
 
         for bom in boms:
             # 获取该物料的库存总量
-            stock_qty = Stock.objects.filter(
-                item=bom.item,
-                is_deleted=False
-            ).aggregate(total=Sum('quantity'))['total'] or Decimal('0')
+            stock_qty = Stock.objects.filter(item=bom.item, is_deleted=False).aggregate(total=Sum('quantity'))[
+                'total'
+            ] or Decimal('0')
 
             # 计算净需求 = 计划数量 - 已出库数量
             net_demand = bom.planned_qty - bom.issued_qty
@@ -2262,43 +2222,47 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             total_value += item_value
             shortage_value += shortage_item_value
 
-            results.append({
-                'id': bom.id,
-                'item_id': bom.item_id,
-                'item_sku': bom.item.sku,
-                'item_name': bom.item.name,
-                'specification': bom.item.specification or '',
-                'unit': bom.item.get_unit_display(),
-                'planned_qty': float(bom.planned_qty),
-                'issued_qty': float(bom.issued_qty),
-                'net_demand': float(net_demand),
-                'stock_qty': float(stock_qty),
-                'shortage': float(shortage),
-                'unit_price': float(unit_price),
-                'shortage_value': float(shortage_item_value),
-                'status': check_status,
-                'status_display': {
-                    'COMPLETE': '已完成',
-                    'READY': '库存充足',
-                    'PARTIAL': '部分满足',
-                    'SHORTAGE': '完全缺料'
-                }.get(check_status, '未知')
-            })
+            results.append(
+                {
+                    'id': bom.id,
+                    'item_id': bom.item_id,
+                    'item_sku': bom.item.sku,
+                    'item_name': bom.item.name,
+                    'specification': bom.item.specification or '',
+                    'unit': bom.item.get_unit_display(),
+                    'planned_qty': float(bom.planned_qty),
+                    'issued_qty': float(bom.issued_qty),
+                    'net_demand': float(net_demand),
+                    'stock_qty': float(stock_qty),
+                    'shortage': float(shortage),
+                    'unit_price': float(unit_price),
+                    'shortage_value': float(shortage_item_value),
+                    'status': check_status,
+                    'status_display': {
+                        'COMPLETE': '已完成',
+                        'READY': '库存充足',
+                        'PARTIAL': '部分满足',
+                        'SHORTAGE': '完全缺料',
+                    }.get(check_status, '未知'),
+                }
+            )
 
         # 计算齐套率
         completion_rate = round((complete_items / total_items * 100), 2) if total_items > 0 else 0
 
-        return Response({
-            'summary': {
-                'total_items': total_items,
-                'complete_items': complete_items,
-                'shortage_items': total_items - complete_items,
-                'completion_rate': completion_rate,
-                'total_value': float(total_value),
-                'shortage_value': float(shortage_value)
-            },
-            'details': results
-        })
+        return Response(
+            {
+                'summary': {
+                    'total_items': total_items,
+                    'complete_items': complete_items,
+                    'shortage_items': total_items - complete_items,
+                    'completion_rate': completion_rate,
+                    'total_value': float(total_value),
+                    'shortage_value': float(shortage_value),
+                },
+                'details': results,
+            }
+        )
 
     @action(detail=True, methods=['post'])
     def add_child(self, request, pk=None):
@@ -2312,12 +2276,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             return Response({'error': '请提供物料ID'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 检查是否已存在相同的子物料
-        if ProjectBOM.objects.filter(
-            project=parent.project,
-            parent=parent,
-            item_id=item_id,
-            is_deleted=False
-        ).exists():
+        if ProjectBOM.objects.filter(project=parent.project, parent=parent, item_id=item_id, is_deleted=False).exists():
             return Response({'error': '该子物料已存在'}, status=status.HTTP_400_BAD_REQUEST)
 
         child = ProjectBOM.objects.create(
@@ -2329,7 +2288,7 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
             unit_qty=request.data.get('unit_qty', 1),
             estimated_cost=request.data.get('estimated_cost', 0),
             notes=request.data.get('notes', ''),
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(ProjectBOMSerializer(child, context={'request': request}).data, status=status.HTTP_201_CREATED)
@@ -2350,20 +2309,18 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
                 ProjectBOM.objects.filter(id=bom_id).update(
                     parent_id=item_data.get('parent'),
                     level=item_data.get('level', 0),
-                    sort_order=item_data.get('sort_order', 0)
+                    sort_order=item_data.get('sort_order', 0),
                 )
                 updated_count += 1
 
-        return Response({
-            'message': f'成功更新 {updated_count} 条记录',
-            'updated_count': updated_count
-        })
+        return Response({'message': f'成功更新 {updated_count} 条记录', 'updated_count': updated_count})
 
 
 class TimeLogViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for TimeLog management.
     """
+
     queryset = TimeLog.objects.all()
     serializer_class = TimeLogSerializer
     filterset_fields = ['project', 'task', 'user', 'status', 'is_deleted']
@@ -2422,21 +2379,24 @@ class TimeLogViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         week_hours = logs.filter(date__gte=week_start).aggregate(Sum('hours'))['hours__sum'] or 0
         month_hours = logs.filter(date__gte=month_start).aggregate(Sum('hours'))['hours__sum'] or 0
 
-        return Response({
-            'week_hours': float(week_hours),
-            'month_hours': float(month_hours),
-        })
+        return Response(
+            {
+                'week_hours': float(week_hours),
+                'month_hours': float(month_hours),
+            }
+        )
 
     def _update_task_actual_hours(self, task):
         """重新计算任务的实际工时（从所有已审批工时记录汇总）"""
         if not task:
             return
         # 汇总该任务下所有已审批的工时记录
-        total_hours = TimeLog.objects.filter(
-            task=task,
-            status='APPROVED',
-            is_deleted=False
-        ).aggregate(total=Sum('hours'))['total'] or 0
+        total_hours = (
+            TimeLog.objects.filter(task=task, status='APPROVED', is_deleted=False).aggregate(total=Sum('hours'))[
+                'total'
+            ]
+            or 0
+        )
 
         task.actual_hours = total_hours
         task.save(update_fields=['actual_hours'])
@@ -2472,6 +2432,7 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
     """
     ViewSet for ECN (Engineering Change Notice) management.
     """
+
     permission_module = 'projects'
     permission_resource = 'ecn'
 
@@ -2491,22 +2452,16 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
         ecn = self.get_object()
 
         if ecn.status != 'DRAFT':
-            return Response(
-                {'error': '只有草稿状态的ECN可以提交评审'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只有草稿状态的ECN可以提交评审'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 计算成本影响金额作为审批阈值判断依据
         amount = abs(ecn.cost_impact) if ecn.cost_impact else 0
 
         # 尝试启动工作流
         from apps.core.workflow.services import WorkflowService
+
         instance = WorkflowService.start_workflow(
-            business_type='ECN',
-            business_id=ecn.id,
-            business_no=ecn.ecn_no,
-            submitter=request.user,
-            amount=amount
+            business_type='ECN', business_id=ecn.id, business_no=ecn.ecn_no, submitter=request.user, amount=amount
         )
 
         if instance:
@@ -2520,14 +2475,16 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
                 approver=request.user,
                 action='SUBMIT',
                 comment=request.data.get('comment', '已提交工作流审批'),
-                created_by=request.user
+                created_by=request.user,
             )
 
-            return Response({
-                **ECNSerializer(ecn, context={'request': request}).data,
-                'workflow_instance_id': instance.id,
-                'message': '已提交审批流程'
-            })
+            return Response(
+                {
+                    **ECNSerializer(ecn, context={'request': request}).data,
+                    'workflow_instance_id': instance.id,
+                    'message': '已提交审批流程',
+                }
+            )
         else:
             # 没有配置工作流，使用原有逻辑
             ecn.status = 'PENDING'
@@ -2539,7 +2496,7 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
                 approver=request.user,
                 action='SUBMIT',
                 comment=request.data.get('comment', ''),
-                created_by=request.user
+                created_by=request.user,
             )
 
             return Response(ECNSerializer(ecn, context={'request': request}).data)
@@ -2550,10 +2507,7 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
         ecn = self.get_object()
 
         if ecn.status not in ['PENDING', 'REVIEWING']:
-            return Response(
-                {'error': '当前状态无法批准'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '当前状态无法批准'}, status=status.HTTP_400_BAD_REQUEST)
 
         from django.utils import timezone
 
@@ -2568,7 +2522,7 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
             approver=request.user,
             action='APPROVE',
             comment=request.data.get('comment', ''),
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(ECNSerializer(ecn, context={'request': request}).data)
@@ -2579,10 +2533,7 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
         ecn = self.get_object()
 
         if ecn.status not in ['PENDING', 'REVIEWING']:
-            return Response(
-                {'error': '当前状态无法拒绝'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '当前状态无法拒绝'}, status=status.HTTP_400_BAD_REQUEST)
 
         ecn.status = 'REJECTED'
         ecn.save()
@@ -2593,7 +2544,7 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
             approver=request.user,
             action='REJECT',
             comment=request.data.get('comment', '拒绝'),
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(ECNSerializer(ecn, context={'request': request}).data)
@@ -2604,10 +2555,7 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
         ecn = self.get_object()
 
         if ecn.status not in ['PENDING', 'REVIEWING', 'REJECTED']:
-            return Response(
-                {'error': '当前状态无法退回'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '当前状态无法退回'}, status=status.HTTP_400_BAD_REQUEST)
 
         ecn.status = 'DRAFT'
         ecn.save()
@@ -2618,7 +2566,7 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
             approver=request.user,
             action='RETURN',
             comment=request.data.get('comment', '退回修改'),
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(ECNSerializer(ecn, context={'request': request}).data)
@@ -2629,10 +2577,7 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
         ecn = self.get_object()
 
         if ecn.status != 'APPROVED':
-            return Response(
-                {'error': '只有已批准的ECN可以开始实施'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只有已批准的ECN可以开始实施'}, status=status.HTTP_400_BAD_REQUEST)
 
         ecn.status = 'IMPLEMENTING'
         ecn.implemented_by = request.user
@@ -2644,7 +2589,7 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
             approver=request.user,
             action='IMPLEMENT',
             comment=request.data.get('comment', ''),
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(ECNSerializer(ecn, context={'request': request}).data)
@@ -2655,10 +2600,7 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
         ecn = self.get_object()
 
         if ecn.status != 'IMPLEMENTING':
-            return Response(
-                {'error': '只有实施中的ECN可以完成'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只有实施中的ECN可以完成'}, status=status.HTTP_400_BAD_REQUEST)
 
         from django.utils import timezone
 
@@ -2676,7 +2618,7 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
             approver=request.user,
             action='COMPLETE',
             comment=request.data.get('comment', '实施完成'),
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(ECNSerializer(ecn, context={'request': request}).data)
@@ -2692,8 +2634,8 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
                     defaults={
                         'planned_qty': item.new_qty or 0,
                         'notes': f'通过ECN {ecn.ecn_no} 添加',
-                        'created_by': ecn.implemented_by
-                    }
+                        'created_by': ecn.implemented_by,
+                    },
                 )
             elif item.change_type == 'DELETE' and item.bom_item:
                 # 物理删除BOM项
@@ -2715,7 +2657,7 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
                     item=item.new_item,
                     planned_qty=item.new_qty or old_qty,
                     notes=f'通过ECN {ecn.ecn_no} 替换自 {old_sku}',
-                    created_by=ecn.implemented_by
+                    created_by=ecn.implemented_by,
                 )
 
                 # 物理删除旧的BOM项
@@ -2727,10 +2669,7 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
         ecn = self.get_object()
 
         if ecn.status in ['COMPLETED', 'CANCELLED']:
-            return Response(
-                {'error': '已完成或已取消的ECN无法取消'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '已完成或已取消的ECN无法取消'}, status=status.HTTP_400_BAD_REQUEST)
 
         ecn.status = 'CANCELLED'
         ecn.save()
@@ -2741,7 +2680,7 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
             approver=request.user,
             action='CANCEL',
             comment=request.data.get('comment', '取消'),
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(ECNSerializer(ecn, context={'request': request}).data)
@@ -2752,10 +2691,7 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
         ecn = self.get_object()
 
         if ecn.status not in ['DRAFT']:
-            return Response(
-                {'error': '只有草稿状态可以添加明细'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只有草稿状态可以添加明细'}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = ECNItemSerializer(data={**request.data, 'ecn': ecn.id})
         serializer.is_valid(raise_exception=True)
@@ -2769,26 +2705,21 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
         ecn = self.get_object()
 
         if ecn.status not in ['DRAFT']:
-            return Response(
-                {'error': '只有草稿状态可以删除明细'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只有草稿状态可以删除明细'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             ecn_item = ECNItem.objects.get(id=item_id, ecn=ecn)
             ecn_item.delete()
             return Response({'message': '删除成功'})
         except ECNItem.DoesNotExist:
-            return Response(
-                {'error': '明细不存在'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({'error': '明细不存在'}, status=status.HTTP_404_NOT_FOUND)
 
 
 class ECNItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for ECN Item management.
     """
+
     queryset = ECNItem.objects.all()
     serializer_class = ECNItemSerializer
     filterset_fields = ['ecn', 'change_type', 'item']
@@ -2798,10 +2729,12 @@ class ECNItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 
 # ==================== 售后管理视图 ====================
 
+
 class AfterSalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.ModelViewSet):
     """
     售后工单管理视图
     """
+
     permission_module = 'projects'
     permission_resource = 'aftersales'
 
@@ -2818,6 +2751,7 @@ class AfterSalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin
 
     def perform_create(self, serializer):
         from apps.core.utils import generate_code
+
         order_no = generate_code('AS')
         serializer.save(order_no=order_no, created_by=self.request.user)
 
@@ -2841,13 +2775,13 @@ class AfterSalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin
             total_labor=Sum('labor_cost'),
             total_travel=Sum('travel_cost'),
             total_parts=Sum('parts_cost'),
-            total_other=Sum('other_cost')
+            total_other=Sum('other_cost'),
         )
 
         # 满意度统计
-        satisfaction_stats = queryset.filter(
-            satisfaction_score__isnull=False
-        ).aggregate(avg_score=Avg('satisfaction_score'))
+        satisfaction_stats = queryset.filter(satisfaction_score__isnull=False).aggregate(
+            avg_score=Avg('satisfaction_score')
+        )
 
         # 本月新增工单
         today = timezone.now().date()
@@ -2857,14 +2791,16 @@ class AfterSalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin
         # 待处理工单
         pending_count = queryset.filter(status__in=['PENDING', 'ASSIGNED']).count()
 
-        return Response({
-            'status_stats': list(status_stats),
-            'type_stats': list(type_stats),
-            'cost_stats': cost_stats,
-            'satisfaction_avg': satisfaction_stats.get('avg_score'),
-            'monthly_count': monthly_count,
-            'pending_count': pending_count
-        })
+        return Response(
+            {
+                'status_stats': list(status_stats),
+                'type_stats': list(type_stats),
+                'cost_stats': cost_stats,
+                'satisfaction_avg': satisfaction_stats.get('avg_score'),
+                'monthly_count': monthly_count,
+                'pending_count': pending_count,
+            }
+        )
 
     @action(detail=True, methods=['post'])
     def assign(self, request, pk=None):
@@ -2876,6 +2812,7 @@ class AfterSalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin
             return Response({'error': '请指定负责人'}, status=status.HTTP_400_BAD_REQUEST)
 
         from apps.accounts.models import User
+
         try:
             assigned_to = User.objects.get(id=assigned_to_id)
         except User.DoesNotExist:
@@ -2977,16 +2914,14 @@ class AfterSalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin
 
         order.save()
 
-        return Response({
-            'message': '成本更新成功',
-            'total_cost': order.total_cost
-        })
+        return Response({'message': '成本更新成功', 'total_cost': order.total_cost})
 
 
 class ServiceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     服务记录管理视图
     """
+
     queryset = ServiceRecord.objects.all()
     serializer_class = ServiceRecordSerializer
     filterset_fields = ['aftersales_order', 'service_type', 'technician', 'service_date']
@@ -3002,10 +2937,8 @@ class ServiceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         order = record.aftersales_order
 
         from django.db.models import Sum
-        totals = order.service_records.aggregate(
-            labor=Sum('labor_cost'),
-            travel=Sum('travel_cost')
-        )
+
+        totals = order.service_records.aggregate(labor=Sum('labor_cost'), travel=Sum('travel_cost'))
         order.labor_cost = totals['labor'] or 0
         order.travel_cost = totals['travel'] or 0
         order.save()
@@ -3015,6 +2948,7 @@ class SparePartUsageViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
     """
     备件使用记录管理视图
     """
+
     queryset = SparePartUsage.objects.all()
     serializer_class = SparePartUsageSerializer
     filterset_fields = ['aftersales_order', 'service_record', 'item', 'is_warranty']
@@ -3030,9 +2964,8 @@ class SparePartUsageViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         order = usage.aftersales_order
 
         from django.db.models import Sum
-        total = order.spare_parts.aggregate(
-            parts_cost=Sum(F('qty') * F('unit_cost'))
-        )
+
+        total = order.spare_parts.aggregate(parts_cost=Sum(F('qty') * F('unit_cost')))
         order.parts_cost = total['parts_cost'] or 0
         order.save()
 
@@ -3041,6 +2974,7 @@ class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     图纸管理视图
     """
+
     queryset = Drawing.objects.all()
     serializer_class = DrawingSerializer
     parser_classes = [JSONParser, MultiPartParser, FormParser]
@@ -3050,20 +2984,14 @@ class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     ordering = ['-created_at']
 
     def perform_create(self, serializer):
-        serializer.save(
-            created_by=self.request.user,
-            designer=self.request.user
-        )
+        serializer.save(created_by=self.request.user, designer=self.request.user)
 
     @action(detail=True, methods=['post'])
     def submit_review(self, request, pk=None):
         """提交审核"""
         drawing = self.get_object()
         if drawing.status != 'DRAFT':
-            return Response(
-                {'error': '只能提交草稿状态的图纸'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能提交草稿状态的图纸'}, status=status.HTTP_400_BAD_REQUEST)
 
         drawing.status = 'REVIEWING'
         drawing.save()
@@ -3074,10 +3002,7 @@ class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         """审批图纸"""
         drawing = self.get_object()
         if drawing.status != 'REVIEWING':
-            return Response(
-                {'error': '只能审批审核中的图纸'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能审批审核中的图纸'}, status=status.HTTP_400_BAD_REQUEST)
 
         from django.utils import timezone
 
@@ -3092,10 +3017,7 @@ class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         """发布图纸"""
         drawing = self.get_object()
         if drawing.status != 'APPROVED':
-            return Response(
-                {'error': '只能发布已批准的图纸'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能发布已批准的图纸'}, status=status.HTTP_400_BAD_REQUEST)
 
         from django.utils import timezone
 
@@ -3109,26 +3031,20 @@ class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
             change_type='NEW' if drawing.revision == 1 else 'REVISION',
             new_version=f'{drawing.version}.{drawing.revision}',
             change_description=drawing.change_description or '图纸发布',
-            created_by=request.user
+            created_by=request.user,
         )
 
         # 发送邮件通知（异步任务）
         self._send_change_notification(notice)
 
-        return Response({
-            **DrawingSerializer(drawing).data,
-            'notice_id': notice.id
-        })
+        return Response({**DrawingSerializer(drawing).data, 'notice_id': notice.id})
 
     @action(detail=True, methods=['post'])
     def new_revision(self, request, pk=None):
         """创建新版本"""
         drawing = self.get_object()
         if drawing.status not in ['RELEASED', 'APPROVED']:
-            return Response(
-                {'error': '只能为已发布或已批准的图纸创建新版本'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能为已发布或已批准的图纸创建新版本'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 创建新版本
         new_drawing = Drawing.objects.create(
@@ -3144,7 +3060,7 @@ class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
             status='DRAFT',
             designer=request.user,
             change_description=request.data.get('change_description', ''),
-            created_by=request.user
+            created_by=request.user,
         )
 
         # 标记旧版本为废弃
@@ -3162,20 +3078,37 @@ class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
             worksheet = workbook.add_worksheet('图纸导入模板')
 
             # 定义格式
-            header_format = workbook.add_format({
-                'bold': True, 'bg_color': '#4472C4', 'font_color': 'white',
-                'border': 1, 'align': 'center', 'valign': 'vcenter'
-            })
-            required_format = workbook.add_format({
-                'bold': True, 'bg_color': '#FF6B6B', 'font_color': 'white',
-                'border': 1, 'align': 'center', 'valign': 'vcenter'
-            })
+            header_format = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#4472C4',
+                    'font_color': 'white',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                }
+            )
+            required_format = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#FF6B6B',
+                    'font_color': 'white',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                }
+            )
 
             # 表头
             headers = [
-                ('图纸号*', True), ('图纸名称*', True), ('版本', False),
-                ('文件类型*', True), ('关联物料编码', False), ('公共盘路径', False),
-                ('变更说明', False), ('备注', False)
+                ('图纸号*', True),
+                ('图纸名称*', True),
+                ('版本', False),
+                ('文件类型*', True),
+                ('关联物料编码', False),
+                ('公共盘路径', False),
+                ('变更说明', False),
+                ('备注', False),
             ]
 
             for col, (header, required) in enumerate(headers):
@@ -3189,8 +3122,26 @@ class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 
             # 示例数据
             examples = [
-                ('DWG-001', '主轴装配图', 'A0', 'PDF', 'MAT001', r'\\192.168.1.100\drawings\项目A\DWG-001.pdf', '初版发布', ''),
-                ('DWG-002', '底座加工图', 'A0', 'STEP', '', r'\\192.168.1.100\drawings\项目A\DWG-002.stp', '', '3D模型'),
+                (
+                    'DWG-001',
+                    '主轴装配图',
+                    'A0',
+                    'PDF',
+                    'MAT001',
+                    r'\\192.168.1.100\drawings\项目A\DWG-001.pdf',
+                    '初版发布',
+                    '',
+                ),
+                (
+                    'DWG-002',
+                    '底座加工图',
+                    'A0',
+                    'STEP',
+                    '',
+                    r'\\192.168.1.100\drawings\项目A\DWG-002.stp',
+                    '',
+                    '3D模型',
+                ),
             ]
             for row, example in enumerate(examples, 1):
                 for col, val in enumerate(example):
@@ -3216,8 +3167,7 @@ class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 
         output.seek(0)
         response = HttpResponse(
-            output.read(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         response['Content-Disposition'] = 'attachment; filename=drawing_import_template.xlsx'
         return response
@@ -3235,21 +3185,23 @@ class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 
         data = []
         for d in queryset:
-            data.append({
-                '图纸号': d.drawing_no,
-                '图纸名称': d.name,
-                '版本': f'{d.version}.{d.revision}',
-                '文件类型': d.get_file_type_display() if hasattr(d, 'get_file_type_display') else d.file_type,
-                '状态': d.get_status_display() if hasattr(d, 'get_status_display') else d.status,
-                '项目': d.project.name if d.project else '',
-                '关联物料编码': d.item.sku if d.item else '',
-                '关联物料名称': d.item.name if d.item else '',
-                '公共盘路径': d.public_share_path or '',
-                '设计者': d.designer.get_full_name() if d.designer else '',
-                '变更说明': d.change_description or '',
-                '备注': d.notes or '',
-                '创建时间': d.created_at.strftime('%Y-%m-%d %H:%M') if d.created_at else '',
-            })
+            data.append(
+                {
+                    '图纸号': d.drawing_no,
+                    '图纸名称': d.name,
+                    '版本': f'{d.version}.{d.revision}',
+                    '文件类型': d.get_file_type_display() if hasattr(d, 'get_file_type_display') else d.file_type,
+                    '状态': d.get_status_display() if hasattr(d, 'get_status_display') else d.status,
+                    '项目': d.project.name if d.project else '',
+                    '关联物料编码': d.item.sku if d.item else '',
+                    '关联物料名称': d.item.name if d.item else '',
+                    '公共盘路径': d.public_share_path or '',
+                    '设计者': d.designer.get_full_name() if d.designer else '',
+                    '变更说明': d.change_description or '',
+                    '备注': d.notes or '',
+                    '创建时间': d.created_at.strftime('%Y-%m-%d %H:%M') if d.created_at else '',
+                }
+            )
 
         df = pd.DataFrame(data)
         output = BytesIO()
@@ -3258,10 +3210,9 @@ class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 
             workbook = writer.book
             worksheet = writer.sheets['图纸列表']
-            header_format = workbook.add_format({
-                'bold': True, 'bg_color': '#4472C4', 'font_color': 'white',
-                'border': 1, 'align': 'center'
-            })
+            header_format = workbook.add_format(
+                {'bold': True, 'bg_color': '#4472C4', 'font_color': 'white', 'border': 1, 'align': 'center'}
+            )
             for col, header in enumerate(df.columns):
                 worksheet.write(0, col, header, header_format)
 
@@ -3279,10 +3230,11 @@ class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                 pass
 
         response = HttpResponse(
-            output.read(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
-        response['Content-Disposition'] = f'attachment; filename=drawings_{project_name}{pd.Timestamp.now().strftime("%Y%m%d")}.xlsx'
+        response['Content-Disposition'] = (
+            f'attachment; filename=drawings_{project_name}{pd.Timestamp.now().strftime("%Y%m%d")}.xlsx'
+        )
         return response
 
     @action(detail=False, methods=['post'])
@@ -3326,16 +3278,22 @@ class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         notes_col = find_column(['备注'])
 
         if not drawing_no_col or not name_col:
-            return Response({
-                'error': '缺少必需列',
-                'required_columns': ['图纸号*', '图纸名称*']
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': '缺少必需列', 'required_columns': ['图纸号*', '图纸名称*']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # 文件类型映射
         file_type_map = {
-            'PDF': 'PDF', 'DWG': 'DWG', 'DXF': 'DXF',
-            'STEP': 'STEP', 'STP': 'STP', 'IGES': 'IGES',
-            'STL': 'STL', 'SOLIDWORKS': 'SOLIDWORKS', '其他': 'OTHER'
+            'PDF': 'PDF',
+            'DWG': 'DWG',
+            'DXF': 'DXF',
+            'STEP': 'STEP',
+            'STP': 'STP',
+            'IGES': 'IGES',
+            'STL': 'STL',
+            'SOLIDWORKS': 'SOLIDWORKS',
+            '其他': 'OTHER',
         }
 
         created_count = 0
@@ -3392,10 +3350,7 @@ class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 
             # 检查是否已存在
             existing = Drawing.objects.filter(
-                project=project,
-                drawing_no=drawing_no,
-                file_type=file_type,
-                is_deleted=False
+                project=project, drawing_no=drawing_no, file_type=file_type, is_deleted=False
             ).first()
 
             try:
@@ -3423,23 +3378,26 @@ class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                         notes=notes,
                         status='DRAFT',
                         designer=request.user,
-                        created_by=request.user
+                        created_by=request.user,
                     )
                     created_count += 1
             except Exception as e:
                 error_rows.append({'row': row_num, 'error': str(e)})
 
-        return Response({
-            'message': f'导入完成：新增{created_count}条，更新{updated_count}条',
-            'created': created_count,
-            'updated': updated_count,
-            'errors': error_rows
-        })
+        return Response(
+            {
+                'message': f'导入完成：新增{created_count}条，更新{updated_count}条',
+                'created': created_count,
+                'updated': updated_count,
+                'errors': error_rows,
+            }
+        )
 
     def _send_change_notification(self, notice):
         """发送变更通知邮件"""
         try:
             from apps.core.tasks import send_drawing_change_notification
+
             send_drawing_change_notification.delay(notice.id)
         except Exception:
             pass  # 邮件发送失败不影响主流程
@@ -3449,6 +3407,7 @@ class DrawingChangeNoticeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
     """
     图纸变更通知视图
     """
+
     queryset = DrawingChangeNotice.objects.all()
     serializer_class = DrawingChangeNoticeSerializer
     filterset_fields = ['drawing', 'change_type', 'email_sent']
@@ -3463,11 +3422,8 @@ class DrawingChangeNoticeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
 
         try:
             from apps.core.tasks import send_drawing_change_notification
+
             send_drawing_change_notification.delay(notice.id)
             return Response({'message': '邮件已加入发送队列'})
         except Exception as e:
-            return Response(
-                {'error': f'发送失败: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
+            return Response({'error': f'发送失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

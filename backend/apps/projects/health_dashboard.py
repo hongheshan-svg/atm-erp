@@ -2,6 +2,7 @@
 项目健康度看板模块
 Project Health Dashboard - 综合评分、预警等级、趋势预测
 """
+
 from django.db import models
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
@@ -13,8 +14,10 @@ from apps.core.models import BaseModel
 
 class ProjectHealthScore(BaseModel):
     """项目健康度评分记录"""
-    project = models.ForeignKey('projects.Project', on_delete=models.CASCADE,
-                               related_name='health_scores', verbose_name='项目')
+
+    project = models.ForeignKey(
+        'projects.Project', on_delete=models.CASCADE, related_name='health_scores', verbose_name='项目'
+    )
     score_date = models.DateField('评分日期')
 
     # 各维度得分 (0-100)
@@ -55,6 +58,7 @@ class ProjectHealthScore(BaseModel):
 
 class ProjectHealthAlert(BaseModel):
     """项目健康预警"""
+
     ALERT_TYPE_CHOICES = [
         ('SCHEDULE', '进度预警'),
         ('COST', '成本预警'),
@@ -69,8 +73,9 @@ class ProjectHealthAlert(BaseModel):
         ('CRITICAL', '严重'),
     ]
 
-    project = models.ForeignKey('projects.Project', on_delete=models.CASCADE,
-                               related_name='health_alerts', verbose_name='项目')
+    project = models.ForeignKey(
+        'projects.Project', on_delete=models.CASCADE, related_name='health_alerts', verbose_name='项目'
+    )
     alert_type = models.CharField('预警类型', max_length=20, choices=ALERT_TYPE_CHOICES)
     severity = models.CharField('严重程度', max_length=20, choices=SEVERITY_CHOICES, default='WARNING')
 
@@ -83,8 +88,14 @@ class ProjectHealthAlert(BaseModel):
     # 状态
     is_active = models.BooleanField('是否激活', default=True)
     acknowledged = models.BooleanField('已确认', default=False)
-    acknowledged_by = models.ForeignKey('core.User', on_delete=models.SET_NULL, null=True, blank=True,
-                                       related_name='acknowledged_health_alerts', verbose_name='确认人')
+    acknowledged_by = models.ForeignKey(
+        'core.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='acknowledged_health_alerts',
+        verbose_name='确认人',
+    )
     acknowledged_at = models.DateTimeField('确认时间', null=True, blank=True)
 
     # 解决
@@ -127,10 +138,7 @@ class ProjectHealthService:
         details['completion_rate'] = round(details['completed_tasks'] / details['total_tasks'] * 100, 1)
 
         # 逾期任务
-        details['overdue_tasks'] = tasks.filter(
-            status__in=['TODO', 'IN_PROGRESS'],
-            due_date__lt=today
-        ).count()
+        details['overdue_tasks'] = tasks.filter(status__in=['TODO', 'IN_PROGRESS'], due_date__lt=today).count()
 
         # 进度偏差
         if project.end_date and project.start_date:
@@ -215,20 +223,18 @@ class ProjectHealthService:
 
         # 调试问题
         from apps.projects.debug_management import DebugIssue
-        issues = DebugIssue.objects.filter(
-            plan__project=project,
-            is_deleted=False
-        ).exclude(status__in=['RESOLVED', 'CLOSED'])
+
+        issues = DebugIssue.objects.filter(plan__project=project, is_deleted=False).exclude(
+            status__in=['RESOLVED', 'CLOSED']
+        )
 
         details['debug_issues'] = issues.count()
         details['critical_issues'] = issues.filter(severity='CRITICAL').count()
 
         # ECN数量
         from apps.projects.ecn_enhanced import ECNChangeRequest
-        details['ecn_count'] = ECNChangeRequest.objects.filter(
-            project=project,
-            is_deleted=False
-        ).count()
+
+        details['ecn_count'] = ECNChangeRequest.objects.filter(project=project, is_deleted=False).count()
 
         # 计算得分
         if details['critical_issues'] > 0:
@@ -261,11 +267,9 @@ class ProjectHealthService:
 
         # 逾期里程碑
         from apps.projects.models import Milestone
+
         details['overdue_milestones'] = Milestone.objects.filter(
-            project=project,
-            is_deleted=False,
-            status__in=['PENDING', 'IN_PROGRESS'],
-            due_date__lt=today
+            project=project, is_deleted=False, status__in=['PENDING', 'IN_PROGRESS'], due_date__lt=today
         ).count()
 
         # 计算得分
@@ -288,10 +292,8 @@ class ProjectHealthService:
 
         # 项目成员数
         from apps.projects.models import ProjectMember
-        details['team_members'] = ProjectMember.objects.filter(
-            project=project,
-            is_deleted=False
-        ).count()
+
+        details['team_members'] = ProjectMember.objects.filter(project=project, is_deleted=False).count()
 
         if details['team_members'] == 0:
             score -= 20
@@ -317,11 +319,11 @@ class ProjectHealthService:
         }
 
         overall = (
-            schedule_score * weights['schedule'] +
-            cost_score * weights['cost'] +
-            quality_score * weights['quality'] +
-            risk_score * weights['risk'] +
-            resource_score * weights['resource']
+            schedule_score * weights['schedule']
+            + cost_score * weights['cost']
+            + quality_score * weights['quality']
+            + risk_score * weights['risk']
+            + resource_score * weights['resource']
         )
         overall_score = round(overall)
 
@@ -387,7 +389,7 @@ class ProjectHealthService:
                 'risk_details': scores['risk_details'],
                 'resource_details': scores['resource_details'],
                 'recommendations': scores['recommendations'],
-            }
+            },
         )
 
         # 生成预警
@@ -402,61 +404,63 @@ class ProjectHealthService:
 
         # 进度预警
         if scores['schedule_score'] < 60:
-            alerts_to_create.append({
-                'alert_type': 'SCHEDULE',
-                'severity': 'CRITICAL' if scores['schedule_score'] < 40 else 'WARNING',
-                'title': '进度严重落后' if scores['schedule_score'] < 40 else '进度落后',
-                'description': f"项目进度得分仅{scores['schedule_score']}分",
-                'metric_name': '进度得分',
-                'current_value': str(scores['schedule_score']),
-                'threshold_value': '60',
-            })
+            alerts_to_create.append(
+                {
+                    'alert_type': 'SCHEDULE',
+                    'severity': 'CRITICAL' if scores['schedule_score'] < 40 else 'WARNING',
+                    'title': '进度严重落后' if scores['schedule_score'] < 40 else '进度落后',
+                    'description': f"项目进度得分仅{scores['schedule_score']}分",
+                    'metric_name': '进度得分',
+                    'current_value': str(scores['schedule_score']),
+                    'threshold_value': '60',
+                }
+            )
 
         # 成本预警
         if scores['cost_score'] < 60:
-            alerts_to_create.append({
-                'alert_type': 'COST',
-                'severity': 'CRITICAL' if scores['cost_score'] < 40 else 'WARNING',
-                'title': '成本严重超支' if scores['cost_score'] < 40 else '成本超支风险',
-                'description': f"项目成本得分仅{scores['cost_score']}分",
-                'metric_name': '成本得分',
-                'current_value': str(scores['cost_score']),
-                'threshold_value': '60',
-            })
+            alerts_to_create.append(
+                {
+                    'alert_type': 'COST',
+                    'severity': 'CRITICAL' if scores['cost_score'] < 40 else 'WARNING',
+                    'title': '成本严重超支' if scores['cost_score'] < 40 else '成本超支风险',
+                    'description': f"项目成本得分仅{scores['cost_score']}分",
+                    'metric_name': '成本得分',
+                    'current_value': str(scores['cost_score']),
+                    'threshold_value': '60',
+                }
+            )
 
         # 质量预警
         if scores['quality_score'] < 60:
-            alerts_to_create.append({
-                'alert_type': 'QUALITY',
-                'severity': 'CRITICAL' if scores['quality_score'] < 40 else 'WARNING',
-                'title': '质量问题严重' if scores['quality_score'] < 40 else '质量问题较多',
-                'description': f"项目质量得分仅{scores['quality_score']}分",
-                'metric_name': '质量得分',
-                'current_value': str(scores['quality_score']),
-                'threshold_value': '60',
-            })
+            alerts_to_create.append(
+                {
+                    'alert_type': 'QUALITY',
+                    'severity': 'CRITICAL' if scores['quality_score'] < 40 else 'WARNING',
+                    'title': '质量问题严重' if scores['quality_score'] < 40 else '质量问题较多',
+                    'description': f"项目质量得分仅{scores['quality_score']}分",
+                    'metric_name': '质量得分',
+                    'current_value': str(scores['quality_score']),
+                    'threshold_value': '60',
+                }
+            )
 
         # 创建预警
         for alert_data in alerts_to_create:
             # 检查是否已存在相同预警
             existing = ProjectHealthAlert.objects.filter(
-                project=project,
-                alert_type=alert_data['alert_type'],
-                is_active=True,
-                resolved=False
+                project=project, alert_type=alert_data['alert_type'], is_active=True, resolved=False
             ).first()
 
             if not existing:
-                ProjectHealthAlert.objects.create(
-                    project=project,
-                    **alert_data
-                )
+                ProjectHealthAlert.objects.create(project=project, **alert_data)
 
 
 # ==================== API Views ====================
 
+
 class ProjectHealthDashboardView(APIView):
     """项目健康度看板"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request, project_id=None):
@@ -472,51 +476,52 @@ class ProjectHealthDashboardView(APIView):
             scores = ProjectHealthService.calculate_overall_score(project)
 
             # 历史趋势
-            history = ProjectHealthScore.objects.filter(
-                project=project
-            ).order_by('-score_date')[:30]
+            history = ProjectHealthScore.objects.filter(project=project).order_by('-score_date')[:30]
 
-            trend = [{
-                'date': h.score_date,
-                'overall': h.overall_score,
-                'schedule': h.schedule_score,
-                'cost': h.cost_score,
-                'quality': h.quality_score,
-            } for h in reversed(list(history))]
+            trend = [
+                {
+                    'date': h.score_date,
+                    'overall': h.overall_score,
+                    'schedule': h.schedule_score,
+                    'cost': h.cost_score,
+                    'quality': h.quality_score,
+                }
+                for h in reversed(list(history))
+            ]
 
             # 活跃预警
-            alerts = ProjectHealthAlert.objects.filter(
-                project=project,
-                is_active=True,
-                resolved=False
-            ).order_by('-severity', '-created_at')
+            alerts = ProjectHealthAlert.objects.filter(project=project, is_active=True, resolved=False).order_by(
+                '-severity', '-created_at'
+            )
 
-            return Response({
-                'project': {
-                    'id': project.id,
-                    'name': project.name,
-                    'code': project.code,
-                    'status': project.status,
-                    'progress': project.progress,
-                },
-                'scores': scores,
-                'trend': trend,
-                'alerts': [{
-                    'id': a.id,
-                    'type': a.alert_type,
-                    'severity': a.severity,
-                    'title': a.title,
-                    'description': a.description,
-                    'created_at': a.created_at,
-                } for a in alerts],
-            })
+            return Response(
+                {
+                    'project': {
+                        'id': project.id,
+                        'name': project.name,
+                        'code': project.code,
+                        'status': project.status,
+                        'progress': project.progress,
+                    },
+                    'scores': scores,
+                    'trend': trend,
+                    'alerts': [
+                        {
+                            'id': a.id,
+                            'type': a.alert_type,
+                            'severity': a.severity,
+                            'title': a.title,
+                            'description': a.description,
+                            'created_at': a.created_at,
+                        }
+                        for a in alerts
+                    ],
+                }
+            )
 
         else:
             # 所有项目概览
-            projects = Project.objects.filter(
-                status__in=['IN_PROGRESS', 'ACTIVE', 'TESTING'],
-                is_deleted=False
-            )
+            projects = Project.objects.filter(status__in=['IN_PROGRESS', 'ACTIVE', 'TESTING'], is_deleted=False)
 
             overview = []
             health_distribution = {'GREEN': 0, 'YELLOW': 0, 'ORANGE': 0, 'RED': 0}
@@ -525,51 +530,56 @@ class ProjectHealthDashboardView(APIView):
                 scores = ProjectHealthService.calculate_overall_score(project)
                 health_distribution[scores['health_level']] += 1
 
-                overview.append({
-                    'id': project.id,
-                    'name': project.name,
-                    'code': project.code,
-                    'manager_name': project.manager.get_full_name() if project.manager else '',
-                    'progress': project.progress,
-                    'overall_score': scores['overall_score'],
-                    'health_level': scores['health_level'],
-                    'schedule_score': scores['schedule_score'],
-                    'cost_score': scores['cost_score'],
-                    'quality_score': scores['quality_score'],
-                    'recommendations': scores['recommendations'][:2],
-                })
+                overview.append(
+                    {
+                        'id': project.id,
+                        'name': project.name,
+                        'code': project.code,
+                        'manager_name': project.manager.get_full_name() if project.manager else '',
+                        'progress': project.progress,
+                        'overall_score': scores['overall_score'],
+                        'health_level': scores['health_level'],
+                        'schedule_score': scores['schedule_score'],
+                        'cost_score': scores['cost_score'],
+                        'quality_score': scores['quality_score'],
+                        'recommendations': scores['recommendations'][:2],
+                    }
+                )
 
             # 按健康度排序
             overview.sort(key=lambda x: x['overall_score'])
 
             # 统计
             total_alerts = ProjectHealthAlert.objects.filter(
-                is_active=True,
-                resolved=False,
-                project__status__in=['IN_PROGRESS', 'ACTIVE', 'TESTING']
+                is_active=True, resolved=False, project__status__in=['IN_PROGRESS', 'ACTIVE', 'TESTING']
             ).count()
 
             critical_alerts = ProjectHealthAlert.objects.filter(
                 is_active=True,
                 resolved=False,
                 severity='CRITICAL',
-                project__status__in=['IN_PROGRESS', 'ACTIVE', 'TESTING']
+                project__status__in=['IN_PROGRESS', 'ACTIVE', 'TESTING'],
             ).count()
 
-            return Response({
-                'summary': {
-                    'total_projects': len(overview),
-                    'health_distribution': health_distribution,
-                    'total_alerts': total_alerts,
-                    'critical_alerts': critical_alerts,
-                    'avg_score': round(sum(p['overall_score'] for p in overview) / len(overview), 1) if overview else 0,
-                },
-                'projects': overview,
-            })
+            return Response(
+                {
+                    'summary': {
+                        'total_projects': len(overview),
+                        'health_distribution': health_distribution,
+                        'total_alerts': total_alerts,
+                        'critical_alerts': critical_alerts,
+                        'avg_score': round(sum(p['overall_score'] for p in overview) / len(overview), 1)
+                        if overview
+                        else 0,
+                    },
+                    'projects': overview,
+                }
+            )
 
 
 class ProjectHealthAlertView(APIView):
     """项目健康预警管理"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -578,11 +588,7 @@ class ProjectHealthAlertView(APIView):
         severity = request.query_params.get('severity')
         alert_type = request.query_params.get('type')
 
-        qs = ProjectHealthAlert.objects.filter(
-            is_active=True,
-            resolved=False,
-            is_deleted=False
-        )
+        qs = ProjectHealthAlert.objects.filter(is_active=True, resolved=False, is_deleted=False)
 
         if project_id:
             qs = qs.filter(project_id=project_id)
@@ -593,20 +599,25 @@ class ProjectHealthAlertView(APIView):
 
         alerts = qs.select_related('project').order_by('-severity', '-created_at')[:100]
 
-        return Response([{
-            'id': a.id,
-            'project_id': a.project_id,
-            'project_name': a.project.name,
-            'type': a.alert_type,
-            'severity': a.severity,
-            'title': a.title,
-            'description': a.description,
-            'metric_name': a.metric_name,
-            'current_value': a.current_value,
-            'threshold_value': a.threshold_value,
-            'acknowledged': a.acknowledged,
-            'created_at': a.created_at,
-        } for a in alerts])
+        return Response(
+            [
+                {
+                    'id': a.id,
+                    'project_id': a.project_id,
+                    'project_name': a.project.name,
+                    'type': a.alert_type,
+                    'severity': a.severity,
+                    'title': a.title,
+                    'description': a.description,
+                    'metric_name': a.metric_name,
+                    'current_value': a.current_value,
+                    'threshold_value': a.threshold_value,
+                    'acknowledged': a.acknowledged,
+                    'created_at': a.created_at,
+                }
+                for a in alerts
+            ]
+        )
 
     def post(self, request):
         """确认或解决预警"""
@@ -638,16 +649,14 @@ class ProjectHealthAlertView(APIView):
 
 class ProjectHealthBatchCalculateView(APIView):
     """批量计算项目健康度"""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         """批量计算并保存"""
         from apps.projects.models import Project
 
-        projects = Project.objects.filter(
-            status__in=['IN_PROGRESS', 'ACTIVE', 'TESTING'],
-            is_deleted=False
-        )
+        projects = Project.objects.filter(status__in=['IN_PROGRESS', 'ACTIVE', 'TESTING'], is_deleted=False)
 
         count = 0
         for project in projects:

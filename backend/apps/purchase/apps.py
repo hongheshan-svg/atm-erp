@@ -9,4 +9,3 @@ class PurchaseConfig(AppConfig):
     def ready(self):
         """导入信号处理器"""
         from . import signals  # noqa
-

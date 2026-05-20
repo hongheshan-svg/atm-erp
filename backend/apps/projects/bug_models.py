@@ -1,6 +1,7 @@
 """
 Bug跟踪系统模型
 """
+
 from django.conf import settings
 from django.db import models
 
@@ -11,6 +12,7 @@ class Bug(BaseModel):
     """
     Bug模型
     """
+
     # 严重程度选项
     SEVERITY_CHOICES = [
         ('CRITICAL', '致命'),
@@ -70,10 +72,7 @@ class Bug(BaseModel):
 
     # 关联
     project = models.ForeignKey(
-        'projects.Project',
-        on_delete=models.CASCADE,
-        related_name='bugs',
-        verbose_name='所属项目'
+        'projects.Project', on_delete=models.CASCADE, related_name='bugs', verbose_name='所属项目'
     )
     task = models.ForeignKey(
         'projects.ProjectTask',
@@ -81,44 +80,21 @@ class Bug(BaseModel):
         null=True,
         blank=True,
         related_name='bugs',
-        verbose_name='关联任务'
+        verbose_name='关联任务',
     )
     module = models.CharField(max_length=100, blank=True, verbose_name='模块/组件')
 
     # 分类
-    severity = models.CharField(
-        max_length=20,
-        choices=SEVERITY_CHOICES,
-        default='NORMAL',
-        verbose_name='严重程度'
-    )
-    priority = models.CharField(
-        max_length=10,
-        choices=PRIORITY_CHOICES,
-        default='P2',
-        verbose_name='优先级'
-    )
-    bug_type = models.CharField(
-        max_length=20,
-        choices=TYPE_CHOICES,
-        default='FUNCTION',
-        verbose_name='Bug类型'
-    )
+    severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES, default='NORMAL', verbose_name='严重程度')
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='P2', verbose_name='优先级')
+    bug_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='FUNCTION', verbose_name='Bug类型')
 
     # 状态
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='NEW',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='NEW', verbose_name='状态')
 
     # 人员
     reporter = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
-        related_name='reported_bugs',
-        verbose_name='报告人'
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='reported_bugs', verbose_name='报告人'
     )
     assignee = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -126,16 +102,11 @@ class Bug(BaseModel):
         null=True,
         blank=True,
         related_name='assigned_bugs',
-        verbose_name='处理人'
+        verbose_name='处理人',
     )
 
     # 解决方案
-    resolution = models.CharField(
-        max_length=20,
-        choices=RESOLUTION_CHOICES,
-        blank=True,
-        verbose_name='解决方式'
-    )
+    resolution = models.CharField(max_length=20, choices=RESOLUTION_CHOICES, blank=True, verbose_name='解决方式')
     solution = models.TextField(blank=True, verbose_name='解决说明')
 
     # 时间
@@ -148,12 +119,7 @@ class Bug(BaseModel):
 
     # 关联Bug（用于标记重复）
     duplicate_of = models.ForeignKey(
-        'self',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='duplicates',
-        verbose_name='重复于'
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='duplicates', verbose_name='重复于'
     )
 
     class Meta:
@@ -163,13 +129,14 @@ class Bug(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.bug_number}: {self.title}"
+        return f'{self.bug_number}: {self.title}'
 
     def save(self, *args, **kwargs):
         # 自动生成Bug编号
         if not self.bug_number:
             try:
                 from apps.core.code_rule_models import CodeRule
+
                 rule = CodeRule.objects.filter(rule_type='BUG', is_active=True).first()
                 if rule:
                     self.bug_number = rule.generate_code()
@@ -178,10 +145,9 @@ class Bug(BaseModel):
             except Exception:
                 # 如果编码规则不存在，使用简单编号
                 import datetime
+
                 year = datetime.datetime.now().year
-                last_bug = Bug.objects.filter(
-                    bug_number__startswith=f'BUG{year}'
-                ).order_by('-bug_number').first()
+                last_bug = Bug.objects.filter(bug_number__startswith=f'BUG{year}').order_by('-bug_number').first()
                 if last_bug:
                     try:
                         seq = int(last_bug.bug_number[-6:]) + 1
@@ -198,17 +164,10 @@ class BugComment(BaseModel):
     """
     Bug评论
     """
-    bug = models.ForeignKey(
-        Bug,
-        on_delete=models.CASCADE,
-        related_name='comments',
-        verbose_name='Bug'
-    )
+
+    bug = models.ForeignKey(Bug, on_delete=models.CASCADE, related_name='comments', verbose_name='Bug')
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
-        related_name='bug_comments',
-        verbose_name='评论人'
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='bug_comments', verbose_name='评论人'
     )
     content = models.TextField(verbose_name='评论内容')
 
@@ -219,27 +178,20 @@ class BugComment(BaseModel):
         ordering = ['created_at']
 
     def __str__(self):
-        return f"{self.bug.bug_number} - {self.user.username}"
+        return f'{self.bug.bug_number} - {self.user.username}'
 
 
 class BugAttachment(BaseModel):
     """
     Bug附件
     """
-    bug = models.ForeignKey(
-        Bug,
-        on_delete=models.CASCADE,
-        related_name='attachments',
-        verbose_name='Bug'
-    )
+
+    bug = models.ForeignKey(Bug, on_delete=models.CASCADE, related_name='attachments', verbose_name='Bug')
     file = models.FileField(upload_to='bugs/%Y/%m/', verbose_name='文件')
     filename = models.CharField(max_length=255, verbose_name='文件名')
     file_size = models.IntegerField(default=0, verbose_name='文件大小')
     uploaded_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
-        related_name='bug_attachments',
-        verbose_name='上传人'
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='bug_attachments', verbose_name='上传人'
     )
 
     class Meta:
@@ -249,24 +201,17 @@ class BugAttachment(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.bug.bug_number} - {self.filename}"
+        return f'{self.bug.bug_number} - {self.filename}'
 
 
 class BugHistory(BaseModel):
     """
     Bug变更历史
     """
-    bug = models.ForeignKey(
-        Bug,
-        on_delete=models.CASCADE,
-        related_name='histories',
-        verbose_name='Bug'
-    )
+
+    bug = models.ForeignKey(Bug, on_delete=models.CASCADE, related_name='histories', verbose_name='Bug')
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
-        related_name='bug_histories',
-        verbose_name='操作人'
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='bug_histories', verbose_name='操作人'
     )
     field_name = models.CharField(max_length=50, verbose_name='变更字段')
     field_label = models.CharField(max_length=50, verbose_name='字段名称')
@@ -280,5 +225,4 @@ class BugHistory(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.bug.bug_number} - {self.field_label}"
-
+        return f'{self.bug.bug_number} - {self.field_label}'

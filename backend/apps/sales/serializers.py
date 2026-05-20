@@ -1,6 +1,7 @@
 """
 Serializers for sales app.
 """
+
 from django.db import transaction
 from django.db.models import Sum
 from rest_framework import serializers
@@ -18,6 +19,7 @@ from .models import (
 
 class SalesQuotationLineSerializer(serializers.ModelSerializer):
     """SalesQuotationLine serializer."""
+
     # 物料关联信息（可选）
     item_name = serializers.SerializerMethodField()
     item_sku = serializers.SerializerMethodField()
@@ -27,9 +29,21 @@ class SalesQuotationLineSerializer(serializers.ModelSerializer):
     class Meta:
         model = SalesQuotationLine
         fields = [
-            'id', 'quotation', 'item', 'item_sku', 'item_name', 'item_unit', 'item_spec',
-            'custom_name', 'custom_spec', 'custom_unit',
-            'qty', 'unit_price', 'line_amount', 'notes', 'is_deleted'
+            'id',
+            'quotation',
+            'item',
+            'item_sku',
+            'item_name',
+            'item_unit',
+            'item_spec',
+            'custom_name',
+            'custom_spec',
+            'custom_unit',
+            'qty',
+            'unit_price',
+            'line_amount',
+            'notes',
+            'is_deleted',
         ]
         read_only_fields = ['line_amount']
 
@@ -60,6 +74,7 @@ class SalesQuotationLineSerializer(serializers.ModelSerializer):
 
 class SalesQuotationSerializer(serializers.ModelSerializer):
     """SalesQuotation serializer."""
+
     customer_name = serializers.CharField(source='customer.name', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True, allow_null=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
@@ -75,10 +90,29 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
     class Meta:
         model = SalesQuotation
         fields = [
-            'id', 'quote_no', 'customer', 'customer_name', 'project', 'project_name',
-            'quote_date', 'valid_until', 'status', 'status_display', 'version',
-            'tax_rate', 'tax_rate_display', 'total_amount', 'tax_amount', 'total_with_tax',
-            'notes', 'lines', 'is_deleted', 'created_by', 'created_by_name', 'created_at', 'updated_at'
+            'id',
+            'quote_no',
+            'customer',
+            'customer_name',
+            'project',
+            'project_name',
+            'quote_date',
+            'valid_until',
+            'status',
+            'status_display',
+            'version',
+            'tax_rate',
+            'tax_rate_display',
+            'total_amount',
+            'tax_amount',
+            'total_with_tax',
+            'notes',
+            'lines',
+            'is_deleted',
+            'created_by',
+            'created_by_name',
+            'created_at',
+            'updated_at',
         ]
         read_only_fields = ['quote_no', 'quote_date', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
 
@@ -104,7 +138,7 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
                         qty=line_data['qty'],
                         unit_price=line_data.get('unit_price', 0),
                         notes=line_data.get('notes', ''),
-                        created_by=quotation.created_by
+                        created_by=quotation.created_by,
                     )
 
             # Update total amount and tax
@@ -144,7 +178,7 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
                         qty=line_data['qty'],
                         unit_price=line_data.get('unit_price', 0),
                         notes=line_data.get('notes', ''),
-                        created_by=instance.created_by
+                        created_by=instance.created_by,
                     )
 
             # Update total amount and tax
@@ -159,6 +193,7 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
 
 class SalesOrderLineSerializer(serializers.ModelSerializer):
     """SalesOrderLine serializer."""
+
     # 物料关联信息（可选）
     item_name = serializers.SerializerMethodField()
     item_sku = serializers.SerializerMethodField()
@@ -169,10 +204,23 @@ class SalesOrderLineSerializer(serializers.ModelSerializer):
     class Meta:
         model = SalesOrderLine
         fields = [
-            'id', 'so', 'item', 'item_sku', 'item_name', 'item_unit', 'item_spec',
-            'custom_name', 'custom_spec', 'custom_unit',
-            'qty', 'unit_price', 'line_amount', 'delivered_qty', 'remaining_qty',
-            'notes', 'is_deleted'
+            'id',
+            'so',
+            'item',
+            'item_sku',
+            'item_name',
+            'item_unit',
+            'item_spec',
+            'custom_name',
+            'custom_spec',
+            'custom_unit',
+            'qty',
+            'unit_price',
+            'line_amount',
+            'delivered_qty',
+            'remaining_qty',
+            'notes',
+            'is_deleted',
         ]
         read_only_fields = ['line_amount', 'delivered_qty']
 
@@ -206,6 +254,7 @@ class SalesOrderLineSerializer(serializers.ModelSerializer):
 
 class SalesOrderLineWriteSerializer(serializers.Serializer):
     """Serializer for creating/updating SO lines."""
+
     # 物料可选（非标定制可不选）
     item = serializers.IntegerField(required=False, allow_null=True)
     # 手动填写的产品信息
@@ -220,6 +269,7 @@ class SalesOrderLineWriteSerializer(serializers.Serializer):
 
 class SalesOrderSerializer(serializers.ModelSerializer):
     """SalesOrder serializer."""
+
     customer_name = serializers.CharField(source='customer.name', read_only=True)
     customer_address = serializers.CharField(source='customer.address', read_only=True, allow_null=True)
     customer_contact = serializers.CharField(source='customer.contact_person', read_only=True, allow_null=True)
@@ -243,14 +293,37 @@ class SalesOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = SalesOrder
         fields = [
-            'id', 'order_no', 'customer_order_no', 'customer', 'customer_name',
-            'customer_address', 'customer_contact', 'customer_phone',
-            'project', 'project_name',
-            'order_date', 'delivery_date', 'status', 'status_display',
-            'tax_rate', 'tax_rate_display', 'total_amount', 'tax_amount', 'total_with_tax',
-            'payment_terms', 'payment_terms_display', 'payment_method', 'payment_method_display',
-            'payment_terms_detail', 'notes', 'lines', 'is_deleted',
-            'created_by', 'created_by_name', 'created_at', 'updated_at'
+            'id',
+            'order_no',
+            'customer_order_no',
+            'customer',
+            'customer_name',
+            'customer_address',
+            'customer_contact',
+            'customer_phone',
+            'project',
+            'project_name',
+            'order_date',
+            'delivery_date',
+            'status',
+            'status_display',
+            'tax_rate',
+            'tax_rate_display',
+            'total_amount',
+            'tax_amount',
+            'total_with_tax',
+            'payment_terms',
+            'payment_terms_display',
+            'payment_method',
+            'payment_method_display',
+            'payment_terms_detail',
+            'notes',
+            'lines',
+            'is_deleted',
+            'created_by',
+            'created_by_name',
+            'created_at',
+            'updated_at',
         ]
         read_only_fields = ['order_date', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
         extra_kwargs = {
@@ -282,7 +355,7 @@ class SalesOrderSerializer(serializers.ModelSerializer):
                         qty=line_data['qty'],
                         unit_price=line_data.get('unit_price', 0),
                         notes=line_data.get('notes', ''),
-                        created_by=so.created_by
+                        created_by=so.created_by,
                     )
 
             # Update total amount and tax
@@ -322,7 +395,7 @@ class SalesOrderSerializer(serializers.ModelSerializer):
                         qty=line_data['qty'],
                         unit_price=line_data.get('unit_price', 0),
                         notes=line_data.get('notes', ''),
-                        created_by=instance.created_by
+                        created_by=instance.created_by,
                     )
 
             # Update total amount and tax
@@ -337,6 +410,7 @@ class SalesOrderSerializer(serializers.ModelSerializer):
 
 class DeliveryOrderLineSerializer(serializers.ModelSerializer):
     """DeliveryOrderLine serializer."""
+
     item_name = serializers.SerializerMethodField()
     item_sku = serializers.SerializerMethodField()
     item_unit = serializers.SerializerMethodField()
@@ -371,14 +445,24 @@ class DeliveryOrderLineSerializer(serializers.ModelSerializer):
     class Meta:
         model = DeliveryOrderLine
         fields = [
-            'id', 'delivery', 'so_line', 'item', 'item_sku', 'item_name', 'item_unit',
-            'unit', 'specification',
-            'qty', 'notes', 'is_deleted'
+            'id',
+            'delivery',
+            'so_line',
+            'item',
+            'item_sku',
+            'item_name',
+            'item_unit',
+            'unit',
+            'specification',
+            'qty',
+            'notes',
+            'is_deleted',
         ]
 
 
 class DeliveryOrderSerializer(serializers.ModelSerializer):
     """DeliveryOrder serializer."""
+
     so_no = serializers.CharField(source='so.order_no', read_only=True)
     customer_name = serializers.CharField(source='so.customer.name', read_only=True)
     customer_contact = serializers.CharField(source='so.customer.contact_person', read_only=True)
@@ -394,27 +478,54 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = DeliveryOrder
         fields = [
-            'id', 'delivery_no', 'so', 'so_no',
+            'id',
+            'delivery_no',
+            'so',
+            'so_no',
             # 客户信息
-            'customer_name', 'customer_contact', 'customer_phone', 'customer_address',
+            'customer_name',
+            'customer_contact',
+            'customer_phone',
+            'customer_address',
             'project_name',
             # 仓库和日期
-            'warehouse', 'warehouse_name', 'delivery_date', 'actual_delivery_date',
+            'warehouse',
+            'warehouse_name',
+            'delivery_date',
+            'actual_delivery_date',
             # 状态
-            'status', 'status_display',
+            'status',
+            'status_display',
             # 收货信息
-            'receiver_name', 'receiver_phone', 'receiver_address',
+            'receiver_name',
+            'receiver_phone',
+            'receiver_address',
             # 包装和保险
-            'packaging_type', 'packaging_type_display', 'packaging_notes',
-            'needs_insurance', 'insurance_amount',
+            'packaging_type',
+            'packaging_type_display',
+            'packaging_notes',
+            'needs_insurance',
+            'insurance_amount',
             # 物流信息
-            'logistics_company', 'logistics_contact', 'logistics_phone',
-            'tracking_number', 'logistics_notes', 'logistics_cost',
+            'logistics_company',
+            'logistics_contact',
+            'logistics_phone',
+            'tracking_number',
+            'logistics_notes',
+            'logistics_cost',
             # 签收信息
-            'signed_receipt', 'signed_date', 'signed_by',
+            'signed_receipt',
+            'signed_date',
+            'signed_by',
             # 其他
-            'notes', 'rejection_reason', 'total_amount', 'lines',
-            'is_deleted', 'created_at', 'updated_at', 'created_by'
+            'notes',
+            'rejection_reason',
+            'total_amount',
+            'lines',
+            'is_deleted',
+            'created_at',
+            'updated_at',
+            'created_by',
         ]
         read_only_fields = ['delivery_no', 'created_at', 'updated_at', 'total_amount']
 
@@ -433,7 +544,7 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
                         item_id=line_data['item'],
                         qty=line_data['qty'],
                         notes=line_data.get('notes', ''),
-                        created_by=delivery.created_by
+                        created_by=delivery.created_by,
                     )
 
         return delivery
@@ -459,7 +570,7 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
                         item_id=line_data['item'],
                         qty=line_data['qty'],
                         notes=line_data.get('notes', ''),
-                        created_by=instance.created_by
+                        created_by=instance.created_by,
                     )
 
         return instance
@@ -467,6 +578,7 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
 
 class SalesContractSerializer(serializers.ModelSerializer):
     """SalesContract serializer."""
+
     so_no = serializers.CharField(source='so.order_no', read_only=True)
     customer_name = serializers.CharField(source='customer.name', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
@@ -476,13 +588,36 @@ class SalesContractSerializer(serializers.ModelSerializer):
     class Meta:
         model = SalesContract
         fields = [
-            'id', 'contract_no', 'so', 'so_no', 'customer', 'customer_name',
-            'project', 'project_name', 'title', 'contract_date',
-            'effective_date', 'expiry_date', 'total_amount', 'tax_rate',
-            'tax_amount', 'total_with_tax', 'payment_terms', 'delivery_terms',
-            'quality_terms', 'warranty_terms', 'buyer_signer', 'seller_signer',
-            'signed_date', 'status', 'status_display', 'notes', 'so_lines',
-            'is_deleted', 'created_at', 'updated_at'
+            'id',
+            'contract_no',
+            'so',
+            'so_no',
+            'customer',
+            'customer_name',
+            'project',
+            'project_name',
+            'title',
+            'contract_date',
+            'effective_date',
+            'expiry_date',
+            'total_amount',
+            'tax_rate',
+            'tax_amount',
+            'total_with_tax',
+            'payment_terms',
+            'delivery_terms',
+            'quality_terms',
+            'warranty_terms',
+            'buyer_signer',
+            'seller_signer',
+            'signed_date',
+            'status',
+            'status_display',
+            'notes',
+            'so_lines',
+            'is_deleted',
+            'created_at',
+            'updated_at',
         ]
         read_only_fields = ['contract_no', 'created_at', 'updated_at']
 

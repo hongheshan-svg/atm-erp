@@ -2,6 +2,7 @@
 报价成本预测优化模块
 Quote Prediction - 历史参照、多版本报价、利润预测
 """
+
 from decimal import Decimal
 
 from django.conf import settings
@@ -20,6 +21,7 @@ User = settings.AUTH_USER_MODEL
 
 class QuoteVersion(BaseModel):
     """报价版本"""
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('SUBMITTED', '已提交'),
@@ -33,19 +35,31 @@ class QuoteVersion(BaseModel):
 
     quote_no = models.CharField('报价编号', max_length=50)
     version = models.IntegerField('版本号', default=1)
-    customer = models.ForeignKey('masterdata.Customer', on_delete=models.CASCADE,
-                                related_name='quote_versions', verbose_name='客户')
-    opportunity = models.ForeignKey('sales.Opportunity', on_delete=models.SET_NULL,
-                                   null=True, blank=True, related_name='quote_versions', verbose_name='商机')
+    customer = models.ForeignKey(
+        'masterdata.Customer', on_delete=models.CASCADE, related_name='quote_versions', verbose_name='客户'
+    )
+    opportunity = models.ForeignKey(
+        'sales.Opportunity',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='quote_versions',
+        verbose_name='商机',
+    )
 
     title = models.CharField('报价标题', max_length=200)
     description = models.TextField('项目描述', blank=True)
     status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES, default='DRAFT')
 
     # 参照项目
-    reference_project = models.ForeignKey('projects.Project', on_delete=models.SET_NULL,
-                                         null=True, blank=True, related_name='referenced_quotes',
-                                         verbose_name='参照项目')
+    reference_project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='referenced_quotes',
+        verbose_name='参照项目',
+    )
     similarity_score = models.DecimalField('相似度', max_digits=5, decimal_places=2, default=0)
 
     # 成本估算
@@ -73,8 +87,9 @@ class QuoteVersion(BaseModel):
     valid_until = models.DateField('有效期至', null=True, blank=True)
 
     # 创建人
-    created_by_user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
-                                       related_name='created_quotes', verbose_name='创建人')
+    created_by_user = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='created_quotes', verbose_name='创建人'
+    )
 
     class Meta:
         db_table = 'quote_version'
@@ -87,19 +102,26 @@ class QuoteVersion(BaseModel):
 
     @property
     def total_cost(self):
-        return (self.material_cost + self.labor_cost + self.outsource_cost +
-                self.overhead_cost + self.other_cost + self.contingency)
+        return (
+            self.material_cost
+            + self.labor_cost
+            + self.outsource_cost
+            + self.overhead_cost
+            + self.other_cost
+            + self.contingency
+        )
 
     def save(self, *args, **kwargs):
         # 计算利润
         self.expected_profit = self.final_amount - self.total_cost
         if self.final_amount > 0:
-            self.profit_margin = (self.expected_profit / self.final_amount * 100)
+            self.profit_margin = self.expected_profit / self.final_amount * 100
         super().save(*args, **kwargs)
 
 
 class QuoteCostItem(BaseModel):
     """报价成本明细"""
+
     COST_TYPE_CHOICES = [
         ('MATERIAL', '材料'),
         ('LABOR', '人工'),
@@ -108,12 +130,17 @@ class QuoteCostItem(BaseModel):
         ('OTHER', '其他'),
     ]
 
-    quote = models.ForeignKey(QuoteVersion, on_delete=models.CASCADE,
-                             related_name='cost_items', verbose_name='报价')
+    quote = models.ForeignKey(QuoteVersion, on_delete=models.CASCADE, related_name='cost_items', verbose_name='报价')
     cost_type = models.CharField('成本类型', max_length=20, choices=COST_TYPE_CHOICES)
 
-    item = models.ForeignKey('masterdata.Item', on_delete=models.SET_NULL,
-                            null=True, blank=True, related_name='quote_cost_items', verbose_name='物料')
+    item = models.ForeignKey(
+        'masterdata.Item',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='quote_cost_items',
+        verbose_name='物料',
+    )
     description = models.CharField('描述', max_length=500)
 
     quantity = models.DecimalField('数量', max_digits=14, decimal_places=4, default=1)
@@ -138,15 +165,22 @@ class QuoteCostItem(BaseModel):
 
 class QuoteComparison(BaseModel):
     """报价对比"""
+
     name = models.CharField('对比名称', max_length=200)
-    customer = models.ForeignKey('masterdata.Customer', on_delete=models.CASCADE,
-                                related_name='quote_comparisons', verbose_name='客户')
+    customer = models.ForeignKey(
+        'masterdata.Customer', on_delete=models.CASCADE, related_name='quote_comparisons', verbose_name='客户'
+    )
     quotes = models.ManyToManyField(QuoteVersion, related_name='comparisons', verbose_name='报价版本')
 
     conclusion = models.TextField('对比结论', blank=True)
-    recommended_quote = models.ForeignKey(QuoteVersion, on_delete=models.SET_NULL,
-                                         null=True, blank=True, related_name='recommended_in',
-                                         verbose_name='推荐版本')
+    recommended_quote = models.ForeignKey(
+        QuoteVersion,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='recommended_in',
+        verbose_name='推荐版本',
+    )
 
     class Meta:
         db_table = 'quote_comparison'
@@ -155,8 +189,10 @@ class QuoteComparison(BaseModel):
 
 class QuoteProjectCostRef(BaseModel):
     """报价参考-项目成本历史（用于参照报价）"""
-    project = models.ForeignKey('projects.Project', on_delete=models.CASCADE,
-                               related_name='quote_cost_refs', verbose_name='项目')
+
+    project = models.ForeignKey(
+        'projects.Project', on_delete=models.CASCADE, related_name='quote_cost_refs', verbose_name='项目'
+    )
 
     # 项目特征
     project_type = models.CharField('项目类型', max_length=100)
@@ -189,6 +225,7 @@ class QuoteProjectCostRef(BaseModel):
 
 # ==================== Services ====================
 
+
 class QuotePredictionService:
     """报价预测服务"""
 
@@ -216,16 +253,18 @@ class QuotePredictionService:
                 similarity = 0
 
             if similarity > 0:
-                similar.append({
-                    'project_id': history.project_id,
-                    'project_name': history.project.name if history.project else '',
-                    'project_type': history.project_type,
-                    'similarity': round(similarity * 100, 1),
-                    'contract_amount': float(history.contract_amount),
-                    'actual_cost': float(history.actual_total_cost),
-                    'profit_margin': float(history.profit_margin),
-                    'actual_days': history.actual_days,
-                })
+                similar.append(
+                    {
+                        'project_id': history.project_id,
+                        'project_name': history.project.name if history.project else '',
+                        'project_type': history.project_type,
+                        'similarity': round(similarity * 100, 1),
+                        'contract_amount': float(history.contract_amount),
+                        'actual_cost': float(history.actual_total_cost),
+                        'profit_margin': float(history.profit_margin),
+                        'actual_days': history.actual_days,
+                    }
+                )
 
         # 按相似度排序
         similar.sort(key=lambda x: x['similarity'], reverse=True)
@@ -275,6 +314,7 @@ class QuotePredictionService:
 
 # ==================== Serializers ====================
 
+
 class QuoteCostItemSerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source='item.name', read_only=True)
     cost_type_display = serializers.CharField(source='get_cost_type_display', read_only=True)
@@ -315,8 +355,10 @@ class QuoteProjectCostRefSerializer(serializers.ModelSerializer):
 
 # ==================== ViewSets ====================
 
+
 class QuoteVersionViewSet(viewsets.ModelViewSet):
     """报价版本管理"""
+
     queryset = QuoteVersion.objects.filter(is_deleted=False)
     serializer_class = QuoteVersionSerializer
     permission_classes = [IsAuthenticated]
@@ -352,9 +394,9 @@ class QuoteVersionViewSet(viewsets.ModelViewSet):
         quote = self.get_object()
 
         # 获取最新版本号
-        max_version = QuoteVersion.objects.filter(
-            quote_no=quote.quote_no
-        ).aggregate(max_v=models.Max('version'))['max_v'] or 0
+        max_version = (
+            QuoteVersion.objects.filter(quote_no=quote.quote_no).aggregate(max_v=models.Max('version'))['max_v'] or 0
+        )
 
         # 复制创建新版本
         new_quote = QuoteVersion.objects.create(
@@ -377,7 +419,7 @@ class QuoteVersionViewSet(viewsets.ModelViewSet):
             estimated_days=quote.estimated_days,
             created_by_user=request.user,
             created_by=request.user,
-            updated_by=request.user
+            updated_by=request.user,
         )
 
         # 复制成本明细
@@ -395,7 +437,7 @@ class QuoteVersionViewSet(viewsets.ModelViewSet):
                 confidence=item.confidence,
                 remarks=item.remarks,
                 created_by=request.user,
-                updated_by=request.user
+                updated_by=request.user,
             )
 
         return Response(QuoteVersionSerializer(new_quote).data)
@@ -419,10 +461,7 @@ class QuoteVersionViewSet(viewsets.ModelViewSet):
         """利润预测"""
         quote = self.get_object()
 
-        prediction = QuotePredictionService.predict_profit(
-            float(quote.final_amount),
-            float(quote.total_cost)
-        )
+        prediction = QuotePredictionService.predict_profit(float(quote.final_amount), float(quote.total_cost))
 
         return Response(prediction)
 
@@ -439,6 +478,7 @@ class QuoteVersionViewSet(viewsets.ModelViewSet):
 
 class QuoteCostItemViewSet(viewsets.ModelViewSet):
     """报价成本明细管理"""
+
     queryset = QuoteCostItem.objects.filter(is_deleted=False)
     serializer_class = QuoteCostItemSerializer
     permission_classes = [IsAuthenticated]
@@ -453,6 +493,7 @@ class QuoteCostItemViewSet(viewsets.ModelViewSet):
 
 class QuoteComparisonViewSet(viewsets.ModelViewSet):
     """报价对比管理"""
+
     queryset = QuoteComparison.objects.filter(is_deleted=False)
     serializer_class = QuoteComparisonSerializer
     permission_classes = [IsAuthenticated]
@@ -477,17 +518,19 @@ class QuoteComparisonViewSet(viewsets.ModelViewSet):
         }
 
         for quote in quotes:
-            comparison_data['quotes'].append({
-                'id': quote.id,
-                'quote_no': f'{quote.quote_no} V{quote.version}',
-                'total_cost': float(quote.total_cost),
-                'final_amount': float(quote.final_amount),
-                'profit_margin': float(quote.profit_margin),
-                'estimated_days': quote.estimated_days,
-                'material_cost': float(quote.material_cost),
-                'labor_cost': float(quote.labor_cost),
-                'outsource_cost': float(quote.outsource_cost),
-            })
+            comparison_data['quotes'].append(
+                {
+                    'id': quote.id,
+                    'quote_no': f'{quote.quote_no} V{quote.version}',
+                    'total_cost': float(quote.total_cost),
+                    'final_amount': float(quote.final_amount),
+                    'profit_margin': float(quote.profit_margin),
+                    'estimated_days': quote.estimated_days,
+                    'material_cost': float(quote.material_cost),
+                    'labor_cost': float(quote.labor_cost),
+                    'outsource_cost': float(quote.outsource_cost),
+                }
+            )
 
             comparison_data['metrics']['total_cost'].append(float(quote.total_cost))
             comparison_data['metrics']['final_amount'].append(float(quote.final_amount))
@@ -496,8 +539,10 @@ class QuoteComparisonViewSet(viewsets.ModelViewSet):
 
         # 计算差异
         comparison_data['analysis'] = {
-            'cost_variance': max(comparison_data['metrics']['total_cost']) - min(comparison_data['metrics']['total_cost']),
-            'price_variance': max(comparison_data['metrics']['final_amount']) - min(comparison_data['metrics']['final_amount']),
+            'cost_variance': max(comparison_data['metrics']['total_cost'])
+            - min(comparison_data['metrics']['total_cost']),
+            'price_variance': max(comparison_data['metrics']['final_amount'])
+            - min(comparison_data['metrics']['final_amount']),
             'best_margin_quote': max(comparison_data['quotes'], key=lambda x: x['profit_margin'])['quote_no'],
             'lowest_cost_quote': min(comparison_data['quotes'], key=lambda x: x['total_cost'])['quote_no'],
         }
@@ -507,6 +552,7 @@ class QuoteComparisonViewSet(viewsets.ModelViewSet):
 
 class QuoteProjectCostRefViewSet(viewsets.ModelViewSet):
     """报价参考成本历史管理"""
+
     queryset = QuoteProjectCostRef.objects.filter(is_deleted=False)
     serializer_class = QuoteProjectCostRefSerializer
     permission_classes = [IsAuthenticated]
@@ -531,9 +577,10 @@ class QuoteProjectCostRefViewSet(viewsets.ModelViewSet):
 
         # 获取合同金额
         from apps.sales.models import SalesOrder
-        contract_amount = SalesOrder.objects.filter(
-            project=project, is_deleted=False
-        ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
+
+        contract_amount = SalesOrder.objects.filter(project=project, is_deleted=False).aggregate(
+            total=Sum('total_amount')
+        )['total'] or Decimal('0')
 
         profit = contract_amount - total_cost
         margin = (profit / contract_amount * 100) if contract_amount > 0 else Decimal('0')
@@ -559,10 +606,9 @@ class QuoteProjectCostRefViewSet(viewsets.ModelViewSet):
                 'actual_days': actual_days,
                 'created_by': request.user,
                 'updated_by': request.user,
-            }
+            },
         )
 
-        return Response({
-            'message': '已同步' if created else '已更新',
-            'data': QuoteProjectCostRefSerializer(history).data
-        })
+        return Response(
+            {'message': '已同步' if created else '已更新', 'data': QuoteProjectCostRefSerializer(history).data}
+        )

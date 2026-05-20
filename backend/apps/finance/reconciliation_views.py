@@ -1,6 +1,7 @@
 """
 对账单视图
 """
+
 from decimal import Decimal
 
 from django.db import transaction
@@ -44,6 +45,7 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
     - 生成对账明细（从采购订单、发票、付款记录）
     - 确认对账
     """
+
     queryset = PurchaseReconciliation.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['supplier', 'status']
@@ -69,10 +71,7 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
         reconciliation = self.get_object()
 
         if reconciliation.status not in ['DRAFT', 'PENDING']:
-            return Response(
-                {'error': '只能对草稿或待确认状态的对账单生成明细'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能对草稿或待确认状态的对账单生成明细'}, status=status.HTTP_400_BAD_REQUEST)
 
         from apps.purchase.models import GoodsReceipt, PurchaseOrder
 
@@ -92,7 +91,7 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
                 order_date__gte=reconciliation.period_start,
                 order_date__lte=reconciliation.period_end,
                 status__in=['CONFIRMED', 'PARTIAL', 'COMPLETED'],
-                is_deleted=False
+                is_deleted=False,
             ).order_by('order_date')
 
             for po in orders:
@@ -140,8 +139,8 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
                     payable_amount=payable_amount,
                     paid_amount=paid_amount,
                     payment_progress=payment_progress,
-                    notes=f"采购订单 - {po.get_status_display()}",
-                    created_by=request.user
+                    notes=f'采购订单 - {po.get_status_display()}',
+                    created_by=request.user,
                 )
 
             # 2. 获取期间内的收货单
@@ -150,7 +149,7 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
                 receipt_date__gte=reconciliation.period_start,
                 receipt_date__lte=reconciliation.period_end,
                 status__in=['CONFIRMED', 'COMPLETED'],
-                is_deleted=False
+                is_deleted=False,
             ).order_by('receipt_date')
 
             for receipt in receipts:
@@ -170,8 +169,8 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
                     debit_amount=receipt_amount,
                     credit_amount=0,
                     balance=running_balance,
-                    notes="收货确认",
-                    created_by=request.user
+                    notes='收货确认',
+                    created_by=request.user,
                 )
 
             # 3. 获取期间内的应付账款（发票）
@@ -179,7 +178,7 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
                 supplier=reconciliation.supplier,
                 invoice_date__gte=reconciliation.period_start,
                 invoice_date__lte=reconciliation.period_end,
-                is_deleted=False
+                is_deleted=False,
             ).order_by('invoice_date')
 
             for ap in payables:
@@ -195,8 +194,8 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
                     debit_amount=ap.amount_due,
                     credit_amount=0,
                     balance=running_balance,
-                    notes="发票/应付",
-                    created_by=request.user
+                    notes='发票/应付',
+                    created_by=request.user,
                 )
 
             # 4. 获取期间内的付款记录
@@ -205,7 +204,7 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
                 ap__supplier=reconciliation.supplier,
                 payment_date__gte=reconciliation.period_start,
                 payment_date__lte=reconciliation.period_end,
-                is_deleted=False
+                is_deleted=False,
             ).order_by('payment_date')
 
             for payment in payments:
@@ -220,8 +219,8 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
                     debit_amount=0,
                     credit_amount=payment.amount,
                     balance=running_balance,
-                    notes=f"付款 - {payment.get_payment_method_display()}",
-                    created_by=request.user
+                    notes=f'付款 - {payment.get_payment_method_display()}',
+                    created_by=request.user,
                 )
 
             # 更新汇总金额
@@ -242,10 +241,7 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
         reconciliation = self.get_object()
 
         if reconciliation.status != 'DRAFT':
-            return Response(
-                {'error': '只能提交草稿状态的对账单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能提交草稿状态的对账单'}, status=status.HTTP_400_BAD_REQUEST)
 
         reconciliation.status = 'PENDING'
         reconciliation.save()
@@ -258,10 +254,7 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
         reconciliation = self.get_object()
 
         if reconciliation.status != 'PENDING':
-            return Response(
-                {'error': '只能确认待确认状态的对账单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能确认待确认状态的对账单'}, status=status.HTTP_400_BAD_REQUEST)
 
         reconciliation.status = 'CONFIRMED'
         reconciliation.confirmed_by = request.user
@@ -276,10 +269,7 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
         reconciliation = self.get_object()
 
         if reconciliation.status not in ['PENDING', 'CONFIRMED']:
-            return Response(
-                {'error': '只能对待确认或已确认的对账单标记争议'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能对待确认或已确认的对账单标记争议'}, status=status.HTTP_400_BAD_REQUEST)
 
         reconciliation.status = 'DISPUTED'
         reconciliation.notes = f"争议说明：{request.data.get('reason', '')}\n" + reconciliation.notes
@@ -347,11 +337,11 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
             return Response({'error': '请提供供应商ID'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 查找该供应商最近一期已确认的对账单
-        last_reconciliation = PurchaseReconciliation.objects.filter(
-            supplier_id=supplier_id,
-            status='CONFIRMED',
-            is_deleted=False
-        ).order_by('-period_end').first()
+        last_reconciliation = (
+            PurchaseReconciliation.objects.filter(supplier_id=supplier_id, status='CONFIRMED', is_deleted=False)
+            .order_by('-period_end')
+            .first()
+        )
 
         if last_reconciliation:
             # 使用上期对账单的期末余额
@@ -362,7 +352,7 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
                 supplier_id=supplier_id,
                 payment_date__gt=last_reconciliation.period_end,
                 status='COMPLETED',
-                is_deleted=False
+                is_deleted=False,
             ).aggregate(total=Sum('amount'))
             payments_after_amount = payments_after['total'] or Decimal('0')
             opening_balance = opening_balance - payments_after_amount
@@ -372,43 +362,38 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
                 supplier_id=supplier_id,
                 invoice_date__gt=last_reconciliation.period_end,
                 invoice_type='PURCHASE',
-                is_deleted=False
+                is_deleted=False,
             ).aggregate(total=Sum('total_amount'))
             invoices_after_amount = invoices_after['total'] or Decimal('0')
             opening_balance = opening_balance + invoices_after_amount
 
             source = 'last_reconciliation'
-            last_period = f"{last_reconciliation.period_start} ~ {last_reconciliation.period_end}"
+            last_period = f'{last_reconciliation.period_start} ~ {last_reconciliation.period_end}'
             details = {
                 'last_closing_balance': float(last_reconciliation.closing_balance or 0),
                 'payments_after': float(payments_after_amount),
-                'invoices_after': float(invoices_after_amount)
+                'invoices_after': float(invoices_after_amount),
             }
         else:
             # 没有历史对账单，计算应付账款余额
-            payable = AccountPayable.objects.filter(
-                supplier_id=supplier_id,
-                is_deleted=False
-            ).aggregate(
-                total_due=Sum('amount_due'),
-                total_paid=Sum('amount_paid')
+            payable = AccountPayable.objects.filter(supplier_id=supplier_id, is_deleted=False).aggregate(
+                total_due=Sum('amount_due'), total_paid=Sum('amount_paid')
             )
             total_due = payable['total_due'] or Decimal('0')
             total_paid = payable['total_paid'] or Decimal('0')
             opening_balance = total_due - total_paid
             source = 'account_payable'
             last_period = None
-            details = {
-                'total_due': float(total_due),
-                'total_paid': float(total_paid)
-            }
+            details = {'total_due': float(total_due), 'total_paid': float(total_paid)}
 
-        return Response({
-            'opening_balance': float(opening_balance),
-            'source': source,
-            'last_period': last_period,
-            'details': details
-        })
+        return Response(
+            {
+                'opening_balance': float(opening_balance),
+                'source': source,
+                'last_period': last_period,
+                'details': details,
+            }
+        )
 
     @action(detail=False, methods=['get'])
     def supplier_summary(self, request):
@@ -418,31 +403,30 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
         """
         from apps.masterdata.models import Supplier
 
-        suppliers = Supplier.objects.filter(is_deleted=False).annotate(
-            total_payable=Sum(
-                'payables__amount_due',
-                filter=Q(payables__is_deleted=False)
-            ),
-            total_paid=Sum(
-                'payables__amount_paid',
-                filter=Q(payables__is_deleted=False)
+        suppliers = (
+            Supplier.objects.filter(is_deleted=False)
+            .annotate(
+                total_payable=Sum('payables__amount_due', filter=Q(payables__is_deleted=False)),
+                total_paid=Sum('payables__amount_paid', filter=Q(payables__is_deleted=False)),
             )
-        ).values(
-            'id', 'name', 'code', 'total_payable', 'total_paid'
-        ).order_by('name')
+            .values('id', 'name', 'code', 'total_payable', 'total_paid')
+            .order_by('name')
+        )
 
         result = []
         for s in suppliers:
             payable = s['total_payable'] or 0
             paid = s['total_paid'] or 0
-            result.append({
-                'id': s['id'],
-                'name': s['name'],
-                'code': s['code'],
-                'total_payable': float(payable),
-                'total_paid': float(paid),
-                'balance': float(payable - paid)
-            })
+            result.append(
+                {
+                    'id': s['id'],
+                    'name': s['name'],
+                    'code': s['code'],
+                    'total_payable': float(payable),
+                    'total_paid': float(paid),
+                    'balance': float(payable - paid),
+                }
+            )
 
         return Response(result)
 
@@ -451,6 +435,7 @@ class SalesReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
     """
     销售收款对账单视图
     """
+
     queryset = SalesReconciliation.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['customer', 'status']
@@ -475,10 +460,7 @@ class SalesReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
         reconciliation = self.get_object()
 
         if reconciliation.status not in ['DRAFT', 'PENDING']:
-            return Response(
-                {'error': '只能对草稿或待确认状态的对账单生成明细'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能对草稿或待确认状态的对账单生成明细'}, status=status.HTTP_400_BAD_REQUEST)
 
         from apps.sales.models import DeliveryOrder, SalesOrder
 
@@ -497,7 +479,7 @@ class SalesReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
                 order_date__gte=reconciliation.period_start,
                 order_date__lte=reconciliation.period_end,
                 status__in=['CONFIRMED', 'PARTIAL', 'COMPLETED'],
-                is_deleted=False
+                is_deleted=False,
             ).order_by('order_date')
 
             for so in orders:
@@ -545,8 +527,8 @@ class SalesReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
                     receivable_amount=receivable_amount,
                     received_amount=received_amount,
                     collection_progress=collection_progress,
-                    notes=f"销售订单 - {so.get_status_display()}",
-                    created_by=request.user
+                    notes=f'销售订单 - {so.get_status_display()}',
+                    created_by=request.user,
                 )
 
             # 2. 获取期间内的发货单
@@ -555,7 +537,7 @@ class SalesReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
                 delivery_date__gte=reconciliation.period_start,
                 delivery_date__lte=reconciliation.period_end,
                 status__in=['CONFIRMED', 'COMPLETED'],
-                is_deleted=False
+                is_deleted=False,
             ).order_by('delivery_date')
 
             for delivery in deliveries:
@@ -575,8 +557,8 @@ class SalesReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
                     debit_amount=delivery_amount,
                     credit_amount=0,
                     balance=running_balance,
-                    notes="发货确认",
-                    created_by=request.user
+                    notes='发货确认',
+                    created_by=request.user,
                 )
 
             # 3. 获取期间内的应收账款（发票）
@@ -584,7 +566,7 @@ class SalesReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
                 customer=reconciliation.customer,
                 invoice_date__gte=reconciliation.period_start,
                 invoice_date__lte=reconciliation.period_end,
-                is_deleted=False
+                is_deleted=False,
             ).order_by('invoice_date')
 
             for ar in receivables:
@@ -600,8 +582,8 @@ class SalesReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
                     debit_amount=ar.amount_due,
                     credit_amount=0,
                     balance=running_balance,
-                    notes="发票/应收",
-                    created_by=request.user
+                    notes='发票/应收',
+                    created_by=request.user,
                 )
 
             # 4. 获取期间内的收款记录
@@ -610,7 +592,7 @@ class SalesReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
                 ar__customer=reconciliation.customer,
                 payment_date__gte=reconciliation.period_start,
                 payment_date__lte=reconciliation.period_end,
-                is_deleted=False
+                is_deleted=False,
             ).order_by('payment_date')
 
             for payment in payments:
@@ -625,8 +607,8 @@ class SalesReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
                     debit_amount=0,
                     credit_amount=payment.amount,
                     balance=running_balance,
-                    notes=f"收款 - {payment.get_payment_method_display()}",
-                    created_by=request.user
+                    notes=f'收款 - {payment.get_payment_method_display()}',
+                    created_by=request.user,
                 )
 
             # 更新汇总金额
@@ -647,10 +629,7 @@ class SalesReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
         reconciliation = self.get_object()
 
         if reconciliation.status != 'DRAFT':
-            return Response(
-                {'error': '只能提交草稿状态的对账单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能提交草稿状态的对账单'}, status=status.HTTP_400_BAD_REQUEST)
 
         reconciliation.status = 'PENDING'
         reconciliation.save()
@@ -663,10 +642,7 @@ class SalesReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
         reconciliation = self.get_object()
 
         if reconciliation.status != 'PENDING':
-            return Response(
-                {'error': '只能确认待确认状态的对账单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能确认待确认状态的对账单'}, status=status.HTTP_400_BAD_REQUEST)
 
         reconciliation.status = 'CONFIRMED'
         reconciliation.confirmed_by = request.user
@@ -735,11 +711,11 @@ class SalesReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
             return Response({'error': '请提供客户ID'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 查找该客户最近一期已确认的对账单
-        last_reconciliation = SalesReconciliation.objects.filter(
-            customer_id=customer_id,
-            status='CONFIRMED',
-            is_deleted=False
-        ).order_by('-period_end').first()
+        last_reconciliation = (
+            SalesReconciliation.objects.filter(customer_id=customer_id, status='CONFIRMED', is_deleted=False)
+            .order_by('-period_end')
+            .first()
+        )
 
         if last_reconciliation:
             # 使用上期对账单的期末余额
@@ -750,7 +726,7 @@ class SalesReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
                 customer_id=customer_id,
                 payment_date__gt=last_reconciliation.period_end,
                 status='COMPLETED',
-                is_deleted=False
+                is_deleted=False,
             ).aggregate(total=Sum('amount'))
             receipts_after_amount = receipts_after['total'] or Decimal('0')
             opening_balance = opening_balance - receipts_after_amount
@@ -760,43 +736,38 @@ class SalesReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
                 customer_id=customer_id,
                 invoice_date__gt=last_reconciliation.period_end,
                 invoice_type='SALE',
-                is_deleted=False
+                is_deleted=False,
             ).aggregate(total=Sum('total_amount'))
             invoices_after_amount = invoices_after['total'] or Decimal('0')
             opening_balance = opening_balance + invoices_after_amount
 
             source = 'last_reconciliation'
-            last_period = f"{last_reconciliation.period_start} ~ {last_reconciliation.period_end}"
+            last_period = f'{last_reconciliation.period_start} ~ {last_reconciliation.period_end}'
             details = {
                 'last_closing_balance': float(last_reconciliation.closing_balance or 0),
                 'receipts_after': float(receipts_after_amount),
-                'invoices_after': float(invoices_after_amount)
+                'invoices_after': float(invoices_after_amount),
             }
         else:
             # 没有历史对账单，计算应收账款余额
-            receivable = AccountReceivable.objects.filter(
-                customer_id=customer_id,
-                is_deleted=False
-            ).aggregate(
-                total_due=Sum('amount_due'),
-                total_received=Sum('amount_paid')
+            receivable = AccountReceivable.objects.filter(customer_id=customer_id, is_deleted=False).aggregate(
+                total_due=Sum('amount_due'), total_received=Sum('amount_paid')
             )
             total_due = receivable['total_due'] or Decimal('0')
             total_received = receivable['total_received'] or Decimal('0')
             opening_balance = total_due - total_received
             source = 'account_receivable'
             last_period = None
-            details = {
-                'total_due': float(total_due),
-                'total_received': float(total_received)
-            }
+            details = {'total_due': float(total_due), 'total_received': float(total_received)}
 
-        return Response({
-            'opening_balance': float(opening_balance),
-            'source': source,
-            'last_period': last_period,
-            'details': details
-        })
+        return Response(
+            {
+                'opening_balance': float(opening_balance),
+                'source': source,
+                'last_period': last_period,
+                'details': details,
+            }
+        )
 
     @action(detail=False, methods=['get'])
     def customer_summary(self, request):
@@ -805,31 +776,30 @@ class SalesReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
         """
         from apps.masterdata.models import Customer
 
-        customers = Customer.objects.filter(is_deleted=False).annotate(
-            total_receivable=Sum(
-                'receivables__amount_due',
-                filter=Q(receivables__is_deleted=False)
-            ),
-            total_received=Sum(
-                'receivables__amount_paid',
-                filter=Q(receivables__is_deleted=False)
+        customers = (
+            Customer.objects.filter(is_deleted=False)
+            .annotate(
+                total_receivable=Sum('receivables__amount_due', filter=Q(receivables__is_deleted=False)),
+                total_received=Sum('receivables__amount_paid', filter=Q(receivables__is_deleted=False)),
             )
-        ).values(
-            'id', 'name', 'code', 'total_receivable', 'total_received'
-        ).order_by('name')
+            .values('id', 'name', 'code', 'total_receivable', 'total_received')
+            .order_by('name')
+        )
 
         result = []
         for c in customers:
             receivable = c['total_receivable'] or 0
             received = c['total_received'] or 0
-            result.append({
-                'id': c['id'],
-                'name': c['name'],
-                'code': c['code'],
-                'total_receivable': float(receivable),
-                'total_received': float(received),
-                'balance': float(receivable - received)
-            })
+            result.append(
+                {
+                    'id': c['id'],
+                    'name': c['name'],
+                    'code': c['code'],
+                    'total_receivable': float(receivable),
+                    'total_received': float(received),
+                    'balance': float(receivable - received),
+                }
+            )
 
         return Response(result)
 
@@ -838,6 +808,7 @@ class InvoiceReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackin
     """
     发票对账单视图
     """
+
     queryset = InvoiceReconciliation.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['invoice_type', 'status']
@@ -860,10 +831,7 @@ class InvoiceReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackin
         reconciliation = self.get_object()
 
         if reconciliation.status not in ['DRAFT', 'UNMATCHED', 'PARTIAL']:
-            return Response(
-                {'error': '当前状态不允许生成明细'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '当前状态不允许生成明细'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             reconciliation.lines.all().delete()
@@ -873,7 +841,7 @@ class InvoiceReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackin
                 invoice_type=reconciliation.invoice_type,
                 invoice_date__gte=reconciliation.period_start,
                 invoice_date__lte=reconciliation.period_end,
-                is_deleted=False
+                is_deleted=False,
             ).order_by('invoice_date')
 
             total_count = 0
@@ -896,6 +864,7 @@ class InvoiceReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackin
                     if reconciliation.invoice_type == 'INPUT':
                         # 进项发票匹配采购订单
                         from apps.purchase.models import PurchaseOrder
+
                         try:
                             po = PurchaseOrder.objects.get(id=invoice.reference_id)
                             matched_order_no = po.order_no
@@ -913,6 +882,7 @@ class InvoiceReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackin
                     else:
                         # 销项发票匹配销售订单
                         from apps.sales.models import SalesOrder
+
                         try:
                             so = SalesOrder.objects.get(id=invoice.reference_id)
                             matched_order_no = so.order_no
@@ -940,7 +910,7 @@ class InvoiceReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackin
                     matched_order_no=matched_order_no,
                     matched_order_amount=matched_order_amount,
                     match_status=match_status,
-                    created_by=request.user
+                    created_by=request.user,
                 )
 
             # 更新汇总
@@ -971,10 +941,7 @@ class InvoiceReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackin
         reconciliation = self.get_object()
 
         if reconciliation.status not in ['MATCHED', 'PARTIAL']:
-            return Response(
-                {'error': '只能确认已匹配或部分匹配的对账单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能确认已匹配或部分匹配的对账单'}, status=status.HTTP_400_BAD_REQUEST)
 
         reconciliation.status = 'CONFIRMED'
         reconciliation.save()
@@ -1001,13 +968,14 @@ class InvoiceReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackin
         summary = invoices.aggregate(
             total_count=Sum('id', filter=Q()),  # 使用 Count 更准确
             total_amount=Sum('total_amount'),
-            total_tax=Sum('tax_amount')
+            total_tax=Sum('tax_amount'),
         )
 
-        return Response({
-            'invoice_type': invoice_type,
-            'total_count': invoices.count(),
-            'total_amount': float(summary['total_amount'] or 0),
-            'total_tax': float(summary['total_tax'] or 0)
-        })
-
+        return Response(
+            {
+                'invoice_type': invoice_type,
+                'total_count': invoices.count(),
+                'total_amount': float(summary['total_amount'] or 0),
+                'total_tax': float(summary['total_tax'] or 0),
+            }
+        )

@@ -1,6 +1,7 @@
 """
 URL configuration for purchase app.
 """
+
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
@@ -99,7 +100,9 @@ router.register(r'price-history', ItemPriceHistoryViewSet, basename='price-histo
 router.register(r'rfq-templates', RFQTemplateViewSet, basename='rfq-template')
 router.register(r'rfq-attachments', RFQAttachmentViewSet, basename='rfq-attachment')
 router.register(r'supplier-capabilities', SupplierCapabilityViewSet, basename='supplier-capability')
-router.register(r'supplier-capability-mappings', SupplierCapabilityMappingViewSet, basename='supplier-capability-mapping')
+router.register(
+    r'supplier-capability-mappings', SupplierCapabilityMappingViewSet, basename='supplier-capability-mapping'
+)
 
 # 外协加工
 router.register(r'outsource-orders', OutsourceOrderViewSet, basename='outsource-order')
@@ -153,13 +156,25 @@ router.register(r'supplier-quality-records', SupplierQualityRecordViewSet, basen
 
 urlpatterns = [
     path('', include(router.urls)),
-
     # 供应商门户API
     path('supplier-portal/login/', SupplierPortalLoginView.as_view(), name='supplier-portal-login'),
-    path('supplier-portal/<int:supplier_id>/orders/', SupplierPortalOrdersView.as_view(), name='supplier-portal-orders'),
-    path('supplier-portal/<int:supplier_id>/orders/<int:order_view_id>/', SupplierPortalOrderDetailView.as_view(), name='supplier-portal-order-detail'),
-    path('supplier-portal/<int:supplier_id>/quality/', SupplierPortalQualityView.as_view(), name='supplier-portal-quality'),
-    path('supplier-portal/<int:supplier_id>/messages/', SupplierPortalMessagesView.as_view(), name='supplier-portal-messages'),
+    path(
+        'supplier-portal/<int:supplier_id>/orders/', SupplierPortalOrdersView.as_view(), name='supplier-portal-orders'
+    ),
+    path(
+        'supplier-portal/<int:supplier_id>/orders/<int:order_view_id>/',
+        SupplierPortalOrderDetailView.as_view(),
+        name='supplier-portal-order-detail',
+    ),
+    path(
+        'supplier-portal/<int:supplier_id>/quality/',
+        SupplierPortalQualityView.as_view(),
+        name='supplier-portal-quality',
+    ),
+    path(
+        'supplier-portal/<int:supplier_id>/messages/',
+        SupplierPortalMessagesView.as_view(),
+        name='supplier-portal-messages',
+    ),
     path('supplier-portal/dashboard/', SupplierDashboardView.as_view(), name='supplier-portal-dashboard'),
 ]
-

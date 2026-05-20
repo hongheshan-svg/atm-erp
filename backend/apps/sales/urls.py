@@ -1,6 +1,7 @@
 """
 URL configuration for sales app.
 """
+
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
@@ -138,7 +139,6 @@ router.register(r'knowledge-base', KnowledgeBaseArticleViewSet, basename='knowle
 
 urlpatterns = [
     path('', include(router.urls)),
-
     # 销售分析
     path('analysis/funnel/', SalesFunnelView.as_view(), name='sales-funnel'),
     path('analysis/stages/', OpportunityStageAnalysisView.as_view(), name='opportunity-stages'),
@@ -147,14 +147,19 @@ urlpatterns = [
     path('customer-rfm/segment_summary/', CustomerRFMSegmentSummaryView.as_view(), name='customer-rfm-segment-summary'),
     path('customer-rfm/top_customers/', CustomerRFMTopCustomersView.as_view(), name='customer-rfm-top-customers'),
     path('customer-rfm/analyze/', CustomerRFMAnalyzeView.as_view(), name='customer-rfm-analyze'),
-
     # 赢单/丢单分析
     path('analysis/win-loss/', WinLossAnalysisView.as_view(), name='win-loss-analysis'),
     path('analysis/win-loss-comparison/', WinLossComparisonView.as_view(), name='win-loss-comparison'),
-
     # 客户门户
     path('customer-portal/login/', CustomerPortalLoginView.as_view(), name='customer-portal-login'),
-    path('customer-portal/<int:customer_id>/dashboard/', CustomerPortalDashboardView.as_view(), name='customer-portal-dashboard'),
-    path('customer-portal/<int:customer_id>/submit-request/', CustomerPortalSubmitRequestView.as_view(), name='customer-portal-submit-request'),
+    path(
+        'customer-portal/<int:customer_id>/dashboard/',
+        CustomerPortalDashboardView.as_view(),
+        name='customer-portal-dashboard',
+    ),
+    path(
+        'customer-portal/<int:customer_id>/submit-request/',
+        CustomerPortalSubmitRequestView.as_view(),
+        name='customer-portal-submit-request',
+    ),
 ]
-

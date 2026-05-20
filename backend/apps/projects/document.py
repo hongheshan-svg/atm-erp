@@ -3,6 +3,7 @@
 Project Document Management
 管理项目相关文档、版本控制、权限控制等
 """
+
 import os
 
 from django.db import models
@@ -19,23 +20,16 @@ class DocumentCategory(BaseModel):
     """
     文档分类
     """
+
     code = models.CharField(max_length=50, unique=True, verbose_name='分类编码')
     name = models.CharField(max_length=100, verbose_name='分类名称')
     parent = models.ForeignKey(
-        'self',
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name='children',
-        verbose_name='上级分类'
+        'self', on_delete=models.CASCADE, null=True, blank=True, related_name='children', verbose_name='上级分类'
     )
 
     # 文件类型限制
     allowed_extensions = models.JSONField(
-        default=list,
-        blank=True,
-        verbose_name='允许的扩展名',
-        help_text='如 ["pdf", "docx", "xlsx"]'
+        default=list, blank=True, verbose_name='允许的扩展名', help_text='如 ["pdf", "docx", "xlsx"]'
     )
     max_file_size = models.IntegerField(default=50, verbose_name='最大文件大小(MB)')
 
@@ -59,6 +53,7 @@ class ProjectDocument(BaseModel):
     """
     项目文档
     """
+
     DOC_TYPES = [
         ('DESIGN', '设计文档'),
         ('TECHNICAL', '技术文档'),
@@ -81,10 +76,7 @@ class ProjectDocument(BaseModel):
     ]
 
     project = models.ForeignKey(
-        'projects.Project',
-        on_delete=models.CASCADE,
-        related_name='documents',
-        verbose_name='项目'
+        'projects.Project', on_delete=models.CASCADE, related_name='documents', verbose_name='项目'
     )
     category = models.ForeignKey(
         DocumentCategory,
@@ -92,18 +84,13 @@ class ProjectDocument(BaseModel):
         null=True,
         blank=True,
         related_name='documents',
-        verbose_name='分类'
+        verbose_name='分类',
     )
 
     # 文档信息
     doc_no = models.CharField(max_length=50, verbose_name='文档编号')
     title = models.CharField(max_length=200, verbose_name='文档标题')
-    doc_type = models.CharField(
-        max_length=20,
-        choices=DOC_TYPES,
-        default='OTHER',
-        verbose_name='文档类型'
-    )
+    doc_type = models.CharField(max_length=20, choices=DOC_TYPES, default='OTHER', verbose_name='文档类型')
 
     # 文件信息
     file = models.FileField(upload_to='project_docs/%Y/%m/', verbose_name='文件')
@@ -118,12 +105,7 @@ class ProjectDocument(BaseModel):
     is_latest = models.BooleanField(default=True, verbose_name='是否最新版')
 
     # 状态
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='DRAFT',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', verbose_name='状态')
 
     # 审批
     reviewer = models.ForeignKey(
@@ -132,7 +114,7 @@ class ProjectDocument(BaseModel):
         null=True,
         blank=True,
         related_name='reviewed_documents',
-        verbose_name='审核人'
+        verbose_name='审核人',
     )
     reviewed_at = models.DateTimeField(null=True, blank=True, verbose_name='审核时间')
     review_comments = models.TextField(blank=True, verbose_name='审核意见')
@@ -169,11 +151,9 @@ class DocumentVersion(BaseModel):
     """
     文档版本历史
     """
+
     document = models.ForeignKey(
-        ProjectDocument,
-        on_delete=models.CASCADE,
-        related_name='versions',
-        verbose_name='文档'
+        ProjectDocument, on_delete=models.CASCADE, related_name='versions', verbose_name='文档'
     )
 
     version = models.CharField(max_length=20, verbose_name='版本号')
@@ -197,12 +177,8 @@ class DocumentShare(BaseModel):
     """
     文档分享
     """
-    document = models.ForeignKey(
-        ProjectDocument,
-        on_delete=models.CASCADE,
-        related_name='shares',
-        verbose_name='文档'
-    )
+
+    document = models.ForeignKey(ProjectDocument, on_delete=models.CASCADE, related_name='shares', verbose_name='文档')
 
     share_code = models.CharField(max_length=32, unique=True, verbose_name='分享码')
     password = models.CharField(max_length=20, blank=True, verbose_name='访问密码')
@@ -226,6 +202,7 @@ class DocumentShare(BaseModel):
 # =====================
 # Serializers
 # =====================
+
 
 class DocumentCategorySerializer(serializers.ModelSerializer):
     children = serializers.SerializerMethodField()
@@ -266,8 +243,18 @@ class ProjectDocumentSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProjectDocument
         fields = '__all__'
-        read_only_fields = ['created_by', 'updated_by', 'file_name', 'file_size', 'file_ext',
-                          'file_hash', 'download_count', 'view_count', 'reviewer', 'reviewed_at']
+        read_only_fields = [
+            'created_by',
+            'updated_by',
+            'file_name',
+            'file_size',
+            'file_ext',
+            'file_hash',
+            'download_count',
+            'view_count',
+            'reviewer',
+            'reviewed_at',
+        ]
 
     def get_file_size_display(self, obj):
         if obj.file_size < 1024:
@@ -289,11 +276,27 @@ class ProjectDocumentListSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProjectDocument
         fields = [
-            'id', 'project', 'project_name', 'category', 'category_name',
-            'doc_no', 'title', 'doc_type', 'doc_type_display',
-            'file_name', 'file_ext', 'file_size', 'file_size_display',
-            'version', 'status', 'status_display', 'tags',
-            'download_count', 'view_count', 'created_by_name', 'created_at'
+            'id',
+            'project',
+            'project_name',
+            'category',
+            'category_name',
+            'doc_no',
+            'title',
+            'doc_type',
+            'doc_type_display',
+            'file_name',
+            'file_ext',
+            'file_size',
+            'file_size_display',
+            'version',
+            'status',
+            'status_display',
+            'tags',
+            'download_count',
+            'view_count',
+            'created_by_name',
+            'created_at',
         ]
 
     def get_file_size_display(self, obj):
@@ -322,8 +325,10 @@ class DocumentShareSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class DocumentCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """文档分类管理"""
+
     queryset = DocumentCategory.objects.filter(is_deleted=False)
     serializer_class = DocumentCategorySerializer
     permission_classes = [IsAuthenticated]
@@ -353,12 +358,7 @@ class DocumentCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         for i, (code, name, exts) in enumerate(categories):
             _, c = DocumentCategory.objects.get_or_create(
                 code=code,
-                defaults={
-                    'name': name,
-                    'allowed_extensions': exts,
-                    'sort_order': i * 10,
-                    'created_by': request.user
-                }
+                defaults={'name': name, 'allowed_extensions': exts, 'sort_order': i * 10, 'created_by': request.user},
             )
             if c:
                 created += 1
@@ -368,6 +368,7 @@ class DocumentCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
 
 class ProjectDocumentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目文档管理"""
+
     queryset = ProjectDocument.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['project', 'category', 'doc_type', 'status']
@@ -382,6 +383,7 @@ class ProjectDocumentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
     def perform_create(self, serializer):
         # 生成文档编号
         from apps.core.utils import generate_code
+
         doc_no = generate_code('DOC')
         serializer.save(doc_no=doc_no, created_by=self.request.user)
 
@@ -402,7 +404,7 @@ class ProjectDocumentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
             file=document.file,
             file_size=document.file_size,
             change_log=change_log,
-            created_by=request.user
+            created_by=request.user,
         )
 
         # 更新文档
@@ -505,7 +507,7 @@ class ProjectDocumentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
             password=request.data.get('password', ''),
             expire_at=request.data.get('expire_at'),
             max_downloads=request.data.get('max_downloads', 0),
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(DocumentShareSerializer(share).data)
@@ -534,26 +536,26 @@ class ProjectDocumentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
 
         qs = self.get_queryset()
 
-        by_type = qs.values('doc_type').annotate(
-            count=Count('id'),
-            total_size=Sum('file_size')
-        )
+        by_type = qs.values('doc_type').annotate(count=Count('id'), total_size=Sum('file_size'))
 
         by_status = qs.values('status').annotate(count=Count('id'))
 
         total_size = qs.aggregate(total=Sum('file_size'))['total'] or 0
 
-        return Response({
-            'total_documents': qs.count(),
-            'total_size': total_size,
-            'total_size_display': f'{total_size / 1024 / 1024:.1f} MB' if total_size > 0 else '0 MB',
-            'by_type': list(by_type),
-            'by_status': list(by_status)
-        })
+        return Response(
+            {
+                'total_documents': qs.count(),
+                'total_size': total_size,
+                'total_size_display': f'{total_size / 1024 / 1024:.1f} MB' if total_size > 0 else '0 MB',
+                'by_type': list(by_type),
+                'by_status': list(by_status),
+            }
+        )
 
 
 class DocumentShareViewSet(viewsets.ReadOnlyModelViewSet):
     """文档分享管理"""
+
     queryset = DocumentShare.objects.filter(is_deleted=False)
     serializer_class = DocumentShareSerializer
     permission_classes = [IsAuthenticated]

@@ -1,6 +1,7 @@
 """
 JWT Authentication Middleware for WebSocket connections
 """
+
 import logging
 from urllib.parse import parse_qs
 
@@ -26,14 +27,14 @@ def get_user(token):
         user_id = access_token.get('user_id')
         if user_id:
             user = User.objects.get(id=user_id)
-            logger.info(f"WebSocket auth successful for user {user_id}")
+            logger.info(f'WebSocket auth successful for user {user_id}')
             return user
     except TokenError as e:
-        logger.warning(f"WebSocket token error: {e}")
+        logger.warning(f'WebSocket token error: {e}')
     except User.DoesNotExist:
-        logger.warning(f"WebSocket user not found: {user_id}")
+        logger.warning(f'WebSocket user not found: {user_id}')
     except Exception as e:
-        logger.error(f"WebSocket auth error: {e}")
+        logger.error(f'WebSocket auth error: {e}')
 
     return AnonymousUser()
 

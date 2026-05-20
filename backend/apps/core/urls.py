@@ -111,7 +111,6 @@ router.register(r'data-scopes', DataScopeViewSet, basename='data-scope')
 urlpatterns = [
     path('', include(router.urls)),
     path('workflow/', include('apps.core.workflow.urls')),
-
     # Export endpoints
     path('export/projects/', export_views.export_projects, name='export-projects'),
     path('export/sales-orders/', export_views.export_sales_orders, name='export-sales-orders'),
@@ -121,20 +120,17 @@ urlpatterns = [
     path('export/ar/', export_views.export_ar, name='export-ar'),
     path('export/ap/', export_views.export_ap, name='export-ap'),
     path('export/project-profit/', export_views.export_project_profit_report, name='export-project-profit'),
-
     # Health check endpoints
     path('health/', health_views.health_check, name='health-check'),
     path('health/ready/', health_views.readiness_check, name='readiness-check'),
     path('health/status/', health_views.system_status, name='system-status'),
     path('health/security/', health_views.security_status, name='security-status'),
-
     # Dashboard API endpoints
     path('dashboards/executive/', ExecutiveDashboardView.as_view(), name='dashboard-executive'),
     path('dashboards/project-manager/', ProjectManagerDashboardView.as_view(), name='dashboard-pm'),
     path('dashboards/sales/', SalesDashboardView.as_view(), name='dashboard-sales'),
     path('dashboards/production/', ProductionDashboardView.as_view(), name='dashboard-production'),
     path('dashboards/finance/', FinanceDashboardView.as_view(), name='dashboard-finance'),
-
     # Import/Export endpoints
     path('import/items/', ItemImportView.as_view(), name='import-items'),
     path('export/items/', ItemExportView.as_view(), name='export-items'),
@@ -142,33 +138,31 @@ urlpatterns = [
     path('export/suppliers/', SupplierExportView.as_view(), name='export-suppliers'),
     path('export/customers/', CustomerExportView.as_view(), name='export-customers'),
     path('export/bom/', BOMExportView.as_view(), name='export-bom'),
-
     # Print endpoints
     path('print/templates/', PrintTemplateListView.as_view(), name='print-templates'),
     path('print/<str:template_name>/<int:pk>/', PrintView.as_view(), name='print-preview'),
     path('print/<str:template_name>/batch/', BatchPrintView.as_view(), name='batch-print'),
-
     # Backup endpoints
     path('backups/', BackupListView.as_view(), name='backup-list'),
     path('backups/create/', BackupCreateView.as_view(), name='backup-create'),
     path('backups/restore/', BackupRestoreView.as_view(), name='backup-restore'),
     path('backups/cleanup/', BackupCleanupView.as_view(), name='backup-cleanup'),
     path('backups/<str:backup_name>/', BackupDeleteView.as_view(), name='backup-delete'),
-
     # Audit analytics endpoints
     path('audit-analytics/', AuditLogAnalyticsView.as_view(), name='audit-analytics'),
     path('audit-analytics/security/', AuditLogSecurityView.as_view(), name='audit-security'),
     path('audit-analytics/user-activity/', UserActivityView.as_view(), name='user-activity'),
-
     # Import template endpoints
     path('import-templates/', ImportTemplateListView.as_view(), name='import-template-list'),
-    path('import-templates/<str:template_type>/download/', ImportTemplateDownloadView.as_view(), name='import-template-download'),
-
+    path(
+        'import-templates/<str:template_type>/download/',
+        ImportTemplateDownloadView.as_view(),
+        name='import-template-download',
+    ),
     # File preview endpoints
     path('files/preview/', FilePreviewView.as_view(), name='file-preview'),
     path('files/upload/', FileUploadView.as_view(), name='file-upload'),
     path('files/list/', FileListView.as_view(), name='file-list'),
-
     # 移动端API
     path('mobile/dashboard/', MobileDashboardView.as_view(), name='mobile-dashboard'),
     path('mobile/quick-actions/', MobileQuickActionsView.as_view(), name='mobile-quick-actions'),

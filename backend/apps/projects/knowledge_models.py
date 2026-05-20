@@ -9,6 +9,7 @@ Project Archive & Knowledge Base Models
 - 标准部件库
 - 经验教训总结
 """
+
 from django.db import models
 
 from apps.core.models import BaseModel
@@ -18,15 +19,11 @@ class KnowledgeCategory(BaseModel):
     """
     知识分类
     """
+
     code = models.CharField(max_length=20, unique=True, verbose_name='分类编码')
     name = models.CharField(max_length=50, verbose_name='分类名称')
     parent = models.ForeignKey(
-        'self',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='children',
-        verbose_name='上级分类'
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='children', verbose_name='上级分类'
     )
     description = models.TextField(blank=True, verbose_name='描述')
     icon = models.CharField(max_length=50, blank=True, verbose_name='图标')
@@ -46,6 +43,7 @@ class KnowledgeArticle(BaseModel):
     """
     知识文章 - 通用知识文档
     """
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('PUBLISHED', '已发布'),
@@ -70,7 +68,7 @@ class KnowledgeArticle(BaseModel):
         null=True,
         blank=True,
         related_name='articles',
-        verbose_name='分类'
+        verbose_name='分类',
     )
     article_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='SOLUTION', verbose_name='类型')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', verbose_name='状态')
@@ -89,16 +87,12 @@ class KnowledgeArticle(BaseModel):
         null=True,
         blank=True,
         related_name='knowledge_articles',
-        verbose_name='关联项目'
+        verbose_name='关联项目',
     )
 
     # 作者
     author = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='authored_articles',
-        verbose_name='作者'
+        'accounts.User', on_delete=models.SET_NULL, null=True, related_name='authored_articles', verbose_name='作者'
     )
 
     # 统计
@@ -125,6 +119,7 @@ class ProjectArchive(BaseModel):
     """
     项目归档报告 - 项目结项时的总结
     """
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('REVIEW', '审核中'),
@@ -132,12 +127,7 @@ class ProjectArchive(BaseModel):
         ('REJECTED', '已驳回'),
     ]
 
-    project = models.OneToOneField(
-        'Project',
-        on_delete=models.PROTECT,
-        related_name='archive',
-        verbose_name='项目'
-    )
+    project = models.OneToOneField('Project', on_delete=models.PROTECT, related_name='archive', verbose_name='项目')
 
     # 基本信息
     archive_date = models.DateField(verbose_name='归档日期')
@@ -190,7 +180,7 @@ class ProjectArchive(BaseModel):
         null=True,
         blank=True,
         related_name='reviewed_archives',
-        verbose_name='评审人'
+        verbose_name='评审人',
     )
     review_comments = models.TextField(blank=True, verbose_name='评审意见')
     reviewed_at = models.DateTimeField(null=True, blank=True, verbose_name='评审时间')
@@ -205,13 +195,14 @@ class ProjectArchive(BaseModel):
         ordering = ['-archive_date']
 
     def __str__(self):
-        return f"{self.project.name} - 归档报告"
+        return f'{self.project.name} - 归档报告'
 
 
 class TechnicalIssue(BaseModel):
     """
     技术问题记录 - 项目中遇到的技术难点
     """
+
     SEVERITY_CHOICES = [
         ('LOW', '低'),
         ('MEDIUM', '中'),
@@ -234,14 +225,10 @@ class TechnicalIssue(BaseModel):
         null=True,
         blank=True,
         related_name='technical_issues',
-        verbose_name='关联项目'
+        verbose_name='关联项目',
     )
     category = models.ForeignKey(
-        KnowledgeCategory,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='技术分类'
+        KnowledgeCategory, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='技术分类'
     )
 
     # 问题描述
@@ -264,11 +251,7 @@ class TechnicalIssue(BaseModel):
 
     # 人员
     reported_by = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='reported_issues',
-        verbose_name='报告人'
+        'accounts.User', on_delete=models.SET_NULL, null=True, related_name='reported_issues', verbose_name='报告人'
     )
     resolved_by = models.ForeignKey(
         'accounts.User',
@@ -276,7 +259,7 @@ class TechnicalIssue(BaseModel):
         null=True,
         blank=True,
         related_name='resolved_issues',
-        verbose_name='解决人'
+        verbose_name='解决人',
     )
 
     # 标签
@@ -289,7 +272,7 @@ class TechnicalIssue(BaseModel):
         null=True,
         blank=True,
         related_name='source_issues',
-        verbose_name='关联知识文章'
+        verbose_name='关联知识文章',
     )
 
     # 附件
@@ -309,6 +292,7 @@ class StandardComponent(BaseModel):
     """
     标准部件库 - 可复用的标准部件/模块
     """
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('ACTIVE', '可用'),
@@ -319,11 +303,7 @@ class StandardComponent(BaseModel):
     code = models.CharField(max_length=50, unique=True, verbose_name='部件编码')
     name = models.CharField(max_length=200, verbose_name='部件名称')
     category = models.ForeignKey(
-        KnowledgeCategory,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='分类'
+        KnowledgeCategory, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='分类'
     )
     version = models.CharField(max_length=20, default='1.0', verbose_name='版本')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', verbose_name='状态')
@@ -353,7 +333,7 @@ class StandardComponent(BaseModel):
         on_delete=models.SET_NULL,
         null=True,
         related_name='maintained_components',
-        verbose_name='维护人'
+        verbose_name='维护人',
     )
 
     # 标签
@@ -366,4 +346,4 @@ class StandardComponent(BaseModel):
         ordering = ['code']
 
     def __str__(self):
-        return f"{self.code} - {self.name}"
+        return f'{self.code} - {self.name}'

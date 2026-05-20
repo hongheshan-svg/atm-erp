@@ -3,6 +3,7 @@
 Instant Messaging
 站内消息、群组聊天、文件共享
 """
+
 from django.db import models
 from django.utils import timezone
 from rest_framework import serializers, viewsets
@@ -16,6 +17,7 @@ from apps.core.models import BaseModel
 
 class Conversation(BaseModel):
     """会话"""
+
     TYPE_CHOICES = [
         ('PRIVATE', '私聊'),
         ('GROUP', '群组'),
@@ -25,10 +27,7 @@ class Conversation(BaseModel):
 
     name = models.CharField(max_length=100, blank=True, verbose_name='会话名称')
     conversation_type = models.CharField(
-        max_length=20,
-        choices=TYPE_CHOICES,
-        default='PRIVATE',
-        verbose_name='会话类型'
+        max_length=20, choices=TYPE_CHOICES, default='PRIVATE', verbose_name='会话类型'
     )
 
     # 群组设置
@@ -42,7 +41,7 @@ class Conversation(BaseModel):
         null=True,
         blank=True,
         related_name='conversations',
-        verbose_name='关联项目'
+        verbose_name='关联项目',
     )
     department = models.ForeignKey(
         'accounts.Department',
@@ -50,7 +49,7 @@ class Conversation(BaseModel):
         null=True,
         blank=True,
         related_name='conversations',
-        verbose_name='关联部门'
+        verbose_name='关联部门',
     )
 
     # 成员
@@ -59,7 +58,7 @@ class Conversation(BaseModel):
         through='ConversationMember',
         through_fields=('conversation', 'user'),
         related_name='im_conversations',
-        verbose_name='成员'
+        verbose_name='成员',
     )
 
     # 创建者
@@ -69,7 +68,7 @@ class Conversation(BaseModel):
         null=True,
         blank=True,
         related_name='owned_conversations',
-        verbose_name='创建者'
+        verbose_name='创建者',
     )
 
     # 最后消息时间（用于排序）
@@ -87,6 +86,7 @@ class Conversation(BaseModel):
 
 class ConversationMember(BaseModel):
     """会话成员"""
+
     ROLE_CHOICES = [
         ('OWNER', '群主'),
         ('ADMIN', '管理员'),
@@ -94,24 +94,13 @@ class ConversationMember(BaseModel):
     ]
 
     conversation = models.ForeignKey(
-        Conversation,
-        on_delete=models.CASCADE,
-        related_name='conversation_members',
-        verbose_name='会话'
+        Conversation, on_delete=models.CASCADE, related_name='conversation_members', verbose_name='会话'
     )
     user = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.CASCADE,
-        related_name='conversation_memberships',
-        verbose_name='用户'
+        'accounts.User', on_delete=models.CASCADE, related_name='conversation_memberships', verbose_name='用户'
     )
 
-    role = models.CharField(
-        max_length=20,
-        choices=ROLE_CHOICES,
-        default='MEMBER',
-        verbose_name='角色'
-    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='MEMBER', verbose_name='角色')
 
     # 设置
     is_pinned = models.BooleanField(default=False, verbose_name='置顶')
@@ -121,12 +110,7 @@ class ConversationMember(BaseModel):
     # 已读位置
     last_read_at = models.DateTimeField(null=True, blank=True, verbose_name='最后阅读时间')
     last_read_message = models.ForeignKey(
-        'Message',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='+',
-        verbose_name='最后阅读消息'
+        'Message', on_delete=models.SET_NULL, null=True, blank=True, related_name='+', verbose_name='最后阅读消息'
     )
 
     joined_at = models.DateTimeField(auto_now_add=True, verbose_name='加入时间')
@@ -140,6 +124,7 @@ class ConversationMember(BaseModel):
 
 class Message(BaseModel):
     """消息"""
+
     TYPE_CHOICES = [
         ('TEXT', '文本'),
         ('IMAGE', '图片'),
@@ -151,26 +136,14 @@ class Message(BaseModel):
     ]
 
     conversation = models.ForeignKey(
-        Conversation,
-        on_delete=models.CASCADE,
-        related_name='messages',
-        verbose_name='会话'
+        Conversation, on_delete=models.CASCADE, related_name='messages', verbose_name='会话'
     )
 
     sender = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='sent_messages',
-        verbose_name='发送者'
+        'accounts.User', on_delete=models.SET_NULL, null=True, related_name='sent_messages', verbose_name='发送者'
     )
 
-    message_type = models.CharField(
-        max_length=20,
-        choices=TYPE_CHOICES,
-        default='TEXT',
-        verbose_name='消息类型'
-    )
+    message_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='TEXT', verbose_name='消息类型')
 
     content = models.TextField(verbose_name='内容')
 
@@ -179,20 +152,12 @@ class Message(BaseModel):
 
     # 引用
     reply_to = models.ForeignKey(
-        'self',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='replies',
-        verbose_name='回复消息'
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='replies', verbose_name='回复消息'
     )
 
     # @提及
     mentions = models.ManyToManyField(
-        'accounts.User',
-        blank=True,
-        related_name='mentioned_messages',
-        verbose_name='提及用户'
+        'accounts.User', blank=True, related_name='mentioned_messages', verbose_name='提及用户'
     )
 
     # 状态
@@ -218,17 +183,10 @@ class Message(BaseModel):
 
 class MessageRead(BaseModel):
     """消息已读状态"""
-    message = models.ForeignKey(
-        Message,
-        on_delete=models.CASCADE,
-        related_name='reads',
-        verbose_name='消息'
-    )
+
+    message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name='reads', verbose_name='消息')
     user = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.CASCADE,
-        related_name='message_reads',
-        verbose_name='用户'
+        'accounts.User', on_delete=models.CASCADE, related_name='message_reads', verbose_name='用户'
     )
     read_at = models.DateTimeField(auto_now_add=True, verbose_name='阅读时间')
 
@@ -242,6 +200,7 @@ class MessageRead(BaseModel):
 # =====================
 # Serializers
 # =====================
+
 
 class MessageSerializer(serializers.ModelSerializer):
     type_display = serializers.CharField(source='get_message_type_display', read_only=True)
@@ -301,10 +260,11 @@ class ConversationSerializer(serializers.ModelSerializer):
             user = user.user
             membership = obj.conversation_members.filter(user=user).first()
             if membership and membership.last_read_at:
-                return obj.messages.filter(
-                    created_at__gt=membership.last_read_at,
-                    is_recalled=False
-                ).exclude(sender=user).count()
+                return (
+                    obj.messages.filter(created_at__gt=membership.last_read_at, is_recalled=False)
+                    .exclude(sender=user)
+                    .count()
+                )
         return 0
 
     def get_last_message(self, obj):
@@ -313,7 +273,7 @@ class ConversationSerializer(serializers.ModelSerializer):
             return {
                 'content': last_msg.content[:50],
                 'sender': last_msg.sender.get_full_name() if last_msg.sender else None,
-                'time': last_msg.created_at.isoformat()
+                'time': last_msg.created_at.isoformat(),
             }
         return None
 
@@ -325,8 +285,16 @@ class ConversationListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Conversation
-        fields = ['id', 'name', 'conversation_type', 'type_display', 'avatar',
-                  'member_count', 'last_message', 'last_message_at']
+        fields = [
+            'id',
+            'name',
+            'conversation_type',
+            'type_display',
+            'avatar',
+            'member_count',
+            'last_message',
+            'last_message_at',
+        ]
 
     def get_member_count(self, obj):
         return obj.members.count()
@@ -334,10 +302,7 @@ class ConversationListSerializer(serializers.ModelSerializer):
     def get_last_message(self, obj):
         last_msg = obj.messages.filter(is_recalled=False).order_by('-created_at').first()
         if last_msg:
-            return {
-                'content': last_msg.content[:30],
-                'time': last_msg.created_at.isoformat()
-            }
+            return {'content': last_msg.content[:30], 'time': last_msg.created_at.isoformat()}
         return None
 
 
@@ -345,8 +310,10 @@ class ConversationListSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class ConversationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """会话管理"""
+
     queryset = Conversation.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['conversation_type', 'project', 'department']
@@ -369,6 +336,7 @@ class ConversationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
             return Response({'error': '请指定用户'}, status=400)
 
         from apps.accounts.models import User
+
         try:
             other_user = User.objects.get(id=user_id, is_active=True)
         except User.DoesNotExist:
@@ -377,10 +345,11 @@ class ConversationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         current_user = request.user
 
         # 检查是否已存在私聊
-        existing = Conversation.objects.filter(
-            conversation_type='PRIVATE',
-            is_deleted=False
-        ).filter(members=current_user).filter(members=other_user)
+        existing = (
+            Conversation.objects.filter(conversation_type='PRIVATE', is_deleted=False)
+            .filter(members=current_user)
+            .filter(members=other_user)
+        )
 
         if existing.exists():
             return Response(ConversationSerializer(existing.first(), context={'request': request}).data)
@@ -390,7 +359,7 @@ class ConversationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
             name=f'{current_user.get_full_name()},{other_user.get_full_name()}',
             conversation_type='PRIVATE',
             owner=current_user,
-            created_by=current_user
+            created_by=current_user,
         )
 
         ConversationMember.objects.create(conversation=conv, user=current_user, role='OWNER', created_by=current_user)
@@ -410,25 +379,19 @@ class ConversationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         current_user = request.user
 
         conv = Conversation.objects.create(
-            name=name,
-            conversation_type='GROUP',
-            owner=current_user,
-            created_by=current_user
+            name=name, conversation_type='GROUP', owner=current_user, created_by=current_user
         )
 
         # 添加创建者
-        ConversationMember.objects.create(
-            conversation=conv, user=current_user, role='OWNER', created_by=current_user
-        )
+        ConversationMember.objects.create(conversation=conv, user=current_user, role='OWNER', created_by=current_user)
 
         # 添加其他成员
         from apps.accounts.models import User
+
         for uid in member_ids:
             try:
                 user = User.objects.get(id=uid, is_active=True)
-                ConversationMember.objects.create(
-                    conversation=conv, user=user, role='MEMBER', created_by=current_user
-                )
+                ConversationMember.objects.create(conversation=conv, user=user, role='MEMBER', created_by=current_user)
             except User.DoesNotExist:
                 pass
 
@@ -441,6 +404,7 @@ class ConversationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         member_ids = request.data.get('member_ids', [])
 
         from apps.accounts.models import User
+
         added = []
         for uid in member_ids:
             try:
@@ -469,6 +433,7 @@ class ConversationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
 
 class MessageViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """消息管理"""
+
     queryset = Message.objects.filter(is_deleted=False)
     serializer_class = MessageSerializer
     permission_classes = [IsAuthenticated]
@@ -477,10 +442,7 @@ class MessageViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         # 只返回用户参与的会话中的消息
-        user_conversations = Conversation.objects.filter(
-            members=self.request.user,
-            is_deleted=False
-        )
+        user_conversations = Conversation.objects.filter(members=self.request.user, is_deleted=False)
         return super().get_queryset().filter(conversation__in=user_conversations)
 
     def perform_create(self, serializer):
@@ -536,6 +498,7 @@ class MessageViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 
 class ConversationMemberViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """会话成员管理"""
+
     queryset = ConversationMember.objects.filter(is_deleted=False)
     serializer_class = ConversationMemberSerializer
     permission_classes = [IsAuthenticated]

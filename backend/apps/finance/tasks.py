@@ -1,6 +1,7 @@
 """
 Celery tasks for finance app - AR/AP overdue reminders.
 """
+
 from datetime import timedelta
 from decimal import Decimal
 
@@ -27,19 +28,17 @@ def check_overdue_receivables():
 
     # Find overdue receivables
     overdue_ar = AccountReceivable.objects.filter(
-        due_date__lt=today,
-        status__in=['PENDING', 'PARTIAL'],
-        is_deleted=False
+        due_date__lt=today, status__in=['PENDING', 'PARTIAL'], is_deleted=False
     ).select_related('customer', 'project')
 
     if not overdue_ar.exists():
-        return "No overdue receivables"
+        return 'No overdue receivables'
 
     # Update status to OVERDUE
     overdue_ar.update(status='OVERDUE')
 
     # Build alert message
-    message_lines = ["以下应收账款已逾期:\n"]
+    message_lines = ['以下应收账款已逾期:\n']
     total_overdue = Decimal('0')
     overdue_items = []
 
@@ -49,41 +48,30 @@ def check_overdue_receivables():
         total_overdue += remaining
 
         message_lines.append(
-            f"- {ar.ar_no} | 客户: {ar.customer.name} | "
-            f"应收: ¥{remaining:,.2f} | 逾期: {days_overdue}天"
+            f'- {ar.ar_no} | 客户: {ar.customer.name} | ' f'应收: ¥{remaining:,.2f} | 逾期: {days_overdue}天'
         )
-        overdue_items.append({
-            'ar_no': ar.ar_no,
-            'customer': ar.customer.name,
-            'amount': float(remaining),
-            'days_overdue': days_overdue
-        })
+        overdue_items.append(
+            {'ar_no': ar.ar_no, 'customer': ar.customer.name, 'amount': float(remaining), 'days_overdue': days_overdue}
+        )
 
-    message_lines.append(f"\n逾期总额: ¥{total_overdue:,.2f}")
-    message = "\n".join(message_lines)
+    message_lines.append(f'\n逾期总额: ¥{total_overdue:,.2f}')
+    message = '\n'.join(message_lines)
 
     # Get finance staff and admins
-    recipients = User.objects.filter(
-        is_active=True,
-        is_deleted=False
-    ).filter(
-        role__code__in=['FINANCE', 'ADMIN']
-    ).values_list('id', flat=True)
+    recipients = (
+        User.objects.filter(is_active=True, is_deleted=False)
+        .filter(role__code__in=['FINANCE', 'ADMIN'])
+        .values_list('id', flat=True)
+    )
 
     # Create in-app notifications
     for user_id in recipients:
-        SystemNotification.objects.create(
-            user_id=user_id,
-            title='应收账款逾期提醒',
-            message=message,
-            type='WARNING'
-        )
+        SystemNotification.objects.create(user_id=user_id, title='应收账款逾期提醒', message=message, type='WARNING')
 
     # Send email to admins
-    admin_emails = list(User.objects.filter(
-        is_staff=True,
-        is_active=True
-    ).exclude(email='').values_list('email', flat=True))
+    admin_emails = list(
+        User.objects.filter(is_staff=True, is_active=True).exclude(email='').values_list('email', flat=True)
+    )
 
     if admin_emails:
         try:
@@ -99,18 +87,18 @@ def check_overdue_receivables():
 
     # Send to DingTalk/WeChat Work
     try:
-        title = "💰 应收账款逾期提醒"
+        title = '💰 应收账款逾期提醒'
 
         # 群发安全内容（不含具体财务数据）
-        safe_content = f"### {title}\n\n"
-        safe_content += f"您有 **{len(overdue_items)}** 笔应收账款已逾期，请登录ERP系统查看详情并及时跟进催收。\n\n"
-        safe_content += "👉 [点击查看详情](应收账款管理)"
+        safe_content = f'### {title}\n\n'
+        safe_content += f'您有 **{len(overdue_items)}** 笔应收账款已逾期，请登录ERP系统查看详情并及时跟进催收。\n\n'
+        safe_content += '👉 [点击查看详情](应收账款管理)'
 
         NotificationService.send_custom_notification(title, safe_content, group_safe_content=safe_content)
     except Exception:
         pass
 
-    return f"Sent overdue AR alert for {overdue_ar.count()} items, total: ¥{total_overdue:,.2f}"
+    return f'Sent overdue AR alert for {overdue_ar.count()} items, total: ¥{total_overdue:,.2f}'
 
 
 @shared_task
@@ -130,19 +118,17 @@ def check_overdue_payables():
 
     # Find overdue payables
     overdue_ap = AccountPayable.objects.filter(
-        due_date__lt=today,
-        status__in=['PENDING', 'PARTIAL'],
-        is_deleted=False
+        due_date__lt=today, status__in=['PENDING', 'PARTIAL'], is_deleted=False
     ).select_related('supplier')
 
     if not overdue_ap.exists():
-        return "No overdue payables"
+        return 'No overdue payables'
 
     # Update status to OVERDUE
     overdue_ap.update(status='OVERDUE')
 
     # Build alert message
-    message_lines = ["以下应付账款已逾期:\n"]
+    message_lines = ['以下应付账款已逾期:\n']
     total_overdue = Decimal('0')
     overdue_items = []
 
@@ -152,42 +138,32 @@ def check_overdue_payables():
         total_overdue += remaining
 
         message_lines.append(
-            f"- {ap.ap_no} | 供应商: {ap.supplier.name} | "
-            f"应付: ¥{remaining:,.2f} | 逾期: {days_overdue}天"
+            f'- {ap.ap_no} | 供应商: {ap.supplier.name} | ' f'应付: ¥{remaining:,.2f} | 逾期: {days_overdue}天'
         )
-        overdue_items.append({
-            'ap_no': ap.ap_no,
-            'supplier': ap.supplier.name,
-            'amount': float(remaining),
-            'days_overdue': days_overdue
-        })
+        overdue_items.append(
+            {'ap_no': ap.ap_no, 'supplier': ap.supplier.name, 'amount': float(remaining), 'days_overdue': days_overdue}
+        )
 
-    message_lines.append(f"\n逾期总额: ¥{total_overdue:,.2f}")
-    message = "\n".join(message_lines)
+    message_lines.append(f'\n逾期总额: ¥{total_overdue:,.2f}')
+    message = '\n'.join(message_lines)
 
     # Get finance staff and admins
-    recipients = User.objects.filter(
-        is_active=True,
-        is_deleted=False
-    ).filter(
-        role__code__in=['FINANCE', 'ADMIN']
-    ).values_list('id', flat=True)
+    recipients = (
+        User.objects.filter(is_active=True, is_deleted=False)
+        .filter(role__code__in=['FINANCE', 'ADMIN'])
+        .values_list('id', flat=True)
+    )
 
     # Create in-app notifications
     for user_id in recipients:
         Notification.objects.create(
-            user_id=user_id,
-            title='应付账款逾期提醒',
-            content=message,
-            notification_type='WARNING',
-            link='/finance/ap'
+            user_id=user_id, title='应付账款逾期提醒', content=message, notification_type='WARNING', link='/finance/ap'
         )
 
     # Send email to admins
-    admin_emails = list(User.objects.filter(
-        is_staff=True,
-        is_active=True
-    ).exclude(email='').values_list('email', flat=True))
+    admin_emails = list(
+        User.objects.filter(is_staff=True, is_active=True).exclude(email='').values_list('email', flat=True)
+    )
 
     if admin_emails:
         try:
@@ -203,18 +179,18 @@ def check_overdue_payables():
 
     # Send to DingTalk/WeChat Work
     try:
-        title = "💸 应付账款逾期提醒"
+        title = '💸 应付账款逾期提醒'
 
         # 群发安全内容（不含具体财务数据）
-        safe_content = f"### {title}\n\n"
-        safe_content += f"您有 **{len(overdue_items)}** 笔应付账款已逾期，请登录ERP系统查看详情并及时安排付款。\n\n"
-        safe_content += "👉 [点击查看详情](应付账款管理)"
+        safe_content = f'### {title}\n\n'
+        safe_content += f'您有 **{len(overdue_items)}** 笔应付账款已逾期，请登录ERP系统查看详情并及时安排付款。\n\n'
+        safe_content += '👉 [点击查看详情](应付账款管理)'
 
         NotificationService.send_custom_notification(title, safe_content, group_safe_content=safe_content)
     except Exception:
         pass
 
-    return f"Sent overdue AP alert for {overdue_ap.count()} items, total: ¥{total_overdue:,.2f}"
+    return f'Sent overdue AP alert for {overdue_ap.count()} items, total: ¥{total_overdue:,.2f}'
 
 
 @shared_task
@@ -234,102 +210,79 @@ def check_upcoming_due_dates():
 
     # Find AR due in 7 days
     upcoming_ar = AccountReceivable.objects.filter(
-        due_date__gte=today,
-        due_date__lte=warning_date,
-        status__in=['PENDING', 'PARTIAL'],
-        is_deleted=False
+        due_date__gte=today, due_date__lte=warning_date, status__in=['PENDING', 'PARTIAL'], is_deleted=False
     ).select_related('customer')
 
     # Find AP due in 7 days
     upcoming_ap = AccountPayable.objects.filter(
-        due_date__gte=today,
-        due_date__lte=warning_date,
-        status__in=['PENDING', 'PARTIAL'],
-        is_deleted=False
+        due_date__gte=today, due_date__lte=warning_date, status__in=['PENDING', 'PARTIAL'], is_deleted=False
     ).select_related('supplier')
 
     if not upcoming_ar.exists() and not upcoming_ap.exists():
-        return "No upcoming due dates"
+        return 'No upcoming due dates'
 
-    message_lines = ["以下账款即将到期 (7天内):\n"]
+    message_lines = ['以下账款即将到期 (7天内):\n']
     ar_items = []
     ap_items = []
     ar_total = Decimal('0')
     ap_total = Decimal('0')
 
     if upcoming_ar.exists():
-        message_lines.append("\n【应收账款】")
+        message_lines.append('\n【应收账款】')
         for ar in upcoming_ar:
             remaining = ar.amount_due - ar.amount_paid
             days_to_due = (ar.due_date - today).days
             ar_total += remaining
-            message_lines.append(
-                f"- {ar.ar_no} | {ar.customer.name} | "
-                f"¥{remaining:,.2f} | {days_to_due}天后到期"
+            message_lines.append(f'- {ar.ar_no} | {ar.customer.name} | ' f'¥{remaining:,.2f} | {days_to_due}天后到期')
+            ar_items.append(
+                {'ar_no': ar.ar_no, 'customer': ar.customer.name, 'amount': float(remaining), 'days': days_to_due}
             )
-            ar_items.append({
-                'ar_no': ar.ar_no,
-                'customer': ar.customer.name,
-                'amount': float(remaining),
-                'days': days_to_due
-            })
-        message_lines.append(f"应收小计: ¥{ar_total:,.2f}")
+        message_lines.append(f'应收小计: ¥{ar_total:,.2f}')
 
     if upcoming_ap.exists():
-        message_lines.append("\n【应付账款】")
+        message_lines.append('\n【应付账款】')
         for ap in upcoming_ap:
             remaining = ap.amount_due - ap.amount_paid
             days_to_due = (ap.due_date - today).days
             ap_total += remaining
-            message_lines.append(
-                f"- {ap.ap_no} | {ap.supplier.name} | "
-                f"¥{remaining:,.2f} | {days_to_due}天后到期"
+            message_lines.append(f'- {ap.ap_no} | {ap.supplier.name} | ' f'¥{remaining:,.2f} | {days_to_due}天后到期')
+            ap_items.append(
+                {'ap_no': ap.ap_no, 'supplier': ap.supplier.name, 'amount': float(remaining), 'days': days_to_due}
             )
-            ap_items.append({
-                'ap_no': ap.ap_no,
-                'supplier': ap.supplier.name,
-                'amount': float(remaining),
-                'days': days_to_due
-            })
-        message_lines.append(f"应付小计: ¥{ap_total:,.2f}")
+        message_lines.append(f'应付小计: ¥{ap_total:,.2f}')
 
-    message = "\n".join(message_lines)
+    message = '\n'.join(message_lines)
 
     # Get finance staff
-    recipients = User.objects.filter(
-        is_active=True,
-        is_deleted=False
-    ).filter(
-        role__code__in=['FINANCE', 'ADMIN']
-    ).values_list('id', flat=True)
+    recipients = (
+        User.objects.filter(is_active=True, is_deleted=False)
+        .filter(role__code__in=['FINANCE', 'ADMIN'])
+        .values_list('id', flat=True)
+    )
 
     # Create in-app notifications
     for user_id in recipients:
         Notification.objects.create(
-            user_id=user_id,
-            title='账款到期预警',
-            content=message,
-            notification_type='INFO',
-            link='/finance/ar'
+            user_id=user_id, title='账款到期预警', content=message, notification_type='INFO', link='/finance/ar'
         )
 
     # Send to DingTalk/WeChat Work
     try:
-        title = "📅 账款到期预警"
+        title = '📅 账款到期预警'
 
         # 群发安全内容（不含具体财务数据）
-        safe_content = f"### {title}\n\n"
+        safe_content = f'### {title}\n\n'
         if ar_items:
-            safe_content += f"- 📥 **{len(ar_items)}** 笔应收账款即将到期\n"
+            safe_content += f'- 📥 **{len(ar_items)}** 笔应收账款即将到期\n'
         if ap_items:
-            safe_content += f"- 📤 **{len(ap_items)}** 笔应付账款即将到期\n"
-        safe_content += "\n请登录ERP系统查看详情，提前做好资金准备！"
+            safe_content += f'- 📤 **{len(ap_items)}** 笔应付账款即将到期\n'
+        safe_content += '\n请登录ERP系统查看详情，提前做好资金准备！'
 
         NotificationService.send_custom_notification(title, safe_content, group_safe_content=safe_content)
     except Exception:
         pass
 
-    return f"Sent due date warnings: {upcoming_ar.count()} AR, {upcoming_ap.count()} AP"
+    return f'Sent due date warnings: {upcoming_ar.count()} AR, {upcoming_ap.count()} AP'
 
 
 @shared_task
@@ -354,7 +307,7 @@ def generate_daily_finance_summary():
         total_partial=Sum('amount_due', filter=Q(status='PARTIAL')) - Sum('amount_paid', filter=Q(status='PARTIAL')),
         total_overdue=Sum('amount_due', filter=Q(status='OVERDUE')) - Sum('amount_paid', filter=Q(status='OVERDUE')),
         count_pending=Count('id', filter=Q(status='PENDING')),
-        count_overdue=Count('id', filter=Q(status='OVERDUE'))
+        count_overdue=Count('id', filter=Q(status='OVERDUE')),
     )
 
     # AP Summary
@@ -363,16 +316,12 @@ def generate_daily_finance_summary():
         total_partial=Sum('amount_due', filter=Q(status='PARTIAL')) - Sum('amount_paid', filter=Q(status='PARTIAL')),
         total_overdue=Sum('amount_due', filter=Q(status='OVERDUE')) - Sum('amount_paid', filter=Q(status='OVERDUE')),
         count_pending=Count('id', filter=Q(status='PENDING')),
-        count_overdue=Count('id', filter=Q(status='OVERDUE'))
+        count_overdue=Count('id', filter=Q(status='OVERDUE')),
     )
 
     # Expense Summary (pending approval)
-    expense_pending = Expense.objects.filter(
-        status='SUBMITTED',
-        is_deleted=False
-    ).aggregate(
-        total=Sum('amount'),
-        count=Count('id')
+    expense_pending = Expense.objects.filter(status='SUBMITTED', is_deleted=False).aggregate(
+        total=Sum('amount'), count=Count('id')
     )
 
     # Build message
@@ -391,24 +340,17 @@ def generate_daily_finance_summary():
 """
 
     # Get admin users
-    admin_users = User.objects.filter(
-        is_staff=True,
-        is_active=True,
-        is_deleted=False
-    ).values_list('id', flat=True)
+    admin_users = User.objects.filter(is_staff=True, is_active=True, is_deleted=False).values_list('id', flat=True)
 
     # Create notifications
     for user_id in admin_users:
         Notification.objects.create(
-            user_id=user_id,
-            title=f'财务日报 - {today}',
-            content=message,
-            notification_type='INFO'
+            user_id=user_id, title=f'财务日报 - {today}', content=message, notification_type='INFO'
         )
 
     # Send to DingTalk/WeChat Work
     try:
-        title = f"📊 财务日报 - {today}"
+        title = f'📊 财务日报 - {today}'
 
         # 群发安全内容（只发笔数，不发金额）
         safe_content = f"""### {title}
@@ -426,7 +368,7 @@ def generate_daily_finance_summary():
     except Exception:
         pass
 
-    return "Daily finance summary generated"
+    return 'Daily finance summary generated'
 
 
 @shared_task
@@ -434,7 +376,7 @@ def check_payment_schedule_reminders():
     """
     Check for payment schedules that need reminders.
     Runs daily at 9 AM.
-    
+
     Sends reminders for:
     1. Overdue payments
     2. Payments due within the reminder window (default 7 days)
@@ -452,13 +394,11 @@ def check_payment_schedule_reminders():
     # 2. Due within reminder window and not yet reminded
     schedules_to_remind = []
 
-    pending_schedules = PaymentSchedule.objects.filter(
-        status__in=['PENDING', 'PARTIAL'],
-        reminder_status='PENDING',
-        is_deleted=False
-    ).select_related(
-        'sales_order', 'sales_order__customer', 'project'
-    ).order_by('due_date')
+    pending_schedules = (
+        PaymentSchedule.objects.filter(status__in=['PENDING', 'PARTIAL'], reminder_status='PENDING', is_deleted=False)
+        .select_related('sales_order', 'sales_order__customer', 'project')
+        .order_by('due_date')
+    )
 
     for schedule in pending_schedules:
         remind_date = schedule.due_date - timedelta(days=schedule.reminder_days_before)
@@ -468,7 +408,7 @@ def check_payment_schedule_reminders():
             schedules_to_remind.append(schedule)
 
     if not schedules_to_remind:
-        return "No payment schedule reminders needed"
+        return 'No payment schedule reminders needed'
 
     # Update overdue status
     for schedule in schedules_to_remind:
@@ -477,45 +417,44 @@ def check_payment_schedule_reminders():
             schedule.save()
 
     # Create in-app notifications for finance and sales staff
-    message_lines = ["以下付款计划需要跟进收款：\n"]
+    message_lines = ['以下付款计划需要跟进收款：\n']
 
     overdue_schedules = [s for s in schedules_to_remind if s.is_overdue]
     upcoming_schedules = [s for s in schedules_to_remind if not s.is_overdue]
 
     if overdue_schedules:
-        message_lines.append("\n【已逾期】")
+        message_lines.append('\n【已逾期】')
         for s in overdue_schedules[:5]:
             remaining = s.amount_due - s.amount_paid
             message_lines.append(
-                f"- {s.sales_order.order_no} | {s.milestone_name} | "
-                f"{s.sales_order.customer.name} | ¥{remaining:,.2f} | 逾期{abs(s.days_until_due)}天"
+                f'- {s.sales_order.order_no} | {s.milestone_name} | '
+                f'{s.sales_order.customer.name} | ¥{remaining:,.2f} | 逾期{abs(s.days_until_due)}天'
             )
         if len(overdue_schedules) > 5:
-            message_lines.append(f"  ... 还有 {len(overdue_schedules) - 5} 笔")
+            message_lines.append(f'  ... 还有 {len(overdue_schedules) - 5} 笔')
 
     if upcoming_schedules:
-        message_lines.append("\n【即将到期】")
+        message_lines.append('\n【即将到期】')
         for s in upcoming_schedules[:5]:
             remaining = s.amount_due - s.amount_paid
             message_lines.append(
-                f"- {s.sales_order.order_no} | {s.milestone_name} | "
-                f"{s.sales_order.customer.name} | ¥{remaining:,.2f} | {s.days_until_due}天后到期"
+                f'- {s.sales_order.order_no} | {s.milestone_name} | '
+                f'{s.sales_order.customer.name} | ¥{remaining:,.2f} | {s.days_until_due}天后到期'
             )
         if len(upcoming_schedules) > 5:
-            message_lines.append(f"  ... 还有 {len(upcoming_schedules) - 5} 笔")
+            message_lines.append(f'  ... 还有 {len(upcoming_schedules) - 5} 笔')
 
     total_remaining = sum(s.amount_due - s.amount_paid for s in schedules_to_remind)
-    message_lines.append(f"\n待收款总额: ¥{total_remaining:,.2f}")
+    message_lines.append(f'\n待收款总额: ¥{total_remaining:,.2f}')
 
-    message = "\n".join(message_lines)
+    message = '\n'.join(message_lines)
 
     # Get finance and sales staff
-    recipients = User.objects.filter(
-        is_active=True,
-        is_deleted=False
-    ).filter(
-        role__code__in=['FINANCE', 'SALES', 'ADMIN']
-    ).values_list('id', flat=True)
+    recipients = (
+        User.objects.filter(is_active=True, is_deleted=False)
+        .filter(role__code__in=['FINANCE', 'SALES', 'ADMIN'])
+        .values_list('id', flat=True)
+    )
 
     # Create in-app notifications
     for user_id in recipients:
@@ -524,7 +463,7 @@ def check_payment_schedule_reminders():
             title='付款计划收款提醒',
             content=message,
             notification_type='WARNING',
-            link='/finance/payment-schedules'
+            link='/finance/payment-schedules',
         )
 
     # Mark as reminded
@@ -539,7 +478,7 @@ def check_payment_schedule_reminders():
     except Exception:
         pass
 
-    return f"Sent payment schedule reminders for {len(schedules_to_remind)} items, total: ¥{total_remaining:,.2f}"
+    return f'Sent payment schedule reminders for {len(schedules_to_remind)} items, total: ¥{total_remaining:,.2f}'
 
 
 @shared_task
@@ -552,19 +491,15 @@ def reset_payment_schedule_reminders():
 
     # Reset reminded schedules that are still pending (销售)
     ar_updated = PaymentSchedule.objects.filter(
-        status__in=['PENDING', 'PARTIAL', 'OVERDUE'],
-        reminder_status='REMINDED',
-        is_deleted=False
+        status__in=['PENDING', 'PARTIAL', 'OVERDUE'], reminder_status='REMINDED', is_deleted=False
     ).update(reminder_status='PENDING')
 
     # Reset reminded schedules that are still pending (采购)
     ap_updated = PurchasePaymentSchedule.objects.filter(
-        status__in=['PENDING', 'PARTIAL', 'OVERDUE'],
-        reminder_status='REMINDED',
-        is_deleted=False
+        status__in=['PENDING', 'PARTIAL', 'OVERDUE'], reminder_status='REMINDED', is_deleted=False
     ).update(reminder_status='PENDING')
 
-    return f"Reset {ar_updated} AR and {ap_updated} AP payment schedule reminders"
+    return f'Reset {ar_updated} AR and {ap_updated} AP payment schedule reminders'
 
 
 @shared_task
@@ -572,7 +507,7 @@ def check_purchase_payment_schedule_reminders():
     """
     Check for purchase payment schedules that need reminders.
     Runs daily at 9 AM.
-    
+
     Sends reminders for:
     1. Overdue payments
     2. Payments due within the reminder window (default 3 days for purchases)
@@ -588,13 +523,13 @@ def check_purchase_payment_schedule_reminders():
     # Find schedules needing reminders
     schedules_to_remind = []
 
-    pending_schedules = PurchasePaymentSchedule.objects.filter(
-        status__in=['PENDING', 'PARTIAL'],
-        reminder_status='PENDING',
-        is_deleted=False
-    ).select_related(
-        'purchase_order', 'purchase_order__supplier', 'project'
-    ).order_by('due_date')
+    pending_schedules = (
+        PurchasePaymentSchedule.objects.filter(
+            status__in=['PENDING', 'PARTIAL'], reminder_status='PENDING', is_deleted=False
+        )
+        .select_related('purchase_order', 'purchase_order__supplier', 'project')
+        .order_by('due_date')
+    )
 
     for schedule in pending_schedules:
         remind_date = schedule.due_date - timedelta(days=schedule.reminder_days_before)
@@ -604,7 +539,7 @@ def check_purchase_payment_schedule_reminders():
             schedules_to_remind.append(schedule)
 
     if not schedules_to_remind:
-        return "No purchase payment schedule reminders needed"
+        return 'No purchase payment schedule reminders needed'
 
     # Update overdue status
     for schedule in schedules_to_remind:
@@ -613,45 +548,44 @@ def check_purchase_payment_schedule_reminders():
             schedule.save()
 
     # Create in-app notifications for finance and purchase staff
-    message_lines = ["以下采购付款计划需要跟进付款：\n"]
+    message_lines = ['以下采购付款计划需要跟进付款：\n']
 
     overdue_schedules = [s for s in schedules_to_remind if s.is_overdue]
     upcoming_schedules = [s for s in schedules_to_remind if not s.is_overdue]
 
     if overdue_schedules:
-        message_lines.append("\n【已逾期】")
+        message_lines.append('\n【已逾期】')
         for s in overdue_schedules[:5]:
             remaining = s.amount_due - s.amount_paid
             message_lines.append(
-                f"- {s.purchase_order.order_no} | {s.milestone_name} | "
-                f"{s.purchase_order.supplier.name} | ¥{remaining:,.2f} | 逾期{abs(s.days_until_due)}天"
+                f'- {s.purchase_order.order_no} | {s.milestone_name} | '
+                f'{s.purchase_order.supplier.name} | ¥{remaining:,.2f} | 逾期{abs(s.days_until_due)}天'
             )
         if len(overdue_schedules) > 5:
-            message_lines.append(f"  ... 还有 {len(overdue_schedules) - 5} 笔")
+            message_lines.append(f'  ... 还有 {len(overdue_schedules) - 5} 笔')
 
     if upcoming_schedules:
-        message_lines.append("\n【即将到期】")
+        message_lines.append('\n【即将到期】')
         for s in upcoming_schedules[:5]:
             remaining = s.amount_due - s.amount_paid
             message_lines.append(
-                f"- {s.purchase_order.order_no} | {s.milestone_name} | "
-                f"{s.purchase_order.supplier.name} | ¥{remaining:,.2f} | {s.days_until_due}天后到期"
+                f'- {s.purchase_order.order_no} | {s.milestone_name} | '
+                f'{s.purchase_order.supplier.name} | ¥{remaining:,.2f} | {s.days_until_due}天后到期'
             )
         if len(upcoming_schedules) > 5:
-            message_lines.append(f"  ... 还有 {len(upcoming_schedules) - 5} 笔")
+            message_lines.append(f'  ... 还有 {len(upcoming_schedules) - 5} 笔')
 
     total_remaining = sum(s.amount_due - s.amount_paid for s in schedules_to_remind)
-    message_lines.append(f"\n待付款总额: ¥{total_remaining:,.2f}")
+    message_lines.append(f'\n待付款总额: ¥{total_remaining:,.2f}')
 
-    message = "\n".join(message_lines)
+    message = '\n'.join(message_lines)
 
     # Get finance and purchase staff
-    recipients = User.objects.filter(
-        is_active=True,
-        is_deleted=False
-    ).filter(
-        role__code__in=['FINANCE', 'PURCHASE', 'ADMIN']
-    ).values_list('id', flat=True)
+    recipients = (
+        User.objects.filter(is_active=True, is_deleted=False)
+        .filter(role__code__in=['FINANCE', 'PURCHASE', 'ADMIN'])
+        .values_list('id', flat=True)
+    )
 
     # Create in-app notifications
     for user_id in recipients:
@@ -660,7 +594,7 @@ def check_purchase_payment_schedule_reminders():
             title='采购付款计划提醒',
             content=message,
             notification_type='WARNING',
-            link='/finance/purchase-payment-schedules'
+            link='/finance/purchase-payment-schedules',
         )
 
     # Mark as reminded
@@ -671,18 +605,20 @@ def check_purchase_payment_schedule_reminders():
 
     # Send to DingTalk/WeChat Work
     try:
-        title = "💸 采购付款提醒"
+        title = '💸 采购付款提醒'
 
         # 群发安全内容（不含具体财务数据）
-        safe_content = f"### {title}\n\n"
+        safe_content = f'### {title}\n\n'
         if overdue_schedules:
-            safe_content += f"⚠️ **{len(overdue_schedules)}** 笔付款已逾期\n"
+            safe_content += f'⚠️ **{len(overdue_schedules)}** 笔付款已逾期\n'
         if upcoming_schedules:
-            safe_content += f"📅 **{len(upcoming_schedules)}** 笔付款即将到期\n"
-        safe_content += "\n请登录ERP系统查看详情并及时安排付款！"
+            safe_content += f'📅 **{len(upcoming_schedules)}** 笔付款即将到期\n'
+        safe_content += '\n请登录ERP系统查看详情并及时安排付款！'
 
         NotificationService.send_custom_notification(title, safe_content, group_safe_content=safe_content)
     except Exception:
         pass
 
-    return f"Sent purchase payment schedule reminders for {len(schedules_to_remind)} items, total: ¥{total_remaining:,.2f}"
+    return (
+        f'Sent purchase payment schedule reminders for {len(schedules_to_remind)} items, total: ¥{total_remaining:,.2f}'
+    )

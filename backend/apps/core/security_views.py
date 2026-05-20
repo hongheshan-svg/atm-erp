@@ -1,6 +1,7 @@
 """
 Security views for login logs, password policy, and sensitive operations.
 """
+
 from django.utils import timezone
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
@@ -12,33 +13,52 @@ from .security import LoginLog, PasswordPolicy, SecurityService, SensitiveOperat
 
 class LoginLogSerializer(serializers.ModelSerializer):
     """Serializer for login logs."""
+
     status_display = serializers.CharField(source='get_status_display', read_only=True)
 
     class Meta:
         model = LoginLog
         fields = [
-            'id', 'username', 'ip_address', 'user_agent', 'status',
-            'status_display', 'failure_reason', 'login_time', 'location',
-            'device_type'
+            'id',
+            'username',
+            'ip_address',
+            'user_agent',
+            'status',
+            'status_display',
+            'failure_reason',
+            'login_time',
+            'location',
+            'device_type',
         ]
 
 
 class SensitiveOperationLogSerializer(serializers.ModelSerializer):
     """Serializer for sensitive operation logs."""
+
     operation_type_display = serializers.CharField(source='get_operation_type_display', read_only=True)
     user_name = serializers.CharField(source='user.username', read_only=True)
 
     class Meta:
         model = SensitiveOperationLog
         fields = [
-            'id', 'user', 'user_name', 'operation_type', 'operation_type_display',
-            'target_model', 'target_id', 'target_desc', 'ip_address',
-            'confirmed', 'confirmed_at', 'created_at'
+            'id',
+            'user',
+            'user_name',
+            'operation_type',
+            'operation_type_display',
+            'target_model',
+            'target_id',
+            'target_desc',
+            'ip_address',
+            'confirmed',
+            'confirmed_at',
+            'created_at',
         ]
 
 
 class LoginLogViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for login logs."""
+
     serializer_class = LoginLogSerializer
     permission_classes = [IsAuthenticated]
 
@@ -96,9 +116,9 @@ class LoginLogViewSet(viewsets.ReadOnlyModelViewSet):
             'failed': queryset.filter(status='FAILED').count(),
             'locked': queryset.filter(status='LOCKED').count(),
             'by_device': list(queryset.values('device_type').annotate(count=Count('id'))),
-            'by_day': list(queryset.annotate(
-                day=TruncDate('login_time')
-            ).values('day').annotate(count=Count('id')).order_by('day'))
+            'by_day': list(
+                queryset.annotate(day=TruncDate('login_time')).values('day').annotate(count=Count('id')).order_by('day')
+            ),
         }
 
         return Response(stats)
@@ -106,6 +126,7 @@ class LoginLogViewSet(viewsets.ReadOnlyModelViewSet):
 
 class SensitiveOperationLogViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for sensitive operation logs."""
+
     serializer_class = SensitiveOperationLogSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
     queryset = SensitiveOperationLog.objects.all()
@@ -128,6 +149,7 @@ class SensitiveOperationLogViewSet(viewsets.ReadOnlyModelViewSet):
 
 class PasswordPolicyViewSet(viewsets.ViewSet):
     """ViewSet for password policy operations."""
+
     permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['get'])
@@ -135,16 +157,20 @@ class PasswordPolicyViewSet(viewsets.ViewSet):
         """Get current password policy."""
         from django.conf import settings
 
-        return Response({
-            'min_length': getattr(settings, 'PASSWORD_MIN_LENGTH', PasswordPolicy.MIN_LENGTH),
-            'require_uppercase': getattr(settings, 'PASSWORD_REQUIRE_UPPERCASE', PasswordPolicy.REQUIRE_UPPERCASE),
-            'require_lowercase': getattr(settings, 'PASSWORD_REQUIRE_LOWERCASE', PasswordPolicy.REQUIRE_LOWERCASE),
-            'require_digit': getattr(settings, 'PASSWORD_REQUIRE_DIGIT', PasswordPolicy.REQUIRE_DIGIT),
-            'require_special': getattr(settings, 'PASSWORD_REQUIRE_SPECIAL', PasswordPolicy.REQUIRE_SPECIAL),
-            'expiry_days': getattr(settings, 'PASSWORD_EXPIRY_DAYS', PasswordPolicy.PASSWORD_EXPIRY_DAYS),
-            'max_login_attempts': getattr(settings, 'MAX_LOGIN_ATTEMPTS', PasswordPolicy.MAX_LOGIN_ATTEMPTS),
-            'lockout_duration_minutes': getattr(settings, 'LOCKOUT_DURATION_MINUTES', PasswordPolicy.LOCKOUT_DURATION_MINUTES),
-        })
+        return Response(
+            {
+                'min_length': getattr(settings, 'PASSWORD_MIN_LENGTH', PasswordPolicy.MIN_LENGTH),
+                'require_uppercase': getattr(settings, 'PASSWORD_REQUIRE_UPPERCASE', PasswordPolicy.REQUIRE_UPPERCASE),
+                'require_lowercase': getattr(settings, 'PASSWORD_REQUIRE_LOWERCASE', PasswordPolicy.REQUIRE_LOWERCASE),
+                'require_digit': getattr(settings, 'PASSWORD_REQUIRE_DIGIT', PasswordPolicy.REQUIRE_DIGIT),
+                'require_special': getattr(settings, 'PASSWORD_REQUIRE_SPECIAL', PasswordPolicy.REQUIRE_SPECIAL),
+                'expiry_days': getattr(settings, 'PASSWORD_EXPIRY_DAYS', PasswordPolicy.PASSWORD_EXPIRY_DAYS),
+                'max_login_attempts': getattr(settings, 'MAX_LOGIN_ATTEMPTS', PasswordPolicy.MAX_LOGIN_ATTEMPTS),
+                'lockout_duration_minutes': getattr(
+                    settings, 'LOCKOUT_DURATION_MINUTES', PasswordPolicy.LOCKOUT_DURATION_MINUTES
+                ),
+            }
+        )
 
     @action(detail=False, methods=['post'])
     def validate(self, request):
@@ -152,18 +178,17 @@ class PasswordPolicyViewSet(viewsets.ViewSet):
         password = request.data.get('password', '')
         is_valid, errors = PasswordPolicy.validate_password(password, request.user)
 
-        return Response({
-            'is_valid': is_valid,
-            'errors': errors
-        })
+        return Response({'is_valid': is_valid, 'errors': errors})
 
     @action(detail=False, methods=['get'])
     def check_expiry(self, request):
         """Check if current user's password is expired."""
         is_expired, days_until = PasswordPolicy.check_password_expiry(request.user)
 
-        return Response({
-            'is_expired': is_expired,
-            'days_until_expiry': days_until,
-            'should_warn': days_until is not None and 0 < days_until <= 14
-        })
+        return Response(
+            {
+                'is_expired': is_expired,
+                'days_until_expiry': days_until,
+                'should_warn': days_until is not None and 0 < days_until <= 14,
+            }
+        )

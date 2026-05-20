@@ -12,6 +12,7 @@
         queryset = Project.objects.all()
         # 自动应用数据权限
 """
+
 from django.db.models import Q
 
 from .permission_config import (
@@ -39,7 +40,7 @@ def is_finance_allowed(user) -> bool:
 def get_user_view_scope(user, module_name: str, model_name: str = None):
     """
     获取用户对指定模块的查看权限范围
-    
+
     Returns:
         str: 'all' | 'related' | 'department' | 'self' | 'none'
     """
@@ -97,7 +98,7 @@ def get_user_view_scope(user, module_name: str, model_name: str = None):
 def build_view_filter(user, module_name: str, model_name: str = None, model_class=None):
     """
     构建数据查看过滤条件
-    
+
     Returns:
         Q对象用于filter，None表示不过滤，empty Q()表示返回空
     """
@@ -174,8 +175,8 @@ def get_related_rules(module_name: str, model_name: str = None):
             {'field': 'project__members__user', 'type': 'user'},
         ],
         'purchase': [
-            {'field': 'requestor', 'type': 'user'},       # 采购申请人
-            {'field': 'buyer', 'type': 'user'},            # 采购员
+            {'field': 'requestor', 'type': 'user'},  # 采购申请人
+            {'field': 'buyer', 'type': 'user'},  # 采购员
             {'field': 'project__manager', 'type': 'user'},
             {'field': 'project__members__user', 'type': 'user'},
         ],
@@ -185,9 +186,9 @@ def get_related_rules(module_name: str, model_name: str = None):
             {'field': 'assignee', 'type': 'user'},
         ],
         'finance': [
-            {'field': 'applicant', 'type': 'user'},        # 付款申请人
-            {'field': 'user', 'type': 'user'},              # 费用报销人
-            {'field': 'reconciled_by', 'type': 'user'},     # 对账人
+            {'field': 'applicant', 'type': 'user'},  # 付款申请人
+            {'field': 'user', 'type': 'user'},  # 费用报销人
+            {'field': 'reconciled_by', 'type': 'user'},  # 对账人
         ],
     }
 
@@ -198,7 +199,7 @@ def get_related_rules(module_name: str, model_name: str = None):
 class DataPermissionMixin:
     """
     数据权限Mixin - 应用于ViewSet
-    
+
     自动根据用户角色和模块配置过滤数据
     """
 
@@ -294,18 +295,21 @@ class OperationPermissionMixin:
     def perform_create(self, serializer):
         if not self.check_operation_permission('create'):
             from rest_framework.exceptions import PermissionDenied
+
             raise PermissionDenied('没有创建权限')
         super().perform_create(serializer)
 
     def perform_update(self, serializer):
         if not self.check_operation_permission('edit', serializer.instance):
             from rest_framework.exceptions import PermissionDenied
+
             raise PermissionDenied('没有编辑权限')
         super().perform_update(serializer)
 
     def perform_destroy(self, instance):
         if not self.check_operation_permission('delete', instance):
             from rest_framework.exceptions import PermissionDenied
+
             raise PermissionDenied('没有删除权限')
         super().perform_destroy(instance)
 
@@ -341,22 +345,24 @@ class SensitiveFieldMixin:
 # 权限检查装饰器
 # ============================================================
 
+
 def require_finance_permission(view_func):
     """要求财务权限的装饰器"""
+
     def wrapper(self, request, *args, **kwargs):
         if not is_finance_allowed(request.user):
             from rest_framework import status
             from rest_framework.response import Response
-            return Response(
-                {'detail': '无权访问财务数据'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+
+            return Response({'detail': '无权访问财务数据'}, status=status.HTTP_403_FORBIDDEN)
         return view_func(self, request, *args, **kwargs)
+
     return wrapper
 
 
 def require_operation_permission(operation: str):
     """要求操作权限的装饰器"""
+
     def decorator(view_func):
         def wrapper(self, request, *args, **kwargs):
             if hasattr(self, 'check_operation_permission'):
@@ -364,12 +370,12 @@ def require_operation_permission(operation: str):
                 if not self.check_operation_permission(operation, obj):
                     from rest_framework import status
                     from rest_framework.response import Response
-                    return Response(
-                        {'detail': f'没有{operation}权限'},
-                        status=status.HTTP_403_FORBIDDEN
-                    )
+
+                    return Response({'detail': f'没有{operation}权限'}, status=status.HTTP_403_FORBIDDEN)
             return view_func(self, request, *args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
@@ -377,10 +383,11 @@ def require_operation_permission(operation: str):
 # 便捷函数
 # ============================================================
 
+
 def filter_queryset_by_permission(queryset, user):
     """
     对查询集应用数据权限过滤
-    
+
     使用示例：
         projects = Project.objects.all()
         projects = filter_queryset_by_permission(projects, request.user)

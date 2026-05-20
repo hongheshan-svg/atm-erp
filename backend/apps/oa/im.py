@@ -7,6 +7,7 @@ Instant Messaging with Group Chat and File Sharing
 - 文件共享可用于分享技术资料、图纸等
 - 建议与项目协作配合使用
 """
+
 from django.conf import settings
 from django.db import models
 from rest_framework import serializers, viewsets
@@ -20,6 +21,7 @@ from apps.core.models import BaseModel
 
 class IMConversation(BaseModel):
     """IM会话/聊天室"""
+
     TYPE_CHOICES = [
         ('PRIVATE', '私聊'),
         ('GROUP', '群聊'),
@@ -37,7 +39,7 @@ class IMConversation(BaseModel):
         null=True,
         blank=True,
         related_name='owned_im_conversations',
-        verbose_name='群主'
+        verbose_name='群主',
     )
     max_members = models.IntegerField(default=500, verbose_name='最大成员数')
     is_muted = models.BooleanField(default=False, verbose_name='全员禁言')
@@ -71,6 +73,7 @@ class IMConversation(BaseModel):
 
 class IMConversationMember(BaseModel):
     """IM会话成员"""
+
     ROLE_CHOICES = [
         ('OWNER', '群主'),
         ('ADMIN', '管理员'),
@@ -78,16 +81,13 @@ class IMConversationMember(BaseModel):
     ]
 
     conversation = models.ForeignKey(
-        IMConversation,
-        on_delete=models.CASCADE,
-        related_name='members',
-        verbose_name='会话'
+        IMConversation, on_delete=models.CASCADE, related_name='members', verbose_name='会话'
     )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='im_conversation_memberships',
-        verbose_name='用户'
+        verbose_name='用户',
     )
 
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='MEMBER', verbose_name='角色')
@@ -107,7 +107,7 @@ class IMConversationMember(BaseModel):
         null=True,
         blank=True,
         related_name='invited_members',
-        verbose_name='邀请人'
+        verbose_name='邀请人',
     )
 
     class Meta:
@@ -128,6 +128,7 @@ class IMConversationMember(BaseModel):
 
 class IMMessage(BaseModel):
     """IM消息"""
+
     TYPE_CHOICES = [
         ('TEXT', '文本'),
         ('IMAGE', '图片'),
@@ -138,17 +139,14 @@ class IMMessage(BaseModel):
     ]
 
     conversation = models.ForeignKey(
-        IMConversation,
-        on_delete=models.CASCADE,
-        related_name='messages',
-        verbose_name='会话'
+        IMConversation, on_delete=models.CASCADE, related_name='messages', verbose_name='会话'
     )
     sender = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         related_name='im_sent_messages',
-        verbose_name='发送者'
+        verbose_name='发送者',
     )
 
     # 消息内容
@@ -163,21 +161,13 @@ class IMMessage(BaseModel):
 
     # @提及
     mentioned_users = models.ManyToManyField(
-        settings.AUTH_USER_MODEL,
-        blank=True,
-        related_name='im_mentioned_in_messages',
-        verbose_name='@提及的用户'
+        settings.AUTH_USER_MODEL, blank=True, related_name='im_mentioned_in_messages', verbose_name='@提及的用户'
     )
     is_mention_all = models.BooleanField(default=False, verbose_name='@所有人')
 
     # 引用回复
     reply_to = models.ForeignKey(
-        'self',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='replies',
-        verbose_name='回复的消息'
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='replies', verbose_name='回复的消息'
     )
 
     # 消息状态
@@ -205,17 +195,10 @@ class IMMessage(BaseModel):
 
 class IMMessageRead(models.Model):
     """IM消息已读记录"""
-    message = models.ForeignKey(
-        IMMessage,
-        on_delete=models.CASCADE,
-        related_name='read_records',
-        verbose_name='消息'
-    )
+
+    message = models.ForeignKey(IMMessage, on_delete=models.CASCADE, related_name='read_records', verbose_name='消息')
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='im_read_messages',
-        verbose_name='用户'
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='im_read_messages', verbose_name='用户'
     )
     read_at = models.DateTimeField(auto_now_add=True, verbose_name='已读时间')
 
@@ -228,6 +211,7 @@ class IMMessageRead(models.Model):
 
 # ============ Serializers ============
 
+
 class IMConversationMemberSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
     full_name = serializers.CharField(source='user.get_full_name', read_only=True)
@@ -236,8 +220,19 @@ class IMConversationMemberSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = IMConversationMember
-        fields = ['id', 'user', 'username', 'full_name', 'avatar', 'role',
-                  'nickname', 'is_muted', 'is_pinned', 'joined_at', 'unread_count']
+        fields = [
+            'id',
+            'user',
+            'username',
+            'full_name',
+            'avatar',
+            'role',
+            'nickname',
+            'is_muted',
+            'is_pinned',
+            'joined_at',
+            'unread_count',
+        ]
 
     def get_avatar(self, obj):
         return None  # 可扩展用户头像
@@ -254,10 +249,25 @@ class IMMessageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = IMMessage
-        fields = ['id', 'conversation', 'sender', 'sender_name', 'sender_full_name',
-                  'message_type', 'content', 'file', 'file_url', 'file_name', 'file_size',
-                  'file_type', 'is_mention_all', 'reply_to', 'reply_to_content',
-                  'is_recalled', 'created_at']
+        fields = [
+            'id',
+            'conversation',
+            'sender',
+            'sender_name',
+            'sender_full_name',
+            'message_type',
+            'content',
+            'file',
+            'file_url',
+            'file_name',
+            'file_size',
+            'file_type',
+            'is_mention_all',
+            'reply_to',
+            'reply_to_content',
+            'is_recalled',
+            'created_at',
+        ]
         read_only_fields = ['sender', 'file_size', 'file_type', 'is_recalled']
 
     def get_file_url(self, obj):
@@ -273,7 +283,7 @@ class IMMessageSerializer(serializers.ModelSerializer):
             return {
                 'id': obj.reply_to.id,
                 'sender': obj.reply_to.sender.username if obj.reply_to.sender else None,
-                'content': obj.reply_to.content[:100] if obj.reply_to.content else '[文件]'
+                'content': obj.reply_to.content[:100] if obj.reply_to.content else '[文件]',
             }
         return None
 
@@ -285,9 +295,19 @@ class IMConversationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = IMConversation
-        fields = ['id', 'name', 'type', 'avatar', 'description', 'owner',
-                  'members_count', 'last_message', 'unread_count', 'last_message_at',
-                  'created_at']
+        fields = [
+            'id',
+            'name',
+            'type',
+            'avatar',
+            'description',
+            'owner',
+            'members_count',
+            'last_message',
+            'unread_count',
+            'last_message_at',
+            'created_at',
+        ]
         read_only_fields = ['owner', 'last_message_at']
 
     def get_members_count(self, obj):
@@ -299,7 +319,7 @@ class IMConversationSerializer(serializers.ModelSerializer):
             return {
                 'content': obj.last_message_content,
                 'sender': msg.sender.username if msg.sender else None,
-                'created_at': msg.created_at
+                'created_at': msg.created_at,
             }
         return None
 
@@ -321,16 +341,15 @@ class IMConversationDetailSerializer(IMConversationSerializer):
 
 # ============ ViewSets ============
 
+
 class IMConversationViewSet(viewsets.ModelViewSet):
     """IM会话管理"""
+
     serializer_class = IMConversationSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return IMConversation.objects.filter(
-            members__user=self.request.user,
-            is_deleted=False
-        ).distinct()
+        return IMConversation.objects.filter(members__user=self.request.user, is_deleted=False).distinct()
 
     def get_serializer_class(self):
         if self.action == 'retrieve':
@@ -341,10 +360,7 @@ class IMConversationViewSet(viewsets.ModelViewSet):
         conversation = serializer.save(owner=self.request.user)
         # 创建者自动成为群主
         IMConversationMember.objects.create(
-            conversation=conversation,
-            user=self.request.user,
-            role='OWNER',
-            created_by=self.request.user
+            conversation=conversation, user=self.request.user, role='OWNER', created_by=self.request.user
         )
 
     @action(detail=False, methods=['post'])
@@ -355,38 +371,28 @@ class IMConversationViewSet(viewsets.ModelViewSet):
             return Response({'error': '请指定聊天对象'}, status=400)
 
         from apps.accounts.models import User
+
         try:
             target_user = User.objects.get(id=target_user_id)
         except User.DoesNotExist:
             return Response({'error': '用户不存在'}, status=404)
 
         # 检查是否已存在私聊
-        existing = IMConversation.objects.filter(
-            type='PRIVATE',
-            members__user=request.user
-        ).filter(
-            members__user=target_user
-        ).first()
+        existing = (
+            IMConversation.objects.filter(type='PRIVATE', members__user=request.user)
+            .filter(members__user=target_user)
+            .first()
+        )
 
         if existing:
             return Response(IMConversationSerializer(existing, context={'request': request}).data)
 
         # 创建新私聊
         conversation = IMConversation.objects.create(
-            type='PRIVATE',
-            name=f'{request.user.username}-{target_user.username}',
-            created_by=request.user
+            type='PRIVATE', name=f'{request.user.username}-{target_user.username}', created_by=request.user
         )
-        IMConversationMember.objects.create(
-            conversation=conversation,
-            user=request.user,
-            created_by=request.user
-        )
-        IMConversationMember.objects.create(
-            conversation=conversation,
-            user=target_user,
-            created_by=request.user
-        )
+        IMConversationMember.objects.create(conversation=conversation, user=request.user, created_by=request.user)
+        IMConversationMember.objects.create(conversation=conversation, user=target_user, created_by=request.user)
 
         return Response(IMConversationSerializer(conversation, context={'request': request}).data)
 
@@ -404,28 +410,23 @@ class IMConversationViewSet(viewsets.ModelViewSet):
             name=name,
             description=request.data.get('description', ''),
             owner=request.user,
-            created_by=request.user
+            created_by=request.user,
         )
 
         # 添加群主
         IMConversationMember.objects.create(
-            conversation=conversation,
-            user=request.user,
-            role='OWNER',
-            created_by=request.user
+            conversation=conversation, user=request.user, role='OWNER', created_by=request.user
         )
 
         # 添加其他成员
         from apps.accounts.models import User
+
         for user_id in member_ids:
             try:
                 user = User.objects.get(id=user_id)
                 if user != request.user:
                     IMConversationMember.objects.create(
-                        conversation=conversation,
-                        user=user,
-                        invited_by=request.user,
-                        created_by=request.user
+                        conversation=conversation, user=user, invited_by=request.user, created_by=request.user
                     )
             except User.DoesNotExist:
                 pass
@@ -435,7 +436,7 @@ class IMConversationViewSet(viewsets.ModelViewSet):
             conversation=conversation,
             message_type='SYSTEM',
             content=f'{request.user.get_full_name() or request.user.username} 创建了群聊',
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(IMConversationDetailSerializer(conversation, context={'request': request}).data)
@@ -451,15 +452,13 @@ class IMConversationViewSet(viewsets.ModelViewSet):
         added = []
 
         from apps.accounts.models import User
+
         for user_id in member_ids:
             try:
                 user = User.objects.get(id=user_id)
                 if not conversation.members.filter(user=user).exists():
                     IMConversationMember.objects.create(
-                        conversation=conversation,
-                        user=user,
-                        invited_by=request.user,
-                        created_by=request.user
+                        conversation=conversation, user=user, invited_by=request.user, created_by=request.user
                     )
                     added.append(user.username)
             except User.DoesNotExist:
@@ -470,7 +469,7 @@ class IMConversationViewSet(viewsets.ModelViewSet):
                 conversation=conversation,
                 message_type='SYSTEM',
                 content=f'{request.user.username} 邀请了 {", ".join(added)} 加入群聊',
-                created_by=request.user
+                created_by=request.user,
             )
 
         return Response({'added': added})
@@ -493,7 +492,7 @@ class IMConversationViewSet(viewsets.ModelViewSet):
                 conversation=conversation,
                 message_type='SYSTEM',
                 content=f'{request.user.username} 退出了群聊',
-                created_by=request.user
+                created_by=request.user,
             )
 
         return Response({'message': '已退出群聊'})
@@ -505,6 +504,7 @@ class IMConversationViewSet(viewsets.ModelViewSet):
         member = conversation.members.filter(user=request.user).first()
         if member:
             from django.utils import timezone
+
             last_msg = conversation.messages.order_by('-id').first()
             member.last_read_at = timezone.now()
             if last_msg:
@@ -515,16 +515,14 @@ class IMConversationViewSet(viewsets.ModelViewSet):
 
 class IMMessageViewSet(viewsets.ModelViewSet):
     """IM消息管理"""
+
     serializer_class = IMMessageSerializer
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
         conversation_id = self.request.query_params.get('conversation')
-        qs = IMMessage.objects.filter(
-            conversation__members__user=self.request.user,
-            is_deleted=False
-        ).distinct()
+        qs = IMMessage.objects.filter(conversation__members__user=self.request.user, is_deleted=False).distinct()
         if conversation_id:
             qs = qs.filter(conversation_id=conversation_id)
         return qs.select_related('sender', 'reply_to')
@@ -532,10 +530,7 @@ class IMMessageViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         file = self.request.FILES.get('file')
 
-        message = serializer.save(
-            sender=self.request.user,
-            created_by=self.request.user
-        )
+        message = serializer.save(sender=self.request.user, created_by=self.request.user)
 
         if file:
             message.file = file
@@ -607,7 +602,7 @@ class IMMessageViewSet(viewsets.ModelViewSet):
             file_name=file.name,
             file_size=file.size,
             file_type=file.content_type,
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(IMMessageSerializer(message, context={'request': request}).data)

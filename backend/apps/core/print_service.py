@@ -15,12 +15,13 @@ class PrintTemplate:
     """
     打印模板配置
     """
+
     TEMPLATES = {
         # 采购订单打印模板
         'purchase_order': {
             'title': '采购订单',
             'model': ('purchase', 'PurchaseOrder'),
-            'template': '''
+            'template': """
 <!DOCTYPE html>
 <html>
 <head>
@@ -115,14 +116,13 @@ class PrintTemplate:
     </div>
 </body>
 </html>
-            '''
+            """,
         },
-
         # 销售订单打印模板
         'sales_order': {
             'title': '销售订单',
             'model': ('sales', 'SalesOrder'),
-            'template': '''
+            'template': """
 <!DOCTYPE html>
 <html>
 <head>
@@ -211,14 +211,13 @@ class PrintTemplate:
     </div>
 </body>
 </html>
-            '''
+            """,
         },
-
         # 领料单打印模板
         'requisition': {
             'title': '领料单',
             'model': ('inventory', 'Requisition'),
-            'template': '''
+            'template': """
 <!DOCTYPE html>
 <html>
 <head>
@@ -290,14 +289,13 @@ class PrintTemplate:
     </div>
 </body>
 </html>
-            '''
+            """,
         },
-
         # 设备台账打印模板
         'equipment': {
             'title': '设备台账',
             'model': ('projects', 'Equipment'),
-            'template': '''
+            'template': """
 <!DOCTYPE html>
 <html>
 <head>
@@ -393,8 +391,8 @@ class PrintTemplate:
     <p><strong>备注:</strong> {{ equipment.notes }}</p>
 </body>
 </html>
-            '''
-        }
+            """,
+        },
     }
 
     @classmethod
@@ -403,14 +401,12 @@ class PrintTemplate:
 
     @classmethod
     def list_templates(cls):
-        return [
-            {'key': k, 'title': v['title']}
-            for k, v in cls.TEMPLATES.items()
-        ]
+        return [{'key': k, 'title': v['title']} for k, v in cls.TEMPLATES.items()]
 
 
 class PrintView(APIView):
     """打印服务API"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request, template_name, pk):
@@ -429,12 +425,14 @@ class PrintView(APIView):
 
         # 渲染模板
         template = Template(template_config['template'])
-        context = Context({
-            template_name.split('_')[-1] if '_' in template_name else template_name: obj,
-            'order': obj,
-            'requisition': obj,
-            'equipment': obj,
-        })
+        context = Context(
+            {
+                template_name.split('_')[-1] if '_' in template_name else template_name: obj,
+                'order': obj,
+                'requisition': obj,
+                'equipment': obj,
+            }
+        )
 
         html = template.render(context)
 
@@ -443,6 +441,7 @@ class PrintView(APIView):
 
 class BatchPrintView(APIView):
     """批量打印服务API"""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request, template_name):
@@ -468,16 +467,19 @@ class BatchPrintView(APIView):
         html_parts = []
 
         for obj in objects:
-            context = Context({
-                template_name.split('_')[-1] if '_' in template_name else template_name: obj,
-                'order': obj,
-                'requisition': obj,
-                'equipment': obj,
-            })
+            context = Context(
+                {
+                    template_name.split('_')[-1] if '_' in template_name else template_name: obj,
+                    'order': obj,
+                    'requisition': obj,
+                    'equipment': obj,
+                }
+            )
             html_parts.append(template.render(context))
 
         # 合并为一个HTML页面，添加分页符
-        combined_html = '''
+        combined_html = (
+            """
 <!DOCTYPE html>
 <html>
 <head>
@@ -490,20 +492,26 @@ class BatchPrintView(APIView):
     </style>
 </head>
 <body>
-''' + '<div class="page-break"></div>'.join([
-            # 提取body内容
-            part.split('<body>')[1].split('</body>')[0] if '<body>' in part else part
-            for part in html_parts
-        ]) + '''
+"""
+            + '<div class="page-break"></div>'.join(
+                [
+                    # 提取body内容
+                    part.split('<body>')[1].split('</body>')[0] if '<body>' in part else part
+                    for part in html_parts
+                ]
+            )
+            + """
 </body>
 </html>
-'''
+"""
+        )
 
         return HttpResponse(combined_html, content_type='text/html')
 
 
 class PrintTemplateListView(APIView):
     """打印模板列表API"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):

@@ -2,6 +2,7 @@
 数据导入导出服务
 Data Import/Export Service
 """
+
 import csv
 import io
 from datetime import datetime
@@ -20,7 +21,7 @@ class ExportService:
     def export_to_excel(data, columns, filename='export', sheet_name='Sheet1'):
         """
         导出数据到Excel
-        
+
         :param data: 数据列表 [dict, ...]
         :param columns: 列定义 [{'field': 'name', 'title': '名称', 'width': 20}, ...]
         :param filename: 文件名
@@ -32,14 +33,11 @@ class ExportService:
         ws.title = sheet_name
 
         # 样式定义
-        header_font = Font(bold=True, color="FFFFFF")
-        header_fill = PatternFill(start_color="409EFF", end_color="409EFF", fill_type="solid")
+        header_font = Font(bold=True, color='FFFFFF')
+        header_fill = PatternFill(start_color='409EFF', end_color='409EFF', fill_type='solid')
         header_alignment = Alignment(horizontal='center', vertical='center')
         thin_border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin')
+            left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin')
         )
 
         # 写入表头
@@ -71,10 +69,10 @@ class ExportService:
         ws.freeze_panes = 'A2'
 
         # 生成响应
-        response = HttpResponse(
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = (
+            f'attachment; filename="{filename}_{datetime.now().strftime("%Y%m%d%H%M%S")}.xlsx"'
         )
-        response['Content-Disposition'] = f'attachment; filename="{filename}_{datetime.now().strftime("%Y%m%d%H%M%S")}.xlsx"'
 
         wb.save(response)
         return response
@@ -85,7 +83,9 @@ class ExportService:
         导出数据到CSV
         """
         response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
-        response['Content-Disposition'] = f'attachment; filename="{filename}_{datetime.now().strftime("%Y%m%d%H%M%S")}.csv"'
+        response['Content-Disposition'] = (
+            f'attachment; filename="{filename}_{datetime.now().strftime("%Y%m%d%H%M%S")}.csv"'
+        )
 
         writer = csv.writer(response)
 
@@ -126,7 +126,7 @@ class ImportService:
     def parse_excel(file, column_mapping, start_row=2):
         """
         解析Excel文件
-        
+
         :param file: 上传的文件对象
         :param column_mapping: 列映射 {'A': 'name', 'B': 'code', ...}
         :param start_row: 数据起始行（默认跳过表头）
@@ -158,7 +158,7 @@ class ImportService:
     def parse_csv(file, column_mapping):
         """
         解析CSV文件
-        
+
         :param file: 上传的文件对象
         :param column_mapping: 列映射 {'列名1': 'field1', '列名2': 'field2', ...}
         :return: 解析后的数据列表
@@ -196,7 +196,7 @@ class ImportService:
     def validate_data(data, validators):
         """
         验证导入数据
-        
+
         :param data: 数据列表
         :param validators: 验证器字典 {'field': [validator_func, ...], ...}
         :return: {'valid': [...], 'errors': [{'row': 1, 'field': 'name', 'message': '...'}]}
@@ -211,11 +211,7 @@ class ImportService:
                 for validator in field_validators:
                     result = validator(value, row_data)
                     if result is not True:
-                        row_errors.append({
-                            'row': row_data.get('_row', 0),
-                            'field': field,
-                            'message': result
-                        })
+                        row_errors.append({'row': row_data.get('_row', 0), 'field': field, 'message': result})
                         break
 
             if row_errors:
@@ -229,7 +225,7 @@ class ImportService:
     def import_data(model_class, data, field_mapping, user=None, batch_size=100):
         """
         批量导入数据
-        
+
         :param model_class: Django模型类
         :param data: 数据列表
         :param field_mapping: 字段映射 {'import_field': 'model_field', ...}
@@ -263,10 +259,7 @@ class ImportService:
                             objects_to_create = []
 
                     except Exception as e:
-                        errors.append({
-                            'row': row_data.get('_row', 0),
-                            'error': str(e)
-                        })
+                        errors.append({'row': row_data.get('_row', 0), 'error': str(e)})
 
                 # 创建剩余对象
                 if objects_to_create:
@@ -289,10 +282,12 @@ def required(value, row_data):
 
 def max_length(max_len):
     """最大长度验证"""
+
     def validator(value, row_data):
         if value and len(str(value)) > max_len:
             return f'长度不能超过{max_len}个字符'
         return True
+
     return validator
 
 
@@ -321,8 +316,10 @@ def is_positive(value, row_data):
 
 def unique_in_db(model_class, field):
     """数据库唯一性验证"""
+
     def validator(value, row_data):
         if value and model_class.objects.filter(**{field: value}).exists():
             return f'"{value}" 已存在'
         return True
+
     return validator

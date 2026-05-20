@@ -2,6 +2,7 @@
 Security check management command.
 Performs comprehensive security audit of the system.
 """
+
 import os
 
 from django.conf import settings
@@ -106,10 +107,7 @@ class Command(BaseCommand):
         self.stdout.write('Checking for default superuser...')
         User = get_user_model()
 
-        default_admins = User.objects.filter(
-            username__in=['admin', 'root', 'administrator'],
-            is_superuser=True
-        )
+        default_admins = User.objects.filter(username__in=['admin', 'root', 'administrator'], is_superuser=True)
 
         if default_admins.exists():
             warnings.append('Default admin usernames found - consider renaming')
@@ -189,7 +187,9 @@ class Command(BaseCommand):
         self.stdout.write(f'Issues: {len(issues)}')
 
         if issues:
-            self.stdout.write(self.style.ERROR('\n❌ Security check FAILED - please fix issues before deploying to production'))
+            self.stdout.write(
+                self.style.ERROR('\n❌ Security check FAILED - please fix issues before deploying to production')
+            )
             return
         elif warnings:
             self.stdout.write(self.style.WARNING('\n⚠ Security check passed with warnings'))

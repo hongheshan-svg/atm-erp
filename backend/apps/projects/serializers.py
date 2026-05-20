@@ -1,6 +1,7 @@
 """
 Serializers for projects app.
 """
+
 from django.db import transaction
 from django.db.models import F
 from rest_framework import serializers
@@ -24,6 +25,7 @@ from .models import (
 
 class ProjectSerializer(serializers.ModelSerializer):
     """Project serializer."""
+
     customer_name = serializers.CharField(source='customer.name', read_only=True, allow_null=True)
     manager_name = serializers.CharField(source='manager.get_full_name', read_only=True, allow_null=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
@@ -44,15 +46,39 @@ class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
         fields = [
-            'id', 'code', 'name', 'customer', 'customer_name',
-            'sales_order', 'sales_order_no',
-            'manager', 'manager_name',
-            'start_date', 'end_date', 'status', 'status_display', 'budget_total',
-            'budget_material', 'budget_labor', 'budget_expense', 'description', 'notes',
-            'actual_material_cost', 'actual_labor_cost', 'actual_expense_cost',
-            'total_actual_cost', 'actual_cost', 'material_cost', 'labor_cost',
-            'revenue', 'profit',
-            'is_deleted', 'created_by', 'created_by_name', 'created_at', 'updated_at'
+            'id',
+            'code',
+            'name',
+            'customer',
+            'customer_name',
+            'sales_order',
+            'sales_order_no',
+            'manager',
+            'manager_name',
+            'start_date',
+            'end_date',
+            'status',
+            'status_display',
+            'budget_total',
+            'budget_material',
+            'budget_labor',
+            'budget_expense',
+            'description',
+            'notes',
+            'actual_material_cost',
+            'actual_labor_cost',
+            'actual_expense_cost',
+            'total_actual_cost',
+            'actual_cost',
+            'material_cost',
+            'labor_cost',
+            'revenue',
+            'profit',
+            'is_deleted',
+            'created_by',
+            'created_by_name',
+            'created_at',
+            'updated_at',
         ]
         read_only_fields = ['created_at', 'updated_at']
 
@@ -75,11 +101,7 @@ class ProjectSerializer(serializers.ModelSerializer):
         return 0
 
     def get_total_actual_cost(self, obj):
-        return (
-            self.get_actual_material_cost(obj) +
-            self.get_actual_labor_cost(obj) +
-            self.get_actual_expense_cost(obj)
-        )
+        return self.get_actual_material_cost(obj) + self.get_actual_labor_cost(obj) + self.get_actual_expense_cost(obj)
 
     def get_actual_cost(self, obj):
         """前端兼容字段"""
@@ -107,13 +129,14 @@ class ProjectSerializer(serializers.ModelSerializer):
 class ProjectMemberSerializer(serializers.ModelSerializer):
     """
     ProjectMember serializer with salary privacy protection.
-    
+
     时薪信息只对以下角色可见：
     - 超级管理员
     - 项目经理（该项目的manager）
     - HR部门成员
     - 财务部门成员
     """
+
     user_name = serializers.CharField(source='user.get_full_name', read_only=True)
     user_email = serializers.CharField(source='user.email', read_only=True)
     user_department = serializers.SerializerMethodField()
@@ -126,10 +149,25 @@ class ProjectMemberSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProjectMember
         fields = [
-            'id', 'project', 'project_name', 'user', 'user_name', 'user_email',
-            'user_department', 'role', 'hourly_rate', 'allocated_hours', 'actual_hours',
-            'total_hours', 'labor_cost', 'join_date', 'can_view_salary',
-            'is_active', 'is_deleted', 'created_at', 'updated_at'
+            'id',
+            'project',
+            'project_name',
+            'user',
+            'user_name',
+            'user_email',
+            'user_department',
+            'role',
+            'hourly_rate',
+            'allocated_hours',
+            'actual_hours',
+            'total_hours',
+            'labor_cost',
+            'join_date',
+            'can_view_salary',
+            'is_active',
+            'is_deleted',
+            'created_at',
+            'updated_at',
         ]
         read_only_fields = ['created_at', 'updated_at', 'labor_cost', 'can_view_salary']
 
@@ -206,6 +244,7 @@ class ProjectMemberSerializer(serializers.ModelSerializer):
 
 class ProjectTaskSerializer(serializers.ModelSerializer):
     """ProjectTask serializer."""
+
     project_name = serializers.CharField(source='project.name', read_only=True)
     assignee_name = serializers.CharField(source='assignee.get_full_name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
@@ -215,11 +254,27 @@ class ProjectTaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProjectTask
         fields = [
-            'id', 'project', 'project_name', 'parent', 'code', 'name',
-            'assignee', 'assignee_name', 'planned_hours', 'actual_hours',
-            'progress_percent', 'status', 'status_display', 'start_date', 'end_date',
-            'description', 'sort_order', 'is_deleted', 'created_at', 'updated_at',
-            'time_log_count'
+            'id',
+            'project',
+            'project_name',
+            'parent',
+            'code',
+            'name',
+            'assignee',
+            'assignee_name',
+            'planned_hours',
+            'actual_hours',
+            'progress_percent',
+            'status',
+            'status_display',
+            'start_date',
+            'end_date',
+            'description',
+            'sort_order',
+            'is_deleted',
+            'created_at',
+            'updated_at',
+            'time_log_count',
         ]
         read_only_fields = ['created_at', 'updated_at', 'actual_hours']  # actual_hours 设为只读
 
@@ -232,6 +287,7 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
     """
     ProjectBOM serializer - 针对非标自动化行业优化
     """
+
     # ===== 项目信息 =====
     project_code = serializers.CharField(source='project.code', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
@@ -250,7 +306,9 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
     item_material = serializers.CharField(source='item.material', read_only=True, allow_blank=True)
     item_lead_time = serializers.IntegerField(source='item.lead_time', read_only=True)
     version_brand_display = serializers.SerializerMethodField()
-    item_standard_cost = serializers.DecimalField(source='item.standard_cost', max_digits=15, decimal_places=2, read_only=True)
+    item_standard_cost = serializers.DecimalField(
+        source='item.standard_cost', max_digits=15, decimal_places=2, read_only=True
+    )
 
     # ===== 显示字段 =====
     requester_name = serializers.CharField(source='requester.get_full_name', read_only=True)
@@ -295,63 +353,139 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProjectBOM
         fields = [
-            'id', 'project', 'project_code', 'project_name',
-            'item', 'item_sku', 'item_code', 'item_name',
-            'item_specification', 'specification', 'item_unit', 'unit',
-            'item_type', 'item_brand', 'item_model', 'item_material',
-            'item_lead_time', 'item_standard_cost',
+            'id',
+            'project',
+            'project_code',
+            'project_name',
+            'item',
+            'item_sku',
+            'item_code',
+            'item_name',
+            'item_specification',
+            'specification',
+            'item_unit',
+            'unit',
+            'item_type',
+            'item_brand',
+            'item_model',
+            'item_material',
+            'item_lead_time',
+            'item_standard_cost',
             # 物料属性与状态
-            'item_property', 'item_property_display', 'effective_item_property',
-            'status', 'status_display', 'priority', 'priority_display',
+            'item_property',
+            'item_property_display',
+            'effective_item_property',
+            'status',
+            'status_display',
+            'priority',
+            'priority_display',
             # 数量
-            'planned_qty', 'actual_qty', 'unit_qty', 'scrap_rate',
+            'planned_qty',
+            'actual_qty',
+            'unit_qty',
+            'scrap_rate',
             # 成本
-            'estimated_cost', 'target_cost', 'actual_cost', 'total_cost',
+            'estimated_cost',
+            'target_cost',
+            'actual_cost',
+            'total_cost',
             # 图纸与技术
-            'version_brand', 'version_brand_display', 'has_drawing', 'has_drawing_display',
-            'drawing', 'drawing_name', 'drawing_no', 'drawing_version',
-            'material_spec', 'surface_treatment', 'technical_requirement',
+            'version_brand',
+            'version_brand_display',
+            'has_drawing',
+            'has_drawing_display',
+            'drawing',
+            'drawing_name',
+            'drawing_no',
+            'drawing_version',
+            'material_spec',
+            'surface_treatment',
+            'technical_requirement',
             # 装配与工艺
-            'work_center', 'work_center_name', 'process', 'process_name',
-            'assembly_sequence', 'assembly_instruction',
+            'work_center',
+            'work_center_name',
+            'process',
+            'process_name',
+            'assembly_sequence',
+            'assembly_instruction',
             # 需求追溯
-            'requirement_id_ref', 'function_module',
+            'requirement_id_ref',
+            'function_module',
             # 日期与时间
-            'required_date', 'latest_order_date', 'requester', 'requester_name',
-            'description', 'notes',
+            'required_date',
+            'latest_order_date',
+            'requester',
+            'requester_name',
+            'description',
+            'notes',
             # 采购与库存跟踪
-            'order_status', 'order_status_display',
-            'supplier', 'supplier_name', 'supplier_code',
-            'delivery_date', 'actual_delivery_date',
-            'purchase_request', 'purchase_request_no', 'pr_qty',
-            'ordered_qty', 'shipped_qty', 'received_qty', 'returned_qty',
-            'issued_qty', 'reserved_qty',
-            'purchase_order', 'purchase_order_no',
-            'shortage_qty', 'is_overdue',
+            'order_status',
+            'order_status_display',
+            'supplier',
+            'supplier_name',
+            'supplier_code',
+            'delivery_date',
+            'actual_delivery_date',
+            'purchase_request',
+            'purchase_request_no',
+            'pr_qty',
+            'ordered_qty',
+            'shipped_qty',
+            'received_qty',
+            'returned_qty',
+            'issued_qty',
+            'reserved_qty',
+            'purchase_order',
+            'purchase_order_no',
+            'shortage_qty',
+            'is_overdue',
             # 质量与检验
-            'inspection_required', 'inspection_passed', 'inspection_notes',
+            'inspection_required',
+            'inspection_passed',
+            'inspection_notes',
             # 多级BOM
-            'parent', 'parent_name', 'level', 'sort_order',
-            'children_count', 'has_children', 'children',
+            'parent',
+            'parent_name',
+            'level',
+            'sort_order',
+            'children_count',
+            'has_children',
+            'children',
             # 关键件标识
-            'is_critical', 'is_long_lead',
+            'is_critical',
+            'is_long_lead',
             # 询价信息
-            'quote_status', 'quote_status_display',
-            'quote_supplier', 'quote_supplier_name', 'quote_supplier_code',
-            'price_with_tax', 'price_without_tax', 'tax_rate',
-            'quote_delivery_days', 'quote_date', 'quote_notes',
+            'quote_status',
+            'quote_status_display',
+            'quote_supplier',
+            'quote_supplier_name',
+            'quote_supplier_code',
+            'price_with_tax',
+            'price_without_tax',
+            'tax_rate',
+            'quote_delivery_days',
+            'quote_date',
+            'quote_notes',
             # 扩展字段
             'extra_fields',
-            'is_deleted', 'created_at', 'updated_at'
+            'is_deleted',
+            'created_at',
+            'updated_at',
         ]
-        read_only_fields = ['created_at', 'updated_at', 'shortage_qty', 'is_overdue',
-                          'effective_item_property', 'total_cost']
+        read_only_fields = [
+            'created_at',
+            'updated_at',
+            'shortage_qty',
+            'is_overdue',
+            'effective_item_property',
+            'total_cost',
+        ]
 
     def get_item_property_display(self, obj):
         """获取物料属性显示值"""
         if obj.item_property:
             return obj.get_item_property_display()
-        return f"[继承]{obj.item.get_item_property_display()}" if obj.item else ''
+        return f'[继承]{obj.item.get_item_property_display()}' if obj.item else ''
 
     def get_version_brand_display(self, obj):
         """
@@ -386,6 +520,7 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
 
 class TimeLogSerializer(serializers.ModelSerializer):
     """TimeLog serializer."""
+
     project_name = serializers.CharField(source='project.name', read_only=True)
     task_name = serializers.SerializerMethodField()
     user_name = serializers.CharField(source='user.username', read_only=True)
@@ -394,9 +529,21 @@ class TimeLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = TimeLog
         fields = [
-            'id', 'project', 'project_name', 'task', 'task_name', 'user', 'user_name',
-            'date', 'hours', 'description', 'status', 'status_display',
-            'is_deleted', 'created_at', 'updated_at'
+            'id',
+            'project',
+            'project_name',
+            'task',
+            'task_name',
+            'user',
+            'user_name',
+            'date',
+            'hours',
+            'description',
+            'status',
+            'status_display',
+            'is_deleted',
+            'created_at',
+            'updated_at',
         ]
         read_only_fields = ['user', 'created_at', 'updated_at']
         extra_kwargs = {
@@ -418,14 +565,13 @@ class TimeLogSerializer(serializers.ModelSerializer):
         with transaction.atomic():
             instance = super().create(validated_data)
             if instance.task:
-                ProjectTask.objects.filter(id=instance.task_id).update(
-                    actual_hours=F('actual_hours') + instance.hours
-                )
+                ProjectTask.objects.filter(id=instance.task_id).update(actual_hours=F('actual_hours') + instance.hours)
         return instance
 
 
 class ECNItemSerializer(serializers.ModelSerializer):
     """ECNItem serializer."""
+
     item_name = serializers.CharField(source='item.name', read_only=True)
     item_sku = serializers.CharField(source='item.sku', read_only=True)
     new_item_name = serializers.CharField(source='new_item.name', read_only=True)
@@ -436,38 +582,50 @@ class ECNItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = ECNItem
         fields = [
-            'id', 'ecn', 'bom_item', 'bom_item_name',
-            'item', 'item_name', 'item_sku',
-            'new_item', 'new_item_name', 'new_item_sku',
-            'change_type', 'change_type_display', 'field_name',
-            'old_value', 'new_value', 'old_qty', 'new_qty', 'notes',
-            'created_at', 'updated_at'
+            'id',
+            'ecn',
+            'bom_item',
+            'bom_item_name',
+            'item',
+            'item_name',
+            'item_sku',
+            'new_item',
+            'new_item_name',
+            'new_item_sku',
+            'change_type',
+            'change_type_display',
+            'field_name',
+            'old_value',
+            'new_value',
+            'old_qty',
+            'new_qty',
+            'notes',
+            'created_at',
+            'updated_at',
         ]
         read_only_fields = ['created_at', 'updated_at']
 
     def get_bom_item_name(self, obj):
         if obj.bom_item:
-            return f"{obj.bom_item.item.sku} - {obj.bom_item.item.name}"
+            return f'{obj.bom_item.item.sku} - {obj.bom_item.item.name}'
         return None
 
 
 class ECNApprovalSerializer(serializers.ModelSerializer):
     """ECNApproval serializer."""
+
     approver_name = serializers.CharField(source='approver.get_full_name', read_only=True)
     action_display = serializers.CharField(source='get_action_display', read_only=True)
 
     class Meta:
         model = ECNApproval
-        fields = [
-            'id', 'ecn', 'approver', 'approver_name',
-            'action', 'action_display', 'comment',
-            'created_at'
-        ]
+        fields = ['id', 'ecn', 'approver', 'approver_name', 'action', 'action_display', 'comment', 'created_at']
         read_only_fields = ['approver', 'created_at']
 
 
 class ECNSerializer(serializers.ModelSerializer):
     """ECN serializer."""
+
     project_name = serializers.CharField(source='project.name', read_only=True)
     project_code = serializers.CharField(source='project.code', read_only=True)
     change_type_display = serializers.CharField(source='get_change_type_display', read_only=True)
@@ -483,19 +641,50 @@ class ECNSerializer(serializers.ModelSerializer):
     class Meta:
         model = ECN
         fields = [
-            'id', 'ecn_no', 'project', 'project_name', 'project_code',
-            'title', 'change_type', 'change_type_display',
-            'priority', 'priority_display', 'status', 'status_display',
-            'reason', 'description', 'impact_analysis',
-            'cost_impact', 'schedule_impact',
-            'requested_by', 'requested_by_name', 'requested_date',
-            'approved_by', 'approved_by_name', 'approved_date',
-            'implemented_by', 'implemented_by_name', 'implemented_date',
-            'implementation_notes', 'items', 'approvals', 'items_count',
-            'is_deleted', 'created_at', 'updated_at'
+            'id',
+            'ecn_no',
+            'project',
+            'project_name',
+            'project_code',
+            'title',
+            'change_type',
+            'change_type_display',
+            'priority',
+            'priority_display',
+            'status',
+            'status_display',
+            'reason',
+            'description',
+            'impact_analysis',
+            'cost_impact',
+            'schedule_impact',
+            'requested_by',
+            'requested_by_name',
+            'requested_date',
+            'approved_by',
+            'approved_by_name',
+            'approved_date',
+            'implemented_by',
+            'implemented_by_name',
+            'implemented_date',
+            'implementation_notes',
+            'items',
+            'approvals',
+            'items_count',
+            'is_deleted',
+            'created_at',
+            'updated_at',
         ]
-        read_only_fields = ['ecn_no', 'requested_by', 'approved_by', 'approved_date',
-                           'implemented_by', 'implemented_date', 'created_at', 'updated_at']
+        read_only_fields = [
+            'ecn_no',
+            'requested_by',
+            'approved_by',
+            'approved_date',
+            'implemented_by',
+            'implemented_date',
+            'created_at',
+            'updated_at',
+        ]
 
     def get_approved_by_name(self, obj):
         return obj.approved_by.get_full_name() if obj.approved_by else None
@@ -513,14 +702,24 @@ class ECNSerializer(serializers.ModelSerializer):
 
 class ECNWriteSerializer(serializers.ModelSerializer):
     """ECN write serializer with items support."""
+
     items = ECNItemSerializer(many=True, required=False)
 
     class Meta:
         model = ECN
         fields = [
-            'id', 'project', 'title', 'change_type', 'priority',
-            'reason', 'description', 'impact_analysis',
-            'cost_impact', 'schedule_impact', 'requested_date', 'items'
+            'id',
+            'project',
+            'title',
+            'change_type',
+            'priority',
+            'reason',
+            'description',
+            'impact_analysis',
+            'cost_impact',
+            'schedule_impact',
+            'requested_date',
+            'items',
         ]
 
     def create(self, validated_data):
@@ -553,8 +752,10 @@ class ECNWriteSerializer(serializers.ModelSerializer):
 
 # ==================== 售后管理序列化器 ====================
 
+
 class SparePartUsageSerializer(serializers.ModelSerializer):
     """备件使用记录序列化器"""
+
     item_name = serializers.CharField(source='item.name', read_only=True)
     item_sku = serializers.CharField(source='item.sku', read_only=True)
     total_cost = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
@@ -562,14 +763,26 @@ class SparePartUsageSerializer(serializers.ModelSerializer):
     class Meta:
         model = SparePartUsage
         fields = [
-            'id', 'aftersales_order', 'service_record', 'item', 'item_name', 'item_sku',
-            'qty', 'unit_cost', 'total_cost', 'is_warranty', 'is_replaced',
-            'serial_no', 'notes', 'created_at'
+            'id',
+            'aftersales_order',
+            'service_record',
+            'item',
+            'item_name',
+            'item_sku',
+            'qty',
+            'unit_cost',
+            'total_cost',
+            'is_warranty',
+            'is_replaced',
+            'serial_no',
+            'notes',
+            'created_at',
         ]
 
 
 class ServiceRecordSerializer(serializers.ModelSerializer):
     """服务记录序列化器"""
+
     technician_name = serializers.CharField(source='technician.get_full_name', read_only=True)
     service_type_display = serializers.CharField(source='get_service_type_display', read_only=True)
     spare_parts = SparePartUsageSerializer(many=True, read_only=True)
@@ -577,16 +790,33 @@ class ServiceRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = ServiceRecord
         fields = [
-            'id', 'aftersales_order', 'service_type', 'service_type_display',
-            'technician', 'technician_name', 'service_date', 'start_time', 'end_time',
-            'work_hours', 'work_content', 'findings', 'actions_taken', 'result',
-            'next_steps', 'labor_cost', 'travel_cost', 'customer_signature',
-            'signed_at', 'spare_parts', 'created_at'
+            'id',
+            'aftersales_order',
+            'service_type',
+            'service_type_display',
+            'technician',
+            'technician_name',
+            'service_date',
+            'start_time',
+            'end_time',
+            'work_hours',
+            'work_content',
+            'findings',
+            'actions_taken',
+            'result',
+            'next_steps',
+            'labor_cost',
+            'travel_cost',
+            'customer_signature',
+            'signed_at',
+            'spare_parts',
+            'created_at',
         ]
 
 
 class AfterSalesOrderSerializer(serializers.ModelSerializer):
     """售后工单序列化器"""
+
     project_name = serializers.CharField(source='project.name', read_only=True)
     project_code = serializers.CharField(source='project.code', read_only=True)
     customer_name = serializers.CharField(source='customer.name', read_only=True)
@@ -606,19 +836,49 @@ class AfterSalesOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = AfterSalesOrder
         fields = [
-            'id', 'order_no', 'project', 'project_name', 'project_code',
-            'customer', 'customer_name', 'order_type', 'order_type_display',
-            'priority', 'priority_display', 'status', 'status_display',
-            'title', 'description', 'equipment_info', 'fault_code',
-            'contact_person', 'contact_phone', 'site_address',
-            'reported_at', 'expected_date', 'resolved_at', 'closed_at',
-            'assigned_to', 'assigned_to_name',
-            'is_warranty', 'labor_cost', 'travel_cost', 'parts_cost', 'other_cost', 'total_cost',
-            'solution', 'root_cause', 'preventive_action',
-            'satisfaction_score', 'customer_feedback',
-            'service_records', 'spare_parts',
-            'service_count', 'total_work_hours',
-            'created_at', 'updated_at'
+            'id',
+            'order_no',
+            'project',
+            'project_name',
+            'project_code',
+            'customer',
+            'customer_name',
+            'order_type',
+            'order_type_display',
+            'priority',
+            'priority_display',
+            'status',
+            'status_display',
+            'title',
+            'description',
+            'equipment_info',
+            'fault_code',
+            'contact_person',
+            'contact_phone',
+            'site_address',
+            'reported_at',
+            'expected_date',
+            'resolved_at',
+            'closed_at',
+            'assigned_to',
+            'assigned_to_name',
+            'is_warranty',
+            'labor_cost',
+            'travel_cost',
+            'parts_cost',
+            'other_cost',
+            'total_cost',
+            'solution',
+            'root_cause',
+            'preventive_action',
+            'satisfaction_score',
+            'customer_feedback',
+            'service_records',
+            'spare_parts',
+            'service_count',
+            'total_work_hours',
+            'created_at',
+            'updated_at',
         ]
 
     def get_service_count(self, obj):
@@ -626,12 +886,14 @@ class AfterSalesOrderSerializer(serializers.ModelSerializer):
 
     def get_total_work_hours(self, obj):
         from django.db.models import Sum
+
         result = obj.service_records.aggregate(total=Sum('work_hours'))
         return result['total'] or 0
 
 
 class AfterSalesOrderListSerializer(serializers.ModelSerializer):
     """售后工单列表序列化器（简化版）"""
+
     project_name = serializers.CharField(source='project.name', read_only=True)
     project_code = serializers.CharField(source='project.code', read_only=True)
     customer_name = serializers.CharField(source='customer.name', read_only=True)
@@ -645,14 +907,32 @@ class AfterSalesOrderListSerializer(serializers.ModelSerializer):
     class Meta:
         model = AfterSalesOrder
         fields = [
-            'id', 'order_no', 'project', 'project_name', 'project_code',
-            'customer', 'customer_name', 'order_type', 'order_type_display',
-            'priority', 'priority_display', 'status', 'status_display',
-            'title', 'contact_person', 'contact_phone',
-            'reported_at', 'expected_date', 'resolved_at',
-            'assigned_to', 'assigned_to_name', 'is_warranty',
-            'total_cost', 'service_count', 'satisfaction_score',
-            'created_at'
+            'id',
+            'order_no',
+            'project',
+            'project_name',
+            'project_code',
+            'customer',
+            'customer_name',
+            'order_type',
+            'order_type_display',
+            'priority',
+            'priority_display',
+            'status',
+            'status_display',
+            'title',
+            'contact_person',
+            'contact_phone',
+            'reported_at',
+            'expected_date',
+            'resolved_at',
+            'assigned_to',
+            'assigned_to_name',
+            'is_warranty',
+            'total_cost',
+            'service_count',
+            'satisfaction_score',
+            'created_at',
         ]
 
     def get_service_count(self, obj):
@@ -661,6 +941,7 @@ class AfterSalesOrderListSerializer(serializers.ModelSerializer):
 
 class DrawingSerializer(serializers.ModelSerializer):
     """图纸序列化器"""
+
     project_name = serializers.CharField(source='project.name', read_only=True)
     project_code = serializers.CharField(source='project.code', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
@@ -674,21 +955,45 @@ class DrawingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Drawing
         fields = [
-            'id', 'drawing_no', 'name', 'version', 'revision',
-            'project', 'project_name', 'project_code',
-            'item', 'item_name', 'item_sku', 'bom_item',
-            'file_type', 'file_type_display', 'file_path', 'file_size',
-            'public_share_path', 'status', 'status_display',
-            'designer', 'designer_name', 'reviewer', 'reviewer_name',
-            'approver', 'approver_name', 'approved_at', 'released_at',
-            'change_description', 'notes',
-            'is_deleted', 'created_at', 'updated_at'
+            'id',
+            'drawing_no',
+            'name',
+            'version',
+            'revision',
+            'project',
+            'project_name',
+            'project_code',
+            'item',
+            'item_name',
+            'item_sku',
+            'bom_item',
+            'file_type',
+            'file_type_display',
+            'file_path',
+            'file_size',
+            'public_share_path',
+            'status',
+            'status_display',
+            'designer',
+            'designer_name',
+            'reviewer',
+            'reviewer_name',
+            'approver',
+            'approver_name',
+            'approved_at',
+            'released_at',
+            'change_description',
+            'notes',
+            'is_deleted',
+            'created_at',
+            'updated_at',
         ]
         read_only_fields = ['created_at', 'updated_at']
 
 
 class DrawingChangeNoticeSerializer(serializers.ModelSerializer):
     """图纸变更通知序列化器"""
+
     drawing_no = serializers.CharField(source='drawing.drawing_no', read_only=True)
     drawing_name = serializers.CharField(source='drawing.name', read_only=True)
     change_type_display = serializers.CharField(source='get_change_type_display', read_only=True)
@@ -696,9 +1001,16 @@ class DrawingChangeNoticeSerializer(serializers.ModelSerializer):
     class Meta:
         model = DrawingChangeNotice
         fields = [
-            'id', 'drawing', 'drawing_no', 'drawing_name',
-            'change_type', 'change_type_display',
-            'old_version', 'new_version', 'change_description',
-            'email_sent', 'email_sent_at',
-            'created_at'
+            'id',
+            'drawing',
+            'drawing_no',
+            'drawing_name',
+            'change_type',
+            'change_type_display',
+            'old_version',
+            'new_version',
+            'change_description',
+            'email_sent',
+            'email_sent_at',
+            'created_at',
         ]

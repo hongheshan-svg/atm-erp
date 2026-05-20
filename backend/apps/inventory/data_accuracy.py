@@ -11,6 +11,7 @@ Inventory Data Accuracy and Reconciliation Module
 - 数据修复建议
 - 定期对账任务
 """
+
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
@@ -31,8 +32,10 @@ from apps.core.models import BaseModel
 # 数据校验规则模型
 # =============================================================================
 
+
 class DataValidationRule(BaseModel):
     """数据校验规则"""
+
     RULE_TYPE_CHOICES = [
         ('STOCK_BALANCE', '库存余额校验'),
         ('STOCK_NEGATIVE', '负库存检查'),
@@ -62,7 +65,7 @@ class DataValidationRule(BaseModel):
             ('CRITICAL', '严重'),
         ],
         default='WARNING',
-        verbose_name='严重级别'
+        verbose_name='严重级别',
     )
 
     is_active = models.BooleanField(default=True, verbose_name='启用')
@@ -79,7 +82,7 @@ class DataValidationRule(BaseModel):
             ('MANUAL', '手动'),
         ],
         default='DAILY',
-        verbose_name='检查频率'
+        verbose_name='检查频率',
     )
 
     class Meta:
@@ -93,6 +96,7 @@ class DataValidationRule(BaseModel):
 
 class DataValidationResult(BaseModel):
     """数据校验结果"""
+
     STATUS_CHOICES = [
         ('PENDING', '待处理'),
         ('INVESTIGATING', '调查中'),
@@ -102,10 +106,7 @@ class DataValidationResult(BaseModel):
     ]
 
     rule = models.ForeignKey(
-        DataValidationRule,
-        on_delete=models.CASCADE,
-        related_name='results',
-        verbose_name='校验规则'
+        DataValidationRule, on_delete=models.CASCADE, related_name='results', verbose_name='校验规则'
     )
 
     check_date = models.DateTimeField(auto_now_add=True, verbose_name='检查时间')
@@ -116,17 +117,9 @@ class DataValidationResult(BaseModel):
     entity_code = models.CharField(max_length=100, blank=True, verbose_name='实体编码')
 
     warehouse = models.ForeignKey(
-        'masterdata.Warehouse',
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        verbose_name='仓库'
+        'masterdata.Warehouse', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='仓库'
     )
-    item = models.ForeignKey(
-        'masterdata.Item',
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        verbose_name='物料'
-    )
+    item = models.ForeignKey('masterdata.Item', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='物料')
 
     # 问题详情
     issue_description = models.TextField(verbose_name='问题描述')
@@ -141,9 +134,10 @@ class DataValidationResult(BaseModel):
     handled_by = models.ForeignKey(
         'accounts.User',
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         related_name='handled_validations',
-        verbose_name='处理人'
+        verbose_name='处理人',
     )
     handled_at = models.DateTimeField(null=True, blank=True, verbose_name='处理时间')
     resolution = models.TextField(blank=True, verbose_name='处理说明')
@@ -166,6 +160,7 @@ class DataValidationResult(BaseModel):
 
 class ReconciliationSession(BaseModel):
     """对账会话"""
+
     session_no = models.CharField(max_length=50, unique=True, verbose_name='会话编号')
     session_type = models.CharField(
         max_length=30,
@@ -177,15 +172,12 @@ class ReconciliationSession(BaseModel):
             ('CUSTOMER_STATEMENT', '客户对账'),
             ('FULL_AUDIT', '全面审计'),
         ],
-        verbose_name='对账类型'
+        verbose_name='对账类型',
     )
 
     # 对账范围
     warehouse = models.ForeignKey(
-        'masterdata.Warehouse',
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        verbose_name='仓库'
+        'masterdata.Warehouse', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='仓库'
     )
     start_date = models.DateField(verbose_name='开始日期')
     end_date = models.DateField(verbose_name='结束日期')
@@ -200,7 +192,7 @@ class ReconciliationSession(BaseModel):
             ('CANCELLED', '已取消'),
         ],
         default='DRAFT',
-        verbose_name='状态'
+        verbose_name='状态',
     )
 
     # 统计
@@ -223,23 +215,14 @@ class ReconciliationSession(BaseModel):
 
 class ReconciliationItem(BaseModel):
     """对账明细"""
+
     session = models.ForeignKey(
-        ReconciliationSession,
-        on_delete=models.CASCADE,
-        related_name='items',
-        verbose_name='对账会话'
+        ReconciliationSession, on_delete=models.CASCADE, related_name='items', verbose_name='对账会话'
     )
 
-    item = models.ForeignKey(
-        'masterdata.Item',
-        on_delete=models.CASCADE,
-        verbose_name='物料'
-    )
+    item = models.ForeignKey('masterdata.Item', on_delete=models.CASCADE, verbose_name='物料')
     warehouse = models.ForeignKey(
-        'masterdata.Warehouse',
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        verbose_name='仓库'
+        'masterdata.Warehouse', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='仓库'
     )
 
     # 期初数据
@@ -281,6 +264,7 @@ class ReconciliationItem(BaseModel):
 # 数据校验服务
 # =============================================================================
 
+
 class InventoryDataValidator:
     """库存数据校验服务"""
 
@@ -290,24 +274,23 @@ class InventoryDataValidator:
         from .models import Stock
 
         results = []
-        negative_stocks = Stock.objects.filter(
-            qty_on_hand__lt=0,
-            is_deleted=False
-        ).select_related('item', 'warehouse')
+        negative_stocks = Stock.objects.filter(qty_on_hand__lt=0, is_deleted=False).select_related('item', 'warehouse')
 
         for stock in negative_stocks:
-            results.append({
-                'rule_type': 'STOCK_NEGATIVE',
-                'entity_type': 'Stock',
-                'entity_id': stock.id,
-                'item_id': stock.item_id,
-                'warehouse_id': stock.warehouse_id,
-                'issue_description': f'物料 [{stock.item.code}] 在仓库 [{stock.warehouse.name}] 存在负库存',
-                'expected_value': '>=0',
-                'actual_value': str(stock.qty_on_hand),
-                'variance': stock.qty_on_hand,
-                'severity': 'ERROR',
-            })
+            results.append(
+                {
+                    'rule_type': 'STOCK_NEGATIVE',
+                    'entity_type': 'Stock',
+                    'entity_id': stock.id,
+                    'item_id': stock.item_id,
+                    'warehouse_id': stock.warehouse_id,
+                    'issue_description': f'物料 [{stock.item.code}] 在仓库 [{stock.warehouse.name}] 存在负库存',
+                    'expected_value': '>=0',
+                    'actual_value': str(stock.qty_on_hand),
+                    'variance': stock.qty_on_hand,
+                    'severity': 'ERROR',
+                }
+            )
 
         return results
 
@@ -319,33 +302,32 @@ class InventoryDataValidator:
 
         results = []
 
-        stocks = Stock.objects.filter(
-            qty_on_hand__gt=0,
-            is_deleted=False
-        ).select_related('item', 'warehouse')
+        stocks = Stock.objects.filter(qty_on_hand__gt=0, is_deleted=False).select_related('item', 'warehouse')
 
         for stock in stocks:
             # 获取最新成本记录
-            last_cost = ItemCostRecord.objects.filter(
-                item=stock.item,
-                warehouse=stock.warehouse,
-                is_deleted=False
-            ).order_by('-created_at').first()
+            last_cost = (
+                ItemCostRecord.objects.filter(item=stock.item, warehouse=stock.warehouse, is_deleted=False)
+                .order_by('-created_at')
+                .first()
+            )
 
             if last_cost:
                 if abs(stock.qty_on_hand - last_cost.balance_qty) > Decimal('0.0001'):
-                    results.append({
-                        'rule_type': 'QTY_MISMATCH',
-                        'entity_type': 'Stock',
-                        'entity_id': stock.id,
-                        'item_id': stock.item_id,
-                        'warehouse_id': stock.warehouse_id,
-                        'issue_description': f'物料 [{stock.item.code}] 库存数量与成本账不一致',
-                        'expected_value': str(last_cost.balance_qty),
-                        'actual_value': str(stock.qty_on_hand),
-                        'variance': stock.qty_on_hand - last_cost.balance_qty,
-                        'severity': 'WARNING',
-                    })
+                    results.append(
+                        {
+                            'rule_type': 'QTY_MISMATCH',
+                            'entity_type': 'Stock',
+                            'entity_id': stock.id,
+                            'item_id': stock.item_id,
+                            'warehouse_id': stock.warehouse_id,
+                            'issue_description': f'物料 [{stock.item.code}] 库存数量与成本账不一致',
+                            'expected_value': str(last_cost.balance_qty),
+                            'actual_value': str(stock.qty_on_hand),
+                            'variance': stock.qty_on_hand - last_cost.balance_qty,
+                            'severity': 'WARNING',
+                        }
+                    )
 
         return results
 
@@ -380,7 +362,7 @@ class InventoryDataValidator:
                 move_date__gte=start_date,
                 move_date__lte=end_date,
                 status='COMPLETED',
-                is_deleted=False
+                is_deleted=False,
             ).aggregate(total=Sum('quantity'))
             in_qty = in_moves['total'] or Decimal('0')
 
@@ -391,7 +373,7 @@ class InventoryDataValidator:
                 move_date__gte=start_date,
                 move_date__lte=end_date,
                 status='COMPLETED',
-                is_deleted=False
+                is_deleted=False,
             ).aggregate(total=Sum('quantity'))
             out_qty = out_moves['total'] or Decimal('0')
 
@@ -401,18 +383,20 @@ class InventoryDataValidator:
             # 比较差异
             variance = stock.qty_on_hand - calculated_qty
             if abs(variance) > Decimal('0.0001'):
-                results.append({
-                    'rule_type': 'STOCK_BALANCE',
-                    'entity_type': 'Stock',
-                    'entity_id': stock.id,
-                    'item_id': stock.item_id,
-                    'warehouse_id': stock.warehouse_id,
-                    'issue_description': f'物料 [{stock.item.code}] 进销存不平衡',
-                    'expected_value': str(calculated_qty),
-                    'actual_value': str(stock.qty_on_hand),
-                    'variance': variance,
-                    'severity': 'WARNING' if abs(variance) < 10 else 'ERROR',
-                })
+                results.append(
+                    {
+                        'rule_type': 'STOCK_BALANCE',
+                        'entity_type': 'Stock',
+                        'entity_id': stock.id,
+                        'item_id': stock.item_id,
+                        'warehouse_id': stock.warehouse_id,
+                        'issue_description': f'物料 [{stock.item.code}] 进销存不平衡',
+                        'expected_value': str(calculated_qty),
+                        'actual_value': str(stock.qty_on_hand),
+                        'variance': variance,
+                        'severity': 'WARNING' if abs(variance) < 10 else 'ERROR',
+                    }
+                )
 
         return results
 
@@ -424,26 +408,25 @@ class InventoryDataValidator:
         results = []
 
         # 检查没有关联单据的移动记录
-        orphan_moves = StockMove.objects.filter(
-            reference_type='',
-            is_deleted=False
-        ).exclude(
+        orphan_moves = StockMove.objects.filter(reference_type='', is_deleted=False).exclude(
             move_type__in=['ADJUSTMENT', 'INITIAL']
         )
 
         for move in orphan_moves:
-            results.append({
-                'rule_type': 'ORPHAN_RECORD',
-                'entity_type': 'StockMove',
-                'entity_id': move.id,
-                'entity_code': move.move_no,
-                'item_id': move.item_id,
-                'warehouse_id': move.from_warehouse_id or move.to_warehouse_id,
-                'issue_description': f'库存移动 [{move.move_no}] 没有关联源单据',
-                'expected_value': '有关联单据',
-                'actual_value': '无关联单据',
-                'severity': 'INFO',
-            })
+            results.append(
+                {
+                    'rule_type': 'ORPHAN_RECORD',
+                    'entity_type': 'StockMove',
+                    'entity_id': move.id,
+                    'entity_code': move.move_no,
+                    'item_id': move.item_id,
+                    'warehouse_id': move.from_warehouse_id or move.to_warehouse_id,
+                    'issue_description': f'库存移动 [{move.move_no}] 没有关联源单据',
+                    'expected_value': '有关联单据',
+                    'actual_value': '无关联单据',
+                    'severity': 'INFO',
+                }
+            )
 
         return results
 
@@ -467,10 +450,7 @@ class InventoryDataValidator:
         # 保存结果
         saved_count = 0
         for result in all_results:
-            rule = DataValidationRule.objects.filter(
-                rule_type=result['rule_type'],
-                is_active=True
-            ).first()
+            rule = DataValidationRule.objects.filter(rule_type=result['rule_type'], is_active=True).first()
 
             if rule:
                 DataValidationResult.objects.create(
@@ -487,11 +467,7 @@ class InventoryDataValidator:
                 )
                 saved_count += 1
 
-        return {
-            'total_issues': len(all_results),
-            'saved_count': saved_count,
-            'by_type': {}
-        }
+        return {'total_issues': len(all_results), 'saved_count': saved_count, 'by_type': {}}
 
 
 class ReconciliationService:
@@ -510,7 +486,7 @@ class ReconciliationService:
             warehouse_id=warehouse_id,
             start_date=start_date,
             end_date=end_date,
-            created_by=user
+            created_by=user,
         )
 
         return session
@@ -540,12 +516,13 @@ class ReconciliationService:
             # 从前一期的期末获取，或者从最早的成本记录反推
             prev_period = session.start_date - timedelta(days=1)
 
-            opening_record = ItemCostRecord.objects.filter(
-                item=stock.item,
-                warehouse=stock.warehouse,
-                transaction_date__lte=prev_period,
-                is_deleted=False
-            ).order_by('-transaction_date', '-created_at').first()
+            opening_record = (
+                ItemCostRecord.objects.filter(
+                    item=stock.item, warehouse=stock.warehouse, transaction_date__lte=prev_period, is_deleted=False
+                )
+                .order_by('-transaction_date', '-created_at')
+                .first()
+            )
 
             opening_qty = opening_record.balance_qty if opening_record else Decimal('0')
             opening_cost = opening_record.balance_cost if opening_record else Decimal('0')
@@ -557,11 +534,8 @@ class ReconciliationService:
                 transaction_date__gte=session.start_date,
                 transaction_date__lte=session.end_date,
                 quantity__gt=0,
-                is_deleted=False
-            ).aggregate(
-                qty=Coalesce(Sum('quantity'), Decimal('0')),
-                cost=Coalesce(Sum('total_cost'), Decimal('0'))
-            )
+                is_deleted=False,
+            ).aggregate(qty=Coalesce(Sum('quantity'), Decimal('0')), cost=Coalesce(Sum('total_cost'), Decimal('0')))
             in_qty = in_records['qty']
             in_cost = in_records['cost']
 
@@ -572,11 +546,8 @@ class ReconciliationService:
                 transaction_date__gte=session.start_date,
                 transaction_date__lte=session.end_date,
                 quantity__lt=0,
-                is_deleted=False
-            ).aggregate(
-                qty=Coalesce(Sum('quantity'), Decimal('0')),
-                cost=Coalesce(Sum('total_cost'), Decimal('0'))
-            )
+                is_deleted=False,
+            ).aggregate(qty=Coalesce(Sum('quantity'), Decimal('0')), cost=Coalesce(Sum('total_cost'), Decimal('0')))
             out_qty = abs(out_records['qty'])
             out_cost = abs(out_records['cost'])
 
@@ -586,7 +557,9 @@ class ReconciliationService:
 
             # 获取实际库存
             actual_qty = stock.qty_on_hand
-            actual_cost = stock.qty_on_hand * stock.weighted_avg_cost if hasattr(stock, 'weighted_avg_cost') else Decimal('0')
+            actual_cost = (
+                stock.qty_on_hand * stock.weighted_avg_cost if hasattr(stock, 'weighted_avg_cost') else Decimal('0')
+            )
 
             # 计算差异
             qty_variance = actual_qty - calculated_qty
@@ -613,7 +586,7 @@ class ReconciliationService:
                     'qty_variance': qty_variance,
                     'cost_variance': cost_variance,
                     'is_matched': is_matched,
-                }
+                },
             )
 
             items_checked += 1
@@ -633,6 +606,7 @@ class ReconciliationService:
 # =============================================================================
 # 序列化器
 # =============================================================================
+
 
 class DataValidationRuleSerializer(serializers.ModelSerializer):
     rule_type_display = serializers.CharField(source='get_rule_type_display', read_only=True)
@@ -681,8 +655,10 @@ class ReconciliationItemSerializer(serializers.ModelSerializer):
 # 视图集
 # =============================================================================
 
+
 class DataValidationRuleViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     """数据校验规则"""
+
     queryset = DataValidationRule.objects.filter(is_deleted=False)
     serializer_class = DataValidationRuleSerializer
     permission_classes = [IsAuthenticated]
@@ -728,22 +704,16 @@ class DataValidationRuleViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
 
         created_count = 0
         for rule_data in default_rules:
-            rule, created = DataValidationRule.objects.get_or_create(
-                code=rule_data['code'],
-                defaults=rule_data
-            )
+            rule, created = DataValidationRule.objects.get_or_create(code=rule_data['code'], defaults=rule_data)
             if created:
                 created_count += 1
 
-        return Response({
-            'success': True,
-            'created_count': created_count,
-            'total_rules': len(default_rules)
-        })
+        return Response({'success': True, 'created_count': created_count, 'total_rules': len(default_rules)})
 
 
 class DataValidationResultViewSet(viewsets.ModelViewSet):
     """数据校验结果"""
+
     queryset = DataValidationResult.objects.filter(is_deleted=False)
     serializer_class = DataValidationResultSerializer
     permission_classes = [IsAuthenticated]
@@ -784,26 +754,29 @@ class DataValidationResultViewSet(viewsets.ModelViewSet):
 
         # 最近7天趋势
         week_ago = timezone.now() - timedelta(days=7)
-        trend = results.filter(
-            check_date__gte=week_ago
-        ).annotate(
-            day=TruncDate('check_date')
-        ).values('day').annotate(
-            count=Count('id')
-        ).order_by('day')
+        trend = (
+            results.filter(check_date__gte=week_ago)
+            .annotate(day=TruncDate('check_date'))
+            .values('day')
+            .annotate(count=Count('id'))
+            .order_by('day')
+        )
 
-        return Response({
-            'total': results.count(),
-            'pending': results.filter(status='PENDING').count(),
-            'by_status': list(by_status),
-            'by_type': list(by_type),
-            'by_severity': list(by_severity),
-            'trend': list(trend),
-        })
+        return Response(
+            {
+                'total': results.count(),
+                'pending': results.filter(status='PENDING').count(),
+                'by_status': list(by_status),
+                'by_type': list(by_type),
+                'by_severity': list(by_severity),
+                'trend': list(trend),
+            }
+        )
 
 
 class ReconciliationSessionViewSet(viewsets.ModelViewSet):
     """对账会话"""
+
     queryset = ReconciliationSession.objects.filter(is_deleted=False)
     serializer_class = ReconciliationSessionSerializer
     permission_classes = [IsAuthenticated]
@@ -828,7 +801,7 @@ class ReconciliationSessionViewSet(viewsets.ModelViewSet):
             warehouse_id=warehouse_id,
             start_date=start_date,
             end_date=end_date,
-            user=request.user
+            user=request.user,
         )
 
         # 运行对账
@@ -855,8 +828,10 @@ class ReconciliationSessionViewSet(viewsets.ModelViewSet):
 # 报表API
 # =============================================================================
 
+
 class InventoryAccuracyReportView(APIView):
     """库存准确性报表"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -879,41 +854,44 @@ class InventoryAccuracyReportView(APIView):
             matched = items.filter(is_matched=True).count()
             accuracy = round(matched / total * 100, 2) if total > 0 else 100
 
-            accuracy_trend.append({
-                'session_no': session.session_no,
-                'date': session.completed_at.date().isoformat() if session.completed_at else None,
-                'total_items': total,
-                'matched_items': matched,
-                'accuracy': accuracy,
-            })
+            accuracy_trend.append(
+                {
+                    'session_no': session.session_no,
+                    'date': session.completed_at.date().isoformat() if session.completed_at else None,
+                    'total_items': total,
+                    'matched_items': matched,
+                    'accuracy': accuracy,
+                }
+            )
 
         # 当前待处理问题
-        pending_issues = DataValidationResult.objects.filter(
-            status='PENDING'
-        ).count()
+        pending_issues = DataValidationResult.objects.filter(status='PENDING').count()
 
         # 按严重程度分布
-        issue_by_severity = DataValidationResult.objects.filter(
-            status='PENDING'
-        ).values('rule__severity').annotate(count=Count('id'))
+        issue_by_severity = (
+            DataValidationResult.objects.filter(status='PENDING').values('rule__severity').annotate(count=Count('id'))
+        )
 
         # 当前库存状态
         total_items = Stock.objects.filter(is_deleted=False, qty_on_hand__gt=0).count()
         negative_items = Stock.objects.filter(is_deleted=False, qty_on_hand__lt=0).count()
 
-        return Response({
-            'accuracy_trend': accuracy_trend,
-            'current_status': {
-                'pending_issues': pending_issues,
-                'total_items_with_stock': total_items,
-                'negative_stock_items': negative_items,
-            },
-            'issue_by_severity': list(issue_by_severity),
-        })
+        return Response(
+            {
+                'accuracy_trend': accuracy_trend,
+                'current_status': {
+                    'pending_issues': pending_issues,
+                    'total_items_with_stock': total_items,
+                    'negative_stock_items': negative_items,
+                },
+                'issue_by_severity': list(issue_by_severity),
+            }
+        )
 
 
 class InOutBalanceReportView(APIView):
     """进销存平衡报表"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -924,11 +902,7 @@ class InOutBalanceReportView(APIView):
         warehouse_id = request.query_params.get('warehouse')
 
         # 获取期间汇总
-        filters = {
-            'period_year': year,
-            'period_month': month,
-            'is_deleted': False
-        }
+        filters = {'period_year': year, 'period_month': month, 'is_deleted': False}
         if warehouse_id:
             filters['warehouse_id'] = warehouse_id
 
@@ -967,25 +941,27 @@ class InOutBalanceReportView(APIView):
             closing_cost=Sum('closing_cost'),
         )
 
-        return Response({
-            'period': f'{year}年{month}月',
-            'totals': {
-                'opening_qty': float(totals['opening_qty']),
-                'opening_cost': float(totals['opening_cost']),
-                'in_qty': float(totals['in_qty']),
-                'in_cost': float(totals['in_cost']),
-                'out_qty': float(totals['out_qty']),
-                'out_cost': float(totals['out_cost']),
-                'closing_qty': float(totals['closing_qty']),
-                'closing_cost': float(totals['closing_cost']),
-            },
-            'balance_check': {
-                'calculated_closing_qty': float(calculated_closing_qty),
-                'calculated_closing_cost': float(calculated_closing_cost),
-                'qty_balanced': qty_balanced,
-                'cost_balanced': cost_balanced,
-            },
-            'by_warehouse': list(by_warehouse),
-            'by_category': list(by_category),
-            'item_count': summaries.count(),
-        })
+        return Response(
+            {
+                'period': f'{year}年{month}月',
+                'totals': {
+                    'opening_qty': float(totals['opening_qty']),
+                    'opening_cost': float(totals['opening_cost']),
+                    'in_qty': float(totals['in_qty']),
+                    'in_cost': float(totals['in_cost']),
+                    'out_qty': float(totals['out_qty']),
+                    'out_cost': float(totals['out_cost']),
+                    'closing_qty': float(totals['closing_qty']),
+                    'closing_cost': float(totals['closing_cost']),
+                },
+                'balance_check': {
+                    'calculated_closing_qty': float(calculated_closing_qty),
+                    'calculated_closing_cost': float(calculated_closing_cost),
+                    'qty_balanced': qty_balanced,
+                    'cost_balanced': cost_balanced,
+                },
+                'by_warehouse': list(by_warehouse),
+                'by_category': list(by_category),
+                'item_count': summaries.count(),
+            }
+        )

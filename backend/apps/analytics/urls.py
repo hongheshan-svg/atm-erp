@@ -9,4 +9,3 @@ router.register(r'', views.AnalyticsViewSet, basename='analytics')
 urlpatterns = [
     path('', include(router.urls)),
 ]
-

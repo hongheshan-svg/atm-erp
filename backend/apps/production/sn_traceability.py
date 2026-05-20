@@ -2,6 +2,7 @@
 序列号与批次追溯增强模块 - 针对非标自动化行业
 包含：SN管理、全流程追溯、追溯码生成、追溯查询
 """
+
 from django.db import models
 from django.db.models import Q
 from rest_framework import serializers, status, viewsets
@@ -15,8 +16,10 @@ from apps.core.models import BaseModel
 # 模型定义
 # =============================================================================
 
+
 class SerialNumber(BaseModel):
     """序列号管理"""
+
     STATUS_CHOICES = [
         ('GENERATED', '已生成'),
         ('ASSIGNED', '已分配'),
@@ -34,10 +37,7 @@ class SerialNumber(BaseModel):
 
     # 关联信息
     item = models.ForeignKey(
-        'masterdata.Item',
-        on_delete=models.PROTECT,
-        related_name='serial_numbers',
-        verbose_name='物料'
+        'masterdata.Item', on_delete=models.PROTECT, related_name='serial_numbers', verbose_name='物料'
     )
     project = models.ForeignKey(
         'projects.Project',
@@ -45,7 +45,7 @@ class SerialNumber(BaseModel):
         null=True,
         blank=True,
         related_name='serial_numbers',
-        verbose_name='项目'
+        verbose_name='项目',
     )
     production_plan = models.ForeignKey(
         'production.ProductionPlan',
@@ -53,7 +53,7 @@ class SerialNumber(BaseModel):
         null=True,
         blank=True,
         related_name='serial_numbers',
-        verbose_name='生产计划'
+        verbose_name='生产计划',
     )
     sales_order = models.ForeignKey(
         'sales.SalesOrder',
@@ -61,7 +61,7 @@ class SerialNumber(BaseModel):
         null=True,
         blank=True,
         related_name='serial_numbers',
-        verbose_name='销售订单'
+        verbose_name='销售订单',
     )
     delivery_order = models.ForeignKey(
         'sales.DeliveryOrder',
@@ -69,7 +69,7 @@ class SerialNumber(BaseModel):
         null=True,
         blank=True,
         related_name='serial_numbers',
-        verbose_name='发货单'
+        verbose_name='发货单',
     )
     customer = models.ForeignKey(
         'masterdata.Customer',
@@ -77,7 +77,7 @@ class SerialNumber(BaseModel):
         null=True,
         blank=True,
         related_name='serial_numbers',
-        verbose_name='客户'
+        verbose_name='客户',
     )
 
     # 生产信息
@@ -89,7 +89,7 @@ class SerialNumber(BaseModel):
         null=True,
         blank=True,
         related_name='produced_sns',
-        verbose_name='操作员'
+        verbose_name='操作员',
     )
 
     # 质量信息
@@ -101,7 +101,7 @@ class SerialNumber(BaseModel):
         null=True,
         blank=True,
         related_name='inspected_sns',
-        verbose_name='检验员'
+        verbose_name='检验员',
     )
 
     # 发货信息
@@ -131,6 +131,7 @@ class SerialNumber(BaseModel):
 
 class SNTraceRecord(BaseModel):
     """序列号追溯记录"""
+
     OPERATION_CHOICES = [
         ('GENERATE', '生成'),
         ('ASSIGN', '分配'),
@@ -150,10 +151,7 @@ class SNTraceRecord(BaseModel):
     ]
 
     serial_number = models.ForeignKey(
-        SerialNumber,
-        on_delete=models.CASCADE,
-        related_name='trace_records',
-        verbose_name='序列号'
+        SerialNumber, on_delete=models.CASCADE, related_name='trace_records', verbose_name='序列号'
     )
 
     operation = models.CharField(max_length=30, choices=OPERATION_CHOICES, verbose_name='操作类型')
@@ -163,11 +161,7 @@ class SNTraceRecord(BaseModel):
     description = models.TextField(verbose_name='操作描述')
     location = models.CharField(max_length=200, blank=True, verbose_name='操作地点')
     operator = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='sn_operations',
-        verbose_name='操作人'
+        'accounts.User', on_delete=models.SET_NULL, null=True, related_name='sn_operations', verbose_name='操作人'
     )
 
     # 关联单据
@@ -192,32 +186,23 @@ class SNTraceRecord(BaseModel):
         ordering = ['-operation_time']
 
     def __str__(self):
-        return f"{self.serial_number.serial_number} - {self.get_operation_display()}"
+        return f'{self.serial_number.serial_number} - {self.get_operation_display()}'
 
 
 class ComponentBinding(BaseModel):
     """组件绑定（设备与关键部件的SN绑定）"""
+
     parent_sn = models.ForeignKey(
-        SerialNumber,
-        on_delete=models.CASCADE,
-        related_name='child_bindings',
-        verbose_name='父序列号'
+        SerialNumber, on_delete=models.CASCADE, related_name='child_bindings', verbose_name='父序列号'
     )
     child_sn = models.ForeignKey(
-        SerialNumber,
-        on_delete=models.CASCADE,
-        related_name='parent_bindings',
-        verbose_name='子序列号'
+        SerialNumber, on_delete=models.CASCADE, related_name='parent_bindings', verbose_name='子序列号'
     )
 
     binding_time = models.DateTimeField(verbose_name='绑定时间')
     position = models.CharField(max_length=100, blank=True, verbose_name='安装位置')
     operator = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='component_bindings',
-        verbose_name='操作人'
+        'accounts.User', on_delete=models.SET_NULL, null=True, related_name='component_bindings', verbose_name='操作人'
     )
 
     # 解绑信息
@@ -232,21 +217,18 @@ class ComponentBinding(BaseModel):
         ordering = ['-binding_time']
 
     def __str__(self):
-        return f"{self.parent_sn.serial_number} -> {self.child_sn.serial_number}"
+        return f'{self.parent_sn.serial_number} -> {self.child_sn.serial_number}'
 
 
 class SNRule(BaseModel):
     """序列号规则"""
+
     code = models.CharField(max_length=50, unique=True, verbose_name='规则编号')
     name = models.CharField(max_length=200, verbose_name='规则名称')
 
     # 适用范围
     item_category = models.ForeignKey(
-        'masterdata.ItemCategory',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='物料分类'
+        'masterdata.ItemCategory', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='物料分类'
     )
 
     # 规则配置
@@ -272,13 +254,15 @@ class SNRule(BaseModel):
         ordering = ['code']
 
     def __str__(self):
-        return f"{self.code} - {self.name}"
+        return f'{self.code} - {self.name}'
 
     def generate_sn(self):
         """生成序列号"""
         from datetime import datetime
 
-        current_date = datetime.now().strftime(self.date_format.replace('YY', '%y').replace('YYYY', '%Y').replace('MM', '%m').replace('DD', '%d'))
+        current_date = datetime.now().strftime(
+            self.date_format.replace('YY', '%y').replace('YYYY', '%Y').replace('MM', '%m').replace('DD', '%d')
+        )
 
         # 如果日期变化，重置序列
         if current_date != self.last_date:
@@ -305,6 +289,7 @@ class SNRule(BaseModel):
 # =============================================================================
 # 序列化器
 # =============================================================================
+
 
 class SNTraceRecordSerializer(serializers.ModelSerializer):
     operation_display = serializers.CharField(source='get_operation_display', read_only=True)
@@ -349,6 +334,7 @@ class SerialNumberSerializer(serializers.ModelSerializer):
 
 class SerialNumberListSerializer(serializers.ModelSerializer):
     """列表用简化序列化器"""
+
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
     item_sku = serializers.CharField(source='item.sku', read_only=True)
@@ -358,9 +344,20 @@ class SerialNumberListSerializer(serializers.ModelSerializer):
     class Meta:
         model = SerialNumber
         fields = [
-            'id', 'serial_number', 'batch_no', 'item', 'item_name', 'item_sku',
-            'project', 'project_code', 'customer', 'customer_name',
-            'production_date', 'status', 'status_display', 'created_at'
+            'id',
+            'serial_number',
+            'batch_no',
+            'item',
+            'item_name',
+            'item_sku',
+            'project',
+            'project_code',
+            'customer',
+            'customer_name',
+            'production_date',
+            'status',
+            'status_display',
+            'created_at',
         ]
 
 
@@ -375,7 +372,10 @@ class SNRuleSerializer(serializers.ModelSerializer):
     def get_example_sn(self, obj):
         """生成示例序列号"""
         from datetime import datetime
-        current_date = datetime.now().strftime(obj.date_format.replace('YY', '%y').replace('YYYY', '%Y').replace('MM', '%m').replace('DD', '%d'))
+
+        current_date = datetime.now().strftime(
+            obj.date_format.replace('YY', '%y').replace('YYYY', '%Y').replace('MM', '%m').replace('DD', '%d')
+        )
         sequence_str = '0001'
 
         parts = []
@@ -395,8 +395,10 @@ class SNRuleSerializer(serializers.ModelSerializer):
 # 视图集
 # =============================================================================
 
+
 class SNRuleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """序列号规则管理"""
+
     queryset = SNRule.objects.all()
     serializer_class = SNRuleSerializer
     filterset_fields = ['item_category', 'is_active', 'is_deleted']
@@ -406,6 +408,7 @@ class SNRuleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 
 class SerialNumberViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """序列号管理"""
+
     queryset = SerialNumber.objects.all()
     filterset_fields = ['item', 'project', 'customer', 'status', 'is_deleted']
     search_fields = ['serial_number', 'batch_no']
@@ -417,9 +420,7 @@ class SerialNumberViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         return SerialNumberSerializer
 
     def get_queryset(self):
-        return super().get_queryset().select_related(
-            'item', 'project', 'customer', 'operator', 'inspector'
-        )
+        return super().get_queryset().select_related('item', 'project', 'customer', 'operator', 'inspector')
 
     @action(detail=False, methods=['post'])
     def generate_batch(self, request):
@@ -439,16 +440,13 @@ class SerialNumberViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
             return Response({'error': '规则不存在'}, status=status.HTTP_404_NOT_FOUND)
 
         from django.utils import timezone
+
         generated_sns = []
 
         for _ in range(quantity):
             sn = rule.generate_sn()
             serial_number = SerialNumber.objects.create(
-                serial_number=sn,
-                batch_no=batch_no,
-                item_id=item_id,
-                project_id=project_id,
-                status='GENERATED'
+                serial_number=sn, batch_no=batch_no, item_id=item_id, project_id=project_id, status='GENERATED'
             )
 
             # 创建追溯记录
@@ -457,15 +455,17 @@ class SerialNumberViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
                 operation='GENERATE',
                 operation_time=timezone.now(),
                 description=f'使用规则 {rule.code} 生成序列号',
-                operator=request.user
+                operator=request.user,
             )
 
             generated_sns.append(serial_number)
 
-        return Response({
-            'message': f'成功生成 {quantity} 个序列号',
-            'serial_numbers': SerialNumberListSerializer(generated_sns, many=True).data
-        })
+        return Response(
+            {
+                'message': f'成功生成 {quantity} 个序列号',
+                'serial_numbers': SerialNumberListSerializer(generated_sns, many=True).data,
+            }
+        )
 
     @action(detail=True, methods=['get'])
     def full_trace(self, request, pk=None):
@@ -507,6 +507,7 @@ class SerialNumberViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         sn = self.get_object()
 
         from django.utils import timezone
+
         record = SNTraceRecord.objects.create(
             serial_number=sn,
             operation=request.data.get('operation'),
@@ -552,23 +553,26 @@ class SerialNumberViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
             return Response({'error': '子序列号不存在'}, status=status.HTTP_404_NOT_FOUND)
 
         from django.utils import timezone
+
         binding = ComponentBinding.objects.create(
             parent_sn=parent_sn,
             child_sn=child_sn,
             binding_time=timezone.now(),
             position=position,
-            operator=request.user
+            operator=request.user,
         )
 
         # 添加追溯记录
-        for sn, desc in [(parent_sn, f'绑定子组件: {child_sn.serial_number}'),
-                         (child_sn, f'绑定到父组件: {parent_sn.serial_number}')]:
+        for sn, desc in [
+            (parent_sn, f'绑定子组件: {child_sn.serial_number}'),
+            (child_sn, f'绑定到父组件: {parent_sn.serial_number}'),
+        ]:
             SNTraceRecord.objects.create(
                 serial_number=sn,
                 operation='OTHER',
                 operation_time=timezone.now(),
                 description=desc,
-                operator=request.user
+                operator=request.user,
             )
 
         return Response(ComponentBindingSerializer(binding).data)
@@ -581,10 +585,10 @@ class SerialNumberViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
             return Response({'error': '搜索关键词至少3个字符'}, status=status.HTTP_400_BAD_REQUEST)
 
         sns = self.get_queryset().filter(
-            Q(serial_number__icontains=query) |
-            Q(batch_no__icontains=query) |
-            Q(item__name__icontains=query) |
-            Q(item__sku__icontains=query)
+            Q(serial_number__icontains=query)
+            | Q(batch_no__icontains=query)
+            | Q(item__name__icontains=query)
+            | Q(item__sku__icontains=query)
         )[:50]
 
         return Response(SerialNumberListSerializer(sns, many=True).data)
@@ -608,6 +612,7 @@ class SerialNumberViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
 
 class SNTraceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """序列号追溯记录管理"""
+
     queryset = SNTraceRecord.objects.all()
     serializer_class = SNTraceRecordSerializer
     filterset_fields = ['serial_number', 'operation', 'operator', 'is_deleted']
@@ -617,6 +622,7 @@ class SNTraceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
 
 class ComponentBindingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """组件绑定管理"""
+
     queryset = ComponentBinding.objects.all()
     serializer_class = ComponentBindingSerializer
     filterset_fields = ['parent_sn', 'child_sn', 'is_active', 'is_deleted']
@@ -628,20 +634,23 @@ class ComponentBindingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         binding = self.get_object()
 
         from django.utils import timezone
+
         binding.is_active = False
         binding.unbinding_time = timezone.now()
         binding.unbinding_reason = request.data.get('reason', '')
         binding.save()
 
         # 添加追溯记录
-        for sn, desc in [(binding.parent_sn, f'解绑子组件: {binding.child_sn.serial_number}'),
-                         (binding.child_sn, f'从父组件解绑: {binding.parent_sn.serial_number}')]:
+        for sn, desc in [
+            (binding.parent_sn, f'解绑子组件: {binding.child_sn.serial_number}'),
+            (binding.child_sn, f'从父组件解绑: {binding.parent_sn.serial_number}'),
+        ]:
             SNTraceRecord.objects.create(
                 serial_number=sn,
                 operation='OTHER',
                 operation_time=timezone.now(),
                 description=desc,
-                operator=request.user
+                operator=request.user,
             )
 
         return Response(ComponentBindingSerializer(binding).data)

@@ -9,6 +9,7 @@ Fixture & Tooling Management Models
 - 测试治具
 - 通用工具
 """
+
 from django.db import models
 
 from apps.core.models import BaseModel
@@ -18,15 +19,11 @@ class FixtureCategory(BaseModel):
     """
     工装分类
     """
+
     code = models.CharField(max_length=20, unique=True, verbose_name='分类编码')
     name = models.CharField(max_length=50, verbose_name='分类名称')
     parent = models.ForeignKey(
-        'self',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='children',
-        verbose_name='上级分类'
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='children', verbose_name='上级分类'
     )
     description = models.TextField(blank=True, verbose_name='描述')
     sort_order = models.IntegerField(default=0, verbose_name='排序')
@@ -38,13 +35,14 @@ class FixtureCategory(BaseModel):
         ordering = ['sort_order', 'code']
 
     def __str__(self):
-        return f"{self.code} - {self.name}"
+        return f'{self.code} - {self.name}'
 
 
 class Fixture(BaseModel):
     """
     工装夹具台账
     """
+
     STATUS_CHOICES = [
         ('IN_USE', '使用中'),
         ('IDLE', '闲置'),
@@ -68,18 +66,13 @@ class Fixture(BaseModel):
         null=True,
         blank=True,
         related_name='fixtures',
-        verbose_name='工装分类'
+        verbose_name='工装分类',
     )
     model = models.CharField(max_length=100, blank=True, verbose_name='规格型号')
 
     # 关联信息
     project = models.ForeignKey(
-        'Project',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='fixtures',
-        verbose_name='关联项目'
+        'Project', on_delete=models.SET_NULL, null=True, blank=True, related_name='fixtures', verbose_name='关联项目'
     )
     equipment = models.ForeignKey(
         'projects.Equipment',
@@ -87,7 +80,7 @@ class Fixture(BaseModel):
         null=True,
         blank=True,
         related_name='fixtures',
-        verbose_name='配套设备'
+        verbose_name='配套设备',
     )
 
     # 状态信息
@@ -97,11 +90,7 @@ class Fixture(BaseModel):
     # 存放位置
     location = models.CharField(max_length=100, blank=True, verbose_name='存放位置')
     warehouse = models.ForeignKey(
-        'masterdata.Warehouse',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='存放仓库'
+        'masterdata.Warehouse', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='存放仓库'
     )
 
     # 责任人
@@ -111,18 +100,14 @@ class Fixture(BaseModel):
         null=True,
         blank=True,
         related_name='custodial_fixtures',
-        verbose_name='保管人'
+        verbose_name='保管人',
     )
 
     # 资产信息
     purchase_date = models.DateField(null=True, blank=True, verbose_name='购置/制作日期')
     purchase_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name='成本价值')
     supplier = models.ForeignKey(
-        'masterdata.Supplier',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='供应商/制作方'
+        'masterdata.Supplier', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='供应商/制作方'
     )
 
     # 技术参数
@@ -152,17 +137,19 @@ class Fixture(BaseModel):
         ordering = ['fixture_no']
 
     def __str__(self):
-        return f"{self.fixture_no} - {self.name}"
+        return f'{self.fixture_no} - {self.name}'
 
     def save(self, *args, **kwargs):
         # 自动生成工装编号
         if not self.fixture_no:
             from apps.core.models import CodeRule
+
             self.fixture_no = CodeRule.generate_code('FIXTURE')
 
         # 计算下次校验日期
         if self.needs_calibration and self.last_calibration and not self.next_calibration:
             from dateutil.relativedelta import relativedelta
+
             self.next_calibration = self.last_calibration + relativedelta(months=self.calibration_cycle)
 
         super().save(*args, **kwargs)
@@ -173,6 +160,7 @@ class Fixture(BaseModel):
         if not self.needs_calibration or not self.next_calibration:
             return False
         from django.utils import timezone
+
         return timezone.now().date() >= self.next_calibration
 
 
@@ -180,12 +168,8 @@ class FixtureUsageRecord(BaseModel):
     """
     工装使用记录
     """
-    fixture = models.ForeignKey(
-        Fixture,
-        on_delete=models.CASCADE,
-        related_name='usage_records',
-        verbose_name='工装'
-    )
+
+    fixture = models.ForeignKey(Fixture, on_delete=models.CASCADE, related_name='usage_records', verbose_name='工装')
 
     # 使用信息
     project = models.ForeignKey(
@@ -194,14 +178,10 @@ class FixtureUsageRecord(BaseModel):
         null=True,
         blank=True,
         related_name='fixture_usages',
-        verbose_name='使用项目'
+        verbose_name='使用项目',
     )
     used_by = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='fixture_usages',
-        verbose_name='使用人'
+        'accounts.User', on_delete=models.SET_NULL, null=True, related_name='fixture_usages', verbose_name='使用人'
     )
 
     # 时间
@@ -223,7 +203,7 @@ class FixtureUsageRecord(BaseModel):
         ordering = ['-checkout_time']
 
     def __str__(self):
-        return f"{self.fixture.fixture_no} - {self.checkout_time.date()}"
+        return f'{self.fixture.fixture_no} - {self.checkout_time.date()}'
 
     def save(self, *args, **kwargs):
         # 更新工装使用次数
@@ -237,6 +217,7 @@ class FixtureCalibration(BaseModel):
     """
     工装校验记录
     """
+
     RESULT_CHOICES = [
         ('PASS', '合格'),
         ('FAIL', '不合格'),
@@ -244,10 +225,7 @@ class FixtureCalibration(BaseModel):
     ]
 
     fixture = models.ForeignKey(
-        Fixture,
-        on_delete=models.CASCADE,
-        related_name='calibration_records',
-        verbose_name='工装'
+        Fixture, on_delete=models.CASCADE, related_name='calibration_records', verbose_name='工装'
     )
 
     # 校验信息
@@ -277,7 +255,7 @@ class FixtureCalibration(BaseModel):
         ordering = ['-calibration_date']
 
     def __str__(self):
-        return f"{self.fixture.fixture_no} - {self.calibration_date}"
+        return f'{self.fixture.fixture_no} - {self.calibration_date}'
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
@@ -293,6 +271,7 @@ class FixtureMaintenance(BaseModel):
     """
     工装维护记录
     """
+
     MAINTENANCE_TYPE = [
         ('REPAIR', '维修'),
         ('OVERHAUL', '保养'),
@@ -301,10 +280,7 @@ class FixtureMaintenance(BaseModel):
     ]
 
     fixture = models.ForeignKey(
-        Fixture,
-        on_delete=models.CASCADE,
-        related_name='maintenance_records',
-        verbose_name='工装'
+        Fixture, on_delete=models.CASCADE, related_name='maintenance_records', verbose_name='工装'
     )
 
     # 维护信息
@@ -329,7 +305,7 @@ class FixtureMaintenance(BaseModel):
         on_delete=models.SET_NULL,
         null=True,
         related_name='fixture_maintenances',
-        verbose_name='执行人'
+        verbose_name='执行人',
     )
 
     notes = models.TextField(blank=True, verbose_name='备注')
@@ -341,7 +317,7 @@ class FixtureMaintenance(BaseModel):
         ordering = ['-maintenance_date']
 
     def __str__(self):
-        return f"{self.fixture.fixture_no} - {self.get_maintenance_type_display()} - {self.maintenance_date}"
+        return f'{self.fixture.fixture_no} - {self.get_maintenance_type_display()} - {self.maintenance_date}'
 
     def save(self, *args, **kwargs):
         # 计算总费用

@@ -1,6 +1,7 @@
 """
 Views for finance app.
 """
+
 import logging
 from decimal import Decimal
 
@@ -52,6 +53,7 @@ class CurrencyViewSet(PermissionMixin, viewsets.ModelViewSet):
     """
     ViewSet for Currency management.
     """
+
     queryset = Currency.objects.all()
     serializer_class = CurrencySerializer
     filterset_fields = ['is_active', 'is_base_currency']
@@ -68,17 +70,10 @@ class CurrencyViewSet(PermissionMixin, viewsets.ModelViewSet):
         effective_date = request.data.get('effective_date', timezone.now().date())
 
         if not new_rate:
-            return Response(
-                {'error': '请提供汇率'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供汇率'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Record history
-        ExchangeRateHistory.objects.create(
-            currency=currency,
-            exchange_rate=new_rate,
-            effective_date=effective_date
-        )
+        ExchangeRateHistory.objects.create(currency=currency, exchange_rate=new_rate, effective_date=effective_date)
 
         # Update current rate
         currency.exchange_rate = new_rate
@@ -93,11 +88,10 @@ class CurrencyViewSet(PermissionMixin, viewsets.ModelViewSet):
         days = int(request.query_params.get('days', 30))
 
         from datetime import timedelta
+
         start_date = timezone.now().date() - timedelta(days=days)
 
-        history = ExchangeRateHistory.objects.filter(
-            effective_date__gte=start_date
-        )
+        history = ExchangeRateHistory.objects.filter(effective_date__gte=start_date)
 
         if currency_code:
             history = history.filter(currency__code=currency_code)
@@ -111,6 +105,7 @@ class PaymentViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
     ViewSet for Payment management.
     财务敏感数据 - 仅财务人员和管理层可访问
     """
+
     queryset = Payment.objects.all()
     serializer_class = PaymentSerializer
     filterset_fields = ['payment_type', 'payment_method', 'ar', 'ap']
@@ -118,10 +113,13 @@ class PaymentViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
     ordering_fields = ['payment_date', 'amount', 'created_at']
 
 
-class ExpenseViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ExpenseViewSet(
+    PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
+):
     """
     ViewSet for Expense management.
     """
+
     queryset = Expense.objects.all()
     serializer_class = ExpenseSerializer
     filterset_fields = ['project', 'department', 'user', 'category', 'status', 'is_deleted']
@@ -141,10 +139,7 @@ class ExpenseViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin,
         """Submit expense for approval with workflow."""
         expense = self.get_object()
         if expense.status != 'DRAFT':
-            return Response(
-                {'error': '只能提交草稿状态的报销单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能提交草稿状态的报销单'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Try to start workflow
         try:
@@ -155,49 +150,44 @@ class ExpenseViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin,
                 business_id=expense.id,
                 business_no=expense.expense_no,
                 submitter=request.user,
-                amount=expense.amount
+                amount=expense.amount,
             )
 
             if instance:
                 expense.status = 'SUBMITTED'
                 expense.save()
-                return Response({
-                    **ExpenseSerializer(expense).data,
-                    'workflow_started': True,
-                    'workflow_id': instance.id
-                })
+                return Response(
+                    {**ExpenseSerializer(expense).data, 'workflow_started': True, 'workflow_id': instance.id}
+                )
             else:
                 # No workflow configured, auto-approve
                 expense.status = 'APPROVED'
                 expense.save()
                 logger.info(f'费用报销 {expense.expense_no} 自动批准（未配置审批流程）')
-                return Response({
-                    **ExpenseSerializer(expense).data,
-                    'workflow_started': False,
-                    'auto_approved': True,
-                    'message': error or '未配置审批流程，已自动批准'
-                })
+                return Response(
+                    {
+                        **ExpenseSerializer(expense).data,
+                        'workflow_started': False,
+                        'auto_approved': True,
+                        'message': error or '未配置审批流程，已自动批准',
+                    }
+                )
 
         except Exception as e:
             # Workflow module not available, auto-approve
             logger.warning(f'工作流服务异常，费用报销 {expense.expense_no} 自动批准: {e}')
             expense.status = 'APPROVED'
             expense.save()
-            return Response({
-                **ExpenseSerializer(expense).data,
-                'auto_approved': True,
-                'message': '工作流服务不可用，已自动批准'
-            })
+            return Response(
+                {**ExpenseSerializer(expense).data, 'auto_approved': True, 'message': '工作流服务不可用，已自动批准'}
+            )
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         """Approve expense - 仅在无活跃工作流时允许直接审批."""
         expense = self.get_object()
         if expense.status != 'SUBMITTED':
-            return Response(
-                {'error': '只能批准已提交的报销单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能批准已提交的报销单'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 检查是否有活跃工作流
         workflow_error = self.check_workflow_allows_direct_action(expense, '审批')
@@ -213,10 +203,7 @@ class ExpenseViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin,
         """Reject expense - 仅在无活跃工作流时允许直接拒绝."""
         expense = self.get_object()
         if expense.status != 'SUBMITTED':
-            return Response(
-                {'error': '只能拒绝已提交的报销单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能拒绝已提交的报销单'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 检查是否有活跃工作流
         workflow_error = self.check_workflow_allows_direct_action(expense, '拒绝')
@@ -232,10 +219,7 @@ class ExpenseViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin,
         """Mark expense as reimbursed."""
         expense = self.get_object()
         if expense.status != 'APPROVED':
-            return Response(
-                {'error': '只能报销已批准的费用'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能报销已批准的费用'}, status=status.HTTP_400_BAD_REQUEST)
 
         expense.status = 'REIMBURSED'
         expense.reimbursement_date = timezone.now().date()
@@ -248,6 +232,7 @@ class AccountReceivableViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMi
     ViewSet for AccountReceivable management.
     财务敏感数据 - 仅财务人员和管理层可访问
     """
+
     queryset = AccountReceivable.objects.all()
     serializer_class = AccountReceivableSerializer
     filterset_fields = ['customer', 'project', 'status', 'is_deleted']
@@ -261,18 +246,12 @@ class AccountReceivableViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMi
         payment_amount = request.data.get('amount')
 
         if not payment_amount or payment_amount <= 0:
-            return Response(
-                {'error': '请提供有效的付款金额'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供有效的付款金额'}, status=status.HTTP_400_BAD_REQUEST)
 
         payment_amount = float(payment_amount)
 
         if ar.amount_paid + payment_amount > ar.amount_due:
-            return Response(
-                {'error': '付款金额超过应收金额'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '付款金额超过应收金额'}, status=status.HTTP_400_BAD_REQUEST)
 
         ar.amount_paid += payment_amount
 
@@ -289,10 +268,7 @@ class AccountReceivableViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMi
     def overdue(self, request):
         """Get overdue receivables."""
         today = timezone.now().date()
-        overdue_ars = self.get_queryset().filter(
-            due_date__lt=today,
-            status__in=['PENDING', 'PARTIAL']
-        )
+        overdue_ars = self.get_queryset().filter(due_date__lt=today, status__in=['PENDING', 'PARTIAL'])
         serializer = self.get_serializer(overdue_ars, many=True)
         return Response(serializer.data)
 
@@ -333,6 +309,7 @@ class AccountPayableViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin
     ViewSet for AccountPayable management.
     财务敏感数据 - 仅财务人员和管理层可访问
     """
+
     queryset = AccountPayable.objects.all()
     serializer_class = AccountPayableSerializer
     filterset_fields = ['supplier', 'status', 'is_deleted']
@@ -346,18 +323,12 @@ class AccountPayableViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin
         payment_amount = request.data.get('amount')
 
         if not payment_amount or payment_amount <= 0:
-            return Response(
-                {'error': '请提供有效的付款金额'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供有效的付款金额'}, status=status.HTTP_400_BAD_REQUEST)
 
         payment_amount = float(payment_amount)
 
         if ap.amount_paid + payment_amount > ap.amount_due:
-            return Response(
-                {'error': '付款金额超过应付金额'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '付款金额超过应付金额'}, status=status.HTTP_400_BAD_REQUEST)
 
         ap.amount_paid += payment_amount
 
@@ -374,10 +345,7 @@ class AccountPayableViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin
     def overdue(self, request):
         """Get overdue payables."""
         today = timezone.now().date()
-        overdue_aps = self.get_queryset().filter(
-            due_date__lt=today,
-            status__in=['PENDING', 'PARTIAL']
-        )
+        overdue_aps = self.get_queryset().filter(due_date__lt=today, status__in=['PENDING', 'PARTIAL'])
         serializer = self.get_serializer(overdue_aps, many=True)
         return Response(serializer.data)
 
@@ -387,6 +355,7 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
     ViewSet for Invoice management.
     财务敏感数据 - 仅财务人员和管理层可访问
     """
+
     from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 
     queryset = Invoice.objects.all()
@@ -409,8 +378,7 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
         invoice_no = self.request.query_params.get('invoice_no')
         if invoice_no:
             queryset = queryset.filter(
-                Q(invoice_no__icontains=invoice_no) |
-                Q(digital_invoice_no__icontains=invoice_no)
+                Q(invoice_no__icontains=invoice_no) | Q(digital_invoice_no__icontains=invoice_no)
             )
 
         # 支持状态过滤
@@ -426,22 +394,13 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
         invoice = self.get_object()
 
         if invoice.invoice_type != 'INPUT':
-            return Response(
-                {'error': '只有进项发票需要认证'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只有进项发票需要认证'}, status=status.HTTP_400_BAD_REQUEST)
 
         if invoice.status == 'CERTIFIED':
-            return Response(
-                {'error': '发票已认证'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '发票已认证'}, status=status.HTTP_400_BAD_REQUEST)
 
         if invoice.status == 'VOID':
-            return Response(
-                {'error': '已作废的发票无法认证'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '已作废的发票无法认证'}, status=status.HTTP_400_BAD_REQUEST)
 
         invoice.status = 'CERTIFIED'
         invoice.save()
@@ -453,10 +412,7 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
         invoice = self.get_object()
 
         if invoice.status == 'VOID':
-            return Response(
-                {'error': '发票已作废'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '发票已作废'}, status=status.HTTP_400_BAD_REQUEST)
 
         invoice.status = 'VOID'
         invoice.save()
@@ -471,10 +427,9 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
         from apps.sales.models import SalesOrder
 
         matched_count = 0
-        invoices = Invoice.objects.filter(
-            is_deleted=False,
-            reference_type__isnull=True
-        ).exclude(reference_id__isnull=False)
+        invoices = Invoice.objects.filter(is_deleted=False, reference_type__isnull=True).exclude(
+            reference_id__isnull=False
+        )
 
         for invoice in invoices:
             matched = False
@@ -485,8 +440,7 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
                 if buyer_name:
                     # 查找客户匹配的销售订单
                     sales_orders = SalesOrder.objects.filter(
-                        is_deleted=False,
-                        status__in=['CONFIRMED', 'PARTIAL', 'COMPLETED']
+                        is_deleted=False, status__in=['CONFIRMED', 'PARTIAL', 'COMPLETED']
                     ).select_related('customer')
 
                     best_match = None
@@ -522,8 +476,7 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
                 if seller_name:
                     # 查找供应商匹配的采购订单
                     purchase_orders = PurchaseOrder.objects.filter(
-                        is_deleted=False,
-                        status__in=['CONFIRMED', 'PARTIAL', 'COMPLETED']
+                        is_deleted=False, status__in=['CONFIRMED', 'PARTIAL', 'COMPLETED']
                     ).select_related('supplier')
 
                     best_match = None
@@ -553,10 +506,7 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
                         matched = True
                         matched_count += 1
 
-        return Response({
-            'matched_count': matched_count,
-            'message': f'成功匹配 {matched_count} 张发票'
-        })
+        return Response({'matched_count': matched_count, 'message': f'成功匹配 {matched_count} 张发票'})
 
     @action(detail=True, methods=['post'], url_path='match-order')
     def match_order(self, request, pk=None):
@@ -570,6 +520,7 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
 
         if order_type == 'SALES_ORDER':
             from apps.sales.models import SalesOrder
+
             try:
                 so = SalesOrder.objects.get(id=order_id)
                 invoice.reference_type = 'SALES_ORDER'
@@ -581,6 +532,7 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
                 return Response({'error': '销售订单不存在'}, status=status.HTTP_400_BAD_REQUEST)
         elif order_type == 'PURCHASE_ORDER':
             from apps.purchase.models import PurchaseOrder
+
             try:
                 po = PurchaseOrder.objects.get(id=order_id)
                 invoice.reference_type = 'PURCHASE_ORDER'
@@ -610,9 +562,21 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
         ws.title = '发票导入模板'
 
         headers = [
-            '发票类型', '发票号码', '数电发票号码', '开票日期',
-            '销方识别号', '销方名称', '购方识别号', '购买方名称',
-            '金额', '税额', '价税合计', '发票来源', '发票票种', '发票状态', '备注'
+            '发票类型',
+            '发票号码',
+            '数电发票号码',
+            '开票日期',
+            '销方识别号',
+            '销方名称',
+            '购方识别号',
+            '购买方名称',
+            '金额',
+            '税额',
+            '价税合计',
+            '发票来源',
+            '发票票种',
+            '发票状态',
+            '备注',
         ]
 
         header_font = Font(bold=True, color='FFFFFF')
@@ -625,9 +589,21 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
             cell.alignment = Alignment(horizontal='center')
 
         example = [
-            '销项发票', 'INV-2025-001', '25952000000022399509', '2025-01-15',
-            '91440300MA5GR95713', '深圳市示例公司', '911310267954776025', '客户公司名称',
-            '100000', '13000', '113000', '电子发票服务平台', '数电发票（增值税专用发票）', '正常', ''
+            '销项发票',
+            'INV-2025-001',
+            '25952000000022399509',
+            '2025-01-15',
+            '91440300MA5GR95713',
+            '深圳市示例公司',
+            '911310267954776025',
+            '客户公司名称',
+            '100000',
+            '13000',
+            '113000',
+            '电子发票服务平台',
+            '数电发票（增值税专用发票）',
+            '正常',
+            '',
         ]
         for col, val in enumerate(example, 1):
             ws.cell(row=2, column=col, value=val)
@@ -641,8 +617,7 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
         output.seek(0)
 
         response = HttpResponse(
-            output.read(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         response['Content-Disposition'] = 'attachment; filename="invoice_import_template.xlsx"'
         return response
@@ -671,16 +646,29 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
         ws.title = '发票列表'
 
         headers = [
-            '序号', '发票类型', '发票号码', '数电发票号码', '开票日期',
-            '销方识别号', '销方名称', '购方识别号', '购买方名称',
-            '金额', '税额', '价税合计', '发票来源', '发票票种', '状态', '备注'
+            '序号',
+            '发票类型',
+            '发票号码',
+            '数电发票号码',
+            '开票日期',
+            '销方识别号',
+            '销方名称',
+            '购方识别号',
+            '购买方名称',
+            '金额',
+            '税额',
+            '价税合计',
+            '发票来源',
+            '发票票种',
+            '状态',
+            '备注',
         ]
 
         for col, header in enumerate(headers, 1):
             ws.cell(row=1, column=col, value=header)
 
         for row, inv in enumerate(queryset, 2):
-            ws.cell(row=row, column=1, value=row-1)
+            ws.cell(row=row, column=1, value=row - 1)
             ws.cell(row=row, column=2, value=inv.get_invoice_type_display())
             ws.cell(row=row, column=3, value=inv.invoice_no)
             ws.cell(row=row, column=4, value=inv.digital_invoice_no)
@@ -706,8 +694,7 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
         output.seek(0)
 
         response = HttpResponse(
-            output.read(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         response['Content-Disposition'] = f'attachment; filename="invoices_{timezone.now().strftime("%Y%m%d")}.xlsx"'
         return response
@@ -859,7 +846,13 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
                             total_amount = amount_before_tax + tax_amount
 
                         # Parse status
-                        status_map = {'正常': 'NORMAL', '已登记': 'REGISTERED', '已认证': 'CERTIFIED', '已作废': 'VOID', '红冲': 'RED'}
+                        status_map = {
+                            '正常': 'NORMAL',
+                            '已登记': 'REGISTERED',
+                            '已认证': 'CERTIFIED',
+                            '已作废': 'VOID',
+                            '红冲': 'RED',
+                        }
                         status_str = str(data.get('status_str', '')).strip()
                         inv_status = status_map.get(status_str, 'REGISTERED')
 
@@ -876,6 +869,7 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
 
                         # 获取系统配置的公司名称
                         from apps.core.models import SystemConfig
+
                         company_config = SystemConfig.get_config()
                         company_name = company_config.company_name
 
@@ -906,9 +900,13 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
 
                         # Check if invoice exists (including soft-deleted) - check both invoice_no and digital_invoice_no
                         existing = Invoice.objects.filter(
-                            Q(invoice_no=invoice_no) |
-                            Q(digital_invoice_no=invoice_no) |
-                            (Q(digital_invoice_no=digital_invoice_no) & Q(digital_invoice_no__isnull=False) & ~Q(digital_invoice_no=''))
+                            Q(invoice_no=invoice_no)
+                            | Q(digital_invoice_no=invoice_no)
+                            | (
+                                Q(digital_invoice_no=digital_invoice_no)
+                                & Q(digital_invoice_no__isnull=False)
+                                & ~Q(digital_invoice_no='')
+                            )
                         ).first()
                         if existing:
                             # Restore if was deleted
@@ -1030,7 +1028,9 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
                                 tax_category_code=str(data.get('tax_category_code', '')).strip(),
                                 business_type=str(data.get('business_type', '')).strip(),
                                 item_name=item_name,
-                                specification=str(data.get('specification', '')).strip() if data.get('specification') else '',
+                                specification=str(data.get('specification', '')).strip()
+                                if data.get('specification')
+                                else '',
                                 unit=str(data.get('unit', '')).strip() if data.get('unit') else '',
                                 quantity=parse_decimal(data.get('quantity'), None),
                                 unit_price=parse_decimal(data.get('unit_price'), None),
@@ -1043,14 +1043,16 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
                         except Exception as e:
                             errors.append({'row': row_idx, 'sheet': '信息汇总表', 'error': str(e)})
 
-            return Response({
-                'success_count': success_count,
-                'update_count': update_count,
-                'skip_count': skip_count,
-                'item_count': item_count,
-                'error_count': len(errors),
-                'errors': errors[:10]
-            })
+            return Response(
+                {
+                    'success_count': success_count,
+                    'update_count': update_count,
+                    'skip_count': skip_count,
+                    'item_count': item_count,
+                    'error_count': len(errors),
+                    'errors': errors[:10],
+                }
+            )
 
         except Exception as e:
             return Response({'error': f'导入失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -1094,10 +1096,7 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
         # 删除发票
         deleted_count = Invoice.objects.filter(id__in=ids).delete()[0]
 
-        return Response({
-            'success': True,
-            'deleted_count': deleted_count
-        })
+        return Response({'success': True, 'deleted_count': deleted_count})
 
     @action(detail=False, methods=['post'])
     def set_project(self, request):
@@ -1123,12 +1122,14 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
 
         updated_count = Invoice.objects.filter(id__in=invoice_ids).update(project=project)
 
-        return Response({
-            'success': True,
-            'updated_count': updated_count,
-            'project_code': project.code,
-            'project_name': project.name
-        })
+        return Response(
+            {
+                'success': True,
+                'updated_count': updated_count,
+                'project_code': project.code,
+                'project_name': project.name,
+            }
+        )
 
     @action(detail=False, methods=['post'])
     def import_pdf(self, request):
@@ -1159,13 +1160,7 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
         # 数电发票号码通常是20位数字
         invoice_no_pattern = re.compile(r'(\d{20})')
 
-        results = {
-            'total': len(files),
-            'matched': 0,
-            'unmatched': 0,
-            'matched_files': [],
-            'unmatched_files': []
-        }
+        results = {'total': len(files), 'matched': 0, 'unmatched': 0, 'matched_files': [], 'unmatched_files': []}
 
         for file in files:
             filename = file.name
@@ -1174,51 +1169,36 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
             # 只接受PDF文件
             if file_ext != '.pdf':
                 results['unmatched'] += 1
-                results['unmatched_files'].append({
-                    'filename': filename,
-                    'reason': '不是PDF文件'
-                })
+                results['unmatched_files'].append({'filename': filename, 'reason': '不是PDF文件'})
                 continue
 
             # 从文件名中提取数电发票号码
             match = invoice_no_pattern.search(filename)
             if not match:
                 results['unmatched'] += 1
-                results['unmatched_files'].append({
-                    'filename': filename,
-                    'reason': '文件名中未找到20位数电发票号码'
-                })
+                results['unmatched_files'].append({'filename': filename, 'reason': '文件名中未找到20位数电发票号码'})
                 continue
 
             invoice_no = match.group(1)
 
             # 查找对应的发票
             invoice = Invoice.objects.filter(
-                Q(digital_invoice_no=invoice_no) | Q(invoice_no=invoice_no),
-                is_deleted=False
+                Q(digital_invoice_no=invoice_no) | Q(invoice_no=invoice_no), is_deleted=False
             ).first()
 
             if not invoice:
                 results['unmatched'] += 1
-                results['unmatched_files'].append({
-                    'filename': filename,
-                    'reason': f'未找到发票号码 {invoice_no}'
-                })
+                results['unmatched_files'].append({'filename': filename, 'reason': f'未找到发票号码 {invoice_no}'})
                 continue
 
             # 检查是否已存在相同的附件
             existing = Attachment.objects.filter(
-                related_model='Invoice',
-                related_id=invoice.id,
-                original_name=filename
+                related_model='Invoice', related_id=invoice.id, original_name=filename
             ).exists()
 
             if existing:
                 results['unmatched'] += 1
-                results['unmatched_files'].append({
-                    'filename': filename,
-                    'reason': '该附件已存在'
-                })
+                results['unmatched_files'].append({'filename': filename, 'reason': '该附件已存在'})
                 continue
 
             # 创建附件记录
@@ -1231,16 +1211,18 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
                 related_model='Invoice',
                 related_id=invoice.id,
                 description=f'发票PDF - {invoice_no}',
-                uploaded_by=request.user
+                uploaded_by=request.user,
             )
 
             results['matched'] += 1
-            results['matched_files'].append({
-                'filename': filename,
-                'invoice_no': invoice_no,
-                'invoice_id': invoice.id,
-                'attachment_id': attachment.id
-            })
+            results['matched_files'].append(
+                {
+                    'filename': filename,
+                    'invoice_no': invoice_no,
+                    'invoice_id': invoice.id,
+                    'attachment_id': attachment.id,
+                }
+            )
 
         return Response(results)
 
@@ -1251,10 +1233,7 @@ class InvoiceViewSet(SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, views
         from apps.core.serializers import AttachmentSerializer
 
         invoice = self.get_object()
-        attachments = Attachment.objects.filter(
-            related_model='Invoice',
-            related_id=invoice.id
-        )
+        attachments = Attachment.objects.filter(related_model='Invoice', related_id=invoice.id)
 
         serializer = AttachmentSerializer(attachments, many=True, context={'request': request})
         return Response(serializer.data)
@@ -1264,6 +1243,7 @@ class SharedExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
     """
     ViewSet for SharedExpense management.
     """
+
     queryset = SharedExpense.objects.all()
     serializer_class = SharedExpenseSerializer
     filterset_fields = ['category', 'status', 'allocation_method', 'is_deleted']
@@ -1284,32 +1264,24 @@ class SharedExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         custom_ratios = request.data.get('custom_ratios', {})
 
         if not project_ids:
-            return Response(
-                {'error': '请选择至少一个项目'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请选择至少一个项目'}, status=status.HTTP_400_BAD_REQUEST)
 
         projects = Project.objects.filter(id__in=project_ids, is_deleted=False)
 
         if not projects.exists():
-            return Response(
-                {'error': '未找到有效项目'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '未找到有效项目'}, status=status.HTTP_400_BAD_REQUEST)
 
-        allocations = self._calculate_allocations(
-            shared_expense,
-            projects,
-            custom_ratios
+        allocations = self._calculate_allocations(shared_expense, projects, custom_ratios)
+
+        return Response(
+            {
+                'expense_id': shared_expense.id,
+                'expense_no': shared_expense.expense_no,
+                'total_amount': float(shared_expense.amount),
+                'allocation_method': shared_expense.allocation_method,
+                'allocations': allocations,
+            }
         )
-
-        return Response({
-            'expense_id': shared_expense.id,
-            'expense_no': shared_expense.expense_no,
-            'total_amount': float(shared_expense.amount),
-            'allocation_method': shared_expense.allocation_method,
-            'allocations': allocations
-        })
 
     @action(detail=True, methods=['post'])
     def allocate(self, request, pk=None):
@@ -1319,33 +1291,20 @@ class SharedExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         shared_expense = self.get_object()
 
         if shared_expense.status == 'ALLOCATED':
-            return Response(
-                {'error': '该费用已分摊'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '该费用已分摊'}, status=status.HTTP_400_BAD_REQUEST)
 
         project_ids = request.data.get('project_ids', [])
         custom_ratios = request.data.get('custom_ratios', {})
 
         if not project_ids:
-            return Response(
-                {'error': '请选择至少一个项目'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请选择至少一个项目'}, status=status.HTTP_400_BAD_REQUEST)
 
         projects = Project.objects.filter(id__in=project_ids, is_deleted=False)
 
         if not projects.exists():
-            return Response(
-                {'error': '未找到有效项目'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '未找到有效项目'}, status=status.HTTP_400_BAD_REQUEST)
 
-        allocations_data = self._calculate_allocations(
-            shared_expense,
-            projects,
-            custom_ratios
-        )
+        allocations_data = self._calculate_allocations(shared_expense, projects, custom_ratios)
 
         with transaction.atomic():
             # Delete existing allocations
@@ -1358,7 +1317,7 @@ class SharedExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                     project_id=alloc_data['project_id'],
                     allocation_ratio=Decimal(str(alloc_data['ratio'])),
                     allocated_amount=Decimal(str(alloc_data['amount'])),
-                    created_by=request.user
+                    created_by=request.user,
                 )
 
             # Update status
@@ -1375,10 +1334,7 @@ class SharedExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         shared_expense = self.get_object()
 
         if shared_expense.status != 'ALLOCATED':
-            return Response(
-                {'error': '只能取消已分摊的费用'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能取消已分摊的费用'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             # Delete allocations
@@ -1395,14 +1351,16 @@ class SharedExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
     @action(detail=False, methods=['get'])
     def allocation_methods(self, request):
         """Get available allocation methods."""
-        return Response([
-            {'value': 'EQUAL', 'label': '平均分摊'},
-            {'value': 'REVENUE', 'label': '按收入比例'},
-            {'value': 'HEADCOUNT', 'label': '按人员数量'},
-            {'value': 'LABOR_HOURS', 'label': '按工时比例'},
-            {'value': 'BUDGET', 'label': '按预算比例'},
-            {'value': 'CUSTOM', 'label': '自定义比例'},
-        ])
+        return Response(
+            [
+                {'value': 'EQUAL', 'label': '平均分摊'},
+                {'value': 'REVENUE', 'label': '按收入比例'},
+                {'value': 'HEADCOUNT', 'label': '按人员数量'},
+                {'value': 'LABOR_HOURS', 'label': '按工时比例'},
+                {'value': 'BUDGET', 'label': '按预算比例'},
+                {'value': 'CUSTOM', 'label': '自定义比例'},
+            ]
+        )
 
     @action(detail=False, methods=['get'])
     def project_allocation_summary(self, request):
@@ -1410,19 +1368,17 @@ class SharedExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         project_id = request.query_params.get('project_id')
 
         queryset = SharedExpenseAllocation.objects.filter(
-            shared_expense__status='ALLOCATED',
-            shared_expense__is_deleted=False
+            shared_expense__status='ALLOCATED', shared_expense__is_deleted=False
         )
 
         if project_id:
             queryset = queryset.filter(project_id=project_id)
 
-        summary = queryset.values(
-            'project__id', 'project__code', 'project__name'
-        ).annotate(
-            total_allocated=Sum('allocated_amount'),
-            allocation_count=Count('id')
-        ).order_by('-total_allocated')
+        summary = (
+            queryset.values('project__id', 'project__code', 'project__name')
+            .annotate(total_allocated=Sum('allocated_amount'), allocation_count=Count('id'))
+            .order_by('-total_allocated')
+        )
 
         return Response(list(summary))
 
@@ -1442,7 +1398,7 @@ class SharedExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                     'project_code': p.code,
                     'project_name': p.name,
                     'ratio': float(ratio),
-                    'amount': float(total_amount / n)
+                    'amount': float(total_amount / n),
                 }
                 for p in project_list
             ]
@@ -1450,12 +1406,11 @@ class SharedExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         elif method == 'REVENUE':
             # By revenue ratio
             from apps.sales.models import SalesOrder
+
             revenues = {}
             for p in project_list:
                 total = SalesOrder.objects.filter(
-                    project=p,
-                    status__in=['CONFIRMED', 'SHIPPED', 'COMPLETED'],
-                    is_deleted=False
+                    project=p, status__in=['CONFIRMED', 'SHIPPED', 'COMPLETED'], is_deleted=False
                 ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
                 revenues[p.id] = total
 
@@ -1467,7 +1422,7 @@ class SharedExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                     'project_code': p.code,
                     'project_name': p.name,
                     'ratio': float(revenues[p.id] / total_revenue),
-                    'amount': float(total_amount * revenues[p.id] / total_revenue)
+                    'amount': float(total_amount * revenues[p.id] / total_revenue),
                 }
                 for p in project_list
             ]
@@ -1475,12 +1430,10 @@ class SharedExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         elif method == 'HEADCOUNT':
             # By headcount
             from apps.projects.models import ProjectMember
+
             headcounts = {}
             for p in project_list:
-                count = ProjectMember.objects.filter(
-                    project=p,
-                    is_deleted=False
-                ).count() or 1
+                count = ProjectMember.objects.filter(project=p, is_deleted=False).count() or 1
                 headcounts[p.id] = count
 
             total_headcount = sum(headcounts.values()) or 1
@@ -1491,7 +1444,7 @@ class SharedExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                     'project_code': p.code,
                     'project_name': p.name,
                     'ratio': float(headcounts[p.id] / total_headcount),
-                    'amount': float(total_amount * headcounts[p.id] / total_headcount)
+                    'amount': float(total_amount * headcounts[p.id] / total_headcount),
                 }
                 for p in project_list
             ]
@@ -1499,12 +1452,12 @@ class SharedExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         elif method == 'LABOR_HOURS':
             # By labor hours
             from apps.projects.models import ProjectMember
+
             hours = {}
             for p in project_list:
-                total = ProjectMember.objects.filter(
-                    project=p,
-                    is_deleted=False
-                ).aggregate(total=Sum('actual_hours'))['total'] or Decimal('1')
+                total = ProjectMember.objects.filter(project=p, is_deleted=False).aggregate(total=Sum('actual_hours'))[
+                    'total'
+                ] or Decimal('1')
                 hours[p.id] = total
 
             total_hours = sum(hours.values()) or Decimal('1')
@@ -1515,7 +1468,7 @@ class SharedExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                     'project_code': p.code,
                     'project_name': p.name,
                     'ratio': float(hours[p.id] / total_hours),
-                    'amount': float(total_amount * hours[p.id] / total_hours)
+                    'amount': float(total_amount * hours[p.id] / total_hours),
                 }
                 for p in project_list
             ]
@@ -1534,7 +1487,7 @@ class SharedExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                     'project_code': p.code,
                     'project_name': p.name,
                     'ratio': float(budgets[p.id] / total_budget),
-                    'amount': float(total_amount * budgets[p.id] / total_budget)
+                    'amount': float(total_amount * budgets[p.id] / total_budget),
                 }
                 for p in project_list
             ]
@@ -1549,7 +1502,7 @@ class SharedExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                     'project_code': p.code,
                     'project_name': p.name,
                     'ratio': float(Decimal(str(custom_ratios.get(str(p.id), 0))) / total_ratio),
-                    'amount': float(total_amount * Decimal(str(custom_ratios.get(str(p.id), 0))) / total_ratio)
+                    'amount': float(total_amount * Decimal(str(custom_ratios.get(str(p.id), 0))) / total_ratio),
                 }
                 for p in project_list
             ]
@@ -1562,7 +1515,7 @@ class SharedExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                 'project_code': p.code,
                 'project_name': p.name,
                 'ratio': float(ratio),
-                'amount': float(total_amount / n)
+                'amount': float(total_amount / n),
             }
             for p in project_list
         ]
@@ -1585,28 +1538,28 @@ class SharedExpenseAllocationViewSet(PermissionMixin, viewsets.ReadOnlyModelView
         project_id = request.query_params.get('project_id')
 
         if not project_id:
-            return Response(
-                {'error': '请提供项目ID'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供项目ID'}, status=status.HTTP_400_BAD_REQUEST)
 
-        allocations = self.get_queryset().filter(
-            project_id=project_id,
-            shared_expense__status='ALLOCATED'
-        ).select_related('shared_expense')
+        allocations = (
+            self.get_queryset()
+            .filter(project_id=project_id, shared_expense__status='ALLOCATED')
+            .select_related('shared_expense')
+        )
 
         data = []
         for alloc in allocations:
-            data.append({
-                'id': alloc.id,
-                'expense_no': alloc.shared_expense.expense_no,
-                'expense_name': alloc.shared_expense.name,
-                'category': alloc.shared_expense.category,
-                'expense_date': alloc.shared_expense.expense_date,
-                'total_amount': float(alloc.shared_expense.amount),
-                'allocation_ratio': float(alloc.allocation_ratio),
-                'allocated_amount': float(alloc.allocated_amount),
-            })
+            data.append(
+                {
+                    'id': alloc.id,
+                    'expense_no': alloc.shared_expense.expense_no,
+                    'expense_name': alloc.shared_expense.name,
+                    'category': alloc.shared_expense.category,
+                    'expense_date': alloc.shared_expense.expense_date,
+                    'total_amount': float(alloc.shared_expense.amount),
+                    'allocation_ratio': float(alloc.allocation_ratio),
+                    'allocated_amount': float(alloc.allocated_amount),
+                }
+            )
 
         return Response(data)
 
@@ -1619,6 +1572,7 @@ class PaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
     permission_module = 'finance'
     permission_resource = 'payment_schedule'
     """
+
     queryset = PaymentSchedule.objects.filter(is_deleted=False).select_related(
         'sales_order', 'sales_order__customer', 'project', 'account_receivable'
     )
@@ -1661,29 +1615,26 @@ class PaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
         # 即将到期的付款（7天内）
         today = timezone.now().date()
         upcoming = queryset.filter(
-            status__in=['PENDING', 'PARTIAL'],
-            due_date__gte=today,
-            due_date__lte=today + timedelta(days=7)
+            status__in=['PENDING', 'PARTIAL'], due_date__gte=today, due_date__lte=today + timedelta(days=7)
         ).order_by('due_date')[:10]
 
         # 已逾期的付款
-        overdue = queryset.filter(
-            status__in=['PENDING', 'PARTIAL'],
-            due_date__lt=today
-        ).order_by('due_date')[:10]
+        overdue = queryset.filter(status__in=['PENDING', 'PARTIAL'], due_date__lt=today).order_by('due_date')[:10]
 
-        return Response({
-            'total_amount': total_amount,
-            'total_paid': total_paid,
-            'total_remaining': total_remaining,
-            'overall_progress': round(overall_progress, 2),
-            'pending_count': counts.get('PENDING', 0),
-            'partial_count': counts.get('PARTIAL', 0),
-            'paid_count': counts.get('PAID', 0),
-            'overdue_count': counts.get('OVERDUE', 0),
-            'upcoming_payments': PaymentScheduleSerializer(upcoming, many=True).data,
-            'overdue_payments': PaymentScheduleSerializer(overdue, many=True).data,
-        })
+        return Response(
+            {
+                'total_amount': total_amount,
+                'total_paid': total_paid,
+                'total_remaining': total_remaining,
+                'overall_progress': round(overall_progress, 2),
+                'pending_count': counts.get('PENDING', 0),
+                'partial_count': counts.get('PARTIAL', 0),
+                'paid_count': counts.get('PAID', 0),
+                'overdue_count': counts.get('OVERDUE', 0),
+                'upcoming_payments': PaymentScheduleSerializer(upcoming, many=True).data,
+                'overdue_payments': PaymentScheduleSerializer(overdue, many=True).data,
+            }
+        )
 
     @action(detail=False, methods=['post'])
     def generate_for_order(self, request):
@@ -1701,11 +1652,13 @@ class PaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
 
         schedules = PaymentSchedule.generate_from_sales_order(sales_order)
 
-        return Response({
-            'success': True,
-            'count': len(schedules),
-            'schedules': PaymentScheduleSerializer(schedules, many=True).data
-        })
+        return Response(
+            {
+                'success': True,
+                'count': len(schedules),
+                'schedules': PaymentScheduleSerializer(schedules, many=True).data,
+            }
+        )
 
     @action(detail=True, methods=['post'])
     def record_payment(self, request, pk=None):
@@ -1746,32 +1699,29 @@ class PaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
         # 2. 已逾期但未提醒的
         reminders = []
 
-        queryset = self.get_queryset().filter(
-            status__in=['PENDING', 'PARTIAL'],
-            reminder_status='PENDING'
-        )
+        queryset = self.get_queryset().filter(status__in=['PENDING', 'PARTIAL'], reminder_status='PENDING')
 
         for schedule in queryset:
             remind_date = schedule.due_date - timedelta(days=schedule.reminder_days_before)
 
             if today >= remind_date:
-                reminders.append({
-                    'schedule': PaymentScheduleSerializer(schedule).data,
-                    'reminder_type': 'OVERDUE' if schedule.is_overdue else 'UPCOMING',
-                    'days_until_due': schedule.days_until_due,
-                    'urgency': 'HIGH' if schedule.is_overdue else ('MEDIUM' if schedule.days_until_due <= 3 else 'LOW')
-                })
+                reminders.append(
+                    {
+                        'schedule': PaymentScheduleSerializer(schedule).data,
+                        'reminder_type': 'OVERDUE' if schedule.is_overdue else 'UPCOMING',
+                        'days_until_due': schedule.days_until_due,
+                        'urgency': 'HIGH'
+                        if schedule.is_overdue
+                        else ('MEDIUM' if schedule.days_until_due <= 3 else 'LOW'),
+                    }
+                )
 
         # 按紧急程度和到期日排序
-        reminders.sort(key=lambda x: (
-            0 if x['urgency'] == 'HIGH' else (1 if x['urgency'] == 'MEDIUM' else 2),
-            x['days_until_due']
-        ))
+        reminders.sort(
+            key=lambda x: (0 if x['urgency'] == 'HIGH' else (1 if x['urgency'] == 'MEDIUM' else 2), x['days_until_due'])
+        )
 
-        return Response({
-            'total_count': len(reminders),
-            'reminders': reminders
-        })
+        return Response({'total_count': len(reminders), 'reminders': reminders})
 
     @action(detail=True, methods=['post'])
     def mark_reminded(self, request, pk=None):
@@ -1792,10 +1742,7 @@ class PaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
         bank_statement_id = request.data.get('bank_statement_id')
 
         if not schedule_id or not bank_statement_id:
-            return Response(
-                {'error': '请提供付款计划ID和银行流水ID'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供付款计划ID和银行流水ID'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             schedule = PaymentSchedule.objects.get(id=schedule_id)
@@ -1825,11 +1772,13 @@ class PaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
         bank_statement.project = schedule.project
         bank_statement.save()
 
-        return Response({
-            'success': True,
-            'schedule': PaymentScheduleSerializer(schedule).data,
-            'message': f'成功匹配付款 ¥{amount}，当前进度 {schedule.payment_progress}%'
-        })
+        return Response(
+            {
+                'success': True,
+                'schedule': PaymentScheduleSerializer(schedule).data,
+                'message': f'成功匹配付款 ¥{amount}，当前进度 {schedule.payment_progress}%',
+            }
+        )
 
 
 class PurchasePaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
@@ -1837,6 +1786,7 @@ class PurchasePaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrack
     ViewSet for PurchasePaymentSchedule management.
     用于管理和跟踪采购订单的付款计划。
     """
+
     queryset = PurchasePaymentSchedule.objects.filter(is_deleted=False).select_related(
         'purchase_order', 'purchase_order__supplier', 'project', 'account_payable'
     )
@@ -1882,29 +1832,26 @@ class PurchasePaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrack
         # 即将到期的付款（7天内）
         today = timezone.now().date()
         upcoming = queryset.filter(
-            status__in=['PENDING', 'PARTIAL'],
-            due_date__gte=today,
-            due_date__lte=today + timedelta(days=7)
+            status__in=['PENDING', 'PARTIAL'], due_date__gte=today, due_date__lte=today + timedelta(days=7)
         ).order_by('due_date')[:10]
 
         # 已逾期的付款
-        overdue = queryset.filter(
-            status__in=['PENDING', 'PARTIAL'],
-            due_date__lt=today
-        ).order_by('due_date')[:10]
+        overdue = queryset.filter(status__in=['PENDING', 'PARTIAL'], due_date__lt=today).order_by('due_date')[:10]
 
-        return Response({
-            'total_amount': total_amount,
-            'total_paid': total_paid,
-            'total_remaining': total_remaining,
-            'overall_progress': round(overall_progress, 2),
-            'pending_count': counts.get('PENDING', 0),
-            'partial_count': counts.get('PARTIAL', 0),
-            'paid_count': counts.get('PAID', 0),
-            'overdue_count': counts.get('OVERDUE', 0),
-            'upcoming_payments': PurchasePaymentScheduleSerializer(upcoming, many=True).data,
-            'overdue_payments': PurchasePaymentScheduleSerializer(overdue, many=True).data,
-        })
+        return Response(
+            {
+                'total_amount': total_amount,
+                'total_paid': total_paid,
+                'total_remaining': total_remaining,
+                'overall_progress': round(overall_progress, 2),
+                'pending_count': counts.get('PENDING', 0),
+                'partial_count': counts.get('PARTIAL', 0),
+                'paid_count': counts.get('PAID', 0),
+                'overdue_count': counts.get('OVERDUE', 0),
+                'upcoming_payments': PurchasePaymentScheduleSerializer(upcoming, many=True).data,
+                'overdue_payments': PurchasePaymentScheduleSerializer(overdue, many=True).data,
+            }
+        )
 
     @action(detail=False, methods=['post'])
     def generate_for_order(self, request):
@@ -1922,11 +1869,13 @@ class PurchasePaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrack
 
         schedules = PurchasePaymentSchedule.generate_from_purchase_order(purchase_order)
 
-        return Response({
-            'success': True,
-            'count': len(schedules),
-            'schedules': PurchasePaymentScheduleSerializer(schedules, many=True).data
-        })
+        return Response(
+            {
+                'success': True,
+                'count': len(schedules),
+                'schedules': PurchasePaymentScheduleSerializer(schedules, many=True).data,
+            }
+        )
 
     @action(detail=True, methods=['post'])
     def record_payment(self, request, pk=None):
@@ -1964,31 +1913,28 @@ class PurchasePaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrack
 
         reminders = []
 
-        queryset = self.get_queryset().filter(
-            status__in=['PENDING', 'PARTIAL'],
-            reminder_status='PENDING'
-        )
+        queryset = self.get_queryset().filter(status__in=['PENDING', 'PARTIAL'], reminder_status='PENDING')
 
         for schedule in queryset:
             remind_date = schedule.due_date - timedelta(days=schedule.reminder_days_before)
 
             if today >= remind_date:
-                reminders.append({
-                    'schedule': PurchasePaymentScheduleSerializer(schedule).data,
-                    'reminder_type': 'OVERDUE' if schedule.is_overdue else 'UPCOMING',
-                    'days_until_due': schedule.days_until_due,
-                    'urgency': 'HIGH' if schedule.is_overdue else ('MEDIUM' if schedule.days_until_due <= 3 else 'LOW')
-                })
+                reminders.append(
+                    {
+                        'schedule': PurchasePaymentScheduleSerializer(schedule).data,
+                        'reminder_type': 'OVERDUE' if schedule.is_overdue else 'UPCOMING',
+                        'days_until_due': schedule.days_until_due,
+                        'urgency': 'HIGH'
+                        if schedule.is_overdue
+                        else ('MEDIUM' if schedule.days_until_due <= 3 else 'LOW'),
+                    }
+                )
 
-        reminders.sort(key=lambda x: (
-            0 if x['urgency'] == 'HIGH' else (1 if x['urgency'] == 'MEDIUM' else 2),
-            x['days_until_due']
-        ))
+        reminders.sort(
+            key=lambda x: (0 if x['urgency'] == 'HIGH' else (1 if x['urgency'] == 'MEDIUM' else 2), x['days_until_due'])
+        )
 
-        return Response({
-            'total_count': len(reminders),
-            'reminders': reminders
-        })
+        return Response({'total_count': len(reminders), 'reminders': reminders})
 
     @action(detail=True, methods=['post'])
     def mark_reminded(self, request, pk=None):
@@ -2009,10 +1955,7 @@ class PurchasePaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrack
         bank_statement_id = request.data.get('bank_statement_id')
 
         if not schedule_id or not bank_statement_id:
-            return Response(
-                {'error': '请提供付款计划ID和银行流水ID'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供付款计划ID和银行流水ID'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             schedule = PurchasePaymentSchedule.objects.get(id=schedule_id)
@@ -2042,17 +1985,22 @@ class PurchasePaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrack
         bank_statement.project = schedule.project
         bank_statement.save()
 
-        return Response({
-            'success': True,
-            'schedule': PurchasePaymentScheduleSerializer(schedule).data,
-            'message': f'成功匹配付款 ¥{amount}，当前进度 {schedule.payment_progress}%'
-        })
+        return Response(
+            {
+                'success': True,
+                'schedule': PurchasePaymentScheduleSerializer(schedule).data,
+                'message': f'成功匹配付款 ¥{amount}，当前进度 {schedule.payment_progress}%',
+            }
+        )
 
 
-class PaymentRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class PaymentRequestViewSet(
+    PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
+):
     """
     ViewSet for PaymentRequest management - 付款申请管理.
     """
+
     queryset = PaymentRequest.objects.all()
     serializer_class = PaymentRequestSerializer
     filterset_fields = ['supplier', 'project', 'status', 'payment_type', 'applicant', 'is_deleted']
@@ -2076,10 +2024,7 @@ class PaymentRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
         """提交付款申请审批 - 审批步骤由流程配置决定"""
         payment_req = self.get_object()
         if payment_req.status not in ['DRAFT', 'REJECTED']:
-            return Response(
-                {'error': '只能提交草稿或已拒绝状态的付款申请'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能提交草稿或已拒绝状态的付款申请'}, status=status.HTTP_400_BAD_REQUEST)
 
         amount = payment_req.amount or 0
 
@@ -2091,29 +2036,33 @@ class PaymentRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
                 business_id=payment_req.id,
                 business_no=payment_req.request_no,
                 submitter=request.user,
-                amount=amount
+                amount=amount,
             )
 
             if instance:
                 payment_req.status = 'PENDING'
                 payment_req.save()
-                return Response({
-                    **PaymentRequestSerializer(payment_req).data,
-                    'workflow_started': True,
-                    'workflow_id': instance.id,
-                    'message': '已提交审批，请在审批中心查看审批进度'
-                })
+                return Response(
+                    {
+                        **PaymentRequestSerializer(payment_req).data,
+                        'workflow_started': True,
+                        'workflow_id': instance.id,
+                        'message': '已提交审批，请在审批中心查看审批进度',
+                    }
+                )
             else:
                 # 未配置审批流程，直接批准
                 payment_req.status = 'APPROVED'
                 payment_req.approved_by = request.user
                 payment_req.approved_at = timezone.now()
                 payment_req.save()
-                return Response({
-                    **PaymentRequestSerializer(payment_req).data,
-                    'workflow_started': False,
-                    'message': error or '未配置审批流程，付款申请已直接批准'
-                })
+                return Response(
+                    {
+                        **PaymentRequestSerializer(payment_req).data,
+                        'workflow_started': False,
+                        'message': error or '未配置审批流程，付款申请已直接批准',
+                    }
+                )
 
         except Exception as e:
             # 审批模块不可用，直接批准
@@ -2121,21 +2070,20 @@ class PaymentRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
             payment_req.approved_by = request.user
             payment_req.approved_at = timezone.now()
             payment_req.save()
-            return Response({
-                **PaymentRequestSerializer(payment_req).data,
-                'workflow_started': False,
-                'message': f'付款申请已批准，但工作流服务异常: {e}'
-            })
+            return Response(
+                {
+                    **PaymentRequestSerializer(payment_req).data,
+                    'workflow_started': False,
+                    'message': f'付款申请已批准，但工作流服务异常: {e}',
+                }
+            )
 
     @action(detail=True, methods=['post'])
     def pay(self, request, pk=None):
         """执行付款 - 审批通过后可执行"""
         payment_req = self.get_object()
         if payment_req.status != 'APPROVED':
-            return Response(
-                {'error': '只能对已批准的付款申请执行付款'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能对已批准的付款申请执行付款'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             # 创建付款记录
@@ -2148,7 +2096,7 @@ class PaymentRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
                 payment_method=request.data.get('payment_method', 'BANK_TRANSFER'),
                 reference=request.data.get('reference', ''),
                 notes=request.data.get('notes', f'付款申请: {payment_req.request_no}'),
-                created_by=request.user
+                created_by=request.user,
             )
 
             # 更新付款申请状态
@@ -2166,21 +2114,20 @@ class PaymentRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
                     payment_req.ap.status = 'PARTIAL'
                 payment_req.ap.save()
 
-        return Response({
-            **PaymentRequestSerializer(payment_req).data,
-            'payment': PaymentSerializer(payment).data,
-            'message': '付款成功'
-        })
+        return Response(
+            {
+                **PaymentRequestSerializer(payment_req).data,
+                'payment': PaymentSerializer(payment).data,
+                'message': '付款成功',
+            }
+        )
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
         """取消付款申请"""
         payment_req = self.get_object()
         if payment_req.status in ['PAID', 'CANCELLED']:
-            return Response(
-                {'error': '已付款或已取消的申请无法取消'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '已付款或已取消的申请无法取消'}, status=status.HTTP_400_BAD_REQUEST)
 
         payment_req.status = 'CANCELLED'
         payment_req.save()

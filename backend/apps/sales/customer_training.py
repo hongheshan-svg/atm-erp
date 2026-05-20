@@ -9,6 +9,7 @@ Customer Training Management Enhancement
 - 培训资料管理
 - 培训证书生成
 """
+
 from datetime import date
 
 from django.db import models
@@ -26,8 +27,10 @@ from apps.core.models import BaseModel
 # 模型定义
 # =============================================================================
 
+
 class TrainingCourse(BaseModel):
     """培训课程"""
+
     COURSE_TYPE_CHOICES = [
         ('OPERATION', '操作培训'),
         ('MAINTENANCE', '维护保养'),
@@ -66,10 +69,7 @@ class TrainingCourse(BaseModel):
 
     # 关联设备/产品
     applicable_equipment = models.ManyToManyField(
-        'projects.Equipment',
-        blank=True,
-        related_name='training_courses',
-        verbose_name='适用设备'
+        'projects.Equipment', blank=True, related_name='training_courses', verbose_name='适用设备'
     )
 
     # 培训资料
@@ -93,6 +93,7 @@ class TrainingCourse(BaseModel):
 
 class TrainingPlan(BaseModel):
     """培训计划"""
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('SCHEDULED', '已安排'),
@@ -114,10 +115,7 @@ class TrainingPlan(BaseModel):
 
     # 关联信息
     customer = models.ForeignKey(
-        'masterdata.Customer',
-        on_delete=models.PROTECT,
-        related_name='training_plans',
-        verbose_name='客户'
+        'masterdata.Customer', on_delete=models.PROTECT, related_name='training_plans', verbose_name='客户'
     )
     project = models.ForeignKey(
         'projects.Project',
@@ -125,7 +123,7 @@ class TrainingPlan(BaseModel):
         null=True,
         blank=True,
         related_name='training_plans',
-        verbose_name='关联项目'
+        verbose_name='关联项目',
     )
     service_order = models.ForeignKey(
         'projects.ServiceOrder',
@@ -133,19 +131,18 @@ class TrainingPlan(BaseModel):
         null=True,
         blank=True,
         related_name='training_plans',
-        verbose_name='服务单'
+        verbose_name='服务单',
     )
 
     # 培训课程
     courses = models.ManyToManyField(
-        TrainingCourse,
-        through='TrainingPlanCourse',
-        related_name='plans',
-        verbose_name='培训课程'
+        TrainingCourse, through='TrainingPlanCourse', related_name='plans', verbose_name='培训课程'
     )
 
     # 培训方式和地点
-    training_mode = models.CharField(max_length=20, choices=TRAINING_MODE_CHOICES, default='ON_SITE', verbose_name='培训方式')
+    training_mode = models.CharField(
+        max_length=20, choices=TRAINING_MODE_CHOICES, default='ON_SITE', verbose_name='培训方式'
+    )
     training_location = models.CharField(max_length=300, blank=True, verbose_name='培训地点')
 
     # 时间
@@ -156,10 +153,7 @@ class TrainingPlan(BaseModel):
 
     # 培训师
     trainers = models.ManyToManyField(
-        'accounts.User',
-        blank=True,
-        related_name='training_assignments',
-        verbose_name='培训师'
+        'accounts.User', blank=True, related_name='training_assignments', verbose_name='培训师'
     )
 
     # 费用
@@ -188,23 +182,19 @@ class TrainingPlan(BaseModel):
     def save(self, *args, **kwargs):
         if not self.plan_no:
             from apps.core.models import CodeRule
+
             self.plan_no = CodeRule.generate_code('TRAIN')
         super().save(*args, **kwargs)
 
 
 class TrainingPlanCourse(BaseModel):
     """培训计划课程"""
+
     plan = models.ForeignKey(
-        TrainingPlan,
-        on_delete=models.CASCADE,
-        related_name='plan_courses',
-        verbose_name='培训计划'
+        TrainingPlan, on_delete=models.CASCADE, related_name='plan_courses', verbose_name='培训计划'
     )
     course = models.ForeignKey(
-        TrainingCourse,
-        on_delete=models.CASCADE,
-        related_name='plan_courses',
-        verbose_name='课程'
+        TrainingCourse, on_delete=models.CASCADE, related_name='plan_courses', verbose_name='课程'
     )
 
     # 排期
@@ -214,11 +204,7 @@ class TrainingPlanCourse(BaseModel):
 
     # 培训师
     trainer = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='培训师'
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='培训师'
     )
 
     # 状态
@@ -235,12 +221,8 @@ class TrainingPlanCourse(BaseModel):
 
 class Trainee(BaseModel):
     """学员"""
-    plan = models.ForeignKey(
-        TrainingPlan,
-        on_delete=models.CASCADE,
-        related_name='trainees',
-        verbose_name='培训计划'
-    )
+
+    plan = models.ForeignKey(TrainingPlan, on_delete=models.CASCADE, related_name='trainees', verbose_name='培训计划')
 
     # 学员信息
     name = models.CharField(max_length=50, verbose_name='姓名')
@@ -276,6 +258,7 @@ class Trainee(BaseModel):
 
 class TrainingExam(BaseModel):
     """培训考核"""
+
     EXAM_TYPE_CHOICES = [
         ('WRITTEN', '笔试'),
         ('PRACTICAL', '实操'),
@@ -284,10 +267,7 @@ class TrainingExam(BaseModel):
     ]
 
     plan_course = models.ForeignKey(
-        TrainingPlanCourse,
-        on_delete=models.CASCADE,
-        related_name='exams',
-        verbose_name='培训课程'
+        TrainingPlanCourse, on_delete=models.CASCADE, related_name='exams', verbose_name='培训课程'
     )
 
     exam_name = models.CharField(max_length=200, verbose_name='考核名称')
@@ -312,18 +292,9 @@ class TrainingExam(BaseModel):
 
 class TrainingExamResult(BaseModel):
     """考核成绩"""
-    exam = models.ForeignKey(
-        TrainingExam,
-        on_delete=models.CASCADE,
-        related_name='results',
-        verbose_name='考核'
-    )
-    trainee = models.ForeignKey(
-        Trainee,
-        on_delete=models.CASCADE,
-        related_name='exam_results',
-        verbose_name='学员'
-    )
+
+    exam = models.ForeignKey(TrainingExam, on_delete=models.CASCADE, related_name='results', verbose_name='考核')
+    trainee = models.ForeignKey(Trainee, on_delete=models.CASCADE, related_name='exam_results', verbose_name='学员')
 
     score = models.IntegerField(default=0, verbose_name='分数')
     is_passed = models.BooleanField(default=False, verbose_name='是否通过')
@@ -334,11 +305,7 @@ class TrainingExamResult(BaseModel):
     # 评语
     comments = models.TextField(blank=True, verbose_name='评语')
     graded_by = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='评分人'
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='评分人'
     )
     graded_at = models.DateTimeField(null=True, blank=True, verbose_name='评分时间')
 
@@ -356,19 +323,10 @@ class TrainingExamResult(BaseModel):
 
 class TrainingFeedback(BaseModel):
     """培训反馈"""
-    plan = models.ForeignKey(
-        TrainingPlan,
-        on_delete=models.CASCADE,
-        related_name='feedbacks',
-        verbose_name='培训计划'
-    )
+
+    plan = models.ForeignKey(TrainingPlan, on_delete=models.CASCADE, related_name='feedbacks', verbose_name='培训计划')
     trainee = models.ForeignKey(
-        Trainee,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='feedbacks',
-        verbose_name='学员'
+        Trainee, on_delete=models.SET_NULL, null=True, blank=True, related_name='feedbacks', verbose_name='学员'
     )
 
     # 评分
@@ -393,6 +351,7 @@ class TrainingFeedback(BaseModel):
 
 class TrainingMaterial(BaseModel):
     """培训资料"""
+
     MATERIAL_TYPE_CHOICES = [
         ('MANUAL', '操作手册'),
         ('PPT', '演示文稿'),
@@ -404,10 +363,7 @@ class TrainingMaterial(BaseModel):
     ]
 
     course = models.ForeignKey(
-        TrainingCourse,
-        on_delete=models.CASCADE,
-        related_name='training_materials',
-        verbose_name='课程'
+        TrainingCourse, on_delete=models.CASCADE, related_name='training_materials', verbose_name='课程'
     )
 
     title = models.CharField(max_length=200, verbose_name='资料标题')
@@ -435,6 +391,7 @@ class TrainingMaterial(BaseModel):
 # =============================================================================
 # 序列化器
 # =============================================================================
+
 
 class TrainingCourseSerializer(serializers.ModelSerializer):
     course_type_display = serializers.CharField(source='get_course_type_display', read_only=True)
@@ -484,7 +441,9 @@ class TrainingExamSerializer(serializers.ModelSerializer):
 class TrainingPlanCourseSerializer(serializers.ModelSerializer):
     course_name = serializers.CharField(source='course.course_name', read_only=True)
     course_code = serializers.CharField(source='course.course_code', read_only=True)
-    duration_hours = serializers.DecimalField(source='course.duration_hours', max_digits=5, decimal_places=1, read_only=True)
+    duration_hours = serializers.DecimalField(
+        source='course.duration_hours', max_digits=5, decimal_places=1, read_only=True
+    )
     trainer_name = serializers.CharField(source='trainer.get_full_name', read_only=True)
 
     class Meta:
@@ -529,10 +488,21 @@ class TrainingPlanListSerializer(serializers.ModelSerializer):
     class Meta:
         model = TrainingPlan
         fields = [
-            'id', 'plan_no', 'title', 'customer', 'customer_name',
-            'training_mode', 'training_mode_display', 'planned_start', 'planned_end',
-            'status', 'status_display', 'trainee_count', 'course_count',
-            'total_fee', 'is_chargeable'
+            'id',
+            'plan_no',
+            'title',
+            'customer',
+            'customer_name',
+            'training_mode',
+            'training_mode_display',
+            'planned_start',
+            'planned_end',
+            'status',
+            'status_display',
+            'trainee_count',
+            'course_count',
+            'total_fee',
+            'is_chargeable',
         ]
 
     def get_trainee_count(self, obj):
@@ -546,8 +516,10 @@ class TrainingPlanListSerializer(serializers.ModelSerializer):
 # 视图集
 # =============================================================================
 
+
 class TrainingCourseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """培训课程管理"""
+
     queryset = TrainingCourse.objects.filter(is_deleted=False)
     serializer_class = TrainingCourseSerializer
     permission_classes = [IsAuthenticated]
@@ -558,6 +530,7 @@ class TrainingCourseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
 
 class TrainingMaterialViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """培训资料管理"""
+
     queryset = TrainingMaterial.objects.filter(is_deleted=False)
     serializer_class = TrainingMaterialSerializer
     permission_classes = [IsAuthenticated]
@@ -567,6 +540,7 @@ class TrainingMaterialViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
 
 class TrainingPlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """培训计划管理"""
+
     queryset = TrainingPlan.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['customer', 'project', 'status', 'training_mode']
@@ -590,7 +564,7 @@ class TrainingPlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
             position=request.data.get('position', ''),
             phone=request.data.get('phone', ''),
             email=request.data.get('email', ''),
-            created_by=request.user
+            created_by=request.user,
         )
         return Response(TraineeSerializer(trainee).data)
 
@@ -610,14 +584,13 @@ class TrainingPlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
                 position=data.get('position', ''),
                 phone=data.get('phone', ''),
                 email=data.get('email', ''),
-                created_by=request.user
+                created_by=request.user,
             )
             created.append(trainee)
 
-        return Response({
-            'message': f'成功添加 {len(created)} 名学员',
-            'trainees': TraineeSerializer(created, many=True).data
-        })
+        return Response(
+            {'message': f'成功添加 {len(created)} 名学员', 'trainees': TraineeSerializer(created, many=True).data}
+        )
 
     @action(detail=True, methods=['post'])
     def start(self, request, pk=None):
@@ -661,14 +634,11 @@ class TrainingPlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
             if all_passed or not plan.plan_courses.filter(course__requires_exam=True).exists():
                 trainee.certificate_issued = True
                 trainee.certificate_date = date.today()
-                trainee.certificate_no = f"CERT-{plan.plan_no}-{trainee.id:04d}"
+                trainee.certificate_no = f'CERT-{plan.plan_no}-{trainee.id:04d}'
                 trainee.save()
                 issued += 1
 
-        return Response({
-            'message': f'成功发放 {issued} 份证书',
-            'issued_count': issued
-        })
+        return Response({'message': f'成功发放 {issued} 份证书', 'issued_count': issued})
 
     @action(detail=True, methods=['get'])
     def statistics(self, request, pk=None):
@@ -687,13 +657,15 @@ class TrainingPlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
             results = exam.results.all()
             passed = results.filter(is_passed=True).count()
             avg_score = results.aggregate(avg=Avg('score'))['avg'] or 0
-            exam_stats.append({
-                'exam_name': exam.exam_name,
-                'total': results.count(),
-                'passed': passed,
-                'pass_rate': round(passed / results.count() * 100, 1) if results.count() > 0 else 0,
-                'avg_score': round(avg_score, 1)
-            })
+            exam_stats.append(
+                {
+                    'exam_name': exam.exam_name,
+                    'total': results.count(),
+                    'passed': passed,
+                    'pass_rate': round(passed / results.count() * 100, 1) if results.count() > 0 else 0,
+                    'avg_score': round(avg_score, 1),
+                }
+            )
 
         # 反馈统计
         feedbacks = plan.feedbacks.all()
@@ -704,24 +676,27 @@ class TrainingPlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
             avg_overall=Avg('overall_rating'),
         )
 
-        return Response({
-            'total_trainees': total_trainees,
-            'checked_in': checked_in,
-            'certified': certified,
-            'certification_rate': round(certified / total_trainees * 100, 1) if total_trainees > 0 else 0,
-            'exam_stats': exam_stats,
-            'feedback_stats': {
-                'content_rating': round(feedback_stats['avg_content'] or 0, 1),
-                'trainer_rating': round(feedback_stats['avg_trainer'] or 0, 1),
-                'facility_rating': round(feedback_stats['avg_facility'] or 0, 1),
-                'overall_rating': round(feedback_stats['avg_overall'] or 0, 1),
-                'feedback_count': feedbacks.count(),
+        return Response(
+            {
+                'total_trainees': total_trainees,
+                'checked_in': checked_in,
+                'certified': certified,
+                'certification_rate': round(certified / total_trainees * 100, 1) if total_trainees > 0 else 0,
+                'exam_stats': exam_stats,
+                'feedback_stats': {
+                    'content_rating': round(feedback_stats['avg_content'] or 0, 1),
+                    'trainer_rating': round(feedback_stats['avg_trainer'] or 0, 1),
+                    'facility_rating': round(feedback_stats['avg_facility'] or 0, 1),
+                    'overall_rating': round(feedback_stats['avg_overall'] or 0, 1),
+                    'feedback_count': feedbacks.count(),
+                },
             }
-        })
+        )
 
 
 class TraineeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """学员管理"""
+
     queryset = Trainee.objects.filter(is_deleted=False)
     serializer_class = TraineeSerializer
     permission_classes = [IsAuthenticated]
@@ -740,6 +715,7 @@ class TraineeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 
 class TrainingExamViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """培训考核管理"""
+
     queryset = TrainingExam.objects.filter(is_deleted=False)
     serializer_class = TrainingExamSerializer
     permission_classes = [IsAuthenticated]
@@ -760,7 +736,7 @@ class TrainingExamViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
                 'comments': request.data.get('comments', ''),
                 'graded_by': request.user,
                 'graded_at': timezone.now(),
-            }
+            },
         )
 
         return Response(TrainingExamResultSerializer(result).data)
@@ -781,18 +757,16 @@ class TrainingExamViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
                     'comments': data.get('comments', ''),
                     'graded_by': request.user,
                     'graded_at': timezone.now(),
-                }
+                },
             )
             submitted += 1
 
-        return Response({
-            'message': f'成功提交 {submitted} 份成绩',
-            'submitted_count': submitted
-        })
+        return Response({'message': f'成功提交 {submitted} 份成绩', 'submitted_count': submitted})
 
 
 class TrainingFeedbackViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """培训反馈管理"""
+
     queryset = TrainingFeedback.objects.filter(is_deleted=False)
     serializer_class = TrainingFeedbackSerializer
     permission_classes = [IsAuthenticated]

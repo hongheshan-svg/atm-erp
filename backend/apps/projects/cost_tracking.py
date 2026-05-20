@@ -8,6 +8,7 @@ Real-time Project Cost Tracking Dashboard
 - 各阶段成本分布
 - 成本趋势分析
 """
+
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -28,13 +29,12 @@ from apps.core.models import BaseModel
 # 模型定义
 # =============================================================================
 
+
 class ProjectBudget(BaseModel):
     """项目预算"""
+
     project = models.OneToOneField(
-        'projects.Project',
-        on_delete=models.CASCADE,
-        related_name='budget',
-        verbose_name='项目'
+        'projects.Project', on_delete=models.CASCADE, related_name='budget', verbose_name='项目'
     )
 
     # 预算明细
@@ -61,7 +61,7 @@ class ProjectBudget(BaseModel):
         null=True,
         blank=True,
         related_name='approved_project_budgets',
-        verbose_name='审批人'
+        verbose_name='审批人',
     )
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name='审批时间')
 
@@ -78,15 +78,21 @@ class ProjectBudget(BaseModel):
     def save(self, *args, **kwargs):
         # 计算总预算
         self.total_budget = (
-            self.material_budget + self.labor_budget + self.outsource_budget +
-            self.equipment_budget + self.travel_budget + self.management_budget +
-            self.other_budget + self.contingency_budget
+            self.material_budget
+            + self.labor_budget
+            + self.outsource_budget
+            + self.equipment_budget
+            + self.travel_budget
+            + self.management_budget
+            + self.other_budget
+            + self.contingency_budget
         )
         super().save(*args, **kwargs)
 
 
 class ProjectCostRecord(BaseModel):
     """项目成本记录"""
+
     COST_TYPE_CHOICES = [
         ('MATERIAL', '材料'),
         ('LABOR', '人工'),
@@ -107,14 +113,13 @@ class ProjectCostRecord(BaseModel):
     ]
 
     project = models.ForeignKey(
-        'projects.Project',
-        on_delete=models.CASCADE,
-        related_name='cost_records',
-        verbose_name='项目'
+        'projects.Project', on_delete=models.CASCADE, related_name='cost_records', verbose_name='项目'
     )
 
     cost_type = models.CharField(max_length=20, choices=COST_TYPE_CHOICES, verbose_name='成本类型')
-    source_type = models.CharField(max_length=20, choices=SOURCE_TYPE_CHOICES, default='MANUAL', verbose_name='来源类型')
+    source_type = models.CharField(
+        max_length=20, choices=SOURCE_TYPE_CHOICES, default='MANUAL', verbose_name='来源类型'
+    )
 
     # 来源单据
     source_doc_type = models.CharField(max_length=50, blank=True, verbose_name='单据类型')
@@ -140,16 +145,12 @@ class ProjectCostRecord(BaseModel):
             ('WARRANTY', '质保期'),
         ],
         default='PRODUCTION',
-        verbose_name='项目阶段'
+        verbose_name='项目阶段',
     )
 
     # 责任部门
     department = models.ForeignKey(
-        'accounts.Department',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='责任部门'
+        'accounts.Department', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='责任部门'
     )
 
     is_verified = models.BooleanField(default=False, verbose_name='已核实')
@@ -159,7 +160,7 @@ class ProjectCostRecord(BaseModel):
         null=True,
         blank=True,
         related_name='verified_costs',
-        verbose_name='核实人'
+        verbose_name='核实人',
     )
 
     remarks = models.TextField(blank=True, verbose_name='备注')
@@ -180,11 +181,9 @@ class ProjectCostRecord(BaseModel):
 
 class ProjectCostSnapshot(BaseModel):
     """项目成本快照（定期汇总）"""
+
     project = models.ForeignKey(
-        'projects.Project',
-        on_delete=models.CASCADE,
-        related_name='cost_snapshots',
-        verbose_name='项目'
+        'projects.Project', on_delete=models.CASCADE, related_name='cost_snapshots', verbose_name='项目'
     )
 
     snapshot_date = models.DateField(verbose_name='快照日期')
@@ -196,7 +195,7 @@ class ProjectCostSnapshot(BaseModel):
             ('MONTHLY', '月快照'),
         ],
         default='DAILY',
-        verbose_name='快照类型'
+        verbose_name='快照类型',
     )
 
     # 累计成本
@@ -230,6 +229,7 @@ class ProjectCostSnapshot(BaseModel):
 
 class CostAlert(BaseModel):
     """成本预警"""
+
     ALERT_TYPE_CHOICES = [
         ('BUDGET_WARNING', '预算预警'),
         ('BUDGET_CRITICAL', '预算严重超支'),
@@ -239,20 +239,14 @@ class CostAlert(BaseModel):
     ]
 
     project = models.ForeignKey(
-        'projects.Project',
-        on_delete=models.CASCADE,
-        related_name='cost_alerts',
-        verbose_name='项目'
+        'projects.Project', on_delete=models.CASCADE, related_name='cost_alerts', verbose_name='项目'
     )
 
     alert_type = models.CharField(max_length=20, choices=ALERT_TYPE_CHOICES, verbose_name='预警类型')
     alert_date = models.DateTimeField(auto_now_add=True, verbose_name='预警时间')
 
     cost_type = models.CharField(
-        max_length=20,
-        choices=ProjectCostRecord.COST_TYPE_CHOICES,
-        blank=True,
-        verbose_name='成本类型'
+        max_length=20, choices=ProjectCostRecord.COST_TYPE_CHOICES, blank=True, verbose_name='成本类型'
     )
 
     budget_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='预算金额')
@@ -269,7 +263,7 @@ class CostAlert(BaseModel):
         null=True,
         blank=True,
         related_name='resolved_cost_alerts',
-        verbose_name='处理人'
+        verbose_name='处理人',
     )
     resolution = models.TextField(blank=True, verbose_name='处理说明')
 
@@ -283,6 +277,7 @@ class CostAlert(BaseModel):
 # =============================================================================
 # 序列化器
 # =============================================================================
+
 
 class ProjectBudgetSerializer(serializers.ModelSerializer):
     project_no = serializers.CharField(source='project.project_no', read_only=True)
@@ -331,8 +326,10 @@ class CostAlertSerializer(serializers.ModelSerializer):
 # 视图集和API
 # =============================================================================
 
+
 class ProjectBudgetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目预算管理"""
+
     queryset = ProjectBudget.objects.filter(is_deleted=False)
     serializer_class = ProjectBudgetSerializer
     permission_classes = [IsAuthenticated]
@@ -351,6 +348,7 @@ class ProjectBudgetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
 
 class ProjectCostRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目成本记录"""
+
     queryset = ProjectCostRecord.objects.filter(is_deleted=False)
     serializer_class = ProjectCostRecordSerializer
     permission_classes = [IsAuthenticated]
@@ -370,6 +368,7 @@ class ProjectCostRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
 
 class CostAlertViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     """成本预警管理"""
+
     queryset = CostAlert.objects.filter(is_deleted=False)
     serializer_class = CostAlertSerializer
     permission_classes = [IsAuthenticated]
@@ -395,6 +394,7 @@ class CostAlertViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
 
 class ProjectCostDashboardView(APIView):
     """项目成本看板API - 非标自动化行业成本分析"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request, project_id):
@@ -413,13 +413,9 @@ class ProjectCostDashboardView(APIView):
             budget_data = None
 
         # 计算实际成本
-        cost_records = ProjectCostRecord.objects.filter(
-            project=project, is_deleted=False
-        )
+        cost_records = ProjectCostRecord.objects.filter(project=project, is_deleted=False)
 
-        actual_costs = cost_records.values('cost_type').annotate(
-            total=Sum('amount')
-        )
+        actual_costs = cost_records.values('cost_type').annotate(total=Sum('amount'))
         actual_by_type = {c['cost_type']: float(c['total']) for c in actual_costs}
 
         total_actual = cost_records.aggregate(total=Sum('amount'))['total'] or Decimal('0')
@@ -461,44 +457,44 @@ class ProjectCostDashboardView(APIView):
                 'name': '材料成本',
                 'amount': float(actual_by_type.get('MATERIAL', 0)),
                 'category': 'direct',
-                'budget': float(budget_data.get('material_budget', 0)) if budget_data else 0
+                'budget': float(budget_data.get('material_budget', 0)) if budget_data else 0,
             },
             'labor': {
                 'name': '人工成本',
                 'amount': float(actual_by_type.get('LABOR', 0)),
                 'category': 'direct',
-                'budget': float(budget_data.get('labor_budget', 0)) if budget_data else 0
+                'budget': float(budget_data.get('labor_budget', 0)) if budget_data else 0,
             },
             'outsource': {
                 'name': '外协成本',
                 'amount': float(actual_by_type.get('OUTSOURCE', 0)),
                 'category': 'direct',
-                'budget': float(budget_data.get('outsource_budget', 0)) if budget_data else 0
+                'budget': float(budget_data.get('outsource_budget', 0)) if budget_data else 0,
             },
             'equipment': {
                 'name': '设备费用',
                 'amount': float(actual_by_type.get('EQUIPMENT', 0)),
                 'category': 'indirect',
-                'budget': float(budget_data.get('equipment_budget', 0)) if budget_data else 0
+                'budget': float(budget_data.get('equipment_budget', 0)) if budget_data else 0,
             },
             'travel': {
                 'name': '差旅费用',
                 'amount': float(actual_by_type.get('TRAVEL', 0)),
                 'category': 'indirect',
-                'budget': float(budget_data.get('travel_budget', 0)) if budget_data else 0
+                'budget': float(budget_data.get('travel_budget', 0)) if budget_data else 0,
             },
             'management': {
                 'name': '管理费用',
                 'amount': float(actual_by_type.get('MANAGEMENT', 0)),
                 'category': 'indirect',
-                'budget': float(budget_data.get('management_budget', 0)) if budget_data else 0
+                'budget': float(budget_data.get('management_budget', 0)) if budget_data else 0,
             },
             'other': {
                 'name': '其他费用',
                 'amount': float(actual_by_type.get('OTHER', 0)),
                 'category': 'indirect',
-                'budget': float(budget_data.get('other_budget', 0)) if budget_data else 0
-            }
+                'budget': float(budget_data.get('other_budget', 0)) if budget_data else 0,
+            },
         }
 
         # 计算各项成本占比
@@ -524,26 +520,27 @@ class ProjectCostDashboardView(APIView):
                 budget_val = float(budget_data.get(budget_field, 0))
                 actual_val = actual_by_type.get(cost_type, 0)
 
-                budget_comparison.append({
-                    'cost_type': cost_type,
-                    'cost_type_display': dict(ProjectCostRecord.COST_TYPE_CHOICES).get(cost_type),
-                    'budget': budget_val,
-                    'actual': actual_val,
-                    'variance': budget_val - actual_val,
-                    'usage_rate': round(actual_val / budget_val * 100, 2) if budget_val > 0 else 0
-                })
+                budget_comparison.append(
+                    {
+                        'cost_type': cost_type,
+                        'cost_type_display': dict(ProjectCostRecord.COST_TYPE_CHOICES).get(cost_type),
+                        'budget': budget_val,
+                        'actual': actual_val,
+                        'variance': budget_val - actual_val,
+                        'usage_rate': round(actual_val / budget_val * 100, 2) if budget_val > 0 else 0,
+                    }
+                )
 
         # 按阶段成本
-        phase_costs = cost_records.values('project_phase').annotate(
-            total=Sum('amount')
-        ).order_by('project_phase')
+        phase_costs = cost_records.values('project_phase').annotate(total=Sum('amount')).order_by('project_phase')
 
         # 成本趋势（按月）
-        cost_trend = cost_records.annotate(
-            month=TruncMonth('cost_date')
-        ).values('month').annotate(
-            total=Sum('amount')
-        ).order_by('month')
+        cost_trend = (
+            cost_records.annotate(month=TruncMonth('cost_date'))
+            .values('month')
+            .annotate(total=Sum('amount'))
+            .order_by('month')
+        )
 
         # 计算预算使用率
         budget_total = float(budget_data.get('total_budget', 0)) if budget_data else 0
@@ -568,47 +565,48 @@ class ProjectCostDashboardView(APIView):
         recent_costs = cost_records.order_by('-cost_date')[:10]
 
         # 未处理预警
-        pending_alerts = CostAlert.objects.filter(
-            project=project, is_resolved=False
-        ).count()
+        pending_alerts = CostAlert.objects.filter(project=project, is_resolved=False).count()
 
-        return Response({
-            'project': {
-                'id': project.id,
-                'project_no': project.project_no,
-                'name': project.name,
-                'customer_name': project.customer.name if project.customer else None,
-                'status': project.status,
-                'sales_order_no': project.sales_order.order_no if project.sales_order else None,
-            },
-            # 收入与利润
-            'revenue': float(revenue),
-            'gross_profit': float(gross_profit),
-            'gross_margin': gross_margin,
-            'net_profit': float(net_profit),
-            'net_margin': net_margin,
-            'profit_warning': profit_warning,
-            # 成本构成
-            'direct_cost': float(direct_cost),
-            'indirect_cost': float(indirect_cost),
-            'cost_breakdown': cost_breakdown,
-            # 预算相关
-            'budget': budget_data,
-            'actual_total': float(total_actual),
-            'budget_total': budget_total,
-            'budget_used_rate': budget_used_rate,
-            'warning_status': warning_status,
-            'budget_comparison': budget_comparison,
-            # 其他
-            'phase_costs': list(phase_costs),
-            'cost_trend': list(cost_trend),
-            'recent_costs': ProjectCostRecordSerializer(recent_costs, many=True).data,
-            'pending_alerts': pending_alerts,
-        })
+        return Response(
+            {
+                'project': {
+                    'id': project.id,
+                    'project_no': project.project_no,
+                    'name': project.name,
+                    'customer_name': project.customer.name if project.customer else None,
+                    'status': project.status,
+                    'sales_order_no': project.sales_order.order_no if project.sales_order else None,
+                },
+                # 收入与利润
+                'revenue': float(revenue),
+                'gross_profit': float(gross_profit),
+                'gross_margin': gross_margin,
+                'net_profit': float(net_profit),
+                'net_margin': net_margin,
+                'profit_warning': profit_warning,
+                # 成本构成
+                'direct_cost': float(direct_cost),
+                'indirect_cost': float(indirect_cost),
+                'cost_breakdown': cost_breakdown,
+                # 预算相关
+                'budget': budget_data,
+                'actual_total': float(total_actual),
+                'budget_total': budget_total,
+                'budget_used_rate': budget_used_rate,
+                'warning_status': warning_status,
+                'budget_comparison': budget_comparison,
+                # 其他
+                'phase_costs': list(phase_costs),
+                'cost_trend': list(cost_trend),
+                'recent_costs': ProjectCostRecordSerializer(recent_costs, many=True).data,
+                'pending_alerts': pending_alerts,
+            }
+        )
 
 
 class CostOverviewDashboardView(APIView):
     """成本总览看板API"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -621,16 +619,13 @@ class CostOverviewDashboardView(APIView):
 
         # 活跃项目
         active_projects = Project.objects.filter(
-            status__in=['IN_PROGRESS', 'DEBUGGING', 'INSTALLATION'],
-            is_deleted=False
+            status__in=['IN_PROGRESS', 'DEBUGGING', 'INSTALLATION'], is_deleted=False
         )
 
         # 项目成本汇总
         project_summaries = []
         for project in active_projects:
-            cost_records = ProjectCostRecord.objects.filter(
-                project=project, is_deleted=False
-            )
+            cost_records = ProjectCostRecord.objects.filter(project=project, is_deleted=False)
 
             if start_date:
                 cost_records = cost_records.filter(cost_date__gte=start_date)
@@ -647,15 +642,17 @@ class CostOverviewDashboardView(APIView):
                 budget_total = 0
                 usage_rate = 0
 
-            project_summaries.append({
-                'project_id': project.id,
-                'project_no': project.project_no,
-                'project_name': project.name,
-                'total_cost': float(total_cost),
-                'budget_total': budget_total,
-                'usage_rate': usage_rate,
-                'status': project.status,
-            })
+            project_summaries.append(
+                {
+                    'project_id': project.id,
+                    'project_no': project.project_no,
+                    'project_name': project.name,
+                    'total_cost': float(total_cost),
+                    'budget_total': budget_total,
+                    'usage_rate': usage_rate,
+                    'status': project.status,
+                }
+            )
 
         # 按使用率排序（超支的排前面）
         project_summaries.sort(key=lambda x: x['usage_rate'], reverse=True)
@@ -668,18 +665,15 @@ class CostOverviewDashboardView(APIView):
             all_costs = all_costs.filter(cost_date__lte=end_date)
 
         # 按类型汇总
-        by_type = all_costs.values('cost_type').annotate(
-            total=Sum('amount'),
-            count=Count('id')
-        )
+        by_type = all_costs.values('cost_type').annotate(total=Sum('amount'), count=Count('id'))
 
         # 按部门汇总
-        by_department = all_costs.exclude(department__isnull=True).values(
-            'department__name'
-        ).annotate(
-            total=Sum('amount'),
-            count=Count('id')
-        ).order_by('-total')
+        by_department = (
+            all_costs.exclude(department__isnull=True)
+            .values('department__name')
+            .annotate(total=Sum('amount'), count=Count('id'))
+            .order_by('-total')
+        )
 
         # 本月vs上月
         today = date.today()
@@ -687,42 +681,44 @@ class CostOverviewDashboardView(APIView):
         last_month_end = this_month_start - timedelta(days=1)
         last_month_start = last_month_end.replace(day=1)
 
-        this_month_total = all_costs.filter(
-            cost_date__gte=this_month_start
-        ).aggregate(total=Sum('amount'))['total'] or 0
+        this_month_total = (
+            all_costs.filter(cost_date__gte=this_month_start).aggregate(total=Sum('amount'))['total'] or 0
+        )
 
-        last_month_total = ProjectCostRecord.objects.filter(
-            cost_date__gte=last_month_start,
-            cost_date__lte=last_month_end,
-            is_deleted=False
-        ).aggregate(total=Sum('amount'))['total'] or 0
+        last_month_total = (
+            ProjectCostRecord.objects.filter(
+                cost_date__gte=last_month_start, cost_date__lte=last_month_end, is_deleted=False
+            ).aggregate(total=Sum('amount'))['total']
+            or 0
+        )
 
         month_change = 0
         if last_month_total > 0:
             month_change = round((float(this_month_total) - float(last_month_total)) / float(last_month_total) * 100, 2)
 
         # 预警统计
-        alert_stats = CostAlert.objects.filter(is_deleted=False).values(
-            'is_resolved'
-        ).annotate(count=Count('id'))
+        alert_stats = CostAlert.objects.filter(is_deleted=False).values('is_resolved').annotate(count=Count('id'))
 
-        return Response({
-            'project_summaries': project_summaries[:20],  # 前20个项目
-            'total_projects': len(project_summaries),
-            'over_budget_count': len([p for p in project_summaries if p['usage_rate'] > 100]),
-            'warning_count': len([p for p in project_summaries if 80 <= p['usage_rate'] <= 100]),
-            'by_type': list(by_type),
-            'by_department': list(by_department)[:10],
-            'this_month_total': float(this_month_total),
-            'last_month_total': float(last_month_total),
-            'month_change': month_change,
-            'alert_stats': list(alert_stats),
-        })
+        return Response(
+            {
+                'project_summaries': project_summaries[:20],  # 前20个项目
+                'total_projects': len(project_summaries),
+                'over_budget_count': len([p for p in project_summaries if p['usage_rate'] > 100]),
+                'warning_count': len([p for p in project_summaries if 80 <= p['usage_rate'] <= 100]),
+                'by_type': list(by_type),
+                'by_department': list(by_department)[:10],
+                'this_month_total': float(this_month_total),
+                'last_month_total': float(last_month_total),
+                'month_change': month_change,
+                'alert_stats': list(alert_stats),
+            }
+        )
 
 
 # =============================================================================
 # 辅助函数
 # =============================================================================
+
 
 def create_cost_snapshot(project_id, snapshot_type='DAILY'):
     """创建成本快照"""
@@ -731,14 +727,10 @@ def create_cost_snapshot(project_id, snapshot_type='DAILY'):
     project = Project.objects.get(id=project_id)
     today = date.today()
 
-    cost_records = ProjectCostRecord.objects.filter(
-        project=project, is_deleted=False
-    )
+    cost_records = ProjectCostRecord.objects.filter(project=project, is_deleted=False)
 
     # 按类型汇总
-    costs_by_type = cost_records.values('cost_type').annotate(
-        total=Sum('amount')
-    )
+    costs_by_type = cost_records.values('cost_type').annotate(total=Sum('amount'))
     type_totals = {c['cost_type']: c['total'] for c in costs_by_type}
 
     total = sum(type_totals.values())
@@ -767,7 +759,7 @@ def create_cost_snapshot(project_id, snapshot_type='DAILY'):
             'total_cost': total,
             'budget_total': budget_total,
             'budget_used_rate': usage_rate,
-        }
+        },
     )
 
     return snapshot
@@ -784,9 +776,7 @@ def check_cost_alerts(project_id):
     except ProjectBudget.DoesNotExist:
         return []
 
-    cost_records = ProjectCostRecord.objects.filter(
-        project=project, is_deleted=False
-    )
+    cost_records = ProjectCostRecord.objects.filter(project=project, is_deleted=False)
 
     total_actual = cost_records.aggregate(total=Sum('amount'))['total'] or 0
     usage_rate = float(total_actual) / float(budget.total_budget) * 100 if budget.total_budget > 0 else 0
@@ -803,8 +793,8 @@ def check_cost_alerts(project_id):
                 'budget_amount': budget.total_budget,
                 'actual_amount': total_actual,
                 'variance_rate': usage_rate - 100,
-                'message': f'项目 [{project.project_no}] 预算已超支！预算: ¥{budget.total_budget}，实际: ¥{total_actual}'
-            }
+                'message': f'项目 [{project.project_no}] 预算已超支！预算: ¥{budget.total_budget}，实际: ¥{total_actual}',
+            },
         )
         if created:
             alerts.append(alert)
@@ -818,8 +808,8 @@ def check_cost_alerts(project_id):
                 'budget_amount': budget.total_budget,
                 'actual_amount': total_actual,
                 'variance_rate': usage_rate,
-                'message': f'项目 [{project.project_no}] 预算使用率已达 {usage_rate:.1f}%，接近超支！'
-            }
+                'message': f'项目 [{project.project_no}] 预算使用率已达 {usage_rate:.1f}%，接近超支！',
+            },
         )
         if created:
             alerts.append(alert)
@@ -833,8 +823,8 @@ def check_cost_alerts(project_id):
                 'budget_amount': budget.total_budget,
                 'actual_amount': total_actual,
                 'variance_rate': usage_rate,
-                'message': f'项目 [{project.project_no}] 预算使用率已达 {usage_rate:.1f}%，请注意控制成本。'
-            }
+                'message': f'项目 [{project.project_no}] 预算使用率已达 {usage_rate:.1f}%，请注意控制成本。',
+            },
         )
         if created:
             alerts.append(alert)

@@ -3,6 +3,7 @@ Permission service functions for checking user permissions.
 
 Provides caching and wildcard support for permission checks.
 """
+
 from typing import List, Set, Tuple
 
 from django.contrib.auth import get_user_model
@@ -103,21 +104,14 @@ def get_user_permissions(user) -> Set[str]:
 
     if user.is_superuser:
         # Superuser gets all active permissions
-        permissions = set(
-            Permission.objects.filter(
-                is_active=True,
-                is_deleted=False
-            ).values_list('code', flat=True)
-        )
+        permissions = set(Permission.objects.filter(is_active=True, is_deleted=False).values_list('code', flat=True))
     else:
         # Get permissions from all user's roles (兼容旧 role FK 和新 roles M2M)
         user_roles = get_active_user_roles(user)
         if user_roles.exists():
             permissions = set(
                 Permission.objects.filter(
-                    role_permissions__role__in=user_roles,
-                    is_active=True,
-                    is_deleted=False
+                    role_permissions__role__in=user_roles, is_active=True, is_deleted=False
                 ).values_list('code', flat=True)
             )
 
@@ -263,9 +257,7 @@ def resolve_data_scope(user, module: str) -> Tuple[str, List[int]]:
 
             # Collect custom department IDs
             if scope_type == 'custom':
-                dept_ids = list(
-                    data_scope.custom_departments.filter(is_deleted=False).values_list('id', flat=True)
-                )
+                dept_ids = list(data_scope.custom_departments.filter(is_deleted=False).values_list('id', flat=True))
                 custom_dept_ids.extend(dept_ids)
 
     # Remove duplicates from custom_dept_ids
@@ -297,10 +289,7 @@ def get_department_tree_ids(dept_id: int) -> List[int]:
     dept_ids = [dept_id]
 
     # Get all children recursively
-    children = Department.objects.filter(
-        parent_id=dept_id,
-        is_deleted=False
-    )
+    children = Department.objects.filter(parent_id=dept_id, is_deleted=False)
 
     for child in children:
         # Recursively get child's tree
@@ -403,21 +392,12 @@ def get_hidden_fields(user, module: str, resource: str) -> List[str]:
         return []
 
     # Get all field permissions for this resource
-    field_permissions = Permission.objects.filter(
-        type='field',
-        resource=resource,
-        is_active=True,
-        is_deleted=False
-    )
+    field_permissions = Permission.objects.filter(type='field', resource=resource, is_active=True, is_deleted=False)
 
     # Get user's field permissions from all roles
     user_field_permissions = set(
         Permission.objects.filter(
-            role_permissions__role__in=user_roles,
-            type='field',
-            resource=resource,
-            is_active=True,
-            is_deleted=False
+            role_permissions__role__in=user_roles, type='field', resource=resource, is_active=True, is_deleted=False
         ).values_list('field_name', flat=True)
     )
 
@@ -428,4 +408,3 @@ def get_hidden_fields(user, module: str, resource: str) -> List[str]:
             hidden_fields.append(perm.field_name)
 
     return hidden_fields
-

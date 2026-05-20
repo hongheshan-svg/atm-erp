@@ -2,6 +2,7 @@
 ZKTECO 考勤机数据同步服务
 支持多种同步方式：云端推送、云端拉取、TCP直连
 """
+
 import hashlib
 import logging
 import uuid
@@ -27,11 +28,11 @@ class AttendanceSyncService:
     def sync(self, date_from: date = None, date_to: date = None) -> Dict[str, Any]:
         """
         执行数据同步
-        
+
         Args:
             date_from: 同步起始日期，默认为最后同步时间或7天前
             date_to: 同步截止日期，默认为当前时间
-            
+
         Returns:
             同步结果统计
         """
@@ -43,7 +44,7 @@ class AttendanceSyncService:
             sync_type='PULL' if self.device.connection_type in ['TCP_IP', 'CLOUD_PULL'] else 'PUSH',
             sync_batch=self.sync_batch,
             data_from=date_from,
-            data_to=date_to
+            data_to=date_to,
         )
 
         result = {
@@ -52,7 +53,7 @@ class AttendanceSyncService:
             'new_records': 0,
             'duplicate_records': 0,
             'error_records': 0,
-            'errors': []
+            'errors': [],
         }
 
         try:
@@ -78,7 +79,7 @@ class AttendanceSyncService:
                 # 推送模式：由设备主动推送，这里只处理已接收的数据
                 records = self._get_pending_push_records()
             else:
-                raise ValueError(f"不支持的连接类型: {self.device.connection_type}")
+                raise ValueError(f'不支持的连接类型: {self.device.connection_type}')
 
             result['total_records'] = len(records)
 
@@ -93,7 +94,7 @@ class AttendanceSyncService:
                 except Exception as e:
                     result['error_records'] += 1
                     result['errors'].append(str(e))
-                    logger.error(f"Save record error: {e}")
+                    logger.error(f'Save record error: {e}')
 
             # 更新设备同步时间
             self.device.last_sync_time = timezone.now()
@@ -115,12 +116,12 @@ class AttendanceSyncService:
                 try:
                     self._auto_process_new_records()
                 except Exception as e:
-                    logger.error(f"Auto process error: {e}")
+                    logger.error(f'Auto process error: {e}')
 
             return result
 
         except Exception as e:
-            logger.error(f"Sync failed: {e}")
+            logger.error(f'Sync failed: {e}')
             sync_log.status = 'FAILED'
             sync_log.end_time = timezone.now()
             sync_log.error_message = str(e)
@@ -147,7 +148,7 @@ class AttendanceSyncService:
                 port=self.device.port,
                 timeout=30,
                 password=int(self.device.device_password) if self.device.device_password else 0,
-                ommit_ping=True  # 跳过ping检查，Docker容器中ping可能不可用
+                ommit_ping=True,  # 跳过ping检查，Docker容器中ping可能不可用
             )
 
             conn = zk.connect()
@@ -163,31 +164,33 @@ class AttendanceSyncService:
                     if date_to and att.timestamp > date_to:
                         continue
 
-                    records.append({
-                        'device_user_id': str(att.user_id),
-                        'punch_time': att.timestamp,
-                        'punch_type': self._map_punch_status(att.status),
-                        'verify_type': self._map_punch_type(att.punch),
-                        'device_log_id': f"{att.user_id}_{att.timestamp.isoformat()}",
-                        'raw_data': {
-                            'user_id': att.user_id,
-                            'timestamp': att.timestamp.isoformat(),
-                            'status': att.status,
-                            'punch': att.punch,
+                    records.append(
+                        {
+                            'device_user_id': str(att.user_id),
+                            'punch_time': att.timestamp,
+                            'punch_type': self._map_punch_status(att.status),
+                            'verify_type': self._map_punch_type(att.punch),
+                            'device_log_id': f'{att.user_id}_{att.timestamp.isoformat()}',
+                            'raw_data': {
+                                'user_id': att.user_id,
+                                'timestamp': att.timestamp.isoformat(),
+                                'status': att.status,
+                                'punch': att.punch,
+                            },
                         }
-                    })
+                    )
 
-                logger.info(f"TCP sync got {len(records)} records from {self.device.device_sn}")
+                logger.info(f'TCP sync got {len(records)} records from {self.device.device_sn}')
 
             finally:
                 conn.disconnect()
 
         except ImportError:
-            logger.warning("pyzk library not installed, using mock data for testing")
+            logger.warning('pyzk library not installed, using mock data for testing')
             # 如果没有安装 pyzk，返回空列表或模拟数据
             records = self._get_mock_records(date_from, date_to)
         except Exception as e:
-            logger.error(f"TCP sync error: {e}")
+            logger.error(f'TCP sync error: {e}')
             raise
 
         return records
@@ -203,14 +206,11 @@ class AttendanceSyncService:
             import requests
 
             if not self.device.cloud_server or not self.device.api_token:
-                raise ValueError("未配置云服务地址或API Token")
+                raise ValueError('未配置云服务地址或API Token')
 
             # ZKTECO 云API请求示例
             # 注意: 实际API地址和参数需要根据ZKTECO文档调整
-            headers = {
-                'Authorization': f'Bearer {self.device.api_token}',
-                'Content-Type': 'application/json'
-            }
+            headers = {'Authorization': f'Bearer {self.device.api_token}', 'Content-Type': 'application/json'}
 
             params = {
                 'device_sn': self.device.device_sn,
@@ -219,33 +219,35 @@ class AttendanceSyncService:
             }
 
             response = requests.get(
-                f"{self.device.cloud_server}/api/v1/attendance/records",
+                f'{self.device.cloud_server}/api/v1/attendance/records',
                 headers=headers,
                 params=params,
                 timeout=30,
-                verify=False
+                verify=False,
             )
 
             if response.status_code == 200:
                 data = response.json()
                 for item in data.get('data', []):
-                    records.append({
-                        'device_user_id': str(item.get('user_id', '')),
-                        'punch_time': datetime.fromisoformat(item.get('punch_time', '')),
-                        'punch_type': self._map_cloud_punch_type(item.get('punch_type', 0)),
-                        'verify_type': self._map_cloud_verify_type(item.get('verify_type', 0)),
-                        'device_log_id': item.get('record_id', ''),
-                        'raw_data': item
-                    })
+                    records.append(
+                        {
+                            'device_user_id': str(item.get('user_id', '')),
+                            'punch_time': datetime.fromisoformat(item.get('punch_time', '')),
+                            'punch_type': self._map_cloud_punch_type(item.get('punch_type', 0)),
+                            'verify_type': self._map_cloud_verify_type(item.get('verify_type', 0)),
+                            'device_log_id': item.get('record_id', ''),
+                            'raw_data': item,
+                        }
+                    )
             else:
-                logger.error(f"Cloud API error: {response.status_code} - {response.text}")
+                logger.error(f'Cloud API error: {response.status_code} - {response.text}')
 
         except requests.RequestException as e:
-            logger.error(f"Cloud API request error: {e}")
+            logger.error(f'Cloud API request error: {e}')
             # 如果云API失败，尝试返回模拟数据用于测试
             records = self._get_mock_records(date_from, date_to)
         except Exception as e:
-            logger.error(f"Cloud sync error: {e}")
+            logger.error(f'Cloud sync error: {e}')
             raise
 
         return records
@@ -259,13 +261,8 @@ class AttendanceSyncService:
         # 这里返回尚未处理的记录
         from .attendance_device import DeviceAttendanceLog
 
-        pending = DeviceAttendanceLog.objects.filter(
-            device=self.device,
-            is_processed=False,
-            is_deleted=False
-        ).values(
-            'device_user_id', 'punch_time', 'punch_type',
-            'verify_type', 'device_log_id', 'raw_data'
+        pending = DeviceAttendanceLog.objects.filter(device=self.device, is_processed=False, is_deleted=False).values(
+            'device_user_id', 'punch_time', 'punch_type', 'verify_type', 'device_log_id', 'raw_data'
         )
 
         return list(pending)
@@ -275,15 +272,13 @@ class AttendanceSyncService:
         生成模拟测试数据
         用于开发测试或设备不可用时
         """
-        logger.warning("Using mock attendance records for testing")
+        logger.warning('Using mock attendance records for testing')
         records = []
 
         # 获取已映射的用户
         from .attendance_device import DeviceUserMapping
-        mappings = DeviceUserMapping.objects.filter(
-            device=self.device,
-            is_deleted=False
-        )
+
+        mappings = DeviceUserMapping.objects.filter(device=self.device, is_deleted=False)
 
         if not mappings.exists():
             return records
@@ -292,37 +287,37 @@ class AttendanceSyncService:
         today = timezone.now().date()
         for mapping in mappings[:5]:  # 限制测试数据数量
             # 上班打卡
-            punch_in_time = timezone.make_aware(
-                datetime.combine(today, datetime.strptime("08:30", "%H:%M").time())
+            punch_in_time = timezone.make_aware(datetime.combine(today, datetime.strptime('08:30', '%H:%M').time()))
+            records.append(
+                {
+                    'device_user_id': mapping.device_user_id,
+                    'punch_time': punch_in_time,
+                    'punch_type': 'IN',
+                    'verify_type': 'FINGERPRINT',
+                    'device_log_id': f'mock_{mapping.device_user_id}_{punch_in_time.isoformat()}',
+                    'raw_data': {'mock': True},
+                }
             )
-            records.append({
-                'device_user_id': mapping.device_user_id,
-                'punch_time': punch_in_time,
-                'punch_type': 'IN',
-                'verify_type': 'FINGERPRINT',
-                'device_log_id': f"mock_{mapping.device_user_id}_{punch_in_time.isoformat()}",
-                'raw_data': {'mock': True}
-            })
 
             # 下班打卡
-            punch_out_time = timezone.make_aware(
-                datetime.combine(today, datetime.strptime("17:30", "%H:%M").time())
+            punch_out_time = timezone.make_aware(datetime.combine(today, datetime.strptime('17:30', '%H:%M').time()))
+            records.append(
+                {
+                    'device_user_id': mapping.device_user_id,
+                    'punch_time': punch_out_time,
+                    'punch_type': 'OUT',
+                    'verify_type': 'FINGERPRINT',
+                    'device_log_id': f'mock_{mapping.device_user_id}_{punch_out_time.isoformat()}',
+                    'raw_data': {'mock': True},
+                }
             )
-            records.append({
-                'device_user_id': mapping.device_user_id,
-                'punch_time': punch_out_time,
-                'punch_type': 'OUT',
-                'verify_type': 'FINGERPRINT',
-                'device_log_id': f"mock_{mapping.device_user_id}_{punch_out_time.isoformat()}",
-                'raw_data': {'mock': True}
-            })
 
         return records
 
     def _save_attendance_log(self, record: Dict) -> Tuple[Any, bool]:
         """
         保存打卡记录到数据库
-        
+
         Returns:
             (记录对象, 是否新增)
         """
@@ -332,9 +327,7 @@ class AttendanceSyncService:
         employee = None
         try:
             mapping = DeviceUserMapping.objects.get(
-                device=self.device,
-                device_user_id=record['device_user_id'],
-                is_deleted=False
+                device=self.device, device_user_id=record['device_user_id'], is_deleted=False
             )
             employee = mapping.employee
         except DeviceUserMapping.DoesNotExist:
@@ -346,9 +339,7 @@ class AttendanceSyncService:
         ).hexdigest()
 
         existing = DeviceAttendanceLog.objects.filter(
-            device=self.device,
-            device_user_id=record['device_user_id'],
-            punch_time=record['punch_time']
+            device=self.device, device_user_id=record['device_user_id'], punch_time=record['punch_time']
         ).first()
 
         if existing:
@@ -364,7 +355,7 @@ class AttendanceSyncService:
             employee=employee,
             device_log_id=record.get('device_log_id', ''),
             sync_batch=self.sync_batch,
-            raw_data=record.get('raw_data', {})
+            raw_data=record.get('raw_data', {}),
         )
 
         return log, True
@@ -377,22 +368,20 @@ class AttendanceSyncService:
         from .attendance_device import DeviceAttendanceLog
 
         new_logs = DeviceAttendanceLog.objects.filter(
-            sync_batch=self.sync_batch,
-            is_processed=False,
-            employee__isnull=False
+            sync_batch=self.sync_batch, is_processed=False, employee__isnull=False
         )
 
         processed, errors = self.process_device_logs(new_logs)
-        logger.info(f"Auto processed {processed} records, {len(errors)} errors")
+        logger.info(f'Auto processed {processed} records, {len(errors)} errors')
 
     @classmethod
     def process_device_logs(cls, logs) -> Tuple[int, List[str]]:
         """
         处理设备打卡记录，转换为系统考勤记录
-        
+
         Args:
             logs: DeviceAttendanceLog 查询集
-            
+
         Returns:
             (处理数量, 错误列表)
         """
@@ -422,7 +411,7 @@ class AttendanceSyncService:
                         attendance_date=punch_date,
                         defaults={
                             'status': 'NORMAL',
-                        }
+                        },
                     )
 
                     # 按时间排序
@@ -456,7 +445,7 @@ class AttendanceSyncService:
                     if not attendance.remarks:
                         attendance.remarks = ''
                     if '考勤机' not in attendance.remarks:
-                        attendance.remarks = f"[考勤机同步] {attendance.remarks}".strip()
+                        attendance.remarks = f'[考勤机同步] {attendance.remarks}'.strip()
 
                     attendance.save()
 
@@ -470,8 +459,8 @@ class AttendanceSyncService:
                     processed += len(day_logs)
 
             except Exception as e:
-                errors.append(f"Employee {employee_id} on {punch_date}: {str(e)}")
-                logger.error(f"Process error: {e}")
+                errors.append(f'Employee {employee_id} on {punch_date}: {str(e)}')
+                logger.error(f'Process error: {e}')
 
         return processed, errors
 
@@ -479,12 +468,12 @@ class AttendanceSyncService:
     def _map_punch_status(self, status: int) -> str:
         """映射 pyzk 的打卡状态"""
         status_map = {
-            0: 'IN',      # Check In
-            1: 'OUT',     # Check Out
+            0: 'IN',  # Check In
+            1: 'OUT',  # Check Out
             2: 'BREAK_OUT',  # Break Out
-            3: 'BREAK_IN',   # Break In
-            4: 'OT_IN',      # OT In
-            5: 'OT_OUT',     # OT Out
+            3: 'BREAK_IN',  # Break In
+            4: 'OT_IN',  # OT In
+            5: 'OT_OUT',  # OT Out
         }
         return status_map.get(status, 'UNKNOWN')
 
@@ -530,28 +519,21 @@ class ZKTECOWebhookHandler:
     def handle_push_data(cls, device_sn: str, data: Dict) -> Dict:
         """
         处理设备推送的数据
-        
+
         Args:
             device_sn: 设备序列号
             data: 推送的数据
-            
+
         Returns:
             处理结果
         """
         from .attendance_device import AttendanceDevice, DeviceAttendanceLog, DeviceUserMapping
 
-        result = {
-            'success': False,
-            'message': '',
-            'records_saved': 0
-        }
+        result = {'success': False, 'message': '', 'records_saved': 0}
 
         try:
             # 查找设备
-            device = AttendanceDevice.objects.get(
-                device_sn=device_sn,
-                is_deleted=False
-            )
+            device = AttendanceDevice.objects.get(device_sn=device_sn, is_deleted=False)
 
             # 更新设备心跳
             device.update_status('ONLINE')
@@ -569,9 +551,7 @@ class ZKTECOWebhookHandler:
                     employee = None
                     try:
                         mapping = DeviceUserMapping.objects.get(
-                            device=device,
-                            device_user_id=str(record.get('user_id', '')),
-                            is_deleted=False
+                            device=device, device_user_id=str(record.get('user_id', '')), is_deleted=False
                         )
                         employee = mapping.employee
                     except DeviceUserMapping.DoesNotExist:
@@ -592,14 +572,14 @@ class ZKTECOWebhookHandler:
                             'employee': employee,
                             'device_log_id': record.get('log_id', ''),
                             'sync_batch': f"PUSH_{device_sn}_{timezone.now().strftime('%Y%m%d%H%M%S')}",
-                            'raw_data': record
-                        }
+                            'raw_data': record,
+                        },
                     )
                     if created:
                         saved += 1
 
                 except Exception as e:
-                    logger.error(f"Save push record error: {e}")
+                    logger.error(f'Save push record error: {e}')
 
             result['success'] = True
             result['message'] = f'成功保存 {saved} 条记录'
@@ -607,10 +587,10 @@ class ZKTECOWebhookHandler:
 
         except AttendanceDevice.DoesNotExist:
             result['message'] = f'设备不存在: {device_sn}'
-            logger.error(f"Device not found: {device_sn}")
+            logger.error(f'Device not found: {device_sn}')
         except Exception as e:
             result['message'] = f'处理失败: {str(e)}'
-            logger.error(f"Handle push data error: {e}")
+            logger.error(f'Handle push data error: {e}')
 
         return result
 
@@ -628,13 +608,15 @@ class ZKTECOWebhookHandler:
             for line in att_log.strip().split('\n'):
                 parts = line.split('\t')
                 if len(parts) >= 4:
-                    records.append({
-                        'user_id': parts[0],
-                        'punch_time': parts[1],
-                        'punch_type': cls._map_iclock_status(int(parts[2]) if parts[2].isdigit() else 0),
-                        'verify_type': cls._map_iclock_verify(int(parts[3]) if parts[3].isdigit() else 0),
-                        'log_id': f"{parts[0]}_{parts[1]}"
-                    })
+                    records.append(
+                        {
+                            'user_id': parts[0],
+                            'punch_time': parts[1],
+                            'punch_type': cls._map_iclock_status(int(parts[2]) if parts[2].isdigit() else 0),
+                            'verify_type': cls._map_iclock_verify(int(parts[3]) if parts[3].isdigit() else 0),
+                            'log_id': f'{parts[0]}_{parts[1]}',
+                        }
+                    )
 
         return records
 

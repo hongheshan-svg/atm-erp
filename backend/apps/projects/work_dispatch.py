@@ -3,6 +3,7 @@
 Work Order Dispatch System
 支持生产工单、维修工单、安装工单的派工和执行跟踪
 """
+
 from decimal import Decimal
 
 from django.db import models
@@ -21,6 +22,7 @@ class WorkOrder(BaseModel):
     """
     工单
     """
+
     ORDER_TYPES = [
         ('PRODUCTION', '生产工单'),
         ('ASSEMBLY', '装配工单'),
@@ -50,12 +52,7 @@ class WorkOrder(BaseModel):
     ]
 
     order_no = models.CharField(max_length=50, unique=True, verbose_name='工单编号')
-    order_type = models.CharField(
-        max_length=20,
-        choices=ORDER_TYPES,
-        default='PRODUCTION',
-        verbose_name='工单类型'
-    )
+    order_type = models.CharField(max_length=20, choices=ORDER_TYPES, default='PRODUCTION', verbose_name='工单类型')
     title = models.CharField(max_length=200, verbose_name='工单标题')
     description = models.TextField(blank=True, verbose_name='工单描述')
 
@@ -66,7 +63,7 @@ class WorkOrder(BaseModel):
         null=True,
         blank=True,
         related_name='work_orders',
-        verbose_name='关联项目'
+        verbose_name='关联项目',
     )
     equipment = models.ForeignKey(
         'projects.Equipment',
@@ -74,7 +71,7 @@ class WorkOrder(BaseModel):
         null=True,
         blank=True,
         related_name='work_orders',
-        verbose_name='关联设备'
+        verbose_name='关联设备',
     )
 
     # 时间
@@ -84,32 +81,12 @@ class WorkOrder(BaseModel):
     actual_end = models.DateTimeField(null=True, blank=True, verbose_name='实际结束时间')
 
     # 优先级和状态
-    priority = models.CharField(
-        max_length=20,
-        choices=PRIORITY_LEVELS,
-        default='NORMAL',
-        verbose_name='优先级'
-    )
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='DRAFT',
-        verbose_name='状态'
-    )
+    priority = models.CharField(max_length=20, choices=PRIORITY_LEVELS, default='NORMAL', verbose_name='优先级')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', verbose_name='状态')
 
     # 工时估算
-    estimated_hours = models.DecimalField(
-        max_digits=8,
-        decimal_places=2,
-        default=0,
-        verbose_name='预估工时(小时)'
-    )
-    actual_hours = models.DecimalField(
-        max_digits=8,
-        decimal_places=2,
-        default=0,
-        verbose_name='实际工时(小时)'
-    )
+    estimated_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0, verbose_name='预估工时(小时)')
+    actual_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0, verbose_name='实际工时(小时)')
 
     # 进度
     progress = models.IntegerField(default=0, verbose_name='进度%')
@@ -141,8 +118,7 @@ class WorkOrder(BaseModel):
     def assigned_workers(self):
         """已派工人员"""
         return self.dispatches.filter(
-            is_deleted=False,
-            status__in=['ASSIGNED', 'IN_PROGRESS', 'COMPLETED']
+            is_deleted=False, status__in=['ASSIGNED', 'IN_PROGRESS', 'COMPLETED']
         ).values_list('worker__id', flat=True)
 
 
@@ -150,6 +126,7 @@ class WorkDispatch(BaseModel):
     """
     工单派工
     """
+
     STATUS_CHOICES = [
         ('ASSIGNED', '已派工'),
         ('ACCEPTED', '已接单'),
@@ -158,27 +135,15 @@ class WorkDispatch(BaseModel):
         ('REJECTED', '已拒绝'),
     ]
 
-    work_order = models.ForeignKey(
-        WorkOrder,
-        on_delete=models.CASCADE,
-        related_name='dispatches',
-        verbose_name='工单'
-    )
+    work_order = models.ForeignKey(WorkOrder, on_delete=models.CASCADE, related_name='dispatches', verbose_name='工单')
     worker = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.CASCADE,
-        related_name='dispatched_works',
-        verbose_name='执行人'
+        'accounts.User', on_delete=models.CASCADE, related_name='dispatched_works', verbose_name='执行人'
     )
 
     # 派工信息
     dispatch_time = models.DateTimeField(auto_now_add=True, verbose_name='派工时间')
     dispatcher = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='dispatched_orders',
-        verbose_name='派工人'
+        'accounts.User', on_delete=models.SET_NULL, null=True, related_name='dispatched_orders', verbose_name='派工人'
     )
 
     # 时间安排
@@ -188,26 +153,11 @@ class WorkDispatch(BaseModel):
     actual_end = models.DateTimeField(null=True, blank=True, verbose_name='实际结束')
 
     # 工时
-    planned_hours = models.DecimalField(
-        max_digits=8,
-        decimal_places=2,
-        default=0,
-        verbose_name='计划工时'
-    )
-    actual_hours = models.DecimalField(
-        max_digits=8,
-        decimal_places=2,
-        default=0,
-        verbose_name='实际工时'
-    )
+    planned_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0, verbose_name='计划工时')
+    actual_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0, verbose_name='实际工时')
 
     # 状态
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='ASSIGNED',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ASSIGNED', verbose_name='状态')
 
     # 工作内容
     work_content = models.TextField(blank=True, verbose_name='工作内容')
@@ -234,6 +184,7 @@ class WorkLog(BaseModel):
     """
     工单执行日志
     """
+
     LOG_TYPES = [
         ('START', '开始执行'),
         ('PAUSE', '暂停'),
@@ -244,27 +195,11 @@ class WorkLog(BaseModel):
         ('ISSUE', '问题'),
     ]
 
-    dispatch = models.ForeignKey(
-        WorkDispatch,
-        on_delete=models.CASCADE,
-        related_name='logs',
-        verbose_name='派工记录'
-    )
-    log_type = models.CharField(
-        max_length=20,
-        choices=LOG_TYPES,
-        default='NOTE',
-        verbose_name='日志类型'
-    )
+    dispatch = models.ForeignKey(WorkDispatch, on_delete=models.CASCADE, related_name='logs', verbose_name='派工记录')
+    log_type = models.CharField(max_length=20, choices=LOG_TYPES, default='NOTE', verbose_name='日志类型')
     content = models.TextField(verbose_name='内容')
     progress = models.IntegerField(null=True, blank=True, verbose_name='进度%')
-    hours = models.DecimalField(
-        max_digits=8,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        verbose_name='工时'
-    )
+    hours = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True, verbose_name='工时')
     attachments = models.JSONField(default=list, blank=True, verbose_name='附件')
 
     class Meta:
@@ -277,6 +212,7 @@ class WorkLog(BaseModel):
 # =====================
 # Serializers
 # =====================
+
 
 class WorkDispatchSerializer(serializers.ModelSerializer):
     worker_name = serializers.CharField(source='worker.get_full_name', read_only=True)
@@ -324,11 +260,25 @@ class WorkOrderListSerializer(serializers.ModelSerializer):
     class Meta:
         model = WorkOrder
         fields = [
-            'id', 'order_no', 'order_type', 'order_type_display', 'title',
-            'project', 'project_name', 'priority', 'priority_display',
-            'planned_start', 'planned_end', 'status', 'status_display',
-            'progress', 'estimated_hours', 'actual_hours', 'is_overdue',
-            'dispatch_count', 'created_at'
+            'id',
+            'order_no',
+            'order_type',
+            'order_type_display',
+            'title',
+            'project',
+            'project_name',
+            'priority',
+            'priority_display',
+            'planned_start',
+            'planned_end',
+            'status',
+            'status_display',
+            'progress',
+            'estimated_hours',
+            'actual_hours',
+            'is_overdue',
+            'dispatch_count',
+            'created_at',
         ]
 
     def get_dispatch_count(self, obj):
@@ -339,8 +289,10 @@ class WorkOrderListSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class WorkOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """工单管理"""
+
     queryset = WorkOrder.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['order_type', 'status', 'priority', 'project']
@@ -355,10 +307,7 @@ class WorkOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
     @action(detail=False, methods=['get'])
     def order_types(self, request):
         """获取工单类型"""
-        return Response([
-            {'value': t[0], 'label': t[1]}
-            for t in WorkOrder.ORDER_TYPES
-        ])
+        return Response([{'value': t[0], 'label': t[1]} for t in WorkOrder.ORDER_TYPES])
 
     @action(detail=True, methods=['post'])
     def assign_workers(self, request, pk=None):
@@ -379,8 +328,8 @@ class WorkOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
                     'planned_start': work_order.planned_start,
                     'planned_end': work_order.planned_end,
                     'planned_hours': work_order.estimated_hours / len(worker_ids),
-                    'created_by': request.user
-                }
+                    'created_by': request.user,
+                },
             )
             if created:
                 dispatched.append(WorkDispatchSerializer(dispatch).data)
@@ -389,10 +338,7 @@ class WorkOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
             work_order.status = 'ASSIGNED'
             work_order.save()
 
-        return Response({
-            'success': True,
-            'dispatched': dispatched
-        })
+        return Response({'success': True, 'dispatched': dispatched})
 
     @action(detail=True, methods=['post'])
     def start(self, request, pk=None):
@@ -449,9 +395,7 @@ class WorkOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
     def my_orders(self, request):
         """我的工单（我被派工的）"""
         dispatches = WorkDispatch.objects.filter(
-            worker=request.user,
-            is_deleted=False,
-            work_order__is_deleted=False
+            worker=request.user, is_deleted=False, work_order__is_deleted=False
         ).values_list('work_order_id', flat=True)
 
         orders = self.get_queryset().filter(id__in=dispatches)
@@ -467,8 +411,7 @@ class WorkOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
     def overdue(self, request):
         """逾期工单"""
         orders = self.get_queryset().filter(
-            planned_end__lt=timezone.now(),
-            status__in=['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'PAUSED']
+            planned_end__lt=timezone.now(), status__in=['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'PAUSED']
         )
         return Response(WorkOrderListSerializer(orders, many=True).data)
 
@@ -488,29 +431,28 @@ class WorkOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
 
         # 逾期数
         overdue_count = qs.filter(
-            planned_end__lt=timezone.now(),
-            status__in=['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'PAUSED']
+            planned_end__lt=timezone.now(), status__in=['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'PAUSED']
         ).count()
 
         # 今日待完成
         today_end = timezone.now().replace(hour=23, minute=59, second=59)
-        today_pending = qs.filter(
-            planned_end__lte=today_end,
-            status__in=['ASSIGNED', 'IN_PROGRESS']
-        ).count()
+        today_pending = qs.filter(planned_end__lte=today_end, status__in=['ASSIGNED', 'IN_PROGRESS']).count()
 
-        return Response({
-            'total': qs.count(),
-            'overdue': overdue_count,
-            'today_pending': today_pending,
-            'by_status': list(by_status),
-            'by_type': list(by_type),
-            'by_priority': list(by_priority)
-        })
+        return Response(
+            {
+                'total': qs.count(),
+                'overdue': overdue_count,
+                'today_pending': today_pending,
+                'by_status': list(by_status),
+                'by_type': list(by_type),
+                'by_priority': list(by_priority),
+            }
+        )
 
 
 class WorkDispatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """派工管理"""
+
     queryset = WorkDispatch.objects.filter(is_deleted=False)
     serializer_class = WorkDispatchSerializer
     permission_classes = [IsAuthenticated]
@@ -572,8 +514,7 @@ class WorkDispatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         # 检查工单是否全部完成
         work_order = dispatch.work_order
         all_completed = not work_order.dispatches.filter(
-            is_deleted=False,
-            status__in=['ASSIGNED', 'ACCEPTED', 'IN_PROGRESS']
+            is_deleted=False, status__in=['ASSIGNED', 'ACCEPTED', 'IN_PROGRESS']
         ).exists()
 
         if all_completed:
@@ -582,10 +523,12 @@ class WorkDispatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
             work_order.actual_end = timezone.now()
 
             # 汇总实际工时
-            total_hours = work_order.dispatches.filter(
-                is_deleted=False,
-                status='COMPLETED'
-            ).aggregate(total=Sum('actual_hours'))['total'] or 0
+            total_hours = (
+                work_order.dispatches.filter(is_deleted=False, status='COMPLETED').aggregate(total=Sum('actual_hours'))[
+                    'total'
+                ]
+                or 0
+            )
             work_order.actual_hours = total_hours
             work_order.save()
 
@@ -603,7 +546,7 @@ class WorkDispatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
             progress=request.data.get('progress'),
             hours=request.data.get('hours'),
             attachments=request.data.get('attachments', []),
-            created_by=request.user
+            created_by=request.user,
         )
 
         # 更新进度
@@ -623,10 +566,7 @@ class WorkDispatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
     @action(detail=False, methods=['get'])
     def my_dispatches(self, request):
         """我的派工"""
-        dispatches = self.get_queryset().filter(
-            worker=request.user,
-            status__in=['ASSIGNED', 'ACCEPTED', 'IN_PROGRESS']
-        )
+        dispatches = self.get_queryset().filter(worker=request.user, status__in=['ASSIGNED', 'ACCEPTED', 'IN_PROGRESS'])
         return Response(self.get_serializer(dispatches, many=True).data)
 
     @action(detail=True, methods=['post'])
@@ -641,6 +581,7 @@ class WorkDispatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
 
 class WorkLogViewSet(viewsets.ReadOnlyModelViewSet):
     """工单日志"""
+
     queryset = WorkLog.objects.filter(is_deleted=False)
     serializer_class = WorkLogSerializer
     permission_classes = [IsAuthenticated]

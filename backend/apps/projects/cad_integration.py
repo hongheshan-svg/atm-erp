@@ -4,6 +4,7 @@ CAD Integration
 SolidWorks、AutoCAD集成接口、BOM自动导入等
 为桌面插件和API对接提供后端支持
 """
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -18,6 +19,7 @@ from apps.core.models import BaseModel
 
 class CADSoftware(BaseModel):
     """CAD软件配置"""
+
     SOFTWARE_TYPE_CHOICES = [
         ('SOLIDWORKS', 'SolidWorks'),
         ('AUTOCAD', 'AutoCAD'),
@@ -30,11 +32,7 @@ class CADSoftware(BaseModel):
     ]
 
     name = models.CharField(max_length=100, verbose_name='名称')
-    software_type = models.CharField(
-        max_length=20,
-        choices=SOFTWARE_TYPE_CHOICES,
-        verbose_name='软件类型'
-    )
+    software_type = models.CharField(max_length=20, choices=SOFTWARE_TYPE_CHOICES, verbose_name='软件类型')
     version = models.CharField(max_length=50, blank=True, verbose_name='版本')
 
     # 插件信息
@@ -57,38 +55,26 @@ class CADSoftware(BaseModel):
         verbose_name_plural = verbose_name
 
     def __str__(self):
-        return f"{self.name} {self.version}"
+        return f'{self.name} {self.version}'
 
 
 class CADSession(BaseModel):
     """CAD会话"""
+
     STATUS_CHOICES = [
         ('ACTIVE', '活跃'),
         ('IDLE', '空闲'),
         ('CLOSED', '已关闭'),
     ]
 
-    software = models.ForeignKey(
-        CADSoftware,
-        on_delete=models.PROTECT,
-        related_name='sessions',
-        verbose_name='CAD软件'
-    )
+    software = models.ForeignKey(CADSoftware, on_delete=models.PROTECT, related_name='sessions', verbose_name='CAD软件')
 
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='cad_sessions',
-        verbose_name='用户'
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='cad_sessions', verbose_name='用户'
     )
 
     session_id = models.CharField(max_length=100, unique=True, verbose_name='会话ID')
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='ACTIVE',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ACTIVE', verbose_name='状态')
 
     # 机器信息
     machine_name = models.CharField(max_length=100, blank=True, verbose_name='机器名')
@@ -109,11 +95,12 @@ class CADSession(BaseModel):
         ordering = ['-started_at']
 
     def __str__(self):
-        return f"{self.user.username} - {self.software.name}"
+        return f'{self.user.username} - {self.software.name}'
 
 
 class CADFile(BaseModel):
     """CAD文件"""
+
     FILE_TYPE_CHOICES = [
         ('PART', '零件'),
         ('ASSEMBLY', '装配体'),
@@ -130,30 +117,15 @@ class CADFile(BaseModel):
         ('FAILED', '失败'),
     ]
 
-    software = models.ForeignKey(
-        CADSoftware,
-        on_delete=models.PROTECT,
-        related_name='files',
-        verbose_name='CAD软件'
-    )
+    software = models.ForeignKey(CADSoftware, on_delete=models.PROTECT, related_name='files', verbose_name='CAD软件')
 
     file_name = models.CharField(max_length=255, verbose_name='文件名')
     file_path = models.CharField(max_length=500, verbose_name='文件路径')
     file_size = models.BigIntegerField(default=0, verbose_name='文件大小')
     file_hash = models.CharField(max_length=64, blank=True, verbose_name='文件哈希')
 
-    file_type = models.CharField(
-        max_length=20,
-        choices=FILE_TYPE_CHOICES,
-        default='PART',
-        verbose_name='文件类型'
-    )
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='UPLOADING',
-        verbose_name='状态'
-    )
+    file_type = models.CharField(max_length=20, choices=FILE_TYPE_CHOICES, default='PART', verbose_name='文件类型')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='UPLOADING', verbose_name='状态')
 
     # 版本信息
     version = models.CharField(max_length=20, default='1.0', verbose_name='版本')
@@ -176,7 +148,7 @@ class CADFile(BaseModel):
         on_delete=models.SET_NULL,
         null=True,
         related_name='uploaded_cad_files',
-        verbose_name='上传者'
+        verbose_name='上传者',
     )
     uploaded_at = models.DateTimeField(default=timezone.now, verbose_name='上传时间')
 
@@ -194,6 +166,7 @@ class CADFile(BaseModel):
 
 class CADBOMImport(BaseModel):
     """CAD BOM导入记录"""
+
     STATUS_CHOICES = [
         ('PENDING', '待处理'),
         ('PARSING', '解析中'),
@@ -214,17 +187,9 @@ class CADBOMImport(BaseModel):
 
     name = models.CharField(max_length=200, verbose_name='导入名称')
     source_type = models.CharField(
-        max_length=20,
-        choices=SOURCE_TYPE_CHOICES,
-        default='SOLIDWORKS',
-        verbose_name='来源类型'
+        max_length=20, choices=SOURCE_TYPE_CHOICES, default='SOLIDWORKS', verbose_name='来源类型'
     )
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
 
     # 来源文件
     source_file = models.ForeignKey(
@@ -233,7 +198,7 @@ class CADBOMImport(BaseModel):
         null=True,
         blank=True,
         related_name='bom_imports',
-        verbose_name='来源CAD文件'
+        verbose_name='来源CAD文件',
     )
     source_file_path = models.CharField(max_length=500, blank=True, verbose_name='来源文件路径')
 
@@ -273,6 +238,7 @@ class CADBOMImport(BaseModel):
 
 class CADBOMItem(BaseModel):
     """CAD BOM导入项"""
+
     STATUS_CHOICES = [
         ('PENDING', '待处理'),
         ('MATCHED', '已匹配'),
@@ -283,10 +249,7 @@ class CADBOMItem(BaseModel):
     ]
 
     bom_import = models.ForeignKey(
-        CADBOMImport,
-        on_delete=models.CASCADE,
-        related_name='items',
-        verbose_name='导入记录'
+        CADBOMImport, on_delete=models.CASCADE, related_name='items', verbose_name='导入记录'
     )
 
     # 原始数据
@@ -308,12 +271,7 @@ class CADBOMItem(BaseModel):
     level = models.IntegerField(default=0, verbose_name='层级')
     parent_row = models.IntegerField(null=True, blank=True, verbose_name='父行号')
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
 
     # 匹配结果
     matched_material_id = models.IntegerField(null=True, blank=True, verbose_name='匹配的物料ID')
@@ -330,11 +288,9 @@ class CADBOMItem(BaseModel):
 
 class CADPropertyMapping(BaseModel):
     """CAD属性映射"""
+
     software = models.ForeignKey(
-        CADSoftware,
-        on_delete=models.CASCADE,
-        related_name='property_mappings',
-        verbose_name='CAD软件'
+        CADSoftware, on_delete=models.CASCADE, related_name='property_mappings', verbose_name='CAD软件'
     )
 
     cad_property = models.CharField(max_length=100, verbose_name='CAD属性名')
@@ -420,7 +376,6 @@ CREO_PARAMETER_MAPPING = {
     'DENSITY': 'density',
     'VOLUME': 'volume',
     'SURFACE_AREA': 'surface_area',
-
     # 自定义参数
     'VENDOR': 'vendor',
     'COST': 'unit_cost',
@@ -428,7 +383,6 @@ CREO_PARAMETER_MAPPING = {
     'AUTHOR': 'designer',
     'CREATED_DATE': 'created_date',
     'MODIFIED_DATE': 'modified_date',
-
     # BOM相关
     'QTY': 'quantity',
     'UNIT': 'unit',
@@ -467,13 +421,13 @@ class BOMParserService:
     def parse_creo_bom(file_path, bom_format='csv'):
         """
         解析Creo/Pro-E BOM
-        
+
         支持的格式:
         - CSV: Creo导出的CSV格式BOM
         - XML: Creo导出的XML格式BOM
         - REP: Creo Rep文件(.rep)
-        
-        Creo BOM导出路径: 
+
+        Creo BOM导出路径:
         Info > BOM > Top Level / Indented / Multi-Level
         """
         items = []
@@ -579,7 +533,7 @@ class BOMParserService:
     def parse_creo_parameters(prt_file_path):
         """
         提取Creo零件参数
-        
+
         Creo参数来源:
         - 模型参数 (Model Parameters)
         - 族表参数 (Family Table)
@@ -668,6 +622,7 @@ class CreoIntegrationService:
     def validate_creo_file(file_path):
         """验证Creo文件格式"""
         import os
+
         ext = os.path.splitext(file_path)[1].lower()
 
         all_extensions = []
@@ -683,6 +638,7 @@ class CreoIntegrationService:
     def extract_version_from_filename(filename):
         """从Creo文件名提取版本号"""
         import re
+
         # Creo文件命名: part_name.prt.5 或 assembly.asm.12
         match = re.search(r'\.(\d+)$', filename)
         if match:
@@ -693,6 +649,7 @@ class CreoIntegrationService:
 # =====================
 # Serializers
 # =====================
+
 
 class CADSoftwareSerializer(serializers.ModelSerializer):
     type_display = serializers.CharField(source='get_software_type_display', read_only=True)
@@ -745,8 +702,15 @@ class CADBOMImportSerializer(serializers.ModelSerializer):
     class Meta:
         model = CADBOMImport
         fields = '__all__'
-        read_only_fields = ['created_by', 'updated_by', 'parsed_data', 'total_items',
-                           'imported_count', 'skipped_count', 'error_count']
+        read_only_fields = [
+            'created_by',
+            'updated_by',
+            'parsed_data',
+            'total_items',
+            'imported_count',
+            'skipped_count',
+            'error_count',
+        ]
 
 
 class CADPropertyMappingSerializer(serializers.ModelSerializer):
@@ -762,8 +726,10 @@ class CADPropertyMappingSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class CADSoftwareViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """CAD软件管理"""
+
     queryset = CADSoftware.objects.filter(is_deleted=False)
     serializer_class = CADSoftwareSerializer
     permission_classes = [IsAuthenticated]
@@ -787,16 +753,10 @@ class CADSoftwareViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
         version = request.data.get('version', 'Creo 10.0')
 
         # 检查是否已存在
-        existing = CADSoftware.objects.filter(
-            software_type='CREO',
-            is_deleted=False
-        ).first()
+        existing = CADSoftware.objects.filter(software_type='CREO', is_deleted=False).first()
 
         if existing:
-            return Response({
-                'message': 'Creo配置已存在',
-                'data': CADSoftwareSerializer(existing).data
-            })
+            return Response({'message': 'Creo配置已存在', 'data': CADSoftwareSerializer(existing).data})
 
         # 创建Creo配置
         creo = CADSoftware.objects.create(
@@ -804,9 +764,9 @@ class CADSoftwareViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
             software_type='CREO',
             version=version,
             supported_extensions=config['supported_extensions'],
-            description=f"PTC {version} - 支持零件(.prt)、装配体(.asm)、工程图(.drw)文件",
+            description=f'PTC {version} - 支持零件(.prt)、装配体(.asm)、工程图(.drw)文件',
             is_active=True,
-            created_by=request.user
+            created_by=request.user,
         )
 
         # 创建默认属性映射
@@ -817,17 +777,15 @@ class CADSoftwareViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
                 system_field=sys_field,
                 target_model='Material',
                 is_required=creo_prop in ['PART_NUMBER', 'DESCRIPTION'],
-                created_by=request.user
+                created_by=request.user,
             )
 
-        return Response({
-            'message': 'Creo配置初始化成功',
-            'data': CADSoftwareSerializer(creo).data
-        })
+        return Response({'message': 'Creo配置初始化成功', 'data': CADSoftwareSerializer(creo).data})
 
 
 class CADSessionViewSet(viewsets.ModelViewSet):
     """CAD会话管理"""
+
     queryset = CADSession.objects.filter(is_deleted=False)
     serializer_class = CADSessionSerializer
     permission_classes = [IsAuthenticated]
@@ -844,7 +802,7 @@ class CADSessionViewSet(viewsets.ModelViewSet):
             session_id=str(uuid.uuid4()),
             machine_name=request.data.get('machine_name', ''),
             machine_ip=request.META.get('REMOTE_ADDR'),
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(self.get_serializer(session).data)
@@ -870,6 +828,7 @@ class CADSessionViewSet(viewsets.ModelViewSet):
 
 class CADFileViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """CAD文件管理"""
+
     queryset = CADFile.objects.filter(is_deleted=False)
     serializer_class = CADFileSerializer
     permission_classes = [IsAuthenticated]
@@ -890,7 +849,7 @@ class CADFileViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
             source_type=cad_file.software.software_type,
             source_file=cad_file,
             project_id=cad_file.project_id,
-            created_by=request.user
+            created_by=request.user,
         )
 
         # 根据软件类型选择解析器
@@ -917,7 +876,7 @@ class CADFileViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
                 unit=item.get('unit', 'PCS'),
                 material=item.get('material', ''),
                 level=item.get('level', 0),
-                created_by=request.user
+                created_by=request.user,
             )
 
         bom_import.total_items = len(parsed_items)
@@ -929,6 +888,7 @@ class CADFileViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 
 class CADBOMImportViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """CAD BOM导入管理"""
+
     queryset = CADBOMImport.objects.filter(is_deleted=False)
     serializer_class = CADBOMImportSerializer
     permission_classes = [IsAuthenticated]
@@ -947,7 +907,7 @@ class CADBOMImportViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
             bom_import.items.filter(row_number=item_data.get('row_number', 0)).update(
                 matched_material_id=item_data.get('matched_material_id'),
                 match_score=item_data.get('match_score', 0),
-                status=item_data.get('status', 'PENDING')
+                status=item_data.get('status', 'PENDING'),
             )
 
         return Response(self.get_serializer(bom_import).data)
@@ -1010,6 +970,7 @@ class CADBOMImportViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
 
 class CADPropertyMappingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """CAD属性映射管理"""
+
     queryset = CADPropertyMapping.objects.filter(is_deleted=False)
     serializer_class = CADPropertyMappingSerializer
     permission_classes = [IsAuthenticated]

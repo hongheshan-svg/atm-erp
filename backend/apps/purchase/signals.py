@@ -4,6 +4,7 @@ Purchase Module Signals
 
 处理采购订单确认、收货等事件时的BOM状态同步
 """
+
 from django.db import transaction
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
@@ -41,10 +42,16 @@ def sync_bom_on_po_confirm(sender, instance, **kwargs):
             else:
                 bom.order_status = 'PARTIAL'
 
-            bom.save(update_fields=[
-                'ordered_qty', 'purchase_order', 'supplier',
-                'delivery_date', 'order_status', 'updated_at'
-            ])
+            bom.save(
+                update_fields=[
+                    'ordered_qty',
+                    'purchase_order',
+                    'supplier',
+                    'delivery_date',
+                    'order_status',
+                    'updated_at',
+                ]
+            )
 
 
 @receiver(post_save, sender=GoodsReceipt)
@@ -81,10 +88,16 @@ def sync_bom_on_receipt(sender, instance, **kwargs):
             elif bom.received_qty > 0:
                 bom.order_status = 'IN_TRANSIT'
 
-            bom.save(update_fields=[
-                'received_qty', 'actual_delivery_date',
-                'actual_cost', 'total_cost', 'order_status', 'updated_at'
-            ])
+            bom.save(
+                update_fields=[
+                    'received_qty',
+                    'actual_delivery_date',
+                    'actual_cost',
+                    'total_cost',
+                    'order_status',
+                    'updated_at',
+                ]
+            )
 
 
 @receiver(pre_save, sender=PurchaseOrderLine)

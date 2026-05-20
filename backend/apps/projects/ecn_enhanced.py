@@ -2,6 +2,7 @@
 设计变更管理增强模块
 ECN Enhanced Management - 变更影响分析、成本估算、审批流程
 """
+
 from decimal import Decimal
 
 from django.conf import settings
@@ -20,6 +21,7 @@ User = settings.AUTH_USER_MODEL
 
 class ECNChangeRequest(BaseModel):
     """设计变更申请"""
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('SUBMITTED', '已提交'),
@@ -49,8 +51,9 @@ class ECNChangeRequest(BaseModel):
 
     ecn_no = models.CharField('变更编号', max_length=50, unique=True)
     title = models.CharField('变更标题', max_length=200)
-    project = models.ForeignKey('projects.Project', on_delete=models.CASCADE,
-                                related_name='ecn_requests', verbose_name='关联项目')
+    project = models.ForeignKey(
+        'projects.Project', on_delete=models.CASCADE, related_name='ecn_requests', verbose_name='关联项目'
+    )
     change_type = models.CharField('变更类型', max_length=20, choices=CHANGE_TYPE_CHOICES)
     priority = models.CharField('优先级', max_length=20, choices=PRIORITY_CHOICES, default='MEDIUM')
     status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES, default='DRAFT')
@@ -86,8 +89,9 @@ class ECNChangeRequest(BaseModel):
     delivery_delay_days = models.IntegerField('延期天数', default=0)
 
     # 申请人信息
-    requested_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
-                                     related_name='ecn_requests', verbose_name='申请人')
+    requested_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='ecn_requests', verbose_name='申请人'
+    )
     requested_date = models.DateTimeField('申请时间', auto_now_add=True)
 
     # 客户确认
@@ -106,8 +110,12 @@ class ECNChangeRequest(BaseModel):
 
     @property
     def total_estimated_cost(self):
-        return (self.estimated_material_cost + self.estimated_labor_cost +
-                self.estimated_outsource_cost + self.estimated_other_cost)
+        return (
+            self.estimated_material_cost
+            + self.estimated_labor_cost
+            + self.estimated_outsource_cost
+            + self.estimated_other_cost
+        )
 
     def save(self, *args, **kwargs):
         if not self.ecn_no:
@@ -125,12 +133,21 @@ class ECNChangeRequest(BaseModel):
 
 class ECNAffectedItem(BaseModel):
     """变更影响的物料/BOM项"""
-    ecn = models.ForeignKey(ECNChangeRequest, on_delete=models.CASCADE,
-                           related_name='affected_items', verbose_name='变更申请')
-    item = models.ForeignKey('masterdata.Item', on_delete=models.CASCADE,
-                            related_name='ecn_affected', verbose_name='物料')
-    bom_item = models.ForeignKey('projects.ProjectBOM', on_delete=models.SET_NULL,
-                                null=True, blank=True, related_name='ecn_affected', verbose_name='BOM项')
+
+    ecn = models.ForeignKey(
+        ECNChangeRequest, on_delete=models.CASCADE, related_name='affected_items', verbose_name='变更申请'
+    )
+    item = models.ForeignKey(
+        'masterdata.Item', on_delete=models.CASCADE, related_name='ecn_affected', verbose_name='物料'
+    )
+    bom_item = models.ForeignKey(
+        'projects.ProjectBOM',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ecn_affected',
+        verbose_name='BOM项',
+    )
 
     CHANGE_ACTION_CHOICES = [
         ('ADD', '新增'),
@@ -144,9 +161,14 @@ class ECNAffectedItem(BaseModel):
     new_spec = models.TextField('新规格/参数', blank=True)
     original_qty = models.DecimalField('原数量', max_digits=14, decimal_places=4, default=0)
     new_qty = models.DecimalField('新数量', max_digits=14, decimal_places=4, default=0)
-    replace_item = models.ForeignKey('masterdata.Item', on_delete=models.SET_NULL,
-                                     null=True, blank=True, related_name='ecn_replace_to',
-                                     verbose_name='替换物料')
+    replace_item = models.ForeignKey(
+        'masterdata.Item',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ecn_replace_to',
+        verbose_name='替换物料',
+    )
     cost_impact = models.DecimalField('成本影响', max_digits=14, decimal_places=2, default=0)
     remarks = models.TextField('备注', blank=True)
 
@@ -157,10 +179,13 @@ class ECNAffectedItem(BaseModel):
 
 class ECNReviewRecord(BaseModel):
     """变更评审记录"""
-    ecn = models.ForeignKey(ECNChangeRequest, on_delete=models.CASCADE,
-                           related_name='review_records', verbose_name='变更申请')
-    reviewer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
-                                related_name='ecn_reviews', verbose_name='评审人')
+
+    ecn = models.ForeignKey(
+        ECNChangeRequest, on_delete=models.CASCADE, related_name='review_records', verbose_name='变更申请'
+    )
+    reviewer = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='ecn_reviews', verbose_name='评审人'
+    )
     review_role = models.CharField('评审角色', max_length=50)  # 设计、采购、生产、质量等
 
     DECISION_CHOICES = [
@@ -182,8 +207,10 @@ class ECNReviewRecord(BaseModel):
 
 class ECNImplementation(BaseModel):
     """变更实施记录"""
-    ecn = models.ForeignKey(ECNChangeRequest, on_delete=models.CASCADE,
-                           related_name='implementations', verbose_name='变更申请')
+
+    ecn = models.ForeignKey(
+        ECNChangeRequest, on_delete=models.CASCADE, related_name='implementations', verbose_name='变更申请'
+    )
 
     IMPL_TYPE_CHOICES = [
         ('BOM_UPDATE', 'BOM更新'),
@@ -197,13 +224,17 @@ class ECNImplementation(BaseModel):
 
     impl_type = models.CharField('实施类型', max_length=30, choices=IMPL_TYPE_CHOICES)
     description = models.TextField('实施内容')
-    responsible = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
-                                   related_name='ecn_implementations', verbose_name='负责人')
+    responsible = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='ecn_implementations', verbose_name='负责人'
+    )
     planned_date = models.DateField('计划完成日期')
     actual_date = models.DateField('实际完成日期', null=True, blank=True)
-    status = models.CharField('状态', max_length=20, default='PENDING',
-                             choices=[('PENDING', '待实施'), ('IN_PROGRESS', '进行中'),
-                                     ('COMPLETED', '已完成'), ('CANCELLED', '已取消')])
+    status = models.CharField(
+        '状态',
+        max_length=20,
+        default='PENDING',
+        choices=[('PENDING', '待实施'), ('IN_PROGRESS', '进行中'), ('COMPLETED', '已完成'), ('CANCELLED', '已取消')],
+    )
     result = models.TextField('实施结果', blank=True)
 
     class Meta:
@@ -212,6 +243,7 @@ class ECNImplementation(BaseModel):
 
 
 # ==================== Serializers ====================
+
 
 class ECNAffectedItemSerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source='item.name', read_only=True)
@@ -257,8 +289,10 @@ class ECNChangeRequestSerializer(serializers.ModelSerializer):
 
 # ==================== ViewSets ====================
 
+
 class ECNChangeRequestViewSet(viewsets.ModelViewSet):
     """设计变更申请管理"""
+
     queryset = ECNChangeRequest.objects.filter(is_deleted=False)
     serializer_class = ECNChangeRequestSerializer
     permission_classes = [IsAuthenticated]
@@ -294,12 +328,7 @@ class ECNChangeRequestViewSet(viewsets.ModelViewSet):
         # 创建评审记录
         review_roles = ['设计', '采购', '生产', '质量']
         for role in review_roles:
-            ECNReviewRecord.objects.create(
-                ecn=ecn,
-                review_role=role,
-                created_by=request.user,
-                updated_by=request.user
-            )
+            ECNReviewRecord.objects.create(ecn=ecn, review_role=role, created_by=request.user, updated_by=request.user)
 
         return Response({'message': '已提交评审'})
 
@@ -317,21 +346,16 @@ class ECNChangeRequestViewSet(viewsets.ModelViewSet):
 
         # 采购影响
         pending_po = PurchaseOrderLine.objects.filter(
-            item_id__in=item_ids,
-            order__project=ecn.project,
-            order__status__in=['DRAFT', 'PENDING', 'APPROVED']
+            item_id__in=item_ids, order__project=ecn.project, order__status__in=['DRAFT', 'PENDING', 'APPROVED']
         ).select_related('order')
 
         # 生产影响
         production_impact = ProductionPlan.objects.filter(
-            project=ecn.project,
-            status__in=['DRAFT', 'CONFIRMED', 'IN_PROGRESS']
+            project=ecn.project, status__in=['DRAFT', 'CONFIRMED', 'IN_PROGRESS']
         ).count()
 
         # 成本影响汇总
-        total_cost_impact = affected_items.aggregate(
-            total=Sum('cost_impact')
-        )['total'] or Decimal('0')
+        total_cost_impact = affected_items.aggregate(total=Sum('cost_impact'))['total'] or Decimal('0')
 
         impact_summary = {
             'affected_items_count': affected_items.count(),
@@ -339,7 +363,7 @@ class ECNChangeRequestViewSet(viewsets.ModelViewSet):
             'pending_purchase_lines': pending_po.count(),
             'affected_production_plans': production_impact,
             'total_cost_impact': float(total_cost_impact),
-            'recommendations': []
+            'recommendations': [],
         }
 
         # 生成建议
@@ -460,7 +484,7 @@ class ECNChangeRequestViewSet(viewsets.ModelViewSet):
             material=Sum('estimated_material_cost'),
             labor=Sum('estimated_labor_cost'),
             outsource=Sum('estimated_outsource_cost'),
-            other=Sum('estimated_other_cost')
+            other=Sum('estimated_other_cost'),
         )
         total_cost = sum(v or 0 for v in cost_agg.values())
         if total_cost > 0:
@@ -473,6 +497,7 @@ class ECNChangeRequestViewSet(viewsets.ModelViewSet):
 
 class ECNAffectedItemViewSet(viewsets.ModelViewSet):
     """变更影响物料管理"""
+
     queryset = ECNAffectedItem.objects.filter(is_deleted=False)
     serializer_class = ECNAffectedItemSerializer
     permission_classes = [IsAuthenticated]
@@ -487,6 +512,7 @@ class ECNAffectedItemViewSet(viewsets.ModelViewSet):
 
 class ECNReviewRecordViewSet(viewsets.ModelViewSet):
     """变更评审记录管理"""
+
     queryset = ECNReviewRecord.objects.filter(is_deleted=False)
     serializer_class = ECNReviewRecordSerializer
     permission_classes = [IsAuthenticated]
@@ -515,6 +541,7 @@ class ECNReviewRecordViewSet(viewsets.ModelViewSet):
 
 class ECNImplementationViewSet(viewsets.ModelViewSet):
     """变更实施记录管理"""
+
     queryset = ECNImplementation.objects.filter(is_deleted=False)
     serializer_class = ECNImplementationSerializer
     permission_classes = [IsAuthenticated]

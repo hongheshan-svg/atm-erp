@@ -33,4 +33,3 @@ class ProjectBOMAdmin(admin.ModelAdmin):
     list_filter = ['is_deleted', 'created_at']
     search_fields = ['project__code', 'item__sku']
     ordering = ['-created_at']
-

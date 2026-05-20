@@ -1,6 +1,7 @@
 """
 生产领料/退料视图
 """
+
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -24,7 +25,6 @@ from .models import Stock, StockMove
 
 
 class MaterialRequisitionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
-
     permission_module = 'inventory'
     permission_resource = 'material_requisition'
     """
@@ -62,16 +62,10 @@ class MaterialRequisitionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
         requisition = self.get_object()
 
         if requisition.status != 'DRAFT':
-            return Response(
-                {'error': '只能提交草稿状态的领料单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能提交草稿状态的领料单'}, status=status.HTTP_400_BAD_REQUEST)
 
         if not requisition.lines.exists():
-            return Response(
-                {'error': '领料单没有明细，无法提交'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '领料单没有明细，无法提交'}, status=status.HTTP_400_BAD_REQUEST)
 
         requisition.status = 'SUBMITTED'  # 改为待审批状态
         requisition.save()
@@ -86,10 +80,7 @@ class MaterialRequisitionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
         requisition = self.get_object()
 
         if requisition.status != 'SUBMITTED':
-            return Response(
-                {'error': '只能审批待审批状态的领料单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能审批待审批状态的领料单'}, status=status.HTTP_400_BAD_REQUEST)
 
         requisition.status = 'PENDING'  # 审批通过后进入待备料
         requisition.save()
@@ -104,10 +95,7 @@ class MaterialRequisitionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
         requisition = self.get_object()
 
         if requisition.status != 'SUBMITTED':
-            return Response(
-                {'error': '只能拒绝待审批状态的领料单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能拒绝待审批状态的领料单'}, status=status.HTTP_400_BAD_REQUEST)
 
         requisition.status = 'REJECTED'
         requisition.save()
@@ -120,10 +108,7 @@ class MaterialRequisitionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
         requisition = self.get_object()
 
         if requisition.status != 'PENDING':
-            return Response(
-                {'error': '只能对待备料状态的领料单进行备料'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能对待备料状态的领料单进行备料'}, status=status.HTTP_400_BAD_REQUEST)
 
         requisition.status = 'PREPARING'
         requisition.warehouse_operator = request.user
@@ -137,10 +122,7 @@ class MaterialRequisitionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
         requisition = self.get_object()
 
         if requisition.status != 'PREPARING':
-            return Response(
-                {'error': '只能对备料中状态的领料单标记完成'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能对备料中状态的领料单标记完成'}, status=status.HTTP_400_BAD_REQUEST)
 
         requisition.status = 'READY'
         requisition.save()
@@ -165,16 +147,12 @@ class MaterialRequisitionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
 
         if requisition.status not in ['READY', 'PARTIAL']:
             return Response(
-                {'error': '只能对备料完成或部分出库状态的领料单执行出库'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': '只能对备料完成或部分出库状态的领料单执行出库'}, status=status.HTTP_400_BAD_REQUEST
             )
 
         lines_data = request.data.get('lines', [])
         if not lines_data:
-            return Response(
-                {'error': '请指定出库明细'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请指定出库明细'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             all_issued = True
@@ -193,20 +171,11 @@ class MaterialRequisitionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
 
                 # 检查库存
                 try:
-                    stock = Stock.objects.get(
-                        warehouse=requisition.warehouse,
-                        item=line.item
-                    )
+                    stock = Stock.objects.get(warehouse=requisition.warehouse, item=line.item)
                     if stock.qty_available < issued_qty:
-                        return Response(
-                            {'error': f'物料 {line.item.sku} 库存不足'},
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
+                        return Response({'error': f'物料 {line.item.sku} 库存不足'}, status=status.HTTP_400_BAD_REQUEST)
                 except Stock.DoesNotExist:
-                    return Response(
-                        {'error': f'物料 {line.item.sku} 无库存记录'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+                    return Response({'error': f'物料 {line.item.sku} 无库存记录'}, status=status.HTTP_400_BAD_REQUEST)
 
                 # 更新已出库数量
                 line.issued_qty += issued_qty
@@ -225,7 +194,7 @@ class MaterialRequisitionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
                     project=requisition.project,
                     move_date=timezone.now(),
                     status='COMPLETED',
-                    created_by=request.user
+                    created_by=request.user,
                 )
 
                 # 更新库存
@@ -254,17 +223,11 @@ class MaterialRequisitionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
         requisition = self.get_object()
 
         if requisition.status in ['ISSUED', 'CANCELLED']:
-            return Response(
-                {'error': '已出库或已取消的领料单无法取消'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '已出库或已取消的领料单无法取消'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 如果有部分出库，需要处理退回
         if requisition.issued_qty > 0:
-            return Response(
-                {'error': '已有物料出库，请使用退料功能'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '已有物料出库，请使用退料功能'}, status=status.HTTP_400_BAD_REQUEST)
 
         requisition.status = 'CANCELLED'
         requisition.save()
@@ -273,7 +236,6 @@ class MaterialRequisitionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
 
 
 class MaterialRequisitionLineViewSet(PermissionMixin, viewsets.ModelViewSet):
-
     permission_module = 'inventory'
     permission_resource = 'material_requisition_line'
     """领料单明细视图集"""
@@ -284,7 +246,6 @@ class MaterialRequisitionLineViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 
 class MaterialReturnViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
-
     permission_module = 'inventory'
     permission_resource = 'material_return'
     """
@@ -298,7 +259,15 @@ class MaterialReturnViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
     """
     queryset = MaterialReturn.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
-    filterset_fields = ['return_type', 'return_reason', 'project', 'aftersales_order', 'warehouse', 'status', 'requestor']
+    filterset_fields = [
+        'return_type',
+        'return_reason',
+        'project',
+        'aftersales_order',
+        'warehouse',
+        'status',
+        'requestor',
+    ]
     search_fields = ['return_no']
     ordering_fields = ['request_date', 'created_at']
     ordering = ['-created_at']
@@ -322,16 +291,10 @@ class MaterialReturnViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
         material_return = self.get_object()
 
         if material_return.status != 'DRAFT':
-            return Response(
-                {'error': '只能提交草稿状态的退料单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能提交草稿状态的退料单'}, status=status.HTTP_400_BAD_REQUEST)
 
         if not material_return.lines.exists():
-            return Response(
-                {'error': '退料单没有明细，无法提交'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '退料单没有明细，无法提交'}, status=status.HTTP_400_BAD_REQUEST)
 
         material_return.status = 'PENDING'
         material_return.save()
@@ -346,10 +309,7 @@ class MaterialReturnViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
         material_return = self.get_object()
 
         if material_return.status != 'PENDING':
-            return Response(
-                {'error': '只能对待入库状态的退料单进行检验'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能对待入库状态的退料单进行检验'}, status=status.HTTP_400_BAD_REQUEST)
 
         material_return.status = 'INSPECTING'
         material_return.warehouse_operator = request.user
@@ -373,16 +333,12 @@ class MaterialReturnViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 
         if material_return.status not in ['PENDING', 'INSPECTING', 'PARTIAL']:
             return Response(
-                {'error': '只能对待入库、检验中或部分入库状态的退料单执行入库'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': '只能对待入库、检验中或部分入库状态的退料单执行入库'}, status=status.HTTP_400_BAD_REQUEST
             )
 
         lines_data = request.data.get('lines', [])
         if not lines_data:
-            return Response(
-                {'error': '请指定入库明细'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请指定入库明细'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             all_received = True
@@ -420,14 +376,14 @@ class MaterialReturnViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
                         move_date=timezone.now(),
                         status='COMPLETED',
                         notes=f'退料入库 - {material_return.get_return_reason_display()}',
-                        created_by=request.user
+                        created_by=request.user,
                     )
 
                     # 更新库存
                     stock, created = Stock.objects.get_or_create(
                         warehouse=material_return.warehouse,
                         item=line.item,
-                        defaults={'qty_on_hand': 0, 'weighted_avg_cost': line.unit_cost}
+                        defaults={'qty_on_hand': 0, 'weighted_avg_cost': line.unit_cost},
                     )
                     stock.qty_on_hand += received_qty
                     stock.save()
@@ -454,15 +410,12 @@ class MaterialReturnViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
         material_return = self.get_object()
 
         if material_return.status not in ['PENDING', 'INSPECTING']:
-            return Response(
-                {'error': '只能拒绝待入库或检验中状态的退料单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能拒绝待入库或检验中状态的退料单'}, status=status.HTTP_400_BAD_REQUEST)
 
         reason = request.data.get('reason', '')
 
         material_return.status = 'REJECTED'
-        material_return.notes = f"拒绝原因：{reason}\n" + material_return.notes
+        material_return.notes = f'拒绝原因：{reason}\n' + material_return.notes
         material_return.warehouse_operator = request.user
         material_return.save()
 
@@ -474,17 +427,11 @@ class MaterialReturnViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
         material_return = self.get_object()
 
         if material_return.status in ['COMPLETED', 'CANCELLED']:
-            return Response(
-                {'error': '已完成或已取消的退料单无法取消'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '已完成或已取消的退料单无法取消'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 如果有部分入库，需要特殊处理
         if material_return.received_qty > 0:
-            return Response(
-                {'error': '已有物料入库，无法取消'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '已有物料入库，无法取消'}, status=status.HTTP_400_BAD_REQUEST)
 
         material_return.status = 'CANCELLED'
         material_return.save()
@@ -493,7 +440,6 @@ class MaterialReturnViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 
 
 class MaterialReturnLineViewSet(PermissionMixin, viewsets.ModelViewSet):
-
     permission_module = 'inventory'
     permission_resource = 'material_return_line'
     """退料单明细视图集"""
@@ -501,4 +447,3 @@ class MaterialReturnLineViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = MaterialReturnLineSerializer
     permission_classes = [IsAuthenticated]
     filterset_fields = ['material_return', 'item', 'condition']
-

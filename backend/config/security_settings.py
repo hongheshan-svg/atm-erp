@@ -2,6 +2,7 @@
 Security settings for production deployment.
 Import this file in settings.py for production environments.
 """
+
 from decouple import config
 
 # =============================================================================
@@ -45,7 +46,7 @@ CSRF_COOKIE_SAMESITE = 'Lax'
 CSRF_TRUSTED_ORIGINS = config(
     'CSRF_TRUSTED_ORIGINS',
     default='http://localhost,http://127.0.0.1',
-    cast=lambda v: [s.strip() for s in v.split(',')]
+    cast=lambda v: [s.strip() for s in v.split(',')],
 )
 
 # =============================================================================
@@ -96,10 +97,28 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600
 
 # Allowed file extensions
 ALLOWED_UPLOAD_EXTENSIONS = [
-    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
-    '.txt', '.csv', '.json', '.xml',
-    '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg',
-    '.zip', '.rar', '.7z', '.tar', '.gz',
+    '.pdf',
+    '.doc',
+    '.docx',
+    '.xls',
+    '.xlsx',
+    '.ppt',
+    '.pptx',
+    '.txt',
+    '.csv',
+    '.json',
+    '.xml',
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.gif',
+    '.bmp',
+    '.svg',
+    '.zip',
+    '.rar',
+    '.7z',
+    '.tar',
+    '.gz',
 ]
 
 # =============================================================================

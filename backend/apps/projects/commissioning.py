@@ -2,6 +2,7 @@
 调试管理模块
 Commissioning Management - 调试计划、问题跟踪、参数记录、报告生成
 """
+
 from decimal import Decimal
 
 from django.conf import settings
@@ -20,6 +21,7 @@ User = settings.AUTH_USER_MODEL
 
 class CommissioningPlan(BaseModel):
     """调试计划"""
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('CONFIRMED', '已确认'),
@@ -29,8 +31,9 @@ class CommissioningPlan(BaseModel):
     ]
 
     plan_no = models.CharField('计划编号', max_length=50, unique=True)
-    project = models.ForeignKey('projects.Project', on_delete=models.CASCADE,
-                               related_name='commissioning_plans', verbose_name='关联项目')
+    project = models.ForeignKey(
+        'projects.Project', on_delete=models.CASCADE, related_name='commissioning_plans', verbose_name='关联项目'
+    )
 
     title = models.CharField('计划标题', max_length=200)
     description = models.TextField('计划描述', blank=True)
@@ -48,8 +51,9 @@ class CommissioningPlan(BaseModel):
     is_onsite = models.BooleanField('是否现场调试', default=False)
 
     # 负责人
-    leader = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
-                              related_name='led_commissioning_plans', verbose_name='负责人')
+    leader = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='led_commissioning_plans', verbose_name='负责人'
+    )
 
     # 调试目标
     objectives = models.JSONField('调试目标', default=list)
@@ -71,6 +75,7 @@ class CommissioningPlan(BaseModel):
 
 class CommissioningTask(BaseModel):
     """调试任务"""
+
     STATUS_CHOICES = [
         ('PENDING', '待开始'),
         ('IN_PROGRESS', '进行中'),
@@ -85,8 +90,7 @@ class CommissioningTask(BaseModel):
         ('NA', '不适用'),
     ]
 
-    plan = models.ForeignKey(CommissioningPlan, on_delete=models.CASCADE,
-                            related_name='tasks', verbose_name='调试计划')
+    plan = models.ForeignKey(CommissioningPlan, on_delete=models.CASCADE, related_name='tasks', verbose_name='调试计划')
 
     sequence = models.IntegerField('任务序号')
     name = models.CharField('任务名称', max_length=200)
@@ -96,8 +100,9 @@ class CommissioningTask(BaseModel):
     result = models.CharField('结果', max_length=20, choices=RESULT_CHOICES, null=True, blank=True)
 
     # 执行信息
-    assignee = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
-                                related_name='commissioning_tasks', verbose_name='执行人')
+    assignee = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='commissioning_tasks', verbose_name='执行人'
+    )
     planned_hours = models.DecimalField('计划工时', max_digits=6, decimal_places=2, default=0)
     actual_hours = models.DecimalField('实际工时', max_digits=6, decimal_places=2, default=0)
 
@@ -119,6 +124,7 @@ class CommissioningTask(BaseModel):
 
 class CommissioningIssue(BaseModel):
     """调试问题"""
+
     SEVERITY_CHOICES = [
         ('LOW', '轻微'),
         ('MEDIUM', '一般'),
@@ -147,10 +153,17 @@ class CommissioningIssue(BaseModel):
     ]
 
     issue_no = models.CharField('问题编号', max_length=50, unique=True)
-    plan = models.ForeignKey(CommissioningPlan, on_delete=models.CASCADE,
-                            related_name='issues', verbose_name='调试计划')
-    task = models.ForeignKey(CommissioningTask, on_delete=models.SET_NULL, null=True, blank=True,
-                            related_name='issues', verbose_name='相关任务')
+    plan = models.ForeignKey(
+        CommissioningPlan, on_delete=models.CASCADE, related_name='issues', verbose_name='调试计划'
+    )
+    task = models.ForeignKey(
+        CommissioningTask,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='issues',
+        verbose_name='相关任务',
+    )
 
     title = models.CharField('问题标题', max_length=200)
     description = models.TextField('问题描述')
@@ -160,8 +173,9 @@ class CommissioningIssue(BaseModel):
     status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES, default='OPEN')
 
     # 发现信息
-    found_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
-                                related_name='found_issues', verbose_name='发现人')
+    found_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='found_issues', verbose_name='发现人'
+    )
     found_at = models.DateTimeField('发现时间', auto_now_add=True)
 
     # 原因分析
@@ -170,14 +184,16 @@ class CommissioningIssue(BaseModel):
 
     # 解决方案
     solution = models.TextField('解决方案', blank=True)
-    resolved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
-                                   related_name='resolved_issues', verbose_name='解决人')
+    resolved_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='resolved_issues', verbose_name='解决人'
+    )
     resolved_at = models.DateTimeField('解决时间', null=True, blank=True)
 
     # 验证
     verified = models.BooleanField('已验证', default=False)
-    verified_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
-                                   related_name='verified_issues', verbose_name='验证人')
+    verified_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='verified_issues', verbose_name='验证人'
+    )
     verified_at = models.DateTimeField('验证时间', null=True, blank=True)
 
     # 影响
@@ -196,10 +212,18 @@ class CommissioningIssue(BaseModel):
 
 class CommissioningParameter(BaseModel):
     """调试参数记录"""
-    plan = models.ForeignKey(CommissioningPlan, on_delete=models.CASCADE,
-                            related_name='parameters', verbose_name='调试计划')
-    task = models.ForeignKey(CommissioningTask, on_delete=models.SET_NULL, null=True, blank=True,
-                            related_name='parameters', verbose_name='相关任务')
+
+    plan = models.ForeignKey(
+        CommissioningPlan, on_delete=models.CASCADE, related_name='parameters', verbose_name='调试计划'
+    )
+    task = models.ForeignKey(
+        CommissioningTask,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='parameters',
+        verbose_name='相关任务',
+    )
 
     parameter_name = models.CharField('参数名称', max_length=100)
     parameter_code = models.CharField('参数编码', max_length=50, blank=True)
@@ -218,8 +242,9 @@ class CommissioningParameter(BaseModel):
     is_qualified = models.BooleanField('是否合格', default=True)
 
     # 记录信息
-    recorded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
-                                   related_name='recorded_parameters', verbose_name='记录人')
+    recorded_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='recorded_parameters', verbose_name='记录人'
+    )
     recorded_at = models.DateTimeField('记录时间', auto_now_add=True)
 
     notes = models.TextField('备注', blank=True)
@@ -232,6 +257,7 @@ class CommissioningParameter(BaseModel):
 
 class CommissioningReport(BaseModel):
     """调试报告"""
+
     REPORT_TYPE_CHOICES = [
         ('DAILY', '日报'),
         ('WEEKLY', '周报'),
@@ -239,8 +265,9 @@ class CommissioningReport(BaseModel):
         ('FINAL', '最终报告'),
     ]
 
-    plan = models.ForeignKey(CommissioningPlan, on_delete=models.CASCADE,
-                            related_name='reports', verbose_name='调试计划')
+    plan = models.ForeignKey(
+        CommissioningPlan, on_delete=models.CASCADE, related_name='reports', verbose_name='调试计划'
+    )
 
     report_no = models.CharField('报告编号', max_length=50, unique=True)
     report_type = models.CharField('报告类型', max_length=20, choices=REPORT_TYPE_CHOICES)
@@ -262,12 +289,12 @@ class CommissioningReport(BaseModel):
     total_hours = models.DecimalField('总工时', max_digits=8, decimal_places=2, default=0)
 
     # 附件
-    report_file = models.FileField('报告文件', upload_to='commissioning/reports/',
-                                   null=True, blank=True)
+    report_file = models.FileField('报告文件', upload_to='commissioning/reports/', null=True, blank=True)
 
     # 编制人
-    prepared_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
-                                   related_name='prepared_reports', verbose_name='编制人')
+    prepared_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='prepared_reports', verbose_name='编制人'
+    )
 
     class Meta:
         db_table = 'commissioning_report'
@@ -277,6 +304,7 @@ class CommissioningReport(BaseModel):
 
 
 # ============ Serializers ============
+
 
 class CommissioningTaskSerializer(serializers.ModelSerializer):
     assignee_name = serializers.CharField(source='assignee.get_full_name', read_only=True)
@@ -338,8 +366,10 @@ class CommissioningPlanSerializer(serializers.ModelSerializer):
 
 # ============ ViewSets ============
 
+
 class CommissioningPlanViewSet(viewsets.ModelViewSet):
     """调试计划视图集"""
+
     queryset = CommissioningPlan.objects.filter(is_deleted=False)
     serializer_class = CommissioningPlanSerializer
     permission_classes = [IsAuthenticated]
@@ -361,13 +391,9 @@ class CommissioningPlanViewSet(viewsets.ModelViewSet):
         today = timezone.now()
         prefix = f"CP{today.strftime('%Y%m%d')}"
         count = CommissioningPlan.objects.filter(plan_no__startswith=prefix).count() + 1
-        plan_no = f"{prefix}{count:03d}"
+        plan_no = f'{prefix}{count:03d}'
 
-        serializer.save(
-            plan_no=plan_no,
-            created_by=self.request.user,
-            updated_by=self.request.user
-        )
+        serializer.save(plan_no=plan_no, created_by=self.request.user, updated_by=self.request.user)
 
     @action(detail=True, methods=['post'])
     def start(self, request, pk=None):
@@ -426,7 +452,7 @@ class CommissioningPlanViewSet(viewsets.ModelViewSet):
             'parameters': {
                 'total': plan.parameters.count(),
                 'qualified': plan.parameters.filter(is_qualified=True).count(),
-            }
+            },
         }
 
         # 计算通过率
@@ -461,7 +487,7 @@ class CommissioningPlanViewSet(viewsets.ModelViewSet):
         today = timezone.now()
         prefix = f"CR{today.strftime('%Y%m%d')}"
         count = CommissioningReport.objects.filter(report_no__startswith=prefix).count() + 1
-        report_no = f"{prefix}{count:03d}"
+        report_no = f'{prefix}{count:03d}'
 
         # 统计数据
         completed_tasks = tasks.filter(status='COMPLETED')
@@ -471,7 +497,7 @@ class CommissioningPlanViewSet(viewsets.ModelViewSet):
             plan=plan,
             report_no=report_no,
             report_type=report_type,
-            title=f"{plan.title} - {dict(CommissioningReport.REPORT_TYPE_CHOICES)[report_type]}",
+            title=f'{plan.title} - {dict(CommissioningReport.REPORT_TYPE_CHOICES)[report_type]}',
             report_date=today.date(),
             summary=request.data.get('summary', ''),
             achievements=list(completed_tasks.values('name', 'result', 'actual_hours')),
@@ -484,7 +510,7 @@ class CommissioningPlanViewSet(viewsets.ModelViewSet):
             total_hours=tasks.aggregate(Sum('actual_hours'))['actual_hours__sum'] or 0,
             prepared_by=request.user,
             created_by=request.user,
-            updated_by=request.user
+            updated_by=request.user,
         )
 
         return Response(CommissioningReportSerializer(report).data)
@@ -492,6 +518,7 @@ class CommissioningPlanViewSet(viewsets.ModelViewSet):
 
 class CommissioningTaskViewSet(viewsets.ModelViewSet):
     """调试任务视图集"""
+
     queryset = CommissioningTask.objects.filter(is_deleted=False)
     serializer_class = CommissioningTaskSerializer
     permission_classes = [IsAuthenticated]
@@ -535,6 +562,7 @@ class CommissioningTaskViewSet(viewsets.ModelViewSet):
 
 class CommissioningIssueViewSet(viewsets.ModelViewSet):
     """调试问题视图集"""
+
     queryset = CommissioningIssue.objects.filter(is_deleted=False)
     serializer_class = CommissioningIssueSerializer
     permission_classes = [IsAuthenticated]
@@ -560,13 +588,10 @@ class CommissioningIssueViewSet(viewsets.ModelViewSet):
         today = timezone.now()
         prefix = f"CI{today.strftime('%Y%m%d')}"
         count = CommissioningIssue.objects.filter(issue_no__startswith=prefix).count() + 1
-        issue_no = f"{prefix}{count:03d}"
+        issue_no = f'{prefix}{count:03d}'
 
         serializer.save(
-            issue_no=issue_no,
-            found_by=self.request.user,
-            created_by=self.request.user,
-            updated_by=self.request.user
+            issue_no=issue_no, found_by=self.request.user, created_by=self.request.user, updated_by=self.request.user
         )
 
     @action(detail=True, methods=['post'])
@@ -597,6 +622,7 @@ class CommissioningIssueViewSet(viewsets.ModelViewSet):
 
 class CommissioningParameterViewSet(viewsets.ModelViewSet):
     """调试参数视图集"""
+
     queryset = CommissioningParameter.objects.filter(is_deleted=False)
     serializer_class = CommissioningParameterSerializer
     permission_classes = [IsAuthenticated]
@@ -623,12 +649,13 @@ class CommissioningParameterViewSet(viewsets.ModelViewSet):
             is_qualified=is_qualified,
             recorded_by=self.request.user,
             created_by=self.request.user,
-            updated_by=self.request.user
+            updated_by=self.request.user,
         )
 
 
 class CommissioningReportViewSet(viewsets.ModelViewSet):
     """调试报告视图集"""
+
     queryset = CommissioningReport.objects.filter(is_deleted=False)
     serializer_class = CommissioningReportSerializer
     permission_classes = [IsAuthenticated]

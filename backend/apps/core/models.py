@@ -6,6 +6,7 @@ class TimeStampedModel(models.Model):
     """
     Abstract base model with created_at and updated_at timestamps
     """
+
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
 
@@ -17,6 +18,7 @@ class SoftDeleteModel(models.Model):
     """
     Abstract model for soft delete functionality
     """
+
     is_deleted = models.BooleanField(default=False, verbose_name='已删除')
     deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='删除时间')
 
@@ -26,6 +28,7 @@ class SoftDeleteModel(models.Model):
     def soft_delete(self):
         """Soft delete the instance by setting is_deleted to True."""
         from django.utils import timezone
+
         self.is_deleted = True
         self.deleted_at = timezone.now()
         self.save(update_fields=['is_deleted', 'deleted_at'])
@@ -35,13 +38,14 @@ class BaseModel(TimeStampedModel, SoftDeleteModel):
     """
     Base model combining timestamps and soft delete
     """
+
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='%(class)s_created',
-        verbose_name='创建人'
+        verbose_name='创建人',
     )
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -49,7 +53,7 @@ class BaseModel(TimeStampedModel, SoftDeleteModel):
         null=True,
         blank=True,
         related_name='%(class)s_updated',
-        verbose_name='更新人'
+        verbose_name='更新人',
     )
 
     class Meta:
@@ -60,6 +64,7 @@ class AuditLog(models.Model):
     """
     Audit trail for all system changes
     """
+
     ACTION_CHOICES = [
         ('CREATE', '创建'),
         ('UPDATE', '更新'),
@@ -75,7 +80,7 @@ class AuditLog(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         related_name='audit_logs',
-        verbose_name='操作用户'
+        verbose_name='操作用户',
     )
     action = models.CharField(max_length=20, choices=ACTION_CHOICES, verbose_name='操作类型')
     model_name = models.CharField(max_length=100, verbose_name='模型名称')
@@ -97,13 +102,14 @@ class AuditLog(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.user} - {self.action} - {self.model_name} - {self.timestamp}"
+        return f'{self.user} - {self.action} - {self.model_name} - {self.timestamp}'
 
 
 class Attachment(models.Model):
     """
     通用附件模型，可关联到任何业务对象
     """
+
     CATEGORY_CHOICES = [
         ('CONTRACT', '合同文件'),
         ('INVOICE', '发票'),
@@ -137,7 +143,7 @@ class Attachment(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         related_name='uploaded_attachments',
-        verbose_name='上传人'
+        verbose_name='上传人',
     )
     uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name='上传时间')
 
@@ -151,13 +157,14 @@ class Attachment(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.original_name} ({self.related_model}:{self.related_id})"
+        return f'{self.original_name} ({self.related_model}:{self.related_id})'
 
     def save(self, *args, **kwargs):
         if self.file and not self.file_size:
             self.file_size = self.file.size
         if self.file and not self.file_type:
             import mimetypes
+
             self.file_type = mimetypes.guess_type(self.file.name)[0] or 'application/octet-stream'
         super().save(*args, **kwargs)
 
@@ -166,6 +173,7 @@ class SystemNotification(models.Model):
     """
     System notifications for users
     """
+
     TYPE_CHOICES = [
         ('INFO', '信息'),
         ('WARNING', '警告'),
@@ -174,10 +182,7 @@ class SystemNotification(models.Model):
     ]
 
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='notifications',
-        verbose_name='接收用户'
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notifications', verbose_name='接收用户'
     )
     type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='INFO', verbose_name='类型')
     title = models.CharField(max_length=200, verbose_name='标题')
@@ -193,7 +198,7 @@ class SystemNotification(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.user} - {self.title}"
+        return f'{self.user} - {self.title}'
 
 
 class SystemConfig(models.Model):
@@ -201,6 +206,7 @@ class SystemConfig(models.Model):
     系统配置 - 存储公司信息和系统级设置
     使用单例模式，只有一条记录
     """
+
     # 公司基本信息
     company_name = models.CharField(max_length=200, verbose_name='公司名称', default='')
     company_short_name = models.CharField(max_length=50, blank=True, verbose_name='公司简称')
@@ -217,7 +223,9 @@ class SystemConfig(models.Model):
 
     # 法人信息
     legal_representative = models.CharField(max_length=50, blank=True, verbose_name='法人代表')
-    registered_capital = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True, verbose_name='注册资本')
+    registered_capital = models.DecimalField(
+        max_digits=15, decimal_places=2, null=True, blank=True, verbose_name='注册资本'
+    )
 
     # 系统设置
     default_currency = models.CharField(max_length=10, default='CNY', verbose_name='默认货币')
@@ -226,11 +234,7 @@ class SystemConfig(models.Model):
     # 时间戳
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
     updated_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='更新人'
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='更新人'
     )
 
     class Meta:

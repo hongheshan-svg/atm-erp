@@ -1,6 +1,7 @@
 """
 Security enhancements: login logging, password policy, sensitive operation confirmation.
 """
+
 import logging
 import re
 from datetime import timedelta
@@ -16,6 +17,7 @@ class LoginLog(models.Model):
     """
     Login attempt logging for security audit.
     """
+
     STATUS_CHOICES = [
         ('SUCCESS', '成功'),
         ('FAILED', '失败'),
@@ -28,7 +30,7 @@ class LoginLog(models.Model):
         null=True,
         blank=True,
         related_name='login_logs',
-        verbose_name='用户'
+        verbose_name='用户',
     )
     username = models.CharField(max_length=150, verbose_name='用户名')
     ip_address = models.GenericIPAddressField(null=True, blank=True, verbose_name='IP地址')
@@ -50,7 +52,7 @@ class LoginLog(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.username} - {self.status} - {self.login_time}"
+        return f'{self.username} - {self.status} - {self.login_time}'
 
 
 class PasswordPolicy:
@@ -64,7 +66,7 @@ class PasswordPolicy:
     REQUIRE_LOWERCASE = True
     REQUIRE_DIGIT = True
     REQUIRE_SPECIAL = True
-    SPECIAL_CHARS = "!@#$%^&*()_+-=[]{}|;:,.<>?"
+    SPECIAL_CHARS = '!@#$%^&*()_+-=[]{}|;:,.<>?'
     PASSWORD_EXPIRY_DAYS = 90
     PASSWORD_HISTORY_COUNT = 5
     MAX_LOGIN_ATTEMPTS = 5
@@ -74,7 +76,7 @@ class PasswordPolicy:
     def validate_password(cls, password, user=None):
         """
         Validate password against policy.
-        
+
         Returns:
             tuple: (is_valid, error_messages)
         """
@@ -117,7 +119,7 @@ class PasswordPolicy:
     def check_password_expiry(cls, user):
         """
         Check if user's password has expired.
-        
+
         Returns:
             tuple: (is_expired, days_until_expiry)
         """
@@ -140,7 +142,7 @@ class PasswordPolicy:
     def check_account_lockout(cls, username):
         """
         Check if account is locked due to failed login attempts.
-        
+
         Returns:
             tuple: (is_locked, remaining_minutes)
         """
@@ -150,17 +152,12 @@ class PasswordPolicy:
         # Get recent failed attempts
         cutoff_time = timezone.now() - timedelta(minutes=lockout_minutes)
         failed_attempts = LoginLog.objects.filter(
-            username=username,
-            status='FAILED',
-            login_time__gte=cutoff_time
+            username=username, status='FAILED', login_time__gte=cutoff_time
         ).count()
 
         if failed_attempts >= max_attempts:
             # Find the last failed attempt
-            last_attempt = LoginLog.objects.filter(
-                username=username,
-                status='FAILED'
-            ).order_by('-login_time').first()
+            last_attempt = LoginLog.objects.filter(username=username, status='FAILED').order_by('-login_time').first()
 
             if last_attempt:
                 unlock_time = last_attempt.login_time + timedelta(minutes=lockout_minutes)
@@ -175,6 +172,7 @@ class SensitiveOperationLog(models.Model):
     """
     Log for sensitive operations requiring confirmation.
     """
+
     OPERATION_TYPES = [
         ('DELETE', '删除'),
         ('BULK_DELETE', '批量删除'),
@@ -190,7 +188,7 @@ class SensitiveOperationLog(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         related_name='sensitive_operations',
-        verbose_name='操作用户'
+        verbose_name='操作用户',
     )
     operation_type = models.CharField(max_length=30, choices=OPERATION_TYPES, verbose_name='操作类型')
     target_model = models.CharField(max_length=100, verbose_name='目标模型')
@@ -208,7 +206,7 @@ class SensitiveOperationLog(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.user} - {self.get_operation_type_display()} - {self.target_desc}"
+        return f'{self.user} - {self.get_operation_type_display()} - {self.target_desc}'
 
 
 class SecurityService:
@@ -232,7 +230,7 @@ class SecurityService:
             user_agent=user_agent,
             status=status,
             failure_reason=failure_reason,
-            device_type=device_type
+            device_type=device_type,
         )
 
     @classmethod
@@ -273,7 +271,7 @@ class SecurityService:
             target_model=target_model,
             target_id=str(target_id) if target_id else '',
             target_desc=target_desc,
-            ip_address=cls.get_client_ip(request)
+            ip_address=cls.get_client_ip(request),
         )
 
     @classmethod
@@ -282,7 +280,4 @@ class SecurityService:
         Get login history for a user.
         """
         cutoff = timezone.now() - timedelta(days=days)
-        return LoginLog.objects.filter(
-            user=user,
-            login_time__gte=cutoff
-        ).order_by('-login_time')
+        return LoginLog.objects.filter(user=user, login_time__gte=cutoff).order_by('-login_time')

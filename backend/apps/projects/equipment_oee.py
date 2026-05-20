@@ -3,6 +3,7 @@
 Equipment OEE (Overall Equipment Effectiveness) Analysis
 设备综合效率统计：可用率 × 性能率 × 良品率
 """
+
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -21,15 +22,11 @@ class EquipmentShift(BaseModel):
     """
     设备班次配置
     """
+
     name = models.CharField(max_length=50, verbose_name='班次名称')
     start_time = models.TimeField(verbose_name='开始时间')
     end_time = models.TimeField(verbose_name='结束时间')
-    planned_hours = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=8,
-        verbose_name='计划工时'
-    )
+    planned_hours = models.DecimalField(max_digits=5, decimal_places=2, default=8, verbose_name='计划工时')
     break_minutes = models.IntegerField(default=0, verbose_name='休息时间(分钟)')
     is_default = models.BooleanField(default=False, verbose_name='默认班次')
     is_active = models.BooleanField(default=True, verbose_name='启用')
@@ -47,11 +44,9 @@ class EquipmentOEERecord(BaseModel):
     """
     设备OEE记录
     """
+
     equipment = models.ForeignKey(
-        'projects.Equipment',
-        on_delete=models.CASCADE,
-        related_name='oee_records',
-        verbose_name='设备'
+        'projects.Equipment', on_delete=models.CASCADE, related_name='oee_records', verbose_name='设备'
     )
     record_date = models.DateField(verbose_name='记录日期')
     shift = models.ForeignKey(
@@ -60,7 +55,7 @@ class EquipmentOEERecord(BaseModel):
         null=True,
         blank=True,
         related_name='oee_records',
-        verbose_name='班次'
+        verbose_name='班次',
     )
 
     # 时间数据 (分钟)
@@ -75,37 +70,14 @@ class EquipmentOEERecord(BaseModel):
 
     # 停机原因
     downtime_reasons = models.JSONField(
-        default=list,
-        blank=True,
-        verbose_name='停机原因',
-        help_text='[{"reason": "设备故障", "minutes": 30}, ...]'
+        default=list, blank=True, verbose_name='停机原因', help_text='[{"reason": "设备故障", "minutes": 30}, ...]'
     )
 
     # OEE指标
-    availability = models.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        default=0,
-        verbose_name='可用率(%)'
-    )
-    performance = models.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        default=0,
-        verbose_name='性能率(%)'
-    )
-    quality = models.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        default=0,
-        verbose_name='良品率(%)'
-    )
-    oee = models.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        default=0,
-        verbose_name='OEE(%)'
-    )
+    availability = models.DecimalField(max_digits=6, decimal_places=2, default=0, verbose_name='可用率(%)')
+    performance = models.DecimalField(max_digits=6, decimal_places=2, default=0, verbose_name='性能率(%)')
+    quality = models.DecimalField(max_digits=6, decimal_places=2, default=0, verbose_name='良品率(%)')
+    oee = models.DecimalField(max_digits=6, decimal_places=2, default=0, verbose_name='OEE(%)')
 
     # 操作员
     operator = models.ForeignKey(
@@ -114,7 +86,7 @@ class EquipmentOEERecord(BaseModel):
         null=True,
         blank=True,
         related_name='oee_records',
-        verbose_name='操作员'
+        verbose_name='操作员',
     )
 
     remarks = models.TextField(blank=True, verbose_name='备注')
@@ -158,6 +130,7 @@ class DowntimeReason(BaseModel):
     """
     停机原因字典
     """
+
     CATEGORY_CHOICES = [
         ('BREAKDOWN', '设备故障'),
         ('SETUP', '换型调整'),
@@ -170,12 +143,7 @@ class DowntimeReason(BaseModel):
 
     code = models.CharField(max_length=20, unique=True, verbose_name='原因编码')
     name = models.CharField(max_length=100, verbose_name='原因名称')
-    category = models.CharField(
-        max_length=20,
-        choices=CATEGORY_CHOICES,
-        default='OTHER',
-        verbose_name='分类'
-    )
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='OTHER', verbose_name='分类')
     description = models.TextField(blank=True, verbose_name='描述')
     is_planned = models.BooleanField(default=False, verbose_name='计划内停机')
     is_active = models.BooleanField(default=True, verbose_name='启用')
@@ -193,6 +161,7 @@ class DowntimeReason(BaseModel):
 # =====================
 # Serializers
 # =====================
+
 
 class EquipmentShiftSerializer(serializers.ModelSerializer):
     class Meta:
@@ -219,8 +188,7 @@ class EquipmentOEERecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = EquipmentOEERecord
         fields = '__all__'
-        read_only_fields = ['created_by', 'updated_by', 'availability', 'performance',
-                          'quality', 'oee']
+        read_only_fields = ['created_by', 'updated_by', 'availability', 'performance', 'quality', 'oee']
 
 
 class EquipmentOEERecordListSerializer(serializers.ModelSerializer):
@@ -230,9 +198,20 @@ class EquipmentOEERecordListSerializer(serializers.ModelSerializer):
     class Meta:
         model = EquipmentOEERecord
         fields = [
-            'id', 'equipment', 'equipment_name', 'record_date', 'shift', 'shift_name',
-            'planned_time', 'downtime', 'actual_output', 'qualified_output',
-            'availability', 'performance', 'quality', 'oee'
+            'id',
+            'equipment',
+            'equipment_name',
+            'record_date',
+            'shift',
+            'shift_name',
+            'planned_time',
+            'downtime',
+            'actual_output',
+            'qualified_output',
+            'availability',
+            'performance',
+            'quality',
+            'oee',
         ]
 
 
@@ -240,8 +219,10 @@ class EquipmentOEERecordListSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class EquipmentShiftViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """班次管理"""
+
     queryset = EquipmentShift.objects.filter(is_deleted=False)
     serializer_class = EquipmentShiftSerializer
     permission_classes = [IsAuthenticated]
@@ -264,8 +245,8 @@ class EquipmentShiftViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
                     'end_time': end,
                     'planned_hours': hours,
                     'break_minutes': break_min,
-                    'created_by': request.user
-                }
+                    'created_by': request.user,
+                },
             )
             if c:
                 created += 1
@@ -275,6 +256,7 @@ class EquipmentShiftViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
 
 class DowntimeReasonViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """停机原因管理"""
+
     queryset = DowntimeReason.objects.filter(is_deleted=False)
     serializer_class = DowntimeReasonSerializer
     permission_classes = [IsAuthenticated]
@@ -301,12 +283,7 @@ class DowntimeReasonViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         for code, name, category, is_planned in reasons:
             _, c = DowntimeReason.objects.get_or_create(
                 code=code,
-                defaults={
-                    'name': name,
-                    'category': category,
-                    'is_planned': is_planned,
-                    'created_by': request.user
-                }
+                defaults={'name': name, 'category': category, 'is_planned': is_planned, 'created_by': request.user},
             )
             if c:
                 created += 1
@@ -316,6 +293,7 @@ class DowntimeReasonViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
 
 class EquipmentOEERecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """OEE记录管理"""
+
     queryset = EquipmentOEERecord.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['equipment', 'shift', 'record_date']
@@ -350,10 +328,7 @@ class EquipmentOEERecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
         start_date = request.query_params.get('start_date', (date.today() - timedelta(days=30)).isoformat())
         end_date = request.query_params.get('end_date', date.today().isoformat())
 
-        records = self.get_queryset().filter(
-            record_date__gte=start_date,
-            record_date__lte=end_date
-        )
+        records = self.get_queryset().filter(record_date__gte=start_date, record_date__lte=end_date)
 
         # 总体平均
         overall = records.aggregate(
@@ -364,31 +339,33 @@ class EquipmentOEERecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
             total_planned=Sum('planned_time'),
             total_downtime=Sum('downtime'),
             total_output=Sum('actual_output'),
-            total_qualified=Sum('qualified_output')
+            total_qualified=Sum('qualified_output'),
         )
 
         # 按设备汇总
-        by_equipment = records.values(
-            'equipment__id', 'equipment__name', 'equipment__code'
-        ).annotate(
-            avg_oee=Avg('oee'),
-            avg_availability=Avg('availability'),
-            avg_performance=Avg('performance'),
-            avg_quality=Avg('quality'),
-            record_count=Count('id')
-        ).order_by('-avg_oee')
+        by_equipment = (
+            records.values('equipment__id', 'equipment__name', 'equipment__code')
+            .annotate(
+                avg_oee=Avg('oee'),
+                avg_availability=Avg('availability'),
+                avg_performance=Avg('performance'),
+                avg_quality=Avg('quality'),
+                record_count=Count('id'),
+            )
+            .order_by('-avg_oee')
+        )
 
         # 按日期趋势
-        trend = records.values('record_date').annotate(
-            avg_oee=Avg('oee')
-        ).order_by('record_date')
+        trend = records.values('record_date').annotate(avg_oee=Avg('oee')).order_by('record_date')
 
-        return Response({
-            'period': {'start': start_date, 'end': end_date},
-            'overall': overall,
-            'by_equipment': list(by_equipment),
-            'trend': list(trend)
-        })
+        return Response(
+            {
+                'period': {'start': start_date, 'end': end_date},
+                'overall': overall,
+                'by_equipment': list(by_equipment),
+                'trend': list(trend),
+            }
+        )
 
     @action(detail=False, methods=['get'])
     def downtime_analysis(self, request):
@@ -397,10 +374,7 @@ class EquipmentOEERecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
         end_date = request.query_params.get('end_date', date.today().isoformat())
         equipment_id = request.query_params.get('equipment_id')
 
-        queryset = self.get_queryset().filter(
-            record_date__gte=start_date,
-            record_date__lte=end_date
-        )
+        queryset = self.get_queryset().filter(record_date__gte=start_date, record_date__lte=end_date)
 
         if equipment_id:
             queryset = queryset.filter(equipment_id=equipment_id)
@@ -422,37 +396,30 @@ class EquipmentOEERecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
         # 转换为列表并计算占比
         reasons_list = []
         for name, minutes in sorted(reason_summary.items(), key=lambda x: -x[1]):
-            reasons_list.append({
-                'reason': name,
-                'minutes': minutes,
-                'percentage': round(minutes / total_downtime * 100, 2) if total_downtime > 0 else 0
-            })
+            reasons_list.append(
+                {
+                    'reason': name,
+                    'minutes': minutes,
+                    'percentage': round(minutes / total_downtime * 100, 2) if total_downtime > 0 else 0,
+                }
+            )
 
-        return Response({
-            'total_downtime': total_downtime,
-            'reasons': reasons_list
-        })
+        return Response({'total_downtime': total_downtime, 'reasons': reasons_list})
 
     @action(detail=False, methods=['get'])
     def benchmark(self, request):
         """OEE对标分析"""
         # 世界级OEE标准
-        world_class = {
-            'availability': 90,
-            'performance': 95,
-            'quality': 99,
-            'oee': 85
-        }
+        world_class = {'availability': 90, 'performance': 95, 'quality': 99, 'oee': 85}
 
         # 计算当前平均值
         last_30_days = date.today() - timedelta(days=30)
-        current = self.get_queryset().filter(
-            record_date__gte=last_30_days
-        ).aggregate(
-            availability=Avg('availability'),
-            performance=Avg('performance'),
-            quality=Avg('quality'),
-            oee=Avg('oee')
+        current = (
+            self.get_queryset()
+            .filter(record_date__gte=last_30_days)
+            .aggregate(
+                availability=Avg('availability'), performance=Avg('performance'), quality=Avg('quality'), oee=Avg('oee')
+            )
         )
 
         # 计算差距
@@ -460,11 +427,9 @@ class EquipmentOEERecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
             'availability': float(world_class['availability'] - (current['availability'] or 0)),
             'performance': float(world_class['performance'] - (current['performance'] or 0)),
             'quality': float(world_class['quality'] - (current['quality'] or 0)),
-            'oee': float(world_class['oee'] - (current['oee'] or 0))
+            'oee': float(world_class['oee'] - (current['oee'] or 0)),
         }
 
-        return Response({
-            'world_class': world_class,
-            'current': {k: float(v) if v else 0 for k, v in current.items()},
-            'gap': gap
-        })
+        return Response(
+            {'world_class': world_class, 'current': {k: float(v) if v else 0 for k, v in current.items()}, 'gap': gap}
+        )

@@ -1,6 +1,7 @@
 """
 URL configuration for projects app.
 """
+
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
@@ -267,7 +268,9 @@ router.register(r'agreement-changes', TechnicalAgreementChangeViewSet, basename=
 # 设备档案管理
 router.register(r'equipment-archives', EquipmentArchiveViewSet, basename='equipment-archive')
 router.register(r'archive-maintenance-plans', EquipmentMaintenancePlanViewSet, basename='archive-maintenance-plan')
-router.register(r'archive-maintenance-records', EquipmentMaintenanceRecordViewSet, basename='archive-maintenance-record')
+router.register(
+    r'archive-maintenance-records', EquipmentMaintenanceRecordViewSet, basename='archive-maintenance-record'
+)
 router.register(r'archive-spare-parts', EquipmentSparePartViewSet, basename='archive-spare-part')
 
 # FAT/SAT验收管理
@@ -331,32 +334,27 @@ router.register(r'customer-acceptances', CustomerAcceptanceViewSet, basename='cu
 
 urlpatterns = [
     path('', include(router.urls)),
-
     # 设备维护日历
     path('maintenance/calendar/', MaintenanceCalendarView.as_view(), name='maintenance-calendar'),
     path('maintenance/statistics/', MaintenanceStatisticsView.as_view(), name='maintenance-statistics'),
-    path('maintenance/history/<int:equipment_id>/', EquipmentMaintenanceHistoryView.as_view(), name='maintenance-history'),
-
+    path(
+        'maintenance/history/<int:equipment_id>/', EquipmentMaintenanceHistoryView.as_view(), name='maintenance-history'
+    ),
     # BOM对比
     path('bom/compare/', BOMCompareView.as_view(), name='bom-compare'),
-
     # 项目仪表盘增强
     path('dashboard/<int:project_id>/', ProjectDashboardView.as_view(), name='project-dashboard'),
     path('dashboard/overview/', ProjectListDashboardView.as_view(), name='project-list-dashboard'),
     path('dashboard/<int:project_id>/bom-cost/', BOMCostRollupView.as_view(), name='bom-cost-rollup'),
-
     # 业务跟踪仪表盘
     path('tracking/delivery/', DeliveryTrackingView.as_view(), name='delivery-tracking'),
     path('tracking/procurement/', ProcurementTrackingView.as_view(), name='procurement-tracking'),
     path('tracking/production/', ProductionProgressView.as_view(), name='production-progress'),
-
     # 项目成本看板
     path('cost/dashboard/<int:project_id>/', ProjectCostDashboardView.as_view(), name='project-cost-dashboard'),
     path('cost/overview/', CostOverviewDashboardView.as_view(), name='cost-overview-dashboard'),
-
     # 设备监控看板
     path('monitoring/dashboard/', EquipmentMonitoringDashboardView.as_view(), name='equipment-monitoring-dashboard'),
-
     # 高级成本分析报表
     path('cost/analysis/<int:project_id>/', ProjectCostAnalysisDashboardView.as_view(), name='project-cost-analysis'),
     path('cost/comparison/', CostComparisonReportView.as_view(), name='cost-comparison-report'),

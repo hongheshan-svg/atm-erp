@@ -41,4 +41,3 @@ class WarehouseAdmin(admin.ModelAdmin):
     list_filter = ['warehouse_type', 'is_active', 'is_deleted', 'created_at']
     search_fields = ['code', 'name', 'location']
     ordering = ['code']
-

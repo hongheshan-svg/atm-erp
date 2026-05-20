@@ -3,6 +3,7 @@ Finance models for expenses, receivables, and payables.
 
 注意: 使用字符串引用替代直接导入以避免循环依赖
 """
+
 from django.db import models
 
 from apps.core.models import BaseModel
@@ -10,14 +11,12 @@ from apps.core.models import BaseModel
 
 class Currency(BaseModel):
     """Currency master data"""
+
     code = models.CharField(max_length=3, unique=True, verbose_name='货币代码')  # USD, EUR, CNY
     name = models.CharField(max_length=50, verbose_name='货币名称')
     symbol = models.CharField(max_length=5, verbose_name='货币符号')  # $, €, ¥
     exchange_rate = models.DecimalField(
-        max_digits=12,
-        decimal_places=6,
-        default=1.0,
-        verbose_name='汇率（相对于基准货币）'
+        max_digits=12, decimal_places=6, default=1.0, verbose_name='汇率（相对于基准货币）'
     )
     is_base_currency = models.BooleanField(default=False, verbose_name='是否为基准货币')
     is_active = models.BooleanField(default=True, verbose_name='是否启用')
@@ -29,22 +28,14 @@ class Currency(BaseModel):
         ordering = ['code']
 
     def __str__(self):
-        return f"{self.code} - {self.name}"
+        return f'{self.code} - {self.name}'
 
 
 class ExchangeRateHistory(models.Model):
     """Exchange rate history for tracking"""
-    currency = models.ForeignKey(
-        Currency,
-        on_delete=models.CASCADE,
-        related_name='rate_history',
-        verbose_name='货币'
-    )
-    exchange_rate = models.DecimalField(
-        max_digits=12,
-        decimal_places=6,
-        verbose_name='汇率'
-    )
+
+    currency = models.ForeignKey(Currency, on_delete=models.CASCADE, related_name='rate_history', verbose_name='货币')
+    exchange_rate = models.DecimalField(max_digits=12, decimal_places=6, verbose_name='汇率')
     effective_date = models.DateField(verbose_name='生效日期', db_index=True)
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
 
@@ -58,13 +49,14 @@ class ExchangeRateHistory(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.currency.code} - {self.exchange_rate} ({self.effective_date})"
+        return f'{self.currency.code} - {self.exchange_rate} ({self.effective_date})'
 
 
 class Expense(BaseModel):
     """
     Expense records for project and department expenses.
     """
+
     CATEGORY_CHOICES = [
         ('TRAVEL', '差旅费'),
         ('MEAL', '餐饮费'),
@@ -89,7 +81,7 @@ class Expense(BaseModel):
         null=True,
         blank=True,
         related_name='expenses',
-        verbose_name='项目'
+        verbose_name='项目',
     )
     department = models.ForeignKey(
         'accounts.Department',
@@ -97,38 +89,20 @@ class Expense(BaseModel):
         null=True,
         blank=True,
         related_name='expenses',
-        verbose_name='部门'
+        verbose_name='部门',
     )
-    user = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.PROTECT,
-        related_name='expenses',
-        verbose_name='申请人'
-    )
+    user = models.ForeignKey('accounts.User', on_delete=models.PROTECT, related_name='expenses', verbose_name='申请人')
     expense_date = models.DateField(verbose_name='费用日期')
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, verbose_name='费用类别')
 
     # Multi-currency support
     currency = models.ForeignKey(
-        Currency,
-        on_delete=models.PROTECT,
-        related_name='expenses',
-        verbose_name='货币',
-        null=True
+        Currency, on_delete=models.PROTECT, related_name='expenses', verbose_name='货币', null=True
     )
     amount = models.DecimalField(max_digits=12, decimal_places=2, verbose_name='金额')
-    exchange_rate = models.DecimalField(
-        max_digits=12,
-        decimal_places=6,
-        default=1.0,
-        verbose_name='汇率（记录时）'
-    )
+    exchange_rate = models.DecimalField(max_digits=12, decimal_places=6, default=1.0, verbose_name='汇率（记录时）')
     base_amount = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        verbose_name='基准货币金额',
-        null=True,
-        blank=True
+        max_digits=12, decimal_places=2, verbose_name='基准货币金额', null=True, blank=True
     )
 
     description = models.TextField(verbose_name='费用说明')
@@ -148,8 +122,11 @@ class Expense(BaseModel):
         # Auto-generate expense_no
         if not self.expense_no:
             from django.utils import timezone
+
             date_str = timezone.now().strftime('%Y%m%d')
-            last_expense = Expense.objects.filter(expense_no__startswith=f'EXP{date_str}').order_by('-expense_no').first()
+            last_expense = (
+                Expense.objects.filter(expense_no__startswith=f'EXP{date_str}').order_by('-expense_no').first()
+            )
             if last_expense:
                 last_seq = int(last_expense.expense_no[-4:])
                 new_seq = last_seq + 1
@@ -168,6 +145,7 @@ class AccountReceivable(BaseModel):
     """
     Accounts receivable from sales orders.
     """
+
     STATUS_CHOICES = [
         ('PENDING', '待收款'),
         ('PARTIAL', '部分收款'),
@@ -178,10 +156,7 @@ class AccountReceivable(BaseModel):
 
     ar_no = models.CharField(max_length=50, unique=True, verbose_name='应收单号')
     customer = models.ForeignKey(
-        'masterdata.Customer',
-        on_delete=models.PROTECT,
-        related_name='receivables',
-        verbose_name='客户'
+        'masterdata.Customer', on_delete=models.PROTECT, related_name='receivables', verbose_name='客户'
     )
     so = models.ForeignKey(
         'sales.SalesOrder',
@@ -189,7 +164,7 @@ class AccountReceivable(BaseModel):
         null=True,
         blank=True,
         related_name='receivables',
-        verbose_name='销售订单'
+        verbose_name='销售订单',
     )
     project = models.ForeignKey(
         'projects.Project',
@@ -197,27 +172,18 @@ class AccountReceivable(BaseModel):
         null=True,
         blank=True,
         related_name='receivables',
-        verbose_name='项目'
+        verbose_name='项目',
     )
     invoice_no = models.CharField(max_length=50, null=True, blank=True, verbose_name='发票号')
     invoice_date = models.DateField(verbose_name='发票日期')
 
     # Multi-currency support
     currency = models.ForeignKey(
-        Currency,
-        on_delete=models.PROTECT,
-        related_name='receivables',
-        verbose_name='货币',
-        null=True
+        Currency, on_delete=models.PROTECT, related_name='receivables', verbose_name='货币', null=True
     )
     amount_due = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='应收金额')
     amount_paid = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='已收金额')
-    exchange_rate = models.DecimalField(
-        max_digits=12,
-        decimal_places=6,
-        default=1.0,
-        verbose_name='汇率'
-    )
+    exchange_rate = models.DecimalField(max_digits=12, decimal_places=6, default=1.0, verbose_name='汇率')
 
     due_date = models.DateField(verbose_name='到期日')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
@@ -239,6 +205,7 @@ class AccountReceivable(BaseModel):
         # Auto-generate ar_no
         if not self.ar_no:
             from django.utils import timezone
+
             date_str = timezone.now().strftime('%Y%m%d')
             last_ar = AccountReceivable.objects.filter(ar_no__startswith=f'AR{date_str}').order_by('-ar_no').first()
             if last_ar:
@@ -261,6 +228,7 @@ class AccountPayable(BaseModel):
     """
     Accounts payable from purchase orders.
     """
+
     STATUS_CHOICES = [
         ('PENDING', '待付款'),
         ('PARTIAL', '部分付款'),
@@ -271,10 +239,7 @@ class AccountPayable(BaseModel):
 
     ap_no = models.CharField(max_length=50, unique=True, verbose_name='应付单号')
     supplier = models.ForeignKey(
-        'masterdata.Supplier',
-        on_delete=models.PROTECT,
-        related_name='payables',
-        verbose_name='供应商'
+        'masterdata.Supplier', on_delete=models.PROTECT, related_name='payables', verbose_name='供应商'
     )
     po = models.ForeignKey(
         'purchase.PurchaseOrder',
@@ -282,7 +247,7 @@ class AccountPayable(BaseModel):
         null=True,
         blank=True,
         related_name='payables',
-        verbose_name='采购订单'
+        verbose_name='采购订单',
     )
     project = models.ForeignKey(
         'projects.Project',
@@ -290,27 +255,18 @@ class AccountPayable(BaseModel):
         null=True,
         blank=True,
         related_name='payables',
-        verbose_name='项目'
+        verbose_name='项目',
     )
     invoice_no = models.CharField(max_length=50, null=True, blank=True, verbose_name='发票号')
     invoice_date = models.DateField(verbose_name='发票日期')
 
     # Multi-currency support
     currency = models.ForeignKey(
-        Currency,
-        on_delete=models.PROTECT,
-        related_name='payables',
-        verbose_name='货币',
-        null=True
+        Currency, on_delete=models.PROTECT, related_name='payables', verbose_name='货币', null=True
     )
     amount_due = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='应付金额')
     amount_paid = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='已付金额')
-    exchange_rate = models.DecimalField(
-        max_digits=12,
-        decimal_places=6,
-        default=1.0,
-        verbose_name='汇率'
-    )
+    exchange_rate = models.DecimalField(max_digits=12, decimal_places=6, default=1.0, verbose_name='汇率')
 
     due_date = models.DateField(verbose_name='到期日')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
@@ -332,6 +288,7 @@ class AccountPayable(BaseModel):
         # Auto-generate ap_no
         if not self.ap_no:
             from django.utils import timezone
+
             date_str = timezone.now().strftime('%Y%m%d')
             last_ap = AccountPayable.objects.filter(ap_no__startswith=f'AP{date_str}').order_by('-ap_no').first()
             if last_ap:
@@ -352,6 +309,7 @@ class AccountPayable(BaseModel):
 
 class Payment(BaseModel):
     """Payment records for AR/AP"""
+
     PAYMENT_TYPE_CHOICES = [
         ('AR', '应收款'),
         ('AP', '应付款'),
@@ -373,7 +331,7 @@ class Payment(BaseModel):
         null=True,
         blank=True,
         related_name='payments',
-        verbose_name='应收账款'
+        verbose_name='应收账款',
     )
     ap = models.ForeignKey(
         AccountPayable,
@@ -381,26 +339,17 @@ class Payment(BaseModel):
         null=True,
         blank=True,
         related_name='payments',
-        verbose_name='应付账款'
+        verbose_name='应付账款',
     )
     payment_date = models.DateField(verbose_name='付款日期')
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, verbose_name='付款方式')
 
     # Multi-currency support
     currency = models.ForeignKey(
-        Currency,
-        on_delete=models.PROTECT,
-        related_name='payments',
-        verbose_name='货币',
-        null=True
+        Currency, on_delete=models.PROTECT, related_name='payments', verbose_name='货币', null=True
     )
     amount = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='付款金额')
-    exchange_rate = models.DecimalField(
-        max_digits=12,
-        decimal_places=6,
-        default=1.0,
-        verbose_name='汇率'
-    )
+    exchange_rate = models.DecimalField(max_digits=12, decimal_places=6, default=1.0, verbose_name='汇率')
 
     notes = models.TextField(null=True, blank=True, verbose_name='备注')
 
@@ -417,8 +366,11 @@ class Payment(BaseModel):
         # Auto-generate payment_no
         if not self.payment_no:
             from django.utils import timezone
+
             date_str = timezone.now().strftime('%Y%m%d')
-            last_payment = Payment.objects.filter(payment_no__startswith=f'PAY{date_str}').order_by('-payment_no').first()
+            last_payment = (
+                Payment.objects.filter(payment_no__startswith=f'PAY{date_str}').order_by('-payment_no').first()
+            )
             if last_payment:
                 last_seq = int(last_payment.payment_no[-4:])
                 new_seq = last_seq + 1
@@ -442,6 +394,7 @@ class PaymentSchedule(BaseModel):
     Payment schedule for tracking payment milestones based on contract terms.
     用于跟踪销售订单/合同的付款计划和进度。
     """
+
     MILESTONE_TYPE_CHOICES = [
         ('PREPAY', '预付款'),
         ('ON_DELIVERY', '发货款'),
@@ -471,10 +424,7 @@ class PaymentSchedule(BaseModel):
 
     # 关联销售订单
     sales_order = models.ForeignKey(
-        'sales.SalesOrder',
-        on_delete=models.CASCADE,
-        related_name='payment_schedules',
-        verbose_name='销售订单'
+        'sales.SalesOrder', on_delete=models.CASCADE, related_name='payment_schedules', verbose_name='销售订单'
     )
 
     # 关联项目（可选，从销售订单继承）
@@ -484,25 +434,18 @@ class PaymentSchedule(BaseModel):
         null=True,
         blank=True,
         related_name='payment_schedules',
-        verbose_name='项目'
+        verbose_name='项目',
     )
 
     # 里程碑信息
     milestone_type = models.CharField(
-        max_length=20,
-        choices=MILESTONE_TYPE_CHOICES,
-        default='CUSTOM',
-        verbose_name='付款节点类型'
+        max_length=20, choices=MILESTONE_TYPE_CHOICES, default='CUSTOM', verbose_name='付款节点类型'
     )
     milestone_name = models.CharField(max_length=100, verbose_name='付款节点名称')
     milestone_order = models.IntegerField(default=1, verbose_name='节点顺序')
 
     # 金额信息
-    percentage = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        verbose_name='付款比例(%)'
-    )
+    percentage = models.DecimalField(max_digits=5, decimal_places=2, verbose_name='付款比例(%)')
     amount_due = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='应收金额')
     amount_paid = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='已收金额')
 
@@ -511,19 +454,11 @@ class PaymentSchedule(BaseModel):
     actual_paid_date = models.DateField(null=True, blank=True, verbose_name='实际收款日期')
 
     # 状态
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
 
     # 提醒相关
     reminder_status = models.CharField(
-        max_length=20,
-        choices=REMINDER_STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='提醒状态'
+        max_length=20, choices=REMINDER_STATUS_CHOICES, default='PENDING', verbose_name='提醒状态'
     )
     reminder_days_before = models.IntegerField(default=7, verbose_name='提前提醒天数')
     last_reminded_at = models.DateTimeField(null=True, blank=True, verbose_name='最后提醒时间')
@@ -535,16 +470,13 @@ class PaymentSchedule(BaseModel):
         null=True,
         blank=True,
         related_name='payment_schedules',
-        verbose_name='关联应收账款'
+        verbose_name='关联应收账款',
     )
 
     # 关联银行流水（匹配后设置）
     # Note: Use string reference with app label since BankStatement is in same app
     bank_statements = models.ManyToManyField(
-        'finance.BankStatement',
-        blank=True,
-        related_name='payment_schedules',
-        verbose_name='关联银行流水'
+        'finance.BankStatement', blank=True, related_name='payment_schedules', verbose_name='关联银行流水'
     )
 
     notes = models.TextField(blank=True, verbose_name='备注')
@@ -561,7 +493,7 @@ class PaymentSchedule(BaseModel):
         ]
 
     def __str__(self):
-        return f"{self.schedule_no} - {self.milestone_name}"
+        return f'{self.schedule_no} - {self.milestone_name}'
 
     @property
     def amount_remaining(self):
@@ -579,20 +511,25 @@ class PaymentSchedule(BaseModel):
     def is_overdue(self):
         """是否逾期"""
         from django.utils import timezone
+
         return self.status == 'PENDING' and self.due_date < timezone.now().date()
 
     @property
     def days_until_due(self):
         """距离到期天数（负数表示已逾期）"""
         from django.utils import timezone
+
         return (self.due_date - timezone.now().date()).days
 
     def save(self, *args, **kwargs):
         # 自动生成编号
         if not self.schedule_no:
             from django.utils import timezone
+
             date_str = timezone.now().strftime('%Y%m%d')
-            last = PaymentSchedule.objects.filter(schedule_no__startswith=f'PS{date_str}').order_by('-schedule_no').first()
+            last = (
+                PaymentSchedule.objects.filter(schedule_no__startswith=f'PS{date_str}').order_by('-schedule_no').first()
+            )
             if last:
                 last_seq = int(last.schedule_no[-4:])
                 new_seq = last_seq + 1
@@ -627,55 +564,45 @@ class PaymentSchedule(BaseModel):
 
         # 付款条款到付款计划的映射
         PAYMENT_TERMS_MAP = {
-            'FULL_PREPAY': [
-                {'type': 'PREPAY', 'name': '全款预付', 'percentage': Decimal('100'), 'days_offset': 0}
-            ],
-            'COD': [
-                {'type': 'ON_DELIVERY', 'name': '货到付款', 'percentage': Decimal('100'), 'days_offset': 0}
-            ],
-            'NET30': [
-                {'type': 'FINAL', 'name': '月结30天', 'percentage': Decimal('100'), 'days_offset': 30}
-            ],
-            'NET60': [
-                {'type': 'FINAL', 'name': '月结60天', 'percentage': Decimal('100'), 'days_offset': 60}
-            ],
-            'NET90': [
-                {'type': 'FINAL', 'name': '月结90天', 'percentage': Decimal('100'), 'days_offset': 90}
-            ],
+            'FULL_PREPAY': [{'type': 'PREPAY', 'name': '全款预付', 'percentage': Decimal('100'), 'days_offset': 0}],
+            'COD': [{'type': 'ON_DELIVERY', 'name': '货到付款', 'percentage': Decimal('100'), 'days_offset': 0}],
+            'NET30': [{'type': 'FINAL', 'name': '月结30天', 'percentage': Decimal('100'), 'days_offset': 30}],
+            'NET60': [{'type': 'FINAL', 'name': '月结60天', 'percentage': Decimal('100'), 'days_offset': 60}],
+            'NET90': [{'type': 'FINAL', 'name': '月结90天', 'percentage': Decimal('100'), 'days_offset': 90}],
             'M_30_70': [
                 {'type': 'PREPAY', 'name': '30%预付款', 'percentage': Decimal('30'), 'days_offset': 0},
-                {'type': 'ON_DELIVERY', 'name': '70%发货款', 'percentage': Decimal('70'), 'days_offset': 0}
+                {'type': 'ON_DELIVERY', 'name': '70%发货款', 'percentage': Decimal('70'), 'days_offset': 0},
             ],
             'M_30_30_40': [
                 {'type': 'PREPAY', 'name': '30%预付款', 'percentage': Decimal('30'), 'days_offset': 0},
                 {'type': 'ON_DELIVERY', 'name': '30%发货款', 'percentage': Decimal('30'), 'days_offset': 0},
-                {'type': 'ON_ACCEPTANCE', 'name': '40%验收款', 'percentage': Decimal('40'), 'days_offset': 30}
+                {'type': 'ON_ACCEPTANCE', 'name': '40%验收款', 'percentage': Decimal('40'), 'days_offset': 30},
             ],
             'M_30_30_30_10': [
                 {'type': 'PREPAY', 'name': '30%预付款', 'percentage': Decimal('30'), 'days_offset': 0},
                 {'type': 'ON_DELIVERY', 'name': '30%发货款', 'percentage': Decimal('30'), 'days_offset': 0},
                 {'type': 'ON_ACCEPTANCE', 'name': '30%验收款', 'percentage': Decimal('30'), 'days_offset': 30},
-                {'type': 'WARRANTY', 'name': '10%质保金', 'percentage': Decimal('10'), 'days_offset': 365}
+                {'type': 'WARRANTY', 'name': '10%质保金', 'percentage': Decimal('10'), 'days_offset': 365},
             ],
             'M_30_60_10': [
                 {'type': 'PREPAY', 'name': '30%预付款', 'percentage': Decimal('30'), 'days_offset': 0},
                 {'type': 'ON_ACCEPTANCE', 'name': '60%验收款', 'percentage': Decimal('60'), 'days_offset': 30},
-                {'type': 'WARRANTY', 'name': '10%质保金', 'percentage': Decimal('10'), 'days_offset': 365}
+                {'type': 'WARRANTY', 'name': '10%质保金', 'percentage': Decimal('10'), 'days_offset': 365},
             ],
             'M_50_40_10': [
                 {'type': 'PREPAY', 'name': '50%预付款', 'percentage': Decimal('50'), 'days_offset': 0},
                 {'type': 'ON_ACCEPTANCE', 'name': '40%验收款', 'percentage': Decimal('40'), 'days_offset': 30},
-                {'type': 'WARRANTY', 'name': '10%质保金', 'percentage': Decimal('10'), 'days_offset': 365}
+                {'type': 'WARRANTY', 'name': '10%质保金', 'percentage': Decimal('10'), 'days_offset': 365},
             ],
             'M_40_50_10': [
                 {'type': 'PREPAY', 'name': '40%预付款', 'percentage': Decimal('40'), 'days_offset': 0},
                 {'type': 'ON_ACCEPTANCE', 'name': '50%验收款', 'percentage': Decimal('50'), 'days_offset': 30},
-                {'type': 'WARRANTY', 'name': '10%质保金', 'percentage': Decimal('10'), 'days_offset': 365}
+                {'type': 'WARRANTY', 'name': '10%质保金', 'percentage': Decimal('10'), 'days_offset': 365},
             ],
             'M_20_70_10': [
                 {'type': 'PREPAY', 'name': '20%预付款', 'percentage': Decimal('20'), 'days_offset': 0},
                 {'type': 'ON_ACCEPTANCE', 'name': '70%验收款', 'percentage': Decimal('70'), 'days_offset': 30},
-                {'type': 'WARRANTY', 'name': '10%质保金', 'percentage': Decimal('10'), 'days_offset': 365}
+                {'type': 'WARRANTY', 'name': '10%质保金', 'percentage': Decimal('10'), 'days_offset': 365},
             ],
         }
 
@@ -720,7 +647,7 @@ class PaymentSchedule(BaseModel):
                 percentage=milestone['percentage'],
                 amount_due=amount,
                 due_date=due_date,
-                reminder_days_before=7 if milestone['type'] != 'WARRANTY' else 30
+                reminder_days_before=7 if milestone['type'] != 'WARRANTY' else 30,
             )
             schedules.append(schedule)
 
@@ -732,6 +659,7 @@ class PurchasePaymentSchedule(BaseModel):
     Payment schedule for tracking payment milestones based on purchase contract terms.
     用于跟踪采购订单/合同的付款计划和进度。
     """
+
     MILESTONE_TYPE_CHOICES = [
         ('PREPAY', '预付款'),
         ('ON_DELIVERY', '到货款'),
@@ -760,10 +688,7 @@ class PurchasePaymentSchedule(BaseModel):
 
     # 关联采购订单
     purchase_order = models.ForeignKey(
-        'purchase.PurchaseOrder',
-        on_delete=models.CASCADE,
-        related_name='payment_schedules',
-        verbose_name='采购订单'
+        'purchase.PurchaseOrder', on_delete=models.CASCADE, related_name='payment_schedules', verbose_name='采购订单'
     )
 
     # 关联项目（可选，从采购订单继承）
@@ -773,25 +698,18 @@ class PurchasePaymentSchedule(BaseModel):
         null=True,
         blank=True,
         related_name='purchase_payment_schedules',
-        verbose_name='项目'
+        verbose_name='项目',
     )
 
     # 里程碑信息
     milestone_type = models.CharField(
-        max_length=20,
-        choices=MILESTONE_TYPE_CHOICES,
-        default='CUSTOM',
-        verbose_name='付款节点类型'
+        max_length=20, choices=MILESTONE_TYPE_CHOICES, default='CUSTOM', verbose_name='付款节点类型'
     )
     milestone_name = models.CharField(max_length=100, verbose_name='付款节点名称')
     milestone_order = models.IntegerField(default=1, verbose_name='节点顺序')
 
     # 金额信息
-    percentage = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        verbose_name='付款比例(%)'
-    )
+    percentage = models.DecimalField(max_digits=5, decimal_places=2, verbose_name='付款比例(%)')
     amount_due = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='应付金额')
     amount_paid = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='已付金额')
 
@@ -800,19 +718,11 @@ class PurchasePaymentSchedule(BaseModel):
     actual_paid_date = models.DateField(null=True, blank=True, verbose_name='实际付款日期')
 
     # 状态
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
 
     # 提醒相关
     reminder_status = models.CharField(
-        max_length=20,
-        choices=REMINDER_STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='提醒状态'
+        max_length=20, choices=REMINDER_STATUS_CHOICES, default='PENDING', verbose_name='提醒状态'
     )
     reminder_days_before = models.IntegerField(default=3, verbose_name='提前提醒天数')
     last_reminded_at = models.DateTimeField(null=True, blank=True, verbose_name='最后提醒时间')
@@ -824,15 +734,12 @@ class PurchasePaymentSchedule(BaseModel):
         null=True,
         blank=True,
         related_name='payment_schedules',
-        verbose_name='关联应付账款'
+        verbose_name='关联应付账款',
     )
 
     # 关联银行流水（匹配后设置）
     bank_statements = models.ManyToManyField(
-        'finance.BankStatement',
-        blank=True,
-        related_name='purchase_payment_schedules',
-        verbose_name='关联银行流水'
+        'finance.BankStatement', blank=True, related_name='purchase_payment_schedules', verbose_name='关联银行流水'
     )
 
     notes = models.TextField(blank=True, verbose_name='备注')
@@ -849,7 +756,7 @@ class PurchasePaymentSchedule(BaseModel):
         ]
 
     def __str__(self):
-        return f"{self.schedule_no} - {self.milestone_name}"
+        return f'{self.schedule_no} - {self.milestone_name}'
 
     @property
     def amount_remaining(self):
@@ -867,20 +774,27 @@ class PurchasePaymentSchedule(BaseModel):
     def is_overdue(self):
         """是否逾期"""
         from django.utils import timezone
+
         return self.status in ['PENDING', 'PARTIAL'] and self.due_date < timezone.now().date()
 
     @property
     def days_until_due(self):
         """距离到期天数（负数表示已逾期）"""
         from django.utils import timezone
+
         return (self.due_date - timezone.now().date()).days
 
     def save(self, *args, **kwargs):
         # 自动生成编号
         if not self.schedule_no:
             from django.utils import timezone
+
             date_str = timezone.now().strftime('%Y%m%d')
-            last = PurchasePaymentSchedule.objects.filter(schedule_no__startswith=f'PPS{date_str}').order_by('-schedule_no').first()
+            last = (
+                PurchasePaymentSchedule.objects.filter(schedule_no__startswith=f'PPS{date_str}')
+                .order_by('-schedule_no')
+                .first()
+            )
             if last:
                 last_seq = int(last.schedule_no[-4:])
                 new_seq = last_seq + 1
@@ -915,30 +829,14 @@ class PurchasePaymentSchedule(BaseModel):
 
         # 付款条款到付款计划的映射
         PAYMENT_TERMS_MAP = {
-            'PREPAY': [
-                {'type': 'PREPAY', 'name': '全款预付', 'percentage': Decimal('100'), 'days_offset': 0}
-            ],
-            'COD': [
-                {'type': 'ON_DELIVERY', 'name': '货到付款', 'percentage': Decimal('100'), 'days_offset': 0}
-            ],
-            'NET15': [
-                {'type': 'FINAL', 'name': '月结15天', 'percentage': Decimal('100'), 'days_offset': 15}
-            ],
-            'NET30': [
-                {'type': 'FINAL', 'name': '月结30天', 'percentage': Decimal('100'), 'days_offset': 30}
-            ],
-            'NET45': [
-                {'type': 'FINAL', 'name': '月结45天', 'percentage': Decimal('100'), 'days_offset': 45}
-            ],
-            'NET60': [
-                {'type': 'FINAL', 'name': '月结60天', 'percentage': Decimal('100'), 'days_offset': 60}
-            ],
-            'NET90': [
-                {'type': 'FINAL', 'name': '月结90天', 'percentage': Decimal('100'), 'days_offset': 90}
-            ],
-            'NET120': [
-                {'type': 'FINAL', 'name': '月结120天', 'percentage': Decimal('100'), 'days_offset': 120}
-            ],
+            'PREPAY': [{'type': 'PREPAY', 'name': '全款预付', 'percentage': Decimal('100'), 'days_offset': 0}],
+            'COD': [{'type': 'ON_DELIVERY', 'name': '货到付款', 'percentage': Decimal('100'), 'days_offset': 0}],
+            'NET15': [{'type': 'FINAL', 'name': '月结15天', 'percentage': Decimal('100'), 'days_offset': 15}],
+            'NET30': [{'type': 'FINAL', 'name': '月结30天', 'percentage': Decimal('100'), 'days_offset': 30}],
+            'NET45': [{'type': 'FINAL', 'name': '月结45天', 'percentage': Decimal('100'), 'days_offset': 45}],
+            'NET60': [{'type': 'FINAL', 'name': '月结60天', 'percentage': Decimal('100'), 'days_offset': 60}],
+            'NET90': [{'type': 'FINAL', 'name': '月结90天', 'percentage': Decimal('100'), 'days_offset': 90}],
+            'NET120': [{'type': 'FINAL', 'name': '月结120天', 'percentage': Decimal('100'), 'days_offset': 120}],
         }
 
         # 删除旧的付款计划
@@ -980,7 +878,7 @@ class PurchasePaymentSchedule(BaseModel):
                 percentage=milestone['percentage'],
                 amount_due=amount,
                 due_date=due_date,
-                reminder_days_before=3  # 采购付款提前3天提醒
+                reminder_days_before=3,  # 采购付款提前3天提醒
             )
             schedules.append(schedule)
 
@@ -991,6 +889,7 @@ class Invoice(BaseModel):
     """
     Invoice records for tax management.
     """
+
     INVOICE_TYPE_CHOICES = [
         ('INPUT', '进项发票'),
         ('OUTPUT', '销项发票'),
@@ -1041,14 +940,12 @@ class Invoice(BaseModel):
 
     # 发票分类信息
     invoice_source = models.CharField(max_length=100, blank=True, verbose_name='发票来源')
-    invoice_category = models.CharField(max_length=50, choices=INVOICE_CATEGORY_CHOICES, blank=True, verbose_name='发票票种')
+    invoice_category = models.CharField(
+        max_length=50, choices=INVOICE_CATEGORY_CHOICES, blank=True, verbose_name='发票票种'
+    )
 
     reference_type = models.CharField(
-        max_length=20,
-        choices=REFERENCE_TYPE_CHOICES,
-        null=True,
-        blank=True,
-        verbose_name='关联单据类型'
+        max_length=20, choices=REFERENCE_TYPE_CHOICES, null=True, blank=True, verbose_name='关联单据类型'
     )
     reference_id = models.IntegerField(null=True, blank=True, verbose_name='关联单据ID')
 
@@ -1059,7 +956,7 @@ class Invoice(BaseModel):
         null=True,
         blank=True,
         related_name='invoices',
-        verbose_name='关联项目'
+        verbose_name='关联项目',
     )
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='REGISTERED', verbose_name='状态')
@@ -1072,7 +969,7 @@ class Invoice(BaseModel):
         ordering = ['-invoice_date', '-id']
 
     def __str__(self):
-        return f"{self.invoice_no}"
+        return f'{self.invoice_no}'
 
     def save(self, *args, **kwargs):
         # Calculate total_amount if not set
@@ -1086,12 +983,8 @@ class InvoiceItem(BaseModel):
     Invoice line items / details.
     发票明细行，记录每张发票的商品明细。
     """
-    invoice = models.ForeignKey(
-        Invoice,
-        on_delete=models.CASCADE,
-        related_name='items',
-        verbose_name='发票'
-    )
+
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='items', verbose_name='发票')
     line_no = models.IntegerField(default=1, verbose_name='行号')
 
     # 商品信息
@@ -1115,7 +1008,7 @@ class InvoiceItem(BaseModel):
         ordering = ['invoice', 'line_no']
 
     def __str__(self):
-        return f"{self.invoice.invoice_no} - {self.item_name}"
+        return f'{self.invoice.invoice_no} - {self.item_name}'
 
 
 class SharedExpense(BaseModel):
@@ -1123,6 +1016,7 @@ class SharedExpense(BaseModel):
     Shared/Public expense for allocation across multiple projects.
     Examples: rent, utilities, shared equipment, admin expenses.
     """
+
     ALLOCATION_METHOD_CHOICES = [
         ('EQUAL', '平均分摊'),
         ('REVENUE', '按收入比例'),
@@ -1161,10 +1055,7 @@ class SharedExpense(BaseModel):
 
     amount = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='费用金额')
     allocation_method = models.CharField(
-        max_length=20,
-        choices=ALLOCATION_METHOD_CHOICES,
-        default='EQUAL',
-        verbose_name='分摊方式'
+        max_length=20, choices=ALLOCATION_METHOD_CHOICES, default='EQUAL', verbose_name='分摊方式'
     )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', verbose_name='状态')
 
@@ -1175,7 +1066,7 @@ class SharedExpense(BaseModel):
         null=True,
         blank=True,
         related_name='allocated_shared_expenses',
-        verbose_name='分摊人'
+        verbose_name='分摊人',
     )
     notes = models.TextField(blank=True, verbose_name='备注')
 
@@ -1186,15 +1077,20 @@ class SharedExpense(BaseModel):
         ordering = ['-expense_date']
 
     def __str__(self):
-        return f"{self.expense_no} - {self.name}"
+        return f'{self.expense_no} - {self.name}'
 
     def save(self, *args, **kwargs):
         # Auto-generate expense_no
         if not self.expense_no:
             from django.utils import timezone
+
             date_str = timezone.now().strftime('%Y%m%d')
             prefix = 'SE'  # Shared Expense
-            last = SharedExpense.objects.filter(expense_no__startswith=f'{prefix}{date_str}').order_by('-expense_no').first()
+            last = (
+                SharedExpense.objects.filter(expense_no__startswith=f'{prefix}{date_str}')
+                .order_by('-expense_no')
+                .first()
+            )
             if last:
                 last_seq = int(last.expense_no[-4:])
                 new_seq = last_seq + 1
@@ -1208,28 +1104,15 @@ class SharedExpenseAllocation(BaseModel):
     """
     Allocation of shared expense to individual projects.
     """
+
     shared_expense = models.ForeignKey(
-        SharedExpense,
-        on_delete=models.CASCADE,
-        related_name='allocations',
-        verbose_name='公共费用'
+        SharedExpense, on_delete=models.CASCADE, related_name='allocations', verbose_name='公共费用'
     )
     project = models.ForeignKey(
-        'projects.Project',
-        on_delete=models.PROTECT,
-        related_name='shared_expense_allocations',
-        verbose_name='项目'
+        'projects.Project', on_delete=models.PROTECT, related_name='shared_expense_allocations', verbose_name='项目'
     )
-    allocation_ratio = models.DecimalField(
-        max_digits=6,
-        decimal_places=4,
-        verbose_name='分摊比例'
-    )
-    allocated_amount = models.DecimalField(
-        max_digits=15,
-        decimal_places=2,
-        verbose_name='分摊金额'
-    )
+    allocation_ratio = models.DecimalField(max_digits=6, decimal_places=4, verbose_name='分摊比例')
+    allocated_amount = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='分摊金额')
     notes = models.TextField(blank=True, verbose_name='备注')
 
     class Meta:
@@ -1239,13 +1122,14 @@ class SharedExpenseAllocation(BaseModel):
         unique_together = ['shared_expense', 'project']
 
     def __str__(self):
-        return f"{self.shared_expense.expense_no} -> {self.project.code}"
+        return f'{self.shared_expense.expense_no} -> {self.project.code}'
 
 
 class PaymentRequest(BaseModel):
     """
     付款申请 - 用于申请向供应商付款，需经审批流程
     """
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('PENDING', '审批中'),
@@ -1266,16 +1150,10 @@ class PaymentRequest(BaseModel):
     request_no = models.CharField(max_length=50, unique=True, verbose_name='申请单号')
     title = models.CharField(max_length=200, verbose_name='申请标题')
     payment_type = models.CharField(
-        max_length=20,
-        choices=PAYMENT_TYPE_CHOICES,
-        default='OTHER',
-        verbose_name='付款类型'
+        max_length=20, choices=PAYMENT_TYPE_CHOICES, default='OTHER', verbose_name='付款类型'
     )
     supplier = models.ForeignKey(
-        'masterdata.Supplier',
-        on_delete=models.PROTECT,
-        related_name='payment_requests',
-        verbose_name='供应商'
+        'masterdata.Supplier', on_delete=models.PROTECT, related_name='payment_requests', verbose_name='供应商'
     )
     po = models.ForeignKey(
         'purchase.PurchaseOrder',
@@ -1283,7 +1161,7 @@ class PaymentRequest(BaseModel):
         null=True,
         blank=True,
         related_name='payment_requests',
-        verbose_name='关联采购订单'
+        verbose_name='关联采购订单',
     )
     ap = models.ForeignKey(
         AccountPayable,
@@ -1291,7 +1169,7 @@ class PaymentRequest(BaseModel):
         null=True,
         blank=True,
         related_name='payment_requests',
-        verbose_name='关联应付账款'
+        verbose_name='关联应付账款',
     )
     project = models.ForeignKey(
         'projects.Project',
@@ -1299,32 +1177,18 @@ class PaymentRequest(BaseModel):
         null=True,
         blank=True,
         related_name='payment_requests',
-        verbose_name='关联项目'
+        verbose_name='关联项目',
     )
     amount = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='申请金额')
-    currency = models.ForeignKey(
-        Currency,
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        verbose_name='币种'
-    )
+    currency = models.ForeignKey(Currency, on_delete=models.PROTECT, null=True, blank=True, verbose_name='币种')
     bank_account = models.CharField(max_length=100, blank=True, verbose_name='收款账户')
     bank_name = models.CharField(max_length=100, blank=True, verbose_name='开户银行')
     expected_date = models.DateField(null=True, blank=True, verbose_name='期望付款日期')
     reason = models.TextField(verbose_name='付款原因')
     attachments = models.JSONField(default=list, blank=True, verbose_name='附件')
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='DRAFT',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', verbose_name='状态')
     applicant = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.PROTECT,
-        related_name='payment_requests_applied',
-        verbose_name='申请人'
+        'accounts.User', on_delete=models.PROTECT, related_name='payment_requests_applied', verbose_name='申请人'
     )
     approved_by = models.ForeignKey(
         'accounts.User',
@@ -1332,7 +1196,7 @@ class PaymentRequest(BaseModel):
         null=True,
         blank=True,
         related_name='payment_requests_approved',
-        verbose_name='审批人'
+        verbose_name='审批人',
     )
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name='审批时间')
     paid_at = models.DateTimeField(null=True, blank=True, verbose_name='付款时间')
@@ -1342,7 +1206,7 @@ class PaymentRequest(BaseModel):
         null=True,
         blank=True,
         related_name='payment_requests',
-        verbose_name='付款记录'
+        verbose_name='付款记录',
     )
     notes = models.TextField(blank=True, verbose_name='备注')
 
@@ -1358,10 +1222,9 @@ class PaymentRequest(BaseModel):
     def save(self, *args, **kwargs):
         if not self.request_no:
             from django.utils import timezone
+
             today = timezone.now().strftime('%Y%m%d')
-            last = PaymentRequest.objects.filter(
-                request_no__startswith=f'PAY{today}'
-            ).order_by('-request_no').first()
+            last = PaymentRequest.objects.filter(request_no__startswith=f'PAY{today}').order_by('-request_no').first()
             if last:
                 seq = int(last.request_no[-4:]) + 1
             else:

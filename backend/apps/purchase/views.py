@@ -1,6 +1,7 @@
 """
 Views for purchase app.
 """
+
 import logging
 
 from django.db import transaction
@@ -38,10 +39,13 @@ from .services import BudgetValidationService
 logger = logging.getLogger(__name__)
 
 
-class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class PurchaseRequestViewSet(
+    PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
+):
     """
     ViewSet for PurchaseRequest management.
     """
+
     queryset = PurchaseRequest.objects.all()
     serializer_class = PurchaseRequestSerializer
     filterset_fields = ['project', 'requestor', 'status', 'is_deleted']
@@ -60,12 +64,13 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
     def create(self, request, *args, **kwargs):
         """Override create to add debugging."""
         import logging
+
         logger = logging.getLogger(__name__)
-        logger.warning(f"PR Create request data: {request.data}")
+        logger.warning(f'PR Create request data: {request.data}')
 
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
-            logger.warning(f"PR Validation errors: {serializer.errors}")
+            logger.warning(f'PR Validation errors: {serializer.errors}')
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         self.perform_create(serializer)
@@ -75,21 +80,19 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
     def perform_create(self, serializer):
         """Auto-set requestor to current user and update BOM status."""
         with transaction.atomic():
-            instance = serializer.save(
-            created_by=self.request.user,
-            requestor=self.request.user
-        )
+            instance = serializer.save(created_by=self.request.user, requestor=self.request.user)
 
             # 更新BOM状态：NOT_ORDERED -> PR_PENDING
             if instance.project:
                 from apps.projects.models import ProjectBOM
+
                 # 获取采购申请行
                 for pr_line in instance.lines.filter(is_deleted=False):
                     bom_items = ProjectBOM.objects.filter(
                         project=instance.project,
                         item=pr_line.item,
                         is_deleted=False,
-                        order_status='NOT_ORDERED'  # 只更新未下单的
+                        order_status='NOT_ORDERED',  # 只更新未下单的
                     )
                     for bom in bom_items:
                         bom.order_status = 'PR_PENDING'
@@ -114,7 +117,7 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
                         item=pr_line.item,
                         purchase_request=instance,
                         is_deleted=False,
-                        order_status__in=['PR_PENDING', 'PR_APPROVED']
+                        order_status__in=['PR_PENDING', 'PR_APPROVED'],
                     )
                     for bom in bom_items:
                         # 回退数量
@@ -144,18 +147,12 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
             amount = 0
 
         if not project_id:
-            return Response({
-                'valid': True,
-                'message': '未选择项目，无需预算校验'
-            })
+            return Response({'valid': True, 'message': '未选择项目，无需预算校验'})
 
         try:
             project = Project.objects.get(id=project_id)
         except Project.DoesNotExist:
-            return Response(
-                {'error': '项目不存在'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '项目不存在'}, status=status.HTTP_400_BAD_REQUEST)
 
         result = BudgetValidationService.validate_purchase_request(project, amount)
         return Response(result)
@@ -166,18 +163,12 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
         project_id = request.query_params.get('project_id')
 
         if not project_id:
-            return Response(
-                {'error': '请提供项目ID'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供项目ID'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             project = Project.objects.get(id=project_id)
         except Project.DoesNotExist:
-            return Response(
-                {'error': '项目不存在'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '项目不存在'}, status=status.HTTP_400_BAD_REQUEST)
 
         summary = BudgetValidationService.get_project_budget_summary(project)
         return Response(summary)
@@ -187,17 +178,12 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
         """Submit PR for approval with budget validation and workflow."""
         pr = self.get_object()
         if pr.status != 'DRAFT':
-            return Response(
-                {'error': '只能提交草稿状态的申请'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能提交草稿状态的申请'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Budget validation
         budget_warning = None
         if pr.project:
-            budget_result = BudgetValidationService.validate_purchase_request(
-                pr.project, pr.total_amount
-            )
+            budget_result = BudgetValidationService.validate_purchase_request(pr.project, pr.total_amount)
             if not budget_result['valid']:
                 budget_warning = budget_result['message']
 
@@ -210,7 +196,7 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
                 business_id=pr.id,
                 business_no=pr.request_no,
                 submitter=request.user,
-                amount=pr.total_amount
+                amount=pr.total_amount,
             )
 
             if instance:
@@ -219,7 +205,7 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
                 response_data = {
                     **PurchaseRequestSerializer(pr).data,
                     'workflow_started': True,
-                    'workflow_id': instance.id
+                    'workflow_id': instance.id,
                 }
                 if budget_warning:
                     response_data['budget_warning'] = budget_warning
@@ -233,17 +219,16 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
 
                 # 更新BOM状态
                 from apps.projects.models import ProjectBOM
-                ProjectBOM.objects.filter(
-                    purchase_request=pr,
-                    is_deleted=False,
-                    order_status='PR_PENDING'
-                ).update(order_status='PR_APPROVED')
+
+                ProjectBOM.objects.filter(purchase_request=pr, is_deleted=False, order_status='PR_PENDING').update(
+                    order_status='PR_APPROVED'
+                )
 
                 response_data = {
                     **PurchaseRequestSerializer(pr).data,
                     'workflow_started': False,
                     'auto_approved': True,
-                    'message': error or '未配置审批流程，已自动批准'
+                    'message': error or '未配置审批流程，已自动批准',
                 }
                 if budget_warning:
                     response_data['budget_warning'] = budget_warning
@@ -257,7 +242,7 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
             response_data = {
                 **PurchaseRequestSerializer(pr).data,
                 'auto_approved': True,
-                'message': '工作流服务不可用，已自动批准'
+                'message': '工作流服务不可用，已自动批准',
             }
             if budget_warning:
                 response_data['budget_warning'] = budget_warning
@@ -268,10 +253,7 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
         """Approve PR - 仅在无活跃工作流时允许直接审批."""
         pr = self.get_object()
         if pr.status != 'SUBMITTED':
-            return Response(
-                {'error': '只能批准已提交的申请'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能批准已提交的申请'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 检查是否有活跃工作流
         workflow_error = self.check_workflow_allows_direct_action(pr, '审批')
@@ -284,11 +266,10 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
 
             # 更新BOM状态：PR_PENDING -> PR_APPROVED
             from apps.projects.models import ProjectBOM
-            ProjectBOM.objects.filter(
-                purchase_request=pr,
-                is_deleted=False,
-                order_status='PR_PENDING'
-            ).update(order_status='PR_APPROVED')
+
+            ProjectBOM.objects.filter(purchase_request=pr, is_deleted=False, order_status='PR_PENDING').update(
+                order_status='PR_APPROVED'
+            )
 
         return Response(PurchaseRequestSerializer(pr).data)
 
@@ -297,10 +278,7 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
         """Reject PR - 仅在无活跃工作流时允许直接拒绝."""
         pr = self.get_object()
         if pr.status != 'SUBMITTED':
-            return Response(
-                {'error': '只能拒绝已提交的申请'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能拒绝已提交的申请'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 检查是否有活跃工作流
         workflow_error = self.check_workflow_allows_direct_action(pr, '拒绝')
@@ -316,17 +294,11 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
         """Withdraw/Revoke submitted PR - 反审/撤回采购申请."""
         pr = self.get_object()
         if pr.status not in ['SUBMITTED', 'APPROVED']:
-            return Response(
-                {'error': '只能撤回已提交或已批准的申请'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能撤回已提交或已批准的申请'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 检查是否已经转为采购订单
         if pr.status == 'CONVERTED':
-            return Response(
-                {'error': '该申请已转为采购订单，无法撤回'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '该申请已转为采购订单，无法撤回'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             pr.status = 'DRAFT'
@@ -334,50 +306,35 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
 
             # 回退BOM状态：PR_APPROVED -> PR_PENDING
             from apps.projects.models import ProjectBOM
-            ProjectBOM.objects.filter(
-                purchase_request=pr,
-                is_deleted=False,
-                order_status='PR_APPROVED'
-            ).update(order_status='PR_PENDING')
+
+            ProjectBOM.objects.filter(purchase_request=pr, is_deleted=False, order_status='PR_APPROVED').update(
+                order_status='PR_PENDING'
+            )
 
         # 尝试取消工作流
         try:
             from apps.core.workflow.services import WorkflowService
-            WorkflowService.cancel_workflow(
-                business_type='PURCHASE_REQUEST',
-                business_id=pr.id
-            )
+
+            WorkflowService.cancel_workflow(business_type='PURCHASE_REQUEST', business_id=pr.id)
         except Exception:
             pass
 
-        return Response({
-            **PurchaseRequestSerializer(pr).data,
-            'message': '采购申请已撤回'
-        })
+        return Response({**PurchaseRequestSerializer(pr).data, 'message': '采购申请已撤回'})
 
     @action(detail=True, methods=['post'])
     def convert_to_po(self, request, pk=None):
         """Convert PR to PO."""
         pr = self.get_object()
         if pr.status != 'APPROVED':
-            return Response(
-                {'error': '只能转换已批准的申请'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能转换已批准的申请'}, status=status.HTTP_400_BAD_REQUEST)
 
         supplier_id = request.data.get('supplier')
         if not supplier_id:
-            return Response(
-                {'error': '请选择供应商'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请选择供应商'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             po = PurchaseOrder.objects.create(
-                supplier_id=supplier_id,
-                project=pr.project,
-                delivery_date=pr.required_date,
-                created_by=request.user
+                supplier_id=supplier_id, project=pr.project, delivery_date=pr.required_date, created_by=request.user
             )
 
             for pr_line in pr.lines.filter(is_deleted=False):
@@ -386,18 +343,19 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
                     item=pr_line.item,
                     qty=pr_line.qty,
                     unit_price=pr_line.estimated_price,
-                    created_by=request.user
+                    created_by=request.user,
                 )
 
             # 关联BOM到采购订单（但状态保持PR_APPROVED，等订单确认时再变为ORDERED）
             if pr.project:
                 from apps.projects.models import ProjectBOM
+
                 for pr_line in pr.lines.filter(is_deleted=False):
                     bom_items = ProjectBOM.objects.filter(
                         project=pr.project,
                         item=pr_line.item,
                         is_deleted=False,
-                        order_status__in=['PR_PENDING', 'PR_APPROVED']
+                        order_status__in=['PR_PENDING', 'PR_APPROVED'],
                     )
                     for bom in bom_items:
                         bom.purchase_order = po  # 先关联订单，但状态不变
@@ -430,10 +388,7 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
 
         file = request.FILES.get('file')
         if not file:
-            return Response(
-                {'error': '请上传Excel文件'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请上传Excel文件'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 获取用户选择的项目ID（可选，但建议选择）
         selected_project_id = request.data.get('project')
@@ -442,10 +397,7 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
             try:
                 selected_project = Project.objects.get(id=selected_project_id, is_deleted=False)
             except Project.DoesNotExist:
-                return Response(
-                    {'error': '选择的项目不存在'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+                return Response({'error': '选择的项目不存在'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             # 读取Excel，智能识别列标题行
@@ -466,10 +418,7 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
                 file.seek(0)
                 df = pd.read_excel(file)
         except Exception as e:
-            return Response(
-                {'error': f'Excel文件读取失败: {str(e)}'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': f'Excel文件读取失败: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 查找列
         def find_column(df, keywords):
@@ -490,16 +439,10 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
         notes_column = find_column(df, ['备注'])
 
         if not sku_column:
-            return Response(
-                {'error': 'Excel文件必须包含"物料编码"列'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'Excel文件必须包含"物料编码"列'}, status=status.HTTP_400_BAD_REQUEST)
 
         if not qty_column:
-            return Response(
-                {'error': 'Excel文件必须包含"数量"列'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'Excel文件必须包含"数量"列'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 第一遍：校验项目号
         project_mismatch_rows = []
@@ -519,12 +462,14 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
 
                     # 检查项目号是否匹配
                     if excel_project_code != selected_project.code and excel_project_code != selected_project.name:
-                        project_mismatch_rows.append({
-                            'row': row_num,
-                            'sku': sku,
-                            'excel_project': excel_project_code,
-                            'selected_project': f'{selected_project.code} ({selected_project.name})'
-                        })
+                        project_mismatch_rows.append(
+                            {
+                                'row': row_num,
+                                'sku': sku,
+                                'excel_project': excel_project_code,
+                                'selected_project': f'{selected_project.code} ({selected_project.name})',
+                            }
+                        )
 
         # 如果有项目号不匹配，返回详细错误
         if project_mismatch_rows:
@@ -536,13 +481,18 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
                 for e in sample_errors
             ]
 
-            return Response({
-                'error': f'项目号不匹配：Excel中有 {mismatch_count} 条记录的项目号与您选择的项目不一致',
-                'details': error_details,
-                'excel_projects': list(excel_project_codes),
-                'selected_project': f'{selected_project.code} ({selected_project.name})' if selected_project else None,
-                'suggestion': f'Excel中包含的项目号有：{", ".join(excel_project_codes)}。请确认选择正确的项目后重新导入。'
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {
+                    'error': f'项目号不匹配：Excel中有 {mismatch_count} 条记录的项目号与您选择的项目不一致',
+                    'details': error_details,
+                    'excel_projects': list(excel_project_codes),
+                    'selected_project': f'{selected_project.code} ({selected_project.name})'
+                    if selected_project
+                    else None,
+                    'suggestion': f'Excel中包含的项目号有：{", ".join(excel_project_codes)}。请确认选择正确的项目后重新导入。',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # 按供应商分组数据
         supplier_groups = {}  # {supplier_name: [lines]}
@@ -577,7 +527,9 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
                 continue
 
             # 获取供应商
-            supplier_name = str(row[supplier_column]).strip() if supplier_column and pd.notna(row.get(supplier_column)) else ''
+            supplier_name = (
+                str(row[supplier_column]).strip() if supplier_column and pd.notna(row.get(supplier_column)) else ''
+            )
             if not supplier_name:
                 supplier_name = '未指定供应商'
 
@@ -593,16 +545,23 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
                 project_code = str(row[project_column]).strip() if pd.notna(row.get(project_column)) else ''
                 if project_code:
                     project = Project.objects.filter(
-                        Q(code=project_code) | Q(name__icontains=project_code),
-                        is_deleted=False
+                        Q(code=project_code) | Q(name__icontains=project_code), is_deleted=False
                     ).first()
 
             # 获取备注
             notes = str(row[notes_column]).strip() if notes_column and pd.notna(row.get(notes_column)) else ''
 
             # 获取付款方式和账期
-            payment_method = str(row[payment_method_column]).strip() if payment_method_column and pd.notna(row.get(payment_method_column)) else ''
-            payment_terms = str(row[payment_terms_column]).strip() if payment_terms_column and pd.notna(row.get(payment_terms_column)) else ''
+            payment_method = (
+                str(row[payment_method_column]).strip()
+                if payment_method_column and pd.notna(row.get(payment_method_column))
+                else ''
+            )
+            payment_terms = (
+                str(row[payment_terms_column]).strip()
+                if payment_terms_column and pd.notna(row.get(payment_terms_column))
+                else ''
+            )
 
             # 加入分组
             if supplier_name not in supplier_groups:
@@ -611,21 +570,13 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
                     'project': project,
                     'payment_method': payment_method,
                     'payment_terms': payment_terms,
-                    'lines': []
+                    'lines': [],
                 }
 
-            supplier_groups[supplier_name]['lines'].append({
-                'item': item,
-                'qty': qty,
-                'price': price,
-                'notes': notes
-            })
+            supplier_groups[supplier_name]['lines'].append({'item': item, 'qty': qty, 'price': price, 'notes': notes})
 
         if not supplier_groups:
-            return Response(
-                {'error': '没有可导入的有效数据', 'errors': error_rows},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '没有可导入的有效数据', 'errors': error_rows}, status=status.HTTP_400_BAD_REQUEST)
 
         # 创建采购申请
         created_prs = []
@@ -637,8 +588,7 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
                 supplier = None
                 if supplier_name != '未指定供应商':
                     supplier = Supplier.objects.filter(
-                        Q(name__icontains=supplier_name) | Q(code__icontains=supplier_name),
-                        is_deleted=False
+                        Q(name__icontains=supplier_name) | Q(code__icontains=supplier_name), is_deleted=False
                     ).first()
 
                 # 创建采购申请
@@ -648,8 +598,8 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
                     requestor=request.user,
                     required_date=date.today() + timedelta(days=14),
                     status='DRAFT',
-                    notes=f"从Excel导入，供应商: {supplier_name}",
-                    created_by=request.user
+                    notes=f'从Excel导入，供应商: {supplier_name}',
+                    created_by=request.user,
                 )
 
                 # 创建采购申请明细
@@ -663,18 +613,19 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
                         estimated_price=line_data['price'],
                         project=group_data['project'],
                         notes=line_data['notes'],
-                        created_by=request.user
+                        created_by=request.user,
                     )
                     total_amount += line.line_amount
 
                     # 更新对应BOM的采购状态
                     if group_data['project']:
                         from apps.projects.models import ProjectBOM
+
                         bom_items = ProjectBOM.objects.filter(
                             project=group_data['project'],
                             item=line_data['item'],
                             is_deleted=False,
-                            order_status='NOT_ORDERED'  # 只更新未下单的
+                            order_status='NOT_ORDERED',  # 只更新未下单的
                         )
                         for bom in bom_items:
                             bom.order_status = 'PR_PENDING'
@@ -689,23 +640,27 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
                 pr.total_with_tax = total_amount + pr.tax_amount
                 pr.save()
 
-                created_prs.append({
-                    'id': pr.id,
-                    'request_no': pr.request_no,
-                    'supplier_name': supplier_name,
-                    'project_name': group_data['project'].name if group_data['project'] else '无项目',
-                    'lines_count': len(group_data['lines']),
-                    'total_amount': float(pr.total_with_tax),
-                    'updated_bom_count': len(updated_bom_ids)
-                })
+                created_prs.append(
+                    {
+                        'id': pr.id,
+                        'request_no': pr.request_no,
+                        'supplier_name': supplier_name,
+                        'project_name': group_data['project'].name if group_data['project'] else '无项目',
+                        'lines_count': len(group_data['lines']),
+                        'total_amount': float(pr.total_with_tax),
+                        'updated_bom_count': len(updated_bom_ids),
+                    }
+                )
 
-        return Response({
-            'message': f'导入成功，共创建 {len(created_prs)} 个采购申请',
-            'created_count': len(created_prs),
-            'purchase_requests': created_prs,
-            'errors': error_rows,
-            'project': selected_project.name if selected_project else None
-        })
+        return Response(
+            {
+                'message': f'导入成功，共创建 {len(created_prs)} 个采购申请',
+                'created_count': len(created_prs),
+                'purchase_requests': created_prs,
+                'errors': error_rows,
+                'project': selected_project.name if selected_project else None,
+            }
+        )
 
     @action(detail=False, methods=['get'])
     def export_template(self, request):
@@ -723,28 +678,29 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
             worksheet = workbook.add_worksheet('采购申请导入模板')
 
             # Define formats
-            required_format = workbook.add_format({
-                'bold': True,
-                'bg_color': '#C00000',
-                'font_color': 'white',
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter'
-            })
-            optional_format = workbook.add_format({
-                'bold': True,
-                'bg_color': '#4472C4',
-                'font_color': 'white',
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter'
-            })
-            example_format = workbook.add_format({
-                'bg_color': '#FFF2CC',
-                'border': 1,
-                'italic': True,
-                'font_color': '#666666'
-            })
+            required_format = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#C00000',
+                    'font_color': 'white',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                }
+            )
+            optional_format = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#4472C4',
+                    'font_color': 'white',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                }
+            )
+            example_format = workbook.add_format(
+                {'bg_color': '#FFF2CC', 'border': 1, 'italic': True, 'font_color': '#666666'}
+            )
 
             headers = [
                 ('项目号', 12, 'optional'),
@@ -760,10 +716,7 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
                 ('备注', 25, 'optional'),
             ]
 
-            format_map = {
-                'required': required_format,
-                'optional': optional_format
-            }
+            format_map = {'required': required_format, 'optional': optional_format}
 
             for col, (header, width, htype) in enumerate(headers):
                 fmt = format_map[htype]
@@ -772,8 +725,17 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
 
             # 示例数据
             example = [
-                'PJ2601', '1126000001', '示例物料', 'ABC-100', 'PCS',
-                10, '示例供应商', 100.00, '电汇', '月结30天', '备注信息'
+                'PJ2601',
+                '1126000001',
+                '示例物料',
+                'ABC-100',
+                'PCS',
+                10,
+                '示例供应商',
+                100.00,
+                '电汇',
+                '月结30天',
+                '备注信息',
             ]
             for col, val in enumerate(example):
                 worksheet.write(1, col, val, example_format)
@@ -783,8 +745,7 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
 
         output.seek(0)
         response = HttpResponse(
-            output.read(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         response['Content-Disposition'] = 'attachment; filename=purchase_request_import_template.xlsx'
         return response
@@ -794,6 +755,7 @@ class PurchaseRequestLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
     """
     ViewSet for PurchaseRequestLine management.
     """
+
     queryset = PurchaseRequestLine.objects.all()
     serializer_class = PurchaseRequestLineSerializer
     filterset_fields = ['pr', 'item', 'project', 'is_deleted']
@@ -803,10 +765,13 @@ class PurchaseRequestLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
     search_fields = ['item__sku', 'item__name']
 
 
-class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class PurchaseOrderViewSet(
+    PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
+):
     """
     ViewSet for PurchaseOrder management.
     """
+
     queryset = PurchaseOrder.objects.all()
     serializer_class = PurchaseOrderSerializer
     filterset_fields = ['supplier', 'project', 'status', 'is_deleted']
@@ -826,28 +791,31 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
     def for_linking(self, request):
         """获取可用于关联的采购订单（不受数据权限限制）"""
         from django.db import models as db_models
+
         queryset = PurchaseOrder.objects.filter(is_deleted=False).order_by('-created_at')
 
         # 支持搜索
         search = request.query_params.get('search', '')
         if search:
             queryset = queryset.filter(
-                db_models.Q(order_no__icontains=search) |
-                db_models.Q(supplier__name__icontains=search)
+                db_models.Q(order_no__icontains=search) | db_models.Q(supplier__name__icontains=search)
             )
 
         # 简化返回数据
-        data = [{
-            'id': po.id,
-            'order_no': po.order_no,
-            'supplier': po.supplier_id,
-            'supplier_name': po.supplier.name if po.supplier else '',
-            'project': po.project_id,
-            'project_name': po.project.name if po.project else '',
-            'status': po.status,
-            'total_amount': float(po.total_amount or 0),
-            'total_with_tax': float(po.total_with_tax or 0),
-        } for po in queryset[:100]]  # 限制返回数量
+        data = [
+            {
+                'id': po.id,
+                'order_no': po.order_no,
+                'supplier': po.supplier_id,
+                'supplier_name': po.supplier.name if po.supplier else '',
+                'project': po.project_id,
+                'project_name': po.project.name if po.project else '',
+                'status': po.status,
+                'total_amount': float(po.total_amount or 0),
+                'total_with_tax': float(po.total_with_tax or 0),
+            }
+            for po in queryset[:100]
+        ]  # 限制返回数量
 
         return Response(data)
 
@@ -856,10 +824,7 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
         """提交采购订单审批 - 审批步骤由流程配置决定"""
         po = self.get_object()
         if po.status not in ['DRAFT', 'REJECTED']:
-            return Response(
-                {'error': '只能提交草稿或已拒绝状态的采购订单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能提交草稿或已拒绝状态的采购订单'}, status=status.HTTP_400_BAD_REQUEST)
 
         amount = po.total_with_tax or po.total_amount or 0
 
@@ -871,47 +836,50 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                 business_id=po.id,
                 business_no=po.order_no,
                 submitter=request.user,
-                amount=amount
+                amount=amount,
             )
 
             if instance:
                 po.status = 'PENDING'
                 po.save()
-                return Response({
-                    **PurchaseOrderSerializer(po).data,
-                    'workflow_started': True,
-                    'workflow_id': instance.id,
-                    'message': '已提交审批，请在审批中心查看审批进度'
-                })
+                return Response(
+                    {
+                        **PurchaseOrderSerializer(po).data,
+                        'workflow_started': True,
+                        'workflow_id': instance.id,
+                        'message': '已提交审批，请在审批中心查看审批进度',
+                    }
+                )
             else:
                 # 未配置审批流程，直接确认
                 po.status = 'CONFIRMED'
                 po.save()
-                return Response({
-                    **PurchaseOrderSerializer(po).data,
-                    'workflow_started': False,
-                    'message': error or '未配置审批流程，采购订单已直接确认'
-                })
+                return Response(
+                    {
+                        **PurchaseOrderSerializer(po).data,
+                        'workflow_started': False,
+                        'message': error or '未配置审批流程，采购订单已直接确认',
+                    }
+                )
 
         except Exception as e:
             # 审批模块不可用，直接确认
             po.status = 'CONFIRMED'
             po.save()
-            return Response({
-                **PurchaseOrderSerializer(po).data,
-                'workflow_started': False,
-                'message': f'采购订单已确认，但工作流服务异常: {e}'
-            })
+            return Response(
+                {
+                    **PurchaseOrderSerializer(po).data,
+                    'workflow_started': False,
+                    'message': f'采购订单已确认，但工作流服务异常: {e}',
+                }
+            )
 
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
         """Confirm PO - 确认采购订单，此时BOM状态才变为已下单."""
         po = self.get_object()
         if po.status not in ['DRAFT', 'APPROVED']:
-            return Response(
-                {'error': '只能确认草稿或已审批状态的订单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能确认草稿或已审批状态的订单'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 检查是否有活跃工作流（PENDING状态时需要通过工作流确认）
         workflow_error = self.check_workflow_allows_direct_action(po, '确认')
@@ -924,6 +892,7 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
 
             # 更新BOM状态：PR_APPROVED -> ORDERED（订单确认时才真正"已下单"）
             from apps.projects.models import ProjectBOM
+
             if po.project:
                 for po_line in po.lines.filter(is_deleted=False):
                     bom_items = ProjectBOM.objects.filter(
@@ -931,7 +900,7 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                         item=po_line.item,
                         purchase_order=po,
                         is_deleted=False,
-                        order_status__in=['PR_PENDING', 'PR_APPROVED']
+                        order_status__in=['PR_PENDING', 'PR_APPROVED'],
                     )
                     for bom in bom_items:
                         bom.order_status = 'ORDERED'
@@ -951,7 +920,7 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                 invoice_date=po.order_date,
                 amount_due=po.total_with_tax or po.total_amount,  # 优先使用含税金额
                 due_date=request.data.get('due_date', po.delivery_date),
-                created_by=request.user
+                created_by=request.user,
             )
 
         # 自动生成付款计划（避免重复创建）
@@ -971,10 +940,7 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
         """Cancel PO."""
         po = self.get_object()
         if po.status in ['COMPLETED', 'CANCELLED']:
-            return Response(
-                {'error': '无法取消已完成或已取消的订单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '无法取消已完成或已取消的订单'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             po.status = 'CANCELLED'
@@ -982,11 +948,10 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
 
             # 回退BOM状态：ORDERED -> CANCELLED
             from apps.projects.models import ProjectBOM
-            ProjectBOM.objects.filter(
-                purchase_order=po,
-                is_deleted=False,
-                order_status='ORDERED'
-            ).update(order_status='CANCELLED')
+
+            ProjectBOM.objects.filter(purchase_order=po, is_deleted=False, order_status='ORDERED').update(
+                order_status='CANCELLED'
+            )
 
         return Response(PurchaseOrderSerializer(po).data)
 
@@ -995,10 +960,7 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
         """标记为已发货 - 供应商发货通知，更新BOM为在途状态."""
         po = self.get_object()
         if po.status not in ['CONFIRMED', 'PARTIAL']:
-            return Response(
-                {'error': '只能标记已确认或部分收货状态的订单为已发货'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能标记已确认或部分收货状态的订单为已发货'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 获取发货数量（可选，默认为订单全部数量）
         shipped_items = request.data.get('items', [])
@@ -1018,7 +980,7 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                             item_id=item_id,
                             purchase_order=po,
                             is_deleted=False,
-                            order_status='ORDERED'
+                            order_status='ORDERED',
                         )
                         for bom in bom_items:
                             bom.order_status = 'IN_TRANSIT'
@@ -1033,39 +995,31 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                             item=po_line.item,
                             purchase_order=po,
                             is_deleted=False,
-                            order_status='ORDERED'
+                            order_status='ORDERED',
                         )
                         for bom in bom_items:
                             bom.order_status = 'IN_TRANSIT'
                             bom.shipped_qty = (bom.shipped_qty or 0) + po_line.qty
                             bom.save(update_fields=['order_status', 'shipped_qty'])
 
-        return Response({
-            'message': '已标记为发货',
-            **PurchaseOrderSerializer(po).data
-        })
+        return Response({'message': '已标记为发货', **PurchaseOrderSerializer(po).data})
 
     @action(detail=True, methods=['post'])
     def withdraw(self, request, pk=None):
         """Withdraw/Revoke confirmed PO - 反审/撤回采购订单."""
         po = self.get_object()
         if po.status not in ['CONFIRMED']:
-            return Response(
-                {'error': '只能撤回已确认的订单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能撤回已确认的订单'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 检查是否有收货记录
         has_receipts = GoodsReceipt.objects.filter(po=po, status='CONFIRMED', is_deleted=False).exists()
         if has_receipts:
-            return Response(
-                {'error': '该订单已有收货记录，无法撤回'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '该订单已有收货记录，无法撤回'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             # 删除关联的应付账款
             from apps.finance.models import AccountPayable, PurchasePaymentSchedule
+
             AccountPayable.objects.filter(po=po, is_deleted=False).update(is_deleted=True)
 
             # 删除付款计划
@@ -1073,11 +1027,8 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
 
             # 回退BOM状态：ORDERED -> PR_APPROVED (有采购申请) 或 NOT_ORDERED (无采购申请)
             from apps.projects.models import ProjectBOM
-            bom_items = ProjectBOM.objects.filter(
-                purchase_order=po,
-                is_deleted=False,
-                order_status='ORDERED'
-            )
+
+            bom_items = ProjectBOM.objects.filter(purchase_order=po, is_deleted=False, order_status='ORDERED')
             for bom in bom_items:
                 if bom.purchase_request:
                     bom.order_status = 'PR_APPROVED'
@@ -1090,16 +1041,14 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
             po.status = 'DRAFT'
             po.save()
 
-        return Response({
-            **PurchaseOrderSerializer(po).data,
-            'message': '采购订单已撤回至草稿状态'
-        })
+        return Response({**PurchaseOrderSerializer(po).data, 'message': '采购订单已撤回至草稿状态'})
 
 
 class PurchaseOrderLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for PurchaseOrderLine management.
     """
+
     queryset = PurchaseOrderLine.objects.all()
     serializer_class = PurchaseOrderLineSerializer
     filterset_fields = ['po', 'item', 'is_deleted']
@@ -1113,6 +1062,7 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
     """
     ViewSet for GoodsReceipt management.
     """
+
     queryset = GoodsReceipt.objects.all()
     serializer_class = GoodsReceiptSerializer
     filterset_fields = ['po', 'warehouse', 'status', 'is_deleted']
@@ -1127,10 +1077,7 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
         """Confirm goods receipt and create stock moves with FIFO support."""
         receipt = self.get_object()
         if receipt.status != 'DRAFT':
-            return Response(
-                {'error': '只能确认草稿状态的收货单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能确认草稿状态的收货单'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             from django.conf import settings
@@ -1153,7 +1100,7 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
                     reference_id=receipt.id,
                     move_date=receipt.receipt_date,
                     status='COMPLETED',
-                    created_by=request.user
+                    created_by=request.user,
                 )
 
                 # If using FIFO, also create inventory lot
@@ -1164,7 +1111,7 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
                         qty=line.qty,
                         unit_cost=line.po_line.unit_price,
                         reference_type='GoodsReceipt',
-                        reference_id=receipt.id
+                        reference_id=receipt.id,
                     )
 
                 # Update received qty on PO line
@@ -1178,7 +1125,7 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
                         item=line.item,
                         purchase_order=po,
                         is_deleted=False,
-                        order_status__in=['ORDERED', 'IN_TRANSIT', 'PARTIAL_RECEIVED']
+                        order_status__in=['ORDERED', 'IN_TRANSIT', 'PARTIAL_RECEIVED'],
                     )
                     for bom in bom_items:
                         bom.received_qty = (bom.received_qty or 0) + line.qty
@@ -1193,10 +1140,7 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
             receipt.save()
 
             # Check if PO is fully received
-            all_received = all(
-                line.received_qty >= line.qty
-                for line in po.lines.filter(is_deleted=False)
-            )
+            all_received = all(line.received_qty >= line.qty for line in po.lines.filter(is_deleted=False))
             if all_received:
                 po.status = 'COMPLETED'
             else:
@@ -1210,20 +1154,14 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
         """退货 - 创建退货记录并更新BOM状态."""
         receipt = self.get_object()
         if receipt.status != 'CONFIRMED':
-            return Response(
-                {'error': '只能对已确认的收货单进行退货'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能对已确认的收货单进行退货'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 获取退货明细
         return_items = request.data.get('items', [])
         return_reason = request.data.get('reason', '')
 
         if not return_items:
-            return Response(
-                {'error': '请提供退货明细'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供退货明细'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             from apps.inventory.models import StockMove
@@ -1250,7 +1188,7 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
                     move_date=request.data.get('return_date') or receipt.receipt_date,
                     status='COMPLETED',
                     notes=f'退货原因: {return_reason}',
-                    created_by=request.user
+                    created_by=request.user,
                 )
 
                 # 更新BOM的退货数量和状态
@@ -1260,7 +1198,7 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
                         item_id=item_id,
                         purchase_order=po,
                         is_deleted=False,
-                        order_status__in=['RECEIVED', 'PARTIAL_RECEIVED']
+                        order_status__in=['RECEIVED', 'PARTIAL_RECEIVED'],
                     )
                     for bom in bom_items:
                         bom.returned_qty = (bom.returned_qty or 0) + return_qty
@@ -1273,29 +1211,32 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
                 returned_count += 1
 
             # 更新收货单状态
-            receipt.notes = f"{receipt.notes}\n退货记录: {return_reason}" if receipt.notes else f"退货记录: {return_reason}"
+            receipt.notes = (
+                f'{receipt.notes}\n退货记录: {return_reason}' if receipt.notes else f'退货记录: {return_reason}'
+            )
             receipt.save()
 
-        return Response({
-            'message': f'退货成功，共处理 {returned_count} 种物料',
-            'returned_count': returned_count
-        })
+        return Response({'message': f'退货成功，共处理 {returned_count} 种物料', 'returned_count': returned_count})
 
 
 class GoodsReceiptLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for GoodsReceiptLine management.
     """
+
     queryset = GoodsReceiptLine.objects.all()
     serializer_class = GoodsReceiptLineSerializer
     filterset_fields = ['receipt', 'item', 'quality_status', 'is_deleted']
     search_fields = ['item__sku', 'item__name']
 
 
-class PurchaseContractViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class PurchaseContractViewSet(
+    PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
+):
     """
     ViewSet for PurchaseContract management.
     """
+
     queryset = PurchaseContract.objects.all()
     serializer_class = PurchaseContractSerializer
     filterset_fields = ['po', 'supplier', 'project', 'status', 'is_deleted']
@@ -1315,25 +1256,18 @@ class PurchaseContractViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDel
         """从采购订单创建合同."""
         po_id = request.data.get('po_id')
         if not po_id:
-            return Response(
-                {'error': '请选择采购订单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请选择采购订单'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             po = PurchaseOrder.objects.get(id=po_id, is_deleted=False)
         except PurchaseOrder.DoesNotExist:
-            return Response(
-                {'error': '采购订单不存在'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '采购订单不存在'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 检查是否已有合同
         existing = PurchaseContract.objects.filter(po=po, is_deleted=False).first()
         if existing:
             return Response(
-                {'error': f'该采购订单已存在合同: {existing.contract_no}'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': f'该采购订单已存在合同: {existing.contract_no}'}, status=status.HTTP_400_BAD_REQUEST
             )
 
         from django.utils import timezone
@@ -1350,7 +1284,7 @@ class PurchaseContractViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDel
             total_with_tax=po.total_with_tax,
             payment_terms=self._get_payment_terms_text(po),
             delivery_terms=f'交货日期：{po.delivery_date}',
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(PurchaseContractSerializer(contract).data, status=status.HTTP_201_CREATED)
@@ -1382,20 +1316,23 @@ class PurchaseContractViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDel
 
         # 获取公司信息
         from apps.core.models import SystemConfig
+
         config = SystemConfig.get_config()
 
         # 获取订单明细
         lines = []
         for line in po.lines.filter(is_deleted=False):
-            lines.append({
-                'item_sku': line.item.sku,
-                'item_name': line.item.name,
-                'specification': line.item.specification or '',
-                'unit': line.item.get_unit_display(),
-                'qty': float(line.qty),
-                'unit_price': float(line.unit_price),
-                'line_amount': float(line.line_amount),
-            })
+            lines.append(
+                {
+                    'item_sku': line.item.sku,
+                    'item_name': line.item.name,
+                    'specification': line.item.specification or '',
+                    'unit': line.item.get_unit_display(),
+                    'qty': float(line.qty),
+                    'unit_price': float(line.unit_price),
+                    'line_amount': float(line.line_amount),
+                }
+            )
 
         # 获取采购订单的付款条款
         payment_terms_display = ''
@@ -1427,52 +1364,51 @@ class PurchaseContractViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDel
             }
             payment_method_display = payment_method_map.get(po.payment_method, po.payment_method)
 
-        return Response({
-            'contract': PurchaseContractSerializer(contract).data,
-            'company': {
-                'name': config.company_name or '',
-                'address': config.company_address or '',
-                'phone': config.company_phone or '',
-                'email': config.company_email or '',
-                'tax_no': config.company_tax_no or '',
-                'bank_name': config.bank_name or '',
-                'bank_account': config.bank_account or '',
-            },
-            'supplier': {
-                'name': contract.supplier.name,
-                'address': contract.supplier.address or '',
-                'contact': contract.supplier.contact_person or '',
-                'phone': contract.supplier.phone or '',
-                'email': contract.supplier.email or '' if hasattr(contract.supplier, 'email') else '',
-                'tax_no': contract.supplier.tax_id or '' if hasattr(contract.supplier, 'tax_id') else '',
-                'bank_name': contract.supplier.bank_name or '',
-                'bank_account': contract.supplier.bank_account or '',
-            },
-            'po': {
-                'order_no': po.order_no,
-                'order_date': po.order_date.isoformat() if po.order_date else '',
-                'delivery_date': po.delivery_date.isoformat() if po.delivery_date else '',
-                'payment_terms': payment_terms_display,
-                'payment_method': payment_method_display,
-                'total_amount': float(po.total_amount) if po.total_amount else 0,
-                'total_with_tax': float(po.total_with_tax) if po.total_with_tax else 0,
-                'buyer_name': po.created_by.get_full_name() if po.created_by else '',
-                'buyer_phone': '',
-                'project_name': po.project.name if po.project else '',
-                'notes': po.notes or '',
-            },
-            'lines': lines,
-        })
+        return Response(
+            {
+                'contract': PurchaseContractSerializer(contract).data,
+                'company': {
+                    'name': config.company_name or '',
+                    'address': config.company_address or '',
+                    'phone': config.company_phone or '',
+                    'email': config.company_email or '',
+                    'tax_no': config.company_tax_no or '',
+                    'bank_name': config.bank_name or '',
+                    'bank_account': config.bank_account or '',
+                },
+                'supplier': {
+                    'name': contract.supplier.name,
+                    'address': contract.supplier.address or '',
+                    'contact': contract.supplier.contact_person or '',
+                    'phone': contract.supplier.phone or '',
+                    'email': contract.supplier.email or '' if hasattr(contract.supplier, 'email') else '',
+                    'tax_no': contract.supplier.tax_id or '' if hasattr(contract.supplier, 'tax_id') else '',
+                    'bank_name': contract.supplier.bank_name or '',
+                    'bank_account': contract.supplier.bank_account or '',
+                },
+                'po': {
+                    'order_no': po.order_no,
+                    'order_date': po.order_date.isoformat() if po.order_date else '',
+                    'delivery_date': po.delivery_date.isoformat() if po.delivery_date else '',
+                    'payment_terms': payment_terms_display,
+                    'payment_method': payment_method_display,
+                    'total_amount': float(po.total_amount) if po.total_amount else 0,
+                    'total_with_tax': float(po.total_with_tax) if po.total_with_tax else 0,
+                    'buyer_name': po.created_by.get_full_name() if po.created_by else '',
+                    'buyer_phone': '',
+                    'project_name': po.project.name if po.project else '',
+                    'notes': po.notes or '',
+                },
+                'lines': lines,
+            }
+        )
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         """审批合同 - 仅在无活跃工作流时允许直接审批."""
         contract = self.get_object()
         if contract.status not in ['DRAFT', 'PENDING']:
-            return Response(
-                {'error': '只能审批草稿或待审批状态的合同'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能审批草稿或待审批状态的合同'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 检查是否有活跃工作流
         workflow_error = self.check_workflow_allows_direct_action(contract, '审批')
@@ -1488,10 +1424,7 @@ class PurchaseContractViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDel
         """签署合同."""
         contract = self.get_object()
         if contract.status != 'APPROVED':
-            return Response(
-                {'error': '只能签署已审批的合同'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能签署已审批的合同'}, status=status.HTTP_400_BAD_REQUEST)
 
         from django.utils import timezone
 
@@ -1501,4 +1434,3 @@ class PurchaseContractViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDel
         contract.status = 'SIGNED'
         contract.save()
         return Response(PurchaseContractSerializer(contract).data)
-

@@ -1,6 +1,7 @@
 """
 Bank Statement models for importing and managing bank transactions.
 """
+
 from django.db import models
 from django.utils import timezone
 
@@ -13,6 +14,7 @@ class BankStatement(BaseModel):
     """
     Bank statement record imported from bank transaction files.
     """
+
     TRANSACTION_TYPE_CHOICES = [
         ('DEBIT', '借（支出）'),
         ('CREDIT', '贷（收入）'),
@@ -59,7 +61,9 @@ class BankStatement(BaseModel):
 
     # 匹配信息
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
-    match_type = models.CharField(max_length=20, choices=MATCH_TYPE_CHOICES, null=True, blank=True, verbose_name='匹配类型')
+    match_type = models.CharField(
+        max_length=20, choices=MATCH_TYPE_CHOICES, null=True, blank=True, verbose_name='匹配类型'
+    )
 
     # 关联供应商/客户
     supplier = models.ForeignKey(
@@ -68,7 +72,7 @@ class BankStatement(BaseModel):
         null=True,
         blank=True,
         related_name='bank_statements',
-        verbose_name='匹配供应商'
+        verbose_name='匹配供应商',
     )
     customer = models.ForeignKey(
         Customer,
@@ -76,7 +80,7 @@ class BankStatement(BaseModel):
         null=True,
         blank=True,
         related_name='bank_statements',
-        verbose_name='匹配客户'
+        verbose_name='匹配客户',
     )
 
     # 关联到具体业务单据
@@ -86,7 +90,7 @@ class BankStatement(BaseModel):
         null=True,
         blank=True,
         related_name='bank_statements',
-        verbose_name='关联应付账款'
+        verbose_name='关联应付账款',
     )
     related_ar = models.ForeignKey(
         'AccountReceivable',
@@ -94,7 +98,7 @@ class BankStatement(BaseModel):
         null=True,
         blank=True,
         related_name='bank_statements',
-        verbose_name='关联应收账款'
+        verbose_name='关联应收账款',
     )
     related_payment = models.ForeignKey(
         'Payment',
@@ -102,7 +106,7 @@ class BankStatement(BaseModel):
         null=True,
         blank=True,
         related_name='bank_statements',
-        verbose_name='关联付款记录'
+        verbose_name='关联付款记录',
     )
 
     # 项目关联 - 用于成本核算
@@ -112,13 +116,10 @@ class BankStatement(BaseModel):
         null=True,
         blank=True,
         related_name='bank_statements',
-        verbose_name='关联项目'
+        verbose_name='关联项目',
     )
 
-    match_confidence = models.DecimalField(
-        max_digits=5, decimal_places=2, default=0,
-        verbose_name='匹配置信度(%)'
-    )
+    match_confidence = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name='匹配置信度(%)')
     match_notes = models.TextField(blank=True, verbose_name='匹配备注')
 
     class Meta:
@@ -152,19 +153,13 @@ class BankStatement(BaseModel):
             return None, 0
 
         # Exact match
-        exact_supplier = Supplier.objects.filter(
-            name=self.counterparty_name,
-            is_deleted=False
-        ).first()
+        exact_supplier = Supplier.objects.filter(name=self.counterparty_name, is_deleted=False).first()
 
         if exact_supplier:
             return exact_supplier, 100.0
 
         # Partial match (contains)
-        partial_suppliers = Supplier.objects.filter(
-            name__icontains=self.counterparty_name,
-            is_deleted=False
-        )
+        partial_suppliers = Supplier.objects.filter(name__icontains=self.counterparty_name, is_deleted=False)
 
         if partial_suppliers.count() == 1:
             return partial_suppliers.first(), 80.0
@@ -207,19 +202,13 @@ class BankStatement(BaseModel):
             return None, 0
 
         # Exact match
-        exact_customer = Customer.objects.filter(
-            name=self.counterparty_name,
-            is_deleted=False
-        ).first()
+        exact_customer = Customer.objects.filter(name=self.counterparty_name, is_deleted=False).first()
 
         if exact_customer:
             return exact_customer, 100.0
 
         # Partial match
-        partial_customers = Customer.objects.filter(
-            name__icontains=self.counterparty_name,
-            is_deleted=False
-        )
+        partial_customers = Customer.objects.filter(name__icontains=self.counterparty_name, is_deleted=False)
 
         if partial_customers.count() == 1:
             return partial_customers.first(), 80.0
@@ -239,11 +228,11 @@ class BankStatement(BaseModel):
         # If customer is matched, find projects for that customer
         if self.customer:
             # Find active projects for this customer
-            project = Project.objects.filter(
-                customer=self.customer,
-                is_deleted=False,
-                status__in=['ACTIVE', 'PLANNING']
-            ).order_by('-created_at').first()
+            project = (
+                Project.objects.filter(customer=self.customer, is_deleted=False, status__in=['ACTIVE', 'PLANNING'])
+                .order_by('-created_at')
+                .first()
+            )
 
             if project:
                 return project
@@ -253,10 +242,12 @@ class BankStatement(BaseModel):
             from apps.purchase.models import PurchaseOrder
 
             # Find purchase orders for this supplier
-            po = PurchaseOrder.objects.filter(
-                supplier=self.supplier,
-                is_deleted=False
-            ).select_related('project').order_by('-created_at').first()
+            po = (
+                PurchaseOrder.objects.filter(supplier=self.supplier, is_deleted=False)
+                .select_related('project')
+                .order_by('-created_at')
+                .first()
+            )
 
             if po and po.project:
                 return po.project
@@ -268,6 +259,7 @@ class BankStatementImportLog(BaseModel):
     """
     Log for bank statement import batches.
     """
+
     batch_no = models.CharField(max_length=50, unique=True, verbose_name='批次号')
     file_name = models.CharField(max_length=255, verbose_name='文件名')
     import_time = models.DateTimeField(default=timezone.now, verbose_name='导入时间')
@@ -290,5 +282,4 @@ class BankStatementImportLog(BaseModel):
         ordering = ['-import_time']
 
     def __str__(self):
-        return f"{self.batch_no} - {self.file_name}"
-
+        return f'{self.batch_no} - {self.file_name}'

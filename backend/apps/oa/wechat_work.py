@@ -2,6 +2,7 @@
 企业微信考勤数据同步模块
 支持从企业微信获取打卡数据并同步到OA系统
 """
+
 import logging
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Tuple
@@ -24,11 +25,13 @@ logger = logging.getLogger(__name__)
 # 模型定义
 # ============================================
 
+
 class WechatWorkConfig(BaseModel):
     """
     企业微信配置
     存储企业微信API连接信息
     """
+
     name = models.CharField(max_length=100, default='默认配置', verbose_name='配置名称')
     corp_id = models.CharField(max_length=100, verbose_name='企业ID (CorpID)')
     agent_id = models.CharField(max_length=50, blank=True, verbose_name='应用ID (AgentID)')
@@ -52,14 +55,14 @@ class WechatWorkConfig(BaseModel):
         verbose_name_plural = verbose_name
 
     def __str__(self):
-        return f"{self.name} ({self.corp_id})"
+        return f'{self.name} ({self.corp_id})'
 
     def get_access_token(self, token_type='checkin'):
         """
         获取access_token，自动缓存
         token_type: 'checkin' 打卡, 'contact' 通讯录
         """
-        cache_key = f"wechat_work_token_{self.id}_{token_type}"
+        cache_key = f'wechat_work_token_{self.id}_{token_type}'
         token = cache.get(cache_key)
 
         if token:
@@ -68,11 +71,8 @@ class WechatWorkConfig(BaseModel):
         # 获取新token
         secret = self.checkin_secret if (token_type == 'checkin' and self.checkin_secret) else self.secret
 
-        url = "https://qyapi.weixin.qq.com/cgi-bin/gettoken"
-        params = {
-            'corpid': self.corp_id,
-            'corpsecret': secret
-        }
+        url = 'https://qyapi.weixin.qq.com/cgi-bin/gettoken'
+        params = {'corpid': self.corp_id, 'corpsecret': secret}
 
         try:
             response = requests.get(url, params=params, timeout=10)
@@ -85,10 +85,10 @@ class WechatWorkConfig(BaseModel):
                 cache.set(cache_key, token, expires_in - 300)
                 return token
             else:
-                logger.error(f"获取企业微信token失败: {data}")
+                logger.error(f'获取企业微信token失败: {data}')
                 return None
         except Exception as e:
-            logger.error(f"获取企业微信token异常: {e}")
+            logger.error(f'获取企业微信token异常: {e}')
             return None
 
 
@@ -96,20 +96,15 @@ class WechatUserMapping(BaseModel):
     """
     企业微信用户与系统员工映射
     """
+
     config = models.ForeignKey(
-        WechatWorkConfig,
-        on_delete=models.CASCADE,
-        related_name='user_mappings',
-        verbose_name='企业微信配置'
+        WechatWorkConfig, on_delete=models.CASCADE, related_name='user_mappings', verbose_name='企业微信配置'
     )
     wechat_userid = models.CharField(max_length=100, verbose_name='企业微信UserID')
     wechat_name = models.CharField(max_length=100, blank=True, verbose_name='企业微信姓名')
 
     employee = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.CASCADE,
-        related_name='wechat_mappings',
-        verbose_name='关联员工'
+        'accounts.User', on_delete=models.CASCADE, related_name='wechat_mappings', verbose_name='关联员工'
     )
 
     # 自动匹配标记
@@ -122,13 +117,14 @@ class WechatUserMapping(BaseModel):
         unique_together = ['config', 'wechat_userid']
 
     def __str__(self):
-        return f"{self.wechat_userid} -> {self.employee.get_full_name()}"
+        return f'{self.wechat_userid} -> {self.employee.get_full_name()}'
 
 
 class WechatCheckinRecord(BaseModel):
     """
     企业微信打卡原始记录
     """
+
     CHECKIN_TYPE_CHOICES = [
         ('上班打卡', '上班打卡'),
         ('下班打卡', '下班打卡'),
@@ -146,10 +142,7 @@ class WechatCheckinRecord(BaseModel):
     ]
 
     config = models.ForeignKey(
-        WechatWorkConfig,
-        on_delete=models.CASCADE,
-        related_name='checkin_records',
-        verbose_name='企业微信配置'
+        WechatWorkConfig, on_delete=models.CASCADE, related_name='checkin_records', verbose_name='企业微信配置'
     )
 
     # 企业微信原始数据
@@ -165,11 +158,7 @@ class WechatCheckinRecord(BaseModel):
 
     # 异常信息
     exception_type = models.CharField(
-        max_length=20,
-        choices=EXCEPTION_TYPE_CHOICES,
-        blank=True,
-        default='',
-        verbose_name='异常类型'
+        max_length=20, choices=EXCEPTION_TYPE_CHOICES, blank=True, default='', verbose_name='异常类型'
     )
     notes = models.CharField(max_length=500, blank=True, verbose_name='备注')
 
@@ -180,7 +169,7 @@ class WechatCheckinRecord(BaseModel):
         null=True,
         blank=True,
         related_name='wechat_checkin_records',
-        verbose_name='关联员工'
+        verbose_name='关联员工',
     )
 
     # 处理状态
@@ -192,7 +181,7 @@ class WechatCheckinRecord(BaseModel):
         null=True,
         blank=True,
         related_name='wechat_records',
-        verbose_name='关联考勤记录'
+        verbose_name='关联考勤记录',
     )
 
     # 原始数据
@@ -210,13 +199,14 @@ class WechatCheckinRecord(BaseModel):
         ]
 
     def __str__(self):
-        return f"{self.wechat_userid} - {self.checkin_type} @ {self.checkin_time}"
+        return f'{self.wechat_userid} - {self.checkin_type} @ {self.checkin_time}'
 
 
 class WechatSyncLog(BaseModel):
     """
     企业微信同步日志
     """
+
     STATUS_CHOICES = [
         ('PENDING', '进行中'),
         ('SUCCESS', '成功'),
@@ -225,10 +215,7 @@ class WechatSyncLog(BaseModel):
     ]
 
     config = models.ForeignKey(
-        WechatWorkConfig,
-        on_delete=models.CASCADE,
-        related_name='sync_logs',
-        verbose_name='企业微信配置'
+        WechatWorkConfig, on_delete=models.CASCADE, related_name='sync_logs', verbose_name='企业微信配置'
     )
 
     sync_date_from = models.DateField(verbose_name='同步起始日期')
@@ -254,12 +241,13 @@ class WechatSyncLog(BaseModel):
         ordering = ['-start_time']
 
     def __str__(self):
-        return f"{self.config.name} - {self.sync_date_from} ~ {self.sync_date_to}"
+        return f'{self.config.name} - {self.sync_date_from} ~ {self.sync_date_to}'
 
 
 # ============================================
 # 企业微信API服务
 # ============================================
+
 
 class WechatWorkService:
     """
@@ -268,7 +256,7 @@ class WechatWorkService:
 
     def __init__(self, config: WechatWorkConfig):
         self.config = config
-        self.base_url = "https://qyapi.weixin.qq.com/cgi-bin"
+        self.base_url = 'https://qyapi.weixin.qq.com/cgi-bin'
 
     def _request(self, method: str, endpoint: str, token_type: str = 'checkin', **kwargs) -> Dict:
         """发送API请求"""
@@ -276,7 +264,7 @@ class WechatWorkService:
         if not token:
             return {'errcode': -1, 'errmsg': '获取access_token失败'}
 
-        url = f"{self.base_url}/{endpoint}?access_token={token}"
+        url = f'{self.base_url}/{endpoint}?access_token={token}'
 
         try:
             if method.upper() == 'GET':
@@ -286,13 +274,13 @@ class WechatWorkService:
 
             return response.json()
         except Exception as e:
-            logger.error(f"企业微信API请求失败: {e}")
+            logger.error(f'企业微信API请求失败: {e}')
             return {'errcode': -1, 'errmsg': str(e)}
 
     def get_checkin_data(self, userids: List[str], start_time: int, end_time: int) -> Dict:
         """
         获取打卡数据
-        
+
         Args:
             userids: 用户ID列表
             start_time: 开始时间戳
@@ -302,7 +290,7 @@ class WechatWorkService:
             'opencheckindatatype': 3,  # 1-上下班打卡 2-外出打卡 3-全部
             'starttime': start_time,
             'endtime': end_time,
-            'useridlist': userids
+            'useridlist': userids,
         }
 
         return self._request('POST', 'checkin/getcheckindata', json=data)
@@ -311,11 +299,7 @@ class WechatWorkService:
         """
         获取打卡日报数据
         """
-        data = {
-            'starttime': start_time,
-            'endtime': end_time,
-            'useridlist': userids
-        }
+        data = {'starttime': start_time, 'endtime': end_time, 'useridlist': userids}
 
         return self._request('POST', 'checkin/getcheckin_daydata', json=data)
 
@@ -323,11 +307,7 @@ class WechatWorkService:
         """
         获取打卡月报数据
         """
-        data = {
-            'starttime': start_time,
-            'endtime': end_time,
-            'useridlist': userids
-        }
+        data = {'starttime': start_time, 'endtime': end_time, 'useridlist': userids}
 
         return self._request('POST', 'checkin/getcheckin_monthdata', json=data)
 
@@ -335,31 +315,20 @@ class WechatWorkService:
         """
         获取部门成员
         """
-        params = {
-            'department_id': department_id,
-            'fetch_child': 1
-        }
+        params = {'department_id': department_id, 'fetch_child': 1}
         return self._request('GET', 'user/simplelist', token_type='contact', params=params)
 
     def sync_checkin_data(self, date_from: date, date_to: date) -> Dict:
         """
         同步指定日期范围的打卡数据
-        
+
         Returns:
             同步结果
         """
-        result = {
-            'total': 0,
-            'new': 0,
-            'processed': 0,
-            'errors': []
-        }
+        result = {'total': 0, 'new': 0, 'processed': 0, 'errors': []}
 
         # 获取所有映射的用户
-        mappings = WechatUserMapping.objects.filter(
-            config=self.config,
-            is_deleted=False
-        ).select_related('employee')
+        mappings = WechatUserMapping.objects.filter(config=self.config, is_deleted=False).select_related('employee')
 
         if not mappings.exists():
             result['errors'].append('没有配置用户映射，请先配置用户映射')
@@ -374,7 +343,7 @@ class WechatWorkService:
         end_ts = int(datetime.combine(date_to, datetime.max.time()).timestamp())
 
         for i in range(0, len(userids), batch_size):
-            batch_userids = userids[i:i + batch_size]
+            batch_userids = userids[i : i + batch_size]
 
             try:
                 response = self.get_checkin_data(batch_userids, start_ts, end_ts)
@@ -392,10 +361,10 @@ class WechatWorkService:
                         if is_new:
                             result['new'] += 1
                     except Exception as e:
-                        result['errors'].append(f"保存记录失败: {e}")
+                        result['errors'].append(f'保存记录失败: {e}')
 
             except Exception as e:
-                result['errors'].append(f"批次同步失败: {e}")
+                result['errors'].append(f'批次同步失败: {e}')
 
         # 处理新记录
         if result['new'] > 0:
@@ -418,9 +387,7 @@ class WechatWorkService:
 
         # 检查是否已存在
         existing = WechatCheckinRecord.objects.filter(
-            config=self.config,
-            wechat_userid=wechat_userid,
-            checkin_time=checkin_time
+            config=self.config, wechat_userid=wechat_userid, checkin_time=checkin_time
         ).first()
 
         if existing:
@@ -451,7 +418,7 @@ class WechatWorkService:
             exception_type=data.get('exception_type', ''),
             notes=data.get('notes', ''),
             employee=employee,
-            raw_data=data
+            raw_data=data,
         )
 
         return record, True
@@ -464,9 +431,7 @@ class WechatWorkService:
 
         # 获取未处理的记录
         records = WechatCheckinRecord.objects.filter(
-            config=self.config,
-            is_processed=False,
-            employee__isnull=False
+            config=self.config, is_processed=False, employee__isnull=False
         ).order_by('checkin_time')
 
         # 按员工和日期分组
@@ -484,9 +449,7 @@ class WechatWorkService:
                 with transaction.atomic():
                     # 获取或创建当天的考勤记录
                     attendance, created = AttendanceRecord.objects.get_or_create(
-                        user_id=employee_id,
-                        attendance_date=checkin_date,
-                        defaults={'status': 'NORMAL'}
+                        user_id=employee_id, attendance_date=checkin_date, defaults={'status': 'NORMAL'}
                     )
 
                     # 按时间排序
@@ -520,7 +483,7 @@ class WechatWorkService:
                     if not attendance.remarks:
                         attendance.remarks = ''
                     if '企业微信' not in attendance.remarks:
-                        attendance.remarks = f"[企业微信同步] {attendance.remarks}".strip()
+                        attendance.remarks = f'[企业微信同步] {attendance.remarks}'.strip()
 
                     attendance.save()
 
@@ -534,7 +497,7 @@ class WechatWorkService:
                     processed += len(day_records)
 
             except Exception as e:
-                logger.error(f"处理企业微信打卡记录失败: {e}")
+                logger.error(f'处理企业微信打卡记录失败: {e}')
 
         return processed
 
@@ -543,19 +506,31 @@ class WechatWorkService:
 # 序列化器
 # ============================================
 
+
 class WechatWorkConfigSerializer(serializers.ModelSerializer):
     """企业微信配置序列化器"""
+
     user_count = serializers.SerializerMethodField()
     record_count = serializers.SerializerMethodField()
 
     class Meta:
         model = WechatWorkConfig
         fields = [
-            'id', 'name', 'corp_id', 'agent_id', 'secret', 'checkin_secret',
-            'is_active', 'last_sync_time',
-            'sync_enabled', 'sync_interval', 'sync_days',
-            'user_count', 'record_count',
-            'created_at', 'updated_at'
+            'id',
+            'name',
+            'corp_id',
+            'agent_id',
+            'secret',
+            'checkin_secret',
+            'is_active',
+            'last_sync_time',
+            'sync_enabled',
+            'sync_interval',
+            'sync_days',
+            'user_count',
+            'record_count',
+            'created_at',
+            'updated_at',
         ]
         extra_kwargs = {
             'secret': {'write_only': True},
@@ -571,45 +546,72 @@ class WechatWorkConfigSerializer(serializers.ModelSerializer):
 
 class WechatUserMappingSerializer(serializers.ModelSerializer):
     """用户映射序列化器"""
+
     employee_name = serializers.CharField(source='employee.get_full_name', read_only=True)
     employee_code = serializers.CharField(source='employee.employee_id', read_only=True)
 
     class Meta:
         model = WechatUserMapping
         fields = [
-            'id', 'config', 'wechat_userid', 'wechat_name',
-            'employee', 'employee_name', 'employee_code',
-            'auto_matched', 'created_at'
+            'id',
+            'config',
+            'wechat_userid',
+            'wechat_name',
+            'employee',
+            'employee_name',
+            'employee_code',
+            'auto_matched',
+            'created_at',
         ]
 
 
 class WechatCheckinRecordSerializer(serializers.ModelSerializer):
     """打卡记录序列化器"""
+
     employee_name = serializers.CharField(source='employee.get_full_name', read_only=True)
 
     class Meta:
         model = WechatCheckinRecord
         fields = [
-            'id', 'wechat_userid', 'checkin_time', 'checkin_type',
-            'location_title', 'location_detail', 'wifi_name',
-            'exception_type', 'notes',
-            'employee', 'employee_name',
-            'is_processed', 'processed_at',
-            'created_at'
+            'id',
+            'wechat_userid',
+            'checkin_time',
+            'checkin_type',
+            'location_title',
+            'location_detail',
+            'wifi_name',
+            'exception_type',
+            'notes',
+            'employee',
+            'employee_name',
+            'is_processed',
+            'processed_at',
+            'created_at',
         ]
 
 
 class WechatSyncLogSerializer(serializers.ModelSerializer):
     """同步日志序列化器"""
+
     status_display = serializers.CharField(source='get_status_display', read_only=True)
 
     class Meta:
         model = WechatSyncLog
         fields = [
-            'id', 'config', 'sync_date_from', 'sync_date_to',
-            'start_time', 'end_time', 'status', 'status_display',
-            'total_records', 'new_records', 'processed_records', 'error_count',
-            'error_message', 'created_at'
+            'id',
+            'config',
+            'sync_date_from',
+            'sync_date_to',
+            'start_time',
+            'end_time',
+            'status',
+            'status_display',
+            'total_records',
+            'new_records',
+            'processed_records',
+            'error_count',
+            'error_message',
+            'created_at',
         ]
 
 
@@ -617,8 +619,10 @@ class WechatSyncLogSerializer(serializers.ModelSerializer):
 # 视图集
 # ============================================
 
+
 class WechatWorkConfigViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """企业微信配置管理"""
+
     queryset = WechatWorkConfig.objects.filter(is_deleted=False)
     serializer_class = WechatWorkConfigSerializer
 
@@ -629,15 +633,9 @@ class WechatWorkConfigViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
 
         token = config.get_access_token()
         if token:
-            return Response({
-                'success': True,
-                'message': '企业微信连接成功!'
-            })
+            return Response({'success': True, 'message': '企业微信连接成功!'})
         else:
-            return Response({
-                'success': False,
-                'message': '连接失败，请检查CorpID和Secret是否正确'
-            })
+            return Response({'success': False, 'message': '连接失败，请检查CorpID和Secret是否正确'})
 
     @action(detail=True, methods=['post'])
     def sync_now(self, request, pk=None):
@@ -649,11 +647,7 @@ class WechatWorkConfigViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         date_from = date_to - timedelta(days=days - 1)
 
         # 创建同步日志
-        sync_log = WechatSyncLog.objects.create(
-            config=config,
-            sync_date_from=date_from,
-            sync_date_to=date_to
-        )
+        sync_log = WechatSyncLog.objects.create(config=config, sync_date_from=date_from, sync_date_to=date_to)
 
         try:
             service = WechatWorkService(config)
@@ -668,11 +662,13 @@ class WechatWorkConfigViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
             sync_log.end_time = timezone.now()
             sync_log.save()
 
-            return Response({
-                'success': True,
-                'message': f"同步完成! 获取 {result['total']} 条记录，新增 {result['new']} 条，处理 {result['processed']} 条",
-                'details': result
-            })
+            return Response(
+                {
+                    'success': True,
+                    'message': f"同步完成! 获取 {result['total']} 条记录，新增 {result['new']} 条，处理 {result['processed']} 条",
+                    'details': result,
+                }
+            )
 
         except Exception as e:
             sync_log.status = 'FAILED'
@@ -680,10 +676,7 @@ class WechatWorkConfigViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
             sync_log.end_time = timezone.now()
             sync_log.save()
 
-            return Response({
-                'success': False,
-                'message': f'同步失败: {str(e)}'
-            }, status=500)
+            return Response({'success': False, 'message': f'同步失败: {str(e)}'}, status=500)
 
     @action(detail=True, methods=['get'])
     def sync_history(self, request, pk=None):
@@ -705,10 +698,7 @@ class WechatWorkConfigViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         response = service.get_department_users()
 
         if response.get('errcode') != 0:
-            return Response({
-                'success': False,
-                'message': f"获取企业微信用户失败: {response.get('errmsg')}"
-            })
+            return Response({'success': False, 'message': f"获取企业微信用户失败: {response.get('errmsg')}"})
 
         matched = 0
         wechat_users = response.get('userlist', [])
@@ -722,34 +712,31 @@ class WechatWorkConfigViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
                 continue
 
             # 按姓名匹配
-            employee = User.objects.filter(
-                is_active=True
-            ).filter(
-                models.Q(first_name=name) |
-                models.Q(last_name=name) |
-                models.Q(username=name)
-            ).first()
+            employee = (
+                User.objects.filter(is_active=True)
+                .filter(models.Q(first_name=name) | models.Q(last_name=name) | models.Q(username=name))
+                .first()
+            )
 
             if employee:
                 WechatUserMapping.objects.create(
-                    config=config,
-                    wechat_userid=userid,
-                    wechat_name=name,
-                    employee=employee,
-                    auto_matched=True
+                    config=config, wechat_userid=userid, wechat_name=name, employee=employee, auto_matched=True
                 )
                 matched += 1
 
-        return Response({
-            'success': True,
-            'message': f'自动匹配完成，匹配了 {matched} 个用户',
-            'matched': matched,
-            'total': len(wechat_users)
-        })
+        return Response(
+            {
+                'success': True,
+                'message': f'自动匹配完成，匹配了 {matched} 个用户',
+                'matched': matched,
+                'total': len(wechat_users),
+            }
+        )
 
 
 class WechatUserMappingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """企业微信用户映射管理"""
+
     queryset = WechatUserMapping.objects.filter(is_deleted=False)
     serializer_class = WechatUserMappingSerializer
     filterset_fields = ['config', 'employee']
@@ -758,6 +745,7 @@ class WechatUserMappingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
 
 class WechatCheckinRecordViewSet(viewsets.ReadOnlyModelViewSet):
     """企业微信打卡记录（只读）"""
+
     queryset = WechatCheckinRecord.objects.filter(is_deleted=False)
     serializer_class = WechatCheckinRecordSerializer
     filterset_fields = ['config', 'employee', 'checkin_type', 'is_processed']
@@ -780,6 +768,7 @@ class WechatCheckinRecordViewSet(viewsets.ReadOnlyModelViewSet):
 
 class WechatSyncLogViewSet(viewsets.ReadOnlyModelViewSet):
     """企业微信同步日志（只读）"""
+
     queryset = WechatSyncLog.objects.all()
     serializer_class = WechatSyncLogSerializer
     filterset_fields = ['config', 'status']

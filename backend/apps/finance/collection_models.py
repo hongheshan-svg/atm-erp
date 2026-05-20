@@ -8,6 +8,7 @@ Collection Plan Management Models
 - 验收款（客户验收后）
 - 质保款（质保期结束）
 """
+
 from django.db import models
 
 from apps.core.models import BaseModel
@@ -17,6 +18,7 @@ class CollectionPlan(BaseModel):
     """
     回款计划 - 项目/合同级别的收款规划
     """
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('CONFIRMED', '已确认'),
@@ -35,7 +37,7 @@ class CollectionPlan(BaseModel):
         null=True,
         blank=True,
         related_name='collection_plans',
-        verbose_name='项目'
+        verbose_name='项目',
     )
     sales_order = models.ForeignKey(
         'sales.SalesOrder',
@@ -43,7 +45,7 @@ class CollectionPlan(BaseModel):
         null=True,
         blank=True,
         related_name='collection_plans',
-        verbose_name='销售订单'
+        verbose_name='销售订单',
     )
     contract = models.ForeignKey(
         'sales.SalesContract',
@@ -51,13 +53,10 @@ class CollectionPlan(BaseModel):
         null=True,
         blank=True,
         related_name='collection_plans',
-        verbose_name='销售合同'
+        verbose_name='销售合同',
     )
     customer = models.ForeignKey(
-        'masterdata.Customer',
-        on_delete=models.PROTECT,
-        related_name='collection_plans',
-        verbose_name='客户'
+        'masterdata.Customer', on_delete=models.PROTECT, related_name='collection_plans', verbose_name='客户'
     )
 
     # 金额
@@ -70,11 +69,7 @@ class CollectionPlan(BaseModel):
 
     # 负责人
     owner = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='collection_plans',
-        verbose_name='负责人'
+        'accounts.User', on_delete=models.SET_NULL, null=True, related_name='collection_plans', verbose_name='负责人'
     )
 
     notes = models.TextField(blank=True, verbose_name='备注')
@@ -86,11 +81,12 @@ class CollectionPlan(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.plan_no} - {self.name}"
+        return f'{self.plan_no} - {self.name}'
 
     def save(self, *args, **kwargs):
         if not self.plan_no:
             from apps.core.models import CodeRule
+
             self.plan_no = CodeRule.generate_code('COLLECTION_PLAN')
         super().save(*args, **kwargs)
 
@@ -111,6 +107,7 @@ class CollectionMilestone(BaseModel):
     """
     回款节点 - 具体的收款时间点
     """
+
     MILESTONE_TYPE = [
         ('ADVANCE', '预付款'),
         ('DELIVERY', '发货款'),
@@ -130,10 +127,7 @@ class CollectionMilestone(BaseModel):
     ]
 
     plan = models.ForeignKey(
-        CollectionPlan,
-        on_delete=models.CASCADE,
-        related_name='milestones',
-        verbose_name='回款计划'
+        CollectionPlan, on_delete=models.CASCADE, related_name='milestones', verbose_name='回款计划'
     )
 
     # 节点信息
@@ -171,12 +165,13 @@ class CollectionMilestone(BaseModel):
         ordering = ['planned_date']
 
     def __str__(self):
-        return f"{self.plan.plan_no} - {self.name}"
+        return f'{self.plan.plan_no} - {self.name}'
 
     @property
     def is_overdue(self):
         """是否逾期"""
         from django.utils import timezone
+
         if self.status in ['COLLECTED', 'CANCELLED']:
             return False
         return timezone.now().date() > self.planned_date
@@ -187,6 +182,7 @@ class CollectionMilestone(BaseModel):
         if not self.is_overdue:
             return 0
         from django.utils import timezone
+
         return (timezone.now().date() - self.planned_date).days
 
 
@@ -194,6 +190,7 @@ class CollectionRecord(BaseModel):
     """
     收款记录 - 实际收到的款项
     """
+
     PAYMENT_METHOD = [
         ('BANK', '银行转账'),
         ('CHECK', '支票'),
@@ -203,10 +200,7 @@ class CollectionRecord(BaseModel):
     ]
 
     milestone = models.ForeignKey(
-        CollectionMilestone,
-        on_delete=models.PROTECT,
-        related_name='records',
-        verbose_name='回款节点'
+        CollectionMilestone, on_delete=models.PROTECT, related_name='records', verbose_name='回款节点'
     )
 
     # 收款信息
@@ -226,7 +220,7 @@ class CollectionRecord(BaseModel):
         null=True,
         blank=True,
         related_name='collection_records',
-        verbose_name='关联发票'
+        verbose_name='关联发票',
     )
 
     # 确认
@@ -237,7 +231,7 @@ class CollectionRecord(BaseModel):
         null=True,
         blank=True,
         related_name='confirmed_collections',
-        verbose_name='确认人'
+        verbose_name='确认人',
     )
     confirmed_at = models.DateTimeField(null=True, blank=True, verbose_name='确认时间')
 
@@ -250,16 +244,14 @@ class CollectionRecord(BaseModel):
         ordering = ['-collection_date']
 
     def __str__(self):
-        return f"{self.milestone.plan.plan_no} - {self.collection_date} - {self.amount}"
+        return f'{self.milestone.plan.plan_no} - {self.collection_date} - {self.amount}'
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
 
         # 更新节点已收金额
         milestone = self.milestone
-        total_collected = milestone.records.aggregate(
-            total=models.Sum('amount')
-        )['total'] or 0
+        total_collected = milestone.records.aggregate(total=models.Sum('amount'))['total'] or 0
         milestone.collected_amount = total_collected
 
         # 更新节点状态
@@ -274,9 +266,9 @@ class CollectionRecord(BaseModel):
 
         # 更新计划已收金额
         plan = milestone.plan
-        plan_collected = CollectionRecord.objects.filter(
-            milestone__plan=plan
-        ).aggregate(total=models.Sum('amount'))['total'] or 0
+        plan_collected = (
+            CollectionRecord.objects.filter(milestone__plan=plan).aggregate(total=models.Sum('amount'))['total'] or 0
+        )
         plan.collected_amount = plan_collected
 
         # 检查计划是否完成
@@ -292,6 +284,7 @@ class CollectionReminder(BaseModel):
     """
     回款提醒
     """
+
     REMINDER_TYPE = [
         ('UPCOMING', '即将到期'),
         ('DUE', '到期提醒'),
@@ -299,21 +292,14 @@ class CollectionReminder(BaseModel):
     ]
 
     milestone = models.ForeignKey(
-        CollectionMilestone,
-        on_delete=models.CASCADE,
-        related_name='reminders',
-        verbose_name='回款节点'
+        CollectionMilestone, on_delete=models.CASCADE, related_name='reminders', verbose_name='回款节点'
     )
 
     reminder_type = models.CharField(max_length=20, choices=REMINDER_TYPE, verbose_name='提醒类型')
     reminder_date = models.DateTimeField(verbose_name='提醒时间')
 
     # 接收人
-    recipients = models.ManyToManyField(
-        'accounts.User',
-        related_name='collection_reminders',
-        verbose_name='接收人'
-    )
+    recipients = models.ManyToManyField('accounts.User', related_name='collection_reminders', verbose_name='接收人')
 
     # 发送状态
     sent = models.BooleanField(default=False, verbose_name='已发送')
@@ -328,4 +314,4 @@ class CollectionReminder(BaseModel):
         ordering = ['reminder_date']
 
     def __str__(self):
-        return f"{self.milestone.name} - {self.get_reminder_type_display()}"
+        return f'{self.milestone.name} - {self.get_reminder_type_display()}'

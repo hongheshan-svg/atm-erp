@@ -3,6 +3,7 @@
 Purchase Budget Management
 支持年度预算、项目预算、部门预算的设置和执行跟踪
 """
+
 from decimal import Decimal
 
 from django.db import models
@@ -20,6 +21,7 @@ class PurchaseBudget(BaseModel):
     """
     采购预算
     """
+
     BUDGET_TYPES = [
         ('ANNUAL', '年度预算'),
         ('PROJECT', '项目预算'),
@@ -38,12 +40,7 @@ class PurchaseBudget(BaseModel):
 
     budget_no = models.CharField(max_length=50, unique=True, verbose_name='预算编号')
     name = models.CharField(max_length=200, verbose_name='预算名称')
-    budget_type = models.CharField(
-        max_length=20,
-        choices=BUDGET_TYPES,
-        default='ANNUAL',
-        verbose_name='预算类型'
-    )
+    budget_type = models.CharField(max_length=20, choices=BUDGET_TYPES, default='ANNUAL', verbose_name='预算类型')
 
     # 预算期间
     year = models.IntegerField(verbose_name='预算年度')
@@ -51,32 +48,12 @@ class PurchaseBudget(BaseModel):
     end_date = models.DateField(verbose_name='结束日期')
 
     # 预算金额
-    total_amount = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        verbose_name='预算总额'
-    )
-    used_amount = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        verbose_name='已使用金额'
-    )
-    reserved_amount = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        verbose_name='预留金额'
-    )
+    total_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='预算总额')
+    used_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='已使用金额')
+    reserved_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='预留金额')
 
     # 预警阈值
-    warning_threshold = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=80,
-        verbose_name='预警阈值(%)'
-    )
+    warning_threshold = models.DecimalField(max_digits=5, decimal_places=2, default=80, verbose_name='预警阈值(%)')
 
     # 关联
     department = models.ForeignKey(
@@ -85,7 +62,7 @@ class PurchaseBudget(BaseModel):
         null=True,
         blank=True,
         related_name='purchase_budgets',
-        verbose_name='部门'
+        verbose_name='部门',
     )
     project = models.ForeignKey(
         'projects.Project',
@@ -93,16 +70,11 @@ class PurchaseBudget(BaseModel):
         null=True,
         blank=True,
         related_name='purchase_budgets',
-        verbose_name='项目'
+        verbose_name='项目',
     )
 
     # 状态
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='DRAFT',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', verbose_name='状态')
 
     # 审批
     approver = models.ForeignKey(
@@ -111,7 +83,7 @@ class PurchaseBudget(BaseModel):
         null=True,
         blank=True,
         related_name='approved_budgets',
-        verbose_name='审批人'
+        verbose_name='审批人',
     )
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name='审批时间')
 
@@ -153,37 +125,20 @@ class BudgetLine(BaseModel):
     """
     预算明细行
     """
-    budget = models.ForeignKey(
-        PurchaseBudget,
-        on_delete=models.CASCADE,
-        related_name='lines',
-        verbose_name='预算'
-    )
+
+    budget = models.ForeignKey(PurchaseBudget, on_delete=models.CASCADE, related_name='lines', verbose_name='预算')
 
     # 预算项
     category = models.CharField(max_length=100, verbose_name='物料类别')
     description = models.CharField(max_length=500, blank=True, verbose_name='说明')
 
     # 金额
-    planned_amount = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        verbose_name='计划金额'
-    )
-    used_amount = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        verbose_name='已使用金额'
-    )
+    planned_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='计划金额')
+    used_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='已使用金额')
 
     # 月度分解（可选）
     monthly_plan = models.JSONField(
-        default=dict,
-        blank=True,
-        verbose_name='月度计划',
-        help_text='格式：{"1": 10000, "2": 15000, ...}'
+        default=dict, blank=True, verbose_name='月度计划', help_text='格式：{"1": 10000, "2": 15000, ...}'
     )
 
     class Meta:
@@ -204,6 +159,7 @@ class BudgetUsageRecord(BaseModel):
     """
     预算使用记录
     """
+
     USAGE_TYPES = [
         ('PURCHASE_ORDER', '采购订单'),
         ('PURCHASE_REQUEST', '采购申请'),
@@ -213,10 +169,7 @@ class BudgetUsageRecord(BaseModel):
     ]
 
     budget = models.ForeignKey(
-        PurchaseBudget,
-        on_delete=models.CASCADE,
-        related_name='usage_records',
-        verbose_name='预算'
+        PurchaseBudget, on_delete=models.CASCADE, related_name='usage_records', verbose_name='预算'
     )
     budget_line = models.ForeignKey(
         BudgetLine,
@@ -224,22 +177,14 @@ class BudgetUsageRecord(BaseModel):
         null=True,
         blank=True,
         related_name='usage_records',
-        verbose_name='预算明细'
+        verbose_name='预算明细',
     )
 
-    usage_type = models.CharField(
-        max_length=30,
-        choices=USAGE_TYPES,
-        verbose_name='使用类型'
-    )
+    usage_type = models.CharField(max_length=30, choices=USAGE_TYPES, verbose_name='使用类型')
     reference_no = models.CharField(max_length=50, verbose_name='参考单号')
     reference_id = models.IntegerField(null=True, blank=True, verbose_name='参考ID')
 
-    amount = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        verbose_name='金额'
-    )
+    amount = models.DecimalField(max_digits=18, decimal_places=2, verbose_name='金额')
     is_reserved = models.BooleanField(default=False, verbose_name='是否预留')
 
     description = models.CharField(max_length=500, blank=True, verbose_name='说明')
@@ -258,15 +203,13 @@ class BudgetUsageRecord(BaseModel):
 # Budget Service
 # =====================
 
+
 class BudgetService:
     """预算服务"""
 
     @staticmethod
     def check_budget(
-        project_id: int = None,
-        department_id: int = None,
-        amount: Decimal = 0,
-        category: str = None
+        project_id: int = None, department_id: int = None, amount: Decimal = 0, category: str = None
     ) -> dict:
         """
         检查预算
@@ -292,12 +235,7 @@ class BudgetService:
         budget = PurchaseBudget.objects.filter(**filters).first()
 
         if not budget:
-            return {
-                'available': True,
-                'message': '无适用预算，跳过预算检查',
-                'budget': None,
-                'available_amount': None
-            }
+            return {'available': True, 'message': '无适用预算，跳过预算检查', 'budget': None, 'available_amount': None}
 
         available = budget.available_amount
 
@@ -306,7 +244,7 @@ class BudgetService:
                 'available': False,
                 'message': f'预算不足，可用金额：{available}，申请金额：{amount}',
                 'budget': budget,
-                'available_amount': available
+                'available_amount': available,
             }
 
         if budget.is_warning:
@@ -315,15 +253,10 @@ class BudgetService:
                 'message': f'预算已达预警阈值（{budget.usage_rate}%），请谨慎使用',
                 'budget': budget,
                 'available_amount': available,
-                'warning': True
+                'warning': True,
             }
 
-        return {
-            'available': True,
-            'message': '预算充足',
-            'budget': budget,
-            'available_amount': available
-        }
+        return {'available': True, 'message': '预算充足', 'budget': budget, 'available_amount': available}
 
     @staticmethod
     def use_budget(
@@ -334,7 +267,7 @@ class BudgetService:
         reference_id: int = None,
         budget_line_id: int = None,
         description: str = '',
-        user=None
+        user=None,
     ) -> BudgetUsageRecord:
         """使用预算"""
         budget = PurchaseBudget.objects.get(id=budget_id)
@@ -347,7 +280,7 @@ class BudgetService:
             reference_id=reference_id,
             amount=amount,
             description=description,
-            created_by=user
+            created_by=user,
         )
 
         # 更新预算已使用金额
@@ -362,20 +295,13 @@ class BudgetService:
 
         # 更新明细行
         if budget_line_id:
-            BudgetLine.objects.filter(id=budget_line_id).update(
-                used_amount=F('used_amount') + amount
-            )
+            BudgetLine.objects.filter(id=budget_line_id).update(used_amount=F('used_amount') + amount)
 
         return record
 
     @staticmethod
     def reserve_budget(
-        budget_id: int,
-        amount: Decimal,
-        reference_no: str,
-        reference_id: int = None,
-        description: str = '',
-        user=None
+        budget_id: int, amount: Decimal, reference_no: str, reference_id: int = None, description: str = '', user=None
     ) -> BudgetUsageRecord:
         """预留预算"""
         budget = PurchaseBudget.objects.get(id=budget_id)
@@ -388,7 +314,7 @@ class BudgetService:
             amount=amount,
             is_reserved=True,
             description=description,
-            created_by=user
+            created_by=user,
         )
 
         budget.reserved_amount = F('reserved_amount') + amount
@@ -397,12 +323,7 @@ class BudgetService:
         return record
 
     @staticmethod
-    def release_reserve(
-        budget_id: int,
-        amount: Decimal,
-        reference_no: str,
-        user=None
-    ):
+    def release_reserve(budget_id: int, amount: Decimal, reference_no: str, user=None):
         """释放预留"""
         budget = PurchaseBudget.objects.get(id=budget_id)
 
@@ -413,7 +334,7 @@ class BudgetService:
             amount=-amount,
             is_reserved=True,
             description='释放预留',
-            created_by=user
+            created_by=user,
         )
 
         budget.reserved_amount = F('reserved_amount') - amount
@@ -423,6 +344,7 @@ class BudgetService:
 # =====================
 # Serializers
 # =====================
+
 
 class BudgetLineSerializer(serializers.ModelSerializer):
     available_amount = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
@@ -469,10 +391,24 @@ class PurchaseBudgetListSerializer(serializers.ModelSerializer):
     class Meta:
         model = PurchaseBudget
         fields = [
-            'id', 'budget_no', 'name', 'budget_type', 'budget_type_display',
-            'year', 'start_date', 'end_date', 'total_amount', 'used_amount',
-            'available_amount', 'usage_rate', 'is_warning', 'status', 'status_display',
-            'department_name', 'project_name', 'created_at'
+            'id',
+            'budget_no',
+            'name',
+            'budget_type',
+            'budget_type_display',
+            'year',
+            'start_date',
+            'end_date',
+            'total_amount',
+            'used_amount',
+            'available_amount',
+            'usage_rate',
+            'is_warning',
+            'status',
+            'status_display',
+            'department_name',
+            'project_name',
+            'created_at',
         ]
 
 
@@ -489,8 +425,10 @@ class BudgetUsageRecordSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class PurchaseBudgetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """采购预算管理"""
+
     queryset = PurchaseBudget.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['budget_type', 'status', 'year', 'department', 'project']
@@ -505,10 +443,7 @@ class PurchaseBudgetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
     @action(detail=False, methods=['get'])
     def budget_types(self, request):
         """获取预算类型"""
-        return Response([
-            {'value': t[0], 'label': t[1]}
-            for t in PurchaseBudget.BUDGET_TYPES
-        ])
+        return Response([{'value': t[0], 'label': t[1]} for t in PurchaseBudget.BUDGET_TYPES])
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
@@ -554,10 +489,7 @@ class PurchaseBudgetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         category = request.data.get('category')
 
         result = BudgetService.check_budget(
-            project_id=project_id,
-            department_id=department_id,
-            amount=amount,
-            category=category
+            project_id=project_id, department_id=department_id, amount=amount, category=category
         )
 
         if result['budget']:
@@ -601,9 +533,7 @@ class PurchaseBudgetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
 
         # 按类型统计
         by_type = qs.values('budget_type').annotate(
-            count=models.Count('id'),
-            total=Sum('total_amount'),
-            used=Sum('used_amount')
+            count=models.Count('id'), total=Sum('total_amount'), used=Sum('used_amount')
         )
 
         # 按状态统计
@@ -613,22 +543,25 @@ class PurchaseBudgetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         warning_count = sum(1 for b in qs if b.is_warning and not b.is_exceeded)
         exceeded_count = qs.filter(status='EXCEEDED').count()
 
-        return Response({
-            'year': year,
-            'total_budget': total_budget,
-            'total_used': total_used,
-            'total_reserved': total_reserved,
-            'total_available': total_budget - total_used - total_reserved,
-            'usage_rate': round((total_used / total_budget * 100), 2) if total_budget > 0 else 0,
-            'warning_count': warning_count,
-            'exceeded_count': exceeded_count,
-            'by_type': list(by_type),
-            'by_status': list(by_status)
-        })
+        return Response(
+            {
+                'year': year,
+                'total_budget': total_budget,
+                'total_used': total_used,
+                'total_reserved': total_reserved,
+                'total_available': total_budget - total_used - total_reserved,
+                'usage_rate': round((total_used / total_budget * 100), 2) if total_budget > 0 else 0,
+                'warning_count': warning_count,
+                'exceeded_count': exceeded_count,
+                'by_type': list(by_type),
+                'by_status': list(by_status),
+            }
+        )
 
 
 class BudgetLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """预算明细管理"""
+
     queryset = BudgetLine.objects.filter(is_deleted=False)
     serializer_class = BudgetLineSerializer
     permission_classes = [IsAuthenticated]

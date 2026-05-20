@@ -15,6 +15,7 @@ Office Asset Management
 - 公司内部测试设备、工具等用此模块管理
 - 需要追踪项目占用时，可在借用记录中关联项目
 """
+
 from datetime import date
 from decimal import Decimal
 
@@ -33,15 +34,11 @@ class OAAssetCategory(BaseModel):
     """
     办公资产分类
     """
+
     name = models.CharField(max_length=100, verbose_name='分类名称')
     code = models.CharField(max_length=20, unique=True, verbose_name='分类编码')
     parent = models.ForeignKey(
-        'self',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='children',
-        verbose_name='父分类'
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='children', verbose_name='父分类'
     )
     description = models.TextField(blank=True, verbose_name='描述')
     depreciation_years = models.IntegerField(default=5, verbose_name='折旧年限')
@@ -56,6 +53,7 @@ class OAAssetCategory(BaseModel):
     def __str__(self):
         return self.name
 
+
 # Alias for backwards compatibility
 AssetCategory = OAAssetCategory
 
@@ -64,6 +62,7 @@ class Asset(BaseModel):
     """
     办公资产
     """
+
     STATUS_CHOICES = [
         ('IDLE', '闲置'),
         ('IN_USE', '使用中'),
@@ -81,7 +80,7 @@ class Asset(BaseModel):
         null=True,
         blank=True,
         related_name='oa_assets',
-        verbose_name='资产分类'
+        verbose_name='资产分类',
     )
 
     # 基本信息
@@ -92,41 +91,22 @@ class Asset(BaseModel):
 
     # 采购信息
     purchase_date = models.DateField(null=True, blank=True, verbose_name='购置日期')
-    purchase_price = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        default=0,
-        verbose_name='购置价格'
-    )
+    purchase_price = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name='购置价格')
     supplier = models.ForeignKey(
         'masterdata.Supplier',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='oa_supplied_assets',
-        verbose_name='供应商'
+        verbose_name='供应商',
     )
     warranty_expire_date = models.DateField(null=True, blank=True, verbose_name='保修到期')
 
     # 折旧
-    depreciation_method = models.CharField(
-        max_length=20,
-        default='STRAIGHT',
-        verbose_name='折旧方法'
-    )
+    depreciation_method = models.CharField(max_length=20, default='STRAIGHT', verbose_name='折旧方法')
     depreciation_years = models.IntegerField(default=5, verbose_name='折旧年限')
-    residual_rate = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=5,
-        verbose_name='残值率(%)'
-    )
-    current_value = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        default=0,
-        verbose_name='当前价值'
-    )
+    residual_rate = models.DecimalField(max_digits=5, decimal_places=2, default=5, verbose_name='残值率(%)')
+    current_value = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name='当前价值')
 
     # 位置
     location = models.CharField(max_length=200, blank=True, verbose_name='存放位置')
@@ -139,15 +119,10 @@ class Asset(BaseModel):
         null=True,
         blank=True,
         related_name='using_assets',
-        verbose_name='当前使用人'
+        verbose_name='当前使用人',
     )
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='IDLE',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='IDLE', verbose_name='状态')
 
     # 附件和备注
     image = models.CharField(max_length=500, blank=True, verbose_name='图片')
@@ -166,6 +141,7 @@ class Asset(BaseModel):
     def save(self, *args, **kwargs):
         if not self.asset_no:
             from apps.core.utils import generate_code
+
             self.asset_no = generate_code('AST')
         if not self.current_value and self.purchase_price:
             self.current_value = self.purchase_price
@@ -189,6 +165,7 @@ class AssetBorrow(BaseModel):
     """
     资产借用
     """
+
     STATUS_CHOICES = [
         ('PENDING', '待审批'),
         ('APPROVED', '已批准'),
@@ -200,18 +177,10 @@ class AssetBorrow(BaseModel):
 
     borrow_no = models.CharField(max_length=50, unique=True, verbose_name='借用单号')
 
-    asset = models.ForeignKey(
-        Asset,
-        on_delete=models.CASCADE,
-        related_name='borrows',
-        verbose_name='资产'
-    )
+    asset = models.ForeignKey(Asset, on_delete=models.CASCADE, related_name='borrows', verbose_name='资产')
 
     borrower = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.CASCADE,
-        related_name='asset_borrows',
-        verbose_name='借用人'
+        'accounts.User', on_delete=models.CASCADE, related_name='asset_borrows', verbose_name='借用人'
     )
 
     borrow_date = models.DateField(verbose_name='借用日期')
@@ -220,12 +189,7 @@ class AssetBorrow(BaseModel):
 
     purpose = models.TextField(verbose_name='借用目的')
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
 
     # 审批
     approver = models.ForeignKey(
@@ -234,7 +198,7 @@ class AssetBorrow(BaseModel):
         null=True,
         blank=True,
         related_name='approved_asset_borrows',
-        verbose_name='审批人'
+        verbose_name='审批人',
     )
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name='审批时间')
 
@@ -254,6 +218,7 @@ class AssetBorrow(BaseModel):
     def save(self, *args, **kwargs):
         if not self.borrow_no:
             from apps.core.utils import generate_code
+
             self.borrow_no = generate_code('AB')
         super().save(*args, **kwargs)
 
@@ -262,6 +227,7 @@ class OAAssetTransfer(BaseModel):
     """
     办公资产调拨/转移
     """
+
     STATUS_CHOICES = [
         ('PENDING', '待审批'),
         ('APPROVED', '已审批'),
@@ -272,12 +238,7 @@ class OAAssetTransfer(BaseModel):
 
     transfer_no = models.CharField(max_length=50, unique=True, verbose_name='调拨单号')
 
-    asset = models.ForeignKey(
-        Asset,
-        on_delete=models.CASCADE,
-        related_name='oa_transfers',
-        verbose_name='资产'
-    )
+    asset = models.ForeignKey(Asset, on_delete=models.CASCADE, related_name='oa_transfers', verbose_name='资产')
 
     # 调出
     from_department_name = models.CharField(max_length=100, blank=True, verbose_name='调出部门')
@@ -287,7 +248,7 @@ class OAAssetTransfer(BaseModel):
         null=True,
         blank=True,
         related_name='oa_asset_transfers_out',
-        verbose_name='调出人'
+        verbose_name='调出人',
     )
 
     # 调入
@@ -298,18 +259,13 @@ class OAAssetTransfer(BaseModel):
         null=True,
         blank=True,
         related_name='oa_asset_transfers_in',
-        verbose_name='调入人'
+        verbose_name='调入人',
     )
 
     transfer_date = models.DateField(verbose_name='调拨日期')
     reason = models.TextField(verbose_name='调拨原因')
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
 
     approver = models.ForeignKey(
         'accounts.User',
@@ -317,7 +273,7 @@ class OAAssetTransfer(BaseModel):
         null=True,
         blank=True,
         related_name='oa_approved_asset_transfers',
-        verbose_name='审批人'
+        verbose_name='审批人',
     )
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name='审批时间')
 
@@ -333,8 +289,10 @@ class OAAssetTransfer(BaseModel):
     def save(self, *args, **kwargs):
         if not self.transfer_no:
             from apps.core.utils import generate_code
+
             self.transfer_no = generate_code('OAT')
         super().save(*args, **kwargs)
+
 
 # Alias for backwards compatibility
 AssetTransfer = OAAssetTransfer
@@ -344,6 +302,7 @@ class AssetMaintenance(BaseModel):
     """
     资产维修/保养
     """
+
     MAINTENANCE_TYPES = [
         ('REPAIR', '维修'),
         ('MAINTAIN', '保养'),
@@ -359,25 +318,12 @@ class AssetMaintenance(BaseModel):
 
     maintenance_no = models.CharField(max_length=50, unique=True, verbose_name='维修单号')
 
-    asset = models.ForeignKey(
-        Asset,
-        on_delete=models.CASCADE,
-        related_name='maintenance_records',
-        verbose_name='资产'
-    )
+    asset = models.ForeignKey(Asset, on_delete=models.CASCADE, related_name='maintenance_records', verbose_name='资产')
 
-    maintenance_type = models.CharField(
-        max_length=20,
-        choices=MAINTENANCE_TYPES,
-        default='REPAIR',
-        verbose_name='类型'
-    )
+    maintenance_type = models.CharField(max_length=20, choices=MAINTENANCE_TYPES, default='REPAIR', verbose_name='类型')
 
     reporter = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.CASCADE,
-        related_name='reported_asset_maintenance',
-        verbose_name='报修人'
+        'accounts.User', on_delete=models.CASCADE, related_name='reported_asset_maintenance', verbose_name='报修人'
     )
 
     fault_description = models.TextField(verbose_name='故障描述')
@@ -389,19 +335,14 @@ class AssetMaintenance(BaseModel):
         null=True,
         blank=True,
         related_name='handled_asset_maintenance',
-        verbose_name='处理人'
+        verbose_name='处理人',
     )
     start_date = models.DateField(null=True, blank=True, verbose_name='开始日期')
     end_date = models.DateField(null=True, blank=True, verbose_name='完成日期')
     result = models.TextField(blank=True, verbose_name='处理结果')
     cost = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='费用')
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
 
     class Meta:
         db_table = 'oa_asset_maintenance'
@@ -415,6 +356,7 @@ class AssetMaintenance(BaseModel):
     def save(self, *args, **kwargs):
         if not self.maintenance_no:
             from apps.core.utils import generate_code
+
             self.maintenance_no = generate_code('AM')
         super().save(*args, **kwargs)
 
@@ -422,6 +364,7 @@ class AssetMaintenance(BaseModel):
 # =====================
 # Serializers
 # =====================
+
 
 class AssetCategorySerializer(serializers.ModelSerializer):
     children = serializers.SerializerMethodField()
@@ -456,10 +399,20 @@ class AssetListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Asset
         fields = [
-            'id', 'asset_no', 'name', 'category', 'category_name',
-            'brand', 'model', 'status', 'status_display',
-            'current_user', 'current_user_name', 'location',
-            'purchase_price', 'current_value'
+            'id',
+            'asset_no',
+            'name',
+            'category',
+            'category_name',
+            'brand',
+            'model',
+            'status',
+            'status_display',
+            'current_user',
+            'current_user_name',
+            'location',
+            'purchase_price',
+            'current_value',
         ]
 
 
@@ -507,8 +460,10 @@ class AssetMaintenanceSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class AssetCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """办公资产分类管理"""
+
     queryset = OAAssetCategory.objects.filter(is_deleted=False)
     serializer_class = AssetCategorySerializer
     permission_classes = [IsAuthenticated]
@@ -524,6 +479,7 @@ class AssetCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
 
 class AssetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """办公资产管理"""
+
     queryset = Asset.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'category', 'current_user']
@@ -551,12 +507,11 @@ class AssetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     def warranty_expiring(self, request):
         """即将过保的资产"""
         today = date.today()
-        next_month = today.replace(month=today.month + 1) if today.month < 12 else today.replace(year=today.year + 1, month=1)
-
-        assets = self.get_queryset().filter(
-            warranty_expire_date__gte=today,
-            warranty_expire_date__lte=next_month
+        next_month = (
+            today.replace(month=today.month + 1) if today.month < 12 else today.replace(year=today.year + 1, month=1)
         )
+
+        assets = self.get_queryset().filter(warranty_expire_date__gte=today, warranty_expire_date__lte=next_month)
         return Response(AssetListSerializer(assets, many=True).data)
 
     @action(detail=True, methods=['post'])
@@ -566,6 +521,7 @@ class AssetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         user_id = request.data.get('user_id')
 
         from apps.accounts.models import User
+
         try:
             user = User.objects.get(id=user_id)
         except User.DoesNotExist:
@@ -604,32 +560,29 @@ class AssetViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 
         qs = self.get_queryset()
 
-        by_status = qs.values('status').annotate(
-            count=Count('id'),
-            total_value=Sum('current_value')
-        )
+        by_status = qs.values('status').annotate(count=Count('id'), total_value=Sum('current_value'))
 
-        by_category = qs.values('category__name').annotate(
-            count=Count('id'),
-            total_value=Sum('current_value')
-        )
+        by_category = qs.values('category__name').annotate(count=Count('id'), total_value=Sum('current_value'))
 
         total_count = qs.count()
         total_value = qs.aggregate(total=Sum('current_value'))['total'] or 0
         total_purchase = qs.aggregate(total=Sum('purchase_price'))['total'] or 0
 
-        return Response({
-            'total_count': total_count,
-            'total_current_value': float(total_value),
-            'total_purchase_value': float(total_purchase),
-            'depreciation': float(total_purchase - total_value),
-            'by_status': list(by_status),
-            'by_category': list(by_category)
-        })
+        return Response(
+            {
+                'total_count': total_count,
+                'total_current_value': float(total_value),
+                'total_purchase_value': float(total_purchase),
+                'depreciation': float(total_purchase - total_value),
+                'by_status': list(by_status),
+                'by_category': list(by_category),
+            }
+        )
 
 
 class AssetBorrowViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """资产借用管理"""
+
     queryset = AssetBorrow.objects.filter(is_deleted=False)
     serializer_class = AssetBorrowSerializer
     permission_classes = [IsAuthenticated]
@@ -661,35 +614,41 @@ class AssetBorrowViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
                 business_id=borrow.id,
                 business_no=borrow.borrow_no or f'AB-{borrow.id}',
                 submitter=request.user,
-                amount=None
+                amount=None,
             )
 
             if instance:
                 borrow.status = 'PENDING'
                 borrow.save()
-                return Response({
-                    **self.get_serializer(borrow).data,
-                    'workflow_started': True,
-                    'workflow_id': instance.id,
-                    'message': '已提交审批，请在审批中心查看审批进度'
-                })
+                return Response(
+                    {
+                        **self.get_serializer(borrow).data,
+                        'workflow_started': True,
+                        'workflow_id': instance.id,
+                        'message': '已提交审批，请在审批中心查看审批进度',
+                    }
+                )
             else:
                 borrow.status = 'PENDING'
                 borrow.save()
-                return Response({
-                    **self.get_serializer(borrow).data,
-                    'workflow_started': False,
-                    'message': error or '未配置审批流程，请等待人工审批'
-                })
+                return Response(
+                    {
+                        **self.get_serializer(borrow).data,
+                        'workflow_started': False,
+                        'message': error or '未配置审批流程，请等待人工审批',
+                    }
+                )
 
         except Exception as e:
             borrow.status = 'PENDING'
             borrow.save()
-            return Response({
-                **self.get_serializer(borrow).data,
-                'workflow_started': False,
-                'message': f'已提交，但工作流服务异常: {e}'
-            })
+            return Response(
+                {
+                    **self.get_serializer(borrow).data,
+                    'workflow_started': False,
+                    'message': f'已提交，但工作流服务异常: {e}',
+                }
+            )
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
@@ -759,6 +718,7 @@ class AssetBorrowViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
 
 class AssetTransferViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """办公资产调拨管理"""
+
     queryset = OAAssetTransfer.objects.filter(is_deleted=False)
     serializer_class = AssetTransferSerializer
     permission_classes = [IsAuthenticated]
@@ -800,6 +760,7 @@ class AssetTransferViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
 
 class AssetMaintenanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """资产维修管理"""
+
     queryset = AssetMaintenance.objects.filter(is_deleted=False)
     serializer_class = AssetMaintenanceSerializer
     permission_classes = [IsAuthenticated]
@@ -820,6 +781,7 @@ class AssetMaintenanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         handler_id = request.data.get('handler_id')
 
         from apps.accounts.models import User
+
         try:
             handler = User.objects.get(id=handler_id)
         except User.DoesNotExist:

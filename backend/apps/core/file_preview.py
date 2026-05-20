@@ -3,6 +3,7 @@
 File Preview Service
 支持PDF、Office文档、图片等常见格式的在线预览
 """
+
 import hashlib
 import mimetypes
 import os
@@ -21,14 +22,23 @@ class FilePreviewService:
     # 支持直接预览的MIME类型
     DIRECT_PREVIEW_TYPES = {
         # 图片
-        'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+        'image/jpeg',
+        'image/png',
+        'image/gif',
+        'image/webp',
+        'image/svg+xml',
         # PDF
         'application/pdf',
         # 文本
-        'text/plain', 'text/html', 'text/css', 'text/javascript',
-        'text/csv', 'text/markdown',
+        'text/plain',
+        'text/html',
+        'text/css',
+        'text/javascript',
+        'text/csv',
+        'text/markdown',
         # 代码
-        'application/json', 'application/xml',
+        'application/json',
+        'application/xml',
     }
 
     # 需要转换的Office文档类型
@@ -128,7 +138,7 @@ class FilePreviewService:
             return {
                 'content': '',
                 'truncated': True,
-                'message': f'文件过大（{self._format_size(file_stat.st_size)}），无法预览'
+                'message': f'文件过大（{self._format_size(file_stat.st_size)}），无法预览',
             }
 
         try:
@@ -137,23 +147,13 @@ class FilePreviewService:
                 try:
                     with open(file_path, 'r', encoding=encoding) as f:
                         content = f.read()
-                    return {
-                        'content': content,
-                        'encoding': encoding,
-                        'truncated': False
-                    }
+                    return {'content': content, 'encoding': encoding, 'truncated': False}
                 except UnicodeDecodeError:
                     continue
 
-            return {
-                'content': '',
-                'error': '无法解析文件编码'
-            }
+            return {'content': '', 'error': '无法解析文件编码'}
         except Exception as e:
-            return {
-                'content': '',
-                'error': str(e)
-            }
+            return {'content': '', 'error': str(e)}
 
     def get_excel_preview(self, file_path: str, sheet_name: str = None, max_rows: int = 100) -> dict:
         """获取Excel文件预览"""
@@ -199,7 +199,7 @@ class FilePreviewService:
                 'headers': headers,
                 'data': data,
                 'total_rows': ws.max_row,
-                'truncated': ws.max_row > max_rows if ws.max_row else False
+                'truncated': ws.max_row > max_rows if ws.max_row else False,
             }
         except ImportError:
             return {'error': 'openpyxl 库未安装'}
@@ -246,6 +246,7 @@ class FilePreviewService:
 
 class FilePreviewView(APIView):
     """文件预览接口"""
+
     permission_classes = [IsAuthenticated]
 
     def __init__(self, **kwargs):
@@ -302,18 +303,12 @@ class FilePreviewView(APIView):
                     return Response({**info, **excel_data})
                 else:
                     # 其他Office文档返回基本信息
-                    return Response({
-                        **info,
-                        'message': '请下载后查看完整内容'
-                    })
+                    return Response({**info, 'message': '请下载后查看完整内容'})
 
             elif info['preview_type'] == 'image':
                 # 返回缩略图URL
                 thumb_path = self.service.get_image_thumbnail(file_path)
-                return Response({
-                    **info,
-                    'thumbnail_path': thumb_path.replace(settings.MEDIA_ROOT, '/media')
-                })
+                return Response({**info, 'thumbnail_path': thumb_path.replace(settings.MEDIA_ROOT, '/media')})
 
             else:
                 return Response(info)
@@ -322,10 +317,7 @@ class FilePreviewView(APIView):
             mime_type = self.service.get_mime_type(file_path)
             file_name = os.path.basename(file_path)
 
-            response = FileResponse(
-                open(file_path, 'rb'),
-                content_type=mime_type
-            )
+            response = FileResponse(open(file_path, 'rb'), content_type=mime_type)
             response['Content-Disposition'] = f'attachment; filename="{file_name}"'
             return response
 
@@ -334,10 +326,7 @@ class FilePreviewView(APIView):
             mime_type = self.service.get_mime_type(file_path)
             file_name = os.path.basename(file_path)
 
-            response = FileResponse(
-                open(file_path, 'rb'),
-                content_type=mime_type
-            )
+            response = FileResponse(open(file_path, 'rb'), content_type=mime_type)
             response['Content-Disposition'] = f'inline; filename="{file_name}"'
             return response
 
@@ -347,6 +336,7 @@ class FilePreviewView(APIView):
 
 class FileUploadView(APIView):
     """文件上传接口"""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -365,6 +355,7 @@ class FileUploadView(APIView):
 
         # 创建存储目录
         from datetime import datetime
+
         date_path = datetime.now().strftime('%Y/%m/%d')
         upload_dir = Path(settings.MEDIA_ROOT) / 'uploads' / category / date_path
         upload_dir.mkdir(parents=True, exist_ok=True)
@@ -385,18 +376,21 @@ class FileUploadView(APIView):
         service = FilePreviewService()
         info = service.get_preview_info(str(file_path))
 
-        return Response({
-            'success': True,
-            'file_path': str(file_path).replace(settings.MEDIA_ROOT, '').lstrip('/'),
-            'original_name': file.name,
-            'saved_name': safe_name,
-            'url': f'/media/uploads/{category}/{date_path}/{safe_name}',
-            **info
-        })
+        return Response(
+            {
+                'success': True,
+                'file_path': str(file_path).replace(settings.MEDIA_ROOT, '').lstrip('/'),
+                'original_name': file.name,
+                'saved_name': safe_name,
+                'url': f'/media/uploads/{category}/{date_path}/{safe_name}',
+                **info,
+            }
+        )
 
 
 class FileListView(APIView):
     """文件列表接口"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -426,34 +420,24 @@ class FileListView(APIView):
                 if item.is_file():
                     rel_path = item.relative_to(settings.MEDIA_ROOT)
                     info = service.get_preview_info(str(item))
-                    files.append({
-                        'path': str(rel_path),
-                        'name': item.name,
-                        **info
-                    })
+                    files.append({'path': str(rel_path), 'name': item.name, **info})
         else:
             for item in base_path.iterdir():
                 rel_path = item.relative_to(settings.MEDIA_ROOT)
                 if item.is_file():
                     info = service.get_preview_info(str(item))
-                    files.append({
-                        'path': str(rel_path),
-                        'name': item.name,
-                        **info
-                    })
+                    files.append({'path': str(rel_path), 'name': item.name, **info})
                 elif item.is_dir():
                     # 统计目录下文件数量
                     file_count = sum(1 for _ in item.rglob('*') if _.is_file())
-                    directories.append({
-                        'path': str(rel_path),
-                        'name': item.name,
-                        'file_count': file_count
-                    })
+                    directories.append({'path': str(rel_path), 'name': item.name, 'file_count': file_count})
 
-        return Response({
-            'directory': directory,
-            'directories': directories,
-            'files': files,
-            'total_files': len(files),
-            'total_directories': len(directories)
-        })
+        return Response(
+            {
+                'directory': directory,
+                'directories': directories,
+                'files': files,
+                'total_files': len(files),
+                'total_directories': len(directories),
+            }
+        )

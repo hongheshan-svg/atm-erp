@@ -26,11 +26,10 @@ def sync_default_scope(role, scope_type):
     }
     DataScope.objects.filter(role=role, module='__default__').delete()
     scope, _ = DataScope.objects.update_or_create(
-        role=role,
-        module='',
-        defaults={'scope_type': scope_map.get(scope_type, 'self')}
+        role=role, module='', defaults={'scope_type': scope_map.get(scope_type, 'self')}
     )
     scope.custom_departments.clear()
+
 
 class Command(BaseCommand):
     help = 'Seed the database with sample data'
@@ -73,24 +72,15 @@ class Command(BaseCommand):
         # 2. Create Roles
         self.stdout.write('Creating roles...')
         role_manager = Role.objects.create(
-            name='Project Manager',
-            code='PM',
-            description='Can manage projects and view all data',
-            permissions={}
+            name='Project Manager', code='PM', description='Can manage projects and view all data', permissions={}
         )
         sync_default_scope(role_manager, 'ALL')
         role_engineer = Role.objects.create(
-            name='Engineer',
-            code='ENG',
-            description='Can work on assigned tasks',
-            permissions={}
+            name='Engineer', code='ENG', description='Can work on assigned tasks', permissions={}
         )
         sync_default_scope(role_engineer, 'DEPARTMENT')
         role_buyer = Role.objects.create(
-            name='Buyer',
-            code='BUYER',
-            description='Can create purchase orders',
-            permissions={}
+            name='Buyer', code='BUYER', description='Can create purchase orders', permissions={}
         )
         sync_default_scope(role_buyer, 'DEPARTMENT')
 
@@ -105,7 +95,7 @@ class Command(BaseCommand):
             employee_id='EMP001',
             department=dept_engineering,
             role=role_manager,
-            is_staff=True
+            is_staff=True,
         )
         user_john.roles.add(role_manager)
 
@@ -117,7 +107,7 @@ class Command(BaseCommand):
             last_name='Johnson',
             employee_id='EMP002',
             department=dept_engineering,
-            role=role_engineer
+            role=role_engineer,
         )
         user_sarah.roles.add(role_engineer)
 
@@ -129,7 +119,7 @@ class Command(BaseCommand):
             last_name='Chen',
             employee_id='EMP003',
             department=dept_procurement,
-            role=role_buyer
+            role=role_buyer,
         )
         user_mike.roles.add(role_buyer)
 
@@ -144,7 +134,7 @@ class Command(BaseCommand):
             address='123 Tech Street, Silicon Valley, CA 94025',
             credit_limit=Decimal('100000.00'),
             status='ACTIVE',
-            created_by=admin
+            created_by=admin,
         )
 
         customer2 = Customer.objects.create(
@@ -156,7 +146,7 @@ class Command(BaseCommand):
             address='456 Industrial Blvd, Detroit, MI 48201',
             credit_limit=Decimal('200000.00'),
             status='ACTIVE',
-            created_by=admin
+            created_by=admin,
         )
 
         customer3 = Customer.objects.create(
@@ -168,7 +158,7 @@ class Command(BaseCommand):
             address='789 Innovation Way, Austin, TX 78701',
             credit_limit=Decimal('150000.00'),
             status='ACTIVE',
-            created_by=admin
+            created_by=admin,
         )
 
         # 5. Create Suppliers
@@ -182,7 +172,7 @@ class Command(BaseCommand):
             address='111 Component Ave, Shenzhen, China',
             payment_terms='Net 30',
             status='ACTIVE',
-            created_by=admin
+            created_by=admin,
         )
 
         supplier2 = Supplier.objects.create(
@@ -194,7 +184,7 @@ class Command(BaseCommand):
             address='222 Parts Road, Chicago, IL 60601',
             payment_terms='Net 45',
             status='ACTIVE',
-            created_by=admin
+            created_by=admin,
         )
 
         supplier3 = Supplier.objects.create(
@@ -206,17 +196,13 @@ class Command(BaseCommand):
             address='333 Material Street, Houston, TX 77001',
             payment_terms='Net 30',
             status='ACTIVE',
-            created_by=admin
+            created_by=admin,
         )
 
         # 6. Create Warehouses
         self.stdout.write('Creating warehouses...')
         warehouse_main = Warehouse.objects.create(
-            code='WH001',
-            name='Main Warehouse',
-            location='Building A, Floor 1',
-            warehouse_type='main',
-            created_by=admin
+            code='WH001', name='Main Warehouse', location='Building A, Floor 1', warehouse_type='main', created_by=admin
         )
 
         warehouse_production = Warehouse.objects.create(
@@ -224,28 +210,16 @@ class Command(BaseCommand):
             name='Production Warehouse',
             location='Building B, Floor 2',
             warehouse_type='main',
-            created_by=admin
+            created_by=admin,
         )
 
         # 7. Create Item Categories
         self.stdout.write('Creating item categories...')
-        cat_electronics = ItemCategory.objects.create(
-            name='Electronics',
-            code='ELEC',
-            created_by=admin
-        )
+        cat_electronics = ItemCategory.objects.create(name='Electronics', code='ELEC', created_by=admin)
 
-        cat_mechanical = ItemCategory.objects.create(
-            name='Mechanical Parts',
-            code='MECH',
-            created_by=admin
-        )
+        cat_mechanical = ItemCategory.objects.create(name='Mechanical Parts', code='MECH', created_by=admin)
 
-        cat_materials = ItemCategory.objects.create(
-            name='Raw Materials',
-            code='MAT',
-            created_by=admin
-        )
+        cat_materials = ItemCategory.objects.create(name='Raw Materials', code='MAT', created_by=admin)
 
         # 8. Create Items
         self.stdout.write('Creating items...')
@@ -259,7 +233,7 @@ class Command(BaseCommand):
             min_stock=50,
             max_stock=500,
             is_active=True,
-            created_by=admin
+            created_by=admin,
         )
 
         item2 = Item.objects.create(
@@ -272,7 +246,7 @@ class Command(BaseCommand):
             min_stock=30,
             max_stock=300,
             is_active=True,
-            created_by=admin
+            created_by=admin,
         )
 
         item3 = Item.objects.create(
@@ -285,7 +259,7 @@ class Command(BaseCommand):
             min_stock=40,
             max_stock=400,
             is_active=True,
-            created_by=admin
+            created_by=admin,
         )
 
         item4 = Item.objects.create(
@@ -298,7 +272,7 @@ class Command(BaseCommand):
             min_stock=60,
             max_stock=600,
             is_active=True,
-            created_by=admin
+            created_by=admin,
         )
 
         item5 = Item.objects.create(
@@ -311,7 +285,7 @@ class Command(BaseCommand):
             min_stock=20,
             max_stock=200,
             is_active=True,
-            created_by=admin
+            created_by=admin,
         )
 
         item6 = Item.objects.create(
@@ -324,18 +298,13 @@ class Command(BaseCommand):
             min_stock=100,
             max_stock=1000,
             is_active=True,
-            created_by=admin
+            created_by=admin,
         )
 
         # 9. Create Initial Stock
         self.stdout.write('Creating initial stock...')
         for item in [item1, item2, item3, item4, item5, item6]:
-            stock = Stock.objects.create(
-                warehouse=warehouse_main,
-                item=item,
-                qty_on_hand=100,
-                qty_reserved=0
-            )
+            stock = Stock.objects.create(warehouse=warehouse_main, item=item, qty_on_hand=100, qty_reserved=0)
 
             # Create stock move for initial stock
             StockMove.objects.create(
@@ -349,7 +318,7 @@ class Command(BaseCommand):
                 reference_id=stock.id,
                 move_date=timezone.now() - timedelta(days=30),
                 status='COMPLETED',
-                created_by=admin
+                created_by=admin,
             )
 
         # 10. Create Projects
@@ -366,7 +335,7 @@ class Command(BaseCommand):
             budget_material=Decimal('80000.00'),
             budget_labor=Decimal('50000.00'),
             budget_expense=Decimal('20000.00'),
-            created_by=admin
+            created_by=admin,
         )
 
         project2 = Project.objects.create(
@@ -381,7 +350,7 @@ class Command(BaseCommand):
             budget_material=Decimal('120000.00'),
             budget_labor=Decimal('60000.00'),
             budget_expense=Decimal('20000.00'),
-            created_by=admin
+            created_by=admin,
         )
 
         project3 = Project.objects.create(
@@ -396,41 +365,25 @@ class Command(BaseCommand):
             budget_material=Decimal('55000.00'),
             budget_labor=Decimal('35000.00'),
             budget_expense=Decimal('10000.00'),
-            created_by=admin
+            created_by=admin,
         )
 
         # 11. Create Project Members
         self.stdout.write('Creating project members...')
         ProjectMember.objects.create(
-            project=project1,
-            user=user_john,
-            role='Project Manager',
-            hourly_rate=Decimal('85.00'),
-            created_by=admin
+            project=project1, user=user_john, role='Project Manager', hourly_rate=Decimal('85.00'), created_by=admin
         )
 
         ProjectMember.objects.create(
-            project=project1,
-            user=user_sarah,
-            role='Senior Engineer',
-            hourly_rate=Decimal('65.00'),
-            created_by=admin
+            project=project1, user=user_sarah, role='Senior Engineer', hourly_rate=Decimal('65.00'), created_by=admin
         )
 
         ProjectMember.objects.create(
-            project=project2,
-            user=user_john,
-            role='Project Manager',
-            hourly_rate=Decimal('85.00'),
-            created_by=admin
+            project=project2, user=user_john, role='Project Manager', hourly_rate=Decimal('85.00'), created_by=admin
         )
 
         ProjectMember.objects.create(
-            project=project2,
-            user=user_sarah,
-            role='Lead Engineer',
-            hourly_rate=Decimal('70.00'),
-            created_by=admin
+            project=project2, user=user_sarah, role='Lead Engineer', hourly_rate=Decimal('70.00'), created_by=admin
         )
 
         # 12. Create Project Tasks
@@ -444,7 +397,7 @@ class Command(BaseCommand):
             actual_hours=85,
             progress_percent=70,
             status='IN_PROGRESS',
-            created_by=admin
+            created_by=admin,
         )
 
         task2 = ProjectTask.objects.create(
@@ -456,7 +409,7 @@ class Command(BaseCommand):
             actual_hours=40,
             progress_percent=25,
             status='IN_PROGRESS',
-            created_by=admin
+            created_by=admin,
         )
 
         task3 = ProjectTask.objects.create(
@@ -468,7 +421,7 @@ class Command(BaseCommand):
             actual_hours=0,
             progress_percent=0,
             status='TODO',
-            created_by=admin
+            created_by=admin,
         )
 
         task4 = ProjectTask.objects.create(
@@ -480,7 +433,7 @@ class Command(BaseCommand):
             actual_hours=95,
             progress_percent=95,
             status='IN_PROGRESS',
-            created_by=admin
+            created_by=admin,
         )
 
         task5 = ProjectTask.objects.create(
@@ -492,50 +445,20 @@ class Command(BaseCommand):
             actual_hours=120,
             progress_percent=60,
             status='IN_PROGRESS',
-            created_by=admin
+            created_by=admin,
         )
 
         # 13. Create Project BOM
         self.stdout.write('Creating project BOMs...')
-        ProjectBOM.objects.create(
-            project=project1,
-            item=item1,
-            planned_qty=50,
-            actual_qty=30,
-            created_by=admin
-        )
+        ProjectBOM.objects.create(project=project1, item=item1, planned_qty=50, actual_qty=30, created_by=admin)
 
-        ProjectBOM.objects.create(
-            project=project1,
-            item=item2,
-            planned_qty=50,
-            actual_qty=25,
-            created_by=admin
-        )
+        ProjectBOM.objects.create(project=project1, item=item2, planned_qty=50, actual_qty=25, created_by=admin)
 
-        ProjectBOM.objects.create(
-            project=project1,
-            item=item3,
-            planned_qty=50,
-            actual_qty=20,
-            created_by=admin
-        )
+        ProjectBOM.objects.create(project=project1, item=item3, planned_qty=50, actual_qty=20, created_by=admin)
 
-        ProjectBOM.objects.create(
-            project=project2,
-            item=item1,
-            planned_qty=100,
-            actual_qty=50,
-            created_by=admin
-        )
+        ProjectBOM.objects.create(project=project2, item=item1, planned_qty=100, actual_qty=50, created_by=admin)
 
-        ProjectBOM.objects.create(
-            project=project2,
-            item=item4,
-            planned_qty=100,
-            actual_qty=40,
-            created_by=admin
-        )
+        ProjectBOM.objects.create(project=project2, item=item4, planned_qty=100, actual_qty=40, created_by=admin)
 
         # 14. Create Purchase Requests
         self.stdout.write('Creating purchase requests...')
@@ -546,25 +469,15 @@ class Command(BaseCommand):
             required_date=timezone.now().date() + timedelta(days=30),
             status='APPROVED',
             total_amount=Decimal('5000.00'),
-            created_by=user_mike
+            created_by=user_mike,
         )
 
         PurchaseRequestLine.objects.create(
-            pr=pr1,
-            item=item1,
-            qty=100,
-            estimated_price=Decimal('25.00'),
-            project=project1,
-            created_by=user_mike
+            pr=pr1, item=item1, qty=100, estimated_price=Decimal('25.00'), project=project1, created_by=user_mike
         )
 
         PurchaseRequestLine.objects.create(
-            pr=pr1,
-            item=item2,
-            qty=50,
-            estimated_price=Decimal('45.00'),
-            project=project1,
-            created_by=user_mike
+            pr=pr1, item=item2, qty=50, estimated_price=Decimal('45.00'), project=project1, created_by=user_mike
         )
 
         # 15. Create Purchase Orders
@@ -577,25 +490,15 @@ class Command(BaseCommand):
             status='CONFIRMED',
             total_amount=Decimal('4750.00'),
             payment_terms='Net 30',
-            created_by=user_mike
+            created_by=user_mike,
         )
 
         PurchaseOrderLine.objects.create(
-            po=po1,
-            item=item1,
-            qty=100,
-            unit_price=Decimal('25.00'),
-            received_qty=100,
-            created_by=user_mike
+            po=po1, item=item1, qty=100, unit_price=Decimal('25.00'), received_qty=100, created_by=user_mike
         )
 
         PurchaseOrderLine.objects.create(
-            po=po1,
-            item=item2,
-            qty=50,
-            unit_price=Decimal('44.50'),
-            received_qty=50,
-            created_by=user_mike
+            po=po1, item=item2, qty=50, unit_price=Decimal('44.50'), received_qty=50, created_by=user_mike
         )
 
         # 16. Create Sales Orders
@@ -608,16 +511,11 @@ class Command(BaseCommand):
             delivery_date=timezone.now().date() + timedelta(days=40),
             status='CONFIRMED',
             total_amount=Decimal('150000.00'),
-            created_by=admin
+            created_by=admin,
         )
 
         SalesOrderLine.objects.create(
-            so=so1,
-            item=item1,
-            qty=50,
-            unit_price=Decimal('3000.00'),
-            delivered_qty=30,
-            created_by=admin
+            so=so1, item=item1, qty=50, unit_price=Decimal('3000.00'), delivered_qty=30, created_by=admin
         )
 
         so2 = SalesOrder.objects.create(
@@ -628,16 +526,11 @@ class Command(BaseCommand):
             delivery_date=timezone.now().date() + timedelta(days=60),
             status='CONFIRMED',
             total_amount=Decimal('200000.00'),
-            created_by=admin
+            created_by=admin,
         )
 
         SalesOrderLine.objects.create(
-            so=so2,
-            item=item1,
-            qty=100,
-            unit_price=Decimal('2000.00'),
-            delivered_qty=50,
-            created_by=admin
+            so=so2, item=item1, qty=100, unit_price=Decimal('2000.00'), delivered_qty=50, created_by=admin
         )
 
         # 17. Create Stock Moves for Project Consumption
@@ -656,7 +549,7 @@ class Command(BaseCommand):
             project=project1,
             move_date=timezone.now() - timedelta(days=10),
             status='COMPLETED',
-            created_by=admin
+            created_by=admin,
         )
 
         move2 = StockMove.objects.create(
@@ -671,7 +564,7 @@ class Command(BaseCommand):
             project=project1,
             move_date=timezone.now() - timedelta(days=8),
             status='COMPLETED',
-            created_by=admin
+            created_by=admin,
         )
 
         move3 = StockMove.objects.create(
@@ -686,7 +579,7 @@ class Command(BaseCommand):
             project=project1,
             move_date=timezone.now() - timedelta(days=5),
             status='COMPLETED',
-            created_by=admin
+            created_by=admin,
         )
 
         # Project 2 material consumption
@@ -702,7 +595,7 @@ class Command(BaseCommand):
             project=project2,
             move_date=timezone.now() - timedelta(days=12),
             status='COMPLETED',
-            created_by=admin
+            created_by=admin,
         )
 
         move5 = StockMove.objects.create(
@@ -717,19 +610,19 @@ class Command(BaseCommand):
             project=project2,
             move_date=timezone.now() - timedelta(days=7),
             status='COMPLETED',
-            created_by=admin
+            created_by=admin,
         )
 
         # Update stock quantities
         for item in [item1, item2, item3, item4]:
             stock = Stock.objects.filter(warehouse=warehouse_main, item=item).first()
             if stock:
-                consumed = StockMove.objects.filter(
-                    item=item,
-                    warehouse_from=warehouse_main,
-                    move_type='OUT_PROJECT',
-                    status='completed'
-                ).aggregate(total=Sum('qty'))['total'] or 0
+                consumed = (
+                    StockMove.objects.filter(
+                        item=item, warehouse_from=warehouse_main, move_type='OUT_PROJECT', status='completed'
+                    ).aggregate(total=Sum('qty'))['total']
+                    or 0
+                )
 
                 stock.qty_on_hand = 100 - consumed
                 stock.save()
@@ -745,7 +638,7 @@ class Command(BaseCommand):
             amount=Decimal('1250.50'),
             description='Client meeting travel expenses',
             status='APPROVED',
-            created_by=user_john
+            created_by=user_john,
         )
 
         Expense.objects.create(
@@ -757,7 +650,7 @@ class Command(BaseCommand):
             amount=Decimal('850.00'),
             description='Test equipment purchase',
             status='APPROVED',
-            created_by=user_sarah
+            created_by=user_sarah,
         )
 
         Expense.objects.create(
@@ -769,7 +662,7 @@ class Command(BaseCommand):
             amount=Decimal('2100.00'),
             description='Factory visit and inspection',
             status='APPROVED',
-            created_by=user_john
+            created_by=user_john,
         )
 
         Expense.objects.create(
@@ -781,7 +674,7 @@ class Command(BaseCommand):
             amount=Decimal('450.00'),
             description='Development supplies',
             status='APPROVED',
-            created_by=user_sarah
+            created_by=user_sarah,
         )
 
         # 19. Create Accounts Receivable
@@ -797,7 +690,7 @@ class Command(BaseCommand):
             amount_paid=Decimal('75000.00'),
             due_date=timezone.now().date() + timedelta(days=15),
             status='PARTIAL',
-            created_by=admin
+            created_by=admin,
         )
 
         AccountReceivable.objects.create(
@@ -811,7 +704,7 @@ class Command(BaseCommand):
             amount_paid=Decimal('0.00'),
             due_date=timezone.now().date() + timedelta(days=25),
             status='PENDING',
-            created_by=admin
+            created_by=admin,
         )
 
         self.stdout.write(self.style.SUCCESS('Successfully seeded database with sample data!'))
@@ -834,4 +727,3 @@ class Command(BaseCommand):
         self.stdout.write('Manager: john.smith / password123')
         self.stdout.write('Engineer: sarah.johnson / password123')
         self.stdout.write('Buyer: mike.chen / password123')
-

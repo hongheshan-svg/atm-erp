@@ -1,6 +1,7 @@
 """
 Security middleware for request validation and protection.
 """
+
 import logging
 import re
 import time
@@ -45,10 +46,7 @@ class RateLimitMiddleware(MiddlewareMixin):
         current = cache.get(key, 0)
         if current >= limit:
             logger.warning(f'Rate limit exceeded: {key}')
-            return JsonResponse({
-                'error': '请求过于频繁，请稍后再试',
-                'retry_after': window
-            }, status=429)
+            return JsonResponse({'error': '请求过于频繁，请稍后再试', 'retry_after': window}, status=429)
 
         # Increment counter
         cache.set(key, current + 1, window)
@@ -103,16 +101,16 @@ class SQLInjectionProtectionMiddleware(MiddlewareMixin):
     """
 
     SQL_PATTERNS = [
-        r"(\%27)|(\')|(\-\-)|(\%23)|(#)",
-        r"((\%3D)|(=))[^\n]*((\%27)|(\')|(\-\-)|(\%3B)|(;))",
-        r"\w*((\%27)|(\'))((\%6F)|o|(\%4F))((\%72)|r|(\%52))",
-        r"((\%27)|(\'))union",
-        r"exec(\s|\+)+(s|x)p\w+",
-        r"UNION(\s+)SELECT",
-        r"INSERT(\s+)INTO",
-        r"DELETE(\s+)FROM",
-        r"DROP(\s+)TABLE",
-        r"UPDATE(\s+)\w+(\s+)SET",
+        r'(\%27)|(\')|(\-\-)|(\%23)|(#)',
+        r'((\%3D)|(=))[^\n]*((\%27)|(\')|(\-\-)|(\%3B)|(;))',
+        r'\w*((\%27)|(\'))((\%6F)|o|(\%4F))((\%72)|r|(\%52))',
+        r'((\%27)|(\'))union',
+        r'exec(\s|\+)+(s|x)p\w+',
+        r'UNION(\s+)SELECT',
+        r'INSERT(\s+)INTO',
+        r'DELETE(\s+)FROM',
+        r'DROP(\s+)TABLE',
+        r'UPDATE(\s+)\w+(\s+)SET',
     ]
 
     def process_request(self, request):
@@ -191,8 +189,7 @@ class RequestLoggingMiddleware(MiddlewareMixin):
         # Log slow requests
         if duration > 5:  # More than 5 seconds
             logger.warning(
-                f'Slow request: {request.method} {request.path} '
-                f'took {duration:.2f}s, status={response.status_code}'
+                f'Slow request: {request.method} {request.path} ' f'took {duration:.2f}s, status={response.status_code}'
             )
 
         # Log failed authentication attempts
@@ -202,10 +199,7 @@ class RequestLoggingMiddleware(MiddlewareMixin):
 
         # Log server errors
         if response.status_code >= 500:
-            logger.error(
-                f'Server error: {request.method} {request.path} '
-                f'status={response.status_code}'
-            )
+            logger.error(f'Server error: {request.method} {request.path} ' f'status={response.status_code}')
 
         return response
 

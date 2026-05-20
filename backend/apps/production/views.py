@@ -1,6 +1,7 @@
 """
 生产管理模块视图
 """
+
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
@@ -37,6 +38,7 @@ class ProductionProcessViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
     """
     生产工序管理 ViewSet
     """
+
     queryset = ProductionProcess.objects.all()
     serializer_class = ProductionProcessSerializer
     permission_classes = [IsAuthenticated]
@@ -82,6 +84,7 @@ class ProductionPlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
     """
     生产计划管理 ViewSet
     """
+
     queryset = ProductionPlan.objects.all()
     serializer_class = ProductionPlanSerializer
     permission_classes = [IsAuthenticated]
@@ -169,7 +172,7 @@ class ProductionPlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
                         'planned_start': plan.planned_start,
                         'planned_end': plan.planned_end,
                         'planned_hours': process.planned_hours,
-                    }
+                    },
                 )
                 if is_new:
                     created.append(plan_process.id)
@@ -177,16 +180,14 @@ class ProductionPlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
                 pass
 
         serializer = self.get_serializer(plan)
-        return Response({
-            'plan': serializer.data,
-            'created_count': len(created)
-        })
+        return Response({'plan': serializer.data, 'created_count': len(created)})
 
 
 class ProductionPlanProcessViewSet(UserTrackingMixin, viewsets.ModelViewSet):
     """
     生产计划工序管理 ViewSet
     """
+
     queryset = ProductionPlanProcess.objects.all()
     serializer_class = ProductionPlanProcessSerializer
     permission_classes = [IsAuthenticated]
@@ -260,6 +261,7 @@ class ProductionLogViewSet(UserTrackingMixin, viewsets.ModelViewSet):
     """
     生产日志管理 ViewSet
     """
+
     queryset = ProductionLog.objects.all()
     serializer_class = ProductionLogSerializer
     permission_classes = [IsAuthenticated]
@@ -286,6 +288,7 @@ class DebugRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
     """
     调试记录管理 ViewSet
     """
+
     queryset = DebugRecord.objects.all()
     serializer_class = DebugRecordSerializer
     permission_classes = [IsAuthenticated]
@@ -352,15 +355,12 @@ class DebugRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
                 method=item.get('method', ''),
                 result=item.get('result', 'PENDING'),
                 actual_value=item.get('actual_value', ''),
-                notes=item.get('notes', '')
+                notes=item.get('notes', ''),
             )
             created.append(check_item.id)
 
         serializer = self.get_serializer(record)
-        return Response({
-            'record': serializer.data,
-            'created_count': len(created)
-        })
+        return Response({'record': serializer.data, 'created_count': len(created)})
 
     @action(detail=True, methods=['post'])
     def update_check_items(self, request, pk=None):
@@ -388,6 +388,7 @@ class DebugCheckItemViewSet(UserTrackingMixin, viewsets.ModelViewSet):
     """
     调试检查项管理 ViewSet
     """
+
     queryset = DebugCheckItem.objects.all()
     serializer_class = DebugCheckItemSerializer
     permission_classes = [IsAuthenticated]
@@ -402,6 +403,7 @@ class QualityInspectionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
     """
     质量检验管理 ViewSet
     """
+
     queryset = QualityInspection.objects.all()
     serializer_class = QualityInspectionSerializer
     permission_classes = [IsAuthenticated]
@@ -479,15 +481,12 @@ class QualityInspectionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
                 tolerance_lower=item.get('tolerance_lower', ''),
                 actual_value=item.get('actual_value', ''),
                 result=item.get('result', 'PENDING'),
-                notes=item.get('notes', '')
+                notes=item.get('notes', ''),
             )
             created.append(insp_item.id)
 
         serializer = self.get_serializer(inspection)
-        return Response({
-            'inspection': serializer.data,
-            'created_count': len(created)
-        })
+        return Response({'inspection': serializer.data, 'created_count': len(created)})
 
     @action(detail=True, methods=['post'])
     def update_items(self, request, pk=None):
@@ -515,6 +514,7 @@ class InspectionItemViewSet(UserTrackingMixin, viewsets.ModelViewSet):
     """
     检验项目管理 ViewSet
     """
+
     queryset = InspectionItem.objects.all()
     serializer_class = InspectionItemSerializer
     permission_classes = [IsAuthenticated]
@@ -523,4 +523,3 @@ class InspectionItemViewSet(UserTrackingMixin, viewsets.ModelViewSet):
     search_fields = ['item_name']
     ordering_fields = ['sequence']
     ordering = ['inspection', 'sequence']
-

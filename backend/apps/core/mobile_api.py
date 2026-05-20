@@ -2,6 +2,7 @@
 移动端功能API模块
 Mobile API - 工时填报、拍照上传、扫码、审批
 """
+
 import os
 import uuid
 from datetime import timedelta
@@ -25,14 +26,26 @@ User = settings.AUTH_USER_MODEL
 
 class MobileTimeEntry(BaseModel):
     """移动端工时记录"""
-    user = models.ForeignKey(User, on_delete=models.CASCADE,
-                            related_name='mobile_time_entries', verbose_name='用户')
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mobile_time_entries', verbose_name='用户')
 
     # 关联
-    project = models.ForeignKey('projects.Project', on_delete=models.SET_NULL,
-                               null=True, blank=True, related_name='mobile_time_entries', verbose_name='项目')
-    task = models.ForeignKey('projects.ProjectTask', on_delete=models.SET_NULL,
-                            null=True, blank=True, related_name='mobile_time_entries', verbose_name='任务')
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='mobile_time_entries',
+        verbose_name='项目',
+    )
+    task = models.ForeignKey(
+        'projects.ProjectTask',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='mobile_time_entries',
+        verbose_name='任务',
+    )
 
     # 时间
     work_date = models.DateField('工作日期')
@@ -72,8 +85,14 @@ class MobileTimeEntry(BaseModel):
     status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES, default='DRAFT')
 
     # 审批
-    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
-                                   related_name='approved_time_entries', verbose_name='审批人')
+    approved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='approved_time_entries',
+        verbose_name='审批人',
+    )
     approved_at = models.DateTimeField('审批时间', null=True, blank=True)
     rejection_reason = models.TextField('驳回原因', blank=True)
 
@@ -85,6 +104,7 @@ class MobileTimeEntry(BaseModel):
 
 class MobilePhoto(BaseModel):
     """移动端照片上传"""
+
     PHOTO_TYPE_CHOICES = [
         ('PROGRESS', '进度照片'),
         ('QUALITY', '质量检验'),
@@ -95,8 +115,7 @@ class MobilePhoto(BaseModel):
         ('OTHER', '其他'),
     ]
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE,
-                            related_name='mobile_photos', verbose_name='上传用户')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mobile_photos', verbose_name='上传用户')
 
     photo_type = models.CharField('照片类型', max_length=20, choices=PHOTO_TYPE_CHOICES)
     file_path = models.CharField('文件路径', max_length=500)
@@ -128,6 +147,7 @@ class MobilePhoto(BaseModel):
 
 class MobileScanRecord(BaseModel):
     """移动端扫码记录"""
+
     SCAN_TYPE_CHOICES = [
         ('INVENTORY', '库存盘点'),
         ('RECEIPT', '收货入库'),
@@ -139,8 +159,7 @@ class MobileScanRecord(BaseModel):
         ('OTHER', '其他'),
     ]
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE,
-                            related_name='scan_records', verbose_name='扫码用户')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='scan_records', verbose_name='扫码用户')
 
     scan_type = models.CharField('扫码类型', max_length=20, choices=SCAN_TYPE_CHOICES)
     barcode = models.CharField('条码内容', max_length=500)
@@ -169,6 +188,7 @@ class MobileScanRecord(BaseModel):
 
 class MobileApproval(BaseModel):
     """移动端审批"""
+
     APPROVAL_TYPE_CHOICES = [
         ('PURCHASE_REQUEST', '采购申请'),
         ('EXPENSE', '费用报销'),
@@ -192,12 +212,14 @@ class MobileApproval(BaseModel):
     related_id = models.IntegerField('关联对象ID')
 
     # 申请人
-    applicant = models.ForeignKey(User, on_delete=models.CASCADE,
-                                 related_name='submitted_approvals', verbose_name='申请人')
+    applicant = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='submitted_approvals', verbose_name='申请人'
+    )
 
     # 审批人
-    approver = models.ForeignKey(User, on_delete=models.CASCADE,
-                                related_name='pending_approvals', verbose_name='审批人')
+    approver = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='pending_approvals', verbose_name='审批人'
+    )
 
     # 审批信息
     title = models.CharField('审批标题', max_length=200)
@@ -212,8 +234,14 @@ class MobileApproval(BaseModel):
     decided_at = models.DateTimeField('决定时间', null=True, blank=True)
 
     # 转交
-    delegated_to = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
-                                    related_name='delegated_approvals', verbose_name='转交给')
+    delegated_to = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='delegated_approvals',
+        verbose_name='转交给',
+    )
 
     class Meta:
         db_table = 'mobile_approval'
@@ -223,6 +251,7 @@ class MobileApproval(BaseModel):
 
 class MobileNotification(BaseModel):
     """移动端通知"""
+
     NOTIFICATION_TYPE_CHOICES = [
         ('APPROVAL', '审批通知'),
         ('TASK', '任务通知'),
@@ -232,8 +261,7 @@ class MobileNotification(BaseModel):
         ('SYSTEM', '系统通知'),
     ]
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE,
-                            related_name='mobile_notifications', verbose_name='用户')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mobile_notifications', verbose_name='用户')
 
     notification_type = models.CharField('通知类型', max_length=20, choices=NOTIFICATION_TYPE_CHOICES)
     title = models.CharField('标题', max_length=200)
@@ -259,6 +287,7 @@ class MobileNotification(BaseModel):
 
 
 # ==================== Serializers ====================
+
 
 class MobileTimeEntrySerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.get_full_name', read_only=True)
@@ -311,8 +340,10 @@ class MobileNotificationSerializer(serializers.ModelSerializer):
 
 # ==================== ViewSets ====================
 
+
 class MobileTimeEntryViewSet(viewsets.ModelViewSet):
     """移动工时填报"""
+
     queryset = MobileTimeEntry.objects.filter(is_deleted=False)
     serializer_class = MobileTimeEntrySerializer
     permission_classes = [IsAuthenticated]
@@ -353,21 +384,19 @@ class MobileTimeEntryViewSet(viewsets.ModelViewSet):
         today = timezone.now().date()
         week_start = today - timedelta(days=today.weekday())
 
-        entries = self.get_queryset().filter(
-            user=request.user,
-            work_date__gte=week_start,
-            work_date__lte=today
-        )
+        entries = self.get_queryset().filter(user=request.user, work_date__gte=week_start, work_date__lte=today)
 
         total_hours = entries.aggregate(total=Sum('hours'))['total'] or 0
         by_type = entries.values('work_type').annotate(hours=Sum('hours'))
         by_project = entries.values('project__name').annotate(hours=Sum('hours'))
 
-        return Response({
-            'total_hours': float(total_hours),
-            'by_type': list(by_type),
-            'by_project': list(by_project),
-        })
+        return Response(
+            {
+                'total_hours': float(total_hours),
+                'by_type': list(by_type),
+                'by_project': list(by_project),
+            }
+        )
 
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
@@ -388,7 +417,7 @@ class MobileTimeEntryViewSet(viewsets.ModelViewSet):
                 title=f'{entry.user.get_full_name()}的工时提交',
                 summary=f'{entry.work_date} {entry.hours}小时 - {entry.description[:50]}',
                 created_by=request.user,
-                updated_by=request.user
+                updated_by=request.user,
             )
 
         return Response({'message': '已提交审批'})
@@ -396,6 +425,7 @@ class MobileTimeEntryViewSet(viewsets.ModelViewSet):
 
 class MobilePhotoViewSet(viewsets.ModelViewSet):
     """移动端照片管理"""
+
     queryset = MobilePhoto.objects.filter(is_deleted=False)
     serializer_class = MobilePhotoSerializer
     permission_classes = [IsAuthenticated]
@@ -436,7 +466,7 @@ class MobilePhotoViewSet(viewsets.ModelViewSet):
             related_type=request.data.get('related_type', ''),
             related_id=request.data.get('related_id'),
             created_by=request.user,
-            updated_by=request.user
+            updated_by=request.user,
         )
 
         return Response(MobilePhotoSerializer(photo).data)
@@ -444,6 +474,7 @@ class MobilePhotoViewSet(viewsets.ModelViewSet):
 
 class MobileScanRecordViewSet(viewsets.ModelViewSet):
     """扫码记录管理"""
+
     queryset = MobileScanRecord.objects.filter(is_deleted=False)
     serializer_class = MobileScanRecordSerializer
     permission_classes = [IsAuthenticated]
@@ -475,13 +506,15 @@ class MobileScanRecordViewSet(viewsets.ModelViewSet):
             latitude=request.data.get('latitude'),
             longitude=request.data.get('longitude'),
             created_by=request.user,
-            updated_by=request.user
+            updated_by=request.user,
         )
 
-        return Response({
-            'record_id': record.id,
-            'result': result,
-        })
+        return Response(
+            {
+                'record_id': record.id,
+                'result': result,
+            }
+        )
 
     def _parse_barcode(self, barcode, scan_type):
         """解析条码"""
@@ -489,6 +522,7 @@ class MobileScanRecordViewSet(viewsets.ModelViewSet):
 
         # 尝试解析为物料
         from apps.masterdata.models import Item
+
         try:
             item = Item.objects.get(Q(sku=barcode) | Q(barcode=barcode))
             result = {
@@ -498,7 +532,7 @@ class MobileScanRecordViewSet(viewsets.ModelViewSet):
                     'sku': item.sku,
                     'name': item.name,
                     'unit': item.unit,
-                }
+                },
             }
         except Item.DoesNotExist:
             pass
@@ -521,10 +555,7 @@ class MobileScanRecordViewSet(viewsets.ModelViewSet):
             return Response({'error': '物料不存在'}, status=404)
 
         # 获取当前库存
-        current_stock = StockOnHand.objects.filter(
-            item=item,
-            warehouse_id=warehouse_id
-        ).first()
+        current_stock = StockOnHand.objects.filter(item=item, warehouse_id=warehouse_id).first()
 
         current_qty = current_stock.quantity if current_stock else 0
 
@@ -544,23 +575,26 @@ class MobileScanRecordViewSet(viewsets.ModelViewSet):
             quantity=quantity,
             action_taken='INVENTORY_COUNT',
             created_by=request.user,
-            updated_by=request.user
+            updated_by=request.user,
         )
 
-        return Response({
-            'item': {
-                'id': item.id,
-                'sku': item.sku,
-                'name': item.name,
-            },
-            'current_qty': float(current_qty),
-            'counted_qty': float(quantity),
-            'difference': float(quantity - current_qty),
-        })
+        return Response(
+            {
+                'item': {
+                    'id': item.id,
+                    'sku': item.sku,
+                    'name': item.name,
+                },
+                'current_qty': float(current_qty),
+                'counted_qty': float(quantity),
+                'difference': float(quantity - current_qty),
+            }
+        )
 
 
 class MobileApprovalViewSet(viewsets.ModelViewSet):
     """移动审批管理"""
+
     queryset = MobileApproval.objects.filter(is_deleted=False)
     serializer_class = MobileApprovalSerializer
     permission_classes = [IsAuthenticated]
@@ -581,10 +615,7 @@ class MobileApprovalViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def pending(self, request):
         """待我审批"""
-        approvals = self.get_queryset().filter(
-            approver=request.user,
-            status='PENDING'
-        )
+        approvals = self.get_queryset().filter(approver=request.user, status='PENDING')
         return Response(MobileApprovalSerializer(approvals, many=True).data)
 
     @action(detail=False, methods=['get'])
@@ -619,7 +650,7 @@ class MobileApprovalViewSet(viewsets.ModelViewSet):
             related_type='MobileApproval',
             related_id=approval.id,
             created_by=request.user,
-            updated_by=request.user
+            updated_by=request.user,
         )
 
         return Response({'message': '已批准'})
@@ -650,7 +681,7 @@ class MobileApprovalViewSet(viewsets.ModelViewSet):
             related_type='MobileApproval',
             related_id=approval.id,
             created_by=request.user,
-            updated_by=request.user
+            updated_by=request.user,
         )
 
         return Response({'message': '已拒绝'})
@@ -680,7 +711,7 @@ class MobileApprovalViewSet(viewsets.ModelViewSet):
             summary=approval.summary,
             amount=approval.amount,
             created_by=request.user,
-            updated_by=request.user
+            updated_by=request.user,
         )
 
         return Response({'message': '已转交'})
@@ -701,6 +732,7 @@ class MobileApprovalViewSet(viewsets.ModelViewSet):
 
 class MobileNotificationViewSet(viewsets.ModelViewSet):
     """移动通知管理"""
+
     queryset = MobileNotification.objects.filter(is_deleted=False)
     serializer_class = MobileNotificationSerializer
     permission_classes = [IsAuthenticated]
@@ -732,17 +764,16 @@ class MobileNotificationViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def mark_all_read(self, request):
         """全部已读"""
-        self.get_queryset().filter(is_read=False).update(
-            is_read=True,
-            read_at=timezone.now()
-        )
+        self.get_queryset().filter(is_read=False).update(is_read=True, read_at=timezone.now())
         return Response({'message': '已全部标记已读'})
 
 
 # ==================== 移动端首页API ====================
 
+
 class MobileDashboardView(APIView):
     """移动端首页"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -750,46 +781,40 @@ class MobileDashboardView(APIView):
         today = timezone.now().date()
 
         # 待审批数
-        pending_approvals = MobileApproval.objects.filter(
-            approver=user,
-            status='PENDING',
-            is_deleted=False
-        ).count()
+        pending_approvals = MobileApproval.objects.filter(approver=user, status='PENDING', is_deleted=False).count()
 
         # 未读通知
-        unread_notifications = MobileNotification.objects.filter(
-            user=user,
-            is_read=False,
-            is_deleted=False
-        ).count()
+        unread_notifications = MobileNotification.objects.filter(user=user, is_read=False, is_deleted=False).count()
 
         # 本周工时
         week_start = today - timedelta(days=today.weekday())
-        week_hours = MobileTimeEntry.objects.filter(
-            user=user,
-            work_date__gte=week_start,
-            work_date__lte=today,
-            is_deleted=False
-        ).aggregate(total=Sum('hours'))['total'] or 0
+        week_hours = (
+            MobileTimeEntry.objects.filter(
+                user=user, work_date__gte=week_start, work_date__lte=today, is_deleted=False
+            ).aggregate(total=Sum('hours'))['total']
+            or 0
+        )
 
         # 我的任务
         from apps.projects.models import ProjectTask
+
         my_tasks = ProjectTask.objects.filter(
-            assignee=user,
-            status__in=['NOT_STARTED', 'IN_PROGRESS'],
-            is_deleted=False
+            assignee=user, status__in=['NOT_STARTED', 'IN_PROGRESS'], is_deleted=False
         ).count()
 
-        return Response({
-            'pending_approvals': pending_approvals,
-            'unread_notifications': unread_notifications,
-            'week_hours': float(week_hours),
-            'my_tasks': my_tasks,
-        })
+        return Response(
+            {
+                'pending_approvals': pending_approvals,
+                'unread_notifications': unread_notifications,
+                'week_hours': float(week_hours),
+                'my_tasks': my_tasks,
+            }
+        )
 
 
 class MobileQuickActionsView(APIView):
     """移动端快捷操作"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):

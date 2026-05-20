@@ -50,4 +50,3 @@ class GoodsReceiptAdmin(admin.ModelAdmin):
     search_fields = ['receipt_no']
     inlines = [GoodsReceiptLineInline]
     ordering = ['-created_at']
-

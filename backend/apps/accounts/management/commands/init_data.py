@@ -2,6 +2,7 @@
 初始化系统数据
 创建基础角色、部门和示例数据
 """
+
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
@@ -15,6 +16,7 @@ SCOPE_MAP = {
     'DEPARTMENT': 'dept_tree',
     'SELF': 'self',
 }
+
 
 class Command(BaseCommand):
     help = '初始化系统基础数据'
@@ -37,11 +39,7 @@ class Command(BaseCommand):
         dept_objs = {}
         for dept_data in departments:
             dept, created = Department.objects.get_or_create(
-                code=dept_data['code'],
-                defaults={
-                    'name': dept_data['name'],
-                    'description': dept_data['description']
-                }
+                code=dept_data['code'], defaults={'name': dept_data['name'], 'description': dept_data['description']}
             )
             dept_objs[dept_data['code']] = dept
             if created:
@@ -52,66 +50,21 @@ class Command(BaseCommand):
         # 2. 创建角色
         self.stdout.write('创建角色...')
         roles = [
-            {
-                'name': '系统管理员',
-                'code': 'admin',
-                'description': '系统超级管理员，拥有所有权限',
-                'data_scope': 'ALL'
-            },
-            {
-                'name': '总经理',
-                'code': 'general_manager',
-                'description': '总经理，查看所有数据',
-                'data_scope': 'ALL'
-            },
-            {
-                'name': '销售经理',
-                'code': 'sales_manager',
-                'description': '销售部门经理',
-                'data_scope': 'DEPARTMENT'
-            },
-            {
-                'name': '销售人员',
-                'code': 'salesperson',
-                'description': '销售人员',
-                'data_scope': 'SELF'
-            },
-            {
-                'name': '采购经理',
-                'code': 'purchase_manager',
-                'description': '采购部门经理',
-                'data_scope': 'DEPARTMENT'
-            },
-            {
-                'name': '采购人员',
-                'code': 'purchaser',
-                'description': '采购人员',
-                'data_scope': 'SELF'
-            },
+            {'name': '系统管理员', 'code': 'admin', 'description': '系统超级管理员，拥有所有权限', 'data_scope': 'ALL'},
+            {'name': '总经理', 'code': 'general_manager', 'description': '总经理，查看所有数据', 'data_scope': 'ALL'},
+            {'name': '销售经理', 'code': 'sales_manager', 'description': '销售部门经理', 'data_scope': 'DEPARTMENT'},
+            {'name': '销售人员', 'code': 'salesperson', 'description': '销售人员', 'data_scope': 'SELF'},
+            {'name': '采购经理', 'code': 'purchase_manager', 'description': '采购部门经理', 'data_scope': 'DEPARTMENT'},
+            {'name': '采购人员', 'code': 'purchaser', 'description': '采购人员', 'data_scope': 'SELF'},
             {
                 'name': '仓库管理员',
                 'code': 'warehouse_keeper',
                 'description': '仓库管理人员',
-                'data_scope': 'DEPARTMENT'
+                'data_scope': 'DEPARTMENT',
             },
-            {
-                'name': '项目经理',
-                'code': 'project_manager',
-                'description': '项目管理人员',
-                'data_scope': 'SELF'
-            },
-            {
-                'name': '财务人员',
-                'code': 'accountant',
-                'description': '财务管理人员',
-                'data_scope': 'ALL'
-            },
-            {
-                'name': '普通员工',
-                'code': 'employee',
-                'description': '基础权限员工',
-                'data_scope': 'SELF'
-            },
+            {'name': '项目经理', 'code': 'project_manager', 'description': '项目管理人员', 'data_scope': 'SELF'},
+            {'name': '财务人员', 'code': 'accountant', 'description': '财务管理人员', 'data_scope': 'ALL'},
+            {'name': '普通员工', 'code': 'employee', 'description': '基础权限员工', 'data_scope': 'SELF'},
         ]
 
         role_objs = {}
@@ -143,9 +96,7 @@ class Command(BaseCommand):
                     created = True
             DataScope.objects.filter(role=role, module='__default__').delete()
             scope, _ = DataScope.objects.update_or_create(
-                role=role,
-                module='',
-                defaults={'scope_type': SCOPE_MAP.get(role_data['data_scope'], 'self')}
+                role=role, module='', defaults={'scope_type': SCOPE_MAP.get(role_data['data_scope'], 'self')}
             )
             scope.custom_departments.clear()
             role_objs[role_data['code']] = role
@@ -184,7 +135,7 @@ class Command(BaseCommand):
                 'employee_id': 'EMP002',
                 'department': 'SALES',
                 'role': 'sales_manager',
-                'password': 'erp123456'
+                'password': 'erp123456',
             },
             {
                 'username': 'sales01',
@@ -194,7 +145,7 @@ class Command(BaseCommand):
                 'employee_id': 'EMP003',
                 'department': 'SALES',
                 'role': 'salesperson',
-                'password': 'erp123456'
+                'password': 'erp123456',
             },
             {
                 'username': 'purchase_manager',
@@ -204,7 +155,7 @@ class Command(BaseCommand):
                 'employee_id': 'EMP004',
                 'department': 'PURCHASE',
                 'role': 'purchase_manager',
-                'password': 'erp123456'
+                'password': 'erp123456',
             },
             {
                 'username': 'purchase01',
@@ -214,7 +165,7 @@ class Command(BaseCommand):
                 'employee_id': 'EMP005',
                 'department': 'PURCHASE',
                 'role': 'purchaser',
-                'password': 'erp123456'
+                'password': 'erp123456',
             },
             {
                 'username': 'finance01',
@@ -224,7 +175,7 @@ class Command(BaseCommand):
                 'employee_id': 'EMP006',
                 'department': 'FINANCE',
                 'role': 'accountant',
-                'password': 'erp123456'
+                'password': 'erp123456',
             },
             {
                 'username': 'employee01',
@@ -234,7 +185,7 @@ class Command(BaseCommand):
                 'employee_id': 'EMP007',
                 'department': 'IT',
                 'role': 'employee',
-                'password': 'erp123456'
+                'password': 'erp123456',
             },
         ]
 
@@ -248,8 +199,8 @@ class Command(BaseCommand):
                     'employee_id': user_data['employee_id'],
                     'department': dept_objs[user_data['department']],
                     'role': role_objs[user_data['role']],
-                    'is_active': True
-                }
+                    'is_active': True,
+                },
             )
             user.email = user_data['email']
             user.first_name = user_data['first_name']
@@ -262,9 +213,9 @@ class Command(BaseCommand):
             user.save()
             user.roles.set([role_objs[user_data['role']]])
             if created:
-                self.stdout.write(self.style.SUCCESS(
-                    f'  ✓ 创建用户: {user.username} ({user.first_name}{user.last_name})'
-                ))
+                self.stdout.write(
+                    self.style.SUCCESS(f'  ✓ 创建用户: {user.username} ({user.first_name}{user.last_name})')
+                )
             else:
                 self.stdout.write(f'  - 用户已更新: {user.username}')
 
@@ -277,4 +228,3 @@ class Command(BaseCommand):
         self.stdout.write('  purchase01 / erp123456 (采购员)')
         self.stdout.write('  finance01 / erp123456 (财务人员)')
         self.stdout.write('  employee01 / erp123456 (普通员工)')
-

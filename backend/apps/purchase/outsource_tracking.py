@@ -8,6 +8,7 @@ Outsource Processing Tracking Enhancement
 - 外协质量追溯
 - 外协成本分析
 """
+
 from django.db import models
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
@@ -24,8 +25,10 @@ from .outsource_models import OutsourceOrder, OutsourceOrderLine
 # 模型定义 - 外协能力管理
 # =============================================================================
 
+
 class OutsourceCapability(BaseModel):
     """外协商能力"""
+
     PROCESS_TYPE_CHOICES = [
         ('MACHINING', '机加工'),
         ('WELDING', '焊接'),
@@ -46,10 +49,7 @@ class OutsourceCapability(BaseModel):
     ]
 
     supplier = models.ForeignKey(
-        'masterdata.Supplier',
-        on_delete=models.CASCADE,
-        related_name='outsource_capabilities',
-        verbose_name='供应商'
+        'masterdata.Supplier', on_delete=models.CASCADE, related_name='outsource_capabilities', verbose_name='供应商'
     )
 
     process_type = models.CharField(max_length=20, choices=PROCESS_TYPE_CHOICES, verbose_name='工艺类型')
@@ -91,18 +91,17 @@ class OutsourceCapability(BaseModel):
 
 class OutsourceProgress(BaseModel):
     """外协进度跟踪"""
+
     outsource_order = models.ForeignKey(
-        OutsourceOrder,
-        on_delete=models.CASCADE,
-        related_name='progress_records',
-        verbose_name='外协单'
+        OutsourceOrder, on_delete=models.CASCADE, related_name='progress_records', verbose_name='外协单'
     )
     outsource_line = models.ForeignKey(
         OutsourceOrderLine,
         on_delete=models.CASCADE,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         related_name='progress_records',
-        verbose_name='外协明细'
+        verbose_name='外协明细',
     )
 
     progress_date = models.DateField(verbose_name='进度日期')
@@ -115,7 +114,7 @@ class OutsourceProgress(BaseModel):
             ('SHIPPING', '发货'),
             ('RECEIVED', '已收货'),
         ],
-        verbose_name='进度类型'
+        verbose_name='进度类型',
     )
 
     # 进度数据
@@ -128,10 +127,7 @@ class OutsourceProgress(BaseModel):
     attachments = models.JSONField(default=list, blank=True, verbose_name='附件')
 
     reported_by = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        verbose_name='报告人'
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='报告人'
     )
 
     class Meta:
@@ -143,18 +139,17 @@ class OutsourceProgress(BaseModel):
 
 class OutsourceInspection(BaseModel):
     """外协质量检验"""
+
     outsource_order = models.ForeignKey(
-        OutsourceOrder,
-        on_delete=models.CASCADE,
-        related_name='inspections',
-        verbose_name='外协单'
+        OutsourceOrder, on_delete=models.CASCADE, related_name='inspections', verbose_name='外协单'
     )
     outsource_line = models.ForeignKey(
         OutsourceOrderLine,
         on_delete=models.CASCADE,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         related_name='inspections',
-        verbose_name='外协明细'
+        verbose_name='外协明细',
     )
 
     inspection_no = models.CharField(max_length=50, unique=True, verbose_name='检验单号')
@@ -175,7 +170,7 @@ class OutsourceInspection(BaseModel):
             ('CONDITIONAL', '让步接收'),
         ],
         default='PENDING',
-        verbose_name='检验结果'
+        verbose_name='检验结果',
     )
 
     # 检验项目
@@ -188,9 +183,10 @@ class OutsourceInspection(BaseModel):
     inspector = models.ForeignKey(
         'accounts.User',
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         related_name='outsource_inspections',
-        verbose_name='检验员'
+        verbose_name='检验员',
     )
 
     remarks = models.TextField(blank=True, verbose_name='备注')
@@ -204,17 +200,12 @@ class OutsourceInspection(BaseModel):
 
 class OutsourceClaim(BaseModel):
     """外协索赔"""
+
     outsource_order = models.ForeignKey(
-        OutsourceOrder,
-        on_delete=models.CASCADE,
-        related_name='claims',
-        verbose_name='外协单'
+        OutsourceOrder, on_delete=models.CASCADE, related_name='claims', verbose_name='外协单'
     )
     inspection = models.ForeignKey(
-        OutsourceInspection,
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        verbose_name='关联检验'
+        OutsourceInspection, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='关联检验'
     )
 
     claim_no = models.CharField(max_length=50, unique=True, verbose_name='索赔单号')
@@ -229,7 +220,7 @@ class OutsourceClaim(BaseModel):
             ('DAMAGE', '损坏'),
             ('OTHER', '其他'),
         ],
-        verbose_name='索赔类型'
+        verbose_name='索赔类型',
     )
 
     # 索赔金额
@@ -248,7 +239,7 @@ class OutsourceClaim(BaseModel):
             ('CANCELLED', '已取消'),
         ],
         default='DRAFT',
-        verbose_name='状态'
+        verbose_name='状态',
     )
 
     description = models.TextField(verbose_name='索赔说明')
@@ -264,6 +255,7 @@ class OutsourceClaim(BaseModel):
 # =============================================================================
 # 序列化器
 # =============================================================================
+
 
 class OutsourceCapabilitySerializer(serializers.ModelSerializer):
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
@@ -307,8 +299,10 @@ class OutsourceClaimSerializer(serializers.ModelSerializer):
 # 视图集
 # =============================================================================
 
+
 class OutsourceCapabilityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """外协商能力管理"""
+
     queryset = OutsourceCapability.objects.filter(is_deleted=False)
     serializer_class = OutsourceCapabilitySerializer
     permission_classes = [IsAuthenticated]
@@ -322,15 +316,14 @@ class OutsourceCapabilityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
         if not process_type:
             return Response({'error': '请提供工艺类型'}, status=400)
 
-        capabilities = self.get_queryset().filter(
-            process_type=process_type
-        ).order_by('-overall_rating')
+        capabilities = self.get_queryset().filter(process_type=process_type).order_by('-overall_rating')
 
         return Response(self.get_serializer(capabilities, many=True).data)
 
 
 class OutsourceProgressViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """外协进度跟踪"""
+
     queryset = OutsourceProgress.objects.filter(is_deleted=False)
     serializer_class = OutsourceProgressSerializer
     permission_classes = [IsAuthenticated]
@@ -340,6 +333,7 @@ class OutsourceProgressViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
 
 class OutsourceInspectionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """外协质量检验"""
+
     queryset = OutsourceInspection.objects.filter(is_deleted=False)
     serializer_class = OutsourceInspectionSerializer
     permission_classes = [IsAuthenticated]
@@ -347,12 +341,14 @@ class OutsourceInspectionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
 
     def perform_create(self, serializer):
         from apps.core.models import CodeRule
+
         inspection_no = CodeRule.generate_code('OSINSP')
         serializer.save(inspection_no=inspection_no, inspector=self.request.user)
 
 
 class OutsourceClaimViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """外协索赔管理"""
+
     queryset = OutsourceClaim.objects.filter(is_deleted=False)
     serializer_class = OutsourceClaimSerializer
     permission_classes = [IsAuthenticated]
@@ -360,6 +356,7 @@ class OutsourceClaimViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
 
     def perform_create(self, serializer):
         from apps.core.models import CodeRule
+
         claim_no = CodeRule.generate_code('OSCLAIM')
         serializer.save(claim_no=claim_no)
 

@@ -1,6 +1,7 @@
 """
 供应商评价管理视图
 """
+
 from django.db.models import Avg, Count
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -34,6 +35,7 @@ class SupplierEvaluationTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, view
     """
     评价模板管理
     """
+
     queryset = SupplierEvaluationTemplate.objects.all()
     serializer_class = SupplierEvaluationTemplateSerializer
     permission_classes = [IsAuthenticated]
@@ -66,8 +68,8 @@ class SupplierEvaluationTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, view
     def copy_template(self, request, pk=None):
         """复制模板"""
         template = self.get_object()
-        new_name = request.data.get('name', f"{template.name} (副本)")
-        new_code = request.data.get('code', f"{template.code}_copy")
+        new_name = request.data.get('name', f'{template.name} (副本)')
+        new_code = request.data.get('code', f'{template.code}_copy')
 
         new_template = SupplierEvaluationTemplate.objects.create(
             name=new_name,
@@ -75,7 +77,7 @@ class SupplierEvaluationTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, view
             description=template.description,
             is_default=False,
             is_active=True,
-            created_by=request.user
+            created_by=request.user,
         )
 
         # 复制评价指标
@@ -88,7 +90,7 @@ class SupplierEvaluationTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, view
                 max_score=criteria.max_score,
                 description=criteria.description,
                 sort_order=criteria.sort_order,
-                created_by=request.user
+                created_by=request.user,
             )
 
         return Response(self.get_serializer(new_template).data, status=status.HTTP_201_CREATED)
@@ -98,6 +100,7 @@ class EvaluationCriteriaViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
     """
     评价指标管理
     """
+
     queryset = EvaluationCriteria.objects.all()
     serializer_class = EvaluationCriteriaSerializer
     permission_classes = [IsAuthenticated]
@@ -109,6 +112,7 @@ class SupplierEvaluationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
     """
     供应商评价管理
     """
+
     queryset = SupplierEvaluation.objects.all()
     serializer_class = SupplierEvaluationSerializer
     permission_classes = [IsAuthenticated]
@@ -125,11 +129,7 @@ class SupplierEvaluationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
         return SupplierEvaluationSerializer
 
     def perform_create(self, serializer):
-        serializer.save(
-            created_by=self.request.user,
-            evaluator=self.request.user,
-            status='DRAFT'
-        )
+        serializer.save(created_by=self.request.user, evaluator=self.request.user, status='DRAFT')
 
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
@@ -166,7 +166,7 @@ class SupplierEvaluationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
                 new_grade=evaluation.grade,
                 change_date=timezone.now().date(),
                 reason=f'评价审批通过，评分 {evaluation.total_score}',
-                created_by=request.user
+                created_by=request.user,
             )
 
         return Response(self.get_serializer(evaluation).data)
@@ -217,7 +217,7 @@ class SupplierEvaluationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
                     criteria_id=item_data['criteria'],
                     score=item_data['score'],
                     comments=item_data.get('comments', ''),
-                    created_by=request.user
+                    created_by=request.user,
                 )
 
         evaluation.calculate_scores()
@@ -236,27 +236,29 @@ class SupplierEvaluationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
             avg_quality=Avg('quality_score'),
             avg_delivery=Avg('delivery_score'),
             avg_price=Avg('price_score'),
-            avg_service=Avg('service_score')
+            avg_service=Avg('service_score'),
         )
 
-        return Response({
-            'total_evaluations': total_evaluations,
-            'by_status': by_status,
-            'by_grade': by_grade,
-            'avg_scores': avg_scores,
-        })
+        return Response(
+            {
+                'total_evaluations': total_evaluations,
+                'by_status': by_status,
+                'by_grade': by_grade,
+                'avg_scores': avg_scores,
+            }
+        )
 
     @action(detail=False, methods=['get'])
     def supplier_ranking(self, request):
         """供应商排名"""
 
         # 获取最近审批通过的评价，按供应商分组
-        rankings = SupplierEvaluation.objects.filter(
-            status='APPROVED'
-        ).values('supplier', 'supplier__name', 'supplier__code').annotate(
-            avg_score=Avg('total_score'),
-            evaluation_count=Count('id')
-        ).order_by('-avg_score')[:20]
+        rankings = (
+            SupplierEvaluation.objects.filter(status='APPROVED')
+            .values('supplier', 'supplier__name', 'supplier__code')
+            .annotate(avg_score=Avg('total_score'), evaluation_count=Count('id'))
+            .order_by('-avg_score')[:20]
+        )
 
         return Response(rankings)
 
@@ -265,6 +267,7 @@ class EvaluationScoreItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
     """
     评价得分明细管理
     """
+
     queryset = EvaluationScoreItem.objects.all()
     serializer_class = EvaluationScoreItemSerializer
     permission_classes = [IsAuthenticated]
@@ -275,6 +278,7 @@ class SupplierGradeHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     """
     供应商等级变更历史（只读）
     """
+
     queryset = SupplierGradeHistory.objects.all()
     serializer_class = SupplierGradeHistorySerializer
     permission_classes = [IsAuthenticated]
@@ -286,6 +290,7 @@ class SupplierBlacklistViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
     """
     供应商黑名单管理
     """
+
     queryset = SupplierBlacklist.objects.all()
     serializer_class = SupplierBlacklistSerializer
     permission_classes = [IsAuthenticated]

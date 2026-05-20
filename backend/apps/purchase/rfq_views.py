@@ -8,6 +8,7 @@ RFQ views
 - 询价模板管理
 - 附件管理
 """
+
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -53,6 +54,7 @@ from .rfq_service import BatchRFQService, RFQAttachmentService, RFQTemplateServi
 
 class RFQViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """RFQ viewset"""
+
     queryset = RFQ.objects.all()
     serializer_class = RFQSerializer
     filterset_fields = ['project', 'status', 'is_deleted']
@@ -68,26 +70,17 @@ class RFQViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.M
         rfq = self.get_object()
 
         if rfq.status != 'DRAFT':
-            return Response(
-                {'error': '只能发送草稿状态的询价单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能发送草稿状态的询价单'}, status=status.HTTP_400_BAD_REQUEST)
 
         supplier_ids = request.data.get('supplier_ids', [])
 
         if not supplier_ids:
-            return Response(
-                {'error': '请选择至少一个供应商'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请选择至少一个供应商'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             for supplier_id in supplier_ids:
                 RFQSupplier.objects.create(
-                    rfq=rfq,
-                    supplier_id=supplier_id,
-                    sent_date=timezone.now(),
-                    created_by=request.user
+                    rfq=rfq, supplier_id=supplier_id, sent_date=timezone.now(), created_by=request.user
                 )
 
             rfq.status = 'SENT'
@@ -102,10 +95,7 @@ class RFQViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.M
         quotation_id = request.data.get('quotation_id')
 
         if not quotation_id:
-            return Response(
-                {'error': '请提供报价单ID'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供报价单ID'}, status=status.HTTP_400_BAD_REQUEST)
 
         quotation = SupplierQuotation.objects.get(id=quotation_id)
 
@@ -124,20 +114,15 @@ class RFQViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.M
         rfq = self.get_object()
 
         if rfq.status != 'ACCEPTED':
-            return Response(
-                {'error': '只能转换已接受的询价单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能转换已接受的询价单'}, status=status.HTTP_400_BAD_REQUEST)
 
         quotation_id = request.data.get('quotation_id')
 
         if not quotation_id:
-            return Response(
-                {'error': '请提供报价单ID'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供报价单ID'}, status=status.HTTP_400_BAD_REQUEST)
 
         from .models import PurchaseOrder, PurchaseOrderLine
+
         quotation = SupplierQuotation.objects.get(id=quotation_id)
 
         with transaction.atomic():
@@ -146,7 +131,7 @@ class RFQViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.M
                 project=rfq.project,
                 order_date=timezone.now().date(),
                 payment_terms=quotation.payment_terms,
-                created_by=request.user
+                created_by=request.user,
             )
 
             for quot_line in quotation.lines.all():
@@ -155,16 +140,18 @@ class RFQViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.M
                     item=quot_line.rfq_line.item,
                     qty=quot_line.qty,
                     unit_price=quot_line.unit_price,
-                    created_by=request.user
+                    created_by=request.user,
                 )
 
             # Update PO total
             from django.db.models import Sum
+
             total = po.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
             po.total_amount = total
             po.save()
 
         from .serializers import PurchaseOrderSerializer
+
         return Response(PurchaseOrderSerializer(po).data, status=status.HTTP_201_CREATED)
 
     # ==================== 非标自动化增强API ====================
@@ -176,10 +163,7 @@ class RFQViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.M
         bom_item_ids = request.data.get('bom_item_ids', [])
 
         if not project_id or not bom_item_ids:
-            return Response(
-                {'error': '请指定项目和BOM项'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请指定项目和BOM项'}, status=status.HTTP_400_BAD_REQUEST)
 
         options = {
             'rfq_type': request.data.get('rfq_type', 'NORMAL'),
@@ -191,9 +175,7 @@ class RFQViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.M
         }
 
         try:
-            rfq = BatchRFQService.create_rfq_from_bom(
-                project_id, bom_item_ids, request.user, options
-            )
+            rfq = BatchRFQService.create_rfq_from_bom(project_id, bom_item_ids, request.user, options)
             return Response(RFQSerializer(rfq).data, status=status.HTTP_201_CREATED)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -204,10 +186,7 @@ class RFQViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.M
         rfq_ids = request.data.get('rfq_ids', [])
 
         if not rfq_ids:
-            return Response(
-                {'error': '请指定询价单'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请指定询价单'}, status=status.HTTP_400_BAD_REQUEST)
 
         result = BatchRFQService.batch_send_rfq(rfq_ids, request.user)
         return Response(result)
@@ -235,14 +214,16 @@ class RFQViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.M
                 category=request.data.get('category', 'OTHER'),
                 description=request.data.get('description', ''),
                 version=request.data.get('version', ''),
-                user=request.user
+                user=request.user,
             )
-            return Response({
-                'id': attachment.id,
-                'file_name': attachment.file_name,
-                'file_size': attachment.file_size,
-                'category': attachment.category,
-            })
+            return Response(
+                {
+                    'id': attachment.id,
+                    'file_name': attachment.file_name,
+                    'file_size': attachment.file_size,
+                    'category': attachment.category,
+                }
+            )
         except ValueError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -250,23 +231,23 @@ class RFQViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.M
     def list_attachments(self, request, pk=None):
         """获取询价单附件列表"""
         rfq = self.get_object()
-        attachments = RFQAttachment.objects.filter(
-            rfq=rfq, is_deleted=False
-        ).order_by('category', '-created_at')
+        attachments = RFQAttachment.objects.filter(rfq=rfq, is_deleted=False).order_by('category', '-created_at')
 
         result = []
         for att in attachments:
-            result.append({
-                'id': att.id,
-                'file_name': att.file_name,
-                'file_size': att.file_size,
-                'file_type': att.file_type,
-                'category': att.category,
-                'category_display': att.get_category_display(),
-                'description': att.description,
-                'version': att.version,
-                'created_at': att.created_at.isoformat() if att.created_at else None,
-            })
+            result.append(
+                {
+                    'id': att.id,
+                    'file_name': att.file_name,
+                    'file_size': att.file_size,
+                    'file_type': att.file_type,
+                    'category': att.category,
+                    'category_display': att.get_category_display(),
+                    'description': att.description,
+                    'version': att.version,
+                    'created_at': att.created_at.isoformat() if att.created_at else None,
+                }
+            )
         return Response(result)
 
     @action(detail=False, methods=['post'], url_path='create-from-template')
@@ -276,10 +257,7 @@ class RFQViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.M
         project_id = request.data.get('project_id')
 
         if not template_id:
-            return Response(
-                {'error': '请指定模板'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请指定模板'}, status=status.HTTP_400_BAD_REQUEST)
 
         options = {
             'rfq_type': request.data.get('rfq_type'),
@@ -288,9 +266,7 @@ class RFQViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.M
         }
 
         try:
-            rfq = RFQTemplateService.create_rfq_from_template(
-                template_id, project_id, request.user, options
-            )
+            rfq = RFQTemplateService.create_rfq_from_template(template_id, project_id, request.user, options)
             return Response(RFQSerializer(rfq).data, status=status.HTTP_201_CREATED)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -302,27 +278,20 @@ class RFQViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.M
         name = request.data.get('name')
 
         if not name:
-            return Response(
-                {'error': '请指定模板名称'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请指定模板名称'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             template = RFQTemplateService.create_template_from_rfq(
-                rfq.id, name, request.user,
-                description=request.data.get('description', '')
+                rfq.id, name, request.user, description=request.data.get('description', '')
             )
-            return Response({
-                'id': template.id,
-                'name': template.name,
-                'message': '模板创建成功'
-            })
+            return Response({'id': template.id, 'name': template.name, 'message': '模板创建成功'})
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class RFQLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """RFQ line viewset"""
+
     queryset = RFQLine.objects.all()
     serializer_class = RFQLineSerializer
     filterset_fields = ['rfq', 'item', 'is_deleted']
@@ -334,6 +303,7 @@ class RFQLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
 
 class RFQSupplierViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """RFQ supplier viewset"""
+
     queryset = RFQSupplier.objects.all()
     serializer_class = RFQSupplierSerializer
     filterset_fields = ['rfq', 'supplier', 'is_responded']
@@ -341,6 +311,7 @@ class RFQSupplierViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
 
 class SupplierQuotationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """Supplier quotation viewset"""
+
     queryset = SupplierQuotation.objects.all()
     serializer_class = SupplierQuotationSerializer
     filterset_fields = ['rfq_supplier', 'status', 'is_deleted']
@@ -356,10 +327,7 @@ class SupplierQuotationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
         quotation = self.get_object()
 
         if quotation.status != 'DRAFT':
-            return Response(
-                {'error': '只能提交草稿状态的报价'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '只能提交草稿状态的报价'}, status=status.HTTP_400_BAD_REQUEST)
 
         quotation.status = 'SUBMITTED'
         quotation.rfq_supplier.is_responded = True
@@ -377,6 +345,7 @@ class SupplierQuotationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
 
 class SupplierQuotationLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """Supplier quotation line viewset"""
+
     queryset = SupplierQuotationLine.objects.all()
     serializer_class = SupplierQuotationLineSerializer
 
@@ -387,6 +356,7 @@ class SupplierQuotationLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackin
 
 class QuotationComparisonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """报价比价分析视图"""
+
     queryset = QuotationComparison.objects.all()
     serializer_class = QuotationComparisonSerializer
     filterset_fields = ['rfq', 'status', 'is_deleted']
@@ -404,8 +374,11 @@ class QuotationComparisonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
     def get_queryset(self):
         queryset = super().get_queryset()
         return queryset.select_related(
-            'rfq', 'rfq__project', 'recommended_quotation',
-            'recommended_quotation__rfq_supplier__supplier', 'approved_by'
+            'rfq',
+            'rfq__project',
+            'recommended_quotation',
+            'recommended_quotation__rfq_supplier__supplier',
+            'approved_by',
         ).prefetch_related('scores')
 
     @action(detail=False, methods=['get'], url_path='available-rfqs')
@@ -414,32 +387,40 @@ class QuotationComparisonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
         from django.db.models import Count, Q
 
         # 获取每个RFQ的有效报价数量（SUBMITTED或ACCEPTED状态）
-        rfqs = RFQ.objects.filter(
-            is_deleted=False,
-            status__in=['QUOTED', 'SENT']  # 已报价或已发送状态
-        ).annotate(
-            valid_quotation_count=Count(
-                'supplier_rfqs__quotations',
-                filter=Q(
-                    supplier_rfqs__quotations__status__in=['SUBMITTED', 'ACCEPTED'],
-                    supplier_rfqs__quotations__is_deleted=False
+        rfqs = (
+            RFQ.objects.filter(
+                is_deleted=False,
+                status__in=['QUOTED', 'SENT'],  # 已报价或已发送状态
+            )
+            .annotate(
+                valid_quotation_count=Count(
+                    'supplier_rfqs__quotations',
+                    filter=Q(
+                        supplier_rfqs__quotations__status__in=['SUBMITTED', 'ACCEPTED'],
+                        supplier_rfqs__quotations__is_deleted=False,
+                    ),
                 )
             )
-        ).filter(
-            valid_quotation_count__gte=2  # 至少2个有效报价
-        ).select_related('project').order_by('-request_date')
+            .filter(
+                valid_quotation_count__gte=2  # 至少2个有效报价
+            )
+            .select_related('project')
+            .order_by('-request_date')
+        )
 
         result = []
         for rfq in rfqs:
-            result.append({
-                'id': rfq.id,
-                'rfq_no': rfq.rfq_no,
-                'project_name': rfq.project.name if rfq.project else None,
-                'status': rfq.status,
-                'status_display': rfq.get_status_display(),
-                'quotation_count': rfq.valid_quotation_count,
-                'request_date': rfq.request_date.isoformat() if rfq.request_date else None,
-            })
+            result.append(
+                {
+                    'id': rfq.id,
+                    'rfq_no': rfq.rfq_no,
+                    'project_name': rfq.project.name if rfq.project else None,
+                    'status': rfq.status,
+                    'status_display': rfq.get_status_display(),
+                    'quotation_count': rfq.valid_quotation_count,
+                    'request_date': rfq.request_date.isoformat() if rfq.request_date else None,
+                }
+            )
 
         return Response(result)
 
@@ -469,13 +450,10 @@ class QuotationComparisonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
                 user=request.user,
                 weights=weights,
                 comparison_type=comparison_type,
-                weight_template=weight_template
+                weight_template=weight_template,
             )
 
-            return Response(
-                QuotationComparisonSerializer(comparison).data,
-                status=status.HTTP_201_CREATED
-            )
+            return Response(QuotationComparisonSerializer(comparison).data, status=status.HTTP_201_CREATED)
         except ValueError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
@@ -547,9 +525,7 @@ class QuotationComparisonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
         notes = request.data.get('notes', '')
 
         try:
-            comparison = QuotationComparisonService.approve_comparison(
-                comparison.id, request.user, notes
-            )
+            comparison = QuotationComparisonService.approve_comparison(comparison.id, request.user, notes)
             return Response(QuotationComparisonSerializer(comparison).data)
         except ValueError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -561,6 +537,7 @@ class QuotationComparisonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
 
         try:
             from .serializers import PurchaseOrderSerializer
+
             po = QuotationComparisonService.convert_to_po(comparison.id, request.user)
             return Response(PurchaseOrderSerializer(po).data, status=status.HTTP_201_CREATED)
         except ValueError as e:
@@ -577,7 +554,7 @@ class QuotationComparisonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
                 score_id=score_id,
                 quality_score=serializer.validated_data.get('score_quality'),
                 service_score=serializer.validated_data.get('score_service'),
-                notes=serializer.validated_data.get('notes')
+                notes=serializer.validated_data.get('notes'),
             )
             return Response(QuotationScoreSerializer(score).data)
         except QuotationScore.DoesNotExist:
@@ -595,6 +572,7 @@ class QuotationComparisonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
             return Response({'error': '请选择要删除的记录'}, status=status.HTTP_400_BAD_REQUEST)
 
         from django.utils import timezone
+
         deleted_count = 0
 
         for comparison_id in ids:
@@ -612,7 +590,6 @@ class QuotationComparisonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
 
 
 class QuotationScoreViewSet(PermissionMixin, viewsets.ModelViewSet):
-
     permission_module = 'purchase'
     permission_resource = 'quotation_score'
     """报价评分视图"""
@@ -623,10 +600,7 @@ class QuotationScoreViewSet(PermissionMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        return queryset.select_related(
-            'comparison', 'quotation',
-            'quotation__rfq_supplier__supplier'
-        )
+        return queryset.select_related('comparison', 'quotation', 'quotation__rfq_supplier__supplier')
 
     @action(detail=True, methods=['post'], url_path='update-manual')
     def update_manual(self, request, pk=None):
@@ -639,13 +613,12 @@ class QuotationScoreViewSet(PermissionMixin, viewsets.ModelViewSet):
             score_id=score.id,
             quality_score=serializer.validated_data.get('score_quality'),
             service_score=serializer.validated_data.get('score_service'),
-            notes=serializer.validated_data.get('notes')
+            notes=serializer.validated_data.get('notes'),
         )
         return Response(QuotationScoreSerializer(score).data)
 
 
 class ItemPriceHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
-
     permission_module = 'purchase'
     permission_resource = 'item_price_history'
     """物料价格历史视图（只读）"""
@@ -665,9 +638,7 @@ class ItemPriceHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
         limit = int(request.query_params.get('limit', 10))
 
         history = QuotationComparisonService.get_item_price_history(
-            item_id=item_id,
-            supplier_id=supplier_id,
-            limit=limit
+            item_id=item_id, supplier_id=supplier_id, limit=limit
         )
         return Response(history)
 
@@ -678,10 +649,7 @@ class ItemPriceHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
         supplier_id = request.query_params.get('supplier_id')
 
         if not item_id or not supplier_id:
-            return Response(
-                {'error': '请提供 item_id 和 supplier_id'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供 item_id 和 supplier_id'}, status=status.HTTP_400_BAD_REQUEST)
 
         price = QuotationComparisonService.get_last_purchase_price(item_id, supplier_id)
         return Response({'last_price': price})
@@ -689,8 +657,10 @@ class ItemPriceHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
 
 # ==================== 非标自动化增强ViewSet ====================
 
+
 class RFQTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """询价模板管理"""
+
     queryset = RFQTemplate.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['default_rfq_type', 'default_priority']
@@ -708,12 +678,21 @@ class RFQTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
             class Meta:
                 model = RFQTemplate
                 fields = [
-                    'id', 'name', 'description',
-                    'default_rfq_type', 'default_priority', 'default_deadline_days',
-                    'default_technical_requirements', 'default_quality_requirements',
-                    'default_packaging_requirements', 'default_delivery_requirements',
-                    'use_count', 'default_suppliers_count', 'items_count',
-                    'created_at', 'updated_at'
+                    'id',
+                    'name',
+                    'description',
+                    'default_rfq_type',
+                    'default_priority',
+                    'default_deadline_days',
+                    'default_technical_requirements',
+                    'default_quality_requirements',
+                    'default_packaging_requirements',
+                    'default_delivery_requirements',
+                    'use_count',
+                    'default_suppliers_count',
+                    'items_count',
+                    'created_at',
+                    'updated_at',
                 ]
 
             def get_default_suppliers_count(self, obj):
@@ -732,15 +711,17 @@ class RFQTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
 
         result = []
         for item in items:
-            result.append({
-                'id': item.id,
-                'item_id': item.item_id,
-                'item_sku': item.item.sku,
-                'item_name': item.item.name,
-                'default_qty': float(item.default_qty),
-                'specifications': item.specifications,
-                'technical_specs': item.technical_specs,
-            })
+            result.append(
+                {
+                    'id': item.id,
+                    'item_id': item.item_id,
+                    'item_sku': item.item.sku,
+                    'item_name': item.item.name,
+                    'default_qty': float(item.default_qty),
+                    'specifications': item.specifications,
+                    'technical_specs': item.technical_specs,
+                }
+            )
         return Response(result)
 
     @action(detail=True, methods=['get'])
@@ -751,11 +732,13 @@ class RFQTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
 
         result = []
         for supplier in suppliers:
-            result.append({
-                'id': supplier.id,
-                'code': supplier.code,
-                'name': supplier.name,
-            })
+            result.append(
+                {
+                    'id': supplier.id,
+                    'code': supplier.code,
+                    'name': supplier.name,
+                }
+            )
         return Response(result)
 
     @action(detail=True, methods=['post'], url_path='add-item')
@@ -773,13 +756,14 @@ class RFQTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
             default_qty=request.data.get('default_qty', 1),
             specifications=request.data.get('specifications', ''),
             technical_specs=request.data.get('technical_specs', {}),
-            created_by=request.user
+            created_by=request.user,
         )
         return Response({'message': '物料添加成功'})
 
 
 class SupplierCapabilityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """供应商能力标签管理"""
+
     queryset = SupplierCapability.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['capability_type']
@@ -789,16 +773,20 @@ class SupplierCapabilityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
         from rest_framework import serializers
 
         class SupplierCapabilitySerializer(serializers.ModelSerializer):
-            capability_type_display = serializers.CharField(
-                source='get_capability_type_display', read_only=True
-            )
+            capability_type_display = serializers.CharField(source='get_capability_type_display', read_only=True)
             supplier_count = serializers.SerializerMethodField()
 
             class Meta:
                 model = SupplierCapability
                 fields = [
-                    'id', 'name', 'code', 'capability_type', 'capability_type_display',
-                    'description', 'supplier_count', 'created_at'
+                    'id',
+                    'name',
+                    'code',
+                    'capability_type',
+                    'capability_type_display',
+                    'description',
+                    'supplier_count',
+                    'created_at',
                 ]
 
             def get_supplier_count(self, obj):
@@ -810,25 +798,28 @@ class SupplierCapabilityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
     def suppliers(self, request, pk=None):
         """获取具有此能力的供应商列表"""
         capability = self.get_object()
-        mappings = capability.supplier_mappings.filter(
-            is_deleted=False
-        ).select_related('supplier')
+        mappings = capability.supplier_mappings.filter(is_deleted=False).select_related('supplier')
 
         result = []
         for mapping in mappings:
-            result.append({
-                'supplier_id': mapping.supplier_id,
-                'supplier_name': mapping.supplier.name,
-                'supplier_code': mapping.supplier.code,
-                'level': mapping.level,
-                'certification_no': mapping.certification_no,
-                'certification_valid_until': mapping.certification_valid_until.isoformat() if mapping.certification_valid_until else None,
-            })
+            result.append(
+                {
+                    'supplier_id': mapping.supplier_id,
+                    'supplier_name': mapping.supplier.name,
+                    'supplier_code': mapping.supplier.code,
+                    'level': mapping.level,
+                    'certification_no': mapping.certification_no,
+                    'certification_valid_until': mapping.certification_valid_until.isoformat()
+                    if mapping.certification_valid_until
+                    else None,
+                }
+            )
         return Response(result)
 
 
 class SupplierCapabilityMappingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """供应商能力关联管理"""
+
     queryset = SupplierCapabilityMapping.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['supplier', 'capability', 'level']
@@ -844,10 +835,17 @@ class SupplierCapabilityMappingViewSet(SoftDeleteMixin, UserTrackingMixin, views
             class Meta:
                 model = SupplierCapabilityMapping
                 fields = [
-                    'id', 'supplier', 'supplier_name', 'capability', 'capability_name',
-                    'capability_type', 'level', 'notes',
-                    'certification_no', 'certification_valid_until',
-                    'created_at'
+                    'id',
+                    'supplier',
+                    'supplier_name',
+                    'capability',
+                    'capability_name',
+                    'capability_type',
+                    'level',
+                    'notes',
+                    'certification_no',
+                    'certification_valid_until',
+                    'created_at',
                 ]
 
         return SupplierCapabilityMappingSerializer
@@ -859,19 +857,22 @@ class SupplierCapabilityMappingViewSet(SoftDeleteMixin, UserTrackingMixin, views
 
         result = []
         for mapping in mappings:
-            result.append({
-                'id': mapping.id,
-                'capability_id': mapping.capability_id,
-                'capability_name': mapping.capability.name,
-                'capability_type': mapping.capability.capability_type,
-                'level': mapping.level,
-                'notes': mapping.notes,
-            })
+            result.append(
+                {
+                    'id': mapping.id,
+                    'capability_id': mapping.capability_id,
+                    'capability_name': mapping.capability.name,
+                    'capability_type': mapping.capability.capability_type,
+                    'level': mapping.level,
+                    'notes': mapping.notes,
+                }
+            )
         return Response(result)
 
 
 class RFQAttachmentViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     """询价单附件管理"""
+
     queryset = RFQAttachment.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
@@ -881,16 +882,23 @@ class RFQAttachmentViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
         from rest_framework import serializers
 
         class RFQAttachmentSerializer(serializers.ModelSerializer):
-            category_display = serializers.CharField(
-                source='get_category_display', read_only=True
-            )
+            category_display = serializers.CharField(source='get_category_display', read_only=True)
 
             class Meta:
                 model = RFQAttachment
                 fields = [
-                    'id', 'rfq', 'rfq_line', 'file_name', 'file_path',
-                    'file_size', 'file_type', 'category', 'category_display',
-                    'description', 'version', 'created_at'
+                    'id',
+                    'rfq',
+                    'rfq_line',
+                    'file_name',
+                    'file_path',
+                    'file_size',
+                    'file_type',
+                    'category',
+                    'category_display',
+                    'description',
+                    'version',
+                    'created_at',
                 ]
                 read_only_fields = ['file_path', 'file_size', 'file_type']
 
@@ -910,7 +918,7 @@ class RFQAttachmentViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
                 category=request.data.get('category', 'OTHER'),
                 description=request.data.get('description', ''),
                 version=request.data.get('version', ''),
-                user=request.user
+                user=request.user,
             )
             serializer = self.get_serializer(attachment)
             return Response(serializer.data, status=status.HTTP_201_CREATED)

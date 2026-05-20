@@ -8,6 +8,7 @@
 - BOM关联展示
 - 装配工时记录
 """
+
 from django.db import models
 from django.db.models import Sum
 from django.utils import timezone
@@ -23,8 +24,10 @@ from apps.core.models import BaseModel
 # 模型定义
 # =============================================================================
 
+
 class AssemblyGuide(BaseModel):
     """装配指导书"""
+
     guide_code = models.CharField(max_length=50, unique=True, verbose_name='指导书编码')
     name = models.CharField(max_length=200, verbose_name='名称')
 
@@ -35,7 +38,7 @@ class AssemblyGuide(BaseModel):
         null=True,
         blank=True,
         related_name='assembly_guides',
-        verbose_name='产品'
+        verbose_name='产品',
     )
     bom = models.ForeignKey(
         'projects.ProjectBOM',
@@ -43,7 +46,7 @@ class AssemblyGuide(BaseModel):
         null=True,
         blank=True,
         related_name='assembly_guides',
-        verbose_name='关联BOM'
+        verbose_name='关联BOM',
     )
 
     # 3D模型
@@ -61,7 +64,7 @@ class AssemblyGuide(BaseModel):
             ('OTHER', '其他'),
         ],
         blank=True,
-        verbose_name='模型格式'
+        verbose_name='模型格式',
     )
 
     # 版本控制
@@ -80,7 +83,7 @@ class AssemblyGuide(BaseModel):
             ('EXPERT', '专家'),
         ],
         default='MEDIUM',
-        verbose_name='难度等级'
+        verbose_name='难度等级',
     )
 
     # 工具和材料
@@ -100,7 +103,7 @@ class AssemblyGuide(BaseModel):
             ('OBSOLETE', '已废弃'),
         ],
         default='DRAFT',
-        verbose_name='状态'
+        verbose_name='状态',
     )
 
     class Meta:
@@ -115,20 +118,16 @@ class AssemblyGuide(BaseModel):
     def update_step_count(self):
         """更新步骤数"""
         self.total_steps = self.steps.filter(is_deleted=False).count()
-        self.estimated_time_minutes = self.steps.filter(is_deleted=False).aggregate(
-            total=Sum('estimated_minutes')
-        )['total'] or 0
+        self.estimated_time_minutes = (
+            self.steps.filter(is_deleted=False).aggregate(total=Sum('estimated_minutes'))['total'] or 0
+        )
         self.save(update_fields=['total_steps', 'estimated_time_minutes'])
 
 
 class AssemblyStep(BaseModel):
     """装配步骤"""
-    guide = models.ForeignKey(
-        AssemblyGuide,
-        on_delete=models.CASCADE,
-        related_name='steps',
-        verbose_name='装配指导书'
-    )
+
+    guide = models.ForeignKey(AssemblyGuide, on_delete=models.CASCADE, related_name='steps', verbose_name='装配指导书')
 
     # 步骤信息
     step_number = models.IntegerField(verbose_name='步骤号')
@@ -142,10 +141,7 @@ class AssemblyStep(BaseModel):
 
     # 关联零件
     parts = models.ManyToManyField(
-        'masterdata.Item',
-        through='AssemblyStepPart',
-        related_name='assembly_steps',
-        verbose_name='相关零件'
+        'masterdata.Item', through='AssemblyStepPart', related_name='assembly_steps', verbose_name='相关零件'
     )
 
     # 工时
@@ -179,17 +175,10 @@ class AssemblyStep(BaseModel):
 
 class AssemblyStepPart(BaseModel):
     """装配步骤零件"""
-    step = models.ForeignKey(
-        AssemblyStep,
-        on_delete=models.CASCADE,
-        related_name='step_parts',
-        verbose_name='装配步骤'
-    )
+
+    step = models.ForeignKey(AssemblyStep, on_delete=models.CASCADE, related_name='step_parts', verbose_name='装配步骤')
     part = models.ForeignKey(
-        'masterdata.Item',
-        on_delete=models.CASCADE,
-        related_name='step_usages',
-        verbose_name='零件'
+        'masterdata.Item', on_delete=models.CASCADE, related_name='step_usages', verbose_name='零件'
     )
 
     quantity = models.DecimalField(max_digits=10, decimal_places=2, default=1, verbose_name='数量')
@@ -209,11 +198,9 @@ class AssemblyStepPart(BaseModel):
 
 class AssemblySession(BaseModel):
     """装配作业记录"""
+
     guide = models.ForeignKey(
-        AssemblyGuide,
-        on_delete=models.CASCADE,
-        related_name='sessions',
-        verbose_name='装配指导书'
+        AssemblyGuide, on_delete=models.CASCADE, related_name='sessions', verbose_name='装配指导书'
     )
 
     session_no = models.CharField(max_length=50, unique=True, verbose_name='作业编号')
@@ -225,16 +212,12 @@ class AssemblySession(BaseModel):
         null=True,
         blank=True,
         related_name='assembly_sessions',
-        verbose_name='生产计划'
+        verbose_name='生产计划',
     )
 
     # 操作员
     operator = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='assembly_sessions',
-        verbose_name='操作员'
+        'accounts.User', on_delete=models.SET_NULL, null=True, related_name='assembly_sessions', verbose_name='操作员'
     )
 
     # 时间
@@ -255,7 +238,7 @@ class AssemblySession(BaseModel):
             ('ABORTED', '已中止'),
         ],
         default='IN_PROGRESS',
-        verbose_name='状态'
+        verbose_name='状态',
     )
 
     # 实际工时
@@ -279,24 +262,18 @@ class AssemblySession(BaseModel):
     def save(self, *args, **kwargs):
         if not self.session_no:
             from apps.core.models import CodeRule
+
             self.session_no = CodeRule.generate_code('ASSY')
         super().save(*args, **kwargs)
 
 
 class AssemblyStepRecord(BaseModel):
     """装配步骤记录"""
+
     session = models.ForeignKey(
-        AssemblySession,
-        on_delete=models.CASCADE,
-        related_name='step_records',
-        verbose_name='装配作业'
+        AssemblySession, on_delete=models.CASCADE, related_name='step_records', verbose_name='装配作业'
     )
-    step = models.ForeignKey(
-        AssemblyStep,
-        on_delete=models.CASCADE,
-        related_name='records',
-        verbose_name='装配步骤'
-    )
+    step = models.ForeignKey(AssemblyStep, on_delete=models.CASCADE, related_name='records', verbose_name='装配步骤')
 
     # 时间
     started_at = models.DateTimeField(verbose_name='开始时间')
@@ -314,7 +291,7 @@ class AssemblyStepRecord(BaseModel):
             ('FAILED', '失败'),
         ],
         default='PENDING',
-        verbose_name='状态'
+        verbose_name='状态',
     )
 
     # 检验结果
@@ -342,6 +319,7 @@ class AssemblyStepRecord(BaseModel):
 # =============================================================================
 # 序列化器
 # =============================================================================
+
 
 class AssemblyStepPartSerializer(serializers.ModelSerializer):
     part_code = serializers.CharField(source='part.code', read_only=True)
@@ -379,9 +357,19 @@ class AssemblyGuideListSerializer(serializers.ModelSerializer):
     class Meta:
         model = AssemblyGuide
         fields = [
-            'id', 'guide_code', 'name', 'product', 'product_name',
-            'version', 'is_current', 'total_steps', 'estimated_time_minutes',
-            'difficulty_level', 'difficulty_display', 'status', 'status_display'
+            'id',
+            'guide_code',
+            'name',
+            'product',
+            'product_name',
+            'version',
+            'is_current',
+            'total_steps',
+            'estimated_time_minutes',
+            'difficulty_level',
+            'difficulty_display',
+            'status',
+            'status_display',
         ]
 
 
@@ -417,8 +405,10 @@ class AssemblySessionSerializer(serializers.ModelSerializer):
 # 视图集
 # =============================================================================
 
+
 class AssemblyGuideViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """装配指导书管理"""
+
     queryset = AssemblyGuide.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['product', 'status', 'difficulty_level', 'is_current']
@@ -443,10 +433,10 @@ class AssemblyGuideViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         """创建新版本"""
         original = self.get_object()
 
-        new_version = f"{float(original.version) + 0.1:.1f}"
+        new_version = f'{float(original.version) + 0.1:.1f}'
 
         new_guide = AssemblyGuide.objects.create(
-            guide_code=f"{original.guide_code}_V{new_version}",
+            guide_code=f'{original.guide_code}_V{new_version}',
             name=original.name,
             product=original.product,
             bom=original.bom,
@@ -457,7 +447,7 @@ class AssemblyGuideViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
             required_materials=original.required_materials,
             safety_notes=original.safety_notes,
             description=original.description,
-            created_by=request.user
+            created_by=request.user,
         )
 
         # 设置原版本为非当前
@@ -482,7 +472,7 @@ class AssemblyGuideViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                 required_tools=step.required_tools,
                 warnings=step.warnings,
                 tips=step.tips,
-                created_by=request.user
+                created_by=request.user,
             )
 
             # 复制零件
@@ -494,7 +484,7 @@ class AssemblyGuideViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                     position=sp.position,
                     orientation=sp.orientation,
                     notes=sp.notes,
-                    created_by=request.user
+                    created_by=request.user,
                 )
 
         new_guide.update_step_count()
@@ -504,6 +494,7 @@ class AssemblyGuideViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
 
 class AssemblyStepViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """装配步骤管理"""
+
     queryset = AssemblyStep.objects.filter(is_deleted=False)
     serializer_class = AssemblyStepSerializer
     permission_classes = [IsAuthenticated]
@@ -520,6 +511,7 @@ class AssemblyStepViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
 
 class AssemblySessionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """装配作业管理"""
+
     queryset = AssemblySession.objects.filter(is_deleted=False)
     serializer_class = AssemblySessionSerializer
     permission_classes = [IsAuthenticated]
@@ -535,11 +527,7 @@ class AssemblySessionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
         record, created = AssemblyStepRecord.objects.get_or_create(
             session=session,
             step_id=step_id,
-            defaults={
-                'started_at': timezone.now(),
-                'status': 'IN_PROGRESS',
-                'created_by': request.user
-            }
+            defaults={'started_at': timezone.now(), 'status': 'IN_PROGRESS', 'created_by': request.user},
         )
 
         if not created:
@@ -570,9 +558,7 @@ class AssemblySessionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
         # 更新作业进度
         session.completed_steps = session.step_records.filter(status='COMPLETED').count()
         session.current_step = record.step.step_number + 1
-        session.actual_time_minutes = session.step_records.aggregate(
-            total=Sum('duration_minutes')
-        )['total'] or 0
+        session.actual_time_minutes = session.step_records.aggregate(total=Sum('duration_minutes'))['total'] or 0
 
         if record.issues:
             session.issues_found += 1

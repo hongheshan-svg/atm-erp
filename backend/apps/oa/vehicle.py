@@ -8,6 +8,7 @@ Vehicle Management
 - 用车申请可关联项目（如项目现场调试用车）
 - 可在申请表单中增加项目编号字段
 """
+
 import logging
 from datetime import date, timedelta
 
@@ -29,6 +30,7 @@ class Vehicle(BaseModel):
     """
     车辆信息
     """
+
     STATUS_CHOICES = [
         ('AVAILABLE', '可用'),
         ('IN_USE', '使用中'),
@@ -46,12 +48,7 @@ class Vehicle(BaseModel):
     ]
 
     plate_number = models.CharField(max_length=20, unique=True, verbose_name='车牌号')
-    vehicle_type = models.CharField(
-        max_length=20,
-        choices=VEHICLE_TYPES,
-        default='CAR',
-        verbose_name='车辆类型'
-    )
+    vehicle_type = models.CharField(max_length=20, choices=VEHICLE_TYPES, default='CAR', verbose_name='车辆类型')
     brand = models.CharField(max_length=50, verbose_name='品牌')
     model = models.CharField(max_length=50, verbose_name='型号')
     color = models.CharField(max_length=20, blank=True, verbose_name='颜色')
@@ -73,12 +70,7 @@ class Vehicle(BaseModel):
     # 里程
     current_mileage = models.IntegerField(default=0, verbose_name='当前里程(km)')
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='AVAILABLE',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='AVAILABLE', verbose_name='状态')
 
     # 负责人
     manager = models.ForeignKey(
@@ -87,7 +79,7 @@ class Vehicle(BaseModel):
         null=True,
         blank=True,
         related_name='managed_vehicles',
-        verbose_name='负责人'
+        verbose_name='负责人',
     )
 
     notes = models.TextField(blank=True, verbose_name='备注')
@@ -106,6 +98,7 @@ class VehicleRequest(BaseModel):
     """
     用车申请
     """
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('PENDING', '待审批'),
@@ -128,27 +121,14 @@ class VehicleRequest(BaseModel):
     request_no = models.CharField(max_length=50, unique=True, verbose_name='申请单号')
 
     applicant = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.CASCADE,
-        related_name='vehicle_requests',
-        verbose_name='申请人'
+        'accounts.User', on_delete=models.CASCADE, related_name='vehicle_requests', verbose_name='申请人'
     )
 
     vehicle = models.ForeignKey(
-        Vehicle,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='requests',
-        verbose_name='申请车辆'
+        Vehicle, on_delete=models.SET_NULL, null=True, blank=True, related_name='requests', verbose_name='申请车辆'
     )
 
-    purpose = models.CharField(
-        max_length=20,
-        choices=PURPOSE_CHOICES,
-        default='BUSINESS',
-        verbose_name='用途'
-    )
+    purpose = models.CharField(max_length=20, choices=PURPOSE_CHOICES, default='BUSINESS', verbose_name='用途')
     purpose_detail = models.TextField(verbose_name='详细说明')
 
     # 时间
@@ -172,12 +152,7 @@ class VehicleRequest(BaseModel):
     parking_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='停车费')
     other_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='其他费用')
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='DRAFT',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', verbose_name='状态')
 
     # 审批
     approver = models.ForeignKey(
@@ -186,7 +161,7 @@ class VehicleRequest(BaseModel):
         null=True,
         blank=True,
         related_name='approved_vehicle_requests',
-        verbose_name='审批人'
+        verbose_name='审批人',
     )
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name='审批时间')
     approval_remarks = models.CharField(max_length=500, blank=True, verbose_name='审批意见')
@@ -203,6 +178,7 @@ class VehicleRequest(BaseModel):
     def save(self, *args, **kwargs):
         if not self.request_no:
             from apps.core.utils import generate_code
+
             self.request_no = generate_code('VR')
         super().save(*args, **kwargs)
 
@@ -219,6 +195,7 @@ class VehicleMaintenance(BaseModel):
     """
     车辆维护记录
     """
+
     MAINTENANCE_TYPES = [
         ('REGULAR', '常规保养'),
         ('REPAIR', '维修'),
@@ -228,17 +205,11 @@ class VehicleMaintenance(BaseModel):
     ]
 
     vehicle = models.ForeignKey(
-        Vehicle,
-        on_delete=models.CASCADE,
-        related_name='maintenance_records',
-        verbose_name='车辆'
+        Vehicle, on_delete=models.CASCADE, related_name='maintenance_records', verbose_name='车辆'
     )
 
     maintenance_type = models.CharField(
-        max_length=20,
-        choices=MAINTENANCE_TYPES,
-        default='REGULAR',
-        verbose_name='维护类型'
+        max_length=20, choices=MAINTENANCE_TYPES, default='REGULAR', verbose_name='维护类型'
     )
 
     maintenance_date = models.DateField(verbose_name='维护日期')
@@ -267,6 +238,7 @@ class VehicleMaintenance(BaseModel):
 # Serializers
 # =====================
 
+
 class VehicleSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     type_display = serializers.CharField(source='get_vehicle_type_display', read_only=True)
@@ -285,8 +257,17 @@ class VehicleListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vehicle
         fields = [
-            'id', 'plate_number', 'vehicle_type', 'type_display', 'brand', 'model',
-            'color', 'seats', 'status', 'status_display', 'current_mileage'
+            'id',
+            'plate_number',
+            'vehicle_type',
+            'type_display',
+            'brand',
+            'model',
+            'color',
+            'seats',
+            'status',
+            'status_display',
+            'current_mileage',
         ]
 
 
@@ -314,9 +295,20 @@ class VehicleRequestListSerializer(serializers.ModelSerializer):
     class Meta:
         model = VehicleRequest
         fields = [
-            'id', 'request_no', 'applicant_name', 'vehicle', 'vehicle_plate',
-            'purpose', 'purpose_display', 'start_time', 'end_time',
-            'departure', 'destination', 'status', 'status_display', 'created_at'
+            'id',
+            'request_no',
+            'applicant_name',
+            'vehicle',
+            'vehicle_plate',
+            'purpose',
+            'purpose_display',
+            'start_time',
+            'end_time',
+            'departure',
+            'destination',
+            'status',
+            'status_display',
+            'created_at',
         ]
 
 
@@ -334,8 +326,10 @@ class VehicleMaintenanceSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class VehicleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """车辆管理"""
+
     queryset = Vehicle.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'vehicle_type', 'manager']
@@ -358,9 +352,7 @@ class VehicleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         if start_time and end_time:
             # 排除时间段内有申请的车辆
             busy_vehicle_ids = VehicleRequest.objects.filter(
-                status__in=['APPROVED', 'IN_USE'],
-                start_time__lt=end_time,
-                end_time__gt=start_time
+                status__in=['APPROVED', 'IN_USE'], start_time__lt=end_time, end_time__gt=start_time
             ).values_list('vehicle_id', flat=True)
             vehicles = vehicles.exclude(id__in=busy_vehicle_ids)
 
@@ -382,6 +374,7 @@ class VehicleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 
 class VehicleRequestViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """用车申请管理"""
+
     queryset = VehicleRequest.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'vehicle', 'applicant', 'purpose']
@@ -422,18 +415,20 @@ class VehicleRequestViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrack
                 business_id=req.id,
                 business_no=req.request_no or f'VR-{req.id}',
                 submitter=request.user,
-                amount=None
+                amount=None,
             )
 
             if instance:
                 req.status = 'PENDING'
                 req.save()
-                return Response({
-                    **self.get_serializer(req).data,
-                    'workflow_started': True,
-                    'workflow_id': instance.id,
-                    'message': '已提交审批，请在审批中心查看审批进度'
-                })
+                return Response(
+                    {
+                        **self.get_serializer(req).data,
+                        'workflow_started': True,
+                        'workflow_id': instance.id,
+                        'message': '已提交审批，请在审批中心查看审批进度',
+                    }
+                )
             else:
                 # 未配置审批流程，自动批准
                 req.status = 'APPROVED'
@@ -441,12 +436,14 @@ class VehicleRequestViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrack
                 req.approved_at = timezone.now()
                 req.save()
                 logger.info(f'用车申请 {req.request_no or req.id} 自动批准（未配置审批流程）')
-                return Response({
-                    **self.get_serializer(req).data,
-                    'workflow_started': False,
-                    'auto_approved': True,
-                    'message': error or '未配置审批流程，已自动批准'
-                })
+                return Response(
+                    {
+                        **self.get_serializer(req).data,
+                        'workflow_started': False,
+                        'auto_approved': True,
+                        'message': error or '未配置审批流程，已自动批准',
+                    }
+                )
 
         except Exception as e:
             # 工作流服务异常，自动批准
@@ -455,11 +452,9 @@ class VehicleRequestViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrack
             req.approver = request.user
             req.approved_at = timezone.now()
             req.save()
-            return Response({
-                **self.get_serializer(req).data,
-                'auto_approved': True,
-                'message': '工作流服务不可用，已自动批准'
-            })
+            return Response(
+                {**self.get_serializer(req).data, 'auto_approved': True, 'message': '工作流服务不可用，已自动批准'}
+            )
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
@@ -550,6 +545,7 @@ class VehicleRequestViewSet(WorkflowEnforcementMixin, SoftDeleteMixin, UserTrack
 
 class VehicleMaintenanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """车辆维护管理"""
+
     queryset = VehicleMaintenance.objects.filter(is_deleted=False)
     serializer_class = VehicleMaintenanceSerializer
     permission_classes = [IsAuthenticated]
@@ -563,26 +559,25 @@ class VehicleMaintenanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
         today = date.today()
         next_week = today + timedelta(days=7)
 
-        vehicles = Vehicle.objects.filter(
-            is_deleted=False,
-            status__in=['AVAILABLE', 'IN_USE']
-        )
+        vehicles = Vehicle.objects.filter(is_deleted=False, status__in=['AVAILABLE', 'IN_USE'])
 
         due_list = []
         for vehicle in vehicles:
             # 检查下次维护日期
-            last_maintenance = vehicle.maintenance_records.filter(
-                maintenance_type='REGULAR'
-            ).order_by('-maintenance_date').first()
+            last_maintenance = (
+                vehicle.maintenance_records.filter(maintenance_type='REGULAR').order_by('-maintenance_date').first()
+            )
 
             if last_maintenance and last_maintenance.next_maintenance_date:
                 if last_maintenance.next_maintenance_date <= next_week:
-                    due_list.append({
-                        'vehicle_id': vehicle.id,
-                        'plate_number': vehicle.plate_number,
-                        'maintenance_type': '常规保养',
-                        'due_date': last_maintenance.next_maintenance_date,
-                        'current_mileage': vehicle.current_mileage
-                    })
+                    due_list.append(
+                        {
+                            'vehicle_id': vehicle.id,
+                            'plate_number': vehicle.plate_number,
+                            'maintenance_type': '常规保养',
+                            'due_date': last_maintenance.next_maintenance_date,
+                            'current_mileage': vehicle.current_mileage,
+                        }
+                    )
 
         return Response(due_list)

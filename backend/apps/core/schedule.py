@@ -3,6 +3,7 @@
 Schedule and Meeting Management
 OA协同办公模块
 """
+
 from datetime import date, timedelta
 
 from django.db import models
@@ -19,6 +20,7 @@ from apps.core.models import BaseModel
 
 class Schedule(BaseModel):
     """日程安排"""
+
     TYPE_CHOICES = [
         ('MEETING', '会议'),
         ('TASK', '任务'),
@@ -37,12 +39,7 @@ class Schedule(BaseModel):
     ]
 
     title = models.CharField(max_length=200, verbose_name='标题')
-    schedule_type = models.CharField(
-        max_length=20,
-        choices=TYPE_CHOICES,
-        default='TASK',
-        verbose_name='日程类型'
-    )
+    schedule_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='TASK', verbose_name='日程类型')
 
     # 时间
     start_time = models.DateTimeField(verbose_name='开始时间')
@@ -50,26 +47,15 @@ class Schedule(BaseModel):
     all_day = models.BooleanField(default=False, verbose_name='全天')
 
     # 重复
-    repeat_type = models.CharField(
-        max_length=20,
-        choices=REPEAT_CHOICES,
-        default='NONE',
-        verbose_name='重复类型'
-    )
+    repeat_type = models.CharField(max_length=20, choices=REPEAT_CHOICES, default='NONE', verbose_name='重复类型')
     repeat_end_date = models.DateField(null=True, blank=True, verbose_name='重复结束日期')
 
     # 关联
     owner = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.CASCADE,
-        related_name='schedules',
-        verbose_name='所有者'
+        'accounts.User', on_delete=models.CASCADE, related_name='schedules', verbose_name='所有者'
     )
     participants = models.ManyToManyField(
-        'accounts.User',
-        blank=True,
-        related_name='participated_schedules',
-        verbose_name='参与人'
+        'accounts.User', blank=True, related_name='participated_schedules', verbose_name='参与人'
     )
 
     # 关联业务
@@ -79,7 +65,7 @@ class Schedule(BaseModel):
         null=True,
         blank=True,
         related_name='schedules',
-        verbose_name='关联项目'
+        verbose_name='关联项目',
     )
     customer = models.ForeignKey(
         'masterdata.Customer',
@@ -87,7 +73,7 @@ class Schedule(BaseModel):
         null=True,
         blank=True,
         related_name='schedules',
-        verbose_name='关联客户'
+        verbose_name='关联客户',
     )
 
     # 详情
@@ -116,6 +102,7 @@ class Schedule(BaseModel):
 
 class Meeting(BaseModel):
     """会议管理"""
+
     STATUS_CHOICES = [
         ('SCHEDULED', '已安排'),
         ('IN_PROGRESS', '进行中'),
@@ -141,29 +128,21 @@ class Meeting(BaseModel):
     end_time = models.DateTimeField(verbose_name='结束时间')
     location = models.CharField(max_length=200, blank=True, verbose_name='会议地点')
     meeting_room = models.ForeignKey(
-        'MeetingRoom',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='meetings',
-        verbose_name='会议室'
+        'MeetingRoom', on_delete=models.SET_NULL, null=True, blank=True, related_name='meetings', verbose_name='会议室'
     )
     is_online = models.BooleanField(default=False, verbose_name='线上会议')
     meeting_link = models.CharField(max_length=500, blank=True, verbose_name='会议链接')
 
     # 人员
     organizer = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.CASCADE,
-        related_name='organized_meetings',
-        verbose_name='组织者'
+        'accounts.User', on_delete=models.CASCADE, related_name='organized_meetings', verbose_name='组织者'
     )
     participants = models.ManyToManyField(
         'accounts.User',
         through='MeetingParticipant',
         through_fields=('meeting', 'user'),
         related_name='meetings',
-        verbose_name='参会人员'
+        verbose_name='参会人员',
     )
 
     # 关联
@@ -173,7 +152,7 @@ class Meeting(BaseModel):
         null=True,
         blank=True,
         related_name='meetings',
-        verbose_name='关联项目'
+        verbose_name='关联项目',
     )
 
     # 内容
@@ -182,12 +161,7 @@ class Meeting(BaseModel):
     decisions = models.TextField(blank=True, verbose_name='会议决议')
     action_items = models.JSONField(default=list, blank=True, verbose_name='待办事项')
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='SCHEDULED',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='SCHEDULED', verbose_name='状态')
 
     attachments = models.JSONField(default=list, blank=True, verbose_name='附件')
 
@@ -203,12 +177,14 @@ class Meeting(BaseModel):
     def save(self, *args, **kwargs):
         if not self.meeting_no:
             from apps.core.utils import generate_code
+
             self.meeting_no = generate_code('MTG')
         super().save(*args, **kwargs)
 
 
 class MeetingRoom(BaseModel):
     """会议室"""
+
     name = models.CharField(max_length=100, verbose_name='会议室名称')
     location = models.CharField(max_length=200, blank=True, verbose_name='位置')
     capacity = models.IntegerField(default=10, verbose_name='容纳人数')
@@ -227,6 +203,7 @@ class MeetingRoom(BaseModel):
 
 class MeetingParticipant(BaseModel):
     """会议参与者"""
+
     RESPONSE_CHOICES = [
         ('PENDING', '待确认'),
         ('ACCEPTED', '已接受'),
@@ -235,23 +212,12 @@ class MeetingParticipant(BaseModel):
     ]
 
     meeting = models.ForeignKey(
-        Meeting,
-        on_delete=models.CASCADE,
-        related_name='meeting_participants',
-        verbose_name='会议'
+        Meeting, on_delete=models.CASCADE, related_name='meeting_participants', verbose_name='会议'
     )
     user = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.CASCADE,
-        related_name='meeting_participations',
-        verbose_name='参会人'
+        'accounts.User', on_delete=models.CASCADE, related_name='meeting_participations', verbose_name='参会人'
     )
-    response = models.CharField(
-        max_length=20,
-        choices=RESPONSE_CHOICES,
-        default='PENDING',
-        verbose_name='回复状态'
-    )
+    response = models.CharField(max_length=20, choices=RESPONSE_CHOICES, default='PENDING', verbose_name='回复状态')
     is_required = models.BooleanField(default=True, verbose_name='必须参加')
     attended = models.BooleanField(default=False, verbose_name='实际出席')
 
@@ -265,6 +231,7 @@ class MeetingParticipant(BaseModel):
 # =====================
 # Serializers
 # =====================
+
 
 class ScheduleSerializer(serializers.ModelSerializer):
     type_display = serializers.CharField(source='get_schedule_type_display', read_only=True)
@@ -288,9 +255,16 @@ class ScheduleListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Schedule
         fields = [
-            'id', 'title', 'schedule_type', 'type_display',
-            'start_time', 'end_time', 'all_day', 'location',
-            'color', 'is_public'
+            'id',
+            'title',
+            'schedule_type',
+            'type_display',
+            'start_time',
+            'end_time',
+            'all_day',
+            'location',
+            'color',
+            'is_public',
         ]
 
 
@@ -334,10 +308,20 @@ class MeetingListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Meeting
         fields = [
-            'id', 'meeting_no', 'title', 'meeting_type', 'type_display',
-            'start_time', 'end_time',
-            'location', 'is_online', 'status', 'status_display',
-            'organizer_name', 'room_name', 'participant_count'
+            'id',
+            'meeting_no',
+            'title',
+            'meeting_type',
+            'type_display',
+            'start_time',
+            'end_time',
+            'location',
+            'is_online',
+            'status',
+            'status_display',
+            'organizer_name',
+            'room_name',
+            'participant_count',
         ]
 
     def get_participant_count(self, obj):
@@ -348,8 +332,10 @@ class MeetingListSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class ScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """日程管理"""
+
     queryset = Schedule.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['schedule_type', 'owner', 'project', 'customer']
@@ -364,9 +350,7 @@ class ScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
         qs = super().get_queryset()
         user = self.request.user
         # 只能看自己的日程或公开日程或被邀请的日程
-        return qs.filter(
-            Q(owner=user) | Q(is_public=True) | Q(participants=user)
-        ).distinct()
+        return qs.filter(Q(owner=user) | Q(is_public=True) | Q(participants=user)).distinct()
 
     @action(detail=False, methods=['get'])
     def calendar(self, request):
@@ -383,16 +367,18 @@ class ScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
 
         events = []
         for schedule in qs:
-            events.append({
-                'id': schedule.id,
-                'title': schedule.title,
-                'start': schedule.start_time.isoformat(),
-                'end': schedule.end_time.isoformat(),
-                'allDay': schedule.all_day,
-                'color': schedule.color,
-                'type': schedule.schedule_type,
-                'location': schedule.location
-            })
+            events.append(
+                {
+                    'id': schedule.id,
+                    'title': schedule.title,
+                    'start': schedule.start_time.isoformat(),
+                    'end': schedule.end_time.isoformat(),
+                    'allDay': schedule.all_day,
+                    'color': schedule.color,
+                    'type': schedule.schedule_type,
+                    'location': schedule.location,
+                }
+            )
 
         return Response(events)
 
@@ -402,10 +388,7 @@ class ScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
         today = date.today()
         tomorrow = today + timedelta(days=1)
 
-        schedules = self.get_queryset().filter(
-            start_time__date__lte=today,
-            end_time__date__gte=today
-        )
+        schedules = self.get_queryset().filter(start_time__date__lte=today, end_time__date__gte=today)
 
         return Response(ScheduleListSerializer(schedules, many=True).data)
 
@@ -415,16 +398,16 @@ class ScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
         now = timezone.now()
         week_later = now + timedelta(days=7)
 
-        schedules = self.get_queryset().filter(
-            start_time__gte=now,
-            start_time__lte=week_later
-        ).order_by('start_time')[:20]
+        schedules = (
+            self.get_queryset().filter(start_time__gte=now, start_time__lte=week_later).order_by('start_time')[:20]
+        )
 
         return Response(ScheduleListSerializer(schedules, many=True).data)
 
 
 class MeetingRoomViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """会议室管理"""
+
     queryset = MeetingRoom.objects.filter(is_deleted=False)
     serializer_class = MeetingRoomSerializer
     permission_classes = [IsAuthenticated]
@@ -440,30 +423,20 @@ class MeetingRoomViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
 
         # 获取该日期的所有预订
         meetings = Meeting.objects.filter(
-            meeting_room=room,
-            start_time__date=query_date,
-            status__in=['SCHEDULED', 'IN_PROGRESS'],
-            is_deleted=False
+            meeting_room=room, start_time__date=query_date, status__in=['SCHEDULED', 'IN_PROGRESS'], is_deleted=False
         ).order_by('start_time')
 
         booked_slots = [
-            {
-                'start': m.start_time.strftime('%H:%M'),
-                'end': m.end_time.strftime('%H:%M'),
-                'title': m.title
-            }
+            {'start': m.start_time.strftime('%H:%M'), 'end': m.end_time.strftime('%H:%M'), 'title': m.title}
             for m in meetings
         ]
 
-        return Response({
-            'room': room.name,
-            'date': date_str,
-            'booked_slots': booked_slots
-        })
+        return Response({'room': room.name, 'date': date_str, 'booked_slots': booked_slots})
 
 
 class MeetingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """会议管理"""
+
     queryset = Meeting.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'organizer', 'project', 'meeting_room']
@@ -480,11 +453,7 @@ class MeetingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         # 添加参与者
         participant_ids = self.request.data.get('participant_ids', [])
         for uid in participant_ids:
-            MeetingParticipant.objects.create(
-                meeting=meeting,
-                user_id=uid,
-                created_by=self.request.user
-            )
+            MeetingParticipant.objects.create(meeting=meeting, user_id=uid, created_by=self.request.user)
 
     @action(detail=True, methods=['post'])
     def respond(self, request, pk=None):
@@ -493,9 +462,7 @@ class MeetingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         response = request.data.get('response', 'ACCEPTED')
 
         participant, _ = MeetingParticipant.objects.get_or_create(
-            meeting=meeting,
-            user=request.user,
-            defaults={'created_by': request.user}
+            meeting=meeting, user=request.user, defaults={'created_by': request.user}
         )
         participant.response = response
         participant.save()
@@ -533,9 +500,12 @@ class MeetingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     def my_meetings(self, request):
         """我的会议"""
         user = request.user
-        meetings = self.get_queryset().filter(
-            Q(organizer=user) | Q(meeting_participants__user=user)
-        ).distinct().order_by('-start_time')
+        meetings = (
+            self.get_queryset()
+            .filter(Q(organizer=user) | Q(meeting_participants__user=user))
+            .distinct()
+            .order_by('-start_time')
+        )
 
         return Response(MeetingListSerializer(meetings, many=True).data)
 
@@ -543,9 +513,10 @@ class MeetingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     def today(self, request):
         """今日会议"""
         today = date.today()
-        meetings = self.get_queryset().filter(
-            start_time__date=today,
-            status__in=['SCHEDULED', 'IN_PROGRESS']
-        ).order_by('start_time')
+        meetings = (
+            self.get_queryset()
+            .filter(start_time__date=today, status__in=['SCHEDULED', 'IN_PROGRESS'])
+            .order_by('start_time')
+        )
 
         return Response(MeetingListSerializer(meetings, many=True).data)

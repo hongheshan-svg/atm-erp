@@ -2,6 +2,7 @@
 编码规则模型
 支持自定义各种业务单据的编号规则
 """
+
 from datetime import datetime
 
 from django.conf import settings
@@ -49,12 +50,7 @@ class CodeRule(BaseModel):
         ('DAILY', '每日重置'),
     ]
 
-    rule_type = models.CharField(
-        max_length=50,
-        choices=RULE_TYPE_CHOICES,
-        unique=True,
-        verbose_name='规则类型'
-    )
+    rule_type = models.CharField(max_length=50, choices=RULE_TYPE_CHOICES, unique=True, verbose_name='规则类型')
     rule_name = models.CharField(max_length=100, verbose_name='规则名称')
     prefix = models.CharField(max_length=20, blank=True, default='', verbose_name='固定前缀')
     date_format = models.CharField(
@@ -62,43 +58,18 @@ class CodeRule(BaseModel):
         blank=True,
         default='',
         help_text='日期格式：YYYY-年，YY-年后两位，MM-月，DD-日',
-        verbose_name='日期格式'
+        verbose_name='日期格式',
     )
-    seq_length = models.IntegerField(
-        default=4,
-        help_text='序列号长度（不足补0）',
-        verbose_name='序列号长度'
-    )
-    seq_start = models.IntegerField(
-        default=1,
-        help_text='序列号起始值',
-        verbose_name='序列号起始值'
-    )
-    current_seq = models.IntegerField(
-        default=0,
-        help_text='当前序列号',
-        verbose_name='当前序列号'
-    )
+    seq_length = models.IntegerField(default=4, help_text='序列号长度（不足补0）', verbose_name='序列号长度')
+    seq_start = models.IntegerField(default=1, help_text='序列号起始值', verbose_name='序列号起始值')
+    current_seq = models.IntegerField(default=0, help_text='当前序列号', verbose_name='当前序列号')
     reset_mode = models.CharField(
-        max_length=20,
-        choices=RESET_MODE_CHOICES,
-        default='YEARLY',
-        help_text='序列号重置模式',
-        verbose_name='重置模式'
+        max_length=20, choices=RESET_MODE_CHOICES, default='YEARLY', help_text='序列号重置模式', verbose_name='重置模式'
     )
     separator = models.CharField(
-        max_length=5,
-        blank=True,
-        default='',
-        help_text='分隔符（如：- 或 _）',
-        verbose_name='分隔符'
+        max_length=5, blank=True, default='', help_text='分隔符（如：- 或 _）', verbose_name='分隔符'
     )
-    example = models.CharField(
-        max_length=100,
-        blank=True,
-        editable=False,
-        verbose_name='示例编码'
-    )
+    example = models.CharField(max_length=100, blank=True, editable=False, verbose_name='示例编码')
     is_active = models.BooleanField(default=True, verbose_name='是否启用')
     description = models.TextField(blank=True, verbose_name='说明')
 
@@ -112,7 +83,7 @@ class CodeRule(BaseModel):
         ordering = ['rule_type']
 
     def __str__(self):
-        return f"{self.get_rule_type_display()} - {self.rule_name}"
+        return f'{self.get_rule_type_display()} - {self.rule_name}'
 
     def save(self, *args, **kwargs):
         # 自动生成示例编码
@@ -165,8 +136,7 @@ class CodeRule(BaseModel):
         if self.reset_mode == 'DAILY':
             return self.last_reset_date < today
         elif self.reset_mode == 'MONTHLY':
-            return (self.last_reset_date.year < today.year or
-                   self.last_reset_date.month < today.month)
+            return self.last_reset_date.year < today.year or self.last_reset_date.month < today.month
         elif self.reset_mode == 'YEARLY':
             return self.last_reset_date.year < today.year
 
@@ -284,6 +254,7 @@ def _generate_code_wrapper(self_or_code):
         # 未知调用方式，使用默认
         import random
         from datetime import datetime
+
         timestamp = datetime.now().strftime('%Y%m%d')
         random_suffix = str(random.randint(100000, 999999))
         return f'CODE{timestamp}{random_suffix}'
@@ -298,20 +269,12 @@ class CodeHistory(models.Model):
     编码生成历史记录
     用于追踪和调试
     """
-    rule = models.ForeignKey(
-        CodeRule,
-        on_delete=models.CASCADE,
-        related_name='history',
-        verbose_name='编码规则'
-    )
+
+    rule = models.ForeignKey(CodeRule, on_delete=models.CASCADE, related_name='history', verbose_name='编码规则')
     generated_code = models.CharField(max_length=100, verbose_name='生成的编码')
     sequence_number = models.IntegerField(verbose_name='序列号')
     generated_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='生成人'
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='生成人'
     )
     generated_at = models.DateTimeField(auto_now_add=True, verbose_name='生成时间')
     business_model = models.CharField(max_length=100, blank=True, verbose_name='业务模型')
@@ -328,5 +291,4 @@ class CodeHistory(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.generated_code} - {self.generated_at}"
-
+        return f'{self.generated_code} - {self.generated_at}'

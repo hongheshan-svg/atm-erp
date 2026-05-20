@@ -1,6 +1,7 @@
 """
 Custom permission classes for data scope filtering.
 """
+
 from rest_framework import permissions
 
 from apps.core.permission_service import get_department_tree_ids, resolve_data_scope
@@ -58,4 +59,3 @@ class DataScopePermission(permissions.BasePermission):
             return False
 
         return False
-

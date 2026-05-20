@@ -1,6 +1,7 @@
 """
 Data export service for Excel/PDF generation.
 """
+
 import io
 import logging
 
@@ -19,13 +20,13 @@ class ExcelExportService:
     def export_queryset(cls, queryset, columns, filename, sheet_name='Sheet1'):
         """
         Export a queryset to Excel file.
-        
+
         Args:
             queryset: Django QuerySet or list of dicts
             columns: List of dicts with 'field', 'header', 'width' keys
             filename: Output filename (without extension)
             sheet_name: Excel sheet name
-        
+
         Returns:
             HttpResponse with Excel file
         """
@@ -62,13 +63,9 @@ class ExcelExportService:
                 worksheet.set_column(i, i, width)
 
             # Add header format
-            header_format = workbook.add_format({
-                'bold': True,
-                'bg_color': '#4472C4',
-                'font_color': 'white',
-                'border': 1,
-                'align': 'center'
-            })
+            header_format = workbook.add_format(
+                {'bold': True, 'bg_color': '#4472C4', 'font_color': 'white', 'border': 1, 'align': 'center'}
+            )
 
             for col_num, header in enumerate(headers):
                 if col_num < len(df.columns):
@@ -77,8 +74,7 @@ class ExcelExportService:
         output.seek(0)
 
         response = HttpResponse(
-            output.read(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         response['Content-Disposition'] = f'attachment; filename={filename}_{timezone.now().strftime("%Y%m%d")}.xlsx'
         return response
@@ -87,12 +83,12 @@ class ExcelExportService:
     def export_report(cls, title, data_sections, filename):
         """
         Export a multi-section report to Excel.
-        
+
         Args:
             title: Report title
             data_sections: List of dicts with 'name', 'data', 'columns' keys
             filename: Output filename
-        
+
         Returns:
             HttpResponse with Excel file
         """
@@ -103,18 +99,11 @@ class ExcelExportService:
             workbook = writer.book
 
             # Title format
-            title_format = workbook.add_format({
-                'bold': True,
-                'font_size': 16,
-                'align': 'center'
-            })
+            title_format = workbook.add_format({'bold': True, 'font_size': 16, 'align': 'center'})
 
-            header_format = workbook.add_format({
-                'bold': True,
-                'bg_color': '#4472C4',
-                'font_color': 'white',
-                'border': 1
-            })
+            header_format = workbook.add_format(
+                {'bold': True, 'bg_color': '#4472C4', 'font_color': 'white', 'border': 1}
+            )
 
             for section in data_sections:
                 sheet_name = section['name'][:31]  # Excel sheet name limit
@@ -138,8 +127,7 @@ class ExcelExportService:
         output.seek(0)
 
         response = HttpResponse(
-            output.read(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         response['Content-Disposition'] = f'attachment; filename={filename}_{timezone.now().strftime("%Y%m%d")}.xlsx'
         return response
@@ -154,12 +142,12 @@ class PDFExportService:
     def export_report(cls, title, content, filename):
         """
         Export report to PDF.
-        
+
         Args:
             title: Report title
             content: HTML content or structured data
             filename: Output filename
-        
+
         Returns:
             HttpResponse with PDF file
         """
@@ -180,7 +168,7 @@ class PDFExportService:
                 'Title',
                 parent=styles['Heading1'],
                 fontSize=18,
-                alignment=1  # Center
+                alignment=1,  # Center
             )
 
             elements = []
@@ -201,15 +189,19 @@ class PDFExportService:
                     data = content
 
                 table = Table(data)
-                table.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
-                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                    ('FONTSIZE', (0, 0), (-1, 0), 12),
-                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                    ('GRID', (0, 0), (-1, -1), 1, colors.black)
-                ]))
+                table.setStyle(
+                    TableStyle(
+                        [
+                            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
+                            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                            ('FONTSIZE', (0, 0), (-1, 0), 12),
+                            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                        ]
+                    )
+                )
                 elements.append(table)
 
             doc.build(elements)
@@ -220,8 +212,8 @@ class PDFExportService:
             return response
 
         except ImportError:
-            logger.warning("reportlab not installed, PDF export unavailable")
-            return HttpResponse("PDF export requires reportlab library", status=501)
+            logger.warning('reportlab not installed, PDF export unavailable')
+            return HttpResponse('PDF export requires reportlab library', status=501)
 
 
 # Export column definitions for common models

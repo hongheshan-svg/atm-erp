@@ -1,6 +1,7 @@
 """
 PDF Invoice Generator using ReportLab
 """
+
 from io import BytesIO
 
 from reportlab.lib import colors
@@ -18,12 +19,7 @@ class InvoiceGenerator:
         self.sales_order = sales_order
         self.buffer = BytesIO()
         self.doc = SimpleDocTemplate(
-            self.buffer,
-            pagesize=A4,
-            rightMargin=72,
-            leftMargin=72,
-            topMargin=72,
-            bottomMargin=18
+            self.buffer, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18
         )
         self.elements = []
         self.styles = getSampleStyleSheet()
@@ -49,7 +45,7 @@ class InvoiceGenerator:
             fontSize=24,
             textColor=colors.HexColor('#2c3e50'),
             spaceAfter=30,
-            alignment=TA_CENTER
+            alignment=TA_CENTER,
         )
 
         title = Paragraph('INVOICE', title_style)
@@ -66,13 +62,17 @@ class InvoiceGenerator:
             ['Email: info@company.com', '', f'Email: {self.sales_order.customer.email or ""}'],
         ]
 
-        table = Table(data, colWidths=[3*inch, 1*inch, 3*inch])
-        table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
-        ]))
+        table = Table(data, colWidths=[3 * inch, 1 * inch, 3 * inch])
+        table.setStyle(
+            TableStyle(
+                [
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 10),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+                ]
+            )
+        )
 
         self.elements.append(table)
         self.elements.append(Spacer(1, 0.3 * inch))
@@ -86,12 +86,16 @@ class InvoiceGenerator:
             ['Status:', self.sales_order.status],
         ]
 
-        table = Table(data, colWidths=[2*inch, 4*inch])
-        table.setStyle(TableStyle([
-            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        ]))
+        table = Table(data, colWidths=[2 * inch, 4 * inch])
+        table.setStyle(
+            TableStyle(
+                [
+                    ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 10),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ]
+            )
+        )
 
         self.elements.append(table)
         self.elements.append(Spacer(1, 0.3 * inch))
@@ -107,27 +111,31 @@ class InvoiceGenerator:
                 line.item.name,
                 str(line.qty),
                 f'${line.unit_price:,.2f}',
-                f'${line.qty * line.unit_price:,.2f}'
+                f'${line.qty * line.unit_price:,.2f}',
             ]
             data.append(row)
 
-        table = Table(data, colWidths=[0.5*inch, 3*inch, 1*inch, 1.5*inch, 1.5*inch])
-        table.setStyle(TableStyle([
-            # Header row
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3498db')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 11),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            # Body
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 10),
-            ('ALIGN', (1, 1), (1, -1), 'LEFT'),
-            ('ALIGN', (2, 1), (-1, -1), 'RIGHT'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#ecf0f1')]),
-        ]))
+        table = Table(data, colWidths=[0.5 * inch, 3 * inch, 1 * inch, 1.5 * inch, 1.5 * inch])
+        table.setStyle(
+            TableStyle(
+                [
+                    # Header row
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3498db')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 11),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                    # Body
+                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 1), (-1, -1), 10),
+                    ('ALIGN', (1, 1), (1, -1), 'LEFT'),
+                    ('ALIGN', (2, 1), (-1, -1), 'RIGHT'),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#ecf0f1')]),
+                ]
+            )
+        )
 
         self.elements.append(table)
         self.elements.append(Spacer(1, 0.3 * inch))
@@ -142,14 +150,18 @@ class InvoiceGenerator:
             ['Total:', f'${total:,.2f}'],
         ]
 
-        table = Table(data, colWidths=[5*inch, 1.5*inch])
-        table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
-            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 11),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
-            ('LINEABOVE', (0, -1), (-1, -1), 2, colors.HexColor('#3498db')),
-        ]))
+        table = Table(data, colWidths=[5 * inch, 1.5 * inch])
+        table.setStyle(
+            TableStyle(
+                [
+                    ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
+                    ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 11),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+                    ('LINEABOVE', (0, -1), (-1, -1), 2, colors.HexColor('#3498db')),
+                ]
+            )
+        )
 
         self.elements.append(table)
         self.elements.append(Spacer(1, 0.5 * inch))
@@ -157,16 +169,11 @@ class InvoiceGenerator:
     def _add_footer(self):
         """Add invoice footer"""
         footer_style = ParagraphStyle(
-            'Footer',
-            parent=self.styles['Normal'],
-            fontSize=9,
-            textColor=colors.grey,
-            alignment=TA_CENTER
+            'Footer', parent=self.styles['Normal'], fontSize=9, textColor=colors.grey, alignment=TA_CENTER
         )
 
         footer_text = Paragraph(
-            'Thank you for your business!<br/>For questions, contact: support@company.com',
-            footer_style
+            'Thank you for your business!<br/>For questions, contact: support@company.com', footer_style
         )
         self.elements.append(footer_text)
 
@@ -175,4 +182,3 @@ class InvoiceGenerator:
         """Class method to generate invoice"""
         generator = cls(sales_order)
         return generator.generate()
-

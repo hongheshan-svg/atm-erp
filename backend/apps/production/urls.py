@@ -1,6 +1,7 @@
 """
 生产管理模块 URL 配置
 """
+
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
@@ -106,16 +107,13 @@ router.register(r'kanban-wip-alerts', KanbanWIPAlertViewSet, basename='kanban-wi
 
 urlpatterns = [
     path('', include(router.urls)),
-
     # 电子看板
     path('kanban/', ProductionKanbanView.as_view(), name='production-kanban'),
     path('kanban/work-center/<int:work_center_id>/', WorkCenterKanbanView.as_view(), name='work-center-kanban'),
     path('kanban/trend/', ProductionTrendView.as_view(), name='production-trend'),
     path('kanban/alerts/', AndonAlertView.as_view(), name='andon-alerts'),
-
     # 产能资源规划看板
     path('capacity/dashboard/', CapacityDashboardView.as_view(), name='capacity-dashboard'),
-
     # 看板WIP状态
     path('kanban/wip-status/', KanbanWIPStatusView.as_view(), name='kanban-wip-status'),
 ]

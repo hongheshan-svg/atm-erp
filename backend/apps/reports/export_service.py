@@ -3,6 +3,7 @@
 Report Export Enhancement Service
 支持多种格式导出、批量导出、定时导出等
 """
+
 import io
 import json
 from datetime import date, datetime
@@ -23,6 +24,7 @@ class ExportTemplate(BaseModel):
     """
     导出模板配置
     """
+
     EXPORT_FORMATS = [
         ('EXCEL', 'Excel (.xlsx)'),
         ('CSV', 'CSV (.csv)'),
@@ -36,44 +38,21 @@ class ExportTemplate(BaseModel):
 
     # 导出字段配置
     fields_config = models.JSONField(
-        default=list,
-        verbose_name='字段配置',
-        help_text='[{"field": "code", "label": "编码", "width": 15}, ...]'
+        default=list, verbose_name='字段配置', help_text='[{"field": "code", "label": "编码", "width": 15}, ...]'
     )
 
     # 筛选条件
-    default_filters = models.JSONField(
-        default=dict,
-        blank=True,
-        verbose_name='默认筛选条件'
-    )
+    default_filters = models.JSONField(default=dict, blank=True, verbose_name='默认筛选条件')
 
     # 排序
-    default_ordering = models.JSONField(
-        default=list,
-        blank=True,
-        verbose_name='默认排序'
-    )
+    default_ordering = models.JSONField(default=list, blank=True, verbose_name='默认排序')
 
     # 格式
-    default_format = models.CharField(
-        max_length=20,
-        choices=EXPORT_FORMATS,
-        default='EXCEL',
-        verbose_name='默认格式'
-    )
+    default_format = models.CharField(max_length=20, choices=EXPORT_FORMATS, default='EXCEL', verbose_name='默认格式')
 
     # 样式
-    header_style = models.JSONField(
-        default=dict,
-        blank=True,
-        verbose_name='表头样式'
-    )
-    cell_style = models.JSONField(
-        default=dict,
-        blank=True,
-        verbose_name='单元格样式'
-    )
+    header_style = models.JSONField(default=dict, blank=True, verbose_name='表头样式')
+    cell_style = models.JSONField(default=dict, blank=True, verbose_name='单元格样式')
 
     is_active = models.BooleanField(default=True, verbose_name='启用')
     description = models.TextField(blank=True, verbose_name='描述')
@@ -92,6 +71,7 @@ class ExportHistory(BaseModel):
     """
     导出历史记录
     """
+
     STATUS_CHOICES = [
         ('PENDING', '待处理'),
         ('PROCESSING', '处理中'),
@@ -105,7 +85,7 @@ class ExportHistory(BaseModel):
         null=True,
         blank=True,
         related_name='export_histories',
-        verbose_name='导出模板'
+        verbose_name='导出模板',
     )
 
     export_name = models.CharField(max_length=200, verbose_name='导出名称')
@@ -119,12 +99,7 @@ class ExportHistory(BaseModel):
     file_path = models.CharField(max_length=500, blank=True, verbose_name='文件路径')
     file_size = models.IntegerField(default=0, verbose_name='文件大小(字节)')
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
     error_message = models.TextField(blank=True, verbose_name='错误信息')
 
     started_at = models.DateTimeField(null=True, blank=True, verbose_name='开始时间')
@@ -144,6 +119,7 @@ class ScheduledExport(BaseModel):
     """
     定时导出任务
     """
+
     FREQUENCY_CHOICES = [
         ('DAILY', '每天'),
         ('WEEKLY', '每周'),
@@ -151,37 +127,21 @@ class ScheduledExport(BaseModel):
     ]
 
     template = models.ForeignKey(
-        ExportTemplate,
-        on_delete=models.CASCADE,
-        related_name='scheduled_exports',
-        verbose_name='导出模板'
+        ExportTemplate, on_delete=models.CASCADE, related_name='scheduled_exports', verbose_name='导出模板'
     )
 
     name = models.CharField(max_length=200, verbose_name='任务名称')
-    frequency = models.CharField(
-        max_length=20,
-        choices=FREQUENCY_CHOICES,
-        default='DAILY',
-        verbose_name='频率'
-    )
+    frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES, default='DAILY', verbose_name='频率')
 
     # 执行时间
     execute_time = models.TimeField(verbose_name='执行时间')
-    execute_day = models.IntegerField(
-        null=True,
-        blank=True,
-        verbose_name='执行日',
-        help_text='周几(1-7)或几号(1-31)'
-    )
+    execute_day = models.IntegerField(null=True, blank=True, verbose_name='执行日', help_text='周几(1-7)或几号(1-31)')
 
     # 筛选条件
     filters = models.JSONField(default=dict, blank=True, verbose_name='筛选条件')
 
     # 收件人
-    recipients = models.JSONField(
-        default=list,
-        verbose_name='收件人邮箱'
-    )
+    recipients = models.JSONField(default=list, verbose_name='收件人邮箱')
 
     is_active = models.BooleanField(default=True, verbose_name='启用')
     last_run_at = models.DateTimeField(null=True, blank=True, verbose_name='上次运行时间')
@@ -200,6 +160,7 @@ class ScheduledExport(BaseModel):
 # =====================
 # Export Service
 # =====================
+
 
 class ExportService:
     """导出服务"""
@@ -224,10 +185,7 @@ class ExportService:
         header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
         thin_border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin')
+            left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin')
         )
 
         # 写入表头
@@ -266,19 +224,18 @@ class ExportService:
         worksheet = workbook.add_worksheet('Data')
 
         # 格式
-        header_format = workbook.add_format({
-            'bold': True,
-            'bg_color': '#4472C4',
-            'font_color': 'white',
-            'align': 'center',
-            'valign': 'vcenter',
-            'border': 1
-        })
+        header_format = workbook.add_format(
+            {
+                'bold': True,
+                'bg_color': '#4472C4',
+                'font_color': 'white',
+                'align': 'center',
+                'valign': 'vcenter',
+                'border': 1,
+            }
+        )
 
-        cell_format = workbook.add_format({
-            'border': 1,
-            'valign': 'vcenter'
-        })
+        cell_format = workbook.add_format({'border': 1, 'valign': 'vcenter'})
 
         # 写入表头
         for col, field in enumerate(fields_config):
@@ -390,6 +347,7 @@ class ExportService:
 # Serializers
 # =====================
 
+
 class ExportTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExportTemplate
@@ -421,8 +379,10 @@ class ScheduledExportSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class ExportTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """导出模板管理"""
+
     queryset = ExportTemplate.objects.filter(is_deleted=False)
     serializer_class = ExportTemplateSerializer
     permission_classes = [IsAuthenticated]
@@ -445,7 +405,7 @@ class ExportTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
                     {'field': 'start_date', 'label': '开始日期', 'width': 12},
                     {'field': 'end_date', 'label': '结束日期', 'width': 12},
                     {'field': 'progress', 'label': '进度(%)', 'width': 10},
-                ]
+                ],
             },
             {
                 'code': 'SALES_ORDER_LIST',
@@ -458,7 +418,7 @@ class ExportTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
                     {'field': 'total_amount', 'label': '金额', 'width': 15},
                     {'field': 'status', 'label': '状态', 'width': 10},
                     {'field': 'salesperson__first_name', 'label': '销售员', 'width': 12},
-                ]
+                ],
             },
             {
                 'code': 'PURCHASE_ORDER_LIST',
@@ -470,7 +430,7 @@ class ExportTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
                     {'field': 'order_date', 'label': '订单日期', 'width': 12},
                     {'field': 'total_amount', 'label': '金额', 'width': 15},
                     {'field': 'status', 'label': '状态', 'width': 10},
-                ]
+                ],
             },
             {
                 'code': 'INVENTORY_LIST',
@@ -482,19 +442,13 @@ class ExportTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
                     {'field': 'warehouse__name', 'label': '仓库', 'width': 15},
                     {'field': 'quantity', 'label': '库存数量', 'width': 12},
                     {'field': 'item__unit', 'label': '单位', 'width': 8},
-                ]
+                ],
             },
         ]
 
         created = 0
         for tpl in templates:
-            _, c = ExportTemplate.objects.get_or_create(
-                code=tpl['code'],
-                defaults={
-                    **tpl,
-                    'created_by': request.user
-                }
-            )
+            _, c = ExportTemplate.objects.get_or_create(code=tpl['code'], defaults={**tpl, 'created_by': request.user})
             if c:
                 created += 1
 
@@ -531,17 +485,11 @@ class ExportTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         filename = f'{template.name}_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
 
         if export_format == 'EXCEL':
-            output, name, content_type = ExportService.export_to_excel(
-                queryset, template.fields_config, filename
-            )
+            output, name, content_type = ExportService.export_to_excel(queryset, template.fields_config, filename)
         elif export_format == 'CSV':
-            output, name, content_type = ExportService.export_to_csv(
-                queryset, template.fields_config, filename
-            )
+            output, name, content_type = ExportService.export_to_csv(queryset, template.fields_config, filename)
         elif export_format == 'JSON':
-            output, name, content_type = ExportService.export_to_json(
-                queryset, template.fields_config, filename
-            )
+            output, name, content_type = ExportService.export_to_json(queryset, template.fields_config, filename)
         else:
             return Response({'error': '不支持的导出格式'}, status=400)
 
@@ -554,7 +502,7 @@ class ExportTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
             record_count=queryset.count(),
             status='COMPLETED',
             completed_at=datetime.now(),
-            created_by=request.user
+            created_by=request.user,
         )
 
         response = HttpResponse(output.read(), content_type=content_type)
@@ -564,6 +512,7 @@ class ExportTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
 
 class ExportHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     """导出历史"""
+
     queryset = ExportHistory.objects.filter(is_deleted=False)
     serializer_class = ExportHistorySerializer
     permission_classes = [IsAuthenticated]
@@ -578,6 +527,7 @@ class ExportHistoryViewSet(viewsets.ReadOnlyModelViewSet):
 
 class ScheduledExportViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """定时导出管理"""
+
     queryset = ScheduledExport.objects.filter(is_deleted=False)
     serializer_class = ScheduledExportSerializer
     permission_classes = [IsAuthenticated]

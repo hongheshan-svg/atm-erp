@@ -3,6 +3,7 @@
 Technical Proposal Management
 PLM核心功能
 """
+
 from datetime import date
 
 from django.db import models
@@ -18,15 +19,11 @@ from apps.core.models import BaseModel
 
 class ProposalCategory(BaseModel):
     """方案分类"""
+
     name = models.CharField(max_length=100, verbose_name='分类名称')
     code = models.CharField(max_length=50, unique=True, verbose_name='分类编码')
     parent = models.ForeignKey(
-        'self',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='children',
-        verbose_name='上级分类'
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='children', verbose_name='上级分类'
     )
     description = models.TextField(blank=True, verbose_name='描述')
     sort_order = models.IntegerField(default=0, verbose_name='排序')
@@ -43,6 +40,7 @@ class ProposalCategory(BaseModel):
 
 class TechnicalProposal(BaseModel):
     """技术方案"""
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('SUBMITTED', '已提交'),
@@ -71,7 +69,7 @@ class TechnicalProposal(BaseModel):
         null=True,
         blank=True,
         related_name='proposals',
-        verbose_name='客户'
+        verbose_name='客户',
     )
     opportunity = models.ForeignKey(
         'sales.Opportunity',
@@ -79,7 +77,7 @@ class TechnicalProposal(BaseModel):
         null=True,
         blank=True,
         related_name='proposals',
-        verbose_name='商机'
+        verbose_name='商机',
     )
     requirement = models.ForeignKey(
         'projects.Requirement',
@@ -87,7 +85,7 @@ class TechnicalProposal(BaseModel):
         null=True,
         blank=True,
         related_name='proposals',
-        verbose_name='需求'
+        verbose_name='需求',
     )
     project = models.ForeignKey(
         'projects.Project',
@@ -95,7 +93,7 @@ class TechnicalProposal(BaseModel):
         null=True,
         blank=True,
         related_name='proposals',
-        verbose_name='项目'
+        verbose_name='项目',
     )
     category = models.ForeignKey(
         ProposalCategory,
@@ -103,32 +101,17 @@ class TechnicalProposal(BaseModel):
         null=True,
         blank=True,
         related_name='proposals',
-        verbose_name='方案分类'
+        verbose_name='方案分类',
     )
 
     # 类型和状态
-    proposal_type = models.CharField(
-        max_length=20,
-        choices=TYPE_CHOICES,
-        default='SCHEME',
-        verbose_name='方案类型'
-    )
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='DRAFT',
-        verbose_name='状态'
-    )
+    proposal_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='SCHEME', verbose_name='方案类型')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', verbose_name='状态')
 
     # 版本管理
     version = models.CharField(max_length=20, default='V1.0', verbose_name='版本号')
     parent_version = models.ForeignKey(
-        'self',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='child_versions',
-        verbose_name='上一版本'
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='child_versions', verbose_name='上一版本'
     )
 
     # 内容
@@ -141,11 +124,7 @@ class TechnicalProposal(BaseModel):
 
     # 评估
     estimated_cost = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        verbose_name='预估成本'
+        max_digits=18, decimal_places=2, null=True, blank=True, verbose_name='预估成本'
     )
     estimated_days = models.IntegerField(null=True, blank=True, verbose_name='预估工期(天)')
 
@@ -156,7 +135,7 @@ class TechnicalProposal(BaseModel):
         null=True,
         blank=True,
         related_name='authored_proposals',
-        verbose_name='编制人'
+        verbose_name='编制人',
     )
     reviewer = models.ForeignKey(
         'accounts.User',
@@ -164,7 +143,7 @@ class TechnicalProposal(BaseModel):
         null=True,
         blank=True,
         related_name='reviewing_proposals',
-        verbose_name='评审人'
+        verbose_name='评审人',
     )
 
     # 日期
@@ -187,12 +166,14 @@ class TechnicalProposal(BaseModel):
     def save(self, *args, **kwargs):
         if not self.proposal_no:
             from apps.core.utils import generate_code
+
             self.proposal_no = generate_code('FA')  # 方案
         super().save(*args, **kwargs)
 
 
 class ProposalReview(BaseModel):
     """方案评审"""
+
     RESULT_CHOICES = [
         ('PENDING', '待评审'),
         ('APPROVED', '通过'),
@@ -202,10 +183,7 @@ class ProposalReview(BaseModel):
     ]
 
     proposal = models.ForeignKey(
-        TechnicalProposal,
-        on_delete=models.CASCADE,
-        related_name='reviews',
-        verbose_name='方案'
+        TechnicalProposal, on_delete=models.CASCADE, related_name='reviews', verbose_name='方案'
     )
 
     # 评审信息
@@ -218,16 +196,11 @@ class ProposalReview(BaseModel):
         through='ProposalReviewItem',
         through_fields=('review', 'reviewer'),
         related_name='proposal_reviews',
-        verbose_name='评审人'
+        verbose_name='评审人',
     )
 
     # 评审结论
-    result = models.CharField(
-        max_length=20,
-        choices=RESULT_CHOICES,
-        default='PENDING',
-        verbose_name='评审结论'
-    )
+    result = models.CharField(max_length=20, choices=RESULT_CHOICES, default='PENDING', verbose_name='评审结论')
     conclusion = models.TextField(blank=True, verbose_name='评审结论说明')
     issues = models.TextField(blank=True, verbose_name='遗留问题')
     action_items = models.JSONField(default=list, blank=True, verbose_name='待办事项')
@@ -243,17 +216,12 @@ class ProposalReview(BaseModel):
 
 class ProposalReviewItem(BaseModel):
     """评审意见"""
+
     review = models.ForeignKey(
-        ProposalReview,
-        on_delete=models.CASCADE,
-        related_name='review_items',
-        verbose_name='评审'
+        ProposalReview, on_delete=models.CASCADE, related_name='review_items', verbose_name='评审'
     )
     reviewer = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.CASCADE,
-        related_name='proposal_review_items',
-        verbose_name='评审人'
+        'accounts.User', on_delete=models.CASCADE, related_name='proposal_review_items', verbose_name='评审人'
     )
 
     # 评分
@@ -275,6 +243,7 @@ class ProposalReviewItem(BaseModel):
 
 class ProposalDocument(BaseModel):
     """方案文档"""
+
     DOC_TYPES = [
         ('MAIN', '主方案文档'),
         ('ATTACHMENT', '附件'),
@@ -285,18 +254,10 @@ class ProposalDocument(BaseModel):
     ]
 
     proposal = models.ForeignKey(
-        TechnicalProposal,
-        on_delete=models.CASCADE,
-        related_name='documents',
-        verbose_name='方案'
+        TechnicalProposal, on_delete=models.CASCADE, related_name='documents', verbose_name='方案'
     )
 
-    doc_type = models.CharField(
-        max_length=20,
-        choices=DOC_TYPES,
-        default='ATTACHMENT',
-        verbose_name='文档类型'
-    )
+    doc_type = models.CharField(max_length=20, choices=DOC_TYPES, default='ATTACHMENT', verbose_name='文档类型')
     name = models.CharField(max_length=200, verbose_name='文档名称')
     file_path = models.CharField(max_length=500, verbose_name='文件路径')
     file_size = models.IntegerField(default=0, verbose_name='文件大小(bytes)')
@@ -312,6 +273,7 @@ class ProposalDocument(BaseModel):
 # =====================
 # Serializers
 # =====================
+
 
 class ProposalCategorySerializer(serializers.ModelSerializer):
     children_count = serializers.SerializerMethodField()
@@ -380,10 +342,24 @@ class TechnicalProposalListSerializer(serializers.ModelSerializer):
     class Meta:
         model = TechnicalProposal
         fields = [
-            'id', 'proposal_no', 'title', 'proposal_type', 'type_display',
-            'status', 'status_display', 'version', 'customer', 'customer_name',
-            'project', 'project_name', 'author', 'author_name',
-            'estimated_cost', 'estimated_days', 'submit_date', 'created_at'
+            'id',
+            'proposal_no',
+            'title',
+            'proposal_type',
+            'type_display',
+            'status',
+            'status_display',
+            'version',
+            'customer',
+            'customer_name',
+            'project',
+            'project_name',
+            'author',
+            'author_name',
+            'estimated_cost',
+            'estimated_days',
+            'submit_date',
+            'created_at',
         ]
 
 
@@ -391,8 +367,10 @@ class TechnicalProposalListSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class ProposalCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """方案分类管理"""
+
     queryset = ProposalCategory.objects.filter(is_deleted=False)
     serializer_class = ProposalCategorySerializer
     permission_classes = [IsAuthenticated]
@@ -408,7 +386,7 @@ class ProposalCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
                 'id': cat.id,
                 'name': cat.name,
                 'code': cat.code,
-                'children': [build_tree(c) for c in cat.children.filter(is_deleted=False)]
+                'children': [build_tree(c) for c in cat.children.filter(is_deleted=False)],
             }
 
         return Response([build_tree(c) for c in categories])
@@ -416,6 +394,7 @@ class ProposalCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
 
 class TechnicalProposalViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术方案管理"""
+
     queryset = TechnicalProposal.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'proposal_type', 'customer', 'project', 'author', 'category']
@@ -453,15 +432,12 @@ class TechnicalProposalViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
 
         # 创建评审记录
         review = ProposalReview.objects.create(
-            proposal=proposal,
-            review_type=request.data.get('review_type', '技术评审'),
-            created_by=request.user
+            proposal=proposal, review_type=request.data.get('review_type', '技术评审'), created_by=request.user
         )
 
-        return Response({
-            'proposal': self.get_serializer(proposal).data,
-            'review': ProposalReviewSerializer(review).data
-        })
+        return Response(
+            {'proposal': self.get_serializer(proposal).data, 'review': ProposalReviewSerializer(review).data}
+        )
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
@@ -521,7 +497,7 @@ class TechnicalProposalViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
             estimated_cost=original.estimated_cost,
             estimated_days=original.estimated_days,
             author=request.user,
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(self.get_serializer(new_proposal).data)
@@ -549,17 +525,20 @@ class TechnicalProposalViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         # 待评审
         pending_review = qs.filter(status__in=['SUBMITTED', 'REVIEWING']).count()
 
-        return Response({
-            'total': qs.count(),
-            'new_this_month': new_this_month,
-            'pending_review': pending_review,
-            'by_status': list(by_status),
-            'by_type': list(by_type)
-        })
+        return Response(
+            {
+                'total': qs.count(),
+                'new_this_month': new_this_month,
+                'pending_review': pending_review,
+                'by_status': list(by_status),
+                'by_type': list(by_type),
+            }
+        )
 
 
 class ProposalReviewViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """方案评审管理"""
+
     queryset = ProposalReview.objects.filter(is_deleted=False)
     serializer_class = ProposalReviewSerializer
     permission_classes = [IsAuthenticated]
@@ -577,7 +556,7 @@ class ProposalReviewViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
             opinion=request.data.get('opinion', ''),
             suggestions=request.data.get('suggestions', ''),
             is_approved=request.data.get('is_approved', False),
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(ProposalReviewItemSerializer(item).data)
@@ -610,6 +589,7 @@ class ProposalReviewViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
 
 class ProposalDocumentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """方案文档管理"""
+
     queryset = ProposalDocument.objects.filter(is_deleted=False)
     serializer_class = ProposalDocumentSerializer
     permission_classes = [IsAuthenticated]

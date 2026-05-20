@@ -1,6 +1,7 @@
 """
 Kanban WIP Limits Management
 """
+
 from django.db import models
 from rest_framework import serializers, viewsets
 from rest_framework.permissions import IsAuthenticated
@@ -23,7 +24,7 @@ class KanbanWIPRule(BaseModel):
         verbose_name_plural = '看板WIP规则'
 
     def __str__(self):
-        return f"{self.process_name} (limit={self.wip_limit})"
+        return f'{self.process_name} (limit={self.wip_limit})'
 
 
 class KanbanWIPAlert(BaseModel):
@@ -34,9 +35,7 @@ class KanbanWIPAlert(BaseModel):
     ]
 
     process_name = models.CharField(max_length=200, verbose_name='工序名称')
-    alert_type = models.CharField(
-        max_length=20, choices=ALERT_TYPE_CHOICES, verbose_name='告警类型'
-    )
+    alert_type = models.CharField(max_length=20, choices=ALERT_TYPE_CHOICES, verbose_name='告警类型')
     current_wip = models.IntegerField(verbose_name='当前WIP')
     wip_limit = models.IntegerField(verbose_name='WIP上限')
     message = models.TextField(blank=True, default='', verbose_name='告警消息')
@@ -48,7 +47,7 @@ class KanbanWIPAlert(BaseModel):
         verbose_name_plural = '看板WIP告警'
 
     def __str__(self):
-        return f"{self.process_name} - {self.alert_type}"
+        return f'{self.process_name} - {self.alert_type}'
 
 
 class KanbanWIPService:
@@ -61,6 +60,7 @@ class KanbanWIPService:
         for rule in rules:
             try:
                 from apps.production.models import ProductionOrder
+
                 current_wip = ProductionOrder.objects.filter(
                     process_name=rule.process_name,
                     status='in_progress',
@@ -77,14 +77,16 @@ class KanbanWIPService:
             else:
                 level = 'normal'
 
-            statuses.append({
-                'process_name': rule.process_name,
-                'wip_limit': rule.wip_limit,
-                'current_wip': current_wip,
-                'utilization_pct': round(utilization, 1),
-                'level': level,
-                'warning_threshold': rule.warning_threshold,
-            })
+            statuses.append(
+                {
+                    'process_name': rule.process_name,
+                    'wip_limit': rule.wip_limit,
+                    'current_wip': current_wip,
+                    'utilization_pct': round(utilization, 1),
+                    'level': level,
+                    'warning_threshold': rule.warning_threshold,
+                }
+            )
         return statuses
 
     @staticmethod
@@ -111,6 +113,7 @@ class KanbanWIPService:
 
 # ─── Serializers ────────────────────────────────────────────────
 
+
 class KanbanWIPRuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = KanbanWIPRule
@@ -128,6 +131,7 @@ class KanbanWIPAlertSerializer(serializers.ModelSerializer):
 
 
 # ─── ViewSets ───────────────────────────────────────────────────
+
 
 class KanbanWIPRuleViewSet(viewsets.ModelViewSet):
     serializer_class = KanbanWIPRuleSerializer
@@ -157,13 +161,17 @@ class KanbanWIPAlertViewSet(viewsets.ModelViewSet):
 
 # ─── APIView ────────────────────────────────────────────────────
 
+
 class KanbanWIPStatusView(APIView):
     """GET: Return current WIP status for all active processes."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         statuses = KanbanWIPService.check_wip_status()
-        return Response({
-            'total_processes': len(statuses),
-            'statuses': statuses,
-        })
+        return Response(
+            {
+                'total_processes': len(statuses),
+                'statuses': statuses,
+            }
+        )

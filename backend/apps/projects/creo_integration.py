@@ -3,6 +3,7 @@ CAD BOM统一导入模块 - Unified CAD BOM Import
 支持: CREO/SolidWorks/AutoCAD/Inventor/CATIA/UG等CAD软件BOM导入
 自动识别CAD软件类型，匹配或创建物料(Item)
 """
+
 import csv
 import logging
 import re
@@ -50,81 +51,149 @@ CAD_SIGNATURE_COLUMNS = {
 # 统一BOM列名映射（多CAD软件兼容，与系统BOM格式保持一致）
 UNIFIED_BOM_COLUMN_MAPPING = {
     # 层级
-    'Level': 'level', 'LVL': 'level', 'Lvl': 'level', '层级': 'level', '等级': 'level',
-    'LEVEL': 'level', 'Indent': 'level', 'Tree Level': 'level',
-
+    'Level': 'level',
+    'LVL': 'level',
+    'Lvl': 'level',
+    '层级': 'level',
+    '等级': 'level',
+    'LEVEL': 'level',
+    'Indent': 'level',
+    'Tree Level': 'level',
     # 物料编码（映射到系统字段item_code）
-    'Part Number': 'part_number', 'Part No': 'part_number', 'Part No.': 'part_number',
-    'PartNumber': 'part_number', 'PART_NUMBER': 'part_number', 'Item Number': 'part_number',
-    'Item No': 'part_number', 'Component': 'part_number', 'P/N': 'part_number',
-    '物料编码': 'part_number', '料号': 'part_number', '零件号': 'part_number', '编码': 'part_number',
-    'PTC_WM_PART_NUMBER': 'part_number', 'SW-Part Number': 'part_number',
-
+    'Part Number': 'part_number',
+    'Part No': 'part_number',
+    'Part No.': 'part_number',
+    'PartNumber': 'part_number',
+    'PART_NUMBER': 'part_number',
+    'Item Number': 'part_number',
+    'Item No': 'part_number',
+    'Component': 'part_number',
+    'P/N': 'part_number',
+    '物料编码': 'part_number',
+    '料号': 'part_number',
+    '零件号': 'part_number',
+    '编码': 'part_number',
+    'PTC_WM_PART_NUMBER': 'part_number',
+    'SW-Part Number': 'part_number',
     # 文件名（CAD特有）
-    'Name': 'file_name', 'File Name': 'file_name', 'FileName': 'file_name',
-    'Component Name': 'file_name', 'Model Name': 'file_name',
-    '文件名': 'file_name', '组件名称': 'file_name', '模型名': 'file_name',
-
+    'Name': 'file_name',
+    'File Name': 'file_name',
+    'FileName': 'file_name',
+    'Component Name': 'file_name',
+    'Model Name': 'file_name',
+    '文件名': 'file_name',
+    '组件名称': 'file_name',
+    '模型名': 'file_name',
     # 物料名称（映射到系统字段item_name）
-    'Description': 'description', 'Desc': 'description', 'DESC': 'description',
-    'Part Name': 'description', 'Title': 'description',
-    '名称': 'description', '描述': 'description', '零件名称': 'description', '物料名称': 'description',
-    'PTC_WM_DESCRIPTION': 'description', 'SW-Description': 'description',
-
+    'Description': 'description',
+    'Desc': 'description',
+    'DESC': 'description',
+    'Part Name': 'description',
+    'Title': 'description',
+    '名称': 'description',
+    '描述': 'description',
+    '零件名称': 'description',
+    '物料名称': 'description',
+    'PTC_WM_DESCRIPTION': 'description',
+    'SW-Description': 'description',
     # 数量
-    'Qty': 'quantity', 'QTY': 'quantity', 'Quantity': 'quantity', 'Count': 'quantity',
-    'Amount': 'quantity', 'Cnt': 'quantity',
-    '数量': 'quantity', '用量': 'quantity', '计划数量': 'quantity',
-
+    'Qty': 'quantity',
+    'QTY': 'quantity',
+    'Quantity': 'quantity',
+    'Count': 'quantity',
+    'Amount': 'quantity',
+    'Cnt': 'quantity',
+    '数量': 'quantity',
+    '用量': 'quantity',
+    '计划数量': 'quantity',
     # 单位
-    'Unit': 'unit', 'Units': 'unit', 'UOM': 'unit', 'Unit of Measure': 'unit',
+    'Unit': 'unit',
+    'Units': 'unit',
+    'UOM': 'unit',
+    'Unit of Measure': 'unit',
     '单位': 'unit',
-
     # 材质规格（映射到系统字段material_spec）
-    'Material': 'material', 'Mat': 'material', 'MAT': 'material',
-    '材料': 'material', '材质': 'material', '材质规格': 'material',
-    'PTC_WM_MATERIAL': 'material', 'SW-Material': 'material',
-
+    'Material': 'material',
+    'Mat': 'material',
+    'MAT': 'material',
+    '材料': 'material',
+    '材质': 'material',
+    '材质规格': 'material',
+    'PTC_WM_MATERIAL': 'material',
+    'SW-Material': 'material',
     # 规格型号
-    'Specification': 'specification', 'Spec': 'specification', 'Model': 'specification',
-    '规格型号': 'specification', '规格': 'specification', '型号': 'specification',
-
+    'Specification': 'specification',
+    'Spec': 'specification',
+    'Model': 'specification',
+    '规格型号': 'specification',
+    '规格': 'specification',
+    '型号': 'specification',
     # 物料类型
-    'Type': 'component_type', 'Part Type': 'component_type', 'Component Type': 'component_type',
-    '类型': 'component_type', '零件类型': 'component_type', '物料类型': 'component_type',
-
+    'Type': 'component_type',
+    'Part Type': 'component_type',
+    'Component Type': 'component_type',
+    '类型': 'component_type',
+    '零件类型': 'component_type',
+    '物料类型': 'component_type',
     # 有图/无图
-    'Has Drawing': 'has_drawing', 'Drawing': 'has_drawing',
-    '有图/无图': 'has_drawing', '图纸': 'has_drawing',
-
+    'Has Drawing': 'has_drawing',
+    'Drawing': 'has_drawing',
+    '有图/无图': 'has_drawing',
+    '图纸': 'has_drawing',
     # 版本/品牌
-    'Revision': 'revision', 'Rev': 'revision', 'REV': 'revision', 'Version': 'revision',
-    'Brand': 'revision', '版本': 'revision', '修订': 'revision', '品牌': 'revision', '版本/品牌': 'revision',
-
+    'Revision': 'revision',
+    'Rev': 'revision',
+    'REV': 'revision',
+    'Version': 'revision',
+    'Brand': 'revision',
+    '版本': 'revision',
+    '修订': 'revision',
+    '品牌': 'revision',
+    '版本/品牌': 'revision',
     # 重量
-    'Weight': 'weight', 'Mass': 'weight', 'MASS': 'weight',
-    '重量': 'weight', '质量': 'weight',
-
+    'Weight': 'weight',
+    'Mass': 'weight',
+    'MASS': 'weight',
+    '重量': 'weight',
+    '质量': 'weight',
     # 供应商
-    'Vendor': 'vendor', 'Supplier': 'vendor', 'VENDOR': 'vendor',
-    '供应商': 'vendor', '厂家': 'vendor',
-
+    'Vendor': 'vendor',
+    'Supplier': 'vendor',
+    'VENDOR': 'vendor',
+    '供应商': 'vendor',
+    '厂家': 'vendor',
     # 需求日期
-    'Required Date': 'required_date', 'Due Date': 'required_date', 'Need Date': 'required_date',
-    '需求日期': 'required_date', '交期': 'required_date',
-
+    'Required Date': 'required_date',
+    'Due Date': 'required_date',
+    'Need Date': 'required_date',
+    '需求日期': 'required_date',
+    '交期': 'required_date',
     # 申请人
-    'Requester': 'requester', 'Requested By': 'requester', 'Owner': 'requester',
-    '申请人': 'requester', '需求人': 'requester',
+    'Requester': 'requester',
+    'Requested By': 'requester',
+    'Owner': 'requester',
+    '申请人': 'requester',
+    '需求人': 'requester',
 }
 
 ITEM_PROPERTY_RULES = {
     'prefix_rules': {
-        'STD': 'STANDARD', 'GB': 'STANDARD', 'DIN': 'STANDARD', 'ISO': 'STANDARD', 'JIS': 'STANDARD',
-        'PUR': 'PURCHASED', 'BUY': 'PURCHASED', 'ELE': 'PURCHASED',
-        'OUT': 'OUTSOURCED', 'OEM': 'OUTSOURCED', 'SUB': 'OUTSOURCED',
-        'MFG': 'SELF_MADE', 'MAKE': 'SELF_MADE', 'FAB': 'SELF_MADE',
-        'ASM': 'ASSEMBLY', 'ASSY': 'ASSEMBLY',
+        'STD': 'STANDARD',
+        'GB': 'STANDARD',
+        'DIN': 'STANDARD',
+        'ISO': 'STANDARD',
+        'JIS': 'STANDARD',
+        'PUR': 'PURCHASED',
+        'BUY': 'PURCHASED',
+        'ELE': 'PURCHASED',
+        'OUT': 'OUTSOURCED',
+        'OEM': 'OUTSOURCED',
+        'SUB': 'OUTSOURCED',
+        'MFG': 'SELF_MADE',
+        'MAKE': 'SELF_MADE',
+        'FAB': 'SELF_MADE',
+        'ASM': 'ASSEMBLY',
+        'ASSY': 'ASSEMBLY',
     },
     'material_rules': {
         'STANDARD': ['螺丝', '螺母', '螺栓', '垫圈', '轴承', '密封圈', 'O型圈', '弹簧', '销', '键', '挡圈'],
@@ -146,7 +215,6 @@ MATERIAL_MAPPING = {
     '40CR': {'category': '合金钢', 'grade': '40Cr', 'standard': 'GB/T 3077'},
     '42CRMO': {'category': '合金钢', 'grade': '42CrMo', 'standard': 'GB/T 3077'},
     'GCR15': {'category': '轴承钢', 'grade': 'GCr15', 'standard': 'GB/T 18254'},
-
     # 不锈钢
     'SUS304': {'category': '不锈钢', 'grade': '304', 'standard': 'JIS G4303'},
     '304': {'category': '不锈钢', 'grade': '304', 'standard': 'GB/T 1220'},
@@ -157,7 +225,6 @@ MATERIAL_MAPPING = {
     'SUS316L': {'category': '不锈钢', 'grade': '316L', 'standard': 'JIS G4303'},
     '201': {'category': '不锈钢', 'grade': '201', 'standard': 'GB/T 1220'},
     '303': {'category': '不锈钢', 'grade': '303', 'standard': 'GB/T 1220'},
-
     # 铝合金
     '6061': {'category': '铝合金', 'grade': '6061-T6', 'standard': 'GB/T 3190'},
     '6061-T6': {'category': '铝合金', 'grade': '6061-T6', 'standard': 'GB/T 3190'},
@@ -168,7 +235,6 @@ MATERIAL_MAPPING = {
     '5052': {'category': '铝合金', 'grade': '5052', 'standard': 'GB/T 3190'},
     'AL': {'category': '铝合金', 'grade': '铝', 'standard': ''},
     'ALUMINUM': {'category': '铝合金', 'grade': '铝', 'standard': ''},
-
     # 铜合金
     'H62': {'category': '黄铜', 'grade': 'H62', 'standard': 'GB/T 5231'},
     'H59': {'category': '黄铜', 'grade': 'H59', 'standard': 'GB/T 5231'},
@@ -176,7 +242,6 @@ MATERIAL_MAPPING = {
     'C3604': {'category': '黄铜', 'grade': 'C3604', 'standard': 'JIS H3250'},
     'BRASS': {'category': '黄铜', 'grade': '黄铜', 'standard': ''},
     'COPPER': {'category': '紫铜', 'grade': '紫铜', 'standard': ''},
-
     # 工程塑料
     'POM': {'category': '工程塑料', 'grade': 'POM', 'standard': '', 'alias': '赛钢'},
     '赛钢': {'category': '工程塑料', 'grade': 'POM', 'standard': ''},
@@ -194,7 +259,6 @@ MATERIAL_MAPPING = {
     '亚克力': {'category': '工程塑料', 'grade': 'PMMA', 'standard': ''},
     'ABS': {'category': '工程塑料', 'grade': 'ABS', 'standard': ''},
     'PVC': {'category': '工程塑料', 'grade': 'PVC', 'standard': ''},
-
     # 橡胶
     'NBR': {'category': '橡胶', 'grade': 'NBR', 'standard': '', 'alias': '丁腈橡胶'},
     '丁腈': {'category': '橡胶', 'grade': 'NBR', 'standard': ''},
@@ -235,10 +299,10 @@ class MaterialExtractionService:
     def extract_material(cls, material_str: str) -> Dict:
         """
         从材质字符串提取并标准化材质信息
-        
+
         Args:
             material_str: 原始材质字符串，如 "SUS304 Φ20" 或 "Q235B 10*50*100"
-            
+
         Returns:
             {
                 'category': '不锈钢',
@@ -276,7 +340,7 @@ class MaterialExtractionService:
                 'standard': matched_material.get('standard', ''),
                 'dimension': dimension,
                 'original': original,
-                'normalized': f"{matched_material['grade']}{matched_material['category']} {dimension}".strip()
+                'normalized': f"{matched_material['grade']}{matched_material['category']} {dimension}".strip(),
             }
 
         # 未匹配到标准材质，尝试提取尺寸
@@ -288,7 +352,7 @@ class MaterialExtractionService:
             'standard': '',
             'dimension': dimension,
             'original': original,
-            'normalized': original
+            'normalized': original,
         }
 
     @classmethod
@@ -320,7 +384,7 @@ class MaterialExtractionService:
     def extract_surface_treatment(cls, treatment_str: str) -> Dict:
         """
         提取并标准化表面处理信息
-        
+
         Returns:
             {'code': 'ZN', 'name': '镀锌', 'standard': 'GB/T 9799', 'original': '...'}
         """
@@ -335,15 +399,10 @@ class MaterialExtractionService:
                     'code': info['code'],
                     'name': info['name'],
                     'standard': info.get('standard', ''),
-                    'original': original
+                    'original': original,
                 }
 
-        return {
-            'code': '',
-            'name': original,
-            'standard': '',
-            'original': original
-        }
+        return {'code': '', 'name': original, 'standard': '', 'original': original}
 
     @classmethod
     def batch_extract_materials(cls, items: List[Dict]) -> List[Dict]:
@@ -362,9 +421,17 @@ class MaterialExtractionService:
 
 class CreoBOMImportSession(BaseModel):
     """CAD BOM统一导入会话"""
-    STATUS_CHOICES = [('UPLOADING', '上传中'), ('PARSING', '解析中'), ('MATCHING', '匹配中'),
-        ('REVIEWING', '待确认'), ('IMPORTING', '导入中'), ('COMPLETED', '已完成'),
-        ('FAILED', '失败'), ('CANCELLED', '已取消')]
+
+    STATUS_CHOICES = [
+        ('UPLOADING', '上传中'),
+        ('PARSING', '解析中'),
+        ('MATCHING', '匹配中'),
+        ('REVIEWING', '待确认'),
+        ('IMPORTING', '导入中'),
+        ('COMPLETED', '已完成'),
+        ('FAILED', '失败'),
+        ('CANCELLED', '已取消'),
+    ]
     FORMAT_CHOICES = [('CSV', 'CSV'), ('XML', 'XML'), ('XLSX', 'Excel'), ('TXT', '文本')]
 
     name = models.CharField(max_length=200, verbose_name='导入名称')
@@ -393,8 +460,16 @@ class CreoBOMImportSession(BaseModel):
 
 class CreoBOMImportItem(BaseModel):
     """CREO BOM导入项"""
-    STATUS_CHOICES = [('PENDING', '待处理'), ('MATCHED', '已匹配'), ('NEW', '新物料'),
-        ('CREATED', '已创建'), ('IMPORTED', '已导入'), ('SKIPPED', '跳过'), ('ERROR', '错误')]
+
+    STATUS_CHOICES = [
+        ('PENDING', '待处理'),
+        ('MATCHED', '已匹配'),
+        ('NEW', '新物料'),
+        ('CREATED', '已创建'),
+        ('IMPORTED', '已导入'),
+        ('SKIPPED', '跳过'),
+        ('ERROR', '错误'),
+    ]
 
     session = models.ForeignKey(CreoBOMImportSession, on_delete=models.CASCADE, related_name='items')
     row_number = models.IntegerField(default=0)
@@ -494,9 +569,11 @@ class CreoBOMParserService:
                 with open(file_path, 'r', encoding=enc) as f:
                     for row_num, row in enumerate(csv.DictReader(f), 1):
                         item = cls._map_row(row, column_mapping, row_num)
-                        if item: items.append(item)
+                        if item:
+                            items.append(item)
                 break
-            except UnicodeDecodeError: continue
+            except UnicodeDecodeError:
+                continue
         return items
 
     @classmethod
@@ -504,16 +581,21 @@ class CreoBOMParserService:
         items = []
         try:
             import xml.etree.ElementTree as ET
+
             root = ET.parse(file_path).getroot()
             for tag in ['Component', 'Part', 'Item', 'Row']:
                 for row_num, comp in enumerate(root.findall(f'.//{tag}'), 1):
                     raw = {**comp.attrib}
                     for c in comp:
-                        if c.text: raw[c.tag] = c.text.strip()
+                        if c.text:
+                            raw[c.tag] = c.text.strip()
                     item = cls._map_row(raw, column_mapping, row_num)
-                    if item: items.append(item)
-                if items: break
-        except Exception as e: logger.error(f"XML解析错误: {e}")
+                    if item:
+                        items.append(item)
+                if items:
+                    break
+        except Exception as e:
+            logger.error(f'XML解析错误: {e}')
         return items
 
     @classmethod
@@ -521,35 +603,56 @@ class CreoBOMParserService:
         items = []
         try:
             import openpyxl
+
             ws = openpyxl.load_workbook(file_path, data_only=True).active
             headers = [c.value or f'col_{c.column}' for c in ws[1]]
             for row_num, row in enumerate(ws.iter_rows(min_row=2), 1):
                 row_data = {headers[i]: c.value for i, c in enumerate(row) if i < len(headers)}
                 item = cls._map_row(row_data, column_mapping, row_num)
-                if item: items.append(item)
-        except Exception as e: logger.error(f"Excel解析错误: {e}")
+                if item:
+                    items.append(item)
+        except Exception as e:
+            logger.error(f'Excel解析错误: {e}')
         return items
 
     @classmethod
     def _map_row(cls, row_data, column_mapping, row_num):
-        item = {'row_number': row_num, 'raw_data': row_data, 'level': 0, 'part_number': '',
-                'part_name': '', 'file_name': '', 'quantity': 1, 'unit': 'PCS', 'material': ''}
+        item = {
+            'row_number': row_num,
+            'raw_data': row_data,
+            'level': 0,
+            'part_number': '',
+            'part_name': '',
+            'file_name': '',
+            'quantity': 1,
+            'unit': 'PCS',
+            'material': '',
+        }
         for col, val in row_data.items():
-            if not col or not val: continue
+            if not col or not val:
+                continue
             col_str, val_str = str(col).strip(), str(val).strip()
             for k, field in column_mapping.items():
                 if col_str.lower() == k.lower():
                     if field == 'level':
-                        try: item['level'] = int(val_str)
-                        except: pass
+                        try:
+                            item['level'] = int(val_str)
+                        except:
+                            pass
                     elif field == 'quantity':
-                        try: item['quantity'] = float(val_str)
-                        except: pass
-                    elif field in item: item[field] = val_str
+                        try:
+                            item['quantity'] = float(val_str)
+                        except:
+                            pass
+                    elif field in item:
+                        item[field] = val_str
                     break
         if not item['part_number'] and item['file_name']:
-            item['part_number'] = re.sub(r'\.\d+$', '', re.sub(r'\.(prt|asm|drw)$', '', item['file_name'], flags=re.I)).upper()
-        if not item['part_name']: item['part_name'] = item['part_number'] or item['file_name']
+            item['part_number'] = re.sub(
+                r'\.\d+$', '', re.sub(r'\.(prt|asm|drw)$', '', item['file_name'], flags=re.I)
+            ).upper()
+        if not item['part_name']:
+            item['part_name'] = item['part_number'] or item['file_name']
         return item if item['part_number'] or item['part_name'] else None
 
 
@@ -559,6 +662,7 @@ class ItemMatchingService:
     @classmethod
     def match_items(cls, items, options=None):
         from apps.masterdata.models import Item
+
         threshold = (options or {}).get('fuzzy_threshold', 0.7)
         all_items = list(Item.objects.filter(is_deleted=False).values('id', 'sku', 'name', 'specification'))
         sku_idx = {i['sku'].upper(): i for i in all_items}
@@ -569,24 +673,38 @@ class ItemMatchingService:
 
             if pn in sku_idx:
                 m = sku_idx[pn]
-                item.update({'matched_item_id': m['id'], 'match_score': 1.0, 'match_type': 'EXACT', 'status': 'MATCHED'})
+                item.update(
+                    {'matched_item_id': m['id'], 'match_score': 1.0, 'match_type': 'EXACT', 'status': 'MATCHED'}
+                )
                 continue
 
             best, best_score, cands = None, 0, []
             for db in all_items:
-                score = (SequenceMatcher(None, pn, db['sku'].upper()).ratio() * 0.5 +
-                         SequenceMatcher(None, name, db['name'].lower()).ratio() * 0.5)
+                score = (
+                    SequenceMatcher(None, pn, db['sku'].upper()).ratio() * 0.5
+                    + SequenceMatcher(None, name, db['name'].lower()).ratio() * 0.5
+                )
                 if score >= threshold:
                     cands.append({'id': db['id'], 'sku': db['sku'], 'name': db['name'], 'score': score})
-                    if score > best_score: best, best_score = db, score
+                    if score > best_score:
+                        best, best_score = db, score
 
             item['match_candidates'] = sorted(cands, key=lambda x: -x['score'])[:5]
             if best:
-                item.update({'matched_item_id': best['id'], 'match_score': best_score, 'match_type': 'FUZZY', 'status': 'MATCHED'})
+                item.update(
+                    {
+                        'matched_item_id': best['id'],
+                        'match_score': best_score,
+                        'match_type': 'FUZZY',
+                        'status': 'MATCHED',
+                    }
+                )
             else:
                 prop = 'PURCHASED'
                 for pfx, p in ITEM_PROPERTY_RULES['prefix_rules'].items():
-                    if pn.startswith(pfx): prop = p; break
+                    if pn.startswith(pfx):
+                        prop = p
+                        break
                 item.update({'status': 'NEW', 'match_type': 'NEW', 'suggested_item_property': prop})
         return items
 
@@ -597,13 +715,15 @@ class ItemCreationService:
     @classmethod
     def create_from_bom(cls, items, options=None):
         from apps.masterdata.models import Item
+
         options = options or {}
         prefix = options.get('sku_prefix', 'CREO-')
         cat_id = options.get('default_category_id')
         created, errors = 0, []
 
         for item in items:
-            if item.get('status') != 'NEW': continue
+            if item.get('status') != 'NEW':
+                continue
             try:
                 with transaction.atomic():
                     sku = item.get('part_number') or f"{prefix}{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -612,10 +732,13 @@ class ItemCreationService:
                         errors.append(f'SKU已存在: {sku}')
                         continue
                     new = Item.objects.create(
-                        sku=sku, name=item.get('part_name', sku),
+                        sku=sku,
+                        name=item.get('part_name', sku),
                         specification=item.get('material', ''),
                         item_property=item.get('suggested_item_property', 'PURCHASED'),
-                        unit=item.get('unit', 'PCS'), category_id=cat_id, is_active=True,
+                        unit=item.get('unit', 'PCS'),
+                        category_id=cat_id,
+                        is_active=True,
                     )
                     item.update({'created_item_id': new.id, 'matched_item_id': new.id, 'status': 'CREATED'})
                     created += 1
@@ -634,9 +757,10 @@ class CreoBOMImportService:
         session.save()
         try:
             items, detected_software = CreoBOMParserService.parse_file(
-                file_path, session.file_format,
+                file_path,
+                session.file_format,
                 session.column_mapping or UNIFIED_BOM_COLUMN_MAPPING,
-                session.import_options
+                session.import_options,
             )
             session.total_rows = len(items)
             session.detected_software = detected_software
@@ -647,17 +771,27 @@ class CreoBOMImportService:
             mc, nc = 0, 0
             for d in matched_items:
                 CreoBOMImportItem.objects.create(
-                    session=session, row_number=d.get('row_number', 0), level=d.get('level', 0),
-                    raw_data=d.get('raw_data', {}), part_number=d.get('part_number', ''),
-                    part_name=d.get('part_name', ''), file_name=d.get('file_name', ''),
-                    quantity=Decimal(str(d.get('quantity', 1))), unit=d.get('unit', 'PCS'),
-                    material=d.get('material', ''), status=d.get('status', 'PENDING'),
-                    match_type=d.get('match_type', ''), matched_item_id=d.get('matched_item_id'),
-                    match_score=d.get('match_score', 0), match_candidates=d.get('match_candidates', []),
+                    session=session,
+                    row_number=d.get('row_number', 0),
+                    level=d.get('level', 0),
+                    raw_data=d.get('raw_data', {}),
+                    part_number=d.get('part_number', ''),
+                    part_name=d.get('part_name', ''),
+                    file_name=d.get('file_name', ''),
+                    quantity=Decimal(str(d.get('quantity', 1))),
+                    unit=d.get('unit', 'PCS'),
+                    material=d.get('material', ''),
+                    status=d.get('status', 'PENDING'),
+                    match_type=d.get('match_type', ''),
+                    matched_item_id=d.get('matched_item_id'),
+                    match_score=d.get('match_score', 0),
+                    match_candidates=d.get('match_candidates', []),
                     suggested_item_property=d.get('suggested_item_property', ''),
                 )
-                if d.get('status') == 'MATCHED': mc += 1
-                elif d.get('status') == 'NEW': nc += 1
+                if d.get('status') == 'MATCHED':
+                    mc += 1
+                elif d.get('status') == 'NEW':
+                    nc += 1
             session.matched_count, session.new_item_count = mc, nc
             session.status = 'REVIEWING'
             session.save()
@@ -675,15 +809,20 @@ class CreoBOMImportService:
         for d in items_data:
             if d.get('created_item_id'):
                 new_items.filter(id=d['id']).update(
-                    created_item_id=d['created_item_id'], matched_item_id=d['created_item_id'], status='CREATED')
+                    created_item_id=d['created_item_id'], matched_item_id=d['created_item_id'], status='CREATED'
+                )
         return result
 
     @classmethod
     def import_to_bom(cls, session):
         from apps.projects.models import Project, ProjectBOM
-        if not session.project_id: return {'success': False, 'error': '未指定项目'}
-        try: project = Project.objects.get(id=session.project_id)
-        except: return {'success': False, 'error': '项目不存在'}
+
+        if not session.project_id:
+            return {'success': False, 'error': '未指定项目'}
+        try:
+            project = Project.objects.get(id=session.project_id)
+        except:
+            return {'success': False, 'error': '项目不存在'}
 
         session.status = 'IMPORTING'
         session.save()
@@ -693,18 +832,31 @@ class CreoBOMImportService:
             item_id = item.matched_item_id or item.created_item_id
             if not item_id:
                 item.status, item.error_message = 'SKIPPED', '无匹配物料'
-                item.save(); skip += 1; continue
+                item.save()
+                skip += 1
+                continue
             try:
                 with transaction.atomic():
                     ex = ProjectBOM.objects.filter(project=project, item_id=item_id, is_deleted=False).first()
-                    if ex: ex.planned_qty += item.quantity; ex.save(); bom = ex
-                    else: bom = ProjectBOM.objects.create(project=project, item_id=item_id,
-                            planned_qty=item.quantity, level=item.level, notes=f'CREO导入: {item.file_name}')
+                    if ex:
+                        ex.planned_qty += item.quantity
+                        ex.save()
+                        bom = ex
+                    else:
+                        bom = ProjectBOM.objects.create(
+                            project=project,
+                            item_id=item_id,
+                            planned_qty=item.quantity,
+                            level=item.level,
+                            notes=f'CREO导入: {item.file_name}',
+                        )
                     item.imported_bom_id, item.status = bom.id, 'IMPORTED'
-                    item.save(); imp += 1
+                    item.save()
+                    imp += 1
             except Exception as e:
                 item.status, item.error_message = 'ERROR', str(e)
-                item.save(); err += 1
+                item.save()
+                err += 1
 
         session.imported_count, session.error_count = imp, err
         session.status = 'COMPLETED' if err == 0 else 'FAILED'
@@ -719,6 +871,7 @@ class CreoBOMImportService:
         根据level字段建立parent关系
         """
         from apps.projects.models import Project, ProjectBOM
+
         options = options or {}
 
         if not session.project_id:
@@ -762,10 +915,7 @@ class CreoBOMImportService:
 
                     # 检查是否已存在
                     existing = ProjectBOM.objects.filter(
-                        project=project,
-                        item_id=item_id,
-                        parent=parent_bom,
-                        is_deleted=False
+                        project=project, item_id=item_id, parent=parent_bom, is_deleted=False
                     ).first()
 
                     if existing:
@@ -792,7 +942,7 @@ class CreoBOMImportService:
                             material_spec=item.material,
                             # 装配体代号
                             assembly_code=item.part_number if level == 0 else '',
-                            notes=f'CAD导入: {item.file_name}'
+                            notes=f'CAD导入: {item.file_name}',
                         )
 
                     # 更新层级栈
@@ -812,7 +962,7 @@ class CreoBOMImportService:
                 item.error_message = str(e)
                 item.save()
                 errors += 1
-                logger.exception(f"导入BOM项失败: {item.part_number}")
+                logger.exception(f'导入BOM项失败: {item.part_number}')
 
         session.imported_count = imported
         session.error_count = errors
@@ -825,7 +975,7 @@ class CreoBOMImportService:
             'imported': imported,
             'skipped': skipped,
             'errors': errors,
-            'hierarchy_levels': len(level_stack)
+            'hierarchy_levels': len(level_stack),
         }
 
     @classmethod
@@ -843,7 +993,7 @@ class CreoBOMImportService:
         }
 
         # 检查文件名和零件名
-        check_text = f"{item.file_name} {item.part_name} {item.part_number}".upper()
+        check_text = f'{item.file_name} {item.part_name} {item.part_number}'.upper()
 
         for part_type, keywords in CUSTOM_PART_PATTERNS.items():
             for kw in keywords:
@@ -867,11 +1017,11 @@ class CreoBOMImportService:
         from apps.projects.models import ProjectBOM
 
         def build_tree(parent_id=None, level=0):
-            items = ProjectBOM.objects.filter(
-                project_id=project_id,
-                parent_id=parent_id,
-                is_deleted=False
-            ).select_related('item').order_by('level', 'sort_order')
+            items = (
+                ProjectBOM.objects.filter(project_id=project_id, parent_id=parent_id, is_deleted=False)
+                .select_related('item')
+                .order_by('level', 'sort_order')
+            )
 
             result = []
             for item in items:
@@ -888,7 +1038,7 @@ class CreoBOMImportService:
                     'drawing_no': item.drawing_no,
                     'material_spec': item.material_spec,
                     'cad_file_name': item.cad_file_name,
-                    'children': build_tree(item.id, level + 1)
+                    'children': build_tree(item.id, level + 1),
                 }
                 result.append(node)
             return result
@@ -899,22 +1049,29 @@ class CreoBOMImportService:
 # Serializers
 class CreoBOMImportItemSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+
     class Meta:
         model = CreoBOMImportItem
         fields = '__all__'
 
+
 class CreoBOMImportSessionSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     items = CreoBOMImportItemSerializer(many=True, read_only=True)
+
     class Meta:
         model = CreoBOMImportSession
         fields = '__all__'
+
 
 class CreoBOMUploadSerializer(serializers.Serializer):
     file = serializers.FileField()
     name = serializers.CharField(max_length=200, required=False)
     file_format = serializers.ChoiceField(choices=['CSV', 'XML', 'XLSX', 'TXT'], default='CSV')
-    cad_software = serializers.ChoiceField(choices=['AUTO', 'CREO', 'SOLIDWORKS', 'AUTOCAD', 'INVENTOR', 'CATIA', 'UG', 'FUSION360', 'GENERIC'], default='AUTO')
+    cad_software = serializers.ChoiceField(
+        choices=['AUTO', 'CREO', 'SOLIDWORKS', 'AUTOCAD', 'INVENTOR', 'CATIA', 'UG', 'FUSION360', 'GENERIC'],
+        default='AUTO',
+    )
     project_id = serializers.IntegerField(required=False, allow_null=True)
     options = serializers.JSONField(required=False, default=dict)
 
@@ -938,7 +1095,9 @@ class CreoBOMImportViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
             cad_software=ser.validated_data.get('cad_software', 'AUTO'),
             project_id=ser.validated_data.get('project_id'),
             import_options=ser.validated_data.get('options', {}),
-            source_file=f, source_file_name=f.name, created_by=request.user
+            source_file=f,
+            source_file_name=f.name,
+            created_by=request.user,
         )
         result = CreoBOMImportService.parse_and_match(session, session.source_file.path)
         session.refresh_from_db()
@@ -998,28 +1157,30 @@ class CreoBOMImportViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         """获取支持的文件格式和CAD软件"""
         from .bom_format import BOM_FORMAT_CONFIG, PROJECT_BOM_IMPORT_TEMPLATE
 
-        return Response({
-            'formats': [
-                {'code': 'CSV', 'name': 'CSV', 'extensions': ['.csv']},
-                {'code': 'XML', 'name': 'XML', 'extensions': ['.xml']},
-                {'code': 'XLSX', 'name': 'Excel', 'extensions': ['.xlsx', '.xls']},
-                {'code': 'TXT', 'name': '文本', 'extensions': ['.txt', '.bom']}
-            ],
-            'cad_software': [
-                {'code': 'AUTO', 'name': '自动识别', 'description': '根据BOM内容自动识别CAD软件'},
-                {'code': 'CREO', 'name': 'Creo/Pro-E', 'extensions': ['.prt', '.asm', '.drw']},
-                {'code': 'SOLIDWORKS', 'name': 'SolidWorks', 'extensions': ['.sldprt', '.sldasm']},
-                {'code': 'AUTOCAD', 'name': 'AutoCAD', 'extensions': ['.dwg', '.dxf']},
-                {'code': 'INVENTOR', 'name': 'Inventor', 'extensions': ['.ipt', '.iam']},
-                {'code': 'CATIA', 'name': 'CATIA', 'extensions': ['.catpart', '.catproduct']},
-                {'code': 'UG', 'name': 'UG/NX', 'extensions': ['.prt']},
-                {'code': 'FUSION360', 'name': 'Fusion 360', 'extensions': ['.f3d']},
-                {'code': 'GENERIC', 'name': '通用格式', 'description': '标准BOM格式'},
-            ],
-            'column_mapping': UNIFIED_BOM_COLUMN_MAPPING,
-            'bom_fields': [f['label'] for f in PROJECT_BOM_IMPORT_TEMPLATE],
-            'bom_format': BOM_FORMAT_CONFIG,
-        })
+        return Response(
+            {
+                'formats': [
+                    {'code': 'CSV', 'name': 'CSV', 'extensions': ['.csv']},
+                    {'code': 'XML', 'name': 'XML', 'extensions': ['.xml']},
+                    {'code': 'XLSX', 'name': 'Excel', 'extensions': ['.xlsx', '.xls']},
+                    {'code': 'TXT', 'name': '文本', 'extensions': ['.txt', '.bom']},
+                ],
+                'cad_software': [
+                    {'code': 'AUTO', 'name': '自动识别', 'description': '根据BOM内容自动识别CAD软件'},
+                    {'code': 'CREO', 'name': 'Creo/Pro-E', 'extensions': ['.prt', '.asm', '.drw']},
+                    {'code': 'SOLIDWORKS', 'name': 'SolidWorks', 'extensions': ['.sldprt', '.sldasm']},
+                    {'code': 'AUTOCAD', 'name': 'AutoCAD', 'extensions': ['.dwg', '.dxf']},
+                    {'code': 'INVENTOR', 'name': 'Inventor', 'extensions': ['.ipt', '.iam']},
+                    {'code': 'CATIA', 'name': 'CATIA', 'extensions': ['.catpart', '.catproduct']},
+                    {'code': 'UG', 'name': 'UG/NX', 'extensions': ['.prt']},
+                    {'code': 'FUSION360', 'name': 'Fusion 360', 'extensions': ['.f3d']},
+                    {'code': 'GENERIC', 'name': '通用格式', 'description': '标准BOM格式'},
+                ],
+                'column_mapping': UNIFIED_BOM_COLUMN_MAPPING,
+                'bom_fields': [f['label'] for f in PROJECT_BOM_IMPORT_TEMPLATE],
+                'bom_format': BOM_FORMAT_CONFIG,
+            }
+        )
 
     @action(detail=False, methods=['get'], permission_classes=[])
     def download_template(self, request):
@@ -1038,10 +1199,26 @@ class CreoBOMImportViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
 
             # 格式定义
             title_fmt = workbook.add_format({'bold': True, 'font_size': 14, 'font_color': '#4472C4'})
-            header_fmt = workbook.add_format({'bold': True, 'bg_color': '#4472C4', 'font_color': 'white',
-                                              'border': 1, 'align': 'center', 'valign': 'vcenter'})
-            required_fmt = workbook.add_format({'bold': True, 'bg_color': '#C00000', 'font_color': 'white',
-                                                'border': 1, 'align': 'center', 'valign': 'vcenter'})
+            header_fmt = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#4472C4',
+                    'font_color': 'white',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                }
+            )
+            required_fmt = workbook.add_format(
+                {
+                    'bold': True,
+                    'bg_color': '#C00000',
+                    'font_color': 'white',
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                }
+            )
             example_fmt = workbook.add_format({'bg_color': '#FFF2CC', 'border': 1, 'italic': True})
             readonly_fmt = workbook.add_format({'bg_color': '#E0E0E0', 'border': 1, 'italic': True})
 
@@ -1071,6 +1248,8 @@ class CreoBOMImportViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
             worksheet.set_row(3, 25)
 
         output.seek(0)
-        response = HttpResponse(output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response = HttpResponse(
+            output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
         response['Content-Disposition'] = 'attachment; filename=CAD_BOM_Import_Template.xlsx'
         return response

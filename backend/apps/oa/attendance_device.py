@@ -2,6 +2,7 @@
 ZKTECO 考勤机集成模块
 支持 WX3960WIFI 等型号的智能云指纹考勤机
 """
+
 import hashlib
 import logging
 
@@ -21,11 +22,13 @@ logger = logging.getLogger(__name__)
 # 模型定义
 # ============================================
 
+
 class AttendanceDevice(BaseModel):
     """
     考勤设备管理
     支持 ZKTECO WX3960WIFI 等型号
     """
+
     DEVICE_TYPE_CHOICES = [
         ('ZKTECO_CLOUD', 'ZKTECO智能云考勤机'),
         ('ZKTECO_LOCAL', 'ZKTECO本地考勤机'),
@@ -51,19 +54,13 @@ class AttendanceDevice(BaseModel):
     name = models.CharField(max_length=100, verbose_name='设备名称')
     device_sn = models.CharField(max_length=100, unique=True, verbose_name='设备序列号')
     device_type = models.CharField(
-        max_length=30,
-        choices=DEVICE_TYPE_CHOICES,
-        default='ZKTECO_CLOUD',
-        verbose_name='设备类型'
+        max_length=30, choices=DEVICE_TYPE_CHOICES, default='ZKTECO_CLOUD', verbose_name='设备类型'
     )
     model = models.CharField(max_length=50, blank=True, default='WX3960WIFI', verbose_name='设备型号')
 
     # 连接配置
     connection_type = models.CharField(
-        max_length=20,
-        choices=CONNECTION_TYPE_CHOICES,
-        default='CLOUD_PUSH',
-        verbose_name='连接方式'
+        max_length=20, choices=CONNECTION_TYPE_CHOICES, default='CLOUD_PUSH', verbose_name='连接方式'
     )
     ip_address = models.GenericIPAddressField(null=True, blank=True, verbose_name='IP地址')
     port = models.PositiveIntegerField(default=4370, verbose_name='端口号')
@@ -84,16 +81,11 @@ class AttendanceDevice(BaseModel):
         null=True,
         blank=True,
         related_name='attendance_devices',
-        verbose_name='所属部门'
+        verbose_name='所属部门',
     )
 
     # 状态
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='UNKNOWN',
-        verbose_name='设备状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='UNKNOWN', verbose_name='设备状态')
     last_heartbeat = models.DateTimeField(null=True, blank=True, verbose_name='最后心跳时间')
     last_sync_time = models.DateTimeField(null=True, blank=True, verbose_name='最后同步时间')
 
@@ -113,7 +105,7 @@ class AttendanceDevice(BaseModel):
         ordering = ['name']
 
     def __str__(self):
-        return f"{self.name} ({self.device_sn})"
+        return f'{self.name} ({self.device_sn})'
 
     def update_status(self, new_status, heartbeat=True):
         """更新设备状态"""
@@ -128,20 +120,15 @@ class DeviceUserMapping(BaseModel):
     设备用户与系统员工映射
     将考勤机中的用户ID映射到系统中的员工
     """
+
     device = models.ForeignKey(
-        AttendanceDevice,
-        on_delete=models.CASCADE,
-        related_name='user_mappings',
-        verbose_name='考勤设备'
+        AttendanceDevice, on_delete=models.CASCADE, related_name='user_mappings', verbose_name='考勤设备'
     )
     device_user_id = models.CharField(max_length=50, verbose_name='设备用户ID')
     device_user_name = models.CharField(max_length=100, blank=True, verbose_name='设备用户名称')
 
     employee = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.CASCADE,
-        related_name='device_mappings',
-        verbose_name='关联员工'
+        'accounts.User', on_delete=models.CASCADE, related_name='device_mappings', verbose_name='关联员工'
     )
 
     # 同步状态
@@ -160,7 +147,7 @@ class DeviceUserMapping(BaseModel):
         ordering = ['device', 'device_user_id']
 
     def __str__(self):
-        return f"{self.device.name} - {self.device_user_id} -> {self.employee.get_full_name()}"
+        return f'{self.device.name} - {self.device_user_id} -> {self.employee.get_full_name()}'
 
 
 class DeviceAttendanceLog(BaseModel):
@@ -168,6 +155,7 @@ class DeviceAttendanceLog(BaseModel):
     设备原始打卡记录
     从考勤机同步的原始打卡数据
     """
+
     PUNCH_TYPE_CHOICES = [
         ('IN', '签到'),
         ('OUT', '签退'),
@@ -190,26 +178,15 @@ class DeviceAttendanceLog(BaseModel):
 
     # 来源设备
     device = models.ForeignKey(
-        AttendanceDevice,
-        on_delete=models.CASCADE,
-        related_name='attendance_logs',
-        verbose_name='考勤设备'
+        AttendanceDevice, on_delete=models.CASCADE, related_name='attendance_logs', verbose_name='考勤设备'
     )
 
     # 设备端数据
     device_user_id = models.CharField(max_length=50, verbose_name='设备用户ID')
     punch_time = models.DateTimeField(verbose_name='打卡时间')
-    punch_type = models.CharField(
-        max_length=20,
-        choices=PUNCH_TYPE_CHOICES,
-        default='UNKNOWN',
-        verbose_name='打卡类型'
-    )
+    punch_type = models.CharField(max_length=20, choices=PUNCH_TYPE_CHOICES, default='UNKNOWN', verbose_name='打卡类型')
     verify_type = models.CharField(
-        max_length=20,
-        choices=VERIFY_TYPE_CHOICES,
-        default='FINGERPRINT',
-        verbose_name='验证方式'
+        max_length=20, choices=VERIFY_TYPE_CHOICES, default='FINGERPRINT', verbose_name='验证方式'
     )
 
     # 关联员工(通过映射)
@@ -219,7 +196,7 @@ class DeviceAttendanceLog(BaseModel):
         null=True,
         blank=True,
         related_name='device_attendance_logs',
-        verbose_name='关联员工'
+        verbose_name='关联员工',
     )
 
     # 同步标识
@@ -235,7 +212,7 @@ class DeviceAttendanceLog(BaseModel):
         null=True,
         blank=True,
         related_name='device_logs',
-        verbose_name='关联考勤记录'
+        verbose_name='关联考勤记录',
     )
 
     # 原始数据
@@ -253,11 +230,11 @@ class DeviceAttendanceLog(BaseModel):
         ]
 
     def __str__(self):
-        return f"{self.device.name} - {self.device_user_id} @ {self.punch_time}"
+        return f'{self.device.name} - {self.device_user_id} @ {self.punch_time}'
 
     def get_unique_key(self):
         """生成唯一标识，用于去重"""
-        key_str = f"{self.device_id}_{self.device_user_id}_{self.punch_time.isoformat()}"
+        key_str = f'{self.device_id}_{self.device_user_id}_{self.punch_time.isoformat()}'
         return hashlib.md5(key_str.encode()).hexdigest()
 
 
@@ -266,6 +243,7 @@ class DeviceSyncLog(BaseModel):
     设备同步日志
     记录每次数据同步的详情
     """
+
     SYNC_TYPE_CHOICES = [
         ('PULL', '拉取'),
         ('PUSH', '推送'),
@@ -280,10 +258,7 @@ class DeviceSyncLog(BaseModel):
     ]
 
     device = models.ForeignKey(
-        AttendanceDevice,
-        on_delete=models.CASCADE,
-        related_name='sync_logs',
-        verbose_name='考勤设备'
+        AttendanceDevice, on_delete=models.CASCADE, related_name='sync_logs', verbose_name='考勤设备'
     )
     sync_type = models.CharField(max_length=20, choices=SYNC_TYPE_CHOICES, verbose_name='同步类型')
     sync_batch = models.CharField(max_length=50, verbose_name='同步批次')
@@ -313,15 +288,17 @@ class DeviceSyncLog(BaseModel):
         ordering = ['-start_time']
 
     def __str__(self):
-        return f"{self.device.name} - {self.sync_batch} ({self.status})"
+        return f'{self.device.name} - {self.sync_batch} ({self.status})'
 
 
 # ============================================
 # 序列化器
 # ============================================
 
+
 class AttendanceDeviceSerializer(serializers.ModelSerializer):
     """考勤设备序列化器"""
+
     device_type_display = serializers.CharField(source='get_device_type_display', read_only=True)
     connection_type_display = serializers.CharField(source='get_connection_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
@@ -332,14 +309,35 @@ class AttendanceDeviceSerializer(serializers.ModelSerializer):
     class Meta:
         model = AttendanceDevice
         fields = [
-            'id', 'name', 'device_sn', 'device_type', 'device_type_display',
-            'model', 'connection_type', 'connection_type_display',
-            'ip_address', 'port', 'cloud_server', 'cloud_key', 'api_token',
-            'location', 'department', 'department_name',
-            'status', 'status_display', 'last_heartbeat', 'last_sync_time',
-            'sync_enabled', 'sync_interval', 'timezone_offset', 'firmware_version',
-            'user_count', 'today_records',
-            'is_deleted', 'created_at', 'updated_at'
+            'id',
+            'name',
+            'device_sn',
+            'device_type',
+            'device_type_display',
+            'model',
+            'connection_type',
+            'connection_type_display',
+            'ip_address',
+            'port',
+            'cloud_server',
+            'cloud_key',
+            'api_token',
+            'location',
+            'department',
+            'department_name',
+            'status',
+            'status_display',
+            'last_heartbeat',
+            'last_sync_time',
+            'sync_enabled',
+            'sync_interval',
+            'timezone_offset',
+            'firmware_version',
+            'user_count',
+            'today_records',
+            'is_deleted',
+            'created_at',
+            'updated_at',
         ]
         read_only_fields = ['status', 'last_heartbeat', 'last_sync_time', 'created_at', 'updated_at']
         extra_kwargs = {
@@ -353,14 +351,12 @@ class AttendanceDeviceSerializer(serializers.ModelSerializer):
 
     def get_today_records(self, obj):
         today = timezone.now().date()
-        return obj.attendance_logs.filter(
-            punch_time__date=today,
-            is_deleted=False
-        ).count()
+        return obj.attendance_logs.filter(punch_time__date=today, is_deleted=False).count()
 
 
 class DeviceUserMappingSerializer(serializers.ModelSerializer):
     """设备用户映射序列化器"""
+
     device_name = serializers.CharField(source='device.name', read_only=True)
     employee_name = serializers.CharField(source='employee.get_full_name', read_only=True)
     employee_code = serializers.CharField(source='employee.employee_id', read_only=True)
@@ -368,16 +364,28 @@ class DeviceUserMappingSerializer(serializers.ModelSerializer):
     class Meta:
         model = DeviceUserMapping
         fields = [
-            'id', 'device', 'device_name', 'device_user_id', 'device_user_name',
-            'employee', 'employee_name', 'employee_code',
-            'is_synced', 'last_synced_at', 'fingerprint_count', 'card_number',
-            'is_deleted', 'created_at', 'updated_at'
+            'id',
+            'device',
+            'device_name',
+            'device_user_id',
+            'device_user_name',
+            'employee',
+            'employee_name',
+            'employee_code',
+            'is_synced',
+            'last_synced_at',
+            'fingerprint_count',
+            'card_number',
+            'is_deleted',
+            'created_at',
+            'updated_at',
         ]
         read_only_fields = ['is_synced', 'last_synced_at', 'created_at', 'updated_at']
 
 
 class DeviceAttendanceLogSerializer(serializers.ModelSerializer):
     """设备打卡记录序列化器"""
+
     device_name = serializers.CharField(source='device.name', read_only=True)
     punch_type_display = serializers.CharField(source='get_punch_type_display', read_only=True)
     verify_type_display = serializers.CharField(source='get_verify_type_display', read_only=True)
@@ -386,18 +394,28 @@ class DeviceAttendanceLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = DeviceAttendanceLog
         fields = [
-            'id', 'device', 'device_name', 'device_user_id',
-            'punch_time', 'punch_type', 'punch_type_display',
-            'verify_type', 'verify_type_display',
-            'employee', 'employee_name',
-            'is_processed', 'processed_at', 'attendance_record',
-            'created_at'
+            'id',
+            'device',
+            'device_name',
+            'device_user_id',
+            'punch_time',
+            'punch_type',
+            'punch_type_display',
+            'verify_type',
+            'verify_type_display',
+            'employee',
+            'employee_name',
+            'is_processed',
+            'processed_at',
+            'attendance_record',
+            'created_at',
         ]
         read_only_fields = ['created_at']
 
 
 class DeviceSyncLogSerializer(serializers.ModelSerializer):
     """设备同步日志序列化器"""
+
     device_name = serializers.CharField(source='device.name', read_only=True)
     sync_type_display = serializers.CharField(source='get_sync_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
@@ -406,12 +424,25 @@ class DeviceSyncLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = DeviceSyncLog
         fields = [
-            'id', 'device', 'device_name', 'sync_type', 'sync_type_display',
-            'sync_batch', 'start_time', 'end_time', 'duration',
-            'status', 'status_display',
-            'total_records', 'new_records', 'duplicate_records', 'error_records',
-            'data_from', 'data_to', 'error_message',
-            'created_at'
+            'id',
+            'device',
+            'device_name',
+            'sync_type',
+            'sync_type_display',
+            'sync_batch',
+            'start_time',
+            'end_time',
+            'duration',
+            'status',
+            'status_display',
+            'total_records',
+            'new_records',
+            'duplicate_records',
+            'error_records',
+            'data_from',
+            'data_to',
+            'error_message',
+            'created_at',
         ]
 
     def get_duration(self, obj):
@@ -424,10 +455,12 @@ class DeviceSyncLogSerializer(serializers.ModelSerializer):
 # 视图集
 # ============================================
 
+
 class AttendanceDeviceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     考勤设备管理视图集
     """
+
     queryset = AttendanceDevice.objects.filter(is_deleted=False)
     serializer_class = AttendanceDeviceSerializer
     filterset_fields = ['device_type', 'connection_type', 'status', 'department', 'sync_enabled']
@@ -456,16 +489,16 @@ class AttendanceDeviceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
                 return Response({'success': False, 'message': message})
 
         except Exception as e:
-            logger.error(f"Test connection failed for device {device.device_sn}: {e}")
+            logger.error(f'Test connection failed for device {device.device_sn}: {e}')
             device.update_status('ERROR', heartbeat=False)
-            return Response({
-                'success': False,
-                'message': f'连接测试失败: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {'success': False, 'message': f'连接测试失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     def _test_tcp_connection(self, device):
         """测试TCP连接 - 尝试连接ZKTECO设备"""
         import socket
+
         try:
             # 首先检查端口是否可达
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -479,12 +512,13 @@ class AttendanceDeviceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
             # 尝试使用pyzk连接获取设备信息
             try:
                 from zk import ZK
+
                 zk = ZK(
                     device.ip_address,
                     port=device.port,
                     timeout=10,
                     password=int(device.device_password) if device.device_password else 0,
-                    ommit_ping=True  # 跳过ping检查
+                    ommit_ping=True,  # 跳过ping检查
                 )
                 conn = zk.connect()
 
@@ -512,16 +546,13 @@ class AttendanceDeviceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
     def _test_cloud_connection(self, device):
         """测试云服务连接"""
         import requests
+
         try:
             if not device.cloud_server:
                 return False, '未配置云服务地址'
 
             # 简单的HTTP请求测试
-            response = requests.get(
-                device.cloud_server,
-                timeout=10,
-                verify=False
-            )
+            response = requests.get(device.cloud_server, timeout=10, verify=False)
             if response.status_code < 500:
                 return True, f'云服务连接成功 (HTTP {response.status_code})'
             else:
@@ -538,20 +569,18 @@ class AttendanceDeviceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
 
         try:
             from .attendance_sync_service import AttendanceSyncService
+
             service = AttendanceSyncService(device)
             result = service.sync()
 
-            return Response({
-                'success': True,
-                'message': f'同步完成，新增 {result["new_records"]} 条记录',
-                'details': result
-            })
+            return Response(
+                {'success': True, 'message': f'同步完成，新增 {result["new_records"]} 条记录', 'details': result}
+            )
         except Exception as e:
-            logger.error(f"Sync failed for device {device.device_sn}: {e}")
-            return Response({
-                'success': False,
-                'message': f'同步失败: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.error(f'Sync failed for device {device.device_sn}: {e}')
+            return Response(
+                {'success': False, 'message': f'同步失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     @action(detail=True, methods=['get'])
     def sync_history(self, request, pk=None):
@@ -566,10 +595,7 @@ class AttendanceDeviceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         """获取今日打卡记录"""
         device = self.get_object()
         today = timezone.now().date()
-        logs = device.attendance_logs.filter(
-            punch_time__date=today,
-            is_deleted=False
-        ).order_by('-punch_time')
+        logs = device.attendance_logs.filter(punch_time__date=today, is_deleted=False).order_by('-punch_time')
         serializer = DeviceAttendanceLogSerializer(logs, many=True)
         return Response(serializer.data)
 
@@ -584,14 +610,8 @@ class AttendanceDeviceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
             'online_devices': devices.filter(status='ONLINE').count(),
             'offline_devices': devices.filter(status='OFFLINE').count(),
             'error_devices': devices.filter(status='ERROR').count(),
-            'today_records': DeviceAttendanceLog.objects.filter(
-                punch_time__date=today,
-                is_deleted=False
-            ).count(),
-            'unprocessed_records': DeviceAttendanceLog.objects.filter(
-                is_processed=False,
-                is_deleted=False
-            ).count(),
+            'today_records': DeviceAttendanceLog.objects.filter(punch_time__date=today, is_deleted=False).count(),
+            'unprocessed_records': DeviceAttendanceLog.objects.filter(is_processed=False, is_deleted=False).count(),
         }
 
         return Response(stats)
@@ -601,6 +621,7 @@ class DeviceUserMappingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
     """
     设备用户映射视图集
     """
+
     queryset = DeviceUserMapping.objects.filter(is_deleted=False)
     serializer_class = DeviceUserMappingSerializer
     filterset_fields = ['device', 'employee', 'is_synced']
@@ -622,21 +643,15 @@ class DeviceUserMappingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
                     defaults={
                         'employee_id': mapping_data['employee'],
                         'device_user_name': mapping_data.get('device_user_name', ''),
-                        'created_by': request.user
-                    }
+                        'created_by': request.user,
+                    },
                 )
                 if is_new:
                     created.append(mapping_data)
             except Exception as e:
-                errors.append({
-                    'data': mapping_data,
-                    'error': str(e)
-                })
+                errors.append({'data': mapping_data, 'error': str(e)})
 
-        return Response({
-            'created': len(created),
-            'errors': errors
-        })
+        return Response({'created': len(created), 'errors': errors})
 
     @action(detail=False, methods=['get'])
     def unmapped_employees(self, request):
@@ -645,29 +660,33 @@ class DeviceUserMappingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         if not device_id:
             return Response({'error': '请指定设备'}, status=400)
 
-        mapped_employee_ids = DeviceUserMapping.objects.filter(
-            device_id=device_id,
-            is_deleted=False
-        ).values_list('employee_id', flat=True)
+        mapped_employee_ids = DeviceUserMapping.objects.filter(device_id=device_id, is_deleted=False).values_list(
+            'employee_id', flat=True
+        )
 
         from apps.accounts.models import User
-        unmapped = User.objects.filter(
-            is_active=True
-        ).exclude(id__in=mapped_employee_ids)
 
-        return Response([{
-            'id': u.id,
-            'username': u.username,
-            'name': u.get_full_name(),
-            'employee_id': getattr(u, 'employee_id', ''),
-            'department': u.department.name if u.department else ''
-        } for u in unmapped[:100]])
+        unmapped = User.objects.filter(is_active=True).exclude(id__in=mapped_employee_ids)
+
+        return Response(
+            [
+                {
+                    'id': u.id,
+                    'username': u.username,
+                    'name': u.get_full_name(),
+                    'employee_id': getattr(u, 'employee_id', ''),
+                    'department': u.department.name if u.department else '',
+                }
+                for u in unmapped[:100]
+            ]
+        )
 
 
 class DeviceAttendanceLogViewSet(viewsets.ReadOnlyModelViewSet):
     """
     设备打卡记录视图集（只读）
     """
+
     queryset = DeviceAttendanceLog.objects.filter(is_deleted=False)
     serializer_class = DeviceAttendanceLogSerializer
     filterset_fields = ['device', 'employee', 'punch_type', 'verify_type', 'is_processed']
@@ -700,12 +719,10 @@ class DeviceAttendanceLogViewSet(viewsets.ReadOnlyModelViewSet):
             logs = self.get_queryset().filter(id__in=record_ids, is_processed=False)
 
         from .attendance_sync_service import AttendanceSyncService
+
         processed, errors = AttendanceSyncService.process_device_logs(logs)
 
-        return Response({
-            'processed': processed,
-            'errors': errors
-        })
+        return Response({'processed': processed, 'errors': errors})
 
     @action(detail=False, methods=['get'])
     def statistics(self, request):
@@ -748,6 +765,7 @@ class DeviceSyncLogViewSet(viewsets.ReadOnlyModelViewSet):
     """
     设备同步日志视图集（只读）
     """
+
     queryset = DeviceSyncLog.objects.all()
     serializer_class = DeviceSyncLogSerializer
     filterset_fields = ['device', 'sync_type', 'status']

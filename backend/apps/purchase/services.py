@@ -1,6 +1,7 @@
 """
 Purchase services for budget validation and other business logic.
 """
+
 from decimal import Decimal
 
 from django.db.models import F, Sum
@@ -28,20 +29,13 @@ class BudgetValidationService:
 
         # Sum of approved/converted purchase requests
         pr_total = PurchaseRequest.objects.filter(
-            project=project,
-            status__in=['APPROVED', 'CONVERTED'],
-            is_deleted=False
+            project=project, status__in=['APPROVED', 'CONVERTED'], is_deleted=False
         ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
 
         # Sum of completed project material moves (actual cost)
         move_total = StockMove.objects.filter(
-            project=project,
-            move_type='OUT_PROJECT',
-            status='COMPLETED',
-            is_deleted=False
-        ).aggregate(
-            total=Sum(F('qty') * F('unit_cost'))
-        )['total'] or Decimal('0')
+            project=project, move_type='OUT_PROJECT', status='COMPLETED', is_deleted=False
+        ).aggregate(total=Sum(F('qty') * F('unit_cost')))['total'] or Decimal('0')
 
         # Return the higher of the two (to avoid double counting)
         # In practice, PR amounts are estimates, actual moves are real costs
@@ -58,12 +52,12 @@ class BudgetValidationService:
     def validate_purchase_request(cls, project, request_amount, exclude_pr_id=None):
         """
         Validate if a purchase request amount is within budget.
-        
+
         Args:
             project: The Project instance
             request_amount: The amount of the purchase request
             exclude_pr_id: Exclude this PR from used budget calculation (for updates)
-        
+
         Returns:
             dict with validation result and details
         """
@@ -74,7 +68,7 @@ class BudgetValidationService:
                 'budget_total': None,
                 'budget_used': None,
                 'budget_remaining': None,
-                'request_amount': float(request_amount)
+                'request_amount': float(request_amount),
             }
 
         total_budget = cls.get_project_material_budget(project)
@@ -88,7 +82,7 @@ class BudgetValidationService:
                 'budget_total': 0,
                 'budget_used': 0,
                 'budget_remaining': 0,
-                'request_amount': float(request_amount)
+                'request_amount': float(request_amount),
             }
 
         # Calculate used budget, excluding current PR if updating
@@ -96,10 +90,9 @@ class BudgetValidationService:
 
         if exclude_pr_id:
             from .models import PurchaseRequest
+
             excluded_pr = PurchaseRequest.objects.filter(
-                id=exclude_pr_id,
-                status__in=['APPROVED', 'CONVERTED'],
-                is_deleted=False
+                id=exclude_pr_id, status__in=['APPROVED', 'CONVERTED'], is_deleted=False
             ).first()
             if excluded_pr:
                 used_budget -= excluded_pr.total_amount
@@ -121,7 +114,7 @@ class BudgetValidationService:
             'budget_used': float(used_budget),
             'budget_remaining': float(remaining_budget),
             'request_amount': float(request_amount),
-            'over_budget': float(request_amount - remaining_budget) if not is_valid else 0
+            'over_budget': float(request_amount - remaining_budget) if not is_valid else 0,
         }
 
     @classmethod
@@ -138,19 +131,14 @@ class BudgetValidationService:
 
         # Labor budget
         labor_budget = project.budget_labor or Decimal('0')
-        labor_used = ProjectMember.objects.filter(
-            project=project,
-            is_deleted=False
-        ).aggregate(
+        labor_used = ProjectMember.objects.filter(project=project, is_deleted=False).aggregate(
             total=Sum(F('actual_hours') * F('hourly_rate'))
         )['total'] or Decimal('0')
 
         # Expense budget
         expense_budget = project.budget_expense or Decimal('0')
         expense_used = Expense.objects.filter(
-            project=project,
-            status__in=['APPROVED', 'REIMBURSED'],
-            is_deleted=False
+            project=project, status__in=['APPROVED', 'REIMBURSED'], is_deleted=False
         ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
 
         # Total
@@ -164,25 +152,24 @@ class BudgetValidationService:
                 'budget': float(material_budget),
                 'used': float(material_used),
                 'remaining': float(material_budget - material_used),
-                'utilization': float(material_used / material_budget * 100) if material_budget > 0 else 0
+                'utilization': float(material_used / material_budget * 100) if material_budget > 0 else 0,
             },
             'labor': {
                 'budget': float(labor_budget),
                 'used': float(labor_used),
                 'remaining': float(labor_budget - labor_used),
-                'utilization': float(labor_used / labor_budget * 100) if labor_budget > 0 else 0
+                'utilization': float(labor_used / labor_budget * 100) if labor_budget > 0 else 0,
             },
             'expense': {
                 'budget': float(expense_budget),
                 'used': float(expense_used),
                 'remaining': float(expense_budget - expense_used),
-                'utilization': float(expense_used / expense_budget * 100) if expense_budget > 0 else 0
+                'utilization': float(expense_used / expense_budget * 100) if expense_budget > 0 else 0,
             },
             'total': {
                 'budget': float(total_budget),
                 'used': float(total_used),
                 'remaining': float(total_budget - total_used),
-                'utilization': float(total_used / total_budget * 100) if total_budget > 0 else 0
-            }
+                'utilization': float(total_used / total_budget * 100) if total_budget > 0 else 0,
+            },
         }
-

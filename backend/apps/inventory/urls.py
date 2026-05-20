@@ -1,6 +1,7 @@
 """
 URL configuration for inventory app.
 """
+
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
@@ -64,7 +65,9 @@ router.register(r'stock-alerts', StockAlertViewSet, basename='stock-alert')
 # 备件管理增强
 router.register(r'spare-part-categories', SparePartCategoryViewSet, basename='spare-part-category')
 router.register(r'spare-parts', SparePartViewSet, basename='spare-part')
-router.register(r'spare-part-equipment-relations', SparePartEquipmentRelationViewSet, basename='spare-part-equipment-relation')
+router.register(
+    r'spare-part-equipment-relations', SparePartEquipmentRelationViewSet, basename='spare-part-equipment-relation'
+)
 router.register(r'spare-part-consumptions', SparePartConsumptionViewSet, basename='spare-part-consumption')
 router.register(r'spare-part-alerts', SparePartAlertViewSet, basename='spare-part-alert')
 
@@ -75,18 +78,14 @@ router.register(r'reconciliation-sessions', ReconciliationSessionViewSet, basena
 
 urlpatterns = [
     path('', include(router.urls)),
-
     # 数据准确性报表
     path('reports/accuracy/', InventoryAccuracyReportView.as_view(), name='inventory-accuracy-report'),
     path('reports/in-out-balance/', InOutBalanceReportView.as_view(), name='in-out-balance-report'),
-
     # MRP增强（多层BOM展开）
     path('mrp/explosion/', MRPExplosionView.as_view(), name='mrp-explosion'),
     path('mrp/auto-generate/', MRPAutoGenerateView.as_view(), name='mrp-auto-generate'),
-
     # 备件智能预测
     path('spare-parts/lifecycle-prediction/', LifecyclePredictionView.as_view(), name='lifecycle-prediction'),
     path('spare-parts/purchase-suggestions/', PurchaseSuggestionView.as_view(), name='purchase-suggestions'),
     path('spare-parts/cost-analysis/', SparePartCostAnalysisView.as_view(), name='spare-part-cost-analysis'),
 ]
-

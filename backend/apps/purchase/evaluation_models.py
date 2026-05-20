@@ -2,6 +2,7 @@
 供应商评价管理模型
 Supplier Evaluation Management Models
 """
+
 from django.db import models
 
 from apps.accounts.models import User
@@ -13,6 +14,7 @@ class SupplierEvaluationTemplate(BaseModel):
     """
     供应商评价模板
     """
+
     name = models.CharField(max_length=100, verbose_name='模板名称')
     code = models.CharField(max_length=50, unique=True, verbose_name='模板编码')
     description = models.TextField(blank=True, verbose_name='描述')
@@ -33,6 +35,7 @@ class EvaluationCriteria(BaseModel):
     """
     评价标准/指标
     """
+
     CATEGORY_CHOICES = [
         ('QUALITY', '质量'),
         ('DELIVERY', '交期'),
@@ -43,10 +46,7 @@ class EvaluationCriteria(BaseModel):
     ]
 
     template = models.ForeignKey(
-        SupplierEvaluationTemplate,
-        on_delete=models.CASCADE,
-        related_name='criteria',
-        verbose_name='评价模板'
+        SupplierEvaluationTemplate, on_delete=models.CASCADE, related_name='criteria', verbose_name='评价模板'
     )
     name = models.CharField(max_length=100, verbose_name='指标名称')
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, verbose_name='指标类别')
@@ -62,13 +62,14 @@ class EvaluationCriteria(BaseModel):
         ordering = ['template', 'sort_order']
 
     def __str__(self):
-        return f"{self.template.name} - {self.name}"
+        return f'{self.template.name} - {self.name}'
 
 
 class SupplierEvaluation(BaseModel):
     """
     供应商评价记录
     """
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('SUBMITTED', '已提交'),
@@ -85,17 +86,9 @@ class SupplierEvaluation(BaseModel):
     ]
 
     evaluation_no = models.CharField(max_length=50, unique=True, verbose_name='评价编号')
-    supplier = models.ForeignKey(
-        Supplier,
-        on_delete=models.PROTECT,
-        related_name='evaluations',
-        verbose_name='供应商'
-    )
+    supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT, related_name='evaluations', verbose_name='供应商')
     template = models.ForeignKey(
-        SupplierEvaluationTemplate,
-        on_delete=models.PROTECT,
-        related_name='evaluations',
-        verbose_name='评价模板'
+        SupplierEvaluationTemplate, on_delete=models.PROTECT, related_name='evaluations', verbose_name='评价模板'
     )
     period_type = models.CharField(max_length=20, choices=PERIOD_CHOICES, default='QUARTERLY', verbose_name='评价周期')
     evaluation_date = models.DateField(verbose_name='评价日期')
@@ -115,9 +108,10 @@ class SupplierEvaluation(BaseModel):
     evaluator = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         related_name='supplier_evaluations',
-        verbose_name='评价人'
+        verbose_name='评价人',
     )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', verbose_name='状态')
     comments = models.TextField(blank=True, verbose_name='综合评价')
@@ -127,9 +121,10 @@ class SupplierEvaluation(BaseModel):
     approver = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         related_name='approved_evaluations',
-        verbose_name='审批人'
+        verbose_name='审批人',
     )
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name='审批时间')
     approval_comments = models.TextField(blank=True, verbose_name='审批意见')
@@ -141,7 +136,7 @@ class SupplierEvaluation(BaseModel):
         ordering = ['-evaluation_date']
 
     def __str__(self):
-        return f"{self.evaluation_no} - {self.supplier.name}"
+        return f'{self.evaluation_no} - {self.supplier.name}'
 
     def calculate_scores(self):
         """计算评分"""
@@ -204,17 +199,12 @@ class EvaluationScoreItem(BaseModel):
     """
     评价得分明细
     """
+
     evaluation = models.ForeignKey(
-        SupplierEvaluation,
-        on_delete=models.CASCADE,
-        related_name='score_items',
-        verbose_name='评价记录'
+        SupplierEvaluation, on_delete=models.CASCADE, related_name='score_items', verbose_name='评价记录'
     )
     criteria = models.ForeignKey(
-        EvaluationCriteria,
-        on_delete=models.PROTECT,
-        related_name='score_items',
-        verbose_name='评价指标'
+        EvaluationCriteria, on_delete=models.PROTECT, related_name='score_items', verbose_name='评价指标'
     )
     score = models.DecimalField(max_digits=5, decimal_places=2, verbose_name='得分')
     comments = models.TextField(blank=True, verbose_name='评价说明')
@@ -226,25 +216,24 @@ class EvaluationScoreItem(BaseModel):
         unique_together = ['evaluation', 'criteria']
 
     def __str__(self):
-        return f"{self.evaluation.evaluation_no} - {self.criteria.name}: {self.score}"
+        return f'{self.evaluation.evaluation_no} - {self.criteria.name}: {self.score}'
 
 
 class SupplierGradeHistory(BaseModel):
     """
     供应商等级变更历史
     """
+
     supplier = models.ForeignKey(
-        Supplier,
-        on_delete=models.CASCADE,
-        related_name='grade_history',
-        verbose_name='供应商'
+        Supplier, on_delete=models.CASCADE, related_name='grade_history', verbose_name='供应商'
     )
     evaluation = models.ForeignKey(
         SupplierEvaluation,
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         related_name='grade_changes',
-        verbose_name='关联评价'
+        verbose_name='关联评价',
     )
     old_grade = models.CharField(max_length=10, blank=True, verbose_name='原等级')
     new_grade = models.CharField(max_length=10, verbose_name='新等级')
@@ -258,42 +247,37 @@ class SupplierGradeHistory(BaseModel):
         ordering = ['-change_date']
 
     def __str__(self):
-        return f"{self.supplier.name}: {self.old_grade} -> {self.new_grade}"
+        return f'{self.supplier.name}: {self.old_grade} -> {self.new_grade}'
 
 
 class SupplierBlacklist(BaseModel):
     """
     供应商黑名单
     """
+
     STATUS_CHOICES = [
         ('ACTIVE', '有效'),
         ('LIFTED', '已解除'),
     ]
 
     supplier = models.ForeignKey(
-        Supplier,
-        on_delete=models.CASCADE,
-        related_name='blacklist_records',
-        verbose_name='供应商'
+        Supplier, on_delete=models.CASCADE, related_name='blacklist_records', verbose_name='供应商'
     )
     blacklist_date = models.DateField(verbose_name='加入日期')
     reason = models.TextField(verbose_name='加入原因')
     related_evaluation = models.ForeignKey(
         SupplierEvaluation,
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         related_name='blacklist_records',
-        verbose_name='关联评价'
+        verbose_name='关联评价',
     )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ACTIVE', verbose_name='状态')
     lifted_date = models.DateField(null=True, blank=True, verbose_name='解除日期')
     lifted_reason = models.TextField(blank=True, verbose_name='解除原因')
     lifted_by = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        related_name='lifted_blacklists',
-        verbose_name='解除人'
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='lifted_blacklists', verbose_name='解除人'
     )
 
     class Meta:
@@ -303,4 +287,4 @@ class SupplierBlacklist(BaseModel):
         ordering = ['-blacklist_date']
 
     def __str__(self):
-        return f"{self.supplier.name} - {self.get_status_display()}"
+        return f'{self.supplier.name} - {self.get_status_display()}'

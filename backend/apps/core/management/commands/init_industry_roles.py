@@ -8,6 +8,7 @@
 4. 成本控制：项目成本核算是关键
 5. 技术密集：需要大量技术文档管理
 """
+
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
@@ -41,19 +42,41 @@ INDUSTRY_ROLES = [
             # 仪表盘
             'dashboard',
             # 全部模块权限
-            'projects', 'design', 'sales', 'purchase', 'inventory', 'production',
-            'mes', 'equipment', 'finance', 'reports', 'oa',
-            'workflow', 'masterdata', 'knowledge', 'aftersales', 'accounts', 'system',
+            'projects',
+            'design',
+            'sales',
+            'purchase',
+            'inventory',
+            'production',
+            'mes',
+            'equipment',
+            'finance',
+            'reports',
+            'oa',
+            'workflow',
+            'masterdata',
+            'knowledge',
+            'aftersales',
+            'accounts',
+            'system',
             # 报表分析（重点，分析看板已合并进报表分析）
-            'reports:profitability', 'reports:cost-analysis', 'reports:cash-flow',
-            'reports:aging', 'reports:slow-moving', 'reports:timelog',
-            'reports:project-profitability', 'reports:equipment-lifecycle',
-            'reports:capacity-utilization', 'reports:customer-value',
-            'analytics:project', 'analytics:inventory',
+            'reports:profitability',
+            'reports:cost-analysis',
+            'reports:cash-flow',
+            'reports:aging',
+            'reports:slow-moving',
+            'reports:timelog',
+            'reports:project-profitability',
+            'reports:equipment-lifecycle',
+            'reports:capacity-utilization',
+            'reports:customer-value',
+            'analytics:project',
+            'analytics:inventory',
             # 生产扩展菜单
-            'production:workstations', 'production:resources',
+            'production:workstations',
+            'production:resources',
         ],
-        'sort_order': 1
+        'sort_order': 1,
     },
     {
         'name': '项目经理',
@@ -63,25 +86,53 @@ INDUSTRY_ROLES = [
         'menu_ids': [
             'dashboard',
             # 项目管理（核心）
-            'projects', 'projects:list', 'projects:dashboard', 'projects:tasks',
-            'projects:members', 'projects:bom', 'projects:time-logs', 'projects:gantt',
-            'projects:milestones', 'projects:alerts', 'equipment:archives',
-            'projects:acceptances', 'projects:archives', 'projects:cost',
-            'equipment:monitoring', 'projects:work-orders',
+            'projects',
+            'projects:list',
+            'projects:dashboard',
+            'projects:tasks',
+            'projects:members',
+            'projects:bom',
+            'projects:time-logs',
+            'projects:gantt',
+            'projects:milestones',
+            'projects:alerts',
+            'equipment:archives',
+            'projects:acceptances',
+            'projects:archives',
+            'projects:cost',
+            'equipment:monitoring',
+            'projects:work-orders',
             # 研发设计
-            'design', 'plm', 'plm:requirements', 'plm:proposals', 'plm:agreements',
-            'design:drawings', 'design:documents', 'design:ecn',
-            'plm:cad-bom', 'plm:bom-compare',
+            'design',
+            'plm',
+            'plm:requirements',
+            'plm:proposals',
+            'plm:agreements',
+            'design:drawings',
+            'design:documents',
+            'design:ecn',
+            'plm:cad-bom',
+            'plm:bom-compare',
             # 知识库
-            'knowledge', 'knowledge:articles', 'knowledge:issues', 'knowledge:components',
+            'knowledge',
+            'knowledge:articles',
+            'knowledge:issues',
+            'knowledge:components',
             # 报表
-            'reports', 'reports:profitability', 'reports:cost-analysis', 'reports:timelog',
+            'reports',
+            'reports:profitability',
+            'reports:cost-analysis',
+            'reports:timelog',
             # 审批
-            'workflow', 'workflow:tasks', 'workflow:my-submissions',
+            'workflow',
+            'workflow:tasks',
+            'workflow:my-submissions',
             # OA
-            'oa', 'oa:schedule', 'oa:meeting',
+            'oa',
+            'oa:schedule',
+            'oa:meeting',
         ],
-        'sort_order': 2
+        'sort_order': 2,
     },
     {
         'name': '技术工程师',
@@ -91,23 +142,45 @@ INDUSTRY_ROLES = [
         'menu_ids': [
             'dashboard',
             # 研发设计（核心）
-            'design', 'plm', 'plm:requirements', 'plm:proposals',
-            'plm:agreements', 'plm:model-viewer', 'plm:cad-bom', 'plm:bom-compare',
+            'design',
+            'plm',
+            'plm:requirements',
+            'plm:proposals',
+            'plm:agreements',
+            'plm:model-viewer',
+            'plm:cad-bom',
+            'plm:bom-compare',
             # 项目相关
-            'projects', 'projects:list', 'projects:tasks', 'projects:bom',
-            'design:drawings', 'design:documents', 'design:ecn',
-            'projects:bugs', 'projects:time-logs', 'design:batch-drawing',
+            'projects',
+            'projects:list',
+            'projects:tasks',
+            'projects:bom',
+            'design:drawings',
+            'design:documents',
+            'design:ecn',
+            'projects:bugs',
+            'projects:time-logs',
+            'design:batch-drawing',
             'design:drawing-bom-link',
             # 知识库
-            'knowledge', 'knowledge:articles', 'knowledge:issues', 'knowledge:components',
+            'knowledge',
+            'knowledge:articles',
+            'knowledge:issues',
+            'knowledge:components',
             # 基础数据（物料查询）
-            'masterdata', 'masterdata:items',
+            'masterdata',
+            'masterdata:items',
             # 审批
-            'workflow', 'workflow:tasks', 'workflow:my-submissions',
+            'workflow',
+            'workflow:tasks',
+            'workflow:my-submissions',
             # OA
-            'oa', 'oa:schedule', 'oa:leave', 'accounts:attendance',
+            'oa',
+            'oa:schedule',
+            'oa:leave',
+            'accounts:attendance',
         ],
-        'sort_order': 3
+        'sort_order': 3,
     },
     {
         'name': '销售经理',
@@ -117,27 +190,51 @@ INDUSTRY_ROLES = [
         'menu_ids': [
             'dashboard',
             # CRM客户管理（核心）
-            'sales', 'sales:crm-dashboard', 'sales:leads', 'sales:opportunities',
-            'sales:quotations', 'sales:quote-estimation', 'sales:orders',
-            'sales:contracts', 'sales:delivery-orders', 'sales:quote-templates',
-            'sales:contract-templates', 'sales:performance', 'sales:analysis',
+            'sales',
+            'sales:crm-dashboard',
+            'sales:leads',
+            'sales:opportunities',
+            'sales:quotations',
+            'sales:quote-estimation',
+            'sales:orders',
+            'sales:contracts',
+            'sales:delivery-orders',
+            'sales:quote-templates',
+            'sales:contract-templates',
+            'sales:performance',
+            'sales:analysis',
             'sales:training',
             'sales:quote',
             # 客户管理
-            'masterdata', 'masterdata:customers', 'masterdata:customer-contacts',
-            'masterdata:customer-followups', 'masterdata:credit',
+            'masterdata',
+            'masterdata:customers',
+            'masterdata:customer-contacts',
+            'masterdata:customer-followups',
+            'masterdata:credit',
             # 售后
-            'aftersales', 'aftersales:orders',
+            'aftersales',
+            'aftersales:orders',
             # 财务相关
-            'finance', 'finance:ar', 'finance:sales-reconciliation', 'finance:collection',
+            'finance',
+            'finance:ar',
+            'finance:sales-reconciliation',
+            'finance:collection',
             # 报表
-            'reports', 'reports:profitability', 'reports:aging', 'reports:cash-flow',
+            'reports',
+            'reports:profitability',
+            'reports:aging',
+            'reports:cash-flow',
             # 审批
-            'workflow', 'workflow:tasks', 'workflow:my-submissions',
+            'workflow',
+            'workflow:tasks',
+            'workflow:my-submissions',
             # OA
-            'oa', 'oa:schedule', 'oa:meeting', 'accounts:attendance',
+            'oa',
+            'oa:schedule',
+            'oa:meeting',
+            'accounts:attendance',
         ],
-        'sort_order': 4
+        'sort_order': 4,
     },
     {
         'name': '销售人员',
@@ -147,20 +244,33 @@ INDUSTRY_ROLES = [
         'menu_ids': [
             'dashboard',
             # CRM（核心）
-            'sales', 'sales:leads', 'sales:opportunities', 'sales:quotations',
-            'sales:orders', 'sales:contracts', 'sales:delivery-orders',
-            'sales:quote-estimation', 'sales:quote',
+            'sales',
+            'sales:leads',
+            'sales:opportunities',
+            'sales:quotations',
+            'sales:orders',
+            'sales:contracts',
+            'sales:delivery-orders',
+            'sales:quote-estimation',
+            'sales:quote',
             # 客户管理
-            'masterdata', 'masterdata:customers', 'masterdata:customer-contacts',
+            'masterdata',
+            'masterdata:customers',
+            'masterdata:customer-contacts',
             'masterdata:customer-followups',
             # 售后
-            'aftersales', 'aftersales:orders',
+            'aftersales',
+            'aftersales:orders',
             # 审批
-            'workflow', 'workflow:tasks', 'workflow:my-submissions',
+            'workflow',
+            'workflow:tasks',
+            'workflow:my-submissions',
             # OA
-            'oa', 'oa:schedule', 'accounts:attendance',
+            'oa',
+            'oa:schedule',
+            'accounts:attendance',
         ],
-        'sort_order': 5
+        'sort_order': 5,
     },
     {
         'name': '采购经理',
@@ -170,26 +280,43 @@ INDUSTRY_ROLES = [
         'menu_ids': [
             'dashboard',
             # 采购管理（核心）
-            'purchase', 'purchase:requests', 'purchase:comparisons', 'purchase:orders',
-            'purchase:goods-receipts', 'purchase:rfqs', 'purchase:outsource', 'purchase:evaluations',
-            'purchase:blacklist', 'purchase:budgets', 'purchase:collaboration',
+            'purchase',
+            'purchase:requests',
+            'purchase:comparisons',
+            'purchase:orders',
+            'purchase:goods-receipts',
+            'purchase:rfqs',
+            'purchase:outsource',
+            'purchase:evaluations',
+            'purchase:blacklist',
+            'purchase:budgets',
+            'purchase:collaboration',
             'purchase:portal',
             # 项目查询（采购需查看项目背景与归属）
             'projects:list',
             # 供应商管理
-            'masterdata', 'masterdata:suppliers',
+            'masterdata',
+            'masterdata:suppliers',
             # MRP
-            'inventory', 'inventory:mrp',
+            'inventory',
+            'inventory:mrp',
             # 财务相关
-            'finance', 'finance:ap', 'finance:purchase-reconciliation',
+            'finance',
+            'finance:ap',
+            'finance:purchase-reconciliation',
             # 报表
-            'reports', 'reports:slow-moving',
+            'reports',
+            'reports:slow-moving',
             # 审批
-            'workflow', 'workflow:tasks', 'workflow:my-submissions',
+            'workflow',
+            'workflow:tasks',
+            'workflow:my-submissions',
             # OA
-            'oa', 'oa:schedule', 'accounts:attendance',
+            'oa',
+            'oa:schedule',
+            'accounts:attendance',
         ],
-        'sort_order': 6
+        'sort_order': 6,
     },
     {
         'name': '采购人员',
@@ -199,20 +326,31 @@ INDUSTRY_ROLES = [
         'menu_ids': [
             'dashboard',
             # 采购（核心）
-            'purchase', 'purchase:requests', 'purchase:comparisons', 'purchase:orders',
-            'purchase:goods-receipts', 'purchase:rfqs', 'purchase:outsource',
+            'purchase',
+            'purchase:requests',
+            'purchase:comparisons',
+            'purchase:orders',
+            'purchase:goods-receipts',
+            'purchase:rfqs',
+            'purchase:outsource',
             # 项目查询（采购单据关联项目）
             'projects:list',
             # 供应商
-            'masterdata', 'masterdata:suppliers',
+            'masterdata',
+            'masterdata:suppliers',
             # MRP
-            'inventory', 'inventory:mrp',
+            'inventory',
+            'inventory:mrp',
             # 审批
-            'workflow', 'workflow:tasks', 'workflow:my-submissions',
+            'workflow',
+            'workflow:tasks',
+            'workflow:my-submissions',
             # OA
-            'oa', 'oa:schedule', 'accounts:attendance',
+            'oa',
+            'oa:schedule',
+            'accounts:attendance',
         ],
-        'sort_order': 7
+        'sort_order': 7,
     },
     {
         'name': '仓库主管',
@@ -222,22 +360,38 @@ INDUSTRY_ROLES = [
         'menu_ids': [
             'dashboard',
             # 库存管理（核心）
-            'inventory', 'inventory:stocks', 'inventory:batches', 'inventory:moves',
-            'inventory:transfer', 'inventory:adjustment', 'inventory:alerts',
-            'inventory:requisitions', 'inventory:returns',
-            'inventory:cost-accounting', 'inventory:spare-parts', 'inventory:data-accuracy',
+            'inventory',
+            'inventory:stocks',
+            'inventory:batches',
+            'inventory:moves',
+            'inventory:transfer',
+            'inventory:adjustment',
+            'inventory:alerts',
+            'inventory:requisitions',
+            'inventory:returns',
+            'inventory:cost-accounting',
+            'inventory:spare-parts',
+            'inventory:data-accuracy',
             # 基础数据
-            'masterdata', 'masterdata:items', 'masterdata:warehouses', 'masterdata:locations',
+            'masterdata',
+            'masterdata:items',
+            'masterdata:warehouses',
+            'masterdata:locations',
             # 到货
-            'purchase', 'purchase:goods-receipts',
+            'purchase',
+            'purchase:goods-receipts',
             # 报表
-            'reports', 'reports:slow-moving',
+            'reports',
+            'reports:slow-moving',
             # 审批
-            'workflow', 'workflow:tasks', 'workflow:my-submissions',
+            'workflow',
+            'workflow:tasks',
+            'workflow:my-submissions',
             # OA
-            'oa', 'accounts:attendance',
+            'oa',
+            'accounts:attendance',
         ],
-        'sort_order': 8
+        'sort_order': 8,
     },
     {
         'name': '仓库管理员',
@@ -247,19 +401,28 @@ INDUSTRY_ROLES = [
         'menu_ids': [
             'dashboard',
             # 库存操作（核心）
-            'inventory', 'inventory:stocks', 'inventory:batches', 'inventory:moves',
-            'inventory:transfer', 'inventory:adjustment', 'inventory:requisitions',
+            'inventory',
+            'inventory:stocks',
+            'inventory:batches',
+            'inventory:moves',
+            'inventory:transfer',
+            'inventory:adjustment',
+            'inventory:requisitions',
             'inventory:returns',
             # 到货
-            'purchase', 'purchase:goods-receipts',
+            'purchase',
+            'purchase:goods-receipts',
             # 基础数据
-            'masterdata', 'masterdata:items',
+            'masterdata',
+            'masterdata:items',
             # 审批
-            'workflow', 'workflow:my-submissions',
+            'workflow',
+            'workflow:my-submissions',
             # OA
-            'oa', 'accounts:attendance',
+            'oa',
+            'accounts:attendance',
         ],
-        'sort_order': 9
+        'sort_order': 9,
     },
     {
         'name': '生产主管',
@@ -269,26 +432,46 @@ INDUSTRY_ROLES = [
         'menu_ids': [
             'dashboard',
             # 生产管理（核心）
-            'production', 'production:processes', 'production:plans',
-            'production:debug-records', 'production:inspections',
-            'production:serial-numbers', 'production:routing', 'production:workstations',
-            'production:assembly', 'mes:scheduling', 'production:capacity',
+            'production',
+            'production:processes',
+            'production:plans',
+            'production:debug-records',
+            'production:inspections',
+            'production:serial-numbers',
+            'production:routing',
+            'production:workstations',
+            'production:assembly',
+            'mes:scheduling',
+            'production:capacity',
             'production:resources',
             # MES
-            'mes', 'mes:kanban', 'mes:andon', 'mes:data-acquisition',
+            'mes',
+            'mes:kanban',
+            'mes:andon',
+            'mes:data-acquisition',
             # 工单
-            'projects', 'projects:work-orders',
+            'projects',
+            'projects:work-orders',
             # 设备
-            'equipment', 'equipment:list', 'equipment:fixtures', 'equipment:inspection',
-            'equipment:maintenance', 'equipment:oee',
+            'equipment',
+            'equipment:list',
+            'equipment:fixtures',
+            'equipment:inspection',
+            'equipment:maintenance',
+            'equipment:oee',
             # 领料
-            'inventory', 'inventory:requisitions', 'inventory:returns',
+            'inventory',
+            'inventory:requisitions',
+            'inventory:returns',
             # 审批
-            'workflow', 'workflow:tasks', 'workflow:my-submissions',
+            'workflow',
+            'workflow:tasks',
+            'workflow:my-submissions',
             # OA
-            'oa', 'accounts:attendance',
+            'oa',
+            'accounts:attendance',
         ],
-        'sort_order': 10
+        'sort_order': 10,
     },
     {
         'name': '生产操作员',
@@ -298,17 +481,25 @@ INDUSTRY_ROLES = [
         'menu_ids': [
             'dashboard',
             # 生产执行
-            'production', 'production:processes', 'production:debug-records',
+            'production',
+            'production:processes',
+            'production:debug-records',
             # MES
-            'mes', 'mes:kanban', 'mes:andon',
+            'mes',
+            'mes:kanban',
+            'mes:andon',
             # 工单
-            'projects', 'projects:work-orders',
+            'projects',
+            'projects:work-orders',
             # 领料
-            'inventory', 'inventory:requisitions', 'inventory:returns',
+            'inventory',
+            'inventory:requisitions',
+            'inventory:returns',
             # OA
-            'oa', 'accounts:attendance',
+            'oa',
+            'accounts:attendance',
         ],
-        'sort_order': 11
+        'sort_order': 11,
     },
     {
         'name': '质量工程师',
@@ -318,20 +509,30 @@ INDUSTRY_ROLES = [
         'menu_ids': [
             'dashboard',
             # 质量管理（核心）
-            'production', 'production:inspections',
-            'mes', 'mes:andon',
+            'production',
+            'production:inspections',
+            'mes',
+            'mes:andon',
             # 采购质检
-            'purchase', 'purchase:goods-receipts',
+            'purchase',
+            'purchase:goods-receipts',
             # 项目验收
-            'projects', 'projects:acceptances', 'projects:bugs',
+            'projects',
+            'projects:acceptances',
+            'projects:bugs',
             # 知识库(研发设计)
-            'design', 'knowledge', 'knowledge:issues',
+            'design',
+            'knowledge',
+            'knowledge:issues',
             # 审批
-            'workflow', 'workflow:tasks', 'workflow:my-submissions',
+            'workflow',
+            'workflow:tasks',
+            'workflow:my-submissions',
             # OA
-            'oa', 'accounts:attendance',
+            'oa',
+            'accounts:attendance',
         ],
-        'sort_order': 12
+        'sort_order': 12,
     },
     {
         'name': '财务经理',
@@ -341,23 +542,39 @@ INDUSTRY_ROLES = [
         'menu_ids': [
             'dashboard',
             # 财务管理（核心）
-            'finance', 'finance:expenses', 'finance:shared-expenses',
-            'finance:ar', 'finance:ap', 'finance:invoices', 'finance:project-costs',
-            'finance:collection', 'finance:assets', 'finance:sales-reconciliation',
+            'finance',
+            'finance:expenses',
+            'finance:shared-expenses',
+            'finance:ar',
+            'finance:ap',
+            'finance:invoices',
+            'finance:project-costs',
+            'finance:collection',
+            'finance:assets',
+            'finance:sales-reconciliation',
             'finance:purchase-reconciliation',
             # 库存成本
-            'inventory', 'inventory:cost-accounting',
+            'inventory',
+            'inventory:cost-accounting',
             # 报表
-            'reports', 'reports:profitability', 'reports:cost-analysis',
-            'reports:aging', 'reports:cash-flow',
+            'reports',
+            'reports:profitability',
+            'reports:cost-analysis',
+            'reports:aging',
+            'reports:cash-flow',
             # 数据分析
-            'analytics:project', 'analytics:inventory',
+            'analytics:project',
+            'analytics:inventory',
             # 审批
-            'workflow', 'workflow:tasks', 'workflow:my-submissions',
+            'workflow',
+            'workflow:tasks',
+            'workflow:my-submissions',
             # OA
-            'oa', 'oa:schedule', 'accounts:attendance',
+            'oa',
+            'oa:schedule',
+            'accounts:attendance',
         ],
-        'sort_order': 13
+        'sort_order': 13,
     },
     {
         'name': '财务人员',
@@ -367,14 +584,21 @@ INDUSTRY_ROLES = [
         'menu_ids': [
             'dashboard',
             # 财务操作
-            'finance', 'finance:expenses', 'finance:ar', 'finance:ap',
-            'finance:invoices', 'finance:collection',
+            'finance',
+            'finance:expenses',
+            'finance:ar',
+            'finance:ap',
+            'finance:invoices',
+            'finance:collection',
             # 审批
-            'workflow', 'workflow:tasks', 'workflow:my-submissions',
+            'workflow',
+            'workflow:tasks',
+            'workflow:my-submissions',
             # OA
-            'oa', 'accounts:attendance',
+            'oa',
+            'accounts:attendance',
         ],
-        'sort_order': 14
+        'sort_order': 14,
     },
     {
         'name': '售后工程师',
@@ -384,21 +608,34 @@ INDUSTRY_ROLES = [
         'menu_ids': [
             'dashboard',
             # 售后服务（核心）
-            'aftersales', 'aftersales:orders',
-            'sales', 'sales:service', 'sales:training',
-            'projects', 'aftersales:service',
+            'aftersales',
+            'aftersales:orders',
+            'sales',
+            'sales:service',
+            'sales:training',
+            'projects',
+            'aftersales:service',
             # 设备档案
-            'equipment:archives', 'projects:acceptances',
+            'equipment:archives',
+            'projects:acceptances',
             # 研发设计(文档查询)
-            'design', 'design:drawings', 'design:documents',
+            'design',
+            'design:drawings',
+            'design:documents',
             # 知识库
-            'knowledge', 'knowledge:articles', 'knowledge:issues',
+            'knowledge',
+            'knowledge:articles',
+            'knowledge:issues',
             # 审批
-            'workflow', 'workflow:tasks', 'workflow:my-submissions',
+            'workflow',
+            'workflow:tasks',
+            'workflow:my-submissions',
             # OA
-            'oa', 'oa:schedule', 'accounts:attendance',
+            'oa',
+            'oa:schedule',
+            'accounts:attendance',
         ],
-        'sort_order': 15
+        'sort_order': 15,
     },
     {
         'name': '行政人事',
@@ -408,15 +645,27 @@ INDUSTRY_ROLES = [
         'menu_ids': [
             'dashboard',
             # OA（核心）
-            'oa', 'oa:schedule', 'oa:meeting', 'oa:leave', 'oa:announcement',
-            'oa:vehicles', 'oa:vehicle-request', 'oa:assets', 'oa:im',
-            'oa:attendance', 'oa:attendance-import',
+            'oa',
+            'oa:schedule',
+            'oa:meeting',
+            'oa:leave',
+            'oa:announcement',
+            'oa:vehicles',
+            'oa:vehicle-request',
+            'oa:assets',
+            'oa:im',
+            'oa:attendance',
+            'oa:attendance-import',
             # 考勤
-            'accounts', 'accounts:attendance',
+            'accounts',
+            'accounts:attendance',
             # 审批
-            'workflow', 'workflow:tasks', 'workflow:my-submissions', 'workflow:config',
+            'workflow',
+            'workflow:tasks',
+            'workflow:my-submissions',
+            'workflow:config',
         ],
-        'sort_order': 16
+        'sort_order': 16,
     },
     {
         'name': '普通员工',
@@ -426,12 +675,19 @@ INDUSTRY_ROLES = [
         'menu_ids': [
             'dashboard',
             # 审批
-            'workflow', 'workflow:tasks', 'workflow:my-submissions',
+            'workflow',
+            'workflow:tasks',
+            'workflow:my-submissions',
             # OA
-            'oa', 'oa:schedule', 'oa:leave', 'oa:meeting', 'oa:announcement',
-            'oa:vehicle-request', 'accounts:attendance',
+            'oa',
+            'oa:schedule',
+            'oa:leave',
+            'oa:meeting',
+            'oa:announcement',
+            'oa:vehicle-request',
+            'accounts:attendance',
         ],
-        'sort_order': 17
+        'sort_order': 17,
     },
 ]
 
@@ -511,7 +767,16 @@ class Command(BaseCommand):
                         role.permissions = {}
                         role.sort_order = role_data['sort_order']
                         role.is_active = True
-                        role.save(update_fields=['name', 'description', 'permissions', 'sort_order', 'is_active', 'updated_at'])
+                        role.save(
+                            update_fields=[
+                                'name',
+                                'description',
+                                'permissions',
+                                'sort_order',
+                                'is_active',
+                                'updated_at',
+                            ]
+                        )
                         self._sync_role_scope(role, role_data['data_scope'])
                         self._sync_role_permissions(role, role_data['menu_ids'])
                         updated_count += 1
@@ -527,7 +792,16 @@ class Command(BaseCommand):
                         existing_by_name.permissions = {}
                         existing_by_name.sort_order = role_data['sort_order']
                         existing_by_name.is_active = True
-                        existing_by_name.save(update_fields=['code', 'description', 'permissions', 'sort_order', 'is_active', 'updated_at'])
+                        existing_by_name.save(
+                            update_fields=[
+                                'code',
+                                'description',
+                                'permissions',
+                                'sort_order',
+                                'is_active',
+                                'updated_at',
+                            ]
+                        )
                         self._sync_role_scope(existing_by_name, role_data['data_scope'])
                         self._sync_role_permissions(existing_by_name, role_data['menu_ids'])
                         updated_count += 1
@@ -539,7 +813,7 @@ class Command(BaseCommand):
                             description=role_data['description'],
                             permissions={},
                             sort_order=role_data['sort_order'],
-                            is_active=True
+                            is_active=True,
                         )
                         self._sync_role_scope(role, role_data['data_scope'])
                         self._sync_role_permissions(role, role_data['menu_ids'])
@@ -547,9 +821,9 @@ class Command(BaseCommand):
                         self.stdout.write(self.style.SUCCESS(f'  [创建] {name} ({code})'))
 
         self.stdout.write('')
-        self.stdout.write(self.style.SUCCESS(
-            f'完成！创建: {created_count}, 更新: {updated_count}, 跳过: {skipped_count}'
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(f'完成！创建: {created_count}, 更新: {updated_count}, 跳过: {skipped_count}')
+        )
 
         # 输出角色权限摘要
         self.stdout.write('')
@@ -578,4 +852,3 @@ class Command(BaseCommand):
 
         for name, desc in summaries:
             self.stdout.write(f'  {name}: {desc}')
-

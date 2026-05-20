@@ -3,6 +3,7 @@
 Sales Funnel Analysis
 商机转化分析、阶段转化率等
 """
+
 from datetime import date, timedelta
 
 from django.db.models import Count, Q, Sum
@@ -14,6 +15,7 @@ from rest_framework.views import APIView
 
 class SalesFunnelView(APIView):
     """销售漏斗分析API"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -46,42 +48,38 @@ class SalesFunnelView(APIView):
         funnel_data = []
 
         # 1. 线索阶段
-        leads = Lead.objects.filter(
-            base_filter,
-            is_deleted=False
-        )
+        leads = Lead.objects.filter(base_filter, is_deleted=False)
         lead_count = leads.count()
         # Lead模型没有金额字段，使用0
         lead_amount = 0
-        funnel_data.append({
-            'stage': 'LEAD',
-            'stage_name': '线索',
-            'count': lead_count,
-            'amount': float(lead_amount),
-            'conversion_rate': 100
-        })
+        funnel_data.append(
+            {
+                'stage': 'LEAD',
+                'stage_name': '线索',
+                'count': lead_count,
+                'amount': float(lead_amount),
+                'conversion_rate': 100,
+            }
+        )
 
         # 2. 商机阶段
-        opportunities = Opportunity.objects.filter(
-            base_filter,
-            is_deleted=False
-        )
+        opportunities = Opportunity.objects.filter(base_filter, is_deleted=False)
         opp_count = opportunities.count()
         opp_amount = opportunities.aggregate(total=Sum('estimated_amount'))['total'] or 0
         opp_conversion = round(opp_count / lead_count * 100, 1) if lead_count > 0 else 0
-        funnel_data.append({
-            'stage': 'OPPORTUNITY',
-            'stage_name': '商机',
-            'count': opp_count,
-            'amount': float(opp_amount),
-            'conversion_rate': opp_conversion
-        })
+        funnel_data.append(
+            {
+                'stage': 'OPPORTUNITY',
+                'stage_name': '商机',
+                'count': opp_count,
+                'amount': float(opp_amount),
+                'conversion_rate': opp_conversion,
+            }
+        )
 
         # 3. 报价阶段
         quotations = SalesQuotation.objects.filter(
-            created_at__date__gte=start_date,
-            created_at__date__lte=end_date,
-            is_deleted=False
+            created_at__date__gte=start_date, created_at__date__lte=end_date, is_deleted=False
         )
         if salesperson_id:
             quotations = quotations.filter(created_by_id=salesperson_id)
@@ -89,20 +87,22 @@ class SalesFunnelView(APIView):
         quote_count = quotations.count()
         quote_amount = quotations.aggregate(total=Sum('total_amount'))['total'] or 0
         quote_conversion = round(quote_count / opp_count * 100, 1) if opp_count > 0 else 0
-        funnel_data.append({
-            'stage': 'QUOTATION',
-            'stage_name': '报价',
-            'count': quote_count,
-            'amount': float(quote_amount),
-            'conversion_rate': quote_conversion
-        })
+        funnel_data.append(
+            {
+                'stage': 'QUOTATION',
+                'stage_name': '报价',
+                'count': quote_count,
+                'amount': float(quote_amount),
+                'conversion_rate': quote_conversion,
+            }
+        )
 
         # 4. 订单阶段
         orders = SalesOrder.objects.filter(
             created_at__date__gte=start_date,
             created_at__date__lte=end_date,
             status__in=['CONFIRMED', 'DELIVERED', 'COMPLETED'],
-            is_deleted=False
+            is_deleted=False,
         )
         if salesperson_id:
             orders = orders.filter(created_by_id=salesperson_id)
@@ -110,32 +110,34 @@ class SalesFunnelView(APIView):
         order_count = orders.count()
         order_amount = orders.aggregate(total=Sum('total_amount'))['total'] or 0
         order_conversion = round(order_count / quote_count * 100, 1) if quote_count > 0 else 0
-        funnel_data.append({
-            'stage': 'ORDER',
-            'stage_name': '成交',
-            'count': order_count,
-            'amount': float(order_amount),
-            'conversion_rate': order_conversion
-        })
+        funnel_data.append(
+            {
+                'stage': 'ORDER',
+                'stage_name': '成交',
+                'count': order_count,
+                'amount': float(order_amount),
+                'conversion_rate': order_conversion,
+            }
+        )
 
         # 计算整体转化率
         overall_conversion = round(order_count / lead_count * 100, 2) if lead_count > 0 else 0
 
-        return Response({
-            'period': {
-                'start': start_date.isoformat(),
-                'end': end_date.isoformat()
-            },
-            'funnel': funnel_data,
-            'overall_conversion': overall_conversion,
-            'total_leads': lead_count,
-            'total_orders': order_count,
-            'total_order_amount': float(order_amount)
-        })
+        return Response(
+            {
+                'period': {'start': start_date.isoformat(), 'end': end_date.isoformat()},
+                'funnel': funnel_data,
+                'overall_conversion': overall_conversion,
+                'total_leads': lead_count,
+                'total_orders': order_count,
+                'total_order_amount': float(order_amount),
+            }
+        )
 
 
 class OpportunityStageAnalysisView(APIView):
     """商机阶段分析API"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -171,10 +173,7 @@ class OpportunityStageAnalysisView(APIView):
 
         for stage_code, stage_name in stages:
             opps = Opportunity.objects.filter(
-                stage=stage_code,
-                created_at__date__gte=start_date,
-                created_at__date__lte=end_date,
-                is_deleted=False
+                stage=stage_code, created_at__date__gte=start_date, created_at__date__lte=end_date, is_deleted=False
             )
 
             count = opps.count()
@@ -182,13 +181,15 @@ class OpportunityStageAnalysisView(APIView):
             # days_in_stage 字段可能不存在，使用默认值
             avg_days = 0
 
-            stage_data.append({
-                'stage': stage_code,
-                'stage_name': stage_name,
-                'count': count,
-                'amount': float(amount),
-                'avg_days': round(float(avg_days), 1)
-            })
+            stage_data.append(
+                {
+                    'stage': stage_code,
+                    'stage_name': stage_name,
+                    'count': count,
+                    'amount': float(amount),
+                    'avg_days': round(float(avg_days), 1),
+                }
+            )
 
             if stage_code not in ['CLOSED_WON', 'CLOSED_LOST']:
                 total_count += count
@@ -200,22 +201,19 @@ class OpportunityStageAnalysisView(APIView):
         closed_count = won_count + lost_count
         win_rate = round(won_count / closed_count * 100, 1) if closed_count > 0 else 0
 
-        return Response({
-            'period': {
-                'start': start_date.isoformat(),
-                'end': end_date.isoformat()
-            },
-            'stages': stage_data,
-            'pipeline': {
-                'count': total_count,
-                'amount': total_amount
-            },
-            'win_rate': win_rate
-        })
+        return Response(
+            {
+                'period': {'start': start_date.isoformat(), 'end': end_date.isoformat()},
+                'stages': stage_data,
+                'pipeline': {'count': total_count, 'amount': total_amount},
+                'win_rate': win_rate,
+            }
+        )
 
 
 class SalesTrendView(APIView):
     """销售趋势分析API"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -232,7 +230,7 @@ class SalesTrendView(APIView):
             order_date__gte=start_date,
             order_date__lte=end_date,
             status__in=['CONFIRMED', 'DELIVERED', 'COMPLETED'],
-            is_deleted=False
+            is_deleted=False,
         )
 
         if period == 'day':
@@ -242,28 +240,31 @@ class SalesTrendView(APIView):
         else:
             trunc_func = TruncMonth('order_date')
 
-        trend = orders.annotate(
-            period=trunc_func
-        ).values('period').annotate(
-            count=Count('id'),
-            amount=Sum('total_amount')
-        ).order_by('period')
+        trend = (
+            orders.annotate(period=trunc_func)
+            .values('period')
+            .annotate(count=Count('id'), amount=Sum('total_amount'))
+            .order_by('period')
+        )
 
-        return Response({
-            'period_type': period,
-            'trend': [
-                {
-                    'date': item['period'].isoformat() if item['period'] else None,
-                    'count': item['count'],
-                    'amount': float(item['amount']) if item['amount'] else 0
-                }
-                for item in trend
-            ]
-        })
+        return Response(
+            {
+                'period_type': period,
+                'trend': [
+                    {
+                        'date': item['period'].isoformat() if item['period'] else None,
+                        'count': item['count'],
+                        'amount': float(item['amount']) if item['amount'] else 0,
+                    }
+                    for item in trend
+                ],
+            }
+        )
 
 
 class SalespersonRankingView(APIView):
     """销售人员排名API"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -284,34 +285,31 @@ class SalespersonRankingView(APIView):
             start_date = date.fromisoformat(start_date)
 
         # 按销售人员统计
-        ranking = SalesOrder.objects.filter(
-            order_date__gte=start_date,
-            order_date__lte=end_date,
-            status__in=['CONFIRMED', 'DELIVERED', 'COMPLETED'],
-            is_deleted=False
-        ).values(
-            'created_by__id',
-            'created_by__first_name',
-            'created_by__last_name',
-            'created_by__username'
-        ).annotate(
-            order_count=Count('id'),
-            total_amount=Sum('total_amount')
-        ).order_by('-total_amount')
+        ranking = (
+            SalesOrder.objects.filter(
+                order_date__gte=start_date,
+                order_date__lte=end_date,
+                status__in=['CONFIRMED', 'DELIVERED', 'COMPLETED'],
+                is_deleted=False,
+            )
+            .values('created_by__id', 'created_by__first_name', 'created_by__last_name', 'created_by__username')
+            .annotate(order_count=Count('id'), total_amount=Sum('total_amount'))
+            .order_by('-total_amount')
+        )
 
-        return Response({
-            'period': {
-                'start': start_date.isoformat(),
-                'end': end_date.isoformat()
-            },
-            'ranking': [
-                {
-                    'rank': idx + 1,
-                    'user_id': item['created_by__id'],
-                    'name': f"{item['created_by__last_name'] or ''}{item['created_by__first_name'] or ''}" or item['created_by__username'],
-                    'order_count': item['order_count'],
-                    'total_amount': float(item['total_amount']) if item['total_amount'] else 0
-                }
-                for idx, item in enumerate(ranking)
-            ]
-        })
+        return Response(
+            {
+                'period': {'start': start_date.isoformat(), 'end': end_date.isoformat()},
+                'ranking': [
+                    {
+                        'rank': idx + 1,
+                        'user_id': item['created_by__id'],
+                        'name': f"{item['created_by__last_name'] or ''}{item['created_by__first_name'] or ''}"
+                        or item['created_by__username'],
+                        'order_count': item['order_count'],
+                        'total_amount': float(item['total_amount']) if item['total_amount'] else 0,
+                    }
+                    for idx, item in enumerate(ranking)
+                ],
+            }
+        )

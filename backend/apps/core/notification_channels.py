@@ -6,6 +6,7 @@ Multi-channel notification service supporting:
 - WeChat Work (企业微信)
 - SMS (optional)
 """
+
 import base64
 import hashlib
 import hmac
@@ -43,17 +44,17 @@ class EmailChannel(NotificationChannel):
                 recipient_list=[recipient],
                 fail_silently=False,
             )
-            logger.info(f"Email sent to {recipient}: {title}")
+            logger.info(f'Email sent to {recipient}: {title}')
             return True
         except Exception as e:
-            logger.error(f"Failed to send email to {recipient}: {e}")
+            logger.error(f'Failed to send email to {recipient}: {e}')
             return False
 
 
 class DingTalkChannel(NotificationChannel):
     """
     DingTalk (钉钉) notification channel.
-    
+
     Supports:
     - Robot webhook (群机器人)
     - Work notification (工作通知)
@@ -90,15 +91,15 @@ class DingTalkChannel(NotificationChannel):
             data = response.json()
             if data.get('errcode') == 0:
                 return data.get('access_token')
-            logger.error(f"DingTalk get token error: {data}")
+            logger.error(f'DingTalk get token error: {data}')
         except Exception as e:
-            logger.error(f"DingTalk get token failed: {e}")
+            logger.error(f'DingTalk get token failed: {e}')
         return None
 
     def send_webhook(self, title, content, msg_type='text', at_mobiles=None, at_all=False):
         """
         Send message via robot webhook.
-        
+
         Args:
             title: Message title (for markdown type)
             content: Message content
@@ -107,63 +108,46 @@ class DingTalkChannel(NotificationChannel):
             at_all: Whether to @ all members
         """
         if not self.webhook_url:
-            logger.warning("DingTalk webhook URL not configured")
+            logger.warning('DingTalk webhook URL not configured')
             return False
 
         url = self.webhook_url
         if self.webhook_secret:
             timestamp, sign = self._get_sign()
-            url = f"{url}&timestamp={timestamp}&sign={sign}"
+            url = f'{url}&timestamp={timestamp}&sign={sign}'
 
         if msg_type == 'text':
             data = {
-                "msgtype": "text",
-                "text": {"content": content},
-                "at": {
-                    "atMobiles": at_mobiles or [],
-                    "isAtAll": at_all
-                }
+                'msgtype': 'text',
+                'text': {'content': content},
+                'at': {'atMobiles': at_mobiles or [], 'isAtAll': at_all},
             }
         elif msg_type == 'markdown':
             data = {
-                "msgtype": "markdown",
-                "markdown": {
-                    "title": title,
-                    "text": content
-                },
-                "at": {
-                    "atMobiles": at_mobiles or [],
-                    "isAtAll": at_all
-                }
+                'msgtype': 'markdown',
+                'markdown': {'title': title, 'text': content},
+                'at': {'atMobiles': at_mobiles or [], 'isAtAll': at_all},
             }
         else:
-            data = {
-                "msgtype": "text",
-                "text": {"content": f"{title}\n{content}"}
-            }
+            data = {'msgtype': 'text', 'text': {'content': f'{title}\n{content}'}}
 
         try:
-            response = requests.post(
-                url,
-                json=data,
-                headers={'Content-Type': 'application/json'},
-                timeout=10
-            )
+            response = requests.post(url, json=data, headers={'Content-Type': 'application/json'}, timeout=10)
             result = response.json()
             if result.get('errcode') == 0:
-                logger.info(f"DingTalk webhook sent: {title}")
+                logger.info(f'DingTalk webhook sent: {title}')
                 return True
             else:
-                logger.error(f"DingTalk webhook error: {result}")
+                logger.error(f'DingTalk webhook error: {result}')
                 return False
         except Exception as e:
-            logger.error(f"DingTalk webhook failed: {e}")
+            logger.error(f'DingTalk webhook failed: {e}')
             return False
 
     def send_work_notification(self, user_ids, title, content):
         """
         Send work notification to specific users.
-        
+
         Args:
             user_ids: List of DingTalk user IDs
             title: Message title
@@ -176,39 +160,28 @@ class DingTalkChannel(NotificationChannel):
         url = f'https://oapi.dingtalk.com/topapi/message/corpconversation/asyncsend_v2?access_token={access_token}'
 
         data = {
-            "agent_id": self.agent_id,
-            "userid_list": ",".join(user_ids) if isinstance(user_ids, list) else user_ids,
-            "msg": {
-                "msgtype": "oa",
-                "oa": {
-                    "head": {
-                        "bgcolor": "FFBBBBBB",
-                        "text": "ERP系统通知"
-                    },
-                    "body": {
-                        "title": title,
-                        "content": content
-                    }
-                }
-            }
+            'agent_id': self.agent_id,
+            'userid_list': ','.join(user_ids) if isinstance(user_ids, list) else user_ids,
+            'msg': {
+                'msgtype': 'oa',
+                'oa': {
+                    'head': {'bgcolor': 'FFBBBBBB', 'text': 'ERP系统通知'},
+                    'body': {'title': title, 'content': content},
+                },
+            },
         }
 
         try:
-            response = requests.post(
-                url,
-                json=data,
-                headers={'Content-Type': 'application/json'},
-                timeout=10
-            )
+            response = requests.post(url, json=data, headers={'Content-Type': 'application/json'}, timeout=10)
             result = response.json()
             if result.get('errcode') == 0:
-                logger.info(f"DingTalk work notification sent: {title}")
+                logger.info(f'DingTalk work notification sent: {title}')
                 return True
             else:
-                logger.error(f"DingTalk work notification error: {result}")
+                logger.error(f'DingTalk work notification error: {result}')
                 return False
         except Exception as e:
-            logger.error(f"DingTalk work notification failed: {e}")
+            logger.error(f'DingTalk work notification failed: {e}')
             return False
 
     def send(self, recipient, title, content, **kwargs):
@@ -225,7 +198,7 @@ class DingTalkChannel(NotificationChannel):
 class WeChatWorkChannel(NotificationChannel):
     """
     WeChat Work (企业微信) notification channel.
-    
+
     Supports:
     - Robot webhook (群机器人)
     - Application message (应用消息)
@@ -256,15 +229,15 @@ class WeChatWorkChannel(NotificationChannel):
                 self._access_token = data.get('access_token')
                 self._token_expires_at = time.time() + data.get('expires_in', 7200) - 300
                 return self._access_token
-            logger.error(f"WeChat Work get token error: {data}")
+            logger.error(f'WeChat Work get token error: {data}')
         except Exception as e:
-            logger.error(f"WeChat Work get token failed: {e}")
+            logger.error(f'WeChat Work get token failed: {e}')
         return None
 
     def send_webhook(self, title, content, msg_type='text', mentioned_list=None):
         """
         Send message via robot webhook.
-        
+
         Args:
             title: Message title (for markdown type)
             content: Message content
@@ -272,52 +245,38 @@ class WeChatWorkChannel(NotificationChannel):
             mentioned_list: List of user IDs to mention
         """
         if not self.webhook_url:
-            logger.warning("WeChat Work webhook URL not configured")
+            logger.warning('WeChat Work webhook URL not configured')
             return False
 
         if msg_type == 'text':
             data = {
-                "msgtype": "text",
-                "text": {
-                    "content": f"{title}\n{content}",
-                    "mentioned_list": mentioned_list or []
-                }
+                'msgtype': 'text',
+                'text': {'content': f'{title}\n{content}', 'mentioned_list': mentioned_list or []},
             }
         elif msg_type == 'markdown':
-            data = {
-                "msgtype": "markdown",
-                "markdown": {
-                    "content": f"### {title}\n{content}"
-                }
-            }
+            data = {'msgtype': 'markdown', 'markdown': {'content': f'### {title}\n{content}'}}
         else:
-            data = {
-                "msgtype": "text",
-                "text": {"content": f"{title}\n{content}"}
-            }
+            data = {'msgtype': 'text', 'text': {'content': f'{title}\n{content}'}}
 
         try:
             response = requests.post(
-                self.webhook_url,
-                json=data,
-                headers={'Content-Type': 'application/json'},
-                timeout=10
+                self.webhook_url, json=data, headers={'Content-Type': 'application/json'}, timeout=10
             )
             result = response.json()
             if result.get('errcode') == 0:
-                logger.info(f"WeChat Work webhook sent: {title}")
+                logger.info(f'WeChat Work webhook sent: {title}')
                 return True
             else:
-                logger.error(f"WeChat Work webhook error: {result}")
+                logger.error(f'WeChat Work webhook error: {result}')
                 return False
         except Exception as e:
-            logger.error(f"WeChat Work webhook failed: {e}")
+            logger.error(f'WeChat Work webhook failed: {e}')
             return False
 
     def send_app_message(self, user_ids, title, content):
         """
         Send application message to specific users.
-        
+
         Args:
             user_ids: List of WeChat Work user IDs or '@all'
             title: Message title
@@ -329,36 +288,31 @@ class WeChatWorkChannel(NotificationChannel):
 
         url = f'https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={access_token}'
 
-        touser = "|".join(user_ids) if isinstance(user_ids, list) else user_ids
+        touser = '|'.join(user_ids) if isinstance(user_ids, list) else user_ids
 
         data = {
-            "touser": touser,
-            "msgtype": "textcard",
-            "agentid": self.agent_id,
-            "textcard": {
-                "title": title,
-                "description": content[:512],  # Max 512 chars
-                "url": getattr(settings, 'FRONTEND_URL', 'http://localhost'),
-                "btntxt": "查看详情"
-            }
+            'touser': touser,
+            'msgtype': 'textcard',
+            'agentid': self.agent_id,
+            'textcard': {
+                'title': title,
+                'description': content[:512],  # Max 512 chars
+                'url': getattr(settings, 'FRONTEND_URL', 'http://localhost'),
+                'btntxt': '查看详情',
+            },
         }
 
         try:
-            response = requests.post(
-                url,
-                json=data,
-                headers={'Content-Type': 'application/json'},
-                timeout=10
-            )
+            response = requests.post(url, json=data, headers={'Content-Type': 'application/json'}, timeout=10)
             result = response.json()
             if result.get('errcode') == 0:
-                logger.info(f"WeChat Work app message sent: {title}")
+                logger.info(f'WeChat Work app message sent: {title}')
                 return True
             else:
-                logger.error(f"WeChat Work app message error: {result}")
+                logger.error(f'WeChat Work app message error: {result}')
                 return False
         except Exception as e:
-            logger.error(f"WeChat Work app message failed: {e}")
+            logger.error(f'WeChat Work app message failed: {e}')
             return False
 
     def send(self, recipient, title, content, **kwargs):
@@ -393,13 +347,13 @@ class NotificationService:
             if channel_class:
                 self._channel_instances[channel_name] = channel_class()
             else:
-                raise ValueError(f"Unknown notification channel: {channel_name}")
+                raise ValueError(f'Unknown notification channel: {channel_name}')
         return self._channel_instances[channel_name]
 
     def send(self, channel, recipient, title, content, **kwargs):
         """
         Send notification via specified channel.
-        
+
         Args:
             channel: 'email', 'dingtalk', 'wechat_work'
             recipient: Channel-specific recipient identifier
@@ -411,20 +365,20 @@ class NotificationService:
             channel_instance = self._get_channel(channel)
             return channel_instance.send(recipient, title, content, **kwargs)
         except Exception as e:
-            logger.error(f"Notification send failed ({channel}): {e}")
+            logger.error(f'Notification send failed ({channel}): {e}')
             return False
 
     def send_multi(self, channels, recipient_map, title, content, **kwargs):
         """
         Send notification via multiple channels.
-        
+
         Args:
             channels: List of channel names
             recipient_map: Dict mapping channel name to recipient
             title: Notification title
             content: Notification content
             **kwargs: Channel-specific options
-        
+
         Returns:
             Dict with results for each channel
         """
@@ -441,7 +395,7 @@ class NotificationService:
         """
         Broadcast notification to all configured channels.
         Uses webhook/robot mode (no specific recipient).
-        
+
         Args:
             title: Notification title
             content: Notification content
@@ -483,4 +437,3 @@ def send_wechat_work(title, content, msg_type='markdown', **kwargs):
     """Send WeChat Work notification."""
     wechat = notification_service._get_channel('wechat_work')
     return wechat.send_webhook(title, content, msg_type, **kwargs)
-

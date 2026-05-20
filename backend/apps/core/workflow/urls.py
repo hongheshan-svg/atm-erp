@@ -1,6 +1,7 @@
 """
 Workflow URL configuration.
 """
+
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
@@ -15,7 +16,6 @@ router.register(r'tasks', WorkflowTaskViewSet, basename='workflow-task')
 
 urlpatterns = [
     path('', include(router.urls)),
-
     # 工作流可视化API
     path('visualization/', WorkflowVisualizationView.as_view(), name='workflow-overview'),
     path('visualization/<int:workflow_id>/', WorkflowVisualizationView.as_view(), name='workflow-visualization'),

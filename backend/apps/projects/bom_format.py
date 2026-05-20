@@ -27,35 +27,35 @@ Unified Global BOM Format Configuration for Non-standard Automation Industry
 
 # 物料大类（一级分类）
 ITEM_CATEGORY_L1 = [
-    ('MECHANICAL', '机械类'),       # 机加件、钣金件、焊接件等
-    ('ELECTRICAL', '电气类'),       # PLC、传感器、电机、线缆等
-    ('PNEUMATIC', '气动类'),        # 气缸、电磁阀、气管等
-    ('HYDRAULIC', '液压类'),        # 油缸、液压站等
-    ('STANDARD', '标准件'),         # 螺丝、轴承、导轨等
-    ('MODULE', '外购模组'),         # 直线模组、机器人等
-    ('CONSUMABLE', '耗材辅料'),     # 润滑油、包装材料等
-    ('SOFTWARE', '软件服务'),       # 编程、调试、培训
+    ('MECHANICAL', '机械类'),  # 机加件、钣金件、焊接件等
+    ('ELECTRICAL', '电气类'),  # PLC、传感器、电机、线缆等
+    ('PNEUMATIC', '气动类'),  # 气缸、电磁阀、气管等
+    ('HYDRAULIC', '液压类'),  # 油缸、液压站等
+    ('STANDARD', '标准件'),  # 螺丝、轴承、导轨等
+    ('MODULE', '外购模组'),  # 直线模组、机器人等
+    ('CONSUMABLE', '耗材辅料'),  # 润滑油、包装材料等
+    ('SOFTWARE', '软件服务'),  # 编程、调试、培训
 ]
 
 # 物料属性（加工/采购方式）
 ITEM_PROPERTY = [
-    ('SELF_MADE', '自制件'),        # 自己加工
-    ('OUTSOURCED', '外协件'),       # 外协加工
-    ('PURCHASED', '外购件'),        # 直接采购成品
-    ('STANDARD', '标准件'),         # 标准通用件
-    ('CONSUMABLE', '易耗品'),       # 消耗品
-    ('VIRTUAL', '虚拟件'),          # 仅用于BOM结构
-    ('ASSEMBLY', '组件'),           # 装配件
+    ('SELF_MADE', '自制件'),  # 自己加工
+    ('OUTSOURCED', '外协件'),  # 外协加工
+    ('PURCHASED', '外购件'),  # 直接采购成品
+    ('STANDARD', '标准件'),  # 标准通用件
+    ('CONSUMABLE', '易耗品'),  # 消耗品
+    ('VIRTUAL', '虚拟件'),  # 仅用于BOM结构
+    ('ASSEMBLY', '组件'),  # 装配件
 ]
 
 # 机械类细分（CAD导入相关）
 MECHANICAL_SUBCATEGORY = [
-    ('MACHINING', '机加件'),        # 车铣刨磨
-    ('SHEETMETAL', '钣金件'),       # 激光切割、折弯
-    ('WELDING', '焊接件'),          # 焊接结构件
-    ('CASTING', '铸造件'),          # 铸铁、铸铝
-    ('FORGING', '锻造件'),          # 锻件
-    ('PRINTING', '3D打印件'),       # 快速成型
+    ('MACHINING', '机加件'),  # 车铣刨磨
+    ('SHEETMETAL', '钣金件'),  # 激光切割、折弯
+    ('WELDING', '焊接件'),  # 焊接结构件
+    ('CASTING', '铸造件'),  # 铸铁、铸铝
+    ('FORGING', '锻造件'),  # 锻件
+    ('PRINTING', '3D打印件'),  # 快速成型
     ('OTHER_MECH', '其他机械'),
 ]
 
@@ -446,17 +446,15 @@ BOM_DRAWING_FIELDS = [
 
 # 项目BOM表格（前端显示）- 完整版（全局BOM）
 PROJECT_BOM_TABLE_COLUMNS = (
-    BOM_CORE_FIELDS +
-    BOM_PURCHASE_FIELDS +
-    BOM_INVENTORY_FIELDS +
-    BOM_COST_FIELDS[:2] +  # 预估单价、预估成本
-    BOM_REQUIREMENT_FIELDS[:2]  # 需求日期、申请人
+    BOM_CORE_FIELDS
+    + BOM_PURCHASE_FIELDS
+    + BOM_INVENTORY_FIELDS
+    + BOM_COST_FIELDS[:2]  # 预估单价、预估成本
+    + BOM_REQUIREMENT_FIELDS[:2]  # 需求日期、申请人
 )
 
 # 项目BOM导入模板 - 通用版（适用于所有物料类型）
-PROJECT_BOM_IMPORT_TEMPLATE = [
-    f for f in BOM_CORE_FIELDS
-] + [
+PROJECT_BOM_IMPORT_TEMPLATE = [f for f in BOM_CORE_FIELDS] + [
     BOM_REQUIREMENT_FIELDS[0],  # 需求日期
     BOM_REQUIREMENT_FIELDS[1],  # 申请人
 ]
@@ -469,8 +467,14 @@ MECHANICAL_BOM_TEMPLATE = [
     {'field': 'index', 'label': '序号', 'width': 60, 'type': 'readonly', 'excel_width': 6},
     {'field': 'item_code', 'label': '物料编码', 'width': 120, 'type': 'required', 'excel_width': 15},
     {'field': 'has_drawing', 'label': '有图/无图', 'width': 80, 'type': 'optional', 'excel_width': 10},
-    {'field': 'mech_type', 'label': '加工类型', 'width': 90, 'type': 'optional', 'excel_width': 10,
-     'options': ['机加件', '钣金件', '焊接件', '铸造件', '3D打印']},
+    {
+        'field': 'mech_type',
+        'label': '加工类型',
+        'width': 90,
+        'type': 'optional',
+        'excel_width': 10,
+        'options': ['机加件', '钣金件', '焊接件', '铸造件', '3D打印'],
+    },
     {'field': 'item_name', 'label': '物料名称', 'width': 180, 'type': 'readonly', 'excel_width': 25},
     {'field': 'specification', 'label': '规格型号', 'width': 150, 'type': 'readonly', 'excel_width': 20},
     {'field': 'material', 'label': '材质', 'width': 100, 'type': 'optional', 'excel_width': 12},
@@ -485,8 +489,14 @@ MECHANICAL_BOM_TEMPLATE = [
 ELECTRICAL_BOM_TEMPLATE = [
     {'field': 'index', 'label': '序号', 'width': 60, 'type': 'readonly', 'excel_width': 6},
     {'field': 'item_code', 'label': '物料编码', 'width': 120, 'type': 'required', 'excel_width': 15},
-    {'field': 'elec_type', 'label': '电气类型', 'width': 100, 'type': 'optional', 'excel_width': 12,
-     'options': ['PLC', 'HMI', '伺服', '变频器', '传感器', '开关', '继电器', '电源', '线缆', '其他']},
+    {
+        'field': 'elec_type',
+        'label': '电气类型',
+        'width': 100,
+        'type': 'optional',
+        'excel_width': 12,
+        'options': ['PLC', 'HMI', '伺服', '变频器', '传感器', '开关', '继电器', '电源', '线缆', '其他'],
+    },
     {'field': 'item_name', 'label': '物料名称', 'width': 180, 'type': 'readonly', 'excel_width': 25},
     {'field': 'specification', 'label': '规格型号', 'width': 180, 'type': 'required', 'excel_width': 22},
     {'field': 'brand', 'label': '品牌', 'width': 100, 'type': 'required', 'excel_width': 12},
@@ -501,8 +511,14 @@ ELECTRICAL_BOM_TEMPLATE = [
 PNEUMATIC_BOM_TEMPLATE = [
     {'field': 'index', 'label': '序号', 'width': 60, 'type': 'readonly', 'excel_width': 6},
     {'field': 'item_code', 'label': '物料编码', 'width': 120, 'type': 'required', 'excel_width': 15},
-    {'field': 'pneu_type', 'label': '气动类型', 'width': 100, 'type': 'optional', 'excel_width': 12,
-     'options': ['气缸', '电磁阀', '气源处理', '气管接头', '气动夹爪', '其他']},
+    {
+        'field': 'pneu_type',
+        'label': '气动类型',
+        'width': 100,
+        'type': 'optional',
+        'excel_width': 12,
+        'options': ['气缸', '电磁阀', '气源处理', '气管接头', '气动夹爪', '其他'],
+    },
     {'field': 'item_name', 'label': '物料名称', 'width': 180, 'type': 'readonly', 'excel_width': 25},
     {'field': 'specification', 'label': '规格型号', 'width': 180, 'type': 'required', 'excel_width': 22},
     {'field': 'brand', 'label': '品牌', 'width': 100, 'type': 'required', 'excel_width': 12},
@@ -517,12 +533,24 @@ PNEUMATIC_BOM_TEMPLATE = [
 STANDARD_PARTS_BOM_TEMPLATE = [
     {'field': 'index', 'label': '序号', 'width': 60, 'type': 'readonly', 'excel_width': 6},
     {'field': 'item_code', 'label': '物料编码', 'width': 120, 'type': 'required', 'excel_width': 15},
-    {'field': 'std_type', 'label': '标准件类型', 'width': 100, 'type': 'optional', 'excel_width': 12,
-     'options': ['螺丝螺母', '轴承', '导轨滑块', '丝杆螺母', '联轴器', '同步带轮', '其他']},
+    {
+        'field': 'std_type',
+        'label': '标准件类型',
+        'width': 100,
+        'type': 'optional',
+        'excel_width': 12,
+        'options': ['螺丝螺母', '轴承', '导轨滑块', '丝杆螺母', '联轴器', '同步带轮', '其他'],
+    },
     {'field': 'item_name', 'label': '物料名称', 'width': 180, 'type': 'readonly', 'excel_width': 25},
     {'field': 'specification', 'label': '规格型号', 'width': 180, 'type': 'required', 'excel_width': 22},
-    {'field': 'standard', 'label': '标准号', 'width': 100, 'type': 'optional', 'excel_width': 12,
-     'options': ['GB', 'DIN', 'ISO', 'JIS', '厂标']},
+    {
+        'field': 'standard',
+        'label': '标准号',
+        'width': 100,
+        'type': 'optional',
+        'excel_width': 12,
+        'options': ['GB', 'DIN', 'ISO', 'JIS', '厂标'],
+    },
     {'field': 'brand', 'label': '品牌', 'width': 100, 'type': 'optional', 'excel_width': 12},
     {'field': 'unit', 'label': '单位', 'width': 60, 'type': 'readonly', 'excel_width': 8},
     {'field': 'quantity', 'label': '数量', 'width': 80, 'type': 'required', 'excel_width': 10},
@@ -530,51 +558,48 @@ STANDARD_PARTS_BOM_TEMPLATE = [
 ]
 
 # 采购询价BOM模板
-QUOTE_BOM_TEMPLATE = (
-    BOM_CORE_FIELDS +
-    [
-        {
-            'field': 'ref_price',
-            'label': '历史单价(参考)',
-            'width': 120,
-            'type': 'ref',
-            'excel_width': 14,
-            'description': '历史采购单价参考',
-        },
-        {
-            'field': 'ref_supplier',
-            'label': '历史供应商(参考)',
-            'width': 150,
-            'type': 'ref',
-            'excel_width': 18,
-            'description': '历史供应商参考',
-        },
-        {
-            'field': 'quote_supplier',
-            'label': '供应商',
-            'width': 150,
-            'type': 'input',
-            'excel_width': 18,
-            'description': '填写供应商',
-        },
-        {
-            'field': 'quote_price',
-            'label': '含税单价',
-            'width': 100,
-            'type': 'input',
-            'excel_width': 12,
-            'description': '填写含税单价',
-        },
-        {
-            'field': 'quote_delivery',
-            'label': '交期(天)',
-            'width': 80,
-            'type': 'input',
-            'excel_width': 10,
-            'description': '填写交期天数',
-        },
-    ]
-)
+QUOTE_BOM_TEMPLATE = BOM_CORE_FIELDS + [
+    {
+        'field': 'ref_price',
+        'label': '历史单价(参考)',
+        'width': 120,
+        'type': 'ref',
+        'excel_width': 14,
+        'description': '历史采购单价参考',
+    },
+    {
+        'field': 'ref_supplier',
+        'label': '历史供应商(参考)',
+        'width': 150,
+        'type': 'ref',
+        'excel_width': 18,
+        'description': '历史供应商参考',
+    },
+    {
+        'field': 'quote_supplier',
+        'label': '供应商',
+        'width': 150,
+        'type': 'input',
+        'excel_width': 18,
+        'description': '填写供应商',
+    },
+    {
+        'field': 'quote_price',
+        'label': '含税单价',
+        'width': 100,
+        'type': 'input',
+        'excel_width': 12,
+        'description': '填写含税单价',
+    },
+    {
+        'field': 'quote_delivery',
+        'label': '交期(天)',
+        'width': 80,
+        'type': 'input',
+        'excel_width': 10,
+        'description': '填写交期天数',
+    },
+]
 
 # CAD BOM导入字段映射（机械部分）
 CAD_BOM_FIELD_MAPPING = {
@@ -616,6 +641,7 @@ ITEM_MASTER_TABLE_COLUMNS = [
 # =====================================================
 # 辅助函数
 # =====================================================
+
 
 def get_excel_headers(field_config, include_required_mark=True):
     """生成Excel表头"""
@@ -667,7 +693,6 @@ BOM_FORMAT_CONFIG = {
     'mechanical_subcategory': MECHANICAL_SUBCATEGORY,
     'electrical_subcategory': ELECTRICAL_SUBCATEGORY,
     'pneumatic_subcategory': PNEUMATIC_SUBCATEGORY,
-
     # 字段定义
     'core_fields': BOM_CORE_FIELDS,
     'purchase_fields': BOM_PURCHASE_FIELDS,
@@ -677,22 +702,18 @@ BOM_FORMAT_CONFIG = {
     'process_fields': BOM_PROCESS_FIELDS,
     'drawing_fields': BOM_DRAWING_FIELDS,
     'technical_fields': BOM_TECHNICAL_FIELDS,
-
     # 全局BOM模板
     'project_bom_table': PROJECT_BOM_TABLE_COLUMNS,
     'project_bom_import': PROJECT_BOM_IMPORT_TEMPLATE,
     'project_bom_export': PROJECT_BOM_EXPORT_COLUMNS,
     'quote_bom': QUOTE_BOM_TEMPLATE,
-
     # 分类BOM模板
-    'mechanical_bom': MECHANICAL_BOM_TEMPLATE,      # 机械类（CAD导入用）
-    'electrical_bom': ELECTRICAL_BOM_TEMPLATE,      # 电气类
-    'pneumatic_bom': PNEUMATIC_BOM_TEMPLATE,        # 气动类
+    'mechanical_bom': MECHANICAL_BOM_TEMPLATE,  # 机械类（CAD导入用）
+    'electrical_bom': ELECTRICAL_BOM_TEMPLATE,  # 电气类
+    'pneumatic_bom': PNEUMATIC_BOM_TEMPLATE,  # 气动类
     'standard_parts_bom': STANDARD_PARTS_BOM_TEMPLATE,  # 标准件
-
     # 物料主数据
     'item_master': ITEM_MASTER_TABLE_COLUMNS,
-
     # CAD导入映射（仅机械部分）
     'cad_mapping': CAD_BOM_FIELD_MAPPING,
 }

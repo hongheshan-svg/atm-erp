@@ -3,6 +3,7 @@
 Equipment Inspection Records
 支持日常点检、定期巡检、异常记录等
 """
+
 from datetime import date, timedelta
 
 from django.db import models
@@ -21,6 +22,7 @@ class InspectionTemplate(BaseModel):
     """
     点检模板
     """
+
     TEMPLATE_TYPES = [
         ('DAILY', '日常点检'),
         ('WEEKLY', '周点检'),
@@ -30,12 +32,7 @@ class InspectionTemplate(BaseModel):
 
     code = models.CharField(max_length=50, unique=True, verbose_name='模板编码')
     name = models.CharField(max_length=200, verbose_name='模板名称')
-    template_type = models.CharField(
-        max_length=20,
-        choices=TEMPLATE_TYPES,
-        default='DAILY',
-        verbose_name='模板类型'
-    )
+    template_type = models.CharField(max_length=20, choices=TEMPLATE_TYPES, default='DAILY', verbose_name='模板类型')
 
     # 适用设备类型
     equipment_type = models.CharField(max_length=100, blank=True, verbose_name='适用设备类型')
@@ -57,6 +54,7 @@ class InspectionItem(BaseModel):
     """
     点检项目
     """
+
     # 覆盖 BaseModel 的字段以避免 related_name 冲突
     created_by = models.ForeignKey(
         'accounts.User',
@@ -64,7 +62,7 @@ class InspectionItem(BaseModel):
         null=True,
         blank=True,
         related_name='equipment_inspection_items_created',
-        verbose_name='创建人'
+        verbose_name='创建人',
     )
     updated_by = models.ForeignKey(
         'accounts.User',
@@ -72,7 +70,7 @@ class InspectionItem(BaseModel):
         null=True,
         blank=True,
         related_name='equipment_inspection_items_updated',
-        verbose_name='更新人'
+        verbose_name='更新人',
     )
 
     CHECK_TYPES = [
@@ -92,26 +90,13 @@ class InspectionItem(BaseModel):
     ]
 
     template = models.ForeignKey(
-        InspectionTemplate,
-        on_delete=models.CASCADE,
-        related_name='items',
-        verbose_name='所属模板'
+        InspectionTemplate, on_delete=models.CASCADE, related_name='items', verbose_name='所属模板'
     )
 
     code = models.CharField(max_length=50, verbose_name='项目编码')
     name = models.CharField(max_length=200, verbose_name='项目名称')
-    check_type = models.CharField(
-        max_length=20,
-        choices=CHECK_TYPES,
-        default='VISUAL',
-        verbose_name='检查方式'
-    )
-    result_type = models.CharField(
-        max_length=20,
-        choices=RESULT_TYPES,
-        default='OK_NG',
-        verbose_name='结果类型'
-    )
+    check_type = models.CharField(max_length=20, choices=CHECK_TYPES, default='VISUAL', verbose_name='检查方式')
+    result_type = models.CharField(max_length=20, choices=RESULT_TYPES, default='OK_NG', verbose_name='结果类型')
 
     # 标准值（用于数值类型）
     standard_value = models.CharField(max_length=100, blank=True, verbose_name='标准值')
@@ -142,6 +127,7 @@ class InspectionRecord(BaseModel):
     """
     点检记录
     """
+
     STATUS_CHOICES = [
         ('PENDING', '待点检'),
         ('IN_PROGRESS', '点检中'),
@@ -152,17 +138,10 @@ class InspectionRecord(BaseModel):
     record_no = models.CharField(max_length=50, unique=True, verbose_name='记录编号')
 
     equipment = models.ForeignKey(
-        'projects.Equipment',
-        on_delete=models.CASCADE,
-        related_name='inspection_records',
-        verbose_name='设备'
+        'projects.Equipment', on_delete=models.CASCADE, related_name='inspection_records', verbose_name='设备'
     )
     template = models.ForeignKey(
-        InspectionTemplate,
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='records',
-        verbose_name='使用模板'
+        InspectionTemplate, on_delete=models.SET_NULL, null=True, related_name='records', verbose_name='使用模板'
     )
 
     # 点检时间
@@ -175,7 +154,7 @@ class InspectionRecord(BaseModel):
             ('ALL', '全天'),
         ],
         default='DAY',
-        verbose_name='班次'
+        verbose_name='班次',
     )
     start_time = models.TimeField(null=True, blank=True, verbose_name='开始时间')
     end_time = models.TimeField(null=True, blank=True, verbose_name='结束时间')
@@ -186,16 +165,11 @@ class InspectionRecord(BaseModel):
         on_delete=models.SET_NULL,
         null=True,
         related_name='equipment_inspections',
-        verbose_name='点检人'
+        verbose_name='点检人',
     )
 
     # 状态
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
 
     # 统计
     total_items = models.IntegerField(default=0, verbose_name='总项目数')
@@ -237,18 +211,12 @@ class InspectionResult(BaseModel):
     """
     点检结果
     """
+
     record = models.ForeignKey(
-        InspectionRecord,
-        on_delete=models.CASCADE,
-        related_name='results',
-        verbose_name='点检记录'
+        InspectionRecord, on_delete=models.CASCADE, related_name='results', verbose_name='点检记录'
     )
     item = models.ForeignKey(
-        InspectionItem,
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='results',
-        verbose_name='点检项目'
+        InspectionItem, on_delete=models.SET_NULL, null=True, related_name='results', verbose_name='点检项目'
     )
 
     # 结果
@@ -266,7 +234,7 @@ class InspectionResult(BaseModel):
             ('CRITICAL', '紧急'),
         ],
         blank=True,
-        verbose_name='异常等级'
+        verbose_name='异常等级',
     )
 
     # 处理
@@ -278,7 +246,7 @@ class InspectionResult(BaseModel):
         null=True,
         blank=True,
         related_name='handled_inspections',
-        verbose_name='处理人'
+        verbose_name='处理人',
     )
     handled_at = models.DateTimeField(null=True, blank=True, verbose_name='处理时间')
 
@@ -300,6 +268,7 @@ class InspectionResult(BaseModel):
 # =====================
 # Serializers
 # =====================
+
 
 class InspectionItemSerializer(serializers.ModelSerializer):
     check_type_display = serializers.CharField(source='get_check_type_display', read_only=True)
@@ -348,8 +317,14 @@ class InspectionRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = InspectionRecord
         fields = '__all__'
-        read_only_fields = ['created_by', 'updated_by', 'total_items', 'checked_items',
-                          'normal_items', 'abnormal_items']
+        read_only_fields = [
+            'created_by',
+            'updated_by',
+            'total_items',
+            'checked_items',
+            'normal_items',
+            'abnormal_items',
+        ]
 
 
 class InspectionRecordListSerializer(serializers.ModelSerializer):
@@ -361,9 +336,23 @@ class InspectionRecordListSerializer(serializers.ModelSerializer):
     class Meta:
         model = InspectionRecord
         fields = [
-            'id', 'record_no', 'equipment', 'equipment_name', 'template', 'template_name',
-            'inspection_date', 'shift', 'inspector', 'inspector_name', 'status', 'status_display',
-            'total_items', 'checked_items', 'normal_items', 'abnormal_items', 'created_at'
+            'id',
+            'record_no',
+            'equipment',
+            'equipment_name',
+            'template',
+            'template_name',
+            'inspection_date',
+            'shift',
+            'inspector',
+            'inspector_name',
+            'status',
+            'status_display',
+            'total_items',
+            'checked_items',
+            'normal_items',
+            'abnormal_items',
+            'created_at',
         ]
 
 
@@ -371,8 +360,10 @@ class InspectionRecordListSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class InspectionTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """点检模板管理"""
+
     queryset = InspectionTemplate.objects.filter(is_deleted=False)
     serializer_class = InspectionTemplateSerializer
     permission_classes = [IsAuthenticated]
@@ -387,11 +378,7 @@ class InspectionTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
 
         created = []
         for item_data in items:
-            item = InspectionItem.objects.create(
-                template=template,
-                **item_data,
-                created_by=request.user
-            )
+            item = InspectionItem.objects.create(template=template, **item_data, created_by=request.user)
             created.append(InspectionItemSerializer(item).data)
 
         return Response(created)
@@ -409,7 +396,7 @@ class InspectionTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
             template_type=template.template_type,
             equipment_type=template.equipment_type,
             description=template.description,
-            created_by=request.user
+            created_by=request.user,
         )
 
         for item in template.items.filter(is_deleted=False):
@@ -427,7 +414,7 @@ class InspectionTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
                 check_point=item.check_point,
                 is_required=item.is_required,
                 sort_order=item.sort_order,
-                created_by=request.user
+                created_by=request.user,
             )
 
         return Response(self.get_serializer(new_template).data)
@@ -435,6 +422,7 @@ class InspectionTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
 
 class InspectionItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """点检项管理"""
+
     queryset = InspectionItem.objects.filter(is_deleted=False)
     serializer_class = InspectionItemSerializer
     permission_classes = [IsAuthenticated]
@@ -443,6 +431,7 @@ class InspectionItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
 
 class InspectionRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """点检记录管理"""
+
     queryset = InspectionRecord.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['equipment', 'template', 'status', 'inspector', 'inspection_date']
@@ -475,16 +464,12 @@ class InspectionRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
             template=template,
             inspection_date=inspection_date,
             inspector=request.user,
-            created_by=request.user
+            created_by=request.user,
         )
 
         # 创建点检结果
         for item in template.items.filter(is_deleted=False):
-            InspectionResult.objects.create(
-                record=record,
-                item=item,
-                created_by=request.user
-            )
+            InspectionResult.objects.create(record=record, item=item, created_by=request.user)
 
         record.update_statistics()
 
@@ -514,17 +499,13 @@ class InspectionRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
     @action(detail=False, methods=['get'])
     def today(self, request):
         """今日点检"""
-        records = self.get_queryset().filter(
-            inspection_date=date.today()
-        )
+        records = self.get_queryset().filter(inspection_date=date.today())
         return Response(InspectionRecordListSerializer(records, many=True).data)
 
     @action(detail=False, methods=['get'])
     def my_inspections(self, request):
         """我的点检"""
-        records = self.get_queryset().filter(
-            inspector=request.user
-        )[:50]
+        records = self.get_queryset().filter(inspector=request.user)[:50]
         return Response(InspectionRecordListSerializer(records, many=True).data)
 
     @action(detail=False, methods=['get'])
@@ -545,26 +526,24 @@ class InspectionRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
             'total': today_records.count(),
             'completed': today_records.filter(status='COMPLETED').count(),
             'abnormal': today_records.filter(status='ABNORMAL').count(),
-            'pending': today_records.filter(status='PENDING').count()
+            'pending': today_records.filter(status='PENDING').count(),
         }
 
         # 本周趋势
         week_start = date.today() - timedelta(days=date.today().weekday())
-        weekly = qs.filter(
-            inspection_date__gte=week_start
-        ).values('inspection_date').annotate(
-            total=Count('id'),
-            abnormal=Count('id', filter=Q(status='ABNORMAL'))
-        ).order_by('inspection_date')
+        weekly = (
+            qs.filter(inspection_date__gte=week_start)
+            .values('inspection_date')
+            .annotate(total=Count('id'), abnormal=Count('id', filter=Q(status='ABNORMAL')))
+            .order_by('inspection_date')
+        )
 
-        return Response({
-            'today': today_stats,
-            'weekly_trend': list(weekly)
-        })
+        return Response({'today': today_stats, 'weekly_trend': list(weekly)})
 
 
 class InspectionResultViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """点检结果管理"""
+
     queryset = InspectionResult.objects.filter(is_deleted=False)
     serializer_class = InspectionResultSerializer
     permission_classes = [IsAuthenticated]
@@ -584,8 +563,5 @@ class InspectionResultViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
     @action(detail=False, methods=['get'])
     def unhandled_abnormal(self, request):
         """未处理的异常"""
-        results = self.get_queryset().filter(
-            is_normal=False,
-            is_handled=False
-        ).select_related('record', 'item')
+        results = self.get_queryset().filter(is_normal=False, is_handled=False).select_related('record', 'item')
         return Response(self.get_serializer(results, many=True).data)

@@ -1,6 +1,7 @@
 """
 Initialize default dashboard widgets.
 """
+
 from django.core.management.base import BaseCommand
 
 from apps.core.dashboard_config import DashboardWidget
@@ -20,7 +21,7 @@ class Command(BaseCommand):
                     'title': '项目概览',
                     'icon': 'project',
                     'color': '#1890ff',
-                    'metrics': ['total', 'active', 'completed']
+                    'metrics': ['total', 'active', 'completed'],
                 },
                 'default_width': 3,
                 'default_height': 150,
@@ -31,12 +32,7 @@ class Command(BaseCommand):
                 'code': 'sales_stats',
                 'widget_type': 'stat_card',
                 'data_source': 'sales_stats',
-                'config': {
-                    'title': '本月销售',
-                    'icon': 'shopping-cart',
-                    'color': '#52c41a',
-                    'unit': '元'
-                },
+                'config': {'title': '本月销售', 'icon': 'shopping-cart', 'color': '#52c41a', 'unit': '元'},
                 'default_width': 3,
                 'default_height': 150,
                 'is_system': True,
@@ -154,17 +150,12 @@ class Command(BaseCommand):
         updated_count = 0
 
         for widget_data in widgets:
-            widget, created = DashboardWidget.objects.update_or_create(
-                code=widget_data['code'],
-                defaults=widget_data
-            )
+            widget, created = DashboardWidget.objects.update_or_create(code=widget_data['code'], defaults=widget_data)
             if created:
                 created_count += 1
             else:
                 updated_count += 1
 
         self.stdout.write(
-            self.style.SUCCESS(
-                f'Dashboard widgets initialized: {created_count} created, {updated_count} updated'
-            )
+            self.style.SUCCESS(f'Dashboard widgets initialized: {created_count} created, {updated_count} updated')
         )

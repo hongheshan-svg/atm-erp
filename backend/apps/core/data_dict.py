@@ -3,6 +3,7 @@
 Data Dictionary Management
 用于管理系统中的各类下拉选项、枚举值等
 """
+
 from django.db import models
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
@@ -17,6 +18,7 @@ class DictType(BaseModel):
     """
     字典类型
     """
+
     code = models.CharField(max_length=50, unique=True, verbose_name='类型编码')
     name = models.CharField(max_length=100, verbose_name='类型名称')
     description = models.TextField(blank=True, verbose_name='描述')
@@ -37,12 +39,8 @@ class DictItem(BaseModel):
     """
     字典项
     """
-    dict_type = models.ForeignKey(
-        DictType,
-        on_delete=models.CASCADE,
-        related_name='items',
-        verbose_name='字典类型'
-    )
+
+    dict_type = models.ForeignKey(DictType, on_delete=models.CASCADE, related_name='items', verbose_name='字典类型')
     value = models.CharField(max_length=100, verbose_name='字典值')
     label = models.CharField(max_length=200, verbose_name='显示标签')
     description = models.TextField(blank=True, verbose_name='描述')
@@ -67,6 +65,7 @@ class DictItem(BaseModel):
 # Serializers
 # =====================
 
+
 class DictItemSerializer(serializers.ModelSerializer):
     dict_type_code = serializers.CharField(source='dict_type.code', read_only=True)
     dict_type_name = serializers.CharField(source='dict_type.name', read_only=True)
@@ -79,6 +78,7 @@ class DictItemSerializer(serializers.ModelSerializer):
 
 class DictItemSimpleSerializer(serializers.ModelSerializer):
     """简化版字典项序列化器，用于下拉选项"""
+
     class Meta:
         model = DictItem
         fields = ['id', 'value', 'label', 'color', 'extra_data', 'is_default']
@@ -99,6 +99,7 @@ class DictTypeSerializer(serializers.ModelSerializer):
 
 class DictTypeListSerializer(serializers.ModelSerializer):
     """列表序列化器"""
+
     items_count = serializers.SerializerMethodField()
 
     class Meta:
@@ -113,10 +114,12 @@ class DictTypeListSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class DictTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     字典类型管理
     """
+
     queryset = DictType.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['code', 'is_system']
@@ -131,10 +134,7 @@ class DictTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         if instance.is_system:
-            return Response(
-                {'error': '系统内置字典类型不能删除'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '系统内置字典类型不能删除'}, status=status.HTTP_400_BAD_REQUEST)
         return super().destroy(request, *args, **kwargs)
 
     @action(detail=False, methods=['get'])
@@ -149,16 +149,11 @@ class DictTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
         except DictType.DoesNotExist:
             return Response({'error': '字典类型不存在'}, status=404)
 
-        items = dict_type.items.filter(
-            is_deleted=False,
-            is_enabled=True
-        ).order_by('sort_order', 'value')
+        items = dict_type.items.filter(is_deleted=False, is_enabled=True).order_by('sort_order', 'value')
 
-        return Response({
-            'code': dict_type.code,
-            'name': dict_type.name,
-            'items': DictItemSimpleSerializer(items, many=True).data
-        })
+        return Response(
+            {'code': dict_type.code, 'name': dict_type.name, 'items': DictItemSimpleSerializer(items, many=True).data}
+        )
 
     @action(detail=False, methods=['get'])
     def options(self, request):
@@ -173,10 +168,7 @@ class DictTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
         for code in codes:
             try:
                 dict_type = DictType.objects.get(code=code, is_deleted=False)
-                items = dict_type.items.filter(
-                    is_deleted=False,
-                    is_enabled=True
-                ).order_by('sort_order', 'value')
+                items = dict_type.items.filter(is_deleted=False, is_enabled=True).order_by('sort_order', 'value')
                 result[code] = DictItemSimpleSerializer(items, many=True).data
             except DictType.DoesNotExist:
                 result[code] = []
@@ -200,7 +192,7 @@ class DictTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
                     {'value': 'ON_HOLD', 'label': '暂停', 'color': '#E6A23C'},
                     {'value': 'COMPLETED', 'label': '已完成', 'color': '#67C23A'},
                     {'value': 'CANCELLED', 'label': '已取消', 'color': '#F56C6C'},
-                ]
+                ],
             },
             {
                 'code': 'ORDER_STATUS',
@@ -212,7 +204,7 @@ class DictTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
                     {'value': 'IN_PROGRESS', 'label': '执行中', 'color': '#67C23A'},
                     {'value': 'COMPLETED', 'label': '已完成', 'color': '#67C23A'},
                     {'value': 'CANCELLED', 'label': '已取消', 'color': '#F56C6C'},
-                ]
+                ],
             },
             {
                 'code': 'PAYMENT_TERMS',
@@ -224,7 +216,7 @@ class DictTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
                     {'value': 'NET60', 'label': '月结60天'},
                     {'value': 'NET90', 'label': '月结90天'},
                     {'value': 'MILESTONE', 'label': '分期付款'},
-                ]
+                ],
             },
             {
                 'code': 'PRIORITY',
@@ -234,7 +226,7 @@ class DictTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
                     {'value': 'MEDIUM', 'label': '中', 'color': '#409EFF', 'is_default': True},
                     {'value': 'HIGH', 'label': '高', 'color': '#E6A23C'},
                     {'value': 'URGENT', 'label': '紧急', 'color': '#F56C6C'},
-                ]
+                ],
             },
             {
                 'code': 'CUSTOMER_INDUSTRY',
@@ -247,7 +239,7 @@ class DictTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
                     {'value': 'AEROSPACE', 'label': '航空航天'},
                     {'value': 'SEMICONDUCTOR', 'label': '半导体'},
                     {'value': 'OTHER', 'label': '其他'},
-                ]
+                ],
             },
             {
                 'code': 'SUPPLIER_LEVEL',
@@ -257,7 +249,7 @@ class DictTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
                     {'value': 'B', 'label': 'B级供应商', 'color': '#409EFF'},
                     {'value': 'C', 'label': 'C级供应商', 'color': '#E6A23C'},
                     {'value': 'D', 'label': 'D级供应商', 'color': '#F56C6C'},
-                ]
+                ],
             },
             {
                 'code': 'UNIT',
@@ -270,7 +262,7 @@ class DictTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
                     {'value': 'L', 'label': '升'},
                     {'value': 'BOX', 'label': '箱'},
                     {'value': 'ROLL', 'label': '卷'},
-                ]
+                ],
             },
         ]
 
@@ -278,11 +270,7 @@ class DictTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
         for dict_data in system_dicts:
             dict_type, created = DictType.objects.update_or_create(
                 code=dict_data['code'],
-                defaults={
-                    'name': dict_data['name'],
-                    'is_system': True,
-                    'created_by': request.user
-                }
+                defaults={'name': dict_data['name'], 'is_system': True, 'created_by': request.user},
             )
             if created:
                 created_count += 1
@@ -296,19 +284,18 @@ class DictTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
                         'color': item_data.get('color', ''),
                         'is_default': item_data.get('is_default', False),
                         'sort_order': idx,
-                        'created_by': request.user
-                    }
+                        'created_by': request.user,
+                    },
                 )
 
-        return Response({
-            'message': f'初始化完成，创建了 {created_count} 个新字典类型'
-        })
+        return Response({'message': f'初始化完成，创建了 {created_count} 个新字典类型'})
 
 
 class DictItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     字典项管理
     """
+
     queryset = DictItem.objects.filter(is_deleted=False)
     serializer_class = DictItemSerializer
     permission_classes = [IsAuthenticated]
@@ -336,10 +323,7 @@ class DictItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet)
         """设为默认项"""
         item = self.get_object()
         # 取消同类型下其他默认项
-        DictItem.objects.filter(
-            dict_type=item.dict_type,
-            is_default=True
-        ).update(is_default=False)
+        DictItem.objects.filter(dict_type=item.dict_type, is_default=True).update(is_default=False)
 
         item.is_default = True
         item.save()

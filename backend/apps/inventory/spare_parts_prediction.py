@@ -1,6 +1,7 @@
 """
 Spare Parts Lifecycle Prediction and Purchase Suggestions
 """
+
 from decimal import Decimal
 
 from django.db import models
@@ -15,16 +16,22 @@ from apps.core.models import BaseModel
 
 class SparePartLifecyclePrediction(BaseModel):
     spare_part = models.ForeignKey(
-        'inventory.SparePart', on_delete=models.CASCADE,
-        null=True, blank=True, related_name='lifecycle_predictions', verbose_name='备件'
+        'inventory.SparePart',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='lifecycle_predictions',
+        verbose_name='备件',
     )
     equipment = models.ForeignKey(
-        'projects.Equipment', on_delete=models.CASCADE,
-        null=True, blank=True, related_name='spare_part_predictions', verbose_name='设备'
+        'projects.Equipment',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='spare_part_predictions',
+        verbose_name='设备',
     )
-    predicted_life_hours = models.DecimalField(
-        max_digits=10, decimal_places=2, verbose_name='预测寿命(小时)'
-    )
+    predicted_life_hours = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='预测寿命(小时)')
     current_usage_hours = models.DecimalField(
         max_digits=10, decimal_places=2, default=Decimal('0.00'), verbose_name='当前使用时数'
     )
@@ -33,9 +40,7 @@ class SparePartLifecyclePrediction(BaseModel):
     )
     confidence = models.IntegerField(default=80, verbose_name='置信度(%)')
     prediction_date = models.DateField(auto_now_add=True, verbose_name='预测日期')
-    last_replacement_date = models.DateField(
-        null=True, blank=True, verbose_name='上次更换日期'
-    )
+    last_replacement_date = models.DateField(null=True, blank=True, verbose_name='上次更换日期')
 
     class Meta:
         db_table = 'inventory_spare_part_lifecycle_prediction'
@@ -44,7 +49,7 @@ class SparePartLifecyclePrediction(BaseModel):
         verbose_name_plural = '备件寿命预测'
 
     def __str__(self):
-        return f"{self.spare_part} - 剩余{self.remaining_hours}h"
+        return f'{self.spare_part} - 剩余{self.remaining_hours}h'
 
 
 class PurchaseSuggestion(BaseModel):
@@ -56,8 +61,12 @@ class PurchaseSuggestion(BaseModel):
     ]
 
     spare_part = models.ForeignKey(
-        'inventory.SparePart', on_delete=models.CASCADE,
-        null=True, blank=True, related_name='purchase_suggestions', verbose_name='备件'
+        'inventory.SparePart',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='purchase_suggestions',
+        verbose_name='备件',
     )
     current_stock = models.IntegerField(default=0, verbose_name='当前库存')
     suggested_quantity = models.IntegerField(verbose_name='建议采购数量')
@@ -66,9 +75,7 @@ class PurchaseSuggestion(BaseModel):
         max_digits=12, decimal_places=2, null=True, blank=True, verbose_name='预计费用'
     )
     reason = models.TextField(verbose_name='建议原因')
-    status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='状态')
 
     class Meta:
         db_table = 'inventory_purchase_suggestion'
@@ -77,7 +84,7 @@ class PurchaseSuggestion(BaseModel):
         verbose_name_plural = '采购建议'
 
     def __str__(self):
-        return f"{self.spare_part} x{self.suggested_quantity}"
+        return f'{self.spare_part} x{self.suggested_quantity}'
 
 
 class SparePartPredictionService:
@@ -99,18 +106,20 @@ class SparePartPredictionService:
             elif remaining_pct <= 50:
                 urgency = 'attention'
 
-            results.append({
-                'id': pred.id,
-                'spare_part_id': pred.spare_part_id,
-                'equipment_id': pred.equipment_id,
-                'predicted_life_hours': str(pred.predicted_life_hours),
-                'current_usage_hours': str(pred.current_usage_hours),
-                'remaining_hours': str(pred.remaining_hours),
-                'remaining_pct': round(remaining_pct, 1),
-                'confidence': pred.confidence,
-                'urgency': urgency,
-                'last_replacement_date': str(pred.last_replacement_date) if pred.last_replacement_date else None,
-            })
+            results.append(
+                {
+                    'id': pred.id,
+                    'spare_part_id': pred.spare_part_id,
+                    'equipment_id': pred.equipment_id,
+                    'predicted_life_hours': str(pred.predicted_life_hours),
+                    'current_usage_hours': str(pred.current_usage_hours),
+                    'remaining_hours': str(pred.remaining_hours),
+                    'remaining_pct': round(remaining_pct, 1),
+                    'confidence': pred.confidence,
+                    'urgency': urgency,
+                    'last_replacement_date': str(pred.last_replacement_date) if pred.last_replacement_date else None,
+                }
+            )
         return sorted(results, key=lambda x: float(x['remaining_hours']))
 
     @classmethod
@@ -142,7 +151,7 @@ class SparePartPredictionService:
                 current_stock=0,
                 suggested_quantity=1,
                 suggested_date=suggested_date,
-                reason=f"备件预测剩余寿命{pred.remaining_hours}小时，建议提前采购",
+                reason=f'备件预测剩余寿命{pred.remaining_hours}小时，建议提前采购',
             )
             suggestions.append(suggestion)
         return suggestions
@@ -150,15 +159,15 @@ class SparePartPredictionService:
     @classmethod
     def cost_analysis(cls):
         from django.db.models import Avg, Sum
+
         suggestions = PurchaseSuggestion.objects.filter(is_deleted=False)
         analysis = {
             'total_suggestions': suggestions.count(),
             'pending': suggestions.filter(status='pending').count(),
             'accepted': suggestions.filter(status='accepted').count(),
             'total_estimated_cost': str(
-                suggestions.filter(
-                    estimated_cost__isnull=False
-                ).aggregate(total=Sum('estimated_cost'))['total'] or Decimal('0.00')
+                suggestions.filter(estimated_cost__isnull=False).aggregate(total=Sum('estimated_cost'))['total']
+                or Decimal('0.00')
             ),
             'avg_quantity': suggestions.aggregate(avg=Avg('suggested_quantity'))['avg'] or 0,
         }
@@ -166,6 +175,7 @@ class SparePartPredictionService:
 
 
 # ─── Serializers ────────────────────────────────────────────────
+
 
 class SparePartLifecyclePredictionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -184,6 +194,7 @@ class PurchaseSuggestionSerializer(serializers.ModelSerializer):
 
 
 # ─── APIViews ───────────────────────────────────────────────────
+
 
 class LifecyclePredictionView(APIView):
     permission_classes = [IsAuthenticated]

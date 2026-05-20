@@ -13,6 +13,7 @@ Advanced Cost Tracking for Custom Automation Industry
 - 完工百分比法核算
 - 项目毛利实时计算
 """
+
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -33,13 +34,14 @@ from apps.core.models import BaseModel
 # 标准成本模型
 # =============================================================================
 
+
 class StandardCostCategory(BaseModel):
     """标准成本分类"""
+
     code = models.CharField(max_length=50, unique=True, verbose_name='分类编码')
     name = models.CharField(max_length=100, verbose_name='分类名称')
     parent = models.ForeignKey(
-        'self', on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='children', verbose_name='上级分类'
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='children', verbose_name='上级分类'
     )
     cost_element = models.CharField(
         max_length=20,
@@ -53,7 +55,7 @@ class StandardCostCategory(BaseModel):
             ('OTHER_DIRECT', '其他直接费用'),
             ('INDIRECT', '间接费用'),
         ],
-        verbose_name='成本要素'
+        verbose_name='成本要素',
     )
     is_active = models.BooleanField(default=True, verbose_name='启用')
 
@@ -68,6 +70,7 @@ class StandardCostCategory(BaseModel):
 
 class LaborRateStandard(BaseModel):
     """人工费率标准"""
+
     work_type = models.CharField(
         max_length=30,
         choices=[
@@ -85,7 +88,7 @@ class LaborRateStandard(BaseModel):
             ('TECH_SUPPORT', '技术支持'),
         ],
         unique=True,
-        verbose_name='工作类型'
+        verbose_name='工作类型',
     )
 
     standard_rate = models.DecimalField(max_digits=12, decimal_places=2, verbose_name='标准费率(元/小时)')
@@ -109,6 +112,7 @@ class LaborRateStandard(BaseModel):
 
 class ManufacturingOverheadRate(BaseModel):
     """制造费用分摊率"""
+
     name = models.CharField(max_length=100, verbose_name='名称')
     allocation_base = models.CharField(
         max_length=20,
@@ -119,7 +123,7 @@ class ManufacturingOverheadRate(BaseModel):
             ('DIRECT_LABOR', '直接人工'),
             ('PRODUCTION_VALUE', '产值'),
         ],
-        verbose_name='分摊基础'
+        verbose_name='分摊基础',
     )
 
     rate = models.DecimalField(max_digits=8, decimal_places=4, verbose_name='分摊率')
@@ -138,8 +142,10 @@ class ManufacturingOverheadRate(BaseModel):
 # 项目成本明细
 # =============================================================================
 
+
 class ProjectCostDetail(BaseModel):
     """项目成本明细（增强版）"""
+
     COST_SOURCE_CHOICES = [
         ('PURCHASE_ORDER', '采购订单'),
         ('GOODS_RECEIPT', '到货入库'),
@@ -153,23 +159,15 @@ class ProjectCostDetail(BaseModel):
     ]
 
     project = models.ForeignKey(
-        'projects.Project',
-        on_delete=models.CASCADE,
-        related_name='cost_details',
-        verbose_name='项目'
+        'projects.Project', on_delete=models.CASCADE, related_name='cost_details', verbose_name='项目'
     )
 
     # 成本分类
     cost_category = models.ForeignKey(
-        StandardCostCategory,
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        verbose_name='成本分类'
+        StandardCostCategory, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='成本分类'
     )
     cost_element = models.CharField(
-        max_length=20,
-        choices=StandardCostCategory._meta.get_field('cost_element').choices,
-        verbose_name='成本要素'
+        max_length=20, choices=StandardCostCategory._meta.get_field('cost_element').choices, verbose_name='成本要素'
     )
 
     # 来源追溯
@@ -197,7 +195,7 @@ class ProjectCostDetail(BaseModel):
             ('WARRANTY', '质保期'),
             ('AFTER_SALE', '售后服务'),
         ],
-        verbose_name='项目阶段'
+        verbose_name='项目阶段',
     )
 
     # 成本金额
@@ -219,32 +217,25 @@ class ProjectCostDetail(BaseModel):
             ('MIXED', '混合差异'),
         ],
         blank=True,
-        verbose_name='差异类型'
+        verbose_name='差异类型',
     )
     variance_reason = models.TextField(blank=True, verbose_name='差异原因')
 
     # 责任归属
     department = models.ForeignKey(
-        'accounts.Department',
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        verbose_name='责任部门'
+        'accounts.Department', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='责任部门'
     )
     responsible_user = models.ForeignKey(
         'accounts.User',
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         related_name='cost_responsibilities',
-        verbose_name='责任人'
+        verbose_name='责任人',
     )
 
     # 物料追溯
-    item = models.ForeignKey(
-        'masterdata.Item',
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        verbose_name='物料'
-    )
+    item = models.ForeignKey('masterdata.Item', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='物料')
     batch_no = models.CharField(max_length=50, blank=True, verbose_name='批次号')
 
     # 审核状态
@@ -252,9 +243,10 @@ class ProjectCostDetail(BaseModel):
     verified_by = models.ForeignKey(
         'accounts.User',
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         related_name='verified_cost_details',
-        verbose_name='审核人'
+        verbose_name='审核人',
     )
     verified_at = models.DateTimeField(null=True, blank=True, verbose_name='审核时间')
 
@@ -284,11 +276,9 @@ class ProjectCostDetail(BaseModel):
 
 class ProjectCostSummary(BaseModel):
     """项目成本汇总"""
+
     project = models.OneToOneField(
-        'projects.Project',
-        on_delete=models.CASCADE,
-        related_name='cost_summary',
-        verbose_name='项目'
+        'projects.Project', on_delete=models.CASCADE, related_name='cost_summary', verbose_name='项目'
     )
 
     # 合同信息
@@ -337,14 +327,10 @@ class ProjectCostSummary(BaseModel):
 
     def recalculate(self):
         """重新计算成本汇总"""
-        details = ProjectCostDetail.objects.filter(
-            project=self.project, is_deleted=False
-        )
+        details = ProjectCostDetail.objects.filter(project=self.project, is_deleted=False)
 
         # 按成本要素汇总
-        element_totals = details.values('cost_element').annotate(
-            total=Sum('actual_amount')
-        )
+        element_totals = details.values('cost_element').annotate(total=Sum('actual_amount'))
         element_map = {e['cost_element']: e['total'] for e in element_totals}
 
         self.direct_material_cost = element_map.get('DIRECT_MATERIAL', 0) or 0
@@ -357,10 +343,14 @@ class ProjectCostSummary(BaseModel):
         self.indirect_cost = element_map.get('INDIRECT', 0) or 0
 
         self.total_cost = (
-            self.direct_material_cost + self.direct_labor_cost +
-            self.manufacturing_overhead + self.outsource_cost +
-            self.travel_cost + self.equipment_cost +
-            self.other_direct_cost + self.indirect_cost
+            self.direct_material_cost
+            + self.direct_labor_cost
+            + self.manufacturing_overhead
+            + self.outsource_cost
+            + self.travel_cost
+            + self.equipment_cost
+            + self.other_direct_cost
+            + self.indirect_cost
         )
 
         # 计算毛利
@@ -373,15 +363,15 @@ class ProjectCostSummary(BaseModel):
         # 计算CPI
         if self.estimated_cost > 0 and self.completion_percentage > 0:
             ev = self.estimated_cost * (self.completion_percentage / 100)  # 挣值
-            self.cpi = Decimal(ev / self.total_cost).quantize(
-                Decimal('0.01'), rounding=ROUND_HALF_UP
-            ) if self.total_cost > 0 else Decimal('1')
+            self.cpi = (
+                Decimal(ev / self.total_cost).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                if self.total_cost > 0
+                else Decimal('1')
+            )
 
             # EAC = BAC / CPI
             if self.cpi > 0:
-                self.eac = Decimal(self.estimated_cost / self.cpi).quantize(
-                    Decimal('0.01'), rounding=ROUND_HALF_UP
-                )
+                self.eac = Decimal(self.estimated_cost / self.cpi).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
                 self.etc = self.eac - self.total_cost
 
         self.last_calculated_at = timezone.now()
@@ -390,11 +380,9 @@ class ProjectCostSummary(BaseModel):
 
 class CostVarianceAnalysis(BaseModel):
     """成本差异分析"""
+
     project = models.ForeignKey(
-        'projects.Project',
-        on_delete=models.CASCADE,
-        related_name='variance_analyses',
-        verbose_name='项目'
+        'projects.Project', on_delete=models.CASCADE, related_name='variance_analyses', verbose_name='项目'
     )
 
     analysis_date = models.DateField(verbose_name='分析日期')
@@ -406,7 +394,7 @@ class CostVarianceAnalysis(BaseModel):
             ('PHASE', '阶段分析'),
             ('FINAL', '完工分析'),
         ],
-        verbose_name='分析周期'
+        verbose_name='分析周期',
     )
 
     # 预算vs实际
@@ -430,10 +418,7 @@ class CostVarianceAnalysis(BaseModel):
     corrective_actions = models.TextField(blank=True, verbose_name='纠正措施')
 
     analyzed_by = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        verbose_name='分析人'
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='分析人'
     )
 
     class Meta:
@@ -446,6 +431,7 @@ class CostVarianceAnalysis(BaseModel):
 # =============================================================================
 # 序列化器
 # =============================================================================
+
 
 class StandardCostCategorySerializer(serializers.ModelSerializer):
     cost_element_display = serializers.CharField(source='get_cost_element_display', read_only=True)
@@ -502,8 +488,10 @@ class CostVarianceAnalysisSerializer(serializers.ModelSerializer):
 # 视图集
 # =============================================================================
 
+
 class StandardCostCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """标准成本分类"""
+
     queryset = StandardCostCategory.objects.filter(is_deleted=False)
     serializer_class = StandardCostCategorySerializer
     permission_classes = [IsAuthenticated]
@@ -521,7 +509,7 @@ class StandardCostCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.M
                 'code': cat.code,
                 'name': cat.name,
                 'cost_element': cat.cost_element,
-                'children': [build_tree(c) for c in children]
+                'children': [build_tree(c) for c in children],
             }
 
         return Response([build_tree(c) for c in categories])
@@ -529,6 +517,7 @@ class StandardCostCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.M
 
 class LaborRateStandardViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """人工费率标准"""
+
     queryset = LaborRateStandard.objects.filter(is_deleted=False)
     serializer_class = LaborRateStandardSerializer
     permission_classes = [IsAuthenticated]
@@ -538,16 +527,17 @@ class LaborRateStandardViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
     def current_rates(self, request):
         """获取当前有效费率"""
         today = date.today()
-        rates = self.get_queryset().filter(
-            effective_from__lte=today
-        ).filter(
-            Q(effective_to__isnull=True) | Q(effective_to__gte=today)
+        rates = (
+            self.get_queryset()
+            .filter(effective_from__lte=today)
+            .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today))
         )
         return Response(self.get_serializer(rates, many=True).data)
 
 
 class ProjectCostDetailViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目成本明细"""
+
     queryset = ProjectCostDetail.objects.filter(is_deleted=False)
     serializer_class = ProjectCostDetailSerializer
     permission_classes = [IsAuthenticated]
@@ -579,15 +569,12 @@ class ProjectCostDetailViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
                     serializer.save()
                     created_count += 1
 
-        return Response({
-            'success': True,
-            'created_count': created_count,
-            'total': len(items)
-        })
+        return Response({'success': True, 'created_count': created_count, 'total': len(items)})
 
 
 class ProjectCostSummaryViewSet(viewsets.ModelViewSet):
     """项目成本汇总"""
+
     queryset = ProjectCostSummary.objects.filter(is_deleted=False)
     serializer_class = ProjectCostSummarySerializer
     permission_classes = [IsAuthenticated]
@@ -608,23 +595,19 @@ class ProjectCostSummaryViewSet(viewsets.ModelViewSet):
         if project_ids:
             summaries = self.get_queryset().filter(project_id__in=project_ids)
         else:
-            summaries = self.get_queryset().filter(
-                project__status__in=['IN_PROGRESS', 'DEBUGGING', 'INSTALLATION']
-            )
+            summaries = self.get_queryset().filter(project__status__in=['IN_PROGRESS', 'DEBUGGING', 'INSTALLATION'])
 
         count = 0
         for summary in summaries:
             summary.recalculate()
             count += 1
 
-        return Response({
-            'success': True,
-            'recalculated_count': count
-        })
+        return Response({'success': True, 'recalculated_count': count})
 
 
 class CostVarianceAnalysisViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     """成本差异分析"""
+
     queryset = CostVarianceAnalysis.objects.filter(is_deleted=False)
     serializer_class = CostVarianceAnalysisSerializer
     permission_classes = [IsAuthenticated]
@@ -635,8 +618,10 @@ class CostVarianceAnalysisViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
 # 成本分析报表API
 # =============================================================================
 
+
 class ProjectCostAnalysisDashboardView(APIView):
     """项目成本分析看板（增强版）"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request, project_id):
@@ -649,80 +634,71 @@ class ProjectCostAnalysisDashboardView(APIView):
 
         # 获取或创建成本汇总
         summary, created = ProjectCostSummary.objects.get_or_create(
-            project=project,
-            defaults={
-                'contract_amount': project.budget_total or 0
-            }
+            project=project, defaults={'contract_amount': project.budget_total or 0}
         )
 
         if created or not summary.last_calculated_at:
             summary.recalculate()
 
         # 获取成本明细分析
-        details = ProjectCostDetail.objects.filter(
-            project=project, is_deleted=False
-        )
+        details = ProjectCostDetail.objects.filter(project=project, is_deleted=False)
 
         # 按成本要素分析
         by_element = details.values('cost_element').annotate(
             actual=Sum('actual_amount'),
             standard=Sum('standard_amount'),
             variance=Sum('variance_amount'),
-            count=Count('id')
+            count=Count('id'),
         )
 
         # 按阶段分析
-        by_phase = details.values('project_phase').annotate(
-            total=Sum('actual_amount'),
-            count=Count('id')
-        ).order_by('project_phase')
-
-        # 按来源分析
-        by_source = details.values('source_type').annotate(
-            total=Sum('actual_amount'),
-            count=Count('id')
+        by_phase = (
+            details.values('project_phase')
+            .annotate(total=Sum('actual_amount'), count=Count('id'))
+            .order_by('project_phase')
         )
 
+        # 按来源分析
+        by_source = details.values('source_type').annotate(total=Sum('actual_amount'), count=Count('id'))
+
         # 成本趋势（按月）
-        trend = details.annotate(
-            month=TruncMonth('cost_date')
-        ).values('month').annotate(
-            total=Sum('actual_amount'),
-            material=Sum(Case(
-                When(cost_element='DIRECT_MATERIAL', then='actual_amount'),
-                default=Value(0)
-            )),
-            labor=Sum(Case(
-                When(cost_element='DIRECT_LABOR', then='actual_amount'),
-                default=Value(0)
-            ))
-        ).order_by('month')
+        trend = (
+            details.annotate(month=TruncMonth('cost_date'))
+            .values('month')
+            .annotate(
+                total=Sum('actual_amount'),
+                material=Sum(Case(When(cost_element='DIRECT_MATERIAL', then='actual_amount'), default=Value(0))),
+                labor=Sum(Case(When(cost_element='DIRECT_LABOR', then='actual_amount'), default=Value(0))),
+            )
+            .order_by('month')
+        )
 
         # 差异TOP10
-        top_variances = details.exclude(
-            variance_amount=0
-        ).order_by('-variance_amount')[:10]
+        top_variances = details.exclude(variance_amount=0).order_by('-variance_amount')[:10]
 
-        return Response({
-            'project': {
-                'id': project.id,
-                'project_no': project.project_no,
-                'name': project.name,
-                'status': project.status,
-            },
-            'summary': ProjectCostSummarySerializer(summary).data,
-            'analysis': {
-                'by_element': list(by_element),
-                'by_phase': list(by_phase),
-                'by_source': list(by_source),
-            },
-            'trend': list(trend),
-            'top_variances': ProjectCostDetailSerializer(top_variances, many=True).data,
-        })
+        return Response(
+            {
+                'project': {
+                    'id': project.id,
+                    'project_no': project.project_no,
+                    'name': project.name,
+                    'status': project.status,
+                },
+                'summary': ProjectCostSummarySerializer(summary).data,
+                'analysis': {
+                    'by_element': list(by_element),
+                    'by_phase': list(by_phase),
+                    'by_source': list(by_source),
+                },
+                'trend': list(trend),
+                'top_variances': ProjectCostDetailSerializer(top_variances, many=True).data,
+            }
+        )
 
 
 class CostComparisonReportView(APIView):
     """成本对比报表"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -731,33 +707,33 @@ class CostComparisonReportView(APIView):
         if not project_ids:
             # 获取活跃项目
             from apps.projects.models import Project
+
             projects = Project.objects.filter(
-                status__in=['IN_PROGRESS', 'DEBUGGING', 'INSTALLATION'],
-                is_deleted=False
+                status__in=['IN_PROGRESS', 'DEBUGGING', 'INSTALLATION'], is_deleted=False
             )[:20]
             project_ids = [p.id for p in projects]
 
-        summaries = ProjectCostSummary.objects.filter(
-            project_id__in=project_ids
-        ).select_related('project')
+        summaries = ProjectCostSummary.objects.filter(project_id__in=project_ids).select_related('project')
 
         comparison = []
         for s in summaries:
-            comparison.append({
-                'project_id': s.project.id,
-                'project_no': s.project.project_no,
-                'project_name': s.project.name,
-                'contract_amount': float(s.contract_amount),
-                'estimated_cost': float(s.estimated_cost),
-                'actual_cost': float(s.total_cost),
-                'estimated_profit': float(s.estimated_profit),
-                'actual_profit': float(s.actual_profit),
-                'estimated_margin': float(s.estimated_margin * 100),
-                'actual_margin': float(s.actual_margin * 100),
-                'margin_variance': float((s.actual_margin - s.estimated_margin) * 100),
-                'cpi': float(s.cpi),
-                'completion': float(s.completion_percentage),
-            })
+            comparison.append(
+                {
+                    'project_id': s.project.id,
+                    'project_no': s.project.project_no,
+                    'project_name': s.project.name,
+                    'contract_amount': float(s.contract_amount),
+                    'estimated_cost': float(s.estimated_cost),
+                    'actual_cost': float(s.total_cost),
+                    'estimated_profit': float(s.estimated_profit),
+                    'actual_profit': float(s.actual_profit),
+                    'estimated_margin': float(s.estimated_margin * 100),
+                    'actual_margin': float(s.actual_margin * 100),
+                    'margin_variance': float((s.actual_margin - s.estimated_margin) * 100),
+                    'cpi': float(s.cpi),
+                    'completion': float(s.completion_percentage),
+                }
+            )
 
         # 按实际毛利率排序
         comparison.sort(key=lambda x: x['actual_margin'], reverse=True)
@@ -768,22 +744,25 @@ class CostComparisonReportView(APIView):
         total_actual_profit = sum(c['actual_profit'] for c in comparison)
         avg_margin = total_actual_profit / total_contract * 100 if total_contract > 0 else 0
 
-        return Response({
-            'comparison': comparison,
-            'summary': {
-                'project_count': len(comparison),
-                'total_contract_amount': total_contract,
-                'total_actual_cost': total_actual_cost,
-                'total_actual_profit': total_actual_profit,
-                'average_margin': round(avg_margin, 2),
-                'profitable_count': len([c for c in comparison if c['actual_profit'] > 0]),
-                'loss_count': len([c for c in comparison if c['actual_profit'] < 0]),
+        return Response(
+            {
+                'comparison': comparison,
+                'summary': {
+                    'project_count': len(comparison),
+                    'total_contract_amount': total_contract,
+                    'total_actual_cost': total_actual_cost,
+                    'total_actual_profit': total_actual_profit,
+                    'average_margin': round(avg_margin, 2),
+                    'profitable_count': len([c for c in comparison if c['actual_profit'] > 0]),
+                    'loss_count': len([c for c in comparison if c['actual_profit'] < 0]),
+                },
             }
-        })
+        )
 
 
 class CostElementReportView(APIView):
     """成本要素分析报表"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -801,32 +780,40 @@ class CostElementReportView(APIView):
             details = details.filter(project_id=project_id)
 
         # 按成本要素汇总
-        by_element = details.values('cost_element').annotate(
-            total_actual=Sum('actual_amount'),
-            total_standard=Sum('standard_amount'),
-            total_variance=Sum('variance_amount'),
-            count=Count('id'),
-            avg_unit_cost=Avg('unit_cost')
-        ).order_by('-total_actual')
+        by_element = (
+            details.values('cost_element')
+            .annotate(
+                total_actual=Sum('actual_amount'),
+                total_standard=Sum('standard_amount'),
+                total_variance=Sum('variance_amount'),
+                count=Count('id'),
+                avg_unit_cost=Avg('unit_cost'),
+            )
+            .order_by('-total_actual')
+        )
 
         # 计算总计和占比
         grand_total = details.aggregate(total=Sum('actual_amount'))['total'] or 0
 
         result = []
         for item in by_element:
-            item['percentage'] = round(
-                float(item['total_actual']) / float(grand_total) * 100, 2
-            ) if grand_total > 0 else 0
-            item['variance_rate'] = round(
-                float(item['total_variance']) / float(item['total_standard']) * 100, 2
-            ) if item['total_standard'] and item['total_standard'] > 0 else 0
+            item['percentage'] = (
+                round(float(item['total_actual']) / float(grand_total) * 100, 2) if grand_total > 0 else 0
+            )
+            item['variance_rate'] = (
+                round(float(item['total_variance']) / float(item['total_standard']) * 100, 2)
+                if item['total_standard'] and item['total_standard'] > 0
+                else 0
+            )
             result.append(item)
 
-        return Response({
-            'by_element': result,
-            'grand_total': float(grand_total),
-            'period': {
-                'start_date': start_date,
-                'end_date': end_date,
+        return Response(
+            {
+                'by_element': result,
+                'grand_total': float(grand_total),
+                'period': {
+                    'start_date': start_date,
+                    'end_date': end_date,
+                },
             }
-        })
+        )

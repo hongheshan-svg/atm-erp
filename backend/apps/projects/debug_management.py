@@ -2,6 +2,7 @@
 调试管理模块
 Debug Management - 调试计划、问题跟踪、参数记录、报告生成
 """
+
 from django.conf import settings
 from django.db import models
 from django.db.models import Count, Q, Sum
@@ -18,6 +19,7 @@ User = settings.AUTH_USER_MODEL
 
 class DebugPlan(BaseModel):
     """调试计划"""
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('CONFIRMED', '已确认'),
@@ -28,10 +30,17 @@ class DebugPlan(BaseModel):
     ]
 
     plan_no = models.CharField('计划编号', max_length=50, unique=True)
-    project = models.ForeignKey('projects.Project', on_delete=models.CASCADE,
-                               related_name='debug_plans', verbose_name='项目')
-    equipment = models.ForeignKey('projects.EquipmentArchive', on_delete=models.SET_NULL,
-                                 null=True, blank=True, related_name='debug_plans', verbose_name='设备')
+    project = models.ForeignKey(
+        'projects.Project', on_delete=models.CASCADE, related_name='debug_plans', verbose_name='项目'
+    )
+    equipment = models.ForeignKey(
+        'projects.EquipmentArchive',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='debug_plans',
+        verbose_name='设备',
+    )
 
     name = models.CharField('计划名称', max_length=200)
     description = models.TextField('调试内容描述', blank=True)
@@ -45,16 +54,18 @@ class DebugPlan(BaseModel):
 
     # 资源
     workstation = models.CharField('调试工位', max_length=100, blank=True)
-    leader = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
-                              related_name='led_debug_plans', verbose_name='负责人')
+    leader = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='led_debug_plans', verbose_name='负责人'
+    )
 
     # 目标
     target_parameters = models.TextField('目标参数', blank=True)
     acceptance_criteria = models.TextField('验收标准', blank=True)
 
     # 结果
-    result = models.CharField('调试结果', max_length=20, blank=True,
-                             choices=[('PASS', '通过'), ('FAIL', '失败'), ('PARTIAL', '部分通过')])
+    result = models.CharField(
+        '调试结果', max_length=20, blank=True, choices=[('PASS', '通过'), ('FAIL', '失败'), ('PARTIAL', '部分通过')]
+    )
     result_summary = models.TextField('结果总结', blank=True)
 
     class Meta:
@@ -80,10 +91,9 @@ class DebugPlan(BaseModel):
 
 class DebugPlanMember(BaseModel):
     """调试计划成员"""
-    plan = models.ForeignKey(DebugPlan, on_delete=models.CASCADE,
-                            related_name='members', verbose_name='调试计划')
-    user = models.ForeignKey(User, on_delete=models.CASCADE,
-                            related_name='debug_assignments', verbose_name='人员')
+
+    plan = models.ForeignKey(DebugPlan, on_delete=models.CASCADE, related_name='members', verbose_name='调试计划')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='debug_assignments', verbose_name='人员')
     role = models.CharField('角色', max_length=50)  # 主调、协调、记录等
 
     class Meta:
@@ -94,6 +104,7 @@ class DebugPlanMember(BaseModel):
 
 class DebugTask(BaseModel):
     """调试任务"""
+
     STATUS_CHOICES = [
         ('PENDING', '待开始'),
         ('IN_PROGRESS', '进行中'),
@@ -102,23 +113,24 @@ class DebugTask(BaseModel):
         ('SKIPPED', '跳过'),
     ]
 
-    plan = models.ForeignKey(DebugPlan, on_delete=models.CASCADE,
-                            related_name='tasks', verbose_name='调试计划')
+    plan = models.ForeignKey(DebugPlan, on_delete=models.CASCADE, related_name='tasks', verbose_name='调试计划')
     sequence = models.IntegerField('序号', default=0)
     name = models.CharField('任务名称', max_length=200)
     description = models.TextField('任务描述', blank=True)
     status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES, default='PENDING')
 
-    assignee = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
-                                related_name='debug_tasks', verbose_name='执行人')
+    assignee = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='debug_tasks', verbose_name='执行人'
+    )
     planned_hours = models.DecimalField('计划工时', max_digits=8, decimal_places=2, default=0)
     actual_hours = models.DecimalField('实际工时', max_digits=8, decimal_places=2, default=0)
 
     start_time = models.DateTimeField('开始时间', null=True, blank=True)
     end_time = models.DateTimeField('结束时间', null=True, blank=True)
 
-    result = models.CharField('结果', max_length=20, blank=True,
-                             choices=[('PASS', '通过'), ('FAIL', '失败'), ('NA', '不适用')])
+    result = models.CharField(
+        '结果', max_length=20, blank=True, choices=[('PASS', '通过'), ('FAIL', '失败'), ('NA', '不适用')]
+    )
     result_notes = models.TextField('结果说明', blank=True)
 
     class Meta:
@@ -129,6 +141,7 @@ class DebugTask(BaseModel):
 
 class DebugIssue(BaseModel):
     """调试问题"""
+
     SEVERITY_CHOICES = [
         ('CRITICAL', '严重'),
         ('MAJOR', '重要'),
@@ -147,10 +160,10 @@ class DebugIssue(BaseModel):
     ]
 
     issue_no = models.CharField('问题编号', max_length=50, unique=True)
-    plan = models.ForeignKey(DebugPlan, on_delete=models.CASCADE,
-                            related_name='issues', verbose_name='调试计划')
-    task = models.ForeignKey(DebugTask, on_delete=models.SET_NULL, null=True, blank=True,
-                            related_name='issues', verbose_name='关联任务')
+    plan = models.ForeignKey(DebugPlan, on_delete=models.CASCADE, related_name='issues', verbose_name='调试计划')
+    task = models.ForeignKey(
+        DebugTask, on_delete=models.SET_NULL, null=True, blank=True, related_name='issues', verbose_name='关联任务'
+    )
 
     title = models.CharField('问题标题', max_length=200)
     description = models.TextField('问题描述')
@@ -170,19 +183,32 @@ class DebugIssue(BaseModel):
     category = models.CharField('问题分类', max_length=20, choices=CATEGORY_CHOICES, default='OTHER')
 
     # 发现信息
-    found_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
-                                related_name='found_debug_issues', verbose_name='发现人')
+    found_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='found_debug_issues', verbose_name='发现人'
+    )
     found_date = models.DateTimeField('发现时间', auto_now_add=True)
 
     # 分析
     root_cause = models.TextField('根本原因', blank=True)
-    analysis_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
-                                   related_name='analyzed_debug_issues', verbose_name='分析人')
+    analysis_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='analyzed_debug_issues',
+        verbose_name='分析人',
+    )
 
     # 解决方案
     solution = models.TextField('解决方案', blank=True)
-    resolved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
-                                   related_name='resolved_debug_issues', verbose_name='解决人')
+    resolved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='resolved_debug_issues',
+        verbose_name='解决人',
+    )
     resolved_date = models.DateTimeField('解决时间', null=True, blank=True)
 
     # 预防措施
@@ -212,10 +238,11 @@ class DebugIssue(BaseModel):
 
 class DebugParameter(BaseModel):
     """调试参数记录"""
-    plan = models.ForeignKey(DebugPlan, on_delete=models.CASCADE,
-                            related_name='parameters', verbose_name='调试计划')
-    task = models.ForeignKey(DebugTask, on_delete=models.SET_NULL, null=True, blank=True,
-                            related_name='parameters', verbose_name='调试任务')
+
+    plan = models.ForeignKey(DebugPlan, on_delete=models.CASCADE, related_name='parameters', verbose_name='调试计划')
+    task = models.ForeignKey(
+        DebugTask, on_delete=models.SET_NULL, null=True, blank=True, related_name='parameters', verbose_name='调试任务'
+    )
 
     parameter_name = models.CharField('参数名称', max_length=100)
     parameter_code = models.CharField('参数代码', max_length=50, blank=True)
@@ -232,8 +259,9 @@ class DebugParameter(BaseModel):
 
     # 判定
     is_qualified = models.BooleanField('是否合格', null=True)
-    recorded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
-                                   related_name='recorded_debug_params', verbose_name='记录人')
+    recorded_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='recorded_debug_params', verbose_name='记录人'
+    )
     recorded_at = models.DateTimeField('记录时间', auto_now_add=True)
     remarks = models.TextField('备注', blank=True)
 
@@ -245,8 +273,8 @@ class DebugParameter(BaseModel):
 
 class DebugLog(BaseModel):
     """调试日志"""
-    plan = models.ForeignKey(DebugPlan, on_delete=models.CASCADE,
-                            related_name='logs', verbose_name='调试计划')
+
+    plan = models.ForeignKey(DebugPlan, on_delete=models.CASCADE, related_name='logs', verbose_name='调试计划')
 
     LOG_TYPE_CHOICES = [
         ('START', '开始调试'),
@@ -261,8 +289,9 @@ class DebugLog(BaseModel):
 
     log_type = models.CharField('日志类型', max_length=20, choices=LOG_TYPE_CHOICES)
     content = models.TextField('日志内容')
-    logged_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
-                                 related_name='debug_logs', verbose_name='记录人')
+    logged_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='debug_logs', verbose_name='记录人'
+    )
     logged_at = models.DateTimeField('记录时间', auto_now_add=True)
 
     # 关联图片/附件
@@ -275,6 +304,7 @@ class DebugLog(BaseModel):
 
 
 # ==================== Serializers ====================
+
 
 class DebugPlanMemberSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.get_full_name', read_only=True)
@@ -362,8 +392,10 @@ class DebugPlanSerializer(serializers.ModelSerializer):
 
 # ==================== ViewSets ====================
 
+
 class DebugPlanViewSet(viewsets.ModelViewSet):
     """调试计划管理"""
+
     queryset = DebugPlan.objects.filter(is_deleted=False)
     serializer_class = DebugPlanSerializer
     permission_classes = [IsAuthenticated]
@@ -395,7 +427,7 @@ class DebugPlanViewSet(viewsets.ModelViewSet):
             content='调试开始',
             logged_by=request.user,
             created_by=request.user,
-            updated_by=request.user
+            updated_by=request.user,
         )
 
         return Response({'message': '调试已开始'})
@@ -418,7 +450,7 @@ class DebugPlanViewSet(viewsets.ModelViewSet):
             content=f'调试完成，结果：{plan.get_result_display()}',
             logged_by=request.user,
             created_by=request.user,
-            updated_by=request.user
+            updated_by=request.user,
         )
 
         return Response({'message': '调试已完成'})
@@ -465,9 +497,7 @@ class DebugPlanViewSet(viewsets.ModelViewSet):
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
 
-        qs = self.get_queryset().filter(
-            status__in=['CONFIRMED', 'IN_PROGRESS']
-        )
+        qs = self.get_queryset().filter(status__in=['CONFIRMED', 'IN_PROGRESS'])
 
         if start_date:
             qs = qs.filter(planned_end_date__gte=start_date)
@@ -480,16 +510,18 @@ class DebugPlanViewSet(viewsets.ModelViewSet):
             ws = plan.workstation or '未分配'
             if ws not in schedule:
                 schedule[ws] = []
-            schedule[ws].append({
-                'id': plan.id,
-                'plan_no': plan.plan_no,
-                'name': plan.name,
-                'project_name': plan.project.name,
-                'start_date': plan.planned_start_date,
-                'end_date': plan.planned_end_date,
-                'status': plan.status,
-                'leader_name': plan.leader.get_full_name() if plan.leader else '',
-            })
+            schedule[ws].append(
+                {
+                    'id': plan.id,
+                    'plan_no': plan.plan_no,
+                    'name': plan.name,
+                    'project_name': plan.project.name,
+                    'start_date': plan.planned_start_date,
+                    'end_date': plan.planned_end_date,
+                    'status': plan.status,
+                    'leader_name': plan.leader.get_full_name() if plan.leader else '',
+                }
+            )
 
         return Response(schedule)
 
@@ -535,6 +567,7 @@ class DebugPlanViewSet(viewsets.ModelViewSet):
 
 class DebugTaskViewSet(viewsets.ModelViewSet):
     """调试任务管理"""
+
     queryset = DebugTask.objects.filter(is_deleted=False)
     serializer_class = DebugTaskSerializer
     permission_classes = [IsAuthenticated]
@@ -570,6 +603,7 @@ class DebugTaskViewSet(viewsets.ModelViewSet):
 
 class DebugIssueViewSet(viewsets.ModelViewSet):
     """调试问题管理"""
+
     queryset = DebugIssue.objects.filter(is_deleted=False)
     serializer_class = DebugIssueSerializer
     permission_classes = [IsAuthenticated]
@@ -616,9 +650,7 @@ class DebugIssueViewSet(viewsets.ModelViewSet):
             qs = qs.filter(category=category)
         if keyword:
             qs = qs.filter(
-                Q(title__icontains=keyword) |
-                Q(description__icontains=keyword) |
-                Q(solution__icontains=keyword)
+                Q(title__icontains=keyword) | Q(description__icontains=keyword) | Q(solution__icontains=keyword)
             )
 
         return Response(DebugIssueSerializer(qs[:50], many=True).data)
@@ -626,6 +658,7 @@ class DebugIssueViewSet(viewsets.ModelViewSet):
 
 class DebugParameterViewSet(viewsets.ModelViewSet):
     """调试参数管理"""
+
     queryset = DebugParameter.objects.filter(is_deleted=False)
     serializer_class = DebugParameterSerializer
     permission_classes = [IsAuthenticated]
@@ -665,7 +698,7 @@ class DebugParameterViewSet(viewsets.ModelViewSet):
                 actual_numeric=param.get('actual_numeric'),
                 recorded_by=request.user,
                 created_by=request.user,
-                updated_by=request.user
+                updated_by=request.user,
             )
             # 自动判定
             if obj.actual_numeric is not None and obj.min_value is not None and obj.max_value is not None:
@@ -678,6 +711,7 @@ class DebugParameterViewSet(viewsets.ModelViewSet):
 
 class DebugLogViewSet(viewsets.ModelViewSet):
     """调试日志管理"""
+
     queryset = DebugLog.objects.filter(is_deleted=False)
     serializer_class = DebugLogSerializer
     permission_classes = [IsAuthenticated]

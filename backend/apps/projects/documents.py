@@ -1,6 +1,7 @@
 """
 Elasticsearch document definitions for projects
 """
+
 from django_elasticsearch_dsl import Document, fields
 from django_elasticsearch_dsl.registries import registry
 
@@ -11,25 +12,26 @@ from .models import Project, ProjectTask
 class ProjectDocument(Document):
     """Elasticsearch document for Project model"""
 
-    customer = fields.ObjectField(properties={
-        'id': fields.IntegerField(),
-        'name': fields.TextField(),
-        'code': fields.TextField(),
-    })
+    customer = fields.ObjectField(
+        properties={
+            'id': fields.IntegerField(),
+            'name': fields.TextField(),
+            'code': fields.TextField(),
+        }
+    )
 
-    manager = fields.ObjectField(properties={
-        'id': fields.IntegerField(),
-        'username': fields.TextField(),
-        'first_name': fields.TextField(),
-        'last_name': fields.TextField(),
-    })
+    manager = fields.ObjectField(
+        properties={
+            'id': fields.IntegerField(),
+            'username': fields.TextField(),
+            'first_name': fields.TextField(),
+            'last_name': fields.TextField(),
+        }
+    )
 
     class Index:
         name = 'projects'
-        settings = {
-            'number_of_shards': 1,
-            'number_of_replicas': 0
-        }
+        settings = {'number_of_shards': 1, 'number_of_replicas': 0}
 
     class Django:
         model = Project
@@ -54,25 +56,26 @@ class ProjectDocument(Document):
 class ProjectTaskDocument(Document):
     """Elasticsearch document for ProjectTask model"""
 
-    project = fields.ObjectField(properties={
-        'id': fields.IntegerField(),
-        'name': fields.TextField(),
-        'code': fields.TextField(),
-    })
+    project = fields.ObjectField(
+        properties={
+            'id': fields.IntegerField(),
+            'name': fields.TextField(),
+            'code': fields.TextField(),
+        }
+    )
 
-    assignee = fields.ObjectField(properties={
-        'id': fields.IntegerField(),
-        'username': fields.TextField(),
-        'first_name': fields.TextField(),
-        'last_name': fields.TextField(),
-    })
+    assignee = fields.ObjectField(
+        properties={
+            'id': fields.IntegerField(),
+            'username': fields.TextField(),
+            'first_name': fields.TextField(),
+            'last_name': fields.TextField(),
+        }
+    )
 
     class Index:
         name = 'project_tasks'
-        settings = {
-            'number_of_shards': 1,
-            'number_of_replicas': 0
-        }
+        settings = {'number_of_shards': 1, 'number_of_replicas': 0}
 
     class Django:
         model = ProjectTask
@@ -90,4 +93,3 @@ class ProjectTaskDocument(Document):
 
     def get_queryset(self):
         return super().get_queryset().select_related('project', 'assignee')
-

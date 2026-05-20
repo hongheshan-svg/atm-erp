@@ -1,6 +1,7 @@
 """
 URL configuration for masterdata app.
 """
+
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
@@ -37,4 +38,3 @@ router.register(r'credit-adjustments', CreditAdjustmentViewSet, basename='credit
 urlpatterns = [
     path('', include(router.urls)),
 ]
-

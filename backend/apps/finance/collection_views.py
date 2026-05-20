@@ -1,6 +1,7 @@
 """
 回款计划管理视图
 """
+
 from datetime import timedelta
 
 from django.db.models import Count, Sum
@@ -25,7 +26,6 @@ from .collection_serializers import (
 
 
 class CollectionPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
-
     permission_module = 'finance'
     permission_resource = 'collection_plan'
     """回款计划管理"""
@@ -54,30 +54,23 @@ class CollectionPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 
         # 基础统计
         stats = queryset.aggregate(
-            total_plans=Count('id'),
-            total_amount=Sum('total_amount'),
-            collected_amount=Sum('collected_amount')
+            total_plans=Count('id'), total_amount=Sum('total_amount'), collected_amount=Sum('collected_amount')
         )
 
         stats['total_amount'] = float(stats['total_amount'] or 0)
         stats['collected_amount'] = float(stats['collected_amount'] or 0)
         stats['remaining_amount'] = stats['total_amount'] - stats['collected_amount']
-        stats['collection_rate'] = round(
-            stats['collected_amount'] / stats['total_amount'] * 100, 2
-        ) if stats['total_amount'] > 0 else 0
+        stats['collection_rate'] = (
+            round(stats['collected_amount'] / stats['total_amount'] * 100, 2) if stats['total_amount'] > 0 else 0
+        )
 
         # 逾期统计
         overdue_milestones = CollectionMilestone.objects.filter(
-            plan__in=queryset,
-            status__in=['PENDING', 'PARTIAL'],
-            planned_date__lt=today,
-            is_deleted=False
+            plan__in=queryset, status__in=['PENDING', 'PARTIAL'], planned_date__lt=today, is_deleted=False
         )
         stats['overdue_count'] = overdue_milestones.count()
         stats['overdue_amount'] = float(
-            overdue_milestones.aggregate(
-                total=Sum('planned_amount') - Sum('collected_amount')
-            )['total'] or 0
+            overdue_milestones.aggregate(total=Sum('planned_amount') - Sum('collected_amount'))['total'] or 0
         )
 
         # 即将到期（7天内）
@@ -86,13 +79,11 @@ class CollectionPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
             status__in=['PENDING', 'PARTIAL'],
             planned_date__gte=today,
             planned_date__lte=today + timedelta(days=7),
-            is_deleted=False
+            is_deleted=False,
         )
         stats['upcoming_count'] = upcoming_milestones.count()
         stats['upcoming_amount'] = float(
-            upcoming_milestones.aggregate(
-                total=Sum('planned_amount') - Sum('collected_amount')
-            )['total'] or 0
+            upcoming_milestones.aggregate(total=Sum('planned_amount') - Sum('collected_amount'))['total'] or 0
         )
 
         return Response(stats)
@@ -102,11 +93,13 @@ class CollectionPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
         """获取逾期回款"""
         today = timezone.now().date()
 
-        overdue_milestones = CollectionMilestone.objects.filter(
-            status__in=['PENDING', 'PARTIAL'],
-            planned_date__lt=today,
-            is_deleted=False
-        ).select_related('plan', 'plan__customer', 'plan__project').order_by('planned_date')
+        overdue_milestones = (
+            CollectionMilestone.objects.filter(
+                status__in=['PENDING', 'PARTIAL'], planned_date__lt=today, is_deleted=False
+            )
+            .select_related('plan', 'plan__customer', 'plan__project')
+            .order_by('planned_date')
+        )
 
         return Response(CollectionMilestoneListSerializer(overdue_milestones, many=True).data)
 
@@ -116,12 +109,16 @@ class CollectionPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
         today = timezone.now().date()
         days = int(request.query_params.get('days', 30))
 
-        upcoming_milestones = CollectionMilestone.objects.filter(
-            status__in=['PENDING', 'PARTIAL'],
-            planned_date__gte=today,
-            planned_date__lte=today + timedelta(days=days),
-            is_deleted=False
-        ).select_related('plan', 'plan__customer', 'plan__project').order_by('planned_date')
+        upcoming_milestones = (
+            CollectionMilestone.objects.filter(
+                status__in=['PENDING', 'PARTIAL'],
+                planned_date__gte=today,
+                planned_date__lte=today + timedelta(days=days),
+                is_deleted=False,
+            )
+            .select_related('plan', 'plan__customer', 'plan__project')
+            .order_by('planned_date')
+        )
 
         return Response(CollectionMilestoneListSerializer(upcoming_milestones, many=True).data)
 
@@ -161,7 +158,7 @@ class CollectionPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
                 planned_date=item['planned_date'],
                 trigger_condition=item.get('trigger_condition', ''),
                 created_by=request.user,
-                updated_by=request.user
+                updated_by=request.user,
             )
             created.append(milestone)
 
@@ -188,6 +185,7 @@ class CollectionPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
         base_date = request.data.get('base_date') or timezone.now().date()
         if isinstance(base_date, str):
             from datetime import datetime
+
             base_date = datetime.strptime(base_date, '%Y-%m-%d').date()
 
         # 预估各节点日期间隔（天）
@@ -211,7 +209,7 @@ class CollectionPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
                 planned_amount=planned_amount,
                 planned_date=planned_date,
                 created_by=request.user,
-                updated_by=request.user
+                updated_by=request.user,
             )
             created.append(milestone)
 
@@ -222,7 +220,6 @@ class CollectionPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 
 
 class CollectionMilestoneViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
-
     permission_module = 'finance'
     permission_resource = 'collection_milestone'
     """回款节点管理"""
@@ -272,7 +269,7 @@ class CollectionMilestoneViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
             reminder_date=timezone.now(),
             message=request.data.get('message', f'回款提醒: {milestone.name}'),
             created_by=request.user,
-            updated_by=request.user
+            updated_by=request.user,
         )
 
         # 添加接收人
@@ -293,7 +290,6 @@ class CollectionMilestoneViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
 
 
 class CollectionRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
-
     permission_module = 'finance'
     permission_resource = 'collection_record'
     """收款记录管理"""
@@ -315,7 +311,6 @@ class CollectionRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 
 
 class CollectionReminderViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
-
     permission_module = 'finance'
     permission_resource = 'collection_reminder'
     """回款提醒管理"""

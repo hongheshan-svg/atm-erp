@@ -3,6 +3,7 @@
 Custom Fields Configuration
 支持为各业务模块动态添加自定义字段
 """
+
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
@@ -19,6 +20,7 @@ class CustomFieldDefinition(BaseModel):
     """
     自定义字段定义
     """
+
     FIELD_TYPES = [
         ('TEXT', '单行文本'),
         ('TEXTAREA', '多行文本'),
@@ -54,21 +56,12 @@ class CustomFieldDefinition(BaseModel):
     ]
 
     # 关联的模型
-    model_name = models.CharField(
-        max_length=100,
-        verbose_name='所属模型',
-        help_text='格式：app_label.model_name'
-    )
+    model_name = models.CharField(max_length=100, verbose_name='所属模型', help_text='格式：app_label.model_name')
 
     # 字段基本信息
     field_code = models.CharField(max_length=50, verbose_name='字段编码')
     field_name = models.CharField(max_length=100, verbose_name='字段名称')
-    field_type = models.CharField(
-        max_length=20,
-        choices=FIELD_TYPES,
-        default='TEXT',
-        verbose_name='字段类型'
-    )
+    field_type = models.CharField(max_length=20, choices=FIELD_TYPES, default='TEXT', verbose_name='字段类型')
     description = models.TextField(blank=True, verbose_name='字段描述')
 
     # 字段配置
@@ -86,18 +79,12 @@ class CustomFieldDefinition(BaseModel):
 
     # 验证配置
     validation_rules = models.JSONField(
-        default=dict,
-        blank=True,
-        verbose_name='验证规则',
-        help_text='如：{"min": 0, "max": 100, "pattern": "^[A-Z]+$"}'
+        default=dict, blank=True, verbose_name='验证规则', help_text='如：{"min": 0, "max": 100, "pattern": "^[A-Z]+$"}'
     )
 
     # 选项配置（用于下拉、单选、多选类型）
     options = models.JSONField(
-        default=list,
-        blank=True,
-        verbose_name='选项列表',
-        help_text='格式：[{"value": "1", "label": "选项1"}, ...]'
+        default=list, blank=True, verbose_name='选项列表', help_text='格式：[{"value": "1", "label": "选项1"}, ...]'
     )
 
     # 默认值
@@ -119,11 +106,9 @@ class CustomFieldValue(BaseModel):
     自定义字段值
     使用GenericForeignKey关联到任意模型实例
     """
+
     field_definition = models.ForeignKey(
-        CustomFieldDefinition,
-        on_delete=models.CASCADE,
-        related_name='values',
-        verbose_name='字段定义'
+        CustomFieldDefinition, on_delete=models.CASCADE, related_name='values', verbose_name='字段定义'
     )
 
     # 通用外键
@@ -133,21 +118,10 @@ class CustomFieldValue(BaseModel):
 
     # 存储值（使用JSON格式以支持各种类型）
     value_text = models.TextField(blank=True, verbose_name='文本值')
-    value_number = models.DecimalField(
-        max_digits=20,
-        decimal_places=6,
-        null=True,
-        blank=True,
-        verbose_name='数字值'
-    )
+    value_number = models.DecimalField(max_digits=20, decimal_places=6, null=True, blank=True, verbose_name='数字值')
     value_date = models.DateTimeField(null=True, blank=True, verbose_name='日期值')
     value_json = models.JSONField(default=dict, blank=True, verbose_name='JSON值')
-    value_file = models.FileField(
-        upload_to='custom_fields/',
-        blank=True,
-        null=True,
-        verbose_name='文件值'
-    )
+    value_file = models.FileField(upload_to='custom_fields/', blank=True, null=True, verbose_name='文件值')
 
     class Meta:
         db_table = 'core_custom_field_value'
@@ -208,16 +182,14 @@ class CustomFieldValue(BaseModel):
 # Custom Field Service
 # =====================
 
+
 class CustomFieldService:
     """自定义字段服务"""
 
     @staticmethod
     def get_fields_for_model(model_name: str, include_hidden: bool = False):
         """获取模型的所有自定义字段定义"""
-        qs = CustomFieldDefinition.objects.filter(
-            model_name=model_name,
-            is_deleted=False
-        )
+        qs = CustomFieldDefinition.objects.filter(model_name=model_name, is_deleted=False)
         if not include_hidden:
             qs = qs.filter(is_visible=True)
         return qs.order_by('sort_order', 'field_code')
@@ -229,17 +201,11 @@ class CustomFieldService:
         model_name = f'{content_type.app_label}.{content_type.model.capitalize()}'
 
         # 获取字段定义
-        field_defs = CustomFieldDefinition.objects.filter(
-            model_name=model_name,
-            is_deleted=False,
-            is_visible=True
-        )
+        field_defs = CustomFieldDefinition.objects.filter(model_name=model_name, is_deleted=False, is_visible=True)
 
         # 获取已有值
         existing_values = CustomFieldValue.objects.filter(
-            content_type=content_type,
-            object_id=obj.pk,
-            field_definition__in=field_defs
+            content_type=content_type, object_id=obj.pk, field_definition__in=field_defs
         ).select_related('field_definition')
 
         value_map = {v.field_definition_id: v for v in existing_values}
@@ -262,11 +228,7 @@ class CustomFieldService:
 
         # 获取字段定义
         field_defs = {
-            fd.field_code: fd
-            for fd in CustomFieldDefinition.objects.filter(
-                model_name=model_name,
-                is_deleted=False
-            )
+            fd.field_code: fd for fd in CustomFieldDefinition.objects.filter(model_name=model_name, is_deleted=False)
         }
 
         for field_code, value in values.items():
@@ -298,11 +260,7 @@ class CustomFieldService:
         errors = []
 
         field_defs = {
-            fd.field_code: fd
-            for fd in CustomFieldDefinition.objects.filter(
-                model_name=model_name,
-                is_deleted=False
-            )
+            fd.field_code: fd for fd in CustomFieldDefinition.objects.filter(model_name=model_name, is_deleted=False)
         }
 
         for field_code, field_def in field_defs.items():
@@ -348,6 +306,7 @@ class CustomFieldService:
 
                 if 'pattern' in rules:
                     import re
+
                     if not re.match(rules['pattern'], str(value)):
                         errors.append(f'{field_def.field_name} 格式不正确')
 
@@ -357,9 +316,7 @@ class CustomFieldService:
     def get_field_groups(model_name: str) -> list:
         """获取字段分组"""
         field_defs = CustomFieldDefinition.objects.filter(
-            model_name=model_name,
-            is_deleted=False,
-            is_visible=True
+            model_name=model_name, is_deleted=False, is_visible=True
         ).order_by('sort_order', 'field_code')
 
         groups = {}
@@ -369,15 +326,13 @@ class CustomFieldService:
                 groups[group] = []
             groups[group].append(fd)
 
-        return [
-            {'name': name, 'fields': fields}
-            for name, fields in groups.items()
-        ]
+        return [{'name': name, 'fields': fields} for name, fields in groups.items()]
 
 
 # =====================
 # Serializers
 # =====================
+
 
 class CustomFieldDefinitionSerializer(serializers.ModelSerializer):
     field_type_display = serializers.CharField(source='get_field_type_display', read_only=True)
@@ -394,9 +349,16 @@ class CustomFieldDefinitionListSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomFieldDefinition
         fields = [
-            'id', 'model_name', 'field_code', 'field_name', 'field_type',
-            'field_type_display', 'is_required', 'is_visible', 'sort_order',
-            'group_name'
+            'id',
+            'model_name',
+            'field_code',
+            'field_name',
+            'field_type',
+            'field_type_display',
+            'is_required',
+            'is_visible',
+            'sort_order',
+            'group_name',
         ]
 
 
@@ -409,8 +371,14 @@ class CustomFieldValueSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomFieldValue
         fields = [
-            'id', 'field_definition', 'field_code', 'field_name', 'field_type',
-            'value', 'created_at', 'updated_at'
+            'id',
+            'field_definition',
+            'field_code',
+            'field_name',
+            'field_type',
+            'value',
+            'created_at',
+            'updated_at',
         ]
 
     def get_value(self, obj):
@@ -421,10 +389,12 @@ class CustomFieldValueSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class CustomFieldDefinitionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     自定义字段定义管理
     """
+
     queryset = CustomFieldDefinition.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['model_name', 'field_type', 'is_required', 'is_visible']
@@ -439,18 +409,12 @@ class CustomFieldDefinitionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.
     @action(detail=False, methods=['get'])
     def supported_models(self, request):
         """获取支持自定义字段的模型列表"""
-        return Response([
-            {'value': m[0], 'label': m[1]}
-            for m in CustomFieldDefinition.SUPPORTED_MODELS
-        ])
+        return Response([{'value': m[0], 'label': m[1]} for m in CustomFieldDefinition.SUPPORTED_MODELS])
 
     @action(detail=False, methods=['get'])
     def field_types(self, request):
         """获取支持的字段类型"""
-        return Response([
-            {'value': t[0], 'label': t[1]}
-            for t in CustomFieldDefinition.FIELD_TYPES
-        ])
+        return Response([{'value': t[0], 'label': t[1]} for t in CustomFieldDefinition.FIELD_TYPES])
 
     @action(detail=False, methods=['get'])
     def by_model(self, request):
@@ -472,10 +436,9 @@ class CustomFieldDefinitionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.
         groups = CustomFieldService.get_field_groups(model_name)
         result = []
         for group in groups:
-            result.append({
-                'name': group['name'],
-                'fields': CustomFieldDefinitionListSerializer(group['fields'], many=True).data
-            })
+            result.append(
+                {'name': group['name'], 'fields': CustomFieldDefinitionListSerializer(group['fields'], many=True).data}
+            )
         return Response(result)
 
     @action(detail=True, methods=['post'])
@@ -491,9 +454,7 @@ class CustomFieldDefinitionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.
         """批量排序"""
         items = request.data.get('items', [])
         for item in items:
-            CustomFieldDefinition.objects.filter(id=item['id']).update(
-                sort_order=item['sort_order']
-            )
+            CustomFieldDefinition.objects.filter(id=item['id']).update(sort_order=item['sort_order'])
         return Response({'success': True})
 
 
@@ -501,6 +462,7 @@ class CustomFieldValueViewSet(viewsets.ModelViewSet):
     """
     自定义字段值管理
     """
+
     queryset = CustomFieldValue.objects.all()
     serializer_class = CustomFieldValueSerializer
     permission_classes = [IsAuthenticated]
@@ -529,17 +491,19 @@ class CustomFieldValueViewSet(viewsets.ModelViewSet):
 
         result = []
         for fd in field_defs:
-            result.append({
-                'field_code': fd.field_code,
-                'field_name': fd.field_name,
-                'field_type': fd.field_type,
-                'field_type_display': fd.get_field_type_display(),
-                'is_required': fd.is_required,
-                'options': fd.options,
-                'placeholder': fd.placeholder,
-                'help_text': fd.help_text,
-                'value': values.get(fd.field_code)
-            })
+            result.append(
+                {
+                    'field_code': fd.field_code,
+                    'field_name': fd.field_name,
+                    'field_type': fd.field_type,
+                    'field_type_display': fd.get_field_type_display(),
+                    'is_required': fd.is_required,
+                    'options': fd.options,
+                    'placeholder': fd.placeholder,
+                    'help_text': fd.help_text,
+                    'value': values.get(fd.field_code),
+                }
+            )
 
         return Response(result)
 

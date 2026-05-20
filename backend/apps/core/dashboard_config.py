@@ -1,6 +1,7 @@
 """
 Configurable dashboard components and widgets.
 """
+
 from datetime import timedelta
 
 from django.conf import settings
@@ -12,6 +13,7 @@ class DashboardWidget(models.Model):
     """
     Dashboard widget definition.
     """
+
     WIDGET_TYPES = [
         ('stat_card', '统计卡片'),
         ('line_chart', '折线图'),
@@ -76,18 +78,16 @@ class DashboardWidget(models.Model):
         ordering = ['name']
 
     def __str__(self):
-        return f"{self.name} ({self.get_widget_type_display()})"
+        return f'{self.name} ({self.get_widget_type_display()})'
 
 
 class UserDashboard(models.Model):
     """
     User's personalized dashboard configuration.
     """
+
     user = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='dashboard',
-        verbose_name='用户'
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='dashboard', verbose_name='用户'
     )
 
     # Layout configuration
@@ -123,11 +123,11 @@ class DashboardDataService:
     def get_widget_data(cls, widget, params=None):
         """
         Get data for a dashboard widget.
-        
+
         Args:
             widget: DashboardWidget instance
             params: Optional query parameters
-        
+
         Returns:
             dict with widget data
         """
@@ -198,7 +198,7 @@ class DashboardDataService:
             total=Count('id'),
             active=Count('id', filter=models.Q(status='ACTIVE')),
             completed=Count('id', filter=models.Q(status='COMPLETED')),
-            total_budget=Sum('budget_total')
+            total_budget=Sum('budget_total'),
         )
 
         return {
@@ -217,23 +217,19 @@ class DashboardDataService:
 
         start_date, end_date = date_range
 
-        queryset = SalesOrder.objects.filter(
-            order_date__range=[start_date, end_date],
-            is_deleted=False
-        )
+        queryset = SalesOrder.objects.filter(order_date__range=[start_date, end_date], is_deleted=False)
 
         stats = queryset.aggregate(
             total_orders=Count('id'),
             total_amount=Sum('total_amount'),
             confirmed=Count('id', filter=models.Q(status='CONFIRMED')),
-            completed=Count('id', filter=models.Q(status='COMPLETED'))
+            completed=Count('id', filter=models.Q(status='COMPLETED')),
         )
 
         # Get trend data
-        trend = list(queryset.values('order_date').annotate(
-            amount=Sum('total_amount'),
-            count=Count('id')
-        ).order_by('order_date'))
+        trend = list(
+            queryset.values('order_date').annotate(amount=Sum('total_amount'), count=Count('id')).order_by('order_date')
+        )
 
         return {
             'total_orders': stats['total_orders'] or 0,
@@ -252,15 +248,9 @@ class DashboardDataService:
 
         start_date, end_date = date_range
 
-        queryset = PurchaseOrder.objects.filter(
-            order_date__range=[start_date, end_date],
-            is_deleted=False
-        )
+        queryset = PurchaseOrder.objects.filter(order_date__range=[start_date, end_date], is_deleted=False)
 
-        stats = queryset.aggregate(
-            total_orders=Count('id'),
-            total_amount=Sum('total_amount')
-        )
+        stats = queryset.aggregate(total_orders=Count('id'), total_amount=Sum('total_amount'))
 
         return {
             'total_orders': stats['total_orders'] or 0,
@@ -275,15 +265,11 @@ class DashboardDataService:
         from apps.inventory.models import Stock
 
         stats = Stock.objects.aggregate(
-            total_value=Sum(F('qty_on_hand') * F('weighted_avg_cost')),
-            total_items=Count('id')
+            total_value=Sum(F('qty_on_hand') * F('weighted_avg_cost')), total_items=Count('id')
         )
 
         # Low stock count
-        low_stock = Stock.objects.filter(
-            qty_on_hand__lt=F('item__min_stock'),
-            item__min_stock__gt=0
-        ).count()
+        low_stock = Stock.objects.filter(qty_on_hand__lt=F('item__min_stock'), item__min_stock__gt=0).count()
 
         return {
             'total_value': float(stats['total_value'] or 0),
@@ -298,17 +284,11 @@ class DashboardDataService:
 
         from apps.finance.models import AccountPayable, AccountReceivable
 
-        ar_stats = AccountReceivable.objects.filter(
-            status__in=['PENDING', 'PARTIAL'],
-            is_deleted=False
-        ).aggregate(
+        ar_stats = AccountReceivable.objects.filter(status__in=['PENDING', 'PARTIAL'], is_deleted=False).aggregate(
             total=Sum(F('amount_due') - F('amount_paid'))
         )
 
-        ap_stats = AccountPayable.objects.filter(
-            status__in=['PENDING', 'PARTIAL'],
-            is_deleted=False
-        ).aggregate(
+        ap_stats = AccountPayable.objects.filter(status__in=['PENDING', 'PARTIAL'], is_deleted=False).aggregate(
             total=Sum(F('amount_due') - F('amount_paid'))
         )
 
@@ -324,10 +304,7 @@ class DashboardDataService:
         from apps.finance.models import AccountReceivable
 
         today = timezone.now().date()
-        ars = AccountReceivable.objects.filter(
-            status__in=['PENDING', 'PARTIAL'],
-            is_deleted=False
-        )
+        ars = AccountReceivable.objects.filter(status__in=['PENDING', 'PARTIAL'], is_deleted=False)
 
         aging = {
             'current': 0,
@@ -360,10 +337,7 @@ class DashboardDataService:
         from apps.finance.models import AccountPayable
 
         today = timezone.now().date()
-        aps = AccountPayable.objects.filter(
-            status__in=['PENDING', 'PARTIAL'],
-            is_deleted=False
-        )
+        aps = AccountPayable.objects.filter(status__in=['PENDING', 'PARTIAL'], is_deleted=False)
 
         aging = {
             'current': 0,
@@ -394,6 +368,7 @@ class DashboardDataService:
     def _get_cash_flow(cls, date_range, filters, config):
         """Get cash flow forecast."""
         from apps.analytics.services import CashFlowForecastService
+
         return CashFlowForecastService.forecast_next_30_days()
 
     @classmethod
@@ -417,6 +392,7 @@ class DashboardDataService:
     def _get_inventory_turnover(cls, date_range, filters, config):
         """Get inventory turnover analysis."""
         from apps.analytics.services import InventoryAnalyticsService
+
         return InventoryAnalyticsService.calculate_turnover_rate(days=30)
 
     @classmethod
@@ -435,11 +411,24 @@ class DashboardDataService:
 
         # Security: Block dangerous SQL keywords
         dangerous_patterns = [
-            r'\bINSERT\b', r'\bUPDATE\b', r'\bDELETE\b', r'\bDROP\b',
-            r'\bCREATE\b', r'\bALTER\b', r'\bTRUNCATE\b', r'\bGRANT\b',
-            r'\bREVOKE\b', r'\bEXEC\b', r'\bEXECUTE\b', r'\bUNION\b',
-            r'INTO\s+OUTFILE', r'LOAD_FILE', r'INTO\s+DUMPFILE',
-            r'INFORMATION_SCHEMA', r'PG_CATALOG', r'PG_SHADOW',
+            r'\bINSERT\b',
+            r'\bUPDATE\b',
+            r'\bDELETE\b',
+            r'\bDROP\b',
+            r'\bCREATE\b',
+            r'\bALTER\b',
+            r'\bTRUNCATE\b',
+            r'\bGRANT\b',
+            r'\bREVOKE\b',
+            r'\bEXEC\b',
+            r'\bEXECUTE\b',
+            r'\bUNION\b',
+            r'INTO\s+OUTFILE',
+            r'LOAD_FILE',
+            r'INTO\s+DUMPFILE',
+            r'INFORMATION_SCHEMA',
+            r'PG_CATALOG',
+            r'PG_SHADOW',
         ]
 
         for pattern in dangerous_patterns:
@@ -464,10 +453,7 @@ class DashboardDataService:
                 columns = [col[0] for col in cursor.description]
                 rows = cursor.fetchall()
 
-                return {
-                    'columns': columns,
-                    'data': [dict(zip(columns, row, strict=False)) for row in rows]
-                }
+                return {'columns': columns, 'data': [dict(zip(columns, row, strict=False)) for row in rows]}
         except Exception:
             # Don't expose detailed error messages
             return {'error': 'Query execution failed'}

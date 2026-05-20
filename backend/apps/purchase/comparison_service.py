@@ -8,6 +8,7 @@ Quotation Comparison Service
 - 关键件交期预警和风险评估
 - 供应商能力评估集成
 """
+
 import logging
 from decimal import Decimal
 
@@ -46,14 +47,14 @@ class QuotationComparisonService:
     def create_comparison(cls, rfq_id, user, weights=None, comparison_type='NORMAL', weight_template='STANDARD'):
         """
         创建比价分析（非标自动化增强版）
-        
+
         Args:
             rfq_id: 询价单ID
             user: 创建用户
             weights: 可选的权重配置 {'price': 40, 'quality': 25, 'delivery': 20, 'service': 15, 'technical': 0}
             comparison_type: 比价类型 NORMAL/SAMPLE/BATCH/URGENT/CHANGE
             weight_template: 权重模板 STANDARD/QUALITY_FIRST/DELIVERY_FIRST/PRICE_FIRST/CUSTOM
-        
+
         Returns:
             QuotationComparison instance
         """
@@ -61,13 +62,11 @@ class QuotationComparisonService:
 
         # 检查是否有有效的报价（SUBMITTED或ACCEPTED状态）
         quotations = SupplierQuotation.objects.filter(
-            rfq_supplier__rfq=rfq,
-            status__in=['SUBMITTED', 'ACCEPTED'],
-            is_deleted=False
+            rfq_supplier__rfq=rfq, status__in=['SUBMITTED', 'ACCEPTED'], is_deleted=False
         )
 
         if quotations.count() < 2:
-            raise ValueError("至少需要2个供应商报价才能进行比价分析")
+            raise ValueError('至少需要2个供应商报价才能进行比价分析')
 
         with transaction.atomic():
             # 如果使用模板，获取模板权重
@@ -104,11 +103,7 @@ class QuotationComparisonService:
 
             # 为每个报价创建评分记录
             for quotation in quotations:
-                QuotationScore.objects.create(
-                    comparison=comparison,
-                    quotation=quotation,
-                    created_by=user
-                )
+                QuotationScore.objects.create(comparison=comparison, quotation=quotation, created_by=user)
 
             # 计算价格统计
             cls._calculate_price_stats(comparison)
@@ -119,7 +114,7 @@ class QuotationComparisonService:
             # 风险评估
             cls._assess_risks(comparison)
 
-            logger.info(f"Created comparison {comparison.comparison_no} for RFQ {rfq.rfq_no}")
+            logger.info(f'Created comparison {comparison.comparison_no} for RFQ {rfq.rfq_no}')
 
         return comparison
 
@@ -134,11 +129,7 @@ class QuotationComparisonService:
             from apps.projects.models import ProjectBOM
 
             for rfq_line in rfq.lines.filter(is_deleted=False):
-                bom_item = ProjectBOM.objects.filter(
-                    project=rfq.project,
-                    item=rfq_line.item,
-                    is_deleted=False
-                ).first()
+                bom_item = ProjectBOM.objects.filter(project=rfq.project, item=rfq_line.item, is_deleted=False).first()
 
                 if bom_item:
                     if bom_item.is_critical:
@@ -188,9 +179,7 @@ class QuotationComparisonService:
     @classmethod
     def _calculate_price_stats(cls, comparison):
         """计算价格统计"""
-        prices = list(
-            comparison.scores.values_list('quotation__total_amount', flat=True)
-        )
+        prices = list(comparison.scores.values_list('quotation__total_amount', flat=True))
 
         if prices:
             comparison.min_price = min(prices)
@@ -230,7 +219,7 @@ class QuotationComparisonService:
                 score.score_price = Decimal('0')
             score.save()
 
-        logger.info(f"Auto scored prices for comparison {comparison.comparison_no}")
+        logger.info(f'Auto scored prices for comparison {comparison.comparison_no}')
 
     @classmethod
     def auto_score_delivery(cls, comparison):
@@ -245,9 +234,7 @@ class QuotationComparisonService:
 
         lead_times = []
         for score in scores:
-            avg_lead_time = score.quotation.lines.aggregate(
-                avg=Avg('lead_time_days')
-            )['avg'] or 999
+            avg_lead_time = score.quotation.lines.aggregate(avg=Avg('lead_time_days'))['avg'] or 999
             lead_times.append((score, float(avg_lead_time)))
 
         min_lead_time = min(lt[1] for lt in lead_times) if lead_times else 0
@@ -259,7 +246,7 @@ class QuotationComparisonService:
                 score.score_delivery = Decimal('0')
             score.save()
 
-        logger.info(f"Auto scored delivery for comparison {comparison.comparison_no}")
+        logger.info(f'Auto scored delivery for comparison {comparison.comparison_no}')
 
     @classmethod
     def auto_score_technical(cls, comparison):
@@ -279,16 +266,17 @@ class QuotationComparisonService:
                 from apps.purchase.evaluation_models import SupplierEvaluation
 
                 # 获取最近的评价
-                latest_eval = SupplierEvaluation.objects.filter(
-                    supplier=supplier,
-                    is_deleted=False
-                ).order_by('-evaluation_date').first()
+                latest_eval = (
+                    SupplierEvaluation.objects.filter(supplier=supplier, is_deleted=False)
+                    .order_by('-evaluation_date')
+                    .first()
+                )
 
                 if latest_eval:
                     # 假设评价中有技术能力指标
-                    technical_scores = latest_eval.scores.filter(
-                        indicator__category='TECHNICAL'
-                    ).values_list('score', flat=True)
+                    technical_scores = latest_eval.scores.filter(indicator__category='TECHNICAL').values_list(
+                        'score', flat=True
+                    )
 
                     if technical_scores:
                         avg_technical = sum(technical_scores) / len(technical_scores)
@@ -299,7 +287,7 @@ class QuotationComparisonService:
                     score.score_technical = Decimal('75')  # 无评价默认中等
 
             except Exception as e:
-                logger.warning(f"Failed to get technical score for supplier {supplier.id}: {e}")
+                logger.warning(f'Failed to get technical score for supplier {supplier.id}: {e}')
                 score.score_technical = Decimal('75')
 
             score.save()
@@ -322,9 +310,7 @@ class QuotationComparisonService:
 
             # 获取该供应商的历史订单
             historical_pos = PurchaseOrder.objects.filter(
-                supplier=supplier,
-                status__in=['RECEIVED', 'PARTIAL_RECEIVED', 'COMPLETED'],
-                is_deleted=False
+                supplier=supplier, status__in=['RECEIVED', 'PARTIAL_RECEIVED', 'COMPLETED'], is_deleted=False
             ).order_by('-order_date')[:20]  # 最近20单
 
             if not historical_pos:
@@ -357,7 +343,7 @@ class QuotationComparisonService:
             score.score_reliability = Decimal(str(reliability * 100))
             score.save()
 
-        logger.info(f"Auto scored reliability for comparison {comparison.comparison_no}")
+        logger.info(f'Auto scored reliability for comparison {comparison.comparison_no}')
 
     @classmethod
     def calculate_multi_dimension_ranks(cls, comparison):
@@ -400,7 +386,7 @@ class QuotationComparisonService:
 
             s.save()
 
-        logger.info(f"Calculated multi-dimension ranks for comparison {comparison.comparison_no}")
+        logger.info(f'Calculated multi-dimension ranks for comparison {comparison.comparison_no}')
 
     @classmethod
     def _assess_risks(cls, comparison):
@@ -420,28 +406,37 @@ class QuotationComparisonService:
                 if line.earliest_delivery_date and rfq_line.required_date:
                     delay_days = (line.earliest_delivery_date - rfq_line.required_date).days
                     if delay_days > RISK_THRESHOLDS['delivery_delay_days']:
-                        warnings.append({
-                            'type': 'DELIVERY_DELAY',
-                            'level': 'HIGH' if delay_days > 14 else 'MEDIUM',
-                            'message': f'物料 {rfq_line.item.sku} 交期延迟 {delay_days} 天',
-                            'item_id': rfq_line.item.id
-                        })
+                        warnings.append(
+                            {
+                                'type': 'DELIVERY_DELAY',
+                                'level': 'HIGH' if delay_days > 14 else 'MEDIUM',
+                                'message': f'物料 {rfq_line.item.sku} 交期延迟 {delay_days} 天',
+                                'item_id': rfq_line.item.id,
+                            }
+                        )
 
             # 2. 价格风险检查
-            if quotation.price_change_rate and float(quotation.price_change_rate) > RISK_THRESHOLDS['price_increase_rate']:
-                warnings.append({
-                    'type': 'PRICE_INCREASE',
-                    'level': 'MEDIUM',
-                    'message': f'价格上涨 {quotation.price_change_rate:.1f}%'
-                })
+            if (
+                quotation.price_change_rate
+                and float(quotation.price_change_rate) > RISK_THRESHOLDS['price_increase_rate']
+            ):
+                warnings.append(
+                    {
+                        'type': 'PRICE_INCREASE',
+                        'level': 'MEDIUM',
+                        'message': f'价格上涨 {quotation.price_change_rate:.1f}%',
+                    }
+                )
 
             # 3. 可靠性风险检查
             if float(score.score_reliability) < RISK_THRESHOLDS['min_reliability_score']:
-                warnings.append({
-                    'type': 'LOW_RELIABILITY',
-                    'level': 'MEDIUM',
-                    'message': f'供应商可靠性得分较低 ({score.score_reliability:.0f}分)'
-                })
+                warnings.append(
+                    {
+                        'type': 'LOW_RELIABILITY',
+                        'level': 'MEDIUM',
+                        'message': f'供应商可靠性得分较低 ({score.score_reliability:.0f}分)',
+                    }
+                )
 
             score.risk_warnings = warnings
             score.save()
@@ -462,7 +457,7 @@ class QuotationComparisonService:
     def update_manual_scores(cls, score_id, quality_score=None, service_score=None, technical_score=None, notes=None):
         """
         手动更新质量、服务和技术评分
-        
+
         Args:
             score_id: QuotationScore ID
             quality_score: 质量得分 (0-100)
@@ -507,7 +502,7 @@ class QuotationComparisonService:
 
         for i, score in enumerate(scores, 1):
             score.ranking = i
-            score.is_recommended = (i == 1)  # 第一名自动推荐
+            score.is_recommended = i == 1  # 第一名自动推荐
             score.save()
 
         # 更新推荐报价
@@ -516,7 +511,7 @@ class QuotationComparisonService:
             comparison.recommendation_reason = cls._generate_recommendation_reason(scores[0])
             comparison.save()
 
-        logger.info(f"Calculated total scores for comparison {comparison.comparison_no}")
+        logger.info(f'Calculated total scores for comparison {comparison.comparison_no}')
 
     @classmethod
     def _generate_recommendation_reason(cls, top_score):
@@ -525,27 +520,27 @@ class QuotationComparisonService:
         quotation = top_score.quotation
         supplier = quotation.rfq_supplier.supplier
 
-        reasons.append(f"综合得分最高: {top_score.total_score:.2f}分")
+        reasons.append(f'综合得分最高: {top_score.total_score:.2f}分')
 
         if float(top_score.score_price) >= 90:
-            reasons.append("价格具有明显优势")
+            reasons.append('价格具有明显优势')
 
         if float(top_score.score_delivery) >= 90:
-            reasons.append("交期最短")
+            reasons.append('交期最短')
 
         if float(top_score.score_quality) >= 80:
-            reasons.append("质量评价良好")
+            reasons.append('质量评价良好')
 
         if float(top_score.score_service) >= 80:
-            reasons.append("服务评价良好")
+            reasons.append('服务评价良好')
 
-        return "；".join(reasons)
+        return '；'.join(reasons)
 
     @classmethod
     def update_weights(cls, comparison_id, weights):
         """
         更新比价权重并重新计算
-        
+
         Args:
             comparison_id: QuotationComparison ID
             weights: {'price': 40, 'quality': 25, 'delivery': 20, 'service': 15, 'technical': 0}
@@ -555,7 +550,7 @@ class QuotationComparisonService:
         # 验证权重总和为100
         total = sum(weights.values())
         if abs(total - 100) > 0.01:
-            raise ValueError(f"权重总和必须为100，当前为{total}")
+            raise ValueError(f'权重总和必须为100，当前为{total}')
 
         comparison.weight_price = weights.get('price', comparison.weight_price)
         comparison.weight_quality = weights.get('quality', comparison.weight_quality)
@@ -575,13 +570,13 @@ class QuotationComparisonService:
     def apply_weight_template(cls, comparison_id, template_name):
         """
         应用权重模板
-        
+
         Args:
             comparison_id: QuotationComparison ID
             template_name: 模板名称 STANDARD/QUALITY_FIRST/DELIVERY_FIRST/PRICE_FIRST
         """
         if template_name not in WEIGHT_TEMPLATES:
-            raise ValueError(f"无效的权重模板: {template_name}")
+            raise ValueError(f'无效的权重模板: {template_name}')
 
         weights = WEIGHT_TEMPLATES[template_name]
         comparison = QuotationComparison.objects.get(id=comparison_id)
@@ -604,7 +599,7 @@ class QuotationComparisonService:
     def get_multi_dimension_recommendations(cls, comparison_id):
         """
         获取多维度推荐结果
-        
+
         Returns:
             dict: {
                 'overall': {...},  # 综合最优
@@ -614,9 +609,7 @@ class QuotationComparisonService:
             }
         """
         comparison = QuotationComparison.objects.get(id=comparison_id)
-        scores = comparison.scores.select_related(
-            'quotation__rfq_supplier__supplier'
-        ).all()
+        scores = comparison.scores.select_related('quotation__rfq_supplier__supplier').all()
 
         recommendations = {
             'overall': None,
@@ -667,13 +660,11 @@ class QuotationComparisonService:
     def get_comparison_report(cls, comparison):
         """
         生成比价报告数据
-        
+
         Returns:
             dict: 比价报告数据
         """
-        scores = comparison.scores.select_related(
-            'quotation__rfq_supplier__supplier'
-        ).order_by('ranking')
+        scores = comparison.scores.select_related('quotation__rfq_supplier__supplier').order_by('ranking')
 
         # 获取物料明细比较
         item_comparisons = cls._get_item_comparisons(comparison)
@@ -685,7 +676,6 @@ class QuotationComparisonService:
             'created_at': comparison.created_at.isoformat() if comparison.created_at else None,
             'status': comparison.status,
             'status_display': comparison.get_status_display(),
-
             # 非标自动化增强字段
             'comparison_type': comparison.comparison_type,
             'comparison_type_display': comparison.get_comparison_type_display(),
@@ -695,7 +685,6 @@ class QuotationComparisonService:
             'long_lead_items_count': comparison.long_lead_items_count,
             'weight_template': comparison.weight_template,
             'weight_template_display': comparison.get_weight_template_display(),
-
             'weights': {
                 'price': float(comparison.weight_price),
                 'quality': float(comparison.weight_quality),
@@ -703,14 +692,14 @@ class QuotationComparisonService:
                 'service': float(comparison.weight_service),
                 'technical': float(comparison.weight_technical),
             },
-
             'price_summary': {
                 'min': float(comparison.min_price) if comparison.min_price else 0,
                 'max': float(comparison.max_price) if comparison.max_price else 0,
                 'avg': float(comparison.avg_price) if comparison.avg_price else 0,
-                'spread': float(comparison.max_price - comparison.min_price) if comparison.min_price and comparison.max_price else 0,
+                'spread': float(comparison.max_price - comparison.min_price)
+                if comparison.min_price and comparison.max_price
+                else 0,
             },
-
             'suppliers': [],
             'recommended': None,
             'multi_recommendations': cls.get_multi_dimension_recommendations(comparison.id),
@@ -725,26 +714,20 @@ class QuotationComparisonService:
                 'score_id': score.id,
                 'ranking': score.ranking,
                 'is_recommended': score.is_recommended,
-
                 'supplier_id': supplier.id,
                 'supplier_name': supplier.name,
                 'supplier_code': supplier.code,
-
                 'quotation_id': quotation.id,
                 'quotation_no': quotation.quotation_no,
                 'quotation_date': quotation.quotation_date.isoformat() if quotation.quotation_date else None,
                 'valid_until': quotation.valid_until.isoformat() if quotation.valid_until else None,
-
                 'total_amount': float(quotation.total_amount),
                 'total_with_tax': float(quotation.total_with_tax),
                 'tax_rate': quotation.tax_rate,
-
                 'payment_terms': quotation.payment_terms,
                 'delivery_terms': quotation.delivery_terms,
                 'warranty_period': quotation.warranty_period,
-
                 'price_change_rate': float(quotation.price_change_rate) if quotation.price_change_rate else None,
-
                 'scores': {
                     'price': float(score.score_price),
                     'quality': float(score.score_quality),
@@ -754,14 +737,12 @@ class QuotationComparisonService:
                     'reliability': float(score.score_reliability),
                     'total': float(score.total_score),
                 },
-
                 'ranks': {
                     'overall': score.ranking,
                     'price': score.price_rank,
                     'delivery': score.delivery_rank,
                     'quality': score.quality_rank,
                 },
-
                 'recommend_type': score.recommend_type,
                 'risk_warnings': score.risk_warnings,
                 'notes': score.notes,
@@ -819,7 +800,9 @@ class QuotationComparisonService:
                         'is_alternative': quot_line.is_alternative,
                         'alternative_brand': quot_line.alternative_brand,
                         'last_unit_price': float(quot_line.last_unit_price) if quot_line.last_unit_price else None,
-                        'price_change_rate': float(quot_line.price_change_rate) if quot_line.price_change_rate else None,
+                        'price_change_rate': float(quot_line.price_change_rate)
+                        if quot_line.price_change_rate
+                        else None,
                     }
 
                     item_data[item_key]['supplier_prices'].append(price_info)
@@ -841,7 +824,7 @@ class QuotationComparisonService:
         comparison.status = 'COMPLETED'
         comparison.save()
 
-        logger.info(f"Completed comparison {comparison.comparison_no}")
+        logger.info(f'Completed comparison {comparison.comparison_no}')
         return comparison
 
     @classmethod
@@ -850,7 +833,7 @@ class QuotationComparisonService:
         comparison = QuotationComparison.objects.get(id=comparison_id)
 
         if comparison.status not in ['COMPLETED', 'IN_PROGRESS']:
-            raise ValueError("只能审批已完成或进行中的比价分析")
+            raise ValueError('只能审批已完成或进行中的比价分析')
 
         comparison.status = 'APPROVED'
         comparison.approved_by = user
@@ -866,14 +849,14 @@ class QuotationComparisonService:
             comparison.recommended_quotation.status = 'ACCEPTED'
             comparison.recommended_quotation.save()
 
-        logger.info(f"Approved comparison {comparison.comparison_no} by {user.username}")
+        logger.info(f'Approved comparison {comparison.comparison_no} by {user.username}')
         return comparison
 
     @classmethod
     def convert_to_po(cls, comparison_id, user):
         """
         将推荐报价转换为采购订单
-        
+
         Returns:
             PurchaseOrder instance
         """
@@ -882,10 +865,10 @@ class QuotationComparisonService:
         comparison = QuotationComparison.objects.get(id=comparison_id)
 
         if comparison.status != 'APPROVED':
-            raise ValueError("只能将已审批的比价分析转换为采购订单")
+            raise ValueError('只能将已审批的比价分析转换为采购订单')
 
         if not comparison.recommended_quotation:
-            raise ValueError("没有推荐的报价")
+            raise ValueError('没有推荐的报价')
 
         quotation = comparison.recommended_quotation
         rfq = comparison.rfq
@@ -898,7 +881,7 @@ class QuotationComparisonService:
                 delivery_date=timezone.now().date(),
                 payment_terms=quotation.payment_terms,
                 tax_rate=quotation.tax_rate,
-                created_by=user
+                created_by=user,
             )
 
             # 创建订单明细
@@ -909,7 +892,7 @@ class QuotationComparisonService:
                     item=quot_line.rfq_line.item,
                     qty=quot_line.qty,
                     unit_price=quot_line.unit_price,
-                    created_by=user
+                    created_by=user,
                 )
                 total_amount += line.line_amount
 
@@ -922,7 +905,7 @@ class QuotationComparisonService:
             # 记录价格历史
             cls._record_price_history(po)
 
-            logger.info(f"Converted comparison {comparison.comparison_no} to PO {po.order_no}")
+            logger.info(f'Converted comparison {comparison.comparison_no} to PO {po.order_no}')
 
         return po
 
@@ -940,53 +923,51 @@ class QuotationComparisonService:
                 source_id=po.id,
                 source_no=po.order_no,
                 price_date=po.order_date,
-                created_by=po.created_by
+                created_by=po.created_by,
             )
 
     @classmethod
     def get_item_price_history(cls, item_id, supplier_id=None, limit=10):
         """
         获取物料价格历史
-        
+
         Args:
             item_id: 物料ID
             supplier_id: 可选的供应商ID
             limit: 返回记录数
-        
+
         Returns:
             list: 价格历史记录
         """
-        queryset = ItemPriceHistory.objects.filter(
-            item_id=item_id,
-            is_deleted=False
-        ).order_by('-price_date')
+        queryset = ItemPriceHistory.objects.filter(item_id=item_id, is_deleted=False).order_by('-price_date')
 
         if supplier_id:
             queryset = queryset.filter(supplier_id=supplier_id)
 
         history = []
         for record in queryset[:limit]:
-            history.append({
-                'id': record.id,
-                'supplier_name': record.supplier.name,
-                'unit_price': float(record.unit_price),
-                'qty': float(record.qty),
-                'tax_rate': record.tax_rate,
-                'source_type': record.source_type,
-                'source_no': record.source_no,
-                'price_date': record.price_date.isoformat(),
-            })
+            history.append(
+                {
+                    'id': record.id,
+                    'supplier_name': record.supplier.name,
+                    'unit_price': float(record.unit_price),
+                    'qty': float(record.qty),
+                    'tax_rate': record.tax_rate,
+                    'source_type': record.source_type,
+                    'source_no': record.source_no,
+                    'price_date': record.price_date.isoformat(),
+                }
+            )
 
         return history
 
     @classmethod
     def get_last_purchase_price(cls, item_id, supplier_id):
         """获取物料的上次采购价格"""
-        record = ItemPriceHistory.objects.filter(
-            item_id=item_id,
-            supplier_id=supplier_id,
-            is_deleted=False
-        ).order_by('-price_date').first()
+        record = (
+            ItemPriceHistory.objects.filter(item_id=item_id, supplier_id=supplier_id, is_deleted=False)
+            .order_by('-price_date')
+            .first()
+        )
 
         return float(record.unit_price) if record else None
-

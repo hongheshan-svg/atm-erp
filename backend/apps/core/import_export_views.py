@@ -1,6 +1,7 @@
 """
 数据导入导出视图
 """
+
 from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser
@@ -13,6 +14,7 @@ from .import_export_service import ExportService, ImportService, max_length, req
 
 class ItemImportView(APIView):
     """物料导入"""
+
     parser_classes = [MultiPartParser]
     permission_classes = [IsAuthenticated]
 
@@ -38,6 +40,7 @@ class ItemImportView(APIView):
 
         # 验证数据
         from apps.masterdata.models import Item
+
         validators = {
             'code': [required, max_length(50)],
             'name': [required, max_length(200)],
@@ -46,12 +49,14 @@ class ItemImportView(APIView):
         validation = ImportService.validate_data(result['data'], validators)
 
         if validation['errors']:
-            return Response({
-                'success': False,
-                'valid_count': len(validation['valid']),
-                'error_count': len(validation['errors']),
-                'errors': validation['errors'][:50]  # 只返回前50个错误
-            })
+            return Response(
+                {
+                    'success': False,
+                    'valid_count': len(validation['valid']),
+                    'error_count': len(validation['errors']),
+                    'errors': validation['errors'][:50],  # 只返回前50个错误
+                }
+            )
 
         # 导入数据
         field_mapping = {
@@ -63,15 +68,9 @@ class ItemImportView(APIView):
             'model': 'model',
         }
 
-        import_result = ImportService.import_data(
-            Item, validation['valid'], field_mapping, request.user
-        )
+        import_result = ImportService.import_data(Item, validation['valid'], field_mapping, request.user)
 
-        return Response({
-            'success': True,
-            'created': import_result['created'],
-            'errors': import_result['errors']
-        })
+        return Response({'success': True, 'created': import_result['created'], 'errors': import_result['errors']})
 
     def get(self, request):
         """下载导入模板"""
@@ -86,16 +85,14 @@ class ItemImportView(APIView):
         for col, header in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col, value=header)
             cell.font = Font(bold=True)
-            cell.fill = PatternFill(start_color="E0E0E0", fill_type="solid")
+            cell.fill = PatternFill(start_color='E0E0E0', fill_type='solid')
 
         # 示例数据
         example = ['M001', '螺栓M8x20', 'M8x20 不锈钢', '个', '紧固件', '国标', '304']
         for col, value in enumerate(example, 1):
             ws.cell(row=2, column=col, value=value)
 
-        response = HttpResponse(
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        )
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         response['Content-Disposition'] = 'attachment; filename="item_import_template.xlsx"'
         wb.save(response)
         return response
@@ -103,6 +100,7 @@ class ItemImportView(APIView):
 
 class ItemExportView(APIView):
     """物料导出"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -141,6 +139,7 @@ class ItemExportView(APIView):
 
 class SupplierImportView(APIView):
     """供应商导入"""
+
     parser_classes = [MultiPartParser]
     permission_classes = [IsAuthenticated]
 
@@ -163,6 +162,7 @@ class SupplierImportView(APIView):
             return Response({'error': result['error']}, status=status.HTTP_400_BAD_REQUEST)
 
         from apps.masterdata.models import Supplier
+
         validators = {
             'code': [required, max_length(50)],
             'name': [required, max_length(200)],
@@ -171,12 +171,14 @@ class SupplierImportView(APIView):
         validation = ImportService.validate_data(result['data'], validators)
 
         if validation['errors']:
-            return Response({
-                'success': False,
-                'valid_count': len(validation['valid']),
-                'error_count': len(validation['errors']),
-                'errors': validation['errors'][:50]
-            })
+            return Response(
+                {
+                    'success': False,
+                    'valid_count': len(validation['valid']),
+                    'error_count': len(validation['errors']),
+                    'errors': validation['errors'][:50],
+                }
+            )
 
         field_mapping = {
             'code': 'code',
@@ -187,15 +189,9 @@ class SupplierImportView(APIView):
             'address': 'address',
         }
 
-        import_result = ImportService.import_data(
-            Supplier, validation['valid'], field_mapping, request.user
-        )
+        import_result = ImportService.import_data(Supplier, validation['valid'], field_mapping, request.user)
 
-        return Response({
-            'success': True,
-            'created': import_result['created'],
-            'errors': import_result['errors']
-        })
+        return Response({'success': True, 'created': import_result['created'], 'errors': import_result['errors']})
 
     def get(self, request):
         """下载导入模板"""
@@ -210,15 +206,20 @@ class SupplierImportView(APIView):
         for col, header in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col, value=header)
             cell.font = Font(bold=True)
-            cell.fill = PatternFill(start_color="E0E0E0", fill_type="solid")
+            cell.fill = PatternFill(start_color='E0E0E0', fill_type='solid')
 
-        example = ['S001', '深圳XX精密机械有限公司', '张三', '13800138000', 'zhangsan@example.com', '深圳市宝安区XX路XX号']
+        example = [
+            'S001',
+            '深圳XX精密机械有限公司',
+            '张三',
+            '13800138000',
+            'zhangsan@example.com',
+            '深圳市宝安区XX路XX号',
+        ]
         for col, value in enumerate(example, 1):
             ws.cell(row=2, column=col, value=value)
 
-        response = HttpResponse(
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        )
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         response['Content-Disposition'] = 'attachment; filename="supplier_import_template.xlsx"'
         wb.save(response)
         return response
@@ -226,6 +227,7 @@ class SupplierImportView(APIView):
 
 class SupplierExportView(APIView):
     """供应商导出"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -252,6 +254,7 @@ class SupplierExportView(APIView):
 
 class CustomerExportView(APIView):
     """客户导出"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -275,6 +278,7 @@ class CustomerExportView(APIView):
 
 class BOMExportView(APIView):
     """BOM清单导出"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -284,22 +288,21 @@ class BOMExportView(APIView):
         if not project_id:
             return Response({'error': '请指定项目'}, status=status.HTTP_400_BAD_REQUEST)
 
-        queryset = ProjectBOM.objects.filter(
-            project_id=project_id,
-            is_deleted=False
-        ).select_related('item', 'project')
+        queryset = ProjectBOM.objects.filter(project_id=project_id, is_deleted=False).select_related('item', 'project')
 
         data = []
         for bom in queryset:
-            data.append({
-                'project_name': bom.project.name if bom.project else '',
-                'item_code': bom.item.code if bom.item else '',
-                'item_name': bom.item.name if bom.item else '',
-                'item_spec': bom.item.specification if bom.item else '',
-                'quantity': bom.quantity,
-                'unit': bom.unit,
-                'remark': bom.remark,
-            })
+            data.append(
+                {
+                    'project_name': bom.project.name if bom.project else '',
+                    'item_code': bom.item.code if bom.item else '',
+                    'item_name': bom.item.name if bom.item else '',
+                    'item_spec': bom.item.specification if bom.item else '',
+                    'quantity': bom.quantity,
+                    'unit': bom.unit,
+                    'remark': bom.remark,
+                }
+            )
 
         columns = [
             {'field': 'project_name', 'title': '项目名称', 'width': 25},

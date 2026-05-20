@@ -9,6 +9,7 @@ Field Service Dispatch Management
 - 现场打卡和日志
 - 差旅费用关联
 """
+
 from datetime import date
 
 from django.db import models
@@ -26,8 +27,10 @@ from apps.core.models import BaseModel
 # 模型定义
 # =============================================================================
 
+
 class SkillCategory(BaseModel):
     """技能类别"""
+
     code = models.CharField(max_length=50, unique=True, verbose_name='类别编码')
     name = models.CharField(max_length=100, verbose_name='类别名称')
     description = models.TextField(blank=True, verbose_name='描述')
@@ -45,11 +48,9 @@ class SkillCategory(BaseModel):
 
 class Skill(BaseModel):
     """技能定义"""
+
     category = models.ForeignKey(
-        SkillCategory,
-        on_delete=models.CASCADE,
-        related_name='skills',
-        verbose_name='技能类别'
+        SkillCategory, on_delete=models.CASCADE, related_name='skills', verbose_name='技能类别'
     )
     code = models.CharField(max_length=50, unique=True, verbose_name='技能编码')
     name = models.CharField(max_length=100, verbose_name='技能名称')
@@ -60,7 +61,7 @@ class Skill(BaseModel):
         default=list,
         blank=True,
         verbose_name='等级定义',
-        help_text='[{"level": 1, "name": "初级", "description": "..."}]'
+        help_text='[{"level": 1, "name": "初级", "description": "..."}]',
     )
 
     is_required_for_dispatch = models.BooleanField(default=False, verbose_name='派工必需')
@@ -77,6 +78,7 @@ class Skill(BaseModel):
 
 class TechnicianSkill(BaseModel):
     """技术人员技能"""
+
     LEVEL_CHOICES = [
         (1, '初级'),
         (2, '中级'),
@@ -86,17 +88,9 @@ class TechnicianSkill(BaseModel):
     ]
 
     technician = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.CASCADE,
-        related_name='technician_skills',
-        verbose_name='技术人员'
+        'accounts.User', on_delete=models.CASCADE, related_name='technician_skills', verbose_name='技术人员'
     )
-    skill = models.ForeignKey(
-        Skill,
-        on_delete=models.CASCADE,
-        related_name='technician_skills',
-        verbose_name='技能'
-    )
+    skill = models.ForeignKey(Skill, on_delete=models.CASCADE, related_name='technician_skills', verbose_name='技能')
 
     level = models.IntegerField(choices=LEVEL_CHOICES, default=1, verbose_name='技能等级')
     certified = models.BooleanField(default=False, verbose_name='已认证')
@@ -119,11 +113,9 @@ class TechnicianSkill(BaseModel):
 
 class TechnicianProfile(BaseModel):
     """技术人员档案"""
+
     user = models.OneToOneField(
-        'accounts.User',
-        on_delete=models.CASCADE,
-        related_name='technician_profile',
-        verbose_name='用户'
+        'accounts.User', on_delete=models.CASCADE, related_name='technician_profile', verbose_name='用户'
     )
 
     # 基本信息
@@ -135,7 +127,7 @@ class TechnicianProfile(BaseModel):
             ('PARTNER', '合作伙伴'),
         ],
         default='INTERNAL',
-        verbose_name='人员类型'
+        verbose_name='人员类型',
     )
 
     # 专业领域
@@ -162,7 +154,7 @@ class TechnicianProfile(BaseModel):
             ('UNAVAILABLE', '不可用'),
         ],
         default='AVAILABLE',
-        verbose_name='可用状态'
+        verbose_name='可用状态',
     )
 
     # 统计
@@ -180,6 +172,7 @@ class TechnicianProfile(BaseModel):
 
 class ServiceOrder(BaseModel):
     """现场服务派工单"""
+
     SERVICE_TYPE_CHOICES = [
         ('INSTALLATION', '安装'),
         ('DEBUGGING', '调试'),
@@ -218,10 +211,7 @@ class ServiceOrder(BaseModel):
 
     # 关联信息
     customer = models.ForeignKey(
-        'masterdata.Customer',
-        on_delete=models.PROTECT,
-        related_name='service_orders',
-        verbose_name='客户'
+        'masterdata.Customer', on_delete=models.PROTECT, related_name='service_orders', verbose_name='客户'
     )
     project = models.ForeignKey(
         'projects.Project',
@@ -229,7 +219,7 @@ class ServiceOrder(BaseModel):
         null=True,
         blank=True,
         related_name='service_orders',
-        verbose_name='关联项目'
+        verbose_name='关联项目',
     )
     equipment = models.ForeignKey(
         'projects.Equipment',
@@ -237,7 +227,7 @@ class ServiceOrder(BaseModel):
         null=True,
         blank=True,
         related_name='service_orders',
-        verbose_name='关联设备'
+        verbose_name='关联设备',
     )
 
     # 服务地点
@@ -255,12 +245,7 @@ class ServiceOrder(BaseModel):
     actual_end_date = models.DateField(null=True, blank=True, verbose_name='实际结束')
 
     # 技能要求
-    required_skills = models.ManyToManyField(
-        Skill,
-        blank=True,
-        related_name='service_orders',
-        verbose_name='所需技能'
-    )
+    required_skills = models.ManyToManyField(Skill, blank=True, related_name='service_orders', verbose_name='所需技能')
     min_skill_level = models.IntegerField(default=1, verbose_name='最低技能等级')
 
     # 人员估计
@@ -296,12 +281,14 @@ class ServiceOrder(BaseModel):
     def save(self, *args, **kwargs):
         if not self.order_no:
             from apps.core.models import CodeRule
+
             self.order_no = CodeRule.generate_code('SERVICE')
         super().save(*args, **kwargs)
 
 
 class ServiceDispatch(BaseModel):
     """服务派工记录"""
+
     STATUS_CHOICES = [
         ('PENDING', '待确认'),
         ('CONFIRMED', '已确认'),
@@ -310,17 +297,11 @@ class ServiceDispatch(BaseModel):
     ]
 
     service_order = models.ForeignKey(
-        ServiceOrder,
-        on_delete=models.CASCADE,
-        related_name='dispatches',
-        verbose_name='服务单'
+        ServiceOrder, on_delete=models.CASCADE, related_name='dispatches', verbose_name='服务单'
     )
 
     technician = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.PROTECT,
-        related_name='service_dispatches',
-        verbose_name='技术人员'
+        'accounts.User', on_delete=models.PROTECT, related_name='service_dispatches', verbose_name='技术人员'
     )
 
     # 派工信息
@@ -332,7 +313,7 @@ class ServiceDispatch(BaseModel):
             ('SUPPORT', '支持'),
         ],
         default='MEMBER',
-        verbose_name='角色'
+        verbose_name='角色',
     )
 
     dispatch_date = models.DateField(auto_now_add=True, verbose_name='派工日期')
@@ -365,6 +346,7 @@ class ServiceDispatch(BaseModel):
 
 class ServiceCheckIn(BaseModel):
     """现场打卡记录"""
+
     CHECK_TYPE_CHOICES = [
         ('ARRIVAL', '到达'),
         ('DEPARTURE', '离开'),
@@ -373,10 +355,7 @@ class ServiceCheckIn(BaseModel):
     ]
 
     dispatch = models.ForeignKey(
-        ServiceDispatch,
-        on_delete=models.CASCADE,
-        related_name='check_ins',
-        verbose_name='派工记录'
+        ServiceDispatch, on_delete=models.CASCADE, related_name='check_ins', verbose_name='派工记录'
     )
 
     check_type = models.CharField(max_length=20, choices=CHECK_TYPE_CHOICES, verbose_name='打卡类型')
@@ -404,11 +383,9 @@ class ServiceCheckIn(BaseModel):
 
 class ServiceLog(BaseModel):
     """服务日志"""
+
     dispatch = models.ForeignKey(
-        ServiceDispatch,
-        on_delete=models.CASCADE,
-        related_name='logs',
-        verbose_name='派工记录'
+        ServiceDispatch, on_delete=models.CASCADE, related_name='logs', verbose_name='派工记录'
     )
 
     log_date = models.DateField(verbose_name='日期')
@@ -448,6 +425,7 @@ class ServiceLog(BaseModel):
 
 class ServiceExpense(BaseModel):
     """服务费用"""
+
     EXPENSE_TYPE_CHOICES = [
         ('TRAVEL', '差旅费'),
         ('ACCOMMODATION', '住宿费'),
@@ -459,10 +437,7 @@ class ServiceExpense(BaseModel):
     ]
 
     service_order = models.ForeignKey(
-        ServiceOrder,
-        on_delete=models.CASCADE,
-        related_name='expenses',
-        verbose_name='服务单'
+        ServiceOrder, on_delete=models.CASCADE, related_name='expenses', verbose_name='服务单'
     )
     dispatch = models.ForeignKey(
         ServiceDispatch,
@@ -470,7 +445,7 @@ class ServiceExpense(BaseModel):
         null=True,
         blank=True,
         related_name='expenses',
-        verbose_name='派工记录'
+        verbose_name='派工记录',
     )
 
     expense_type = models.CharField(max_length=20, choices=EXPENSE_TYPE_CHOICES, verbose_name='费用类型')
@@ -491,7 +466,7 @@ class ServiceExpense(BaseModel):
             ('REJECTED', '已拒绝'),
         ],
         default='PENDING',
-        verbose_name='状态'
+        verbose_name='状态',
     )
     approved_by = models.ForeignKey(
         'accounts.User',
@@ -499,7 +474,7 @@ class ServiceExpense(BaseModel):
         null=True,
         blank=True,
         related_name='approved_service_expenses',
-        verbose_name='审批人'
+        verbose_name='审批人',
     )
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name='审批时间')
 
@@ -517,6 +492,7 @@ class ServiceExpense(BaseModel):
 
 class TechnicianSchedule(BaseModel):
     """技术人员日程"""
+
     SCHEDULE_TYPE_CHOICES = [
         ('SERVICE', '现场服务'),
         ('TRAINING', '培训'),
@@ -526,10 +502,7 @@ class TechnicianSchedule(BaseModel):
     ]
 
     technician = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.CASCADE,
-        related_name='technician_schedules',
-        verbose_name='技术人员'
+        'accounts.User', on_delete=models.CASCADE, related_name='technician_schedules', verbose_name='技术人员'
     )
 
     schedule_type = models.CharField(max_length=20, choices=SCHEDULE_TYPE_CHOICES, verbose_name='日程类型')
@@ -543,12 +516,7 @@ class TechnicianSchedule(BaseModel):
 
     # 关联
     service_order = models.ForeignKey(
-        ServiceOrder,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='schedules',
-        verbose_name='服务单'
+        ServiceOrder, on_delete=models.SET_NULL, null=True, blank=True, related_name='schedules', verbose_name='服务单'
     )
 
     location = models.CharField(max_length=300, blank=True, verbose_name='地点')
@@ -567,6 +535,7 @@ class TechnicianSchedule(BaseModel):
 # =============================================================================
 # 序列化器
 # =============================================================================
+
 
 class SkillCategorySerializer(serializers.ModelSerializer):
     skills = serializers.SerializerMethodField()
@@ -668,9 +637,7 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def get_expenses_total(self, obj):
-        return obj.expenses.filter(
-            status='APPROVED', is_deleted=False
-        ).aggregate(total=Sum('amount'))['total'] or 0
+        return obj.expenses.filter(status='APPROVED', is_deleted=False).aggregate(total=Sum('amount'))['total'] or 0
 
 
 class ServiceOrderListSerializer(serializers.ModelSerializer):
@@ -683,10 +650,23 @@ class ServiceOrderListSerializer(serializers.ModelSerializer):
     class Meta:
         model = ServiceOrder
         fields = [
-            'id', 'order_no', 'title', 'service_type', 'service_type_display',
-            'customer', 'customer_name', 'service_address', 'contact_name',
-            'priority', 'priority_display', 'requested_date', 'planned_start_date',
-            'status', 'status_display', 'technician_count', 'created_at'
+            'id',
+            'order_no',
+            'title',
+            'service_type',
+            'service_type_display',
+            'customer',
+            'customer_name',
+            'service_address',
+            'contact_name',
+            'priority',
+            'priority_display',
+            'requested_date',
+            'planned_start_date',
+            'status',
+            'status_display',
+            'technician_count',
+            'created_at',
         ]
 
     def get_technician_count(self, obj):
@@ -707,8 +687,10 @@ class TechnicianScheduleSerializer(serializers.ModelSerializer):
 # 视图集
 # =============================================================================
 
+
 class SkillCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技能类别管理"""
+
     queryset = SkillCategory.objects.filter(is_deleted=False)
     serializer_class = SkillCategorySerializer
     permission_classes = [IsAuthenticated]
@@ -717,6 +699,7 @@ class SkillCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
 
 class SkillViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技能管理"""
+
     queryset = Skill.objects.filter(is_deleted=False)
     serializer_class = SkillSerializer
     permission_classes = [IsAuthenticated]
@@ -726,6 +709,7 @@ class SkillViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 
 class TechnicianProfileViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术人员档案管理"""
+
     queryset = TechnicianProfile.objects.filter(is_deleted=False)
     serializer_class = TechnicianProfileSerializer
     permission_classes = [IsAuthenticated]
@@ -740,23 +724,18 @@ class TechnicianProfileViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
 
         matrix = []
         for profile in profiles:
-            tech_skills = TechnicianSkill.objects.filter(
-                technician=profile.user, is_deleted=False
-            )
+            tech_skills = TechnicianSkill.objects.filter(technician=profile.user, is_deleted=False)
             skill_map = {ts.skill_id: ts.level for ts in tech_skills}
 
             row = {
                 'technician_id': profile.user_id,
                 'technician_name': profile.user.get_full_name(),
                 'availability': profile.availability_status,
-                'skills': {s.id: skill_map.get(s.id, 0) for s in skills}
+                'skills': {s.id: skill_map.get(s.id, 0) for s in skills},
             }
             matrix.append(row)
 
-        return Response({
-            'skills': SkillSerializer(skills, many=True).data,
-            'matrix': matrix
-        })
+        return Response({'skills': SkillSerializer(skills, many=True).data, 'matrix': matrix})
 
     @action(detail=False, methods=['get'])
     def available_technicians(self, request):
@@ -770,16 +749,13 @@ class TechnicianProfileViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         # 按技能筛选
         if skill_ids:
             profiles = profiles.filter(
-                user__technician_skills__skill_id__in=skill_ids,
-                user__technician_skills__is_deleted=False
+                user__technician_skills__skill_id__in=skill_ids, user__technician_skills__is_deleted=False
             ).distinct()
 
         # 按日期排除已有安排的人员
         if start_date and end_date:
             busy_technicians = TechnicianSchedule.objects.filter(
-                start_date__lte=end_date,
-                end_date__gte=start_date,
-                is_deleted=False
+                start_date__lte=end_date, end_date__gte=start_date, is_deleted=False
             ).values_list('technician_id', flat=True)
 
             profiles = profiles.exclude(user_id__in=busy_technicians)
@@ -789,6 +765,7 @@ class TechnicianProfileViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
 
 class TechnicianSkillViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术人员技能管理"""
+
     queryset = TechnicianSkill.objects.filter(is_deleted=False)
     serializer_class = TechnicianSkillSerializer
     permission_classes = [IsAuthenticated]
@@ -797,6 +774,7 @@ class TechnicianSkillViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
 
 class ServiceOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """现场服务单管理"""
+
     queryset = ServiceOrder.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'service_type', 'customer', 'priority']
@@ -821,6 +799,7 @@ class ServiceOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
             return Response({'error': '请选择技术人员'}, status=400)
 
         from apps.accounts.models import User
+
         try:
             technician = User.objects.get(id=technician_id)
         except User.DoesNotExist:
@@ -834,8 +813,8 @@ class ServiceOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
                 'role': role,
                 'planned_start': planned_start or order.planned_start_date,
                 'planned_end': planned_end or order.planned_end_date,
-                'created_by': request.user
-            }
+                'created_by': request.user,
+            },
         )
 
         if not created:
@@ -850,7 +829,7 @@ class ServiceOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
             end_date=dispatch.planned_end,
             service_order=order,
             location=order.service_address,
-            created_by=request.user
+            created_by=request.user,
         )
 
         # 更新订单状态
@@ -858,10 +837,7 @@ class ServiceOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
             order.status = 'ASSIGNED'
             order.save()
 
-        return Response({
-            'message': '派工成功',
-            'dispatch': ServiceDispatchSerializer(dispatch).data
-        })
+        return Response({'message': '派工成功', 'dispatch': ServiceDispatchSerializer(dispatch).data})
 
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
@@ -875,17 +851,14 @@ class ServiceOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         order.follow_up_notes = request.data.get('follow_up_notes', '')
 
         # 计算实际费用
-        order.actual_cost = order.expenses.filter(
-            status='APPROVED', is_deleted=False
-        ).aggregate(total=Sum('amount'))['total'] or 0
+        order.actual_cost = (
+            order.expenses.filter(status='APPROVED', is_deleted=False).aggregate(total=Sum('amount'))['total'] or 0
+        )
 
         order.save()
 
         # 更新派工记录
-        order.dispatches.filter(status='CONFIRMED').update(
-            status='COMPLETED',
-            actual_end=date.today()
-        )
+        order.dispatches.filter(status='CONFIRMED').update(status='COMPLETED', actual_end=date.today())
 
         return Response(ServiceOrderSerializer(order).data)
 
@@ -895,38 +868,34 @@ class ServiceOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         today = date.today()
 
         # 各状态统计
-        status_stats = self.get_queryset().values('status').annotate(
-            count=Count('id')
-        )
+        status_stats = self.get_queryset().values('status').annotate(count=Count('id'))
 
         # 本月服务
         month_start = today.replace(day=1)
         month_orders = self.get_queryset().filter(created_at__gte=month_start)
 
         # 紧急服务
-        urgent = self.get_queryset().filter(
-            priority='URGENT',
-            status__in=['PENDING', 'ASSIGNED', 'CONFIRMED']
-        ).count()
+        urgent = self.get_queryset().filter(priority='URGENT', status__in=['PENDING', 'ASSIGNED', 'CONFIRMED']).count()
 
         # 今日现场
         on_site_today = ServiceDispatch.objects.filter(
-            planned_start__lte=today,
-            planned_end__gte=today,
-            status__in=['CONFIRMED', 'COMPLETED']
+            planned_start__lte=today, planned_end__gte=today, status__in=['CONFIRMED', 'COMPLETED']
         ).count()
 
-        return Response({
-            'status_stats': list(status_stats),
-            'month_total': month_orders.count(),
-            'month_completed': month_orders.filter(status='COMPLETED').count(),
-            'urgent_count': urgent,
-            'on_site_today': on_site_today
-        })
+        return Response(
+            {
+                'status_stats': list(status_stats),
+                'month_total': month_orders.count(),
+                'month_completed': month_orders.filter(status='COMPLETED').count(),
+                'urgent_count': urgent,
+                'on_site_today': on_site_today,
+            }
+        )
 
 
 class ServiceDispatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """服务派工管理"""
+
     queryset = ServiceDispatch.objects.filter(is_deleted=False)
     serializer_class = ServiceDispatchSerializer
     permission_classes = [IsAuthenticated]
@@ -956,25 +925,21 @@ class ServiceDispatchViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
         dispatch.save()
 
         # 删除日程
-        TechnicianSchedule.objects.filter(
-            technician=dispatch.technician,
-            service_order=dispatch.service_order
-        ).delete()
+        TechnicianSchedule.objects.filter(technician=dispatch.technician, service_order=dispatch.service_order).delete()
 
         return Response(ServiceDispatchSerializer(dispatch).data)
 
     @action(detail=False, methods=['get'])
     def my_dispatches(self, request):
         """我的派工"""
-        dispatches = self.get_queryset().filter(
-            technician=request.user
-        ).order_by('-planned_start')
+        dispatches = self.get_queryset().filter(technician=request.user).order_by('-planned_start')
 
         return Response(ServiceDispatchSerializer(dispatches, many=True).data)
 
 
 class ServiceCheckInViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """现场打卡管理"""
+
     queryset = ServiceCheckIn.objects.filter(is_deleted=False)
     serializer_class = ServiceCheckInSerializer
     permission_classes = [IsAuthenticated]
@@ -996,6 +961,7 @@ class ServiceCheckInViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
 
 class ServiceLogViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """服务日志管理"""
+
     queryset = ServiceLog.objects.filter(is_deleted=False)
     serializer_class = ServiceLogSerializer
     permission_classes = [IsAuthenticated]
@@ -1004,6 +970,7 @@ class ServiceLogViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
 
 class ServiceExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """服务费用管理"""
+
     queryset = ServiceExpense.objects.filter(is_deleted=False)
     serializer_class = ServiceExpenseSerializer
     permission_classes = [IsAuthenticated]
@@ -1020,9 +987,9 @@ class ServiceExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
 
         # 更新服务单实际费用
         order = expense.service_order
-        order.actual_cost = order.expenses.filter(
-            status='APPROVED', is_deleted=False
-        ).aggregate(total=Sum('amount'))['total'] or 0
+        order.actual_cost = (
+            order.expenses.filter(status='APPROVED', is_deleted=False).aggregate(total=Sum('amount'))['total'] or 0
+        )
         order.save()
 
         return Response(ServiceExpenseSerializer(expense).data)
@@ -1041,6 +1008,7 @@ class ServiceExpenseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
 
 class TechnicianScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术人员日程管理"""
+
     queryset = TechnicianSchedule.objects.filter(is_deleted=False)
     serializer_class = TechnicianScheduleSerializer
     permission_classes = [IsAuthenticated]
@@ -1069,9 +1037,8 @@ class TechnicianScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
     @action(detail=False, methods=['get'])
     def my_schedule(self, request):
         """我的日程"""
-        schedules = self.get_queryset().filter(
-            technician=request.user,
-            end_date__gte=date.today()
-        ).order_by('start_date')
+        schedules = (
+            self.get_queryset().filter(technician=request.user, end_date__gte=date.today()).order_by('start_date')
+        )
 
         return Response(TechnicianScheduleSerializer(schedules, many=True).data)

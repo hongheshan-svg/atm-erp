@@ -3,6 +3,7 @@
 Project Milestone Management
 跟踪项目关键节点和交付物
 """
+
 from datetime import date, timedelta
 
 from django.db import models
@@ -20,6 +21,7 @@ class Milestone(BaseModel):
     """
     项目里程碑
     """
+
     MILESTONE_TYPES = [
         ('KICKOFF', '项目启动'),
         ('DESIGN', '设计评审'),
@@ -44,41 +46,23 @@ class Milestone(BaseModel):
     ]
 
     project = models.ForeignKey(
-        'projects.Project',
-        on_delete=models.CASCADE,
-        related_name='milestones',
-        verbose_name='项目'
+        'projects.Project', on_delete=models.CASCADE, related_name='milestones', verbose_name='项目'
     )
 
     code = models.CharField(max_length=50, verbose_name='里程碑编码')
     name = models.CharField(max_length=200, verbose_name='里程碑名称')
-    milestone_type = models.CharField(
-        max_length=20,
-        choices=MILESTONE_TYPES,
-        default='CUSTOM',
-        verbose_name='类型'
-    )
+    milestone_type = models.CharField(max_length=20, choices=MILESTONE_TYPES, default='CUSTOM', verbose_name='类型')
 
     # 时间
     planned_date = models.DateField(verbose_name='计划日期')
     actual_date = models.DateField(null=True, blank=True, verbose_name='实际日期')
 
     # 状态
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
     progress = models.IntegerField(default=0, verbose_name='进度%')
 
     # 权重（用于计算项目整体进度）
-    weight = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=10,
-        verbose_name='权重%'
-    )
+    weight = models.DecimalField(max_digits=5, decimal_places=2, default=10, verbose_name='权重%')
 
     # 负责人
     owner = models.ForeignKey(
@@ -87,28 +71,19 @@ class Milestone(BaseModel):
         null=True,
         blank=True,
         related_name='owned_milestones',
-        verbose_name='负责人'
+        verbose_name='负责人',
     )
 
     # 关联付款节点
     payment_linked = models.BooleanField(default=False, verbose_name='关联付款')
-    payment_percentage = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=0,
-        verbose_name='付款比例%'
-    )
+    payment_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name='付款比例%')
 
     # 交付物
     deliverables = models.TextField(blank=True, verbose_name='交付物说明')
 
     # 前置里程碑
     predecessors = models.ManyToManyField(
-        'self',
-        symmetrical=False,
-        blank=True,
-        related_name='successors',
-        verbose_name='前置里程碑'
+        'self', symmetrical=False, blank=True, related_name='successors', verbose_name='前置里程碑'
     )
 
     description = models.TextField(blank=True, verbose_name='说明')
@@ -152,11 +127,9 @@ class MilestoneChecklist(BaseModel):
     """
     里程碑检查项
     """
+
     milestone = models.ForeignKey(
-        Milestone,
-        on_delete=models.CASCADE,
-        related_name='checklist_items',
-        verbose_name='里程碑'
+        Milestone, on_delete=models.CASCADE, related_name='checklist_items', verbose_name='里程碑'
     )
 
     name = models.CharField(max_length=200, verbose_name='检查项')
@@ -169,7 +142,7 @@ class MilestoneChecklist(BaseModel):
         null=True,
         blank=True,
         related_name='completed_checklists',
-        verbose_name='完成人'
+        verbose_name='完成人',
     )
     remarks = models.CharField(max_length=500, blank=True, verbose_name='备注')
     sort_order = models.IntegerField(default=0, verbose_name='排序')
@@ -188,12 +161,8 @@ class MilestoneComment(BaseModel):
     """
     里程碑评论/进展记录
     """
-    milestone = models.ForeignKey(
-        Milestone,
-        on_delete=models.CASCADE,
-        related_name='comments',
-        verbose_name='里程碑'
-    )
+
+    milestone = models.ForeignKey(Milestone, on_delete=models.CASCADE, related_name='comments', verbose_name='里程碑')
     content = models.TextField(verbose_name='内容')
     comment_type = models.CharField(
         max_length=20,
@@ -204,7 +173,7 @@ class MilestoneComment(BaseModel):
             ('NOTE', '备注'),
         ],
         default='PROGRESS',
-        verbose_name='类型'
+        verbose_name='类型',
     )
     attachments = models.JSONField(default=list, blank=True, verbose_name='附件')
 
@@ -221,6 +190,7 @@ class MilestoneComment(BaseModel):
 # =====================
 # Serializers
 # =====================
+
 
 class MilestoneChecklistSerializer(serializers.ModelSerializer):
     completed_by_name = serializers.CharField(source='completed_by.get_full_name', read_only=True)
@@ -262,11 +232,7 @@ class MilestoneSerializer(serializers.ModelSerializer):
         if total == 0:
             return {'total': 0, 'completed': 0, 'percentage': 0}
         completed = obj.checklist_items.filter(is_completed=True).count()
-        return {
-            'total': total,
-            'completed': completed,
-            'percentage': round(completed / total * 100, 1)
-        }
+        return {'total': total, 'completed': completed, 'percentage': round(completed / total * 100, 1)}
 
 
 class MilestoneListSerializer(serializers.ModelSerializer):
@@ -280,9 +246,23 @@ class MilestoneListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Milestone
         fields = [
-            'id', 'project', 'project_name', 'code', 'name', 'milestone_type', 'milestone_type_display',
-            'planned_date', 'actual_date', 'status', 'status_display', 'progress',
-            'owner', 'owner_name', 'days_remaining', 'is_overdue', 'payment_linked'
+            'id',
+            'project',
+            'project_name',
+            'code',
+            'name',
+            'milestone_type',
+            'milestone_type_display',
+            'planned_date',
+            'actual_date',
+            'status',
+            'status_display',
+            'progress',
+            'owner',
+            'owner_name',
+            'days_remaining',
+            'is_overdue',
+            'payment_linked',
         ]
 
 
@@ -290,8 +270,10 @@ class MilestoneListSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class MilestoneViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目里程碑管理"""
+
     queryset = Milestone.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['project', 'milestone_type', 'status', 'owner']
@@ -306,10 +288,7 @@ class MilestoneViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
     @action(detail=False, methods=['get'])
     def milestone_types(self, request):
         """获取里程碑类型"""
-        return Response([
-            {'value': t[0], 'label': t[1]}
-            for t in Milestone.MILESTONE_TYPES
-        ])
+        return Response([{'value': t[0], 'label': t[1]} for t in Milestone.MILESTONE_TYPES])
 
     @action(detail=False, methods=['get'])
     def by_project(self, request):
@@ -368,7 +347,7 @@ class MilestoneViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
                 name=item.get('name'),
                 is_required=item.get('is_required', True),
                 sort_order=item.get('sort_order', 0),
-                created_by=request.user
+                created_by=request.user,
             )
             created.append(MilestoneChecklistSerializer(checklist).data)
 
@@ -384,7 +363,7 @@ class MilestoneViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
             content=request.data.get('content'),
             comment_type=request.data.get('comment_type', 'PROGRESS'),
             attachments=request.data.get('attachments', []),
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(MilestoneCommentSerializer(comment).data)
@@ -399,10 +378,11 @@ class MilestoneViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
     @action(detail=False, methods=['get'])
     def overdue(self, request):
         """获取逾期里程碑"""
-        milestones = self.get_queryset().filter(
-            planned_date__lt=date.today(),
-            status__in=['PENDING', 'IN_PROGRESS']
-        ).order_by('planned_date')
+        milestones = (
+            self.get_queryset()
+            .filter(planned_date__lt=date.today(), status__in=['PENDING', 'IN_PROGRESS'])
+            .order_by('planned_date')
+        )
 
         return Response(MilestoneListSerializer(milestones, many=True).data)
 
@@ -412,21 +392,22 @@ class MilestoneViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
         days = int(request.query_params.get('days', 7))
         end_date = date.today() + timedelta(days=days)
 
-        milestones = self.get_queryset().filter(
-            planned_date__gte=date.today(),
-            planned_date__lte=end_date,
-            status__in=['PENDING', 'IN_PROGRESS']
-        ).order_by('planned_date')
+        milestones = (
+            self.get_queryset()
+            .filter(planned_date__gte=date.today(), planned_date__lte=end_date, status__in=['PENDING', 'IN_PROGRESS'])
+            .order_by('planned_date')
+        )
 
         return Response(MilestoneListSerializer(milestones, many=True).data)
 
     @action(detail=False, methods=['get'])
     def my_milestones(self, request):
         """我负责的里程碑"""
-        milestones = self.get_queryset().filter(
-            owner=request.user,
-            status__in=['PENDING', 'IN_PROGRESS']
-        ).order_by('planned_date')
+        milestones = (
+            self.get_queryset()
+            .filter(owner=request.user, status__in=['PENDING', 'IN_PROGRESS'])
+            .order_by('planned_date')
+        )
 
         return Response(MilestoneListSerializer(milestones, many=True).data)
 
@@ -441,6 +422,7 @@ class MilestoneViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
             return Response({'error': '请提供项目ID'}, status=400)
 
         from apps.projects.models import Project
+
         project = Project.objects.get(id=project_id)
 
         start = date.fromisoformat(start_date)
@@ -473,17 +455,13 @@ class MilestoneViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
                     'planned_date': start + timedelta(days=days_offset),
                     'weight': weight,
                     'sort_order': i * 10,
-                    'created_by': request.user
-                }
+                    'created_by': request.user,
+                },
             )
             if c:
                 created.append(MilestoneListSerializer(milestone).data)
 
-        return Response({
-            'success': True,
-            'created': len(created),
-            'milestones': created
-        })
+        return Response({'success': True, 'created': len(created), 'milestones': created})
 
     def _update_project_progress(self, project):
         """更新项目整体进度"""
@@ -495,9 +473,7 @@ class MilestoneViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
         if total_weight == 0:
             return
 
-        weighted_progress = sum(
-            (m.progress * float(m.weight) / 100) for m in milestones
-        )
+        weighted_progress = sum((m.progress * float(m.weight) / 100) for m in milestones)
 
         project.progress = int(weighted_progress / float(total_weight) * 100)
         project.save()
@@ -505,6 +481,7 @@ class MilestoneViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
 
 class MilestoneChecklistViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """里程碑检查项管理"""
+
     queryset = MilestoneChecklist.objects.filter(is_deleted=False)
     serializer_class = MilestoneChecklistSerializer
     permission_classes = [IsAuthenticated]

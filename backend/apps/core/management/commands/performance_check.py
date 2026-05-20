@@ -2,6 +2,7 @@
 Performance check management command.
 Analyzes system performance and provides optimization suggestions.
 """
+
 import time
 
 from django.core.management.base import BaseCommand
@@ -48,7 +49,7 @@ class Command(BaseCommand):
             # Test connection speed
             start = time.time()
             with connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
+                cursor.execute('SELECT 1')
             latency = (time.time() - start) * 1000
 
             self.stdout.write(f'  Database latency: {latency:.2f}ms')
@@ -97,7 +98,8 @@ class Command(BaseCommand):
             # Get Redis stats
             try:
                 from django_redis import get_redis_connection
-                redis_conn = get_redis_connection("default")
+
+                redis_conn = get_redis_connection('default')
                 info = redis_conn.info()
 
                 self.stdout.write(f'\n  Redis memory: {info.get("used_memory_human", "N/A")}')
@@ -166,9 +168,7 @@ class Command(BaseCommand):
                 if missing_indexes:
                     self.stdout.write(self.style.WARNING('\n  Tables that may need indexes:'))
                     for schema, table, seq_scan, seq_read, idx_scan, idx_fetch in missing_indexes:
-                        self.stdout.write(
-                            f'    - {table}: {seq_scan} seq scans vs {idx_scan} idx scans'
-                        )
+                        self.stdout.write(f'    - {table}: {seq_scan} seq scans vs {idx_scan} idx scans')
                 else:
                     self.stdout.write(self.style.SUCCESS('  ✓ No obvious missing indexes'))
 

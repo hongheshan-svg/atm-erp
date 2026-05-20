@@ -12,6 +12,7 @@ Project Operation Scheduling
 
 注：此模块已简化，适合项目型单件/小批量生产排程
 """
+
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
@@ -32,6 +33,7 @@ from .scheduling import WorkCenter
 
 class ScheduleOrder(BaseModel):
     """排程工单"""
+
     STATUS_CHOICES = [
         ('PENDING', '待排程'),
         ('SCHEDULED', '已排程'),
@@ -57,7 +59,7 @@ class ScheduleOrder(BaseModel):
         null=True,
         blank=True,
         related_name='schedule_orders',
-        verbose_name='来源项目'
+        verbose_name='来源项目',
     )
     sales_order = models.ForeignKey(
         'sales.SalesOrder',
@@ -65,7 +67,7 @@ class ScheduleOrder(BaseModel):
         null=True,
         blank=True,
         related_name='schedule_orders',
-        verbose_name='来源订单'
+        verbose_name='来源订单',
     )
 
     # 产品
@@ -75,7 +77,7 @@ class ScheduleOrder(BaseModel):
         null=True,
         blank=True,
         related_name='schedule_orders',
-        verbose_name='产品'
+        verbose_name='产品',
     )
     quantity = models.DecimalField(max_digits=18, decimal_places=4, verbose_name='数量')
 
@@ -90,35 +92,19 @@ class ScheduleOrder(BaseModel):
         null=True,
         blank=True,
         related_name='schedule_orders',
-        verbose_name='工作中心'
+        verbose_name='工作中心',
     )
     planned_start = models.DateTimeField(null=True, blank=True, verbose_name='计划开始')
     planned_end = models.DateTimeField(null=True, blank=True, verbose_name='计划结束')
-    planned_hours = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        verbose_name='计划工时'
-    )
+    planned_hours = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name='计划工时')
 
     # 实际
     actual_start = models.DateTimeField(null=True, blank=True, verbose_name='实际开始')
     actual_end = models.DateTimeField(null=True, blank=True, verbose_name='实际结束')
-    completed_qty = models.DecimalField(
-        max_digits=18,
-        decimal_places=4,
-        default=0,
-        verbose_name='完成数量'
-    )
+    completed_qty = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='完成数量')
 
     priority = models.IntegerField(choices=PRIORITY_CHOICES, default=3, verbose_name='优先级')
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
 
     remarks = models.TextField(blank=True, verbose_name='备注')
 
@@ -134,12 +120,14 @@ class ScheduleOrder(BaseModel):
     def save(self, *args, **kwargs):
         if not self.order_no:
             from apps.core.utils import generate_code
+
             self.order_no = generate_code('SCH')
         super().save(*args, **kwargs)
 
 
 class APSScheduleTask(BaseModel):
     """APS排程任务"""
+
     STATUS_CHOICES = [
         ('PENDING', '待开始'),
         ('IN_PROGRESS', '进行中'),
@@ -147,12 +135,7 @@ class APSScheduleTask(BaseModel):
         ('COMPLETED', '已完成'),
     ]
 
-    order = models.ForeignKey(
-        ScheduleOrder,
-        on_delete=models.CASCADE,
-        related_name='tasks',
-        verbose_name='工单'
-    )
+    order = models.ForeignKey(ScheduleOrder, on_delete=models.CASCADE, related_name='tasks', verbose_name='工单')
 
     sequence = models.IntegerField(default=1, verbose_name='工序序号')
     process_name = models.CharField(max_length=100, verbose_name='工序名称')
@@ -163,27 +146,17 @@ class APSScheduleTask(BaseModel):
         null=True,
         blank=True,
         related_name='aps_schedule_tasks',
-        verbose_name='工作中心'
+        verbose_name='工作中心',
     )
 
     # 时间
     planned_start = models.DateTimeField(null=True, blank=True, verbose_name='计划开始')
     planned_end = models.DateTimeField(null=True, blank=True, verbose_name='计划结束')
-    planned_hours = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=0,
-        verbose_name='计划工时'
-    )
+    planned_hours = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='计划工时')
 
     actual_start = models.DateTimeField(null=True, blank=True, verbose_name='实际开始')
     actual_end = models.DateTimeField(null=True, blank=True, verbose_name='实际结束')
-    actual_hours = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=0,
-        verbose_name='实际工时'
-    )
+    actual_hours = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='实际工时')
 
     # 操作人
     operator = models.ForeignKey(
@@ -192,15 +165,10 @@ class APSScheduleTask(BaseModel):
         null=True,
         blank=True,
         related_name='aps_schedule_tasks',
-        verbose_name='操作人'
+        verbose_name='操作人',
     )
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
 
     progress = models.IntegerField(default=0, verbose_name='进度(%)')
 
@@ -210,8 +178,6 @@ class APSScheduleTask(BaseModel):
         verbose_name = 'APS排程任务'
         verbose_name_plural = verbose_name
         ordering = ['order', 'sequence']
-
-
 
 
 class APSService:
@@ -224,10 +190,9 @@ class APSService:
             start_date = date.today()
 
         if orders is None:
-            orders = ScheduleOrder.objects.filter(
-                status='PENDING',
-                is_deleted=False
-            ).order_by('priority', 'required_date')
+            orders = ScheduleOrder.objects.filter(status='PENDING', is_deleted=False).order_by(
+                'priority', 'required_date'
+            )
 
         # 获取所有可用工作中心
         work_centers = WorkCenter.objects.filter(is_active=True, is_deleted=False)
@@ -284,10 +249,7 @@ class APSService:
     @staticmethod
     def get_gantt_data(start_date=None, end_date=None):
         """获取甘特图数据"""
-        qs = ScheduleOrder.objects.filter(
-            status__in=['SCHEDULED', 'IN_PROGRESS'],
-            is_deleted=False
-        )
+        qs = ScheduleOrder.objects.filter(status__in=['SCHEDULED', 'IN_PROGRESS'], is_deleted=False)
 
         if start_date:
             qs = qs.filter(planned_start__date__gte=start_date)
@@ -296,17 +258,19 @@ class APSService:
 
         gantt_data = []
         for order in qs.select_related('work_center', 'item'):
-            gantt_data.append({
-                'id': order.id,
-                'order_no': order.order_no,
-                'name': order.item.name if order.item else order.order_no,
-                'work_center': order.work_center.name if order.work_center else '',
-                'start': order.planned_start.isoformat() if order.planned_start else None,
-                'end': order.planned_end.isoformat() if order.planned_end else None,
-                'progress': int(order.completed_qty / order.quantity * 100) if order.quantity else 0,
-                'status': order.status,
-                'priority': order.priority
-            })
+            gantt_data.append(
+                {
+                    'id': order.id,
+                    'order_no': order.order_no,
+                    'name': order.item.name if order.item else order.order_no,
+                    'work_center': order.work_center.name if order.work_center else '',
+                    'start': order.planned_start.isoformat() if order.planned_start else None,
+                    'end': order.planned_end.isoformat() if order.planned_end else None,
+                    'progress': int(order.completed_qty / order.quantity * 100) if order.quantity else 0,
+                    'status': order.status,
+                    'priority': order.priority,
+                }
+            )
 
         return gantt_data
 
@@ -328,7 +292,7 @@ class APSService:
                 'work_center_id': wc.id,
                 'work_center_name': wc.name,
                 'daily_capacity': daily_capacity,
-                'days': []
+                'days': [],
             }
 
             for i in range(days):
@@ -339,19 +303,21 @@ class APSService:
                     work_center=wc,
                     planned_start__date=check_date,
                     status__in=['SCHEDULED', 'IN_PROGRESS'],
-                    is_deleted=False
+                    is_deleted=False,
                 ).aggregate(total=Sum('planned_hours'))['total'] or Decimal('0')
 
                 scheduled = float(scheduled_hours)
                 available = max(0, daily_capacity - scheduled)
                 utilization = min(100, scheduled / daily_capacity * 100) if daily_capacity > 0 else 0
 
-                wc_data['days'].append({
-                    'date': check_date.isoformat(),
-                    'scheduled': scheduled,
-                    'available': available,
-                    'utilization': round(utilization, 1)
-                })
+                wc_data['days'].append(
+                    {
+                        'date': check_date.isoformat(),
+                        'scheduled': scheduled,
+                        'available': available,
+                        'utilization': round(utilization, 1),
+                    }
+                )
 
             result.append(wc_data)
 
@@ -399,10 +365,19 @@ class ScheduleOrderListSerializer(serializers.ModelSerializer):
     class Meta:
         model = ScheduleOrder
         fields = [
-            'id', 'order_no', 'item_name', 'quantity', 'required_date',
-            'work_center_name', 'planned_start', 'planned_end',
-            'priority', 'priority_display', 'status', 'status_display',
-            'completed_qty'
+            'id',
+            'order_no',
+            'item_name',
+            'quantity',
+            'required_date',
+            'work_center_name',
+            'planned_start',
+            'planned_end',
+            'priority',
+            'priority_display',
+            'status',
+            'status_display',
+            'completed_qty',
         ]
 
 
@@ -415,6 +390,7 @@ class ScheduleOrderListSerializer(serializers.ModelSerializer):
 
 class ScheduleOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """排程工单管理"""
+
     queryset = ScheduleOrder.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'priority', 'work_center', 'project']
@@ -487,6 +463,7 @@ class ScheduleOrderViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
 
 class APSScheduleTaskViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """APS排程任务管理"""
+
     queryset = APSScheduleTask.objects.filter(is_deleted=False)
     serializer_class = APSScheduleTaskSerializer
     permission_classes = [IsAuthenticated]

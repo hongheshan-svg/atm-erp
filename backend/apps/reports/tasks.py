@@ -1,6 +1,7 @@
 """
 Celery tasks for reports app.
 """
+
 from celery import shared_task
 
 from .services.cost_service import CostCalculationService
@@ -14,10 +15,9 @@ def calculate_all_project_costs():
     """
     from apps.projects.models import Project
 
-    active_projects = Project.objects.filter(
-        status__in=['ACTIVE', 'COMPLETED'],
-        is_deleted=False
-    ).values_list('id', flat=True)
+    active_projects = Project.objects.filter(status__in=['ACTIVE', 'COMPLETED'], is_deleted=False).values_list(
+        'id', flat=True
+    )
 
     count = 0
     for project_id in active_projects:
@@ -25,5 +25,4 @@ def calculate_all_project_costs():
         CostCalculationService.calculate_project_profit(project_id)
         count += 1
 
-    return f"Calculated costs for {count} projects"
-
+    return f'Calculated costs for {count} projects'

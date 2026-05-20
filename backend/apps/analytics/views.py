@@ -1,6 +1,7 @@
 """
 Analytics API views
 """
+
 from datetime import datetime, timedelta
 
 from rest_framework import viewsets
@@ -13,6 +14,7 @@ from .services import CashFlowForecastService, DashboardKPIService, InventoryAna
 
 class AnalyticsViewSet(viewsets.ViewSet):
     """Analytics and KPI endpoints"""
+
     permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['get'])
@@ -96,35 +98,40 @@ class AnalyticsViewSet(viewsets.ViewSet):
 
             # Get revenue from sales orders
             from apps.sales.models import SalesOrder
-            revenue = SalesOrder.objects.filter(
-                project=project,
-                is_deleted=False
-            ).aggregate(total=Sum('total_amount'))['total'] or 0
+
+            revenue = (
+                SalesOrder.objects.filter(project=project, is_deleted=False).aggregate(total=Sum('total_amount'))[
+                    'total'
+                ]
+                or 0
+            )
             revenue = float(revenue)
 
             profit = revenue - total_cost
             profit_margin = (profit / revenue * 100) if revenue else 0
             budget_usage = (total_cost / float(project.budget_total) * 100) if project.budget_total else 0
 
-            results.append({
-                'id': project.id,
-                'name': project.name,
-                'code': project.code,
-                'manager_name': project.manager.username if project.manager else '',
-                'status': project.status,
-                'status_display': project.get_status_display(),
-                'budget_total': float(project.budget_total or 0),
-                'revenue': revenue,
-                'material_cost': material_cost,
-                'labor_cost': labor_cost,
-                'expense_cost': expense_cost,
-                'total_cost': total_cost,
-                'profit': profit,
-                'profit_margin': profit_margin,
-                'budget_usage': budget_usage,
-                'start_date': project.start_date.isoformat() if project.start_date else None,
-                'end_date': project.end_date.isoformat() if project.end_date else None,
-            })
+            results.append(
+                {
+                    'id': project.id,
+                    'name': project.name,
+                    'code': project.code,
+                    'manager_name': project.manager.username if project.manager else '',
+                    'status': project.status,
+                    'status_display': project.get_status_display(),
+                    'budget_total': float(project.budget_total or 0),
+                    'revenue': revenue,
+                    'material_cost': material_cost,
+                    'labor_cost': labor_cost,
+                    'expense_cost': expense_cost,
+                    'total_cost': total_cost,
+                    'profit': profit,
+                    'profit_margin': profit_margin,
+                    'budget_usage': budget_usage,
+                    'start_date': project.start_date.isoformat() if project.start_date else None,
+                    'end_date': project.end_date.isoformat() if project.end_date else None,
+                }
+            )
 
         # Calculate summary
         summary = {
@@ -135,11 +142,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
             'totalProfit': sum(r['profit'] for r in results),
         }
 
-        return Response({
-            'results': results,
-            'count': total,
-            'summary': summary
-        })
+        return Response({'results': results, 'count': total, 'summary': summary})
 
     @action(detail=False, methods=['post'], url_path='recalculate-costs')
     def recalculate_costs(self, request):
@@ -159,7 +162,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
 
         today = timezone.now().date()
         month_start = today.replace(day=1)
-        last_month_start = (month_start - relativedelta(months=1))
+        last_month_start = month_start - relativedelta(months=1)
         last_month_end = month_start - timedelta(days=1)
 
         # 财务数据
@@ -172,20 +175,15 @@ class AnalyticsViewSet(viewsets.ViewSet):
 
         # 本月收入（销售订单）
         monthly_sales = SalesOrder.objects.filter(
-            order_date__gte=month_start,
-            status__in=['CONFIRMED', 'COMPLETED'],
-            is_deleted=False
-        ).aggregate(
-            total=Sum('total_amount'),
-            count=Count('id')
-        )
+            order_date__gte=month_start, status__in=['CONFIRMED', 'COMPLETED'], is_deleted=False
+        ).aggregate(total=Sum('total_amount'), count=Count('id'))
 
         # 上月收入（用于计算增长率）
         last_month_sales = SalesOrder.objects.filter(
             order_date__gte=last_month_start,
             order_date__lte=last_month_end,
             status__in=['CONFIRMED', 'COMPLETED'],
-            is_deleted=False
+            is_deleted=False,
         ).aggregate(total=Sum('total_amount'))
 
         revenue_total = float(monthly_sales['total'] or 0)
@@ -194,42 +192,25 @@ class AnalyticsViewSet(viewsets.ViewSet):
 
         # 本月支出（采购订单）
         monthly_purchases = PurchaseOrder.objects.filter(
-            order_date__gte=month_start,
-            status__in=['CONFIRMED', 'COMPLETED'],
-            is_deleted=False
-        ).aggregate(
-            total=Sum('total_amount'),
-            count=Count('id')
-        )
+            order_date__gte=month_start, status__in=['CONFIRMED', 'COMPLETED'], is_deleted=False
+        ).aggregate(total=Sum('total_amount'), count=Count('id'))
 
         # 应收账款
-        receivables = AccountReceivable.objects.filter(
-            status__in=['UNPAID', 'PARTIAL'],
-            is_deleted=False
-        ).aggregate(
-            total=Sum('amount_due') - Sum('amount_paid'),
-            count=Count('id')
+        receivables = AccountReceivable.objects.filter(status__in=['UNPAID', 'PARTIAL'], is_deleted=False).aggregate(
+            total=Sum('amount_due') - Sum('amount_paid'), count=Count('id')
         )
 
         overdue_ar = AccountReceivable.objects.filter(
-            status__in=['UNPAID', 'PARTIAL', 'OVERDUE'],
-            due_date__lt=today,
-            is_deleted=False
+            status__in=['UNPAID', 'PARTIAL', 'OVERDUE'], due_date__lt=today, is_deleted=False
         ).count()
 
         # 应付账款
-        payables = AccountPayable.objects.filter(
-            status__in=['UNPAID', 'PARTIAL'],
-            is_deleted=False
-        ).aggregate(
-            total=Sum('amount_due') - Sum('amount_paid'),
-            count=Count('id')
+        payables = AccountPayable.objects.filter(status__in=['UNPAID', 'PARTIAL'], is_deleted=False).aggregate(
+            total=Sum('amount_due') - Sum('amount_paid'), count=Count('id')
         )
 
         overdue_ap = AccountPayable.objects.filter(
-            status__in=['UNPAID', 'PARTIAL', 'OVERDUE'],
-            due_date__lt=today,
-            is_deleted=False
+            status__in=['UNPAID', 'PARTIAL', 'OVERDUE'], due_date__lt=today, is_deleted=False
         ).count()
 
         # 总应收账款和总应付账款（累计）
@@ -237,7 +218,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
             due=Sum('amount_due'), paid=Sum('amount_paid')
         )
         total_receivables = float(ar_total['due'] or 0)  # 总应收
-        total_received = float(ar_total['paid'] or 0)    # 已收款
+        total_received = float(ar_total['paid'] or 0)  # 已收款
         outstanding_receivables = total_receivables - total_received  # 待收款
         collection_rate = round(total_received / total_receivables * 100, 1) if total_receivables > 0 else 0
 
@@ -245,127 +226,117 @@ class AnalyticsViewSet(viewsets.ViewSet):
             due=Sum('amount_due'), paid=Sum('amount_paid')
         )
         total_payables = float(ap_total['due'] or 0)  # 总应付
-        total_paid = float(ap_total['paid'] or 0)     # 已付款
+        total_paid = float(ap_total['paid'] or 0)  # 已付款
         outstanding_payables = total_payables - total_paid  # 待付款
         payment_rate = round(total_paid / total_payables * 100, 1) if total_payables > 0 else 0
 
         # 项目数据
-        active_projects = Project.objects.filter(
-            status__in=['ACTIVE', 'PLANNING'],
-            is_deleted=False
-        ).aggregate(
-            count=Count('id'),
-            budget_total=Sum('budget_total')
+        active_projects = Project.objects.filter(status__in=['ACTIVE', 'PLANNING'], is_deleted=False).aggregate(
+            count=Count('id'), budget_total=Sum('budget_total')
         )
 
         # 销售订单统计
-        pending_sales = SalesOrder.objects.filter(
-            status='DRAFT',
-            is_deleted=False
-        ).count()
+        pending_sales = SalesOrder.objects.filter(status='DRAFT', is_deleted=False).count()
 
-        monthly_sales_count = SalesOrder.objects.filter(
-            order_date__gte=month_start,
-            is_deleted=False
-        ).count()
+        monthly_sales_count = SalesOrder.objects.filter(order_date__gte=month_start, is_deleted=False).count()
 
         # 采购订单统计
-        pending_purchases = PurchaseOrder.objects.filter(
-            status='DRAFT',
-            is_deleted=False
-        ).count()
+        pending_purchases = PurchaseOrder.objects.filter(status='DRAFT', is_deleted=False).count()
 
-        monthly_purchases_count = PurchaseOrder.objects.filter(
-            order_date__gte=month_start,
-            is_deleted=False
-        ).count()
+        monthly_purchases_count = PurchaseOrder.objects.filter(order_date__gte=month_start, is_deleted=False).count()
 
         # 库存数据
-        inventory_value = Stock.objects.aggregate(
-            value=Sum(F('qty_on_hand') * F('item__standard_cost'))
-        )['value'] or 0
+        inventory_value = Stock.objects.aggregate(value=Sum(F('qty_on_hand') * F('item__standard_cost')))['value'] or 0
 
         total_items = Item.objects.filter(is_deleted=False, is_active=True).count()
 
-        low_stock_items = Stock.objects.filter(
-            qty_on_hand__lt=F('item__safety_stock')
-        ).count()
+        low_stock_items = Stock.objects.filter(qty_on_hand__lt=F('item__safety_stock')).count()
 
         # 逾期应收列表
-        overdue_receivables_list = AccountReceivable.objects.filter(
-            status__in=['UNPAID', 'PARTIAL', 'OVERDUE'],
-            due_date__lt=today,
-            is_deleted=False
-        ).select_related('customer').order_by('due_date')[:10]
+        overdue_receivables_list = (
+            AccountReceivable.objects.filter(
+                status__in=['UNPAID', 'PARTIAL', 'OVERDUE'], due_date__lt=today, is_deleted=False
+            )
+            .select_related('customer')
+            .order_by('due_date')[:10]
+        )
 
-        overdue_ar_data = [{
-            'id': ar.id,
-            'ar_no': ar.ar_no,
-            'customer_name': ar.customer.name if ar.customer else '',
-            'amount_remaining': float((ar.amount_due or 0) - (ar.amount_paid or 0)),
-            'overdue_days': (today - ar.due_date).days if ar.due_date else 0
-        } for ar in overdue_receivables_list]
+        overdue_ar_data = [
+            {
+                'id': ar.id,
+                'ar_no': ar.ar_no,
+                'customer_name': ar.customer.name if ar.customer else '',
+                'amount_remaining': float((ar.amount_due or 0) - (ar.amount_paid or 0)),
+                'overdue_days': (today - ar.due_date).days if ar.due_date else 0,
+            }
+            for ar in overdue_receivables_list
+        ]
 
         # 即将到期应付列表
-        upcoming_payables_list = AccountPayable.objects.filter(
-            status__in=['UNPAID', 'PARTIAL'],
-            due_date__lte=today + timedelta(days=7),
-            is_deleted=False
-        ).select_related('supplier').order_by('due_date')[:10]
+        upcoming_payables_list = (
+            AccountPayable.objects.filter(
+                status__in=['UNPAID', 'PARTIAL'], due_date__lte=today + timedelta(days=7), is_deleted=False
+            )
+            .select_related('supplier')
+            .order_by('due_date')[:10]
+        )
 
-        upcoming_ap_data = [{
-            'id': ap.id,
-            'ap_no': ap.ap_no,
-            'supplier_name': ap.supplier.name if ap.supplier else '',
-            'amount_remaining': float((ap.amount_due or 0) - (ap.amount_paid or 0)),
-            'days_until_due': (ap.due_date - today).days if ap.due_date else 0
-        } for ap in upcoming_payables_list]
+        upcoming_ap_data = [
+            {
+                'id': ap.id,
+                'ap_no': ap.ap_no,
+                'supplier_name': ap.supplier.name if ap.supplier else '',
+                'amount_remaining': float((ap.amount_due or 0) - (ap.amount_paid or 0)),
+                'days_until_due': (ap.due_date - today).days if ap.due_date else 0,
+            }
+            for ap in upcoming_payables_list
+        ]
 
         # 活跃项目列表
         active_projects_list = Project.objects.filter(
-            status__in=['ACTIVE', 'PLANNING'],
-            is_deleted=False
+            status__in=['ACTIVE', 'PLANNING'], is_deleted=False
         ).select_related('customer')[:10]
 
-        active_projects_data = [{
-            'id': p.id,
-            'name': p.name,
-            'customer_name': p.customer.name if p.customer else '',
-            'status': p.status,
-            'budget_total': float(p.budget_total or 0)
-        } for p in active_projects_list]
+        active_projects_data = [
+            {
+                'id': p.id,
+                'name': p.name,
+                'customer_name': p.customer.name if p.customer else '',
+                'status': p.status,
+                'budget_total': float(p.budget_total or 0),
+            }
+            for p in active_projects_list
+        ]
 
         # Top 5 客户
-        top_customers = SalesOrder.objects.filter(
-            order_date__gte=month_start,
-            status__in=['CONFIRMED', 'COMPLETED'],
-            is_deleted=False
-        ).values('customer__name').annotate(
-            amount=Sum('total_amount'),
-            orders=Count('id')
-        ).order_by('-amount')[:5]
+        top_customers = (
+            SalesOrder.objects.filter(
+                order_date__gte=month_start, status__in=['CONFIRMED', 'COMPLETED'], is_deleted=False
+            )
+            .values('customer__name')
+            .annotate(amount=Sum('total_amount'), orders=Count('id'))
+            .order_by('-amount')[:5]
+        )
 
-        top_customers_data = [{
-            'name': c['customer__name'],
-            'amount': float(c['amount'] or 0),
-            'orders': c['orders']
-        } for c in top_customers]
+        top_customers_data = [
+            {'name': c['customer__name'], 'amount': float(c['amount'] or 0), 'orders': c['orders']}
+            for c in top_customers
+        ]
 
         # Top 5 供应商
-        top_suppliers = PurchaseOrder.objects.filter(
-            order_date__gte=month_start,
-            status__in=['CONFIRMED', 'COMPLETED'],
-            is_deleted=False
-        ).values('supplier__name').annotate(
-            amount=Sum('total_amount'),
-            orders=Count('id')
-        ).order_by('-amount')[:5]
+        top_suppliers = (
+            PurchaseOrder.objects.filter(
+                order_date__gte=month_start, status__in=['CONFIRMED', 'COMPLETED'], is_deleted=False
+            )
+            .values('supplier__name')
+            .annotate(amount=Sum('total_amount'), orders=Count('id'))
+            .order_by('-amount')[:5]
+        )
 
-        top_suppliers_data = [{
-            'name': s['supplier__name'],
-            'amount': float(s['amount'] or 0),
-            'orders': s['orders']
-        } for s in top_suppliers]
+        top_suppliers_data = [
+            {'name': s['supplier__name'], 'amount': float(s['amount'] or 0), 'orders': s['orders']}
+            for s in top_suppliers
+        ]
 
         # 收支趋势（近6个月）
         trend_months = []
@@ -379,89 +350,82 @@ class AnalyticsViewSet(viewsets.ViewSet):
 
             trend_months.append(f'{month_date.month}月')
 
-            income = SalesOrder.objects.filter(
-                order_date__gte=m_start,
-                order_date__lte=m_end,
-                status__in=['CONFIRMED', 'COMPLETED'],
-                is_deleted=False
-            ).aggregate(total=Sum('total_amount'))['total'] or 0
+            income = (
+                SalesOrder.objects.filter(
+                    order_date__gte=m_start,
+                    order_date__lte=m_end,
+                    status__in=['CONFIRMED', 'COMPLETED'],
+                    is_deleted=False,
+                ).aggregate(total=Sum('total_amount'))['total']
+                or 0
+            )
 
-            expense = PurchaseOrder.objects.filter(
-                order_date__gte=m_start,
-                order_date__lte=m_end,
-                status__in=['CONFIRMED', 'COMPLETED'],
-                is_deleted=False
-            ).aggregate(total=Sum('total_amount'))['total'] or 0
+            expense = (
+                PurchaseOrder.objects.filter(
+                    order_date__gte=m_start,
+                    order_date__lte=m_end,
+                    status__in=['CONFIRMED', 'COMPLETED'],
+                    is_deleted=False,
+                ).aggregate(total=Sum('total_amount'))['total']
+                or 0
+            )
 
             trend_income.append(float(income))
             trend_expense.append(float(expense))
 
         # 账龄分析
         aging_data = []
-        aging_ranges = [
-            ('0-30天', 0, 30),
-            ('31-60天', 31, 60),
-            ('61-90天', 61, 90),
-            ('90天以上', 91, 9999)
-        ]
+        aging_ranges = [('0-30天', 0, 30), ('31-60天', 31, 60), ('61-90天', 61, 90), ('90天以上', 91, 9999)]
 
         for label, min_days, max_days in aging_ranges:
-            amount = AccountReceivable.objects.filter(
-                status__in=['UNPAID', 'PARTIAL', 'OVERDUE'],
-                due_date__lt=today - timedelta(days=min_days),
-                due_date__gte=today - timedelta(days=max_days),
-                is_deleted=False
-            ).aggregate(total=Sum('amount_due') - Sum('amount_paid'))['total'] or 0
+            amount = (
+                AccountReceivable.objects.filter(
+                    status__in=['UNPAID', 'PARTIAL', 'OVERDUE'],
+                    due_date__lt=today - timedelta(days=min_days),
+                    due_date__gte=today - timedelta(days=max_days),
+                    is_deleted=False,
+                ).aggregate(total=Sum('amount_due') - Sum('amount_paid'))['total']
+                or 0
+            )
             aging_data.append({'name': label, 'value': float(amount)})
 
-        return Response({
-            'financial': {
-                'revenue': {
-                    'total': revenue_total,
-                    'orders': monthly_sales['count'] or 0
+        return Response(
+            {
+                'financial': {
+                    'revenue': {'total': revenue_total, 'orders': monthly_sales['count'] or 0},
+                    'expenses': float(monthly_purchases['total'] or 0),
+                    'purchase_orders': monthly_purchases['count'] or 0,
+                    # 总应收/应付（累计）
+                    'total_receivables': total_receivables,
+                    'total_received': total_received,
+                    'total_payables': total_payables,
+                    'total_paid': total_paid,
+                    # 待收/待付款
+                    'receivables': outstanding_receivables,
+                    'payables': outstanding_payables,
+                    'overdue_receivables': overdue_ar,
+                    'overdue_payables': overdue_ap,
+                    'collection_rate': collection_rate,
+                    'payment_rate': payment_rate,
+                    'revenue_growth': revenue_growth,
                 },
-                'expenses': float(monthly_purchases['total'] or 0),
-                'purchase_orders': monthly_purchases['count'] or 0,
-                # 总应收/应付（累计）
-                'total_receivables': total_receivables,
-                'total_received': total_received,
-                'total_payables': total_payables,
-                'total_paid': total_paid,
-                # 待收/待付款
-                'receivables': outstanding_receivables,
-                'payables': outstanding_payables,
-                'overdue_receivables': overdue_ar,
-                'overdue_payables': overdue_ap,
-                'collection_rate': collection_rate,
-                'payment_rate': payment_rate,
-                'revenue_growth': revenue_growth
-            },
-            'projects': {
-                'active_count': active_projects['count'] or 0,
-                'total_budget': float(active_projects['budget_total'] or 0)
-            },
-            'sales': {
-                'pending_orders': pending_sales,
-                'monthly_orders': monthly_sales_count
-            },
-            'purchase': {
-                'pending_orders': pending_purchases,
-                'monthly_orders': monthly_purchases_count
-            },
-            'inventory': {
-                'value': float(inventory_value),
-                'total_items': total_items,
-                'low_stock': low_stock_items
-            },
-            'overdue_receivables': overdue_ar_data,
-            'upcoming_payables': upcoming_ap_data,
-            'active_projects': active_projects_data,
-            'top_customers': top_customers_data,
-            'top_suppliers': top_suppliers_data,
-            'trend_data': {
-                'months': trend_months,
-                'income': trend_income,
-                'expense': trend_expense
-            },
-            'aging_data': aging_data
-        })
+                'projects': {
+                    'active_count': active_projects['count'] or 0,
+                    'total_budget': float(active_projects['budget_total'] or 0),
+                },
+                'sales': {'pending_orders': pending_sales, 'monthly_orders': monthly_sales_count},
+                'purchase': {'pending_orders': pending_purchases, 'monthly_orders': monthly_purchases_count},
+                'inventory': {
+                    'value': float(inventory_value),
+                    'total_items': total_items,
+                    'low_stock': low_stock_items,
+                },
+                'overdue_receivables': overdue_ar_data,
+                'upcoming_payables': upcoming_ap_data,
+                'active_projects': active_projects_data,
+                'top_customers': top_customers_data,
+                'top_suppliers': top_suppliers_data,
+                'trend_data': {'months': trend_months, 'income': trend_income, 'expense': trend_expense},
+                'aging_data': aging_data,
+            }
+        )

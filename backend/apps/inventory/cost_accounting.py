@@ -3,6 +3,7 @@
 Inventory Cost Accounting
 支持加权平均法、先进先出法、移动加权平均法等库存计价方法
 """
+
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -21,6 +22,7 @@ class InventoryCostConfig(BaseModel):
     """
     库存成本配置
     """
+
     COSTING_METHODS = [
         ('WEIGHTED_AVG', '加权平均法'),
         ('MOVING_AVG', '移动加权平均法'),
@@ -31,10 +33,7 @@ class InventoryCostConfig(BaseModel):
 
     name = models.CharField(max_length=100, verbose_name='配置名称')
     costing_method = models.CharField(
-        max_length=20,
-        choices=COSTING_METHODS,
-        default='WEIGHTED_AVG',
-        verbose_name='计价方法'
+        max_length=20, choices=COSTING_METHODS, default='WEIGHTED_AVG', verbose_name='计价方法'
     )
     is_default = models.BooleanField(default=False, verbose_name='默认配置')
     is_active = models.BooleanField(default=True, verbose_name='启用')
@@ -48,7 +47,7 @@ class InventoryCostConfig(BaseModel):
             ('YEARLY', '年结'),
         ],
         default='MONTHLY',
-        verbose_name='结算周期'
+        verbose_name='结算周期',
     )
 
     # 成本要素
@@ -78,6 +77,7 @@ class ItemCostRecord(BaseModel):
     物料成本记录
     每次入库/出库后记录成本变化
     """
+
     TRANSACTION_TYPES = [
         ('PURCHASE_IN', '采购入库'),
         ('RETURN_IN', '退货入库'),
@@ -93,10 +93,7 @@ class ItemCostRecord(BaseModel):
     ]
 
     item = models.ForeignKey(
-        'masterdata.Item',
-        on_delete=models.CASCADE,
-        related_name='cost_records',
-        verbose_name='物料'
+        'masterdata.Item', on_delete=models.CASCADE, related_name='cost_records', verbose_name='物料'
     )
     warehouse = models.ForeignKey(
         'masterdata.Warehouse',
@@ -104,14 +101,10 @@ class ItemCostRecord(BaseModel):
         null=True,
         blank=True,
         related_name='cost_records',
-        verbose_name='仓库'
+        verbose_name='仓库',
     )
 
-    transaction_type = models.CharField(
-        max_length=20,
-        choices=TRANSACTION_TYPES,
-        verbose_name='交易类型'
-    )
+    transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPES, verbose_name='交易类型')
     reference_type = models.CharField(max_length=50, blank=True, verbose_name='参考类型')
     reference_no = models.CharField(max_length=50, blank=True, verbose_name='参考单号')
     reference_id = models.IntegerField(null=True, blank=True, verbose_name='参考ID')
@@ -119,42 +112,18 @@ class ItemCostRecord(BaseModel):
     transaction_date = models.DateField(verbose_name='交易日期')
 
     # 数量
-    quantity = models.DecimalField(
-        max_digits=18,
-        decimal_places=4,
-        verbose_name='数量'
-    )
+    quantity = models.DecimalField(max_digits=18, decimal_places=4, verbose_name='数量')
 
     # 单价
-    unit_cost = models.DecimalField(
-        max_digits=18,
-        decimal_places=4,
-        verbose_name='单位成本'
-    )
+    unit_cost = models.DecimalField(max_digits=18, decimal_places=4, verbose_name='单位成本')
 
     # 金额
-    total_cost = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        verbose_name='总成本'
-    )
+    total_cost = models.DecimalField(max_digits=18, decimal_places=2, verbose_name='总成本')
 
     # 结存
-    balance_qty = models.DecimalField(
-        max_digits=18,
-        decimal_places=4,
-        verbose_name='结存数量'
-    )
-    balance_cost = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        verbose_name='结存金额'
-    )
-    balance_unit_cost = models.DecimalField(
-        max_digits=18,
-        decimal_places=4,
-        verbose_name='结存单价'
-    )
+    balance_qty = models.DecimalField(max_digits=18, decimal_places=4, verbose_name='结存数量')
+    balance_cost = models.DecimalField(max_digits=18, decimal_places=2, verbose_name='结存金额')
+    balance_unit_cost = models.DecimalField(max_digits=18, decimal_places=4, verbose_name='结存单价')
 
     remarks = models.CharField(max_length=500, blank=True, verbose_name='备注')
 
@@ -177,18 +146,12 @@ class PeriodCostSummary(BaseModel):
     期间成本汇总
     按月/季/年汇总物料成本
     """
+
     item = models.ForeignKey(
-        'masterdata.Item',
-        on_delete=models.CASCADE,
-        related_name='period_summaries',
-        verbose_name='物料'
+        'masterdata.Item', on_delete=models.CASCADE, related_name='period_summaries', verbose_name='物料'
     )
     warehouse = models.ForeignKey(
-        'masterdata.Warehouse',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='仓库'
+        'masterdata.Warehouse', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='仓库'
     )
 
     period_year = models.IntegerField(verbose_name='年份')
@@ -219,7 +182,7 @@ class PeriodCostSummary(BaseModel):
         null=True,
         blank=True,
         related_name='closed_cost_summaries',
-        verbose_name='结账人'
+        verbose_name='结账人',
     )
 
     class Meta:
@@ -236,6 +199,7 @@ class PeriodCostSummary(BaseModel):
 # =====================
 # Cost Calculation Service
 # =====================
+
 
 class CostCalculationService:
     """成本计算服务"""
@@ -257,10 +221,10 @@ class CostCalculationService:
 
         # 没有记录时，从采购历史获取平均价
         from apps.purchase.models import PurchaseOrderLine
-        avg_price = PurchaseOrderLine.objects.filter(
-            item_id=item_id,
-            order__status='COMPLETED'
-        ).aggregate(avg_price=Avg('unit_price'))['avg_price']
+
+        avg_price = PurchaseOrderLine.objects.filter(item_id=item_id, order__status='COMPLETED').aggregate(
+            avg_price=Avg('unit_price')
+        )['avg_price']
 
         return Decimal(str(avg_price)) if avg_price else Decimal('0')
 
@@ -274,17 +238,17 @@ class CostCalculationService:
         reference_no: str = '',
         reference_id: int = None,
         transaction_date: date = None,
-        user=None
+        user=None,
     ) -> ItemCostRecord:
         """处理入库成本"""
         transaction_date = transaction_date or date.today()
 
         # 获取当前结存
-        last_record = ItemCostRecord.objects.filter(
-            item_id=item_id,
-            warehouse_id=warehouse_id,
-            is_deleted=False
-        ).order_by('-created_at').first()
+        last_record = (
+            ItemCostRecord.objects.filter(item_id=item_id, warehouse_id=warehouse_id, is_deleted=False)
+            .order_by('-created_at')
+            .first()
+        )
 
         if last_record:
             prev_qty = last_record.balance_qty
@@ -317,7 +281,7 @@ class CostCalculationService:
             balance_qty=new_qty,
             balance_cost=new_total_cost,
             balance_unit_cost=new_unit_cost,
-            created_by=user
+            created_by=user,
         )
 
         return record
@@ -331,17 +295,17 @@ class CostCalculationService:
         reference_no: str = '',
         reference_id: int = None,
         transaction_date: date = None,
-        user=None
+        user=None,
     ) -> ItemCostRecord:
         """处理出库成本"""
         transaction_date = transaction_date or date.today()
 
         # 获取当前结存
-        last_record = ItemCostRecord.objects.filter(
-            item_id=item_id,
-            warehouse_id=warehouse_id,
-            is_deleted=False
-        ).order_by('-created_at').first()
+        last_record = (
+            ItemCostRecord.objects.filter(item_id=item_id, warehouse_id=warehouse_id, is_deleted=False)
+            .order_by('-created_at')
+            .first()
+        )
 
         if last_record:
             prev_qty = last_record.balance_qty
@@ -376,7 +340,7 @@ class CostCalculationService:
             balance_qty=new_qty,
             balance_cost=new_total_cost,
             balance_unit_cost=new_unit_cost,
-            created_by=user
+            created_by=user,
         )
 
         return record
@@ -399,10 +363,7 @@ class CostCalculationService:
             prev_year = year if month > 1 else year - 1
 
             prev_summary = PeriodCostSummary.objects.filter(
-                item=item,
-                period_year=prev_year,
-                period_month=prev_month,
-                warehouse_id=warehouse_id
+                item=item, period_year=prev_year, period_month=prev_month, warehouse_id=warehouse_id
             ).first()
 
             if prev_summary:
@@ -414,46 +375,34 @@ class CostCalculationService:
 
             # 计算本期入库
             in_records = ItemCostRecord.objects.filter(
-                item=item,
-                transaction_date__year=year,
-                transaction_date__month=month,
-                quantity__gt=0,
-                is_deleted=False
+                item=item, transaction_date__year=year, transaction_date__month=month, quantity__gt=0, is_deleted=False
             )
             if warehouse_id:
                 in_records = in_records.filter(warehouse_id=warehouse_id)
 
-            in_agg = in_records.aggregate(
-                total_qty=Sum('quantity'),
-                total_cost=Sum('total_cost')
-            )
+            in_agg = in_records.aggregate(total_qty=Sum('quantity'), total_cost=Sum('total_cost'))
             in_qty = in_agg['total_qty'] or Decimal('0')
             in_cost = in_agg['total_cost'] or Decimal('0')
 
             # 计算本期出库
             out_records = ItemCostRecord.objects.filter(
-                item=item,
-                transaction_date__year=year,
-                transaction_date__month=month,
-                quantity__lt=0,
-                is_deleted=False
+                item=item, transaction_date__year=year, transaction_date__month=month, quantity__lt=0, is_deleted=False
             )
             if warehouse_id:
                 out_records = out_records.filter(warehouse_id=warehouse_id)
 
-            out_agg = out_records.aggregate(
-                total_qty=Sum('quantity'),
-                total_cost=Sum('total_cost')
-            )
+            out_agg = out_records.aggregate(total_qty=Sum('quantity'), total_cost=Sum('total_cost'))
             out_qty = abs(out_agg['total_qty'] or Decimal('0'))
             out_cost = abs(out_agg['total_cost'] or Decimal('0'))
 
             # 计算期末
             closing_qty = opening_qty + in_qty - out_qty
             closing_cost = opening_cost + in_cost - out_cost
-            closing_unit_cost = (closing_cost / closing_qty).quantize(
-                Decimal('0.0001'), rounding=ROUND_HALF_UP
-            ) if closing_qty > 0 else Decimal('0')
+            closing_unit_cost = (
+                (closing_cost / closing_qty).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP)
+                if closing_qty > 0
+                else Decimal('0')
+            )
 
             summary, created = PeriodCostSummary.objects.update_or_create(
                 item=item,
@@ -470,7 +419,7 @@ class CostCalculationService:
                     'closing_qty': closing_qty,
                     'closing_cost': closing_cost,
                     'closing_unit_cost': closing_unit_cost,
-                }
+                },
             )
             summaries.append(summary)
 
@@ -480,6 +429,7 @@ class CostCalculationService:
 # =====================
 # Serializers
 # =====================
+
 
 class InventoryCostConfigSerializer(serializers.ModelSerializer):
     costing_method_display = serializers.CharField(source='get_costing_method_display', read_only=True)
@@ -516,8 +466,10 @@ class PeriodCostSummarySerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class InventoryCostConfigViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """库存成本配置管理"""
+
     queryset = InventoryCostConfig.objects.filter(is_deleted=False)
     serializer_class = InventoryCostConfigSerializer
     permission_classes = [IsAuthenticated]
@@ -533,14 +485,12 @@ class InventoryCostConfigViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
     @action(detail=False, methods=['get'])
     def costing_methods(self, request):
         """获取计价方法"""
-        return Response([
-            {'value': m[0], 'label': m[1]}
-            for m in InventoryCostConfig.COSTING_METHODS
-        ])
+        return Response([{'value': m[0], 'label': m[1]} for m in InventoryCostConfig.COSTING_METHODS])
 
 
 class ItemCostRecordViewSet(viewsets.ReadOnlyModelViewSet):
     """物料成本记录"""
+
     queryset = ItemCostRecord.objects.filter(is_deleted=False)
     serializer_class = ItemCostRecordSerializer
     permission_classes = [IsAuthenticated]
@@ -576,16 +526,19 @@ class ItemCostRecordViewSet(viewsets.ReadOnlyModelViewSet):
 
         last_record = ItemCostRecord.objects.filter(**filters).order_by('-created_at').first()
 
-        return Response({
-            'item_id': item_id,
-            'unit_cost': unit_cost,
-            'balance_qty': last_record.balance_qty if last_record else 0,
-            'balance_cost': last_record.balance_cost if last_record else 0
-        })
+        return Response(
+            {
+                'item_id': item_id,
+                'unit_cost': unit_cost,
+                'balance_qty': last_record.balance_qty if last_record else 0,
+                'balance_cost': last_record.balance_cost if last_record else 0,
+            }
+        )
 
 
 class PeriodCostSummaryViewSet(viewsets.ReadOnlyModelViewSet):
     """期间成本汇总"""
+
     queryset = PeriodCostSummary.objects.filter(is_deleted=False)
     serializer_class = PeriodCostSummarySerializer
     permission_classes = [IsAuthenticated]
@@ -600,11 +553,7 @@ class PeriodCostSummaryViewSet(viewsets.ReadOnlyModelViewSet):
 
         summaries = CostCalculationService.generate_period_summary(year, month, warehouse_id)
 
-        return Response({
-            'success': True,
-            'count': len(summaries),
-            'message': f'已生成{year}年{month}月成本汇总'
-        })
+        return Response({'success': True, 'count': len(summaries), 'message': f'已生成{year}年{month}月成本汇总'})
 
     @action(detail=False, methods=['post'])
     def close_period(self, request):
@@ -615,21 +564,11 @@ class PeriodCostSummaryViewSet(viewsets.ReadOnlyModelViewSet):
         if not year or not month:
             return Response({'error': '请提供年份和月份'}, status=400)
 
-        count = PeriodCostSummary.objects.filter(
-            period_year=year,
-            period_month=month,
-            is_closed=False
-        ).update(
-            is_closed=True,
-            closed_at=datetime.now(),
-            closed_by=request.user
+        count = PeriodCostSummary.objects.filter(period_year=year, period_month=month, is_closed=False).update(
+            is_closed=True, closed_at=datetime.now(), closed_by=request.user
         )
 
-        return Response({
-            'success': True,
-            'count': count,
-            'message': f'{year}年{month}月已结账'
-        })
+        return Response({'success': True, 'count': count, 'message': f'{year}年{month}月已结账'})
 
     @action(detail=False, methods=['get'])
     def inventory_valuation(self, request):
@@ -637,10 +576,7 @@ class PeriodCostSummaryViewSet(viewsets.ReadOnlyModelViewSet):
         year = request.query_params.get('year', date.today().year)
         month = request.query_params.get('month', date.today().month)
 
-        summaries = self.get_queryset().filter(
-            period_year=year,
-            period_month=month
-        ).select_related('item', 'warehouse')
+        summaries = self.get_queryset().filter(period_year=year, period_month=month).select_related('item', 'warehouse')
 
         total_opening = summaries.aggregate(total=Sum('opening_cost'))['total'] or 0
         total_in = summaries.aggregate(total=Sum('in_cost'))['total'] or 0
@@ -649,23 +585,23 @@ class PeriodCostSummaryViewSet(viewsets.ReadOnlyModelViewSet):
 
         # 按仓库分组
         by_warehouse = summaries.values('warehouse__name').annotate(
-            total_qty=Sum('closing_qty'),
-            total_cost=Sum('closing_cost')
+            total_qty=Sum('closing_qty'), total_cost=Sum('closing_cost')
         )
 
         # 按物料类别分组
         by_category = summaries.values('item__category__name').annotate(
-            total_qty=Sum('closing_qty'),
-            total_cost=Sum('closing_cost')
+            total_qty=Sum('closing_qty'), total_cost=Sum('closing_cost')
         )
 
-        return Response({
-            'period': f'{year}年{month}月',
-            'total_opening_cost': total_opening,
-            'total_in_cost': total_in,
-            'total_out_cost': total_out,
-            'total_closing_cost': total_closing,
-            'by_warehouse': list(by_warehouse),
-            'by_category': list(by_category),
-            'details': self.get_serializer(summaries, many=True).data
-        })
+        return Response(
+            {
+                'period': f'{year}年{month}月',
+                'total_opening_cost': total_opening,
+                'total_in_cost': total_in,
+                'total_out_cost': total_out,
+                'total_closing_cost': total_closing,
+                'by_warehouse': list(by_warehouse),
+                'by_category': list(by_category),
+                'details': self.get_serializer(summaries, many=True).data,
+            }
+        )

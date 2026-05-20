@@ -3,6 +3,7 @@
 Win/Loss Analysis for Opportunities
 详细分析商机赢单和丢单的原因、趋势等
 """
+
 from datetime import date, timedelta
 
 from django.db import models
@@ -19,6 +20,7 @@ from apps.core.models import BaseModel
 
 class WinLossReason(BaseModel):
     """赢单/丢单原因"""
+
     REASON_TYPE_CHOICES = [
         ('WIN', '赢单'),
         ('LOSS', '丢单'),
@@ -37,35 +39,26 @@ class WinLossReason(BaseModel):
         ordering = ['reason_type', 'sort_order']
 
     def __str__(self):
-        return f"[{self.get_reason_type_display()}] {self.name}"
+        return f'[{self.get_reason_type_display()}] {self.name}'
 
 
 class OpportunityCloseRecord(BaseModel):
     """商机关闭记录"""
+
     opportunity = models.ForeignKey(
-        'sales.Opportunity',
-        on_delete=models.CASCADE,
-        related_name='close_records',
-        verbose_name='商机'
+        'sales.Opportunity', on_delete=models.CASCADE, related_name='close_records', verbose_name='商机'
     )
-    close_type = models.CharField(
-        max_length=10,
-        choices=[('WIN', '赢单'), ('LOSS', '丢单')],
-        verbose_name='关闭类型'
-    )
+    close_type = models.CharField(max_length=10, choices=[('WIN', '赢单'), ('LOSS', '丢单')], verbose_name='关闭类型')
     primary_reason = models.ForeignKey(
         WinLossReason,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='close_records',
-        verbose_name='主要原因'
+        verbose_name='主要原因',
     )
     secondary_reasons = models.ManyToManyField(
-        WinLossReason,
-        blank=True,
-        related_name='secondary_close_records',
-        verbose_name='次要原因'
+        WinLossReason, blank=True, related_name='secondary_close_records', verbose_name='次要原因'
     )
 
     # 竞争信息
@@ -75,25 +68,17 @@ class OpportunityCloseRecord(BaseModel):
         null=True,
         blank=True,
         related_name='won_opportunities',
-        verbose_name='赢得的竞争对手'
+        verbose_name='赢得的竞争对手',
     )
     competitor_name = models.CharField(max_length=200, blank=True, verbose_name='竞争对手名称')
     competitor_amount = models.DecimalField(
-        max_digits=18, decimal_places=2,
-        null=True, blank=True,
-        verbose_name='竞争对手报价'
+        max_digits=18, decimal_places=2, null=True, blank=True, verbose_name='竞争对手报价'
     )
 
     # 详细分析
-    our_amount = models.DecimalField(
-        max_digits=18, decimal_places=2,
-        null=True, blank=True,
-        verbose_name='我方报价'
-    )
+    our_amount = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True, verbose_name='我方报价')
     price_difference = models.DecimalField(
-        max_digits=18, decimal_places=2,
-        null=True, blank=True,
-        verbose_name='价格差异'
+        max_digits=18, decimal_places=2, null=True, blank=True, verbose_name='价格差异'
     )
 
     # 销售周期
@@ -115,7 +100,7 @@ class OpportunityCloseRecord(BaseModel):
         ordering = ['-close_date']
 
     def __str__(self):
-        return f"{self.opportunity} - {self.get_close_type_display()}"
+        return f'{self.opportunity} - {self.get_close_type_display()}'
 
     def save(self, *args, **kwargs):
         # 计算价格差异
@@ -133,6 +118,7 @@ class OpportunityCloseRecord(BaseModel):
 # =====================
 # Serializers
 # =====================
+
 
 class WinLossReasonSerializer(serializers.ModelSerializer):
     type_display = serializers.CharField(source='get_reason_type_display', read_only=True)
@@ -165,18 +151,24 @@ class OpportunityCloseRecordSerializer(serializers.ModelSerializer):
 
 class OpportunityCloseRecordCreateSerializer(serializers.ModelSerializer):
     secondary_reason_ids = serializers.ListField(
-        child=serializers.IntegerField(),
-        write_only=True,
-        required=False,
-        default=list
+        child=serializers.IntegerField(), write_only=True, required=False, default=list
     )
 
     class Meta:
         model = OpportunityCloseRecord
         fields = [
-            'opportunity', 'close_type', 'primary_reason', 'secondary_reason_ids',
-            'competitor', 'competitor_name', 'competitor_amount', 'our_amount',
-            'analysis_notes', 'lessons_learned', 'customer_feedback', 'close_date'
+            'opportunity',
+            'close_type',
+            'primary_reason',
+            'secondary_reason_ids',
+            'competitor',
+            'competitor_name',
+            'competitor_amount',
+            'our_amount',
+            'analysis_notes',
+            'lessons_learned',
+            'customer_feedback',
+            'close_date',
         ]
 
     def create(self, validated_data):
@@ -194,8 +186,10 @@ class OpportunityCloseRecordCreateSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class WinLossReasonViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """赢单/丢单原因管理"""
+
     queryset = WinLossReason.objects.filter(is_deleted=False)
     serializer_class = WinLossReasonSerializer
     permission_classes = [IsAuthenticated]
@@ -205,6 +199,7 @@ class WinLossReasonViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
 
 class OpportunityCloseRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """商机关闭记录管理"""
+
     queryset = OpportunityCloseRecord.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['opportunity', 'close_type', 'primary_reason']
@@ -220,8 +215,10 @@ class OpportunityCloseRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets
 # Analysis Views
 # =====================
 
+
 class WinLossAnalysisView(APIView):
     """赢单/丢单分析API"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -240,9 +237,7 @@ class WinLossAnalysisView(APIView):
             start_date = date.fromisoformat(start_date)
 
         records = OpportunityCloseRecord.objects.filter(
-            close_date__gte=start_date,
-            close_date__lte=end_date,
-            is_deleted=False
+            close_date__gte=start_date, close_date__lte=end_date, is_deleted=False
         )
 
         # 赢单/丢单统计
@@ -258,31 +253,27 @@ class WinLossAnalysisView(APIView):
         loss_amount = loss_records.aggregate(total=Sum('our_amount'))['total'] or 0
 
         # 按原因统计
-        win_by_reason = win_records.filter(
-            primary_reason__isnull=False
-        ).values(
-            'primary_reason__id', 'primary_reason__name'
-        ).annotate(
-            count=Count('id'),
-            amount=Sum('our_amount')
-        ).order_by('-count')
+        win_by_reason = (
+            win_records.filter(primary_reason__isnull=False)
+            .values('primary_reason__id', 'primary_reason__name')
+            .annotate(count=Count('id'), amount=Sum('our_amount'))
+            .order_by('-count')
+        )
 
-        loss_by_reason = loss_records.filter(
-            primary_reason__isnull=False
-        ).values(
-            'primary_reason__id', 'primary_reason__name'
-        ).annotate(
-            count=Count('id'),
-            amount=Sum('our_amount')
-        ).order_by('-count')
+        loss_by_reason = (
+            loss_records.filter(primary_reason__isnull=False)
+            .values('primary_reason__id', 'primary_reason__name')
+            .annotate(count=Count('id'), amount=Sum('our_amount'))
+            .order_by('-count')
+        )
 
         # 按月趋势
-        monthly_trend = records.annotate(
-            month=TruncMonth('close_date')
-        ).values('month', 'close_type').annotate(
-            count=Count('id'),
-            amount=Sum('our_amount')
-        ).order_by('month')
+        monthly_trend = (
+            records.annotate(month=TruncMonth('close_date'))
+            .values('month', 'close_type')
+            .annotate(count=Count('id'), amount=Sum('our_amount'))
+            .order_by('month')
+        )
 
         # 格式化趋势数据
         trend_data = {}
@@ -306,7 +297,8 @@ class WinLossAnalysisView(APIView):
                 'win_amount': data['win_amount'],
                 'loss_amount': data['loss_amount'],
                 'win_rate': round(data['win'] / (data['win'] + data['loss']) * 100, 1)
-                           if (data['win'] + data['loss']) > 0 else 0
+                if (data['win'] + data['loss']) > 0
+                else 0,
             }
             for month, data in sorted(trend_data.items())
         ]
@@ -316,55 +308,55 @@ class WinLossAnalysisView(APIView):
         avg_loss_cycle = loss_records.aggregate(avg=Avg('sales_cycle_days'))['avg'] or 0
 
         # 竞争对手分析
-        competitor_stats = loss_records.exclude(
-            competitor_name=''
-        ).values('competitor_name').annotate(
-            count=Count('id'),
-            total_amount=Sum('our_amount')
-        ).order_by('-count')[:10]
+        competitor_stats = (
+            loss_records.exclude(competitor_name='')
+            .values('competitor_name')
+            .annotate(count=Count('id'), total_amount=Sum('our_amount'))
+            .order_by('-count')[:10]
+        )
 
-        return Response({
-            'period': {
-                'start': start_date.isoformat(),
-                'end': end_date.isoformat()
-            },
-            'summary': {
-                'total': total_count,
-                'win_count': win_count,
-                'loss_count': loss_count,
-                'win_rate': win_rate,
-                'win_amount': float(win_amount),
-                'loss_amount': float(loss_amount)
-            },
-            'win_by_reason': [
-                {
-                    'reason_id': item['primary_reason__id'],
-                    'reason_name': item['primary_reason__name'],
-                    'count': item['count'],
-                    'amount': float(item['amount'] or 0)
-                }
-                for item in win_by_reason
-            ],
-            'loss_by_reason': [
-                {
-                    'reason_id': item['primary_reason__id'],
-                    'reason_name': item['primary_reason__name'],
-                    'count': item['count'],
-                    'amount': float(item['amount'] or 0)
-                }
-                for item in loss_by_reason
-            ],
-            'monthly_trend': trend_list,
-            'sales_cycle': {
-                'avg_win_days': round(float(avg_win_cycle), 1),
-                'avg_loss_days': round(float(avg_loss_cycle), 1)
-            },
-            'competitor_analysis': list(competitor_stats)
-        })
+        return Response(
+            {
+                'period': {'start': start_date.isoformat(), 'end': end_date.isoformat()},
+                'summary': {
+                    'total': total_count,
+                    'win_count': win_count,
+                    'loss_count': loss_count,
+                    'win_rate': win_rate,
+                    'win_amount': float(win_amount),
+                    'loss_amount': float(loss_amount),
+                },
+                'win_by_reason': [
+                    {
+                        'reason_id': item['primary_reason__id'],
+                        'reason_name': item['primary_reason__name'],
+                        'count': item['count'],
+                        'amount': float(item['amount'] or 0),
+                    }
+                    for item in win_by_reason
+                ],
+                'loss_by_reason': [
+                    {
+                        'reason_id': item['primary_reason__id'],
+                        'reason_name': item['primary_reason__name'],
+                        'count': item['count'],
+                        'amount': float(item['amount'] or 0),
+                    }
+                    for item in loss_by_reason
+                ],
+                'monthly_trend': trend_list,
+                'sales_cycle': {
+                    'avg_win_days': round(float(avg_win_cycle), 1),
+                    'avg_loss_days': round(float(avg_loss_cycle), 1),
+                },
+                'competitor_analysis': list(competitor_stats),
+            }
+        )
 
 
 class WinLossComparisonView(APIView):
     """赢单/丢单对比分析"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -378,9 +370,7 @@ class WinLossComparisonView(APIView):
 
         # 获取关闭的商机
         closed_opps = Opportunity.objects.filter(
-            stage__in=['CLOSED_WON', 'CLOSED_LOST'],
-            updated_at__date__gte=start_date,
-            is_deleted=False
+            stage__in=['CLOSED_WON', 'CLOSED_LOST'], updated_at__date__gte=start_date, is_deleted=False
         )
 
         won = closed_opps.filter(stage='CLOSED_WON')
@@ -392,46 +382,34 @@ class WinLossComparisonView(APIView):
 
         # 按客户规模分析
         def analyze_by_customer_type(queryset):
-            return queryset.values(
-                'customer__customer_type'
-            ).annotate(count=Count('id')).order_by('-count')
+            return queryset.values('customer__customer_type').annotate(count=Count('id')).order_by('-count')
 
         won_by_type = list(analyze_by_customer_type(won))
         lost_by_type = list(analyze_by_customer_type(lost))
 
         # 按产品类型分析 (如果有)
         # 按销售人员分析
-        won_by_sales = won.values(
-            'salesperson__username'
-        ).annotate(
-            count=Count('id'),
-            amount=Sum('amount')
-        ).order_by('-count')[:10]
+        won_by_sales = (
+            won.values('salesperson__username')
+            .annotate(count=Count('id'), amount=Sum('amount'))
+            .order_by('-count')[:10]
+        )
 
-        lost_by_sales = lost.values(
-            'salesperson__username'
-        ).annotate(
-            count=Count('id'),
-            amount=Sum('amount')
-        ).order_by('-count')[:10]
+        lost_by_sales = (
+            lost.values('salesperson__username')
+            .annotate(count=Count('id'), amount=Sum('amount'))
+            .order_by('-count')[:10]
+        )
 
-        return Response({
-            'period': {
-                'months': months,
-                'start': start_date.isoformat(),
-                'end': end_date.isoformat()
-            },
-            'amount_comparison': {
-                'avg_won': float(avg_won_amount),
-                'avg_lost': float(avg_lost_amount),
-                'difference': float(avg_won_amount - avg_lost_amount)
-            },
-            'by_customer_type': {
-                'won': won_by_type,
-                'lost': lost_by_type
-            },
-            'by_salesperson': {
-                'won': list(won_by_sales),
-                'lost': list(lost_by_sales)
+        return Response(
+            {
+                'period': {'months': months, 'start': start_date.isoformat(), 'end': end_date.isoformat()},
+                'amount_comparison': {
+                    'avg_won': float(avg_won_amount),
+                    'avg_lost': float(avg_lost_amount),
+                    'difference': float(avg_won_amount - avg_lost_amount),
+                },
+                'by_customer_type': {'won': won_by_type, 'lost': lost_by_type},
+                'by_salesperson': {'won': list(won_by_sales), 'lost': list(lost_by_sales)},
             }
-        })
+        )

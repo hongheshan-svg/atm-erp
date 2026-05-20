@@ -2,6 +2,7 @@
 仪表盘组件视图
 Dashboard Widget Views
 """
+
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -11,6 +12,7 @@ from .dashboard_config import DashboardDataService, DashboardWidget, UserDashboa
 
 class DashboardWidgetSerializer(serializers.ModelSerializer):
     """仪表盘组件序列化器"""
+
     widget_type_display = serializers.CharField(source='get_widget_type_display', read_only=True)
     data_source_display = serializers.CharField(source='get_data_source_display', read_only=True)
 
@@ -21,6 +23,7 @@ class DashboardWidgetSerializer(serializers.ModelSerializer):
 
 class UserDashboardSerializer(serializers.ModelSerializer):
     """用户仪表盘序列化器"""
+
     username = serializers.CharField(source='user.username', read_only=True)
 
     class Meta:
@@ -30,6 +33,7 @@ class UserDashboardSerializer(serializers.ModelSerializer):
 
 class DashboardWidgetViewSet(viewsets.ModelViewSet):
     """仪表盘组件管理"""
+
     queryset = DashboardWidget.objects.all()
     serializer_class = DashboardWidgetSerializer
     filterset_fields = ['widget_type', 'data_source', 'is_active']
@@ -44,10 +48,7 @@ class DashboardWidgetViewSet(viewsets.ModelViewSet):
         service = DashboardDataService(request.user)
         data = service.get_widget_data(widget)
 
-        return Response({
-            'widget': DashboardWidgetSerializer(widget).data,
-            'data': data
-        })
+        return Response({'widget': DashboardWidgetSerializer(widget).data, 'data': data})
 
     @action(detail=False, methods=['get'])
     def available(self, request):
@@ -58,6 +59,7 @@ class DashboardWidgetViewSet(viewsets.ModelViewSet):
 
 class UserDashboardViewSet(viewsets.ModelViewSet):
     """用户仪表盘配置"""
+
     queryset = UserDashboard.objects.all()
     serializer_class = UserDashboardSerializer
 
@@ -70,20 +72,14 @@ class UserDashboardViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def my_dashboard(self, request):
         """获取当前用户的仪表盘配置"""
-        dashboard, created = UserDashboard.objects.get_or_create(
-            user=request.user,
-            defaults={'layout': []}
-        )
+        dashboard, created = UserDashboard.objects.get_or_create(user=request.user, defaults={'layout': []})
 
         return Response(UserDashboardSerializer(dashboard).data)
 
     @action(detail=False, methods=['post'])
     def save_layout(self, request):
         """保存用户仪表盘布局"""
-        dashboard, created = UserDashboard.objects.get_or_create(
-            user=request.user,
-            defaults={'layout': []}
-        )
+        dashboard, created = UserDashboard.objects.get_or_create(user=request.user, defaults={'layout': []})
 
         dashboard.layout = request.data.get('layout', [])
         dashboard.save()

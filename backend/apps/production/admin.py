@@ -62,4 +62,3 @@ class QualityInspectionAdmin(admin.ModelAdmin):
 class InspectionItemAdmin(admin.ModelAdmin):
     list_display = ['inspection', 'sequence', 'item_name', 'result']
     list_filter = ['result']
-

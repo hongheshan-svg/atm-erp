@@ -10,6 +10,7 @@ Equipment Ledger Management Models
 - 质保信息
 - 维护保养记录
 """
+
 from django.db import models
 
 from apps.core.models import BaseModel
@@ -19,6 +20,7 @@ class Equipment(BaseModel):
     """
     设备台账 - 已交付设备的主记录
     """
+
     STATUS_CHOICES = [
         ('PRODUCING', '生产中'),
         ('TESTING', '厂内调试'),
@@ -40,16 +42,10 @@ class Equipment(BaseModel):
 
     # 关联信息
     project = models.ForeignKey(
-        'Project',
-        on_delete=models.PROTECT,
-        related_name='equipment_list',
-        verbose_name='所属项目'
+        'Project', on_delete=models.PROTECT, related_name='equipment_list', verbose_name='所属项目'
     )
     customer = models.ForeignKey(
-        'masterdata.Customer',
-        on_delete=models.PROTECT,
-        related_name='equipment_list',
-        verbose_name='客户'
+        'masterdata.Customer', on_delete=models.PROTECT, related_name='equipment_list', verbose_name='客户'
     )
     sales_order = models.ForeignKey(
         'sales.SalesOrder',
@@ -57,7 +53,7 @@ class Equipment(BaseModel):
         null=True,
         blank=True,
         related_name='equipment_list',
-        verbose_name='销售订单'
+        verbose_name='销售订单',
     )
 
     # 设备规格
@@ -101,17 +97,19 @@ class Equipment(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.equipment_no} - {self.name}"
+        return f'{self.equipment_no} - {self.name}'
 
     def save(self, *args, **kwargs):
         # 自动生成设备编号
         if not self.equipment_no:
             from apps.core.models import CodeRule
+
             self.equipment_no = CodeRule.generate_code('EQUIPMENT')
 
         # 计算质保结束日期
         if self.warranty_start_date and not self.warranty_end_date:
             from dateutil.relativedelta import relativedelta
+
             total_months = self.warranty_months + (self.extended_warranty_months if self.extended_warranty else 0)
             self.warranty_end_date = self.warranty_start_date + relativedelta(months=total_months)
 
@@ -123,6 +121,7 @@ class Equipment(BaseModel):
         if not self.warranty_end_date:
             return False
         from django.utils import timezone
+
         return timezone.now().date() <= self.warranty_end_date
 
 
@@ -130,6 +129,7 @@ class EquipmentShipment(BaseModel):
     """
     设备发货记录
     """
+
     SHIPMENT_STATUS = [
         ('PREPARING', '准备中'),
         ('PACKED', '已打包'),
@@ -139,12 +139,7 @@ class EquipmentShipment(BaseModel):
     ]
 
     shipment_no = models.CharField(max_length=50, unique=True, verbose_name='发货单号')
-    equipment = models.ForeignKey(
-        Equipment,
-        on_delete=models.PROTECT,
-        related_name='shipments',
-        verbose_name='设备'
-    )
+    equipment = models.ForeignKey(Equipment, on_delete=models.PROTECT, related_name='shipments', verbose_name='设备')
 
     # 发货信息
     shipment_date = models.DateField(verbose_name='发货日期')
@@ -181,13 +176,14 @@ class EquipmentShipment(BaseModel):
         ordering = ['-shipment_date']
 
     def __str__(self):
-        return f"{self.shipment_no} - {self.equipment.name}"
+        return f'{self.shipment_no} - {self.equipment.name}'
 
 
 class EquipmentInstallation(BaseModel):
     """
     现场安装记录
     """
+
     INSTALL_STATUS = [
         ('PLANNED', '计划中'),
         ('PREPARING', '准备中'),
@@ -199,10 +195,7 @@ class EquipmentInstallation(BaseModel):
 
     installation_no = models.CharField(max_length=50, unique=True, verbose_name='安装单号')
     equipment = models.ForeignKey(
-        Equipment,
-        on_delete=models.PROTECT,
-        related_name='installations',
-        verbose_name='设备'
+        Equipment, on_delete=models.PROTECT, related_name='installations', verbose_name='设备'
     )
 
     # 安装计划
@@ -218,13 +211,10 @@ class EquipmentInstallation(BaseModel):
         on_delete=models.SET_NULL,
         null=True,
         related_name='led_installations',
-        verbose_name='安装负责人'
+        verbose_name='安装负责人',
     )
     team_members = models.ManyToManyField(
-        'accounts.User',
-        blank=True,
-        related_name='participated_installations',
-        verbose_name='安装团队成员'
+        'accounts.User', blank=True, related_name='participated_installations', verbose_name='安装团队成员'
     )
 
     # 安装内容
@@ -247,18 +237,16 @@ class EquipmentInstallation(BaseModel):
         ordering = ['-planned_start']
 
     def __str__(self):
-        return f"{self.installation_no} - {self.equipment.name}"
+        return f'{self.installation_no} - {self.equipment.name}'
 
 
 class InstallationLog(BaseModel):
     """
     安装日志 - 每天的安装工作记录
     """
+
     installation = models.ForeignKey(
-        EquipmentInstallation,
-        on_delete=models.CASCADE,
-        related_name='daily_logs',
-        verbose_name='安装记录'
+        EquipmentInstallation, on_delete=models.CASCADE, related_name='daily_logs', verbose_name='安装记录'
     )
 
     log_date = models.DateField(verbose_name='日期')
@@ -279,12 +267,7 @@ class InstallationLog(BaseModel):
     photos = models.JSONField(default=list, blank=True, verbose_name='现场照片')
 
     # 记录人
-    recorded_by = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        verbose_name='记录人'
-    )
+    recorded_by = models.ForeignKey('accounts.User', on_delete=models.SET_NULL, null=True, verbose_name='记录人')
 
     class Meta:
         db_table = 'installation_log'
@@ -294,13 +277,14 @@ class InstallationLog(BaseModel):
         unique_together = ['installation', 'log_date']
 
     def __str__(self):
-        return f"{self.installation.installation_no} - {self.log_date}"
+        return f'{self.installation.installation_no} - {self.log_date}'
 
 
 class EquipmentAcceptance(BaseModel):
     """
     设备验收记录
     """
+
     ACCEPTANCE_STATUS = [
         ('PENDING', '待验收'),
         ('TESTING', '测试中'),
@@ -310,12 +294,7 @@ class EquipmentAcceptance(BaseModel):
     ]
 
     acceptance_no = models.CharField(max_length=50, unique=True, verbose_name='验收单号')
-    equipment = models.ForeignKey(
-        Equipment,
-        on_delete=models.PROTECT,
-        related_name='acceptances',
-        verbose_name='设备'
-    )
+    equipment = models.ForeignKey(Equipment, on_delete=models.PROTECT, related_name='acceptances', verbose_name='设备')
 
     # 验收信息
     acceptance_date = models.DateField(verbose_name='验收日期')
@@ -327,7 +306,7 @@ class EquipmentAcceptance(BaseModel):
         on_delete=models.SET_NULL,
         null=True,
         related_name='accepted_equipments',
-        verbose_name='我方代表'
+        verbose_name='我方代表',
     )
     customer_representative = models.CharField(max_length=50, blank=True, verbose_name='客户代表')
     customer_signature = models.FileField(upload_to='acceptance/signatures/', blank=True, verbose_name='客户签字')
@@ -354,13 +333,14 @@ class EquipmentAcceptance(BaseModel):
         ordering = ['-acceptance_date']
 
     def __str__(self):
-        return f"{self.acceptance_no} - {self.equipment.name}"
+        return f'{self.acceptance_no} - {self.equipment.name}'
 
 
 class MaintenanceSchedule(BaseModel):
     """
     设备保养计划
     """
+
     MAINTENANCE_TYPE = [
         ('DAILY', '日常保养'),
         ('WEEKLY', '周保养'),
@@ -378,10 +358,7 @@ class MaintenanceSchedule(BaseModel):
     ]
 
     equipment = models.ForeignKey(
-        Equipment,
-        on_delete=models.CASCADE,
-        related_name='maintenance_schedules',
-        verbose_name='设备'
+        Equipment, on_delete=models.CASCADE, related_name='maintenance_schedules', verbose_name='设备'
     )
 
     maintenance_type = models.CharField(max_length=20, choices=MAINTENANCE_TYPE, verbose_name='保养类型')
@@ -408,13 +385,14 @@ class MaintenanceSchedule(BaseModel):
         ordering = ['scheduled_date']
 
     def __str__(self):
-        return f"{self.equipment.equipment_no} - {self.get_maintenance_type_display()} - {self.scheduled_date}"
+        return f'{self.equipment.equipment_no} - {self.get_maintenance_type_display()} - {self.scheduled_date}'
 
 
 class TrainingRecord(BaseModel):
     """
     客户培训记录
     """
+
     TRAINING_TYPE = [
         ('OPERATION', '操作培训'),
         ('MAINTENANCE', '保养培训'),
@@ -425,10 +403,7 @@ class TrainingRecord(BaseModel):
 
     training_no = models.CharField(max_length=50, unique=True, verbose_name='培训单号')
     equipment = models.ForeignKey(
-        Equipment,
-        on_delete=models.PROTECT,
-        related_name='training_records',
-        verbose_name='设备'
+        Equipment, on_delete=models.PROTECT, related_name='training_records', verbose_name='设备'
     )
 
     # 培训信息
@@ -442,11 +417,7 @@ class TrainingRecord(BaseModel):
 
     # 培训师
     trainer = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='conducted_trainings',
-        verbose_name='培训师'
+        'accounts.User', on_delete=models.SET_NULL, null=True, related_name='conducted_trainings', verbose_name='培训师'
     )
 
     # 受训人员
@@ -469,4 +440,4 @@ class TrainingRecord(BaseModel):
         ordering = ['-training_date']
 
     def __str__(self):
-        return f"{self.training_no} - {self.equipment.name}"
+        return f'{self.training_no} - {self.equipment.name}'

@@ -20,6 +20,7 @@ Project Material Shortage Calculation
 3. 查看缺料清单
 4. 一键生成采购申请
 """
+
 from datetime import timedelta
 from decimal import Decimal
 
@@ -39,6 +40,7 @@ class MRPPlan(BaseModel):
     """
     MRP计划
     """
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('CALCULATING', '计算中'),
@@ -59,35 +61,15 @@ class MRPPlan(BaseModel):
     projects = models.JSONField(default=list, blank=True, verbose_name='来源项目')
 
     # 计算参数
-    safety_stock_factor = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=1.0,
-        verbose_name='安全库存系数'
-    )
-    lead_time_factor = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=1.0,
-        verbose_name='提前期系数'
-    )
+    safety_stock_factor = models.DecimalField(max_digits=5, decimal_places=2, default=1.0, verbose_name='安全库存系数')
+    lead_time_factor = models.DecimalField(max_digits=5, decimal_places=2, default=1.0, verbose_name='提前期系数')
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='DRAFT',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', verbose_name='状态')
 
     # 计算结果统计
     total_items = models.IntegerField(default=0, verbose_name='物料数量')
     shortage_items = models.IntegerField(default=0, verbose_name='缺料物料数')
-    total_shortage_amount = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        verbose_name='缺料总金额'
-    )
+    total_shortage_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='缺料总金额')
 
     calculated_at = models.DateTimeField(null=True, blank=True, verbose_name='计算时间')
     approved_by = models.ForeignKey(
@@ -96,7 +78,7 @@ class MRPPlan(BaseModel):
         null=True,
         blank=True,
         related_name='approved_mrp_plans',
-        verbose_name='批准人'
+        verbose_name='批准人',
     )
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name='批准时间')
 
@@ -114,6 +96,7 @@ class MRPPlan(BaseModel):
     def save(self, *args, **kwargs):
         if not self.plan_no:
             from apps.core.utils import generate_code
+
             self.plan_no = generate_code('MRP')
         super().save(*args, **kwargs)
 
@@ -122,6 +105,7 @@ class MRPLine(BaseModel):
     """
     MRP计划明细
     """
+
     ACTION_TYPES = [
         ('NONE', '无需操作'),
         ('PURCHASE', '需采购'),
@@ -129,18 +113,8 @@ class MRPLine(BaseModel):
         ('TRANSFER', '需调拨'),
     ]
 
-    plan = models.ForeignKey(
-        MRPPlan,
-        on_delete=models.CASCADE,
-        related_name='lines',
-        verbose_name='MRP计划'
-    )
-    item = models.ForeignKey(
-        'masterdata.Item',
-        on_delete=models.CASCADE,
-        related_name='mrp_lines',
-        verbose_name='物料'
-    )
+    plan = models.ForeignKey(MRPPlan, on_delete=models.CASCADE, related_name='lines', verbose_name='MRP计划')
+    item = models.ForeignKey('masterdata.Item', on_delete=models.CASCADE, related_name='mrp_lines', verbose_name='物料')
 
     # 需求来源
     source_project = models.ForeignKey(
@@ -149,7 +123,7 @@ class MRPLine(BaseModel):
         null=True,
         blank=True,
         related_name='mrp_lines',
-        verbose_name='来源项目'
+        verbose_name='来源项目',
     )
     source_bom = models.ForeignKey(
         'projects.ProjectBOM',
@@ -157,80 +131,30 @@ class MRPLine(BaseModel):
         null=True,
         blank=True,
         related_name='mrp_lines',
-        verbose_name='来源BOM'
+        verbose_name='来源BOM',
     )
 
     # 需求
     required_date = models.DateField(verbose_name='需求日期')
-    gross_requirement = models.DecimalField(
-        max_digits=18,
-        decimal_places=4,
-        default=0,
-        verbose_name='毛需求量'
-    )
+    gross_requirement = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='毛需求量')
 
     # 库存
-    on_hand_qty = models.DecimalField(
-        max_digits=18,
-        decimal_places=4,
-        default=0,
-        verbose_name='在库数量'
-    )
-    allocated_qty = models.DecimalField(
-        max_digits=18,
-        decimal_places=4,
-        default=0,
-        verbose_name='已分配数量'
-    )
-    on_order_qty = models.DecimalField(
-        max_digits=18,
-        decimal_places=4,
-        default=0,
-        verbose_name='在途数量'
-    )
-    safety_stock = models.DecimalField(
-        max_digits=18,
-        decimal_places=4,
-        default=0,
-        verbose_name='安全库存'
-    )
+    on_hand_qty = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='在库数量')
+    allocated_qty = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='已分配数量')
+    on_order_qty = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='在途数量')
+    safety_stock = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='安全库存')
 
     # 净需求
-    net_requirement = models.DecimalField(
-        max_digits=18,
-        decimal_places=4,
-        default=0,
-        verbose_name='净需求量'
-    )
+    net_requirement = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='净需求量')
 
     # 建议
-    suggested_action = models.CharField(
-        max_length=20,
-        choices=ACTION_TYPES,
-        default='NONE',
-        verbose_name='建议操作'
-    )
-    suggested_qty = models.DecimalField(
-        max_digits=18,
-        decimal_places=4,
-        default=0,
-        verbose_name='建议数量'
-    )
+    suggested_action = models.CharField(max_length=20, choices=ACTION_TYPES, default='NONE', verbose_name='建议操作')
+    suggested_qty = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='建议数量')
     suggested_date = models.DateField(null=True, blank=True, verbose_name='建议日期')
 
     # 金额
-    unit_price = models.DecimalField(
-        max_digits=18,
-        decimal_places=4,
-        default=0,
-        verbose_name='单价'
-    )
-    total_amount = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        verbose_name='总金额'
-    )
+    unit_price = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='单价')
+    total_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='总金额')
 
     # 执行
     is_confirmed = models.BooleanField(default=False, verbose_name='已确认')
@@ -240,7 +164,7 @@ class MRPLine(BaseModel):
         null=True,
         blank=True,
         related_name='mrp_lines',
-        verbose_name='采购申请'
+        verbose_name='采购申请',
     )
 
     remarks = models.CharField(max_length=500, blank=True, verbose_name='备注')
@@ -276,17 +200,16 @@ class MRPService:
                 status__in=['IN_PROGRESS', 'PLANNING'],
                 end_date__gte=plan.start_date,
                 start_date__lte=plan.end_date,
-                is_deleted=False
+                is_deleted=False,
             )
             project_ids = list(projects.values_list('id', flat=True))
 
         # 汇总BOM需求
         requirements = {}
 
-        bom_items = ProjectBOM.objects.filter(
-            project_id__in=project_ids,
-            is_deleted=False
-        ).select_related('item', 'project')
+        bom_items = ProjectBOM.objects.filter(project_id__in=project_ids, is_deleted=False).select_related(
+            'item', 'project'
+        )
 
         for bom in bom_items:
             if not bom.item:
@@ -298,16 +221,18 @@ class MRPService:
                     'item': bom.item,
                     'gross_qty': Decimal('0'),
                     'required_date': plan.end_date,
-                    'sources': []
+                    'sources': [],
                 }
 
             requirements[item_id]['gross_qty'] += bom.quantity or Decimal('0')
-            requirements[item_id]['sources'].append({
-                'project_id': bom.project_id,
-                'project_name': bom.project.name if bom.project else '',
-                'bom_id': bom.id,
-                'qty': bom.quantity
-            })
+            requirements[item_id]['sources'].append(
+                {
+                    'project_id': bom.project_id,
+                    'project_name': bom.project.name if bom.project else '',
+                    'bom_id': bom.id,
+                    'qty': bom.quantity,
+                }
+            )
 
             # 使用最早的需求日期
             if bom.required_date and bom.required_date < requirements[item_id]['required_date']:
@@ -322,27 +247,21 @@ class MRPService:
             item = req['item']
 
             # 获取在库数量
-            on_hand = Stock.objects.filter(
-                item_id=item_id,
-                is_deleted=False
-            ).aggregate(total=Sum('quantity'))['total'] or Decimal('0')
+            on_hand = Stock.objects.filter(item_id=item_id, is_deleted=False).aggregate(total=Sum('quantity'))[
+                'total'
+            ] or Decimal('0')
 
             # 获取已分配数量（已确认的领料申请）
             from apps.inventory.models import MaterialRequisitionLine
+
             allocated = MaterialRequisitionLine.objects.filter(
-                item_id=item_id,
-                requisition__status__in=['APPROVED', 'PARTIAL'],
-                is_deleted=False
+                item_id=item_id, requisition__status__in=['APPROVED', 'PARTIAL'], is_deleted=False
             ).aggregate(total=Sum('quantity'))['total'] or Decimal('0')
 
             # 获取在途数量
             on_order = PurchaseOrderLine.objects.filter(
-                item_id=item_id,
-                order__status__in=['APPROVED', 'PARTIAL'],
-                is_deleted=False
-            ).aggregate(
-                total=Sum(F('quantity') - F('received_qty'))
-            )['total'] or Decimal('0')
+                item_id=item_id, order__status__in=['APPROVED', 'PARTIAL'], is_deleted=False
+            ).aggregate(total=Sum(F('quantity') - F('received_qty')))['total'] or Decimal('0')
 
             # 安全库存
             safety_stock = (item.safety_stock or Decimal('0')) * plan.safety_stock_factor
@@ -361,9 +280,7 @@ class MRPService:
 
             # 建议日期（考虑提前期）
             lead_time = item.lead_time or 7
-            suggested_date = req['required_date'] - timedelta(
-                days=int(lead_time * float(plan.lead_time_factor))
-            )
+            suggested_date = req['required_date'] - timedelta(days=int(lead_time * float(plan.lead_time_factor)))
 
             # 单价和金额
             unit_price = item.purchase_price or Decimal('0')
@@ -386,7 +303,7 @@ class MRPService:
                 suggested_qty=net_requirement,
                 suggested_date=suggested_date,
                 unit_price=unit_price,
-                total_amount=total_amount
+                total_amount=total_amount,
             )
             lines_to_create.append(line)
 
@@ -408,11 +325,7 @@ class MRPService:
         """生成采购申请"""
         from apps.purchase.models import PurchaseRequest, PurchaseRequestLine
 
-        lines = plan.lines.filter(
-            suggested_action='PURCHASE',
-            is_confirmed=False,
-            net_requirement__gt=0
-        )
+        lines = plan.lines.filter(suggested_action='PURCHASE', is_confirmed=False, net_requirement__gt=0)
 
         if line_ids:
             lines = lines.filter(id__in=line_ids)
@@ -426,7 +339,7 @@ class MRPService:
             source_type='MRP',
             source_no=plan.plan_no,
             status='DRAFT',
-            created_by=plan.created_by
+            created_by=plan.created_by,
         )
 
         for line in lines:
@@ -435,7 +348,7 @@ class MRPService:
                 item=line.item,
                 quantity=line.suggested_qty,
                 required_date=line.suggested_date,
-                remarks=f'来自MRP计划: {plan.plan_no}'
+                remarks=f'来自MRP计划: {plan.plan_no}',
             )
 
             # 标记已确认
@@ -449,6 +362,7 @@ class MRPService:
 # =====================
 # Serializers
 # =====================
+
 
 class MRPLineSerializer(serializers.ModelSerializer):
     item_code = serializers.CharField(source='item.code', read_only=True)
@@ -472,9 +386,17 @@ class MRPPlanSerializer(serializers.ModelSerializer):
     class Meta:
         model = MRPPlan
         fields = '__all__'
-        read_only_fields = ['created_by', 'updated_by', 'plan_no', 'calculated_at',
-                          'approved_by', 'approved_at', 'total_items', 'shortage_items',
-                          'total_shortage_amount']
+        read_only_fields = [
+            'created_by',
+            'updated_by',
+            'plan_no',
+            'calculated_at',
+            'approved_by',
+            'approved_at',
+            'total_items',
+            'shortage_items',
+            'total_shortage_amount',
+        ]
 
 
 class MRPPlanListSerializer(serializers.ModelSerializer):
@@ -484,9 +406,19 @@ class MRPPlanListSerializer(serializers.ModelSerializer):
     class Meta:
         model = MRPPlan
         fields = [
-            'id', 'plan_no', 'name', 'start_date', 'end_date',
-            'status', 'status_display', 'total_items', 'shortage_items',
-            'total_shortage_amount', 'calculated_at', 'created_by_name', 'created_at'
+            'id',
+            'plan_no',
+            'name',
+            'start_date',
+            'end_date',
+            'status',
+            'status_display',
+            'total_items',
+            'shortage_items',
+            'total_shortage_amount',
+            'calculated_at',
+            'created_by_name',
+            'created_at',
         ]
 
 
@@ -494,8 +426,10 @@ class MRPPlanListSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class MRPPlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """MRP计划管理"""
+
     queryset = MRPPlan.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status']
@@ -558,11 +492,13 @@ class MRPPlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         plan.status = 'EXECUTING'
         plan.save()
 
-        return Response({
-            'success': True,
-            'purchase_request_id': pr.id,
-            'purchase_request_no': pr.request_no if hasattr(pr, 'request_no') else str(pr.id)
-        })
+        return Response(
+            {
+                'success': True,
+                'purchase_request_id': pr.id,
+                'purchase_request_no': pr.request_no if hasattr(pr, 'request_no') else str(pr.id),
+            }
+        )
 
     @action(detail=False, methods=['get'])
     def shortage_summary(self, request):
@@ -573,22 +509,26 @@ class MRPPlanViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         if not plan:
             return Response({'error': '没有已批准的MRP计划'}, status=404)
 
-        shortage_lines = plan.lines.filter(
-            suggested_action='PURCHASE',
-            net_requirement__gt=0
-        ).select_related('item').order_by('-total_amount')
+        shortage_lines = (
+            plan.lines.filter(suggested_action='PURCHASE', net_requirement__gt=0)
+            .select_related('item')
+            .order_by('-total_amount')
+        )
 
-        return Response({
-            'plan_no': plan.plan_no,
-            'plan_name': plan.name,
-            'total_items': shortage_lines.count(),
-            'total_amount': sum(line.total_amount for line in shortage_lines),
-            'items': MRPLineSerializer(shortage_lines[:50], many=True).data
-        })
+        return Response(
+            {
+                'plan_no': plan.plan_no,
+                'plan_name': plan.name,
+                'total_items': shortage_lines.count(),
+                'total_amount': sum(line.total_amount for line in shortage_lines),
+                'items': MRPLineSerializer(shortage_lines[:50], many=True).data,
+            }
+        )
 
 
 class MRPLineViewSet(viewsets.ReadOnlyModelViewSet):
     """MRP明细"""
+
     queryset = MRPLine.objects.filter(is_deleted=False)
     serializer_class = MRPLineSerializer
     permission_classes = [IsAuthenticated]

@@ -1,6 +1,7 @@
 """
 Security validators for file uploads and data validation.
 """
+
 import os
 
 from django.core.exceptions import ValidationError
@@ -8,6 +9,7 @@ from django.core.exceptions import ValidationError
 # 尝试导入python-magic，如果不可用则设为None
 try:
     import magic
+
     MAGIC_AVAILABLE = True
 except ImportError:
     magic = None
@@ -17,13 +19,32 @@ except ImportError:
 # 允许的文件扩展名
 ALLOWED_FILE_EXTENSIONS = {
     # 文档类
-    'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv',
+    'pdf',
+    'doc',
+    'docx',
+    'xls',
+    'xlsx',
+    'ppt',
+    'pptx',
+    'txt',
+    'csv',
     # 图片类
-    'jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp',
+    'jpg',
+    'jpeg',
+    'png',
+    'gif',
+    'bmp',
+    'svg',
+    'webp',
     # 压缩包
-    'zip', 'rar', '7z', 'tar', 'gz',
+    'zip',
+    'rar',
+    '7z',
+    'tar',
+    'gz',
     # 其他
-    'json', 'xml'
+    'json',
+    'xml',
 }
 
 # 允许的MIME类型
@@ -59,7 +80,7 @@ ALLOWED_MIME_TYPES = {
 
 # 最大文件大小（字节）
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
-MAX_IMAGE_SIZE = 10 * 1024 * 1024   # 10MB
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
 
 
 def validate_file_extension(file):
@@ -68,9 +89,7 @@ def validate_file_extension(file):
     """
     ext = os.path.splitext(file.name)[1].lower().lstrip('.')
     if ext not in ALLOWED_FILE_EXTENSIONS:
-        raise ValidationError(
-            f'不支持的文件类型。允许的文件类型：{", ".join(ALLOWED_FILE_EXTENSIONS)}'
-        )
+        raise ValidationError(f'不支持的文件类型。允许的文件类型：{", ".join(ALLOWED_FILE_EXTENSIONS)}')
 
 
 def validate_file_size(file, max_size=MAX_FILE_SIZE):
@@ -164,7 +183,6 @@ def sanitize_filename(filename):
     # 限制长度
     if len(filename) > 200:
         name, ext = os.path.splitext(filename)
-        filename = name[:200-len(ext)] + ext
+        filename = name[: 200 - len(ext)] + ext
 
     return filename
-

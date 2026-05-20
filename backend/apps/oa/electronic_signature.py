@@ -4,6 +4,7 @@ Electronic Signature
 电子签章、合同签署、签章管理等
 支持后续集成第三方服务（法大大、e签宝、DocuSign等）
 """
+
 import hashlib
 from datetime import date
 
@@ -22,6 +23,7 @@ from apps.core.models import BaseModel
 
 class SignatureSeal(BaseModel):
     """电子印章"""
+
     SEAL_TYPE_CHOICES = [
         ('COMPANY', '公章'),
         ('CONTRACT', '合同章'),
@@ -38,18 +40,8 @@ class SignatureSeal(BaseModel):
     ]
 
     name = models.CharField(max_length=100, verbose_name='印章名称')
-    seal_type = models.CharField(
-        max_length=20,
-        choices=SEAL_TYPE_CHOICES,
-        default='COMPANY',
-        verbose_name='印章类型'
-    )
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    seal_type = models.CharField(max_length=20, choices=SEAL_TYPE_CHOICES, default='COMPANY', verbose_name='印章类型')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
 
     # 印章图片
     seal_image = models.CharField(max_length=500, blank=True, verbose_name='印章图片路径')
@@ -60,15 +52,12 @@ class SignatureSeal(BaseModel):
         on_delete=models.SET_NULL,
         null=True,
         related_name='owned_seals',
-        verbose_name='所有者'
+        verbose_name='所有者',
     )
 
     # 授权用户
     authorized_users = models.ManyToManyField(
-        settings.AUTH_USER_MODEL,
-        blank=True,
-        related_name='authorized_seals',
-        verbose_name='授权用户'
+        settings.AUTH_USER_MODEL, blank=True, related_name='authorized_seals', verbose_name='授权用户'
     )
 
     # 有效期
@@ -92,7 +81,7 @@ class SignatureSeal(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.name} ({self.get_seal_type_display()})"
+        return f'{self.name} ({self.get_seal_type_display()})'
 
     @property
     def is_valid(self):
@@ -109,6 +98,7 @@ class SignatureSeal(BaseModel):
 
 class SignatureDocument(BaseModel):
     """签署文档"""
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('PENDING', '待签署'),
@@ -130,18 +120,8 @@ class SignatureDocument(BaseModel):
 
     doc_no = models.CharField(max_length=50, unique=True, verbose_name='文档编号')
     title = models.CharField(max_length=200, verbose_name='文档标题')
-    doc_type = models.CharField(
-        max_length=20,
-        choices=DOC_TYPE_CHOICES,
-        default='CONTRACT',
-        verbose_name='文档类型'
-    )
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='DRAFT',
-        verbose_name='状态'
-    )
+    doc_type = models.CharField(max_length=20, choices=DOC_TYPE_CHOICES, default='CONTRACT', verbose_name='文档类型')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', verbose_name='状态')
 
     # 文件信息
     original_file = models.CharField(max_length=500, blank=True, verbose_name='原始文件路径')
@@ -158,7 +138,7 @@ class SignatureDocument(BaseModel):
         on_delete=models.SET_NULL,
         null=True,
         related_name='initiated_documents',
-        verbose_name='发起人'
+        verbose_name='发起人',
     )
 
     # 时间
@@ -180,17 +160,19 @@ class SignatureDocument(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.doc_no} - {self.title}"
+        return f'{self.doc_no} - {self.title}'
 
     def save(self, *args, **kwargs):
         if not self.doc_no:
             from apps.core.utils import generate_code
+
             self.doc_no = generate_code('SIG')
         super().save(*args, **kwargs)
 
     def calculate_file_hash(self, file_path):
         """计算文件哈希"""
         import os
+
         if os.path.exists(file_path):
             with open(file_path, 'rb') as f:
                 self.file_hash = hashlib.sha256(f.read()).hexdigest()
@@ -200,6 +182,7 @@ class SignatureDocument(BaseModel):
 
 class SignatureParticipant(BaseModel):
     """签署参与者"""
+
     ROLE_CHOICES = [
         ('SIGNER', '签署人'),
         ('APPROVER', '审批人'),
@@ -214,10 +197,7 @@ class SignatureParticipant(BaseModel):
     ]
 
     document = models.ForeignKey(
-        SignatureDocument,
-        on_delete=models.CASCADE,
-        related_name='participants',
-        verbose_name='文档'
+        SignatureDocument, on_delete=models.CASCADE, related_name='participants', verbose_name='文档'
     )
 
     user = models.ForeignKey(
@@ -226,7 +206,7 @@ class SignatureParticipant(BaseModel):
         null=True,
         blank=True,
         related_name='signature_participations',
-        verbose_name='用户'
+        verbose_name='用户',
     )
 
     # 外部签署人信息
@@ -235,30 +215,15 @@ class SignatureParticipant(BaseModel):
     external_email = models.EmailField(blank=True, verbose_name='邮箱')
     external_company = models.CharField(max_length=200, blank=True, verbose_name='公司')
 
-    role = models.CharField(
-        max_length=20,
-        choices=ROLE_CHOICES,
-        default='SIGNER',
-        verbose_name='角色'
-    )
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='SIGNER', verbose_name='角色')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
 
     # 签署顺序
     sign_order = models.IntegerField(default=1, verbose_name='签署顺序')
 
     # 使用的印章
     seal = models.ForeignKey(
-        SignatureSeal,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='signatures',
-        verbose_name='印章'
+        SignatureSeal, on_delete=models.SET_NULL, null=True, blank=True, related_name='signatures', verbose_name='印章'
     )
 
     # 签署信息
@@ -281,11 +246,12 @@ class SignatureParticipant(BaseModel):
 
     def __str__(self):
         name = self.user.get_full_name() if self.user else self.external_name
-        return f"{self.document.doc_no} - {name}"
+        return f'{self.document.doc_no} - {name}'
 
 
 class SignatureLog(BaseModel):
     """签署日志"""
+
     ACTION_CHOICES = [
         ('CREATE', '创建文档'),
         ('SEND', '发送签署'),
@@ -297,19 +263,14 @@ class SignatureLog(BaseModel):
         ('VERIFY', '验证'),
     ]
 
-    document = models.ForeignKey(
-        SignatureDocument,
-        on_delete=models.CASCADE,
-        related_name='logs',
-        verbose_name='文档'
-    )
+    document = models.ForeignKey(SignatureDocument, on_delete=models.CASCADE, related_name='logs', verbose_name='文档')
     participant = models.ForeignKey(
         SignatureParticipant,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='logs',
-        verbose_name='参与者'
+        verbose_name='参与者',
     )
 
     action = models.CharField(max_length=20, choices=ACTION_CHOICES, verbose_name='操作')
@@ -319,7 +280,7 @@ class SignatureLog(BaseModel):
         on_delete=models.SET_NULL,
         null=True,
         related_name='signature_logs',
-        verbose_name='操作人'
+        verbose_name='操作人',
     )
 
     ip_address = models.GenericIPAddressField(null=True, blank=True, verbose_name='IP地址')
@@ -337,6 +298,7 @@ class SignatureLog(BaseModel):
 # =====================
 # Serializers
 # =====================
+
 
 class SignatureSealSerializer(serializers.ModelSerializer):
     type_display = serializers.CharField(source='get_seal_type_display', read_only=True)
@@ -400,8 +362,10 @@ class SignatureDocumentSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class SignatureSealViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """电子印章管理"""
+
     queryset = SignatureSeal.objects.filter(is_deleted=False)
     serializer_class = SignatureSealSerializer
     permission_classes = [IsAuthenticated]
@@ -435,6 +399,7 @@ class SignatureSealViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
 
 class SignatureDocumentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """签署文档管理"""
+
     queryset = SignatureDocument.objects.filter(is_deleted=False)
     serializer_class = SignatureDocumentSerializer
     permission_classes = [IsAuthenticated]
@@ -456,7 +421,7 @@ class SignatureDocumentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
             external_company=request.data.get('external_company', ''),
             role=request.data.get('role', 'SIGNER'),
             sign_order=request.data.get('sign_order', 1),
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(SignatureParticipantSerializer(participant).data)
@@ -477,12 +442,7 @@ class SignatureDocumentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         document.save()
 
         # 记录日志
-        SignatureLog.objects.create(
-            document=document,
-            action='SEND',
-            operator=request.user,
-            created_by=request.user
-        )
+        SignatureLog.objects.create(document=document, action='SEND', operator=request.user, created_by=request.user)
 
         # TODO: 集成第三方服务发送签署请求
         # 这里是模拟实现，实际需要调用第三方API
@@ -496,11 +456,7 @@ class SignatureDocumentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         seal_id = request.data.get('seal_id')
 
         # 获取当前用户的参与记录
-        participant = document.participants.filter(
-            user=request.user,
-            role='SIGNER',
-            status='PENDING'
-        ).first()
+        participant = document.participants.filter(user=request.user, role='SIGNER', status='PENDING').first()
 
         if not participant:
             return Response({'error': '您不是此文档的待签署人'}, status=400)
@@ -532,7 +488,7 @@ class SignatureDocumentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
             action='SIGN',
             operator=request.user,
             ip_address=request.META.get('REMOTE_ADDR'),
-            created_by=request.user
+            created_by=request.user,
         )
 
         # 检查是否所有人都已签署
@@ -553,11 +509,7 @@ class SignatureDocumentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         document = self.get_object()
         reason = request.data.get('reason', '')
 
-        participant = document.participants.filter(
-            user=request.user,
-            role='SIGNER',
-            status='PENDING'
-        ).first()
+        participant = document.participants.filter(user=request.user, role='SIGNER', status='PENDING').first()
 
         if not participant:
             return Response({'error': '您不是此文档的待签署人'}, status=400)
@@ -576,7 +528,7 @@ class SignatureDocumentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
             action='REJECT',
             operator=request.user,
             details={'reason': reason},
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(self.get_serializer(document).data)
@@ -595,12 +547,7 @@ class SignatureDocumentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         document.status = 'CANCELLED'
         document.save()
 
-        SignatureLog.objects.create(
-            document=document,
-            action='CANCEL',
-            operator=request.user,
-            created_by=request.user
-        )
+        SignatureLog.objects.create(document=document, action='CANCEL', operator=request.user, created_by=request.user)
 
         return Response(self.get_serializer(document).data)
 
@@ -622,25 +569,25 @@ class SignatureDocumentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         # 本月统计
         month_start = date.today().replace(day=1)
         this_month = qs.filter(created_at__date__gte=month_start).count()
-        completed_this_month = qs.filter(
-            status='COMPLETED',
-            completed_at__date__gte=month_start
-        ).count()
+        completed_this_month = qs.filter(status='COMPLETED', completed_at__date__gte=month_start).count()
 
         # 待签署
         pending = qs.filter(status__in=['PENDING', 'SIGNING']).count()
 
-        return Response({
-            'total': total,
-            'this_month': this_month,
-            'completed_this_month': completed_this_month,
-            'pending': pending,
-            'by_status': list(by_status)
-        })
+        return Response(
+            {
+                'total': total,
+                'this_month': this_month,
+                'completed_this_month': completed_this_month,
+                'pending': pending,
+                'by_status': list(by_status),
+            }
+        )
 
 
 class SignatureLogViewSet(viewsets.ReadOnlyModelViewSet):
     """签署日志查看"""
+
     queryset = SignatureLog.objects.all()
     serializer_class = SignatureLogSerializer
     permission_classes = [IsAuthenticated]

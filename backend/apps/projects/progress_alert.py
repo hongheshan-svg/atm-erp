@@ -3,6 +3,7 @@
 Project Progress Alert
 监控项目进度，自动预警延期风险
 """
+
 from datetime import date
 from decimal import Decimal
 
@@ -22,6 +23,7 @@ class ProjectAlertRule(BaseModel):
     """
     项目预警规则
     """
+
     ALERT_TYPES = [
         ('PROGRESS', '进度预警'),
         ('BUDGET', '预算预警'),
@@ -37,23 +39,12 @@ class ProjectAlertRule(BaseModel):
     ]
 
     name = models.CharField(max_length=100, verbose_name='规则名称')
-    alert_type = models.CharField(
-        max_length=20,
-        choices=ALERT_TYPES,
-        verbose_name='预警类型'
-    )
-    severity = models.CharField(
-        max_length=20,
-        choices=SEVERITY_LEVELS,
-        default='WARNING',
-        verbose_name='严重程度'
-    )
+    alert_type = models.CharField(max_length=20, choices=ALERT_TYPES, verbose_name='预警类型')
+    severity = models.CharField(max_length=20, choices=SEVERITY_LEVELS, default='WARNING', verbose_name='严重程度')
 
     # 规则条件
     condition = models.JSONField(
-        default=dict,
-        verbose_name='条件配置',
-        help_text='{"field": "progress_gap", "operator": ">", "value": 10}'
+        default=dict, verbose_name='条件配置', help_text='{"field": "progress_gap", "operator": ">", "value": 10}'
     )
 
     # 通知设置
@@ -78,6 +69,7 @@ class ProjectAlert(BaseModel):
     """
     项目预警记录
     """
+
     STATUS_CHOICES = [
         ('ACTIVE', '活跃'),
         ('ACKNOWLEDGED', '已确认'),
@@ -86,10 +78,7 @@ class ProjectAlert(BaseModel):
     ]
 
     project = models.ForeignKey(
-        'projects.Project',
-        on_delete=models.CASCADE,
-        related_name='alerts',
-        verbose_name='项目'
+        'projects.Project', on_delete=models.CASCADE, related_name='alerts', verbose_name='项目'
     )
     rule = models.ForeignKey(
         ProjectAlertRule,
@@ -97,7 +86,7 @@ class ProjectAlert(BaseModel):
         null=True,
         blank=True,
         related_name='alerts',
-        verbose_name='预警规则'
+        verbose_name='预警规则',
     )
 
     alert_type = models.CharField(max_length=20, verbose_name='预警类型')
@@ -108,12 +97,7 @@ class ProjectAlert(BaseModel):
     # 预警数据
     alert_data = models.JSONField(default=dict, blank=True, verbose_name='预警数据')
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='ACTIVE',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ACTIVE', verbose_name='状态')
 
     # 处理
     acknowledged_by = models.ForeignKey(
@@ -122,7 +106,7 @@ class ProjectAlert(BaseModel):
         null=True,
         blank=True,
         related_name='acknowledged_alerts',
-        verbose_name='确认人'
+        verbose_name='确认人',
     )
     acknowledged_at = models.DateTimeField(null=True, blank=True, verbose_name='确认时间')
     resolved_at = models.DateTimeField(null=True, blank=True, verbose_name='解决时间')
@@ -152,10 +136,7 @@ class AlertService:
         if project:
             projects = [project]
         else:
-            projects = Project.objects.filter(
-                status__in=['PLANNING', 'IN_PROGRESS'],
-                is_deleted=False
-            )
+            projects = Project.objects.filter(status__in=['PLANNING', 'IN_PROGRESS'], is_deleted=False)
 
         for proj in projects:
             # 1. 进度预警：实际进度落后计划进度
@@ -173,8 +154,8 @@ class AlertService:
                     alert_data={
                         'expected_progress': expected_progress,
                         'actual_progress': actual_progress,
-                        'gap': progress_gap
-                    }
+                        'gap': progress_gap,
+                    },
                 )
                 if alert:
                     alerts_created.append(alert)
@@ -202,8 +183,8 @@ class AlertService:
                                         alert_data={
                                             'days_remaining': days_remaining,
                                             'days_needed': days_needed,
-                                            'daily_progress': daily_progress
-                                        }
+                                            'daily_progress': daily_progress,
+                                        },
                                     )
                                     if alert:
                                         alerts_created.append(alert)
@@ -216,20 +197,14 @@ class AlertService:
                         severity='CRITICAL',
                         title=f'项目即将到期，仅剩 {days_remaining} 天',
                         description=f'项目 {proj.name} 将在 {days_remaining} 天后到期，当前进度仅 {actual_progress}%',
-                        alert_data={
-                            'days_remaining': days_remaining,
-                            'progress': actual_progress
-                        }
+                        alert_data={'days_remaining': days_remaining, 'progress': actual_progress},
                     )
                     if alert:
                         alerts_created.append(alert)
 
             # 3. 任务预警：逾期任务
             overdue_tasks = ProjectTask.objects.filter(
-                project=proj,
-                status__in=['PENDING', 'IN_PROGRESS'],
-                end_date__lt=date.today(),
-                is_deleted=False
+                project=proj, status__in=['PENDING', 'IN_PROGRESS'], end_date__lt=date.today(), is_deleted=False
             ).count()
 
             if overdue_tasks > 0:
@@ -239,7 +214,7 @@ class AlertService:
                     severity='WARNING' if overdue_tasks < 5 else 'CRITICAL',
                     title=f'{overdue_tasks} 个任务已逾期',
                     description=f'项目 {proj.name} 有 {overdue_tasks} 个任务已超过截止日期',
-                    alert_data={'overdue_count': overdue_tasks}
+                    alert_data={'overdue_count': overdue_tasks},
                 )
                 if alert:
                     alerts_created.append(alert)
@@ -252,11 +227,10 @@ class AlertService:
                 # 从财务模块获取成本（如果存在）
                 try:
                     from apps.finance.models import Expense
-                    actual_cost = Expense.objects.filter(
-                        project=proj,
-                        status='APPROVED',
-                        is_deleted=False
-                    ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+
+                    actual_cost = Expense.objects.filter(project=proj, status='APPROVED', is_deleted=False).aggregate(
+                        total=Sum('amount')
+                    )['total'] or Decimal('0')
                 except:
                     pass
 
@@ -273,8 +247,8 @@ class AlertService:
                             alert_data={
                                 'budget': float(proj.budget),
                                 'actual': float(actual_cost),
-                                'usage_rate': budget_usage
-                            }
+                                'usage_rate': budget_usage,
+                            },
                         )
                         if alert:
                             alerts_created.append(alert)
@@ -301,10 +275,7 @@ class AlertService:
         """创建预警记录（避免重复）"""
         # 检查是否已存在相同的活跃预警
         existing = ProjectAlert.objects.filter(
-            project=project,
-            alert_type=alert_type,
-            status='ACTIVE',
-            title=title
+            project=project, alert_type=alert_type, status='ACTIVE', title=title
         ).exists()
 
         if existing:
@@ -316,13 +287,14 @@ class AlertService:
             severity=severity,
             title=title,
             description=description,
-            alert_data=alert_data
+            alert_data=alert_data,
         )
 
 
 # =====================
 # Serializers
 # =====================
+
 
 class ProjectAlertRuleSerializer(serializers.ModelSerializer):
     alert_type_display = serializers.CharField(source='get_alert_type_display', read_only=True)
@@ -355,9 +327,16 @@ class ProjectAlertListSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProjectAlert
         fields = [
-            'id', 'project', 'project_name', 'project_code',
-            'alert_type', 'severity', 'title', 'status', 'status_display',
-            'created_at'
+            'id',
+            'project',
+            'project_name',
+            'project_code',
+            'alert_type',
+            'severity',
+            'title',
+            'status',
+            'status_display',
+            'created_at',
         ]
 
 
@@ -365,8 +344,10 @@ class ProjectAlertListSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class ProjectAlertRuleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """预警规则管理"""
+
     queryset = ProjectAlertRule.objects.filter(is_deleted=False)
     serializer_class = ProjectAlertRuleSerializer
     permission_classes = [IsAuthenticated]
@@ -391,8 +372,8 @@ class ProjectAlertRuleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
                     'alert_type': alert_type,
                     'severity': severity,
                     'condition': condition,
-                    'created_by': request.user
-                }
+                    'created_by': request.user,
+                },
             )
             if c:
                 created += 1
@@ -402,6 +383,7 @@ class ProjectAlertRuleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
 
 class ProjectAlertViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目预警管理"""
+
     queryset = ProjectAlert.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['project', 'alert_type', 'severity', 'status']
@@ -417,11 +399,13 @@ class ProjectAlertViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
     def check_all(self, request):
         """检查所有项目预警"""
         alerts = AlertService.check_project_alerts()
-        return Response({
-            'success': True,
-            'alerts_created': len(alerts),
-            'alerts': ProjectAlertListSerializer(alerts, many=True).data
-        })
+        return Response(
+            {
+                'success': True,
+                'alerts_created': len(alerts),
+                'alerts': ProjectAlertListSerializer(alerts, many=True).data,
+            }
+        )
 
     @action(detail=True, methods=['post'])
     def acknowledge(self, request, pk=None):
@@ -473,9 +457,11 @@ class ProjectAlertViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
         by_severity = qs.values('severity').annotate(count=Count('id'))
         by_project = qs.values('project__id', 'project__name').annotate(count=Count('id')).order_by('-count')[:10]
 
-        return Response({
-            'total_active': qs.count(),
-            'by_type': list(by_type),
-            'by_severity': list(by_severity),
-            'top_projects': list(by_project)
-        })
+        return Response(
+            {
+                'total_active': qs.count(),
+                'by_type': list(by_type),
+                'by_severity': list(by_severity),
+                'top_projects': list(by_project),
+            }
+        )

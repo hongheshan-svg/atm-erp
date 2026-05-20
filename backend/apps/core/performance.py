@@ -1,6 +1,7 @@
 """
 Performance monitoring and optimization utilities.
 """
+
 import functools
 import logging
 import time
@@ -17,6 +18,7 @@ def query_debugger(func):
     Decorator to log database queries for a function.
     Only active when DEBUG=True.
     """
+
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         if not settings.DEBUG:
@@ -33,8 +35,7 @@ def query_debugger(func):
         total_time = sum(float(q['time']) for q in queries)
 
         logger.debug(
-            f'{func.__name__}: {len(queries)} queries in {total_time:.3f}s '
-            f'(total: {end_time - start_time:.3f}s)'
+            f'{func.__name__}: {len(queries)} queries in {total_time:.3f}s ' f'(total: {end_time - start_time:.3f}s)'
         )
 
         # Log slow queries
@@ -43,22 +44,24 @@ def query_debugger(func):
                 logger.warning(f"Slow query ({query['time']}s): {query['sql'][:200]}")
 
         return result
+
     return wrapper
 
 
 def cache_result(timeout=300, key_prefix=''):
     """
     Decorator to cache function results.
-    
+
     Args:
         timeout: Cache timeout in seconds
         key_prefix: Prefix for cache key
     """
+
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             # Build cache key
-            cache_key = f"{key_prefix}:{func.__name__}:{hash(str(args) + str(kwargs))}"
+            cache_key = f'{key_prefix}:{func.__name__}:{hash(str(args) + str(kwargs))}'
 
             # Try to get from cache
             result = cache.get(cache_key)
@@ -70,7 +73,9 @@ def cache_result(timeout=300, key_prefix=''):
             cache.set(cache_key, result, timeout)
 
             return result
+
         return wrapper
+
     return decorator
 
 
@@ -99,7 +104,8 @@ class PerformanceMonitor:
         try:
             # Try to get Redis info
             from django_redis import get_redis_connection
-            redis_conn = get_redis_connection("default")
+
+            redis_conn = get_redis_connection('default')
             info = redis_conn.info()
 
             return {
@@ -108,10 +114,7 @@ class PerformanceMonitor:
                 'total_commands': info.get('total_commands_processed', 0),
                 'keyspace_hits': info.get('keyspace_hits', 0),
                 'keyspace_misses': info.get('keyspace_misses', 0),
-                'hit_rate': cls._calculate_hit_rate(
-                    info.get('keyspace_hits', 0),
-                    info.get('keyspace_misses', 0)
-                ),
+                'hit_rate': cls._calculate_hit_rate(info.get('keyspace_hits', 0), info.get('keyspace_misses', 0)),
             }
         except Exception as e:
             return {'error': str(e)}
@@ -121,7 +124,7 @@ class PerformanceMonitor:
         total = hits + misses
         if total == 0:
             return 'N/A'
-        return f"{(hits / total) * 100:.2f}%"
+        return f'{(hits / total) * 100:.2f}%'
 
     @classmethod
     def get_celery_stats(cls):
@@ -169,45 +172,41 @@ class QueryOptimizer:
     def analyze_queryset(queryset):
         """
         Analyze a queryset for potential optimizations.
-        
+
         Returns suggestions for improving query performance.
         """
         suggestions = []
 
         # Check for select_related opportunities
         model = queryset.model
-        fk_fields = [
-            f.name for f in model._meta.get_fields()
-            if f.is_relation and f.many_to_one
-        ]
+        fk_fields = [f.name for f in model._meta.get_fields() if f.is_relation and f.many_to_one]
 
         if fk_fields and not queryset.query.select_related:
-            suggestions.append({
-                'type': 'select_related',
-                'message': f'Consider using select_related for: {", ".join(fk_fields)}',
-                'severity': 'warning'
-            })
+            suggestions.append(
+                {
+                    'type': 'select_related',
+                    'message': f'Consider using select_related for: {", ".join(fk_fields)}',
+                    'severity': 'warning',
+                }
+            )
 
         # Check for prefetch_related opportunities
-        m2m_fields = [
-            f.name for f in model._meta.get_fields()
-            if f.is_relation and f.many_to_many
-        ]
+        m2m_fields = [f.name for f in model._meta.get_fields() if f.is_relation and f.many_to_many]
 
         if m2m_fields and not queryset._prefetch_related_lookups:
-            suggestions.append({
-                'type': 'prefetch_related',
-                'message': f'Consider using prefetch_related for: {", ".join(m2m_fields)}',
-                'severity': 'info'
-            })
+            suggestions.append(
+                {
+                    'type': 'prefetch_related',
+                    'message': f'Consider using prefetch_related for: {", ".join(m2m_fields)}',
+                    'severity': 'info',
+                }
+            )
 
         # Check for missing indexes (basic check)
         if queryset.query.where:
-            suggestions.append({
-                'type': 'index',
-                'message': 'Ensure filtered fields have database indexes',
-                'severity': 'info'
-            })
+            suggestions.append(
+                {'type': 'index', 'message': 'Ensure filtered fields have database indexes', 'severity': 'info'}
+            )
 
         return suggestions
 

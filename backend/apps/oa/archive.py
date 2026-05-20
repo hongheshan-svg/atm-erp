@@ -9,6 +9,7 @@ Electronic Archive Management
 - 建议与项目文档管理(projects.documents)配合使用
 - 长期归档的技术资料（如设备手册、认证文件）适合放在此模块
 """
+
 from datetime import date, timedelta
 
 from django.conf import settings
@@ -26,15 +27,11 @@ from apps.core.models import BaseModel
 
 class ArchiveCategory(BaseModel):
     """档案分类"""
+
     name = models.CharField(max_length=100, verbose_name='分类名称')
     code = models.CharField(max_length=50, unique=True, verbose_name='分类编码')
     parent = models.ForeignKey(
-        'self',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='children',
-        verbose_name='上级分类'
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='children', verbose_name='上级分类'
     )
     retention_years = models.IntegerField(default=10, verbose_name='保存年限')
     description = models.TextField(blank=True, verbose_name='描述')
@@ -48,11 +45,12 @@ class ArchiveCategory(BaseModel):
         ordering = ['sort_order', 'code']
 
     def __str__(self):
-        return f"{self.code} - {self.name}"
+        return f'{self.code} - {self.name}'
 
 
 class Archive(BaseModel):
     """电子档案"""
+
     STATUS_CHOICES = [
         ('PENDING', '待归档'),
         ('ARCHIVED', '已归档'),
@@ -77,7 +75,7 @@ class Archive(BaseModel):
         null=True,
         blank=True,
         related_name='archives',
-        verbose_name='档案分类'
+        verbose_name='档案分类',
     )
 
     # 档案信息
@@ -92,17 +90,9 @@ class Archive(BaseModel):
     source_ref = models.CharField(max_length=100, blank=True, verbose_name='来源引用')
 
     # 档案属性
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
     security_level = models.CharField(
-        max_length=20,
-        choices=SECURITY_LEVEL_CHOICES,
-        default='INTERNAL',
-        verbose_name='密级'
+        max_length=20, choices=SECURITY_LEVEL_CHOICES, default='INTERNAL', verbose_name='密级'
     )
 
     # 日期
@@ -122,7 +112,7 @@ class Archive(BaseModel):
         null=True,
         blank=True,
         related_name='custodian_archives',
-        verbose_name='保管人'
+        verbose_name='保管人',
     )
 
     keywords = models.JSONField(default=list, blank=True, verbose_name='关键词')
@@ -140,24 +130,24 @@ class Archive(BaseModel):
         ordering = ['-archive_date', '-created_at']
 
     def __str__(self):
-        return f"{self.archive_no} - {self.title}"
+        return f'{self.archive_no} - {self.title}'
 
     def save(self, *args, **kwargs):
         if not self.archive_no:
             from apps.core.utils import generate_code
+
             self.archive_no = generate_code('ARC')
 
         # 计算到期日期
         if self.archive_date and self.category and not self.expiry_date:
-            self.expiry_date = self.archive_date.replace(
-                year=self.archive_date.year + self.category.retention_years
-            )
+            self.expiry_date = self.archive_date.replace(year=self.archive_date.year + self.category.retention_years)
 
         super().save(*args, **kwargs)
 
 
 class ArchiveBorrow(BaseModel):
     """档案借阅记录"""
+
     STATUS_CHOICES = [
         ('PENDING', '待审批'),
         ('APPROVED', '已批准'),
@@ -167,25 +157,12 @@ class ArchiveBorrow(BaseModel):
         ('OVERDUE', '逾期'),
     ]
 
-    archive = models.ForeignKey(
-        Archive,
-        on_delete=models.CASCADE,
-        related_name='borrows',
-        verbose_name='档案'
-    )
+    archive = models.ForeignKey(Archive, on_delete=models.CASCADE, related_name='borrows', verbose_name='档案')
     borrower = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='archive_borrows',
-        verbose_name='借阅人'
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='archive_borrows', verbose_name='借阅人'
     )
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
 
     # 借阅信息
     purpose = models.TextField(verbose_name='借阅目的')
@@ -200,7 +177,7 @@ class ArchiveBorrow(BaseModel):
         null=True,
         blank=True,
         related_name='approved_archive_borrows',
-        verbose_name='审批人'
+        verbose_name='审批人',
     )
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name='审批时间')
     reject_reason = models.TextField(blank=True, verbose_name='拒绝原因')
@@ -214,42 +191,27 @@ class ArchiveBorrow(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.archive.archive_no} - {self.borrower.username}"
+        return f'{self.archive.archive_no} - {self.borrower.username}'
 
 
 class ArchiveTransfer(BaseModel):
     """档案移交记录"""
+
     STATUS_CHOICES = [
         ('PENDING', '待确认'),
         ('CONFIRMED', '已确认'),
         ('REJECTED', '已拒绝'),
     ]
 
-    archive = models.ForeignKey(
-        Archive,
-        on_delete=models.CASCADE,
-        related_name='transfers',
-        verbose_name='档案'
-    )
+    archive = models.ForeignKey(Archive, on_delete=models.CASCADE, related_name='transfers', verbose_name='档案')
     from_user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='archive_transfers_out',
-        verbose_name='移交人'
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='archive_transfers_out', verbose_name='移交人'
     )
     to_user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='archive_transfers_in',
-        verbose_name='接收人'
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='archive_transfers_in', verbose_name='接收人'
     )
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
 
     transfer_date = models.DateField(default=date.today, verbose_name='移交日期')
     confirm_date = models.DateField(null=True, blank=True, verbose_name='确认日期')
@@ -264,6 +226,7 @@ class ArchiveTransfer(BaseModel):
 
 class ArchiveDestruction(BaseModel):
     """档案销毁记录"""
+
     STATUS_CHOICES = [
         ('PENDING', '待审批'),
         ('APPROVED', '已批准'),
@@ -271,18 +234,9 @@ class ArchiveDestruction(BaseModel):
         ('DESTROYED', '已销毁'),
     ]
 
-    archives = models.ManyToManyField(
-        Archive,
-        related_name='destructions',
-        verbose_name='档案'
-    )
+    archives = models.ManyToManyField(Archive, related_name='destructions', verbose_name='档案')
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
 
     reason = models.TextField(verbose_name='销毁原因')
     destruction_date = models.DateField(null=True, blank=True, verbose_name='销毁日期')
@@ -295,7 +249,7 @@ class ArchiveDestruction(BaseModel):
         null=True,
         blank=True,
         related_name='approved_archive_destructions',
-        verbose_name='审批人'
+        verbose_name='审批人',
     )
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name='审批时间')
 
@@ -306,7 +260,7 @@ class ArchiveDestruction(BaseModel):
         null=True,
         blank=True,
         related_name='witnessed_archive_destructions',
-        verbose_name='见证人'
+        verbose_name='见证人',
     )
 
     notes = models.TextField(blank=True, verbose_name='备注')
@@ -321,6 +275,7 @@ class ArchiveDestruction(BaseModel):
 # =====================
 # Serializers
 # =====================
+
 
 class ArchiveCategorySerializer(serializers.ModelSerializer):
     children_count = serializers.SerializerMethodField()
@@ -358,9 +313,20 @@ class ArchiveListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Archive
         fields = [
-            'id', 'archive_no', 'title', 'category', 'category_name',
-            'status', 'status_display', 'security_level', 'security_display',
-            'archive_date', 'expiry_date', 'borrow_count', 'view_count', 'created_at'
+            'id',
+            'archive_no',
+            'title',
+            'category',
+            'category_name',
+            'status',
+            'status_display',
+            'security_level',
+            'security_display',
+            'archive_date',
+            'expiry_date',
+            'borrow_count',
+            'view_count',
+            'created_at',
         ]
 
 
@@ -408,8 +374,10 @@ class ArchiveDestructionSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class ArchiveCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """档案分类管理"""
+
     queryset = ArchiveCategory.objects.filter(is_deleted=False)
     serializer_class = ArchiveCategorySerializer
     permission_classes = [IsAuthenticated]
@@ -426,7 +394,7 @@ class ArchiveCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
                 'name': cat.name,
                 'code': cat.code,
                 'retention_years': cat.retention_years,
-                'children': [build_tree(c) for c in cat.children.filter(is_deleted=False)]
+                'children': [build_tree(c) for c in cat.children.filter(is_deleted=False)],
             }
 
         return Response([build_tree(c) for c in categories])
@@ -434,6 +402,7 @@ class ArchiveCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
 
 class ArchiveViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """电子档案管理"""
+
     queryset = Archive.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['category', 'status', 'security_level', 'custodian']
@@ -471,10 +440,7 @@ class ArchiveViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         days = int(request.query_params.get('days', 90))
         threshold = date.today() + timedelta(days=days)
 
-        archives = self.get_queryset().filter(
-            status='ARCHIVED',
-            expiry_date__lte=threshold
-        ).order_by('expiry_date')
+        archives = self.get_queryset().filter(status='ARCHIVED', expiry_date__lte=threshold).order_by('expiry_date')
 
         return Response(ArchiveListSerializer(archives, many=True).data)
 
@@ -486,34 +452,35 @@ class ArchiveViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         total = qs.count()
         by_status = qs.values('status').annotate(count=Count('id'))
         by_security = qs.values('security_level').annotate(count=Count('id'))
-        by_category = qs.filter(
-            category__isnull=False
-        ).values(
-            'category__id', 'category__name'
-        ).annotate(count=Count('id')).order_by('-count')[:10]
+        by_category = (
+            qs.filter(category__isnull=False)
+            .values('category__id', 'category__name')
+            .annotate(count=Count('id'))
+            .order_by('-count')[:10]
+        )
 
         # 即将到期
-        expiring = qs.filter(
-            status='ARCHIVED',
-            expiry_date__lte=date.today() + timedelta(days=90)
-        ).count()
+        expiring = qs.filter(status='ARCHIVED', expiry_date__lte=date.today() + timedelta(days=90)).count()
 
         # 本月归档
         month_start = date.today().replace(day=1)
         this_month = qs.filter(archive_date__gte=month_start).count()
 
-        return Response({
-            'total': total,
-            'this_month': this_month,
-            'expiring_soon': expiring,
-            'by_status': list(by_status),
-            'by_security': list(by_security),
-            'by_category': list(by_category)
-        })
+        return Response(
+            {
+                'total': total,
+                'this_month': this_month,
+                'expiring_soon': expiring,
+                'by_status': list(by_status),
+                'by_security': list(by_security),
+                'by_category': list(by_category),
+            }
+        )
 
 
 class ArchiveBorrowViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """档案借阅管理"""
+
     queryset = ArchiveBorrow.objects.filter(is_deleted=False)
     serializer_class = ArchiveBorrowSerializer
     permission_classes = [IsAuthenticated]
@@ -590,6 +557,7 @@ class ArchiveBorrowViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
 
 class ArchiveTransferViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """档案移交管理"""
+
     queryset = ArchiveTransfer.objects.filter(is_deleted=False)
     serializer_class = ArchiveTransferSerializer
     permission_classes = [IsAuthenticated]
@@ -618,6 +586,7 @@ class ArchiveTransferViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
 
 class ArchiveDestructionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """档案销毁管理"""
+
     queryset = ArchiveDestruction.objects.filter(is_deleted=False)
     serializer_class = ArchiveDestructionSerializer
     permission_classes = [IsAuthenticated]

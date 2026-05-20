@@ -2,6 +2,7 @@
 售后服务增强模块
 After Sales Service - 服务合同、预防维护、客户门户
 """
+
 import secrets
 from datetime import timedelta
 
@@ -22,6 +23,7 @@ User = settings.AUTH_USER_MODEL
 
 class ServiceContract(BaseModel):
     """服务合同"""
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('ACTIVE', '生效中'),
@@ -38,10 +40,17 @@ class ServiceContract(BaseModel):
     ]
 
     contract_no = models.CharField('合同编号', max_length=50, unique=True)
-    customer = models.ForeignKey('masterdata.Customer', on_delete=models.CASCADE,
-                                related_name='service_contracts', verbose_name='客户')
-    project = models.ForeignKey('projects.Project', on_delete=models.SET_NULL,
-                               null=True, blank=True, related_name='service_contracts', verbose_name='项目')
+    customer = models.ForeignKey(
+        'masterdata.Customer', on_delete=models.CASCADE, related_name='service_contracts', verbose_name='客户'
+    )
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='service_contracts',
+        verbose_name='项目',
+    )
 
     contract_type = models.CharField('合同类型', max_length=20, choices=CONTRACT_TYPE_CHOICES)
     title = models.CharField('合同标题', max_length=200)
@@ -96,6 +105,7 @@ class ServiceContract(BaseModel):
 
 class PreventiveMaintenance(BaseModel):
     """预防性维护计划"""
+
     STATUS_CHOICES = [
         ('SCHEDULED', '已计划'),
         ('IN_PROGRESS', '进行中'),
@@ -113,8 +123,9 @@ class PreventiveMaintenance(BaseModel):
         ('ANNUAL', '每年'),
     ]
 
-    service_contract = models.ForeignKey(ServiceContract, on_delete=models.CASCADE,
-                                        related_name='pm_schedules', verbose_name='服务合同')
+    service_contract = models.ForeignKey(
+        ServiceContract, on_delete=models.CASCADE, related_name='pm_schedules', verbose_name='服务合同'
+    )
 
     name = models.CharField('维护名称', max_length=200)
     description = models.TextField('维护描述', blank=True)
@@ -131,8 +142,9 @@ class PreventiveMaintenance(BaseModel):
     parts_required = models.JSONField('所需备件', default=list)
 
     # 执行
-    technician = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
-                                  related_name='pm_assignments', verbose_name='技术人员')
+    technician = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='pm_assignments', verbose_name='技术人员'
+    )
 
     # 结果
     findings = models.TextField('检查发现', blank=True)
@@ -147,6 +159,7 @@ class PreventiveMaintenance(BaseModel):
 
 class ServiceRequest(BaseModel):
     """服务请求"""
+
     STATUS_CHOICES = [
         ('NEW', '新建'),
         ('ACKNOWLEDGED', '已确认'),
@@ -174,11 +187,17 @@ class ServiceRequest(BaseModel):
     ]
 
     request_no = models.CharField('请求编号', max_length=50, unique=True)
-    service_contract = models.ForeignKey(ServiceContract, on_delete=models.SET_NULL,
-                                        null=True, blank=True, related_name='service_requests',
-                                        verbose_name='服务合同')
-    customer = models.ForeignKey('masterdata.Customer', on_delete=models.CASCADE,
-                                related_name='service_requests', verbose_name='客户')
+    service_contract = models.ForeignKey(
+        ServiceContract,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='service_requests',
+        verbose_name='服务合同',
+    )
+    customer = models.ForeignKey(
+        'masterdata.Customer', on_delete=models.CASCADE, related_name='service_requests', verbose_name='客户'
+    )
 
     request_type = models.CharField('请求类型', max_length=20, choices=REQUEST_TYPE_CHOICES)
     priority = models.CharField('优先级', max_length=20, choices=PRIORITY_CHOICES, default='MEDIUM')
@@ -206,8 +225,14 @@ class ServiceRequest(BaseModel):
     sla_breached = models.BooleanField('SLA违规', default=False)
 
     # 分配
-    assigned_to = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
-                                   related_name='assigned_service_requests', verbose_name='处理人')
+    assigned_to = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_service_requests',
+        verbose_name='处理人',
+    )
 
     # 解决方案
     resolution = models.TextField('解决方案', blank=True)
@@ -225,6 +250,7 @@ class ServiceRequest(BaseModel):
 
 class ServiceActivity(BaseModel):
     """服务活动记录"""
+
     ACTIVITY_TYPE_CHOICES = [
         ('PHONE_CALL', '电话沟通'),
         ('REMOTE_SESSION', '远程支持'),
@@ -234,8 +260,9 @@ class ServiceActivity(BaseModel):
         ('OTHER', '其他'),
     ]
 
-    service_request = models.ForeignKey(ServiceRequest, on_delete=models.CASCADE,
-                                       related_name='activities', verbose_name='服务请求')
+    service_request = models.ForeignKey(
+        ServiceRequest, on_delete=models.CASCADE, related_name='activities', verbose_name='服务请求'
+    )
 
     activity_type = models.CharField('活动类型', max_length=20, choices=ACTIVITY_TYPE_CHOICES)
     description = models.TextField('活动描述')
@@ -246,8 +273,9 @@ class ServiceActivity(BaseModel):
     duration_minutes = models.IntegerField('时长(分钟)', default=0)
 
     # 执行人
-    performed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
-                                    related_name='service_activities', verbose_name='执行人')
+    performed_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='service_activities', verbose_name='执行人'
+    )
 
     # 费用
     is_billable = models.BooleanField('可计费', default=False)
@@ -264,8 +292,10 @@ class ServiceActivity(BaseModel):
 
 class CustomerPortalAccount(BaseModel):
     """客户门户账户"""
-    customer = models.ForeignKey('masterdata.Customer', on_delete=models.CASCADE,
-                                related_name='portal_accounts', verbose_name='客户')
+
+    customer = models.ForeignKey(
+        'masterdata.Customer', on_delete=models.CASCADE, related_name='portal_accounts', verbose_name='客户'
+    )
 
     username = models.CharField('用户名', max_length=100, unique=True)
     password_hash = models.CharField('密码', max_length=255)
@@ -289,15 +319,18 @@ class CustomerPortalAccount(BaseModel):
 
     def set_password(self, raw_password):
         from django.contrib.auth.hashers import make_password
+
         self.password_hash = make_password(raw_password)
 
     def check_password(self, raw_password):
         from django.contrib.auth.hashers import check_password
+
         return check_password(raw_password, self.password_hash)
 
 
 class KnowledgeBaseArticle(BaseModel):
     """知识库文章"""
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('PUBLISHED', '已发布'),
@@ -325,8 +358,9 @@ class KnowledgeBaseArticle(BaseModel):
     helpful_count = models.IntegerField('有帮助次数', default=0)
 
     # 作者
-    author = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
-                              related_name='kb_articles', verbose_name='作者')
+    author = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='kb_articles', verbose_name='作者'
+    )
 
     class Meta:
         db_table = 'knowledge_base_article'
@@ -335,6 +369,7 @@ class KnowledgeBaseArticle(BaseModel):
 
 
 # ==================== Serializers ====================
+
 
 class ServiceContractSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source='customer.name', read_only=True)
@@ -402,8 +437,10 @@ class KnowledgeBaseArticleSerializer(serializers.ModelSerializer):
 
 # ==================== ViewSets ====================
 
+
 class ServiceContractViewSet(viewsets.ModelViewSet):
     """服务合同管理"""
+
     queryset = ServiceContract.objects.filter(is_deleted=False)
     serializer_class = ServiceContractSerializer
     permission_classes = [IsAuthenticated]
@@ -445,10 +482,7 @@ class ServiceContractViewSet(viewsets.ModelViewSet):
         days = int(request.query_params.get('days', 30))
         threshold = timezone.now().date() + timedelta(days=days)
 
-        contracts = self.get_queryset().filter(
-            status='ACTIVE',
-            end_date__lte=threshold
-        )
+        contracts = self.get_queryset().filter(status='ACTIVE', end_date__lte=threshold)
 
         return Response(ServiceContractSerializer(contracts, many=True).data)
 
@@ -459,14 +493,17 @@ class ServiceContractViewSet(viewsets.ModelViewSet):
         requests = contract.service_requests.all().order_by('-reported_at')
         pm_records = contract.pm_schedules.filter(status='COMPLETED').order_by('-actual_date')
 
-        return Response({
-            'service_requests': ServiceRequestSerializer(requests, many=True).data,
-            'pm_records': PreventiveMaintenanceSerializer(pm_records, many=True).data,
-        })
+        return Response(
+            {
+                'service_requests': ServiceRequestSerializer(requests, many=True).data,
+                'pm_records': PreventiveMaintenanceSerializer(pm_records, many=True).data,
+            }
+        )
 
 
 class PreventiveMaintenanceViewSet(viewsets.ModelViewSet):
     """预防性维护管理"""
+
     queryset = PreventiveMaintenance.objects.filter(is_deleted=False)
     serializer_class = PreventiveMaintenanceSerializer
     permission_classes = [IsAuthenticated]
@@ -515,7 +552,7 @@ class PreventiveMaintenanceViewSet(viewsets.ModelViewSet):
                 checklist=pm.checklist,
                 parts_required=pm.parts_required,
                 created_by=request.user,
-                updated_by=request.user
+                updated_by=request.user,
             )
 
         return Response({'message': '维护已完成'})
@@ -541,16 +578,14 @@ class PreventiveMaintenanceViewSet(viewsets.ModelViewSet):
         days = int(request.query_params.get('days', 7))
         threshold = timezone.now().date() + timedelta(days=days)
 
-        pms = self.get_queryset().filter(
-            status='SCHEDULED',
-            scheduled_date__lte=threshold
-        )
+        pms = self.get_queryset().filter(status='SCHEDULED', scheduled_date__lte=threshold)
 
         return Response(PreventiveMaintenanceSerializer(pms, many=True).data)
 
 
 class ServiceRequestViewSet(viewsets.ModelViewSet):
     """服务请求管理"""
+
     queryset = ServiceRequest.objects.filter(is_deleted=False)
     serializer_class = ServiceRequestSerializer
     permission_classes = [IsAuthenticated]
@@ -648,7 +683,7 @@ class ServiceRequestViewSet(viewsets.ModelViewSet):
             is_billable=request.data.get('is_billable', False),
             cost=request.data.get('cost', 0),
             created_by=request.user,
-            updated_by=request.user
+            updated_by=request.user,
         )
 
         return Response(ServiceActivitySerializer(activity).data)
@@ -656,6 +691,7 @@ class ServiceRequestViewSet(viewsets.ModelViewSet):
 
 class KnowledgeBaseArticleViewSet(viewsets.ModelViewSet):
     """知识库文章管理"""
+
     queryset = KnowledgeBaseArticle.objects.filter(is_deleted=False)
     serializer_class = KnowledgeBaseArticleSerializer
     permission_classes = [IsAuthenticated]
@@ -671,10 +707,7 @@ class KnowledgeBaseArticleViewSet(viewsets.ModelViewSet):
         if tag:
             qs = qs.filter(tags__contains=[tag])
         if keyword:
-            qs = qs.filter(
-                Q(title__icontains=keyword) |
-                Q(content__icontains=keyword)
-            )
+            qs = qs.filter(Q(title__icontains=keyword) | Q(content__icontains=keyword))
 
         return qs
 
@@ -708,8 +741,10 @@ class KnowledgeBaseArticleViewSet(viewsets.ModelViewSet):
 
 # ==================== 客户门户API ====================
 
+
 class CustomerPortalLoginView(APIView):
     """客户门户登录"""
+
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -727,31 +762,32 @@ class CustomerPortalLoginView(APIView):
         account.last_login = timezone.now()
         account.save()
 
-        return Response({
-            'token': secrets.token_urlsafe(32),
-            'customer_id': account.customer_id,
-            'customer_name': account.customer.name,
-            'name': account.name,
-        })
+        return Response(
+            {
+                'token': secrets.token_urlsafe(32),
+                'customer_id': account.customer_id,
+                'customer_name': account.customer.name,
+                'name': account.name,
+            }
+        )
 
 
 class CustomerPortalDashboardView(APIView):
     """客户门户首页"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request, customer_id):
         # 活跃合同
         active_contracts = ServiceContract.objects.filter(
-            customer_id=customer_id,
-            status='ACTIVE',
-            is_deleted=False
+            customer_id=customer_id, status='ACTIVE', is_deleted=False
         ).count()
 
         # 未解决请求
         open_requests = ServiceRequest.objects.filter(
             customer_id=customer_id,
             status__in=['NEW', 'ACKNOWLEDGED', 'ASSIGNED', 'IN_PROGRESS', 'PENDING_PARTS'],
-            is_deleted=False
+            is_deleted=False,
         ).count()
 
         # 即将到期维护
@@ -759,25 +795,27 @@ class CustomerPortalDashboardView(APIView):
             service_contract__customer_id=customer_id,
             status='SCHEDULED',
             scheduled_date__lte=timezone.now().date() + timedelta(days=30),
-            is_deleted=False
+            is_deleted=False,
         ).count()
 
         # 最近请求
-        recent_requests = ServiceRequest.objects.filter(
-            customer_id=customer_id,
-            is_deleted=False
-        ).order_by('-reported_at')[:5]
+        recent_requests = ServiceRequest.objects.filter(customer_id=customer_id, is_deleted=False).order_by(
+            '-reported_at'
+        )[:5]
 
-        return Response({
-            'active_contracts': active_contracts,
-            'open_requests': open_requests,
-            'upcoming_pm': upcoming_pm,
-            'recent_requests': ServiceRequestSerializer(recent_requests, many=True).data,
-        })
+        return Response(
+            {
+                'active_contracts': active_contracts,
+                'open_requests': open_requests,
+                'upcoming_pm': upcoming_pm,
+                'recent_requests': ServiceRequestSerializer(recent_requests, many=True).data,
+            }
+        )
 
 
 class CustomerPortalSubmitRequestView(APIView):
     """客户提交服务请求"""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request, customer_id):
@@ -800,10 +838,7 @@ class CustomerPortalSubmitRequestView(APIView):
             contact_phone=request.data.get('contact_phone'),
             contact_email=request.data.get('contact_email', ''),
             created_by=request.user,
-            updated_by=request.user
+            updated_by=request.user,
         )
 
-        return Response({
-            'request_no': sr.request_no,
-            'message': '服务请求已提交'
-        })
+        return Response({'request_no': sr.request_no, 'message': '服务请求已提交'})

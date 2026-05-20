@@ -5,6 +5,7 @@
     python manage.py init_roles
     python manage.py init_roles --force  # 强制重置所有角色
 """
+
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
@@ -111,7 +112,16 @@ class Command(BaseCommand):
                         role.permissions = {}
                         role.is_active = True
                         role.sort_order = DEFAULT_ROLES.index(role_config) * 10
-                        role.save(update_fields=['name', 'description', 'permissions', 'is_active', 'sort_order', 'updated_at'])
+                        role.save(
+                            update_fields=[
+                                'name',
+                                'description',
+                                'permissions',
+                                'is_active',
+                                'sort_order',
+                                'updated_at',
+                            ]
+                        )
                         self._sync_default_scope(role, role_config.get('data_scope', 'self'))
                         self._sync_permissions(role, role_config)
                         updated_count += 1
@@ -130,7 +140,16 @@ class Command(BaseCommand):
                         existing_by_name.permissions = {}
                         existing_by_name.is_active = True
                         existing_by_name.sort_order = DEFAULT_ROLES.index(role_config) * 10
-                        existing_by_name.save(update_fields=['code', 'description', 'permissions', 'is_active', 'sort_order', 'updated_at'])
+                        existing_by_name.save(
+                            update_fields=[
+                                'code',
+                                'description',
+                                'permissions',
+                                'is_active',
+                                'sort_order',
+                                'updated_at',
+                            ]
+                        )
                         self._sync_default_scope(existing_by_name, role_config.get('data_scope', 'self'))
                         self._sync_permissions(existing_by_name, role_config)
                         updated_count += 1
@@ -143,7 +162,7 @@ class Command(BaseCommand):
                             description=role_config.get('description', ''),
                             permissions={},
                             is_active=True,
-                            sort_order=DEFAULT_ROLES.index(role_config) * 10
+                            sort_order=DEFAULT_ROLES.index(role_config) * 10,
                         )
                         self._sync_default_scope(role, role_config.get('data_scope', 'self'))
                         self._sync_permissions(role, role_config)

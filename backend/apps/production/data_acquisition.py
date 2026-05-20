@@ -3,6 +3,7 @@ MES数据采集模块
 Data Acquisition with MQTT/OPC UA Support
 设备联网和实时数据采集
 """
+
 from datetime import timedelta
 
 from django.conf import settings
@@ -19,6 +20,7 @@ from apps.core.models import BaseModel
 
 class DataSource(BaseModel):
     """数据源配置"""
+
     TYPE_CHOICES = [
         ('MQTT', 'MQTT协议'),
         ('OPC_UA', 'OPC UA协议'),
@@ -80,6 +82,7 @@ class DataSource(BaseModel):
 
 class DataPoint(BaseModel):
     """数据点定义"""
+
     TYPE_CHOICES = [
         ('BOOL', '布尔值'),
         ('INT', '整数'),
@@ -97,10 +100,7 @@ class DataPoint(BaseModel):
     ]
 
     data_source = models.ForeignKey(
-        DataSource,
-        on_delete=models.CASCADE,
-        related_name='data_points',
-        verbose_name='数据源'
+        DataSource, on_delete=models.CASCADE, related_name='data_points', verbose_name='数据源'
     )
 
     name = models.CharField(max_length=100, verbose_name='数据点名称')
@@ -137,7 +137,7 @@ class DataPoint(BaseModel):
         null=True,
         blank=True,
         related_name='data_points',
-        verbose_name='关联设备'
+        verbose_name='关联设备',
     )
 
     # 最新值缓存
@@ -194,12 +194,8 @@ class DataPoint(BaseModel):
 
 class DataRecord(models.Model):
     """采集数据记录"""
-    data_point = models.ForeignKey(
-        DataPoint,
-        on_delete=models.CASCADE,
-        related_name='records',
-        verbose_name='数据点'
-    )
+
+    data_point = models.ForeignKey(DataPoint, on_delete=models.CASCADE, related_name='records', verbose_name='数据点')
 
     value = models.CharField(max_length=255, verbose_name='值')
     raw_value = models.CharField(max_length=255, blank=True, verbose_name='原始值')
@@ -226,6 +222,7 @@ class DataRecord(models.Model):
 
 class DataAlarm(BaseModel):
     """数据告警"""
+
     LEVEL_CHOICES = [
         ('INFO', '信息'),
         ('WARNING', '警告'),
@@ -239,12 +236,7 @@ class DataAlarm(BaseModel):
         ('RESOLVED', '已解决'),
     ]
 
-    data_point = models.ForeignKey(
-        DataPoint,
-        on_delete=models.CASCADE,
-        related_name='alarms',
-        verbose_name='数据点'
-    )
+    data_point = models.ForeignKey(DataPoint, on_delete=models.CASCADE, related_name='alarms', verbose_name='数据点')
 
     level = models.CharField(max_length=20, choices=LEVEL_CHOICES, default='WARNING', verbose_name='级别')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ACTIVE', verbose_name='状态')
@@ -261,7 +253,7 @@ class DataAlarm(BaseModel):
         null=True,
         blank=True,
         related_name='acknowledged_data_alarms',
-        verbose_name='确认人'
+        verbose_name='确认人',
     )
     resolved_at = models.DateTimeField(null=True, blank=True, verbose_name='解决时间')
     resolved_by = models.ForeignKey(
@@ -270,7 +262,7 @@ class DataAlarm(BaseModel):
         null=True,
         blank=True,
         related_name='resolved_data_alarms',
-        verbose_name='解决人'
+        verbose_name='解决人',
     )
     resolution = models.TextField(blank=True, verbose_name='解决措施')
 
@@ -283,6 +275,7 @@ class DataAlarm(BaseModel):
 
 
 # ============ Serializers ============
+
 
 class DataSourceSerializer(serializers.ModelSerializer):
     type_display = serializers.CharField(source='get_source_type_display', read_only=True)
@@ -315,8 +308,7 @@ class DataRecordSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DataRecord
-        fields = ['id', 'data_point', 'data_point_name', 'value', 'raw_value',
-                  'quality', 'timestamp', 'alarm_status']
+        fields = ['id', 'data_point', 'data_point_name', 'value', 'raw_value', 'quality', 'timestamp', 'alarm_status']
 
 
 class DataAlarmSerializer(serializers.ModelSerializer):
@@ -329,14 +321,22 @@ class DataAlarmSerializer(serializers.ModelSerializer):
     class Meta:
         model = DataAlarm
         fields = '__all__'
-        read_only_fields = ['created_by', 'updated_by', 'acknowledged_at',
-                           'acknowledged_by', 'resolved_at', 'resolved_by']
+        read_only_fields = [
+            'created_by',
+            'updated_by',
+            'acknowledged_at',
+            'acknowledged_by',
+            'resolved_at',
+            'resolved_by',
+        ]
 
 
 # ============ ViewSets ============
 
+
 class DataSourceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """数据源管理"""
+
     queryset = DataSource.objects.filter(is_deleted=False)
     serializer_class = DataSourceSerializer
     permission_classes = [IsAuthenticated]
@@ -370,6 +370,7 @@ class DataSourceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
 
 class DataPointViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """数据点管理"""
+
     queryset = DataPoint.objects.filter(is_deleted=False)
     serializer_class = DataPointSerializer
     permission_classes = [IsAuthenticated]
@@ -384,15 +385,17 @@ class DataPointViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
 
         data = []
         for point in points:
-            data.append({
-                'id': point.id,
-                'name': point.name,
-                'code': point.code,
-                'value': point.current_value,
-                'unit': point.unit,
-                'timestamp': point.current_value_at,
-                'alarm_status': point.check_alarms(point.current_value)
-            })
+            data.append(
+                {
+                    'id': point.id,
+                    'name': point.name,
+                    'code': point.code,
+                    'value': point.current_value,
+                    'unit': point.unit,
+                    'timestamp': point.current_value_at,
+                    'alarm_status': point.check_alarms(point.current_value),
+                }
+            )
 
         return Response(data)
 
@@ -416,10 +419,7 @@ class DataPointViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
 
         # 创建记录
         record = DataRecord.objects.create(
-            data_point=point,
-            value=str(transformed),
-            raw_value=str(value),
-            alarm_status=alarm_status or ''
+            data_point=point, value=str(transformed), raw_value=str(value), alarm_status=alarm_status or ''
         )
 
         # 创建告警
@@ -430,7 +430,7 @@ class DataPointViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
                 level=level,
                 message=f'{point.name} {alarm_status}: {transformed}',
                 value=str(transformed),
-                created_by=request.user
+                created_by=request.user,
             )
 
         return Response(DataRecordSerializer(record).data)
@@ -458,6 +458,7 @@ class DataPointViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
 
 class DataRecordViewSet(viewsets.ReadOnlyModelViewSet):
     """数据记录查询"""
+
     queryset = DataRecord.objects.all()
     serializer_class = DataRecordSerializer
     permission_classes = [IsAuthenticated]
@@ -480,6 +481,7 @@ class DataRecordViewSet(viewsets.ReadOnlyModelViewSet):
 
 class DataAlarmViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """数据告警管理"""
+
     queryset = DataAlarm.objects.filter(is_deleted=False)
     serializer_class = DataAlarmSerializer
     permission_classes = [IsAuthenticated]
@@ -525,9 +527,11 @@ class DataAlarmViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
         by_level = alarms.values('level').annotate(count=Count('id'))
         by_status = alarms.values('status').annotate(count=Count('id'))
 
-        return Response({
-            'total': alarms.count(),
-            'by_level': {item['level']: item['count'] for item in by_level},
-            'by_status': {item['status']: item['count'] for item in by_status},
-            'active_count': alarms.filter(status='ACTIVE').count()
-        })
+        return Response(
+            {
+                'total': alarms.count(),
+                'by_level': {item['level']: item['count'] for item in by_level},
+                'by_status': {item['status']: item['count'] for item in by_status},
+                'active_count': alarms.filter(status='ACTIVE').count(),
+            }
+        )

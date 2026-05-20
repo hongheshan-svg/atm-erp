@@ -19,6 +19,7 @@ Spare Parts Management Enhancement
 - 常用易损件（如轴承、密封件）：设置库存阈值
 - 定制备件：仅记录关联关系，不设自动预警
 """
+
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -38,17 +39,14 @@ from apps.core.models import BaseModel
 # 模型定义
 # =============================================================================
 
+
 class SparePartCategory(BaseModel):
     """备件类别"""
+
     code = models.CharField(max_length=50, unique=True, verbose_name='类别编码')
     name = models.CharField(max_length=100, verbose_name='类别名称')
     parent = models.ForeignKey(
-        'self',
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name='children',
-        verbose_name='上级类别'
+        'self', on_delete=models.CASCADE, null=True, blank=True, related_name='children', verbose_name='上级类别'
     )
     description = models.TextField(blank=True, verbose_name='描述')
     sort_order = models.IntegerField(default=0, verbose_name='排序')
@@ -65,6 +63,7 @@ class SparePartCategory(BaseModel):
 
 class SparePart(BaseModel):
     """备件定义"""
+
     PART_TYPE_CHOICES = [
         ('CONSUMABLE', '耗材'),
         ('WEAR', '易损件'),
@@ -96,7 +95,7 @@ class SparePart(BaseModel):
         null=True,
         blank=True,
         related_name='spare_parts',
-        verbose_name='关联物料'
+        verbose_name='关联物料',
     )
 
     # 分类
@@ -106,10 +105,12 @@ class SparePart(BaseModel):
         null=True,
         blank=True,
         related_name='parts',
-        verbose_name='备件类别'
+        verbose_name='备件类别',
     )
     part_type = models.CharField(max_length=20, choices=PART_TYPE_CHOICES, default='STANDARD', verbose_name='备件类型')
-    criticality = models.CharField(max_length=20, choices=CRITICALITY_CHOICES, default='MEDIUM', verbose_name='关键程度')
+    criticality = models.CharField(
+        max_length=20, choices=CRITICALITY_CHOICES, default='MEDIUM', verbose_name='关键程度'
+    )
 
     # 供应信息
     manufacturer = models.CharField(max_length=200, blank=True, verbose_name='制造商')
@@ -120,7 +121,7 @@ class SparePart(BaseModel):
         null=True,
         blank=True,
         related_name='spare_parts',
-        verbose_name='首选供应商'
+        verbose_name='首选供应商',
     )
 
     # 价格
@@ -164,26 +165,20 @@ class SparePart(BaseModel):
         """获取当前库存"""
         if self.item:
             from apps.inventory.models import Stock
-            stock = Stock.objects.filter(
-                item=self.item, is_deleted=False
-            ).aggregate(total=Sum('quantity'))
+
+            stock = Stock.objects.filter(item=self.item, is_deleted=False).aggregate(total=Sum('quantity'))
             return stock['total'] or 0
         return 0
 
 
 class SparePartEquipmentRelation(BaseModel):
     """设备-备件关联（库存模块）"""
+
     equipment = models.ForeignKey(
-        'projects.Equipment',
-        on_delete=models.CASCADE,
-        related_name='inventory_spare_parts',
-        verbose_name='设备'
+        'projects.Equipment', on_delete=models.CASCADE, related_name='inventory_spare_parts', verbose_name='设备'
     )
     spare_part = models.ForeignKey(
-        SparePart,
-        on_delete=models.CASCADE,
-        related_name='equipment_relations',
-        verbose_name='备件'
+        SparePart, on_delete=models.CASCADE, related_name='equipment_relations', verbose_name='备件'
     )
 
     # 用量
@@ -224,6 +219,7 @@ class SparePartEquipmentRelation(BaseModel):
 
 class SparePartConsumption(BaseModel):
     """备件消耗记录"""
+
     CONSUMPTION_TYPE_CHOICES = [
         ('REPLACEMENT', '更换'),
         ('REPAIR', '维修'),
@@ -233,10 +229,7 @@ class SparePartConsumption(BaseModel):
     ]
 
     spare_part = models.ForeignKey(
-        SparePart,
-        on_delete=models.PROTECT,
-        related_name='consumptions',
-        verbose_name='备件'
+        SparePart, on_delete=models.PROTECT, related_name='consumptions', verbose_name='备件'
     )
     equipment = models.ForeignKey(
         'projects.Equipment',
@@ -244,7 +237,7 @@ class SparePartConsumption(BaseModel):
         null=True,
         blank=True,
         related_name='spare_part_consumptions',
-        verbose_name='设备'
+        verbose_name='设备',
     )
     equipment_spare = models.ForeignKey(
         SparePartEquipmentRelation,
@@ -252,10 +245,12 @@ class SparePartConsumption(BaseModel):
         null=True,
         blank=True,
         related_name='consumptions',
-        verbose_name='设备备件关联'
+        verbose_name='设备备件关联',
     )
 
-    consumption_type = models.CharField(max_length=20, choices=CONSUMPTION_TYPE_CHOICES, default='REPLACEMENT', verbose_name='消耗类型')
+    consumption_type = models.CharField(
+        max_length=20, choices=CONSUMPTION_TYPE_CHOICES, default='REPLACEMENT', verbose_name='消耗类型'
+    )
     consumption_date = models.DateField(verbose_name='消耗日期')
     quantity = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='数量')
 
@@ -266,7 +261,7 @@ class SparePartConsumption(BaseModel):
         null=True,
         blank=True,
         related_name='spare_part_consumptions',
-        verbose_name='服务单'
+        verbose_name='服务单',
     )
     maintenance_record = models.ForeignKey(
         'projects.MaintenanceSchedule',
@@ -274,7 +269,7 @@ class SparePartConsumption(BaseModel):
         null=True,
         blank=True,
         related_name='spare_part_consumptions',
-        verbose_name='维护记录'
+        verbose_name='维护记录',
     )
 
     # 成本
@@ -287,11 +282,7 @@ class SparePartConsumption(BaseModel):
     run_hours_at_replacement = models.IntegerField(default=0, verbose_name='更换时运行小时')
 
     technician = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='操作人员'
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='操作人员'
     )
 
     notes = models.TextField(blank=True, verbose_name='备注')
@@ -322,12 +313,8 @@ class SparePartConsumption(BaseModel):
 
 class SparePartForecast(BaseModel):
     """备件需求预测"""
-    spare_part = models.ForeignKey(
-        SparePart,
-        on_delete=models.CASCADE,
-        related_name='forecasts',
-        verbose_name='备件'
-    )
+
+    spare_part = models.ForeignKey(SparePart, on_delete=models.CASCADE, related_name='forecasts', verbose_name='备件')
 
     forecast_date = models.DateField(verbose_name='预测日期')
     forecast_period = models.CharField(
@@ -338,7 +325,7 @@ class SparePartForecast(BaseModel):
             ('YEARLY', '年度'),
         ],
         default='MONTHLY',
-        verbose_name='预测周期'
+        verbose_name='预测周期',
     )
 
     # 预测数量
@@ -361,6 +348,7 @@ class SparePartForecast(BaseModel):
 
 class SparePartAlert(BaseModel):
     """备件预警"""
+
     ALERT_TYPE_CHOICES = [
         ('LOW_STOCK', '库存不足'),
         ('REPLACEMENT_DUE', '即将更换'),
@@ -368,19 +356,14 @@ class SparePartAlert(BaseModel):
         ('NO_STOCK', '缺货'),
     ]
 
-    spare_part = models.ForeignKey(
-        SparePart,
-        on_delete=models.CASCADE,
-        related_name='alerts',
-        verbose_name='备件'
-    )
+    spare_part = models.ForeignKey(SparePart, on_delete=models.CASCADE, related_name='alerts', verbose_name='备件')
     equipment = models.ForeignKey(
         'projects.Equipment',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='spare_part_alerts',
-        verbose_name='设备'
+        verbose_name='设备',
     )
 
     alert_type = models.CharField(max_length=20, choices=ALERT_TYPE_CHOICES, verbose_name='预警类型')
@@ -394,11 +377,7 @@ class SparePartAlert(BaseModel):
     is_resolved = models.BooleanField(default=False, verbose_name='已处理')
     resolved_at = models.DateTimeField(null=True, blank=True, verbose_name='处理时间')
     resolved_by = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='处理人'
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='处理人'
     )
     resolution_notes = models.TextField(blank=True, verbose_name='处理说明')
 
@@ -412,6 +391,7 @@ class SparePartAlert(BaseModel):
 # =============================================================================
 # 序列化器
 # =============================================================================
+
 
 class SparePartCategorySerializer(serializers.ModelSerializer):
     children = serializers.SerializerMethodField()
@@ -450,10 +430,22 @@ class SparePartListSerializer(serializers.ModelSerializer):
     class Meta:
         model = SparePart
         fields = [
-            'id', 'part_no', 'name', 'specification', 'category', 'category_name',
-            'part_type', 'part_type_display', 'criticality', 'criticality_display',
-            'unit_price', 'min_stock', 'reorder_point', 'current_stock',
-            'is_wear_part', 'is_active'
+            'id',
+            'part_no',
+            'name',
+            'specification',
+            'category',
+            'category_name',
+            'part_type',
+            'part_type_display',
+            'criticality',
+            'criticality_display',
+            'unit_price',
+            'min_stock',
+            'reorder_point',
+            'current_stock',
+            'is_wear_part',
+            'is_active',
         ]
 
     def get_current_stock(self, obj):
@@ -512,12 +504,15 @@ class SparePartAlertSerializer(serializers.ModelSerializer):
 # 视图集
 # =============================================================================
 
+
 class SparePartCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """备件类别管理"""
+
     queryset = SparePartCategory.objects.filter(is_deleted=False)
 
     def get_queryset(self):
         return SparePartCategory.objects.filter(is_deleted=False, parent__isnull=True)
+
     serializer_class = SparePartCategorySerializer
     permission_classes = [IsAuthenticated]
     search_fields = ['code', 'name']
@@ -525,6 +520,7 @@ class SparePartCategoryViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
 
 class SparePartViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """备件管理"""
+
     queryset = SparePart.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['category', 'part_type', 'criticality', 'is_wear_part', 'is_active']
@@ -543,16 +539,18 @@ class SparePartViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
         for part in self.get_queryset().filter(is_active=True):
             current = part.get_current_stock()
             if current <= part.reorder_point:
-                parts.append({
-                    'id': part.id,
-                    'part_no': part.part_no,
-                    'name': part.name,
-                    'current_stock': current,
-                    'min_stock': float(part.min_stock),
-                    'reorder_point': float(part.reorder_point),
-                    'reorder_qty': float(part.reorder_qty),
-                    'criticality': part.criticality,
-                })
+                parts.append(
+                    {
+                        'id': part.id,
+                        'part_no': part.part_no,
+                        'name': part.name,
+                        'current_stock': current,
+                        'min_stock': float(part.min_stock),
+                        'reorder_point': float(part.reorder_point),
+                        'reorder_qty': float(part.reorder_qty),
+                        'criticality': part.criticality,
+                    }
+                )
 
         return Response(sorted(parts, key=lambda x: x['criticality'], reverse=True))
 
@@ -563,15 +561,12 @@ class SparePartViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
         months = int(request.query_params.get('months', 12))
 
         start_date = date.today() - timedelta(days=months * 30)
-        consumptions = SparePartConsumption.objects.filter(
-            spare_part=part,
-            consumption_date__gte=start_date,
-            is_deleted=False
-        ).values('consumption_date__year', 'consumption_date__month').annotate(
-            total_qty=Sum('quantity'),
-            total_cost=Sum('total_cost'),
-            count=Count('id')
-        ).order_by('consumption_date__year', 'consumption_date__month')
+        consumptions = (
+            SparePartConsumption.objects.filter(spare_part=part, consumption_date__gte=start_date, is_deleted=False)
+            .values('consumption_date__year', 'consumption_date__month')
+            .annotate(total_qty=Sum('quantity'), total_cost=Sum('total_cost'), count=Count('id'))
+            .order_by('consumption_date__year', 'consumption_date__month')
+        )
 
         return Response(list(consumptions))
 
@@ -579,9 +574,9 @@ class SparePartViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
     def equipment_usage(self, request, pk=None):
         """设备使用情况"""
         part = self.get_object()
-        usages = SparePartEquipmentRelation.objects.filter(
-            spare_part=part, is_deleted=False
-        ).select_related('equipment')
+        usages = SparePartEquipmentRelation.objects.filter(spare_part=part, is_deleted=False).select_related(
+            'equipment'
+        )
 
         return Response(SparePartEquipmentRelationSerializer(usages, many=True).data)
 
@@ -590,16 +585,18 @@ class SparePartViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
         """需求预测汇总"""
         period = request.query_params.get('period', 'MONTHLY')
 
-        forecasts = SparePartForecast.objects.filter(
-            forecast_period=period,
-            forecast_date__gte=date.today()
-        ).select_related('spare_part').order_by('forecast_date')[:50]
+        forecasts = (
+            SparePartForecast.objects.filter(forecast_period=period, forecast_date__gte=date.today())
+            .select_related('spare_part')
+            .order_by('forecast_date')[:50]
+        )
 
         return Response(SparePartForecastSerializer(forecasts, many=True).data)
 
 
 class SparePartEquipmentRelationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备备件关联管理"""
+
     queryset = SparePartEquipmentRelation.objects.filter(is_deleted=False)
     serializer_class = SparePartEquipmentRelationSerializer
     permission_classes = [IsAuthenticated]
@@ -611,10 +608,11 @@ class SparePartEquipmentRelationViewSet(SoftDeleteMixin, UserTrackingMixin, view
         days = int(request.query_params.get('days', 30))
         due_date = date.today() + timedelta(days=days)
 
-        items = self.get_queryset().filter(
-            next_replacement_date__lte=due_date,
-            next_replacement_date__gte=date.today()
-        ).order_by('next_replacement_date')
+        items = (
+            self.get_queryset()
+            .filter(next_replacement_date__lte=due_date, next_replacement_date__gte=date.today())
+            .order_by('next_replacement_date')
+        )
 
         return Response(SparePartEquipmentRelationSerializer(items, many=True).data)
 
@@ -634,17 +632,15 @@ class SparePartEquipmentRelationViewSet(SoftDeleteMixin, UserTrackingMixin, view
             run_hours_at_replacement=request.data.get('run_hours', esp.current_run_hours),
             failure_reason=request.data.get('failure_reason', ''),
             technician=request.user,
-            created_by=request.user
+            created_by=request.user,
         )
 
-        return Response({
-            'message': '更换记录已创建',
-            'consumption_id': consumption.id
-        })
+        return Response({'message': '更换记录已创建', 'consumption_id': consumption.id})
 
 
 class SparePartConsumptionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """备件消耗记录"""
+
     queryset = SparePartConsumption.objects.filter(is_deleted=False)
     serializer_class = SparePartConsumptionSerializer
     permission_classes = [IsAuthenticated]
@@ -664,40 +660,38 @@ class SparePartConsumptionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.M
             queryset = queryset.filter(consumption_date__lte=end_date)
 
         # 按备件统计
-        by_part = queryset.values(
-            'spare_part__part_no', 'spare_part__name'
-        ).annotate(
-            total_qty=Sum('quantity'),
-            total_cost=Sum('total_cost'),
-            count=Count('id')
-        ).order_by('-total_cost')[:20]
+        by_part = (
+            queryset.values('spare_part__part_no', 'spare_part__name')
+            .annotate(total_qty=Sum('quantity'), total_cost=Sum('total_cost'), count=Count('id'))
+            .order_by('-total_cost')[:20]
+        )
 
         # 按设备统计
-        by_equipment = queryset.exclude(equipment__isnull=True).values(
-            'equipment__equipment_no', 'equipment__name'
-        ).annotate(
-            total_qty=Sum('quantity'),
-            total_cost=Sum('total_cost'),
-            count=Count('id')
-        ).order_by('-total_cost')[:20]
+        by_equipment = (
+            queryset.exclude(equipment__isnull=True)
+            .values('equipment__equipment_no', 'equipment__name')
+            .annotate(total_qty=Sum('quantity'), total_cost=Sum('total_cost'), count=Count('id'))
+            .order_by('-total_cost')[:20]
+        )
 
         # 按类型统计
         by_type = queryset.values('consumption_type').annotate(
-            total_qty=Sum('quantity'),
-            total_cost=Sum('total_cost'),
-            count=Count('id')
+            total_qty=Sum('quantity'), total_cost=Sum('total_cost'), count=Count('id')
         )
 
-        return Response({
-            'by_part': list(by_part),
-            'by_equipment': list(by_equipment),
-            'by_type': list(by_type),
-            'total_cost': queryset.aggregate(total=Sum('total_cost'))['total'] or 0
-        })
+        return Response(
+            {
+                'by_part': list(by_part),
+                'by_equipment': list(by_equipment),
+                'by_type': list(by_type),
+                'total_cost': queryset.aggregate(total=Sum('total_cost'))['total'] or 0,
+            }
+        )
 
 
 class SparePartAlertViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     """备件预警管理"""
+
     queryset = SparePartAlert.objects.filter(is_deleted=False)
     serializer_class = SparePartAlertSerializer
     permission_classes = [IsAuthenticated]
@@ -726,6 +720,7 @@ class SparePartAlertViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
 # 定时任务
 # =============================================================================
 
+
 @shared_task
 def check_spare_part_stock():
     """检查备件库存并生成预警"""
@@ -744,8 +739,8 @@ def check_spare_part_stock():
                 defaults={
                     'current_stock': current_stock,
                     'required_stock': part.min_stock,
-                    'message': f'备件 [{part.part_no}] {part.name} 库存不足，当前库存 {current_stock}，最低库存 {part.min_stock}'
-                }
+                    'message': f'备件 [{part.part_no}] {part.name} 库存不足，当前库存 {current_stock}，最低库存 {part.min_stock}',
+                },
             )
             if created:
                 alerts_created += 1
@@ -759,8 +754,8 @@ def check_spare_part_stock():
                 defaults={
                     'current_stock': 0,
                     'required_stock': part.min_stock,
-                    'message': f'备件 [{part.part_no}] {part.name} 已缺货!'
-                }
+                    'message': f'备件 [{part.part_no}] {part.name} 已缺货!',
+                },
             )
             if created:
                 alerts_created += 1
@@ -779,10 +774,7 @@ def check_replacement_due():
     for days in warning_days:
         due_date = today + timedelta(days=days)
 
-        for esp in SparePartEquipmentRelation.objects.filter(
-            next_replacement_date=due_date,
-            is_deleted=False
-        ):
+        for esp in SparePartEquipmentRelation.objects.filter(next_replacement_date=due_date, is_deleted=False):
             alert, created = SparePartAlert.objects.get_or_create(
                 spare_part=esp.spare_part,
                 equipment=esp.equipment,
@@ -790,7 +782,7 @@ def check_replacement_due():
                 is_resolved=False,
                 defaults={
                     'message': f'设备 [{esp.equipment.equipment_no}] 的备件 [{esp.spare_part.part_no}] {esp.spare_part.name} 将于 {days} 天后需要更换'
-                }
+                },
             )
             if created:
                 alerts_created += 1
@@ -807,15 +799,15 @@ def generate_consumption_forecast():
 
     for part in SparePart.objects.filter(is_active=True, is_deleted=False):
         # 获取过去12个月的消耗数据
-        history = SparePartConsumption.objects.filter(
-            spare_part=part,
-            consumption_date__gte=today - timedelta(days=365),
-            is_deleted=False
-        ).annotate(
-            month=TruncMonth('consumption_date')
-        ).values('month').annotate(
-            qty=Sum('quantity')
-        ).order_by('month')
+        history = (
+            SparePartConsumption.objects.filter(
+                spare_part=part, consumption_date__gte=today - timedelta(days=365), is_deleted=False
+            )
+            .annotate(month=TruncMonth('consumption_date'))
+            .values('month')
+            .annotate(qty=Sum('quantity'))
+            .order_by('month')
+        )
 
         if history.count() < 3:
             continue
@@ -826,7 +818,7 @@ def generate_consumption_forecast():
 
         # 计算标准差
         variance = sum((q - avg_qty) ** 2 for q in quantities) / len(quantities)
-        std_qty = variance ** 0.5
+        std_qty = variance**0.5
 
         # 创建下月预测
         next_month = (today.replace(day=1) + timedelta(days=32)).replace(day=1)
@@ -839,8 +831,8 @@ def generate_consumption_forecast():
                 'predicted_quantity': Decimal(str(avg_qty * 1.1)),  # 增加10%安全系数
                 'historical_avg': Decimal(str(avg_qty)),
                 'historical_std': Decimal(str(std_qty)),
-                'method': 'MOVING_AVG'
-            }
+                'method': 'MOVING_AVG',
+            },
         )
 
     return 'Forecast generated'

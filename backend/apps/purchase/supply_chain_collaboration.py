@@ -9,6 +9,7 @@ Supply Chain Collaboration Platform
 - 质量协同
 - 对账协同
 """
+
 from datetime import date
 from decimal import Decimal
 
@@ -26,13 +27,12 @@ from apps.core.models import BaseModel
 # 模型定义
 # =============================================================================
 
+
 class SupplierPortalUser(BaseModel):
     """供应商门户用户"""
+
     supplier = models.ForeignKey(
-        'masterdata.Supplier',
-        on_delete=models.CASCADE,
-        related_name='portal_users',
-        verbose_name='供应商'
+        'masterdata.Supplier', on_delete=models.CASCADE, related_name='portal_users', verbose_name='供应商'
     )
 
     username = models.CharField(max_length=100, unique=True, verbose_name='用户名')
@@ -50,7 +50,7 @@ class SupplierPortalUser(BaseModel):
             ('FINANCE', '财务'),
         ],
         default='SALES',
-        verbose_name='角色'
+        verbose_name='角色',
     )
 
     # 权限
@@ -74,6 +74,7 @@ class SupplierPortalUser(BaseModel):
 
 class RFQCollaboration(BaseModel):
     """询报价协同"""
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('SENT', '已发送'),
@@ -92,10 +93,7 @@ class RFQCollaboration(BaseModel):
 
     # 供应商
     suppliers = models.ManyToManyField(
-        'masterdata.Supplier',
-        through='RFQSupplierResponse',
-        related_name='rfq_collaborations',
-        verbose_name='供应商'
+        'masterdata.Supplier', through='RFQSupplierResponse', related_name='rfq_collaborations', verbose_name='供应商'
     )
 
     # 时间
@@ -113,16 +111,12 @@ class RFQCollaboration(BaseModel):
         null=True,
         blank=True,
         related_name='rfq_collaborations',
-        verbose_name='关联项目'
+        verbose_name='关联项目',
     )
 
     # 负责人
     buyer = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='rfq_collaborations',
-        verbose_name='采购员'
+        'accounts.User', on_delete=models.SET_NULL, null=True, related_name='rfq_collaborations', verbose_name='采购员'
     )
 
     class Meta:
@@ -137,26 +131,17 @@ class RFQCollaboration(BaseModel):
     def save(self, *args, **kwargs):
         if not self.rfq_no:
             from apps.core.models import CodeRule
+
             self.rfq_no = CodeRule.generate_code('RFQ')
         super().save(*args, **kwargs)
 
 
 class RFQItem(BaseModel):
     """询价明细"""
-    rfq = models.ForeignKey(
-        RFQCollaboration,
-        on_delete=models.CASCADE,
-        related_name='items',
-        verbose_name='询价单'
-    )
 
-    item = models.ForeignKey(
-        'masterdata.Item',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='物料'
-    )
+    rfq = models.ForeignKey(RFQCollaboration, on_delete=models.CASCADE, related_name='items', verbose_name='询价单')
+
+    item = models.ForeignKey('masterdata.Item', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='物料')
     item_code = models.CharField(max_length=50, blank=True, verbose_name='物料编码')
     item_name = models.CharField(max_length=200, verbose_name='物料名称')
     specification = models.CharField(max_length=200, blank=True, verbose_name='规格')
@@ -180,17 +165,10 @@ class RFQItem(BaseModel):
 
 class RFQSupplierResponse(BaseModel):
     """供应商报价响应"""
-    rfq = models.ForeignKey(
-        RFQCollaboration,
-        on_delete=models.CASCADE,
-        related_name='responses',
-        verbose_name='询价单'
-    )
+
+    rfq = models.ForeignKey(RFQCollaboration, on_delete=models.CASCADE, related_name='responses', verbose_name='询价单')
     supplier = models.ForeignKey(
-        'masterdata.Supplier',
-        on_delete=models.CASCADE,
-        related_name='rfq_responses',
-        verbose_name='供应商'
+        'masterdata.Supplier', on_delete=models.CASCADE, related_name='rfq_responses', verbose_name='供应商'
     )
 
     # 响应状态
@@ -202,7 +180,7 @@ class RFQSupplierResponse(BaseModel):
             ('DECLINED', '拒绝报价'),
         ],
         default='PENDING',
-        verbose_name='状态'
+        verbose_name='状态',
     )
 
     # 报价信息
@@ -232,18 +210,11 @@ class RFQSupplierResponse(BaseModel):
 
 class RFQItemQuote(BaseModel):
     """报价明细"""
+
     response = models.ForeignKey(
-        RFQSupplierResponse,
-        on_delete=models.CASCADE,
-        related_name='item_quotes',
-        verbose_name='供应商报价'
+        RFQSupplierResponse, on_delete=models.CASCADE, related_name='item_quotes', verbose_name='供应商报价'
     )
-    rfq_item = models.ForeignKey(
-        RFQItem,
-        on_delete=models.CASCADE,
-        related_name='quotes',
-        verbose_name='询价明细'
-    )
+    rfq_item = models.ForeignKey(RFQItem, on_delete=models.CASCADE, related_name='quotes', verbose_name='询价明细')
 
     unit_price = models.DecimalField(max_digits=12, decimal_places=4, verbose_name='单价')
     amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='金额')
@@ -265,11 +236,12 @@ class RFQItemQuote(BaseModel):
 
 class DeliveryCollaboration(BaseModel):
     """交期协同"""
+
     purchase_order = models.ForeignKey(
         'purchase.PurchaseOrder',
         on_delete=models.CASCADE,
         related_name='delivery_collaborations',
-        verbose_name='采购订单'
+        verbose_name='采购订单',
     )
 
     # 原始交期
@@ -295,7 +267,7 @@ class DeliveryCollaboration(BaseModel):
             ('DELIVERED', '已交付'),
         ],
         default='PENDING',
-        verbose_name='状态'
+        verbose_name='状态',
     )
 
     # 预警
@@ -311,27 +283,17 @@ class DeliveryCollaboration(BaseModel):
 
 class QualityCollaboration(BaseModel):
     """质量协同"""
+
     supplier = models.ForeignKey(
-        'masterdata.Supplier',
-        on_delete=models.CASCADE,
-        related_name='quality_collaborations',
-        verbose_name='供应商'
+        'masterdata.Supplier', on_delete=models.CASCADE, related_name='quality_collaborations', verbose_name='供应商'
     )
 
     # 关联单据
     purchase_order = models.ForeignKey(
-        'purchase.PurchaseOrder',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='采购订单'
+        'purchase.PurchaseOrder', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='采购订单'
     )
     inspection = models.ForeignKey(
-        'purchase.OutsourceInspection',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='检验记录'
+        'purchase.OutsourceInspection', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='检验记录'
     )
 
     # 问题类型
@@ -344,7 +306,7 @@ class QualityCollaboration(BaseModel):
             ('DELIVERY', '交付问题'),
             ('OTHER', '其他'),
         ],
-        verbose_name='问题类型'
+        verbose_name='问题类型',
     )
 
     # 问题描述
@@ -370,7 +332,7 @@ class QualityCollaboration(BaseModel):
             ('CLOSED', '已关闭'),
         ],
         default='OPEN',
-        verbose_name='状态'
+        verbose_name='状态',
     )
 
     class Meta:
@@ -382,11 +344,9 @@ class QualityCollaboration(BaseModel):
 
 class ReconciliationCollaboration(BaseModel):
     """对账协同"""
+
     supplier = models.ForeignKey(
-        'masterdata.Supplier',
-        on_delete=models.CASCADE,
-        related_name='reconciliations',
-        verbose_name='供应商'
+        'masterdata.Supplier', on_delete=models.CASCADE, related_name='reconciliations', verbose_name='供应商'
     )
 
     # 对账期间
@@ -416,7 +376,7 @@ class ReconciliationCollaboration(BaseModel):
             ('RECONCILED', '已核对'),
         ],
         default='DRAFT',
-        verbose_name='状态'
+        verbose_name='状态',
     )
 
     # 确认
@@ -426,7 +386,7 @@ class ReconciliationCollaboration(BaseModel):
         null=True,
         blank=True,
         related_name='confirmed_reconciliations',
-        verbose_name='我方确认人'
+        verbose_name='我方确认人',
     )
     our_confirmed_at = models.DateTimeField(null=True, blank=True, verbose_name='我方确认时间')
 
@@ -443,11 +403,9 @@ class ReconciliationCollaboration(BaseModel):
 
 class SupplierNotification(BaseModel):
     """供应商通知"""
+
     supplier = models.ForeignKey(
-        'masterdata.Supplier',
-        on_delete=models.CASCADE,
-        related_name='notifications',
-        verbose_name='供应商'
+        'masterdata.Supplier', on_delete=models.CASCADE, related_name='notifications', verbose_name='供应商'
     )
 
     notification_type = models.CharField(
@@ -460,7 +418,7 @@ class SupplierNotification(BaseModel):
             ('RECONCILIATION', '对账通知'),
             ('SYSTEM', '系统通知'),
         ],
-        verbose_name='通知类型'
+        verbose_name='通知类型',
     )
 
     title = models.CharField(max_length=200, verbose_name='标题')
@@ -483,6 +441,7 @@ class SupplierNotification(BaseModel):
 # =============================================================================
 # 序列化器
 # =============================================================================
+
 
 class SupplierPortalUserSerializer(serializers.ModelSerializer):
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
@@ -543,9 +502,17 @@ class RFQCollaborationListSerializer(serializers.ModelSerializer):
     class Meta:
         model = RFQCollaboration
         fields = [
-            'id', 'rfq_no', 'title', 'issue_date', 'deadline',
-            'status', 'status_display', 'buyer', 'buyer_name',
-            'item_count', 'response_count'
+            'id',
+            'rfq_no',
+            'title',
+            'issue_date',
+            'deadline',
+            'status',
+            'status_display',
+            'buyer',
+            'buyer_name',
+            'item_count',
+            'response_count',
         ]
 
     def get_item_count(self, obj):
@@ -596,8 +563,10 @@ class SupplierNotificationSerializer(serializers.ModelSerializer):
 # 视图集
 # =============================================================================
 
+
 class SupplierPortalUserViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """供应商门户用户管理"""
+
     queryset = SupplierPortalUser.objects.filter(is_deleted=False)
     serializer_class = SupplierPortalUserSerializer
     permission_classes = [IsAuthenticated]
@@ -607,6 +576,7 @@ class SupplierPortalUserViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
 
 class RFQCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """询报价协同管理"""
+
     queryset = RFQCollaboration.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'buyer', 'project']
@@ -626,9 +596,7 @@ class RFQCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
 
         for supplier_id in supplier_ids:
             RFQSupplierResponse.objects.get_or_create(
-                rfq=rfq,
-                supplier_id=supplier_id,
-                defaults={'created_by': request.user}
+                rfq=rfq, supplier_id=supplier_id, defaults={'created_by': request.user}
             )
 
             # 发送通知
@@ -639,16 +607,15 @@ class RFQCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
                 content=f'您收到一份新的询价单，请登录门户查看并报价。\n询价标题: {rfq.title}\n截止日期: {rfq.deadline}',
                 related_type='RFQCollaboration',
                 related_id=rfq.id,
-                created_by=request.user
+                created_by=request.user,
             )
 
         rfq.status = 'SENT'
         rfq.save()
 
-        return Response({
-            'message': f'已发送给 {len(supplier_ids)} 家供应商',
-            'rfq': RFQCollaborationSerializer(rfq).data
-        })
+        return Response(
+            {'message': f'已发送给 {len(supplier_ids)} 家供应商', 'rfq': RFQCollaborationSerializer(rfq).data}
+        )
 
     @action(detail=True, methods=['post'])
     def select_supplier(self, request, pk=None):
@@ -671,10 +638,9 @@ class RFQCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         rfq.status = 'ACCEPTED'
         rfq.save()
 
-        return Response({
-            'message': f'已选定供应商: {response.supplier.name}',
-            'rfq': RFQCollaborationSerializer(rfq).data
-        })
+        return Response(
+            {'message': f'已选定供应商: {response.supplier.name}', 'rfq': RFQCollaborationSerializer(rfq).data}
+        )
 
     @action(detail=True, methods=['get'])
     def compare_quotes(self, request, pk=None):
@@ -688,19 +654,21 @@ class RFQCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
                 'item_name': item.item_name,
                 'quantity': float(item.quantity),
                 'target_price': float(item.target_price) if item.target_price else None,
-                'quotes': []
+                'quotes': [],
             }
 
             for response in rfq.responses.filter(status='QUOTED'):
                 quote = response.item_quotes.filter(rfq_item=item).first()
                 if quote:
-                    item_data['quotes'].append({
-                        'supplier_id': response.supplier_id,
-                        'supplier_name': response.supplier.name,
-                        'unit_price': float(quote.unit_price),
-                        'amount': float(quote.amount),
-                        'lead_time_days': quote.lead_time_days,
-                    })
+                    item_data['quotes'].append(
+                        {
+                            'supplier_id': response.supplier_id,
+                            'supplier_name': response.supplier.name,
+                            'unit_price': float(quote.unit_price),
+                            'amount': float(quote.amount),
+                            'lead_time_days': quote.lead_time_days,
+                        }
+                    )
 
             comparison.append(item_data)
 
@@ -709,6 +677,7 @@ class RFQCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
 
 class DeliveryCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """交期协同管理"""
+
     queryset = DeliveryCollaboration.objects.filter(is_deleted=False)
     serializer_class = DeliveryCollaborationSerializer
     permission_classes = [IsAuthenticated]
@@ -726,11 +695,13 @@ class DeliveryCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.
         collab.status = 'CONFIRMED'
 
         # 记录历史
-        collab.change_history.append({
-            'date': str(date.today()),
-            'action': 'SUPPLIER_CONFIRM',
-            'confirmed_date': confirmed_date,
-        })
+        collab.change_history.append(
+            {
+                'date': str(date.today()),
+                'action': 'SUPPLIER_CONFIRM',
+                'confirmed_date': confirmed_date,
+            }
+        )
 
         collab.save()
         return Response(DeliveryCollaborationSerializer(collab).data)
@@ -751,13 +722,15 @@ class DeliveryCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.
             collab.risk_reason = reason
 
         # 记录历史
-        collab.change_history.append({
-            'date': str(date.today()),
-            'action': 'UPDATE',
-            'old_date': str(old_date),
-            'new_date': new_date,
-            'reason': reason,
-        })
+        collab.change_history.append(
+            {
+                'date': str(date.today()),
+                'action': 'UPDATE',
+                'old_date': str(old_date),
+                'new_date': new_date,
+                'reason': reason,
+            }
+        )
 
         collab.save()
         return Response(DeliveryCollaborationSerializer(collab).data)
@@ -765,15 +738,13 @@ class DeliveryCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.
     @action(detail=False, methods=['get'])
     def at_risk(self, request):
         """风险交期"""
-        collabs = self.get_queryset().filter(
-            is_at_risk=True,
-            status__in=['PENDING', 'CONFIRMED', 'DELAYED']
-        )
+        collabs = self.get_queryset().filter(is_at_risk=True, status__in=['PENDING', 'CONFIRMED', 'DELAYED'])
         return Response(DeliveryCollaborationSerializer(collabs, many=True).data)
 
 
 class QualityCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """质量协同管理"""
+
     queryset = QualityCollaboration.objects.filter(is_deleted=False)
     serializer_class = QualityCollaborationSerializer
     permission_classes = [IsAuthenticated]
@@ -812,6 +783,7 @@ class QualityCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.M
 
 class ReconciliationCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """对账协同管理"""
+
     queryset = ReconciliationCollaboration.objects.filter(is_deleted=False)
     serializer_class = ReconciliationCollaborationSerializer
     permission_classes = [IsAuthenticated]
@@ -833,7 +805,7 @@ class ReconciliationCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, vie
             content=f'请登录门户确认对账单。\n我方金额: ¥{recon.our_amount}',
             related_type='ReconciliationCollaboration',
             related_id=recon.id,
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(ReconciliationCollaborationSerializer(recon).data)
@@ -871,6 +843,7 @@ class ReconciliationCollaborationViewSet(SoftDeleteMixin, UserTrackingMixin, vie
 
 class SupplierNotificationViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     """供应商通知管理"""
+
     queryset = SupplierNotification.objects.filter(is_deleted=False)
     serializer_class = SupplierNotificationSerializer
     permission_classes = [IsAuthenticated]
@@ -890,7 +863,7 @@ class SupplierNotificationViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
         """全部已读"""
         supplier_id = request.data.get('supplier_id')
         if supplier_id:
-            self.get_queryset().filter(
-                supplier_id=supplier_id, is_read=False
-            ).update(is_read=True, read_at=timezone.now())
+            self.get_queryset().filter(supplier_id=supplier_id, is_read=False).update(
+                is_read=True, read_at=timezone.now()
+            )
         return Response({'status': 'ok'})

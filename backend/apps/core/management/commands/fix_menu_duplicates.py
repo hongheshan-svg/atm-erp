@@ -1,6 +1,7 @@
 """
 清理重复菜单项并修复路由路径
 """
+
 from django.core.management.base import BaseCommand
 
 from apps.core.permission_models_new import Permission

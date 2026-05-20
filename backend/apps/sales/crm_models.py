@@ -5,6 +5,7 @@ Customer Relationship Management - Lead & Opportunity Models
 非标自动化行业销售流程：
 线索 → 商机 → 报价 → 合同 → 项目
 """
+
 from django.db import models
 
 from apps.core.models import BaseModel
@@ -14,6 +15,7 @@ class LeadSource(BaseModel):
     """
     线索来源
     """
+
     code = models.CharField(max_length=20, unique=True, verbose_name='来源编码')
     name = models.CharField(max_length=50, verbose_name='来源名称')
     description = models.TextField(blank=True, verbose_name='描述')
@@ -34,6 +36,7 @@ class Lead(BaseModel):
     """
     销售线索 - 潜在客户初次接触
     """
+
     STATUS_CHOICES = [
         ('NEW', '新线索'),
         ('CONTACTED', '已联系'),
@@ -65,23 +68,13 @@ class Lead(BaseModel):
     expected_date = models.DateField(null=True, blank=True, verbose_name='预期交期')
 
     # 来源和状态
-    source = models.ForeignKey(
-        LeadSource,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='线索来源'
-    )
+    source = models.ForeignKey(LeadSource, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='线索来源')
     source_detail = models.CharField(max_length=200, blank=True, verbose_name='来源详情')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='NEW', verbose_name='状态')
 
     # 负责人
     owner = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='owned_leads',
-        verbose_name='负责人'
+        'accounts.User', on_delete=models.SET_NULL, null=True, related_name='owned_leads', verbose_name='负责人'
     )
 
     # 转化信息
@@ -91,7 +84,7 @@ class Lead(BaseModel):
         null=True,
         blank=True,
         related_name='from_leads',
-        verbose_name='转化客户'
+        verbose_name='转化客户',
     )
     converted_opportunity = models.ForeignKey(
         'Opportunity',
@@ -99,7 +92,7 @@ class Lead(BaseModel):
         null=True,
         blank=True,
         related_name='from_leads',
-        verbose_name='转化商机'
+        verbose_name='转化商机',
     )
     converted_at = models.DateTimeField(null=True, blank=True, verbose_name='转化时间')
 
@@ -115,11 +108,12 @@ class Lead(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.lead_no} - {self.company_name}"
+        return f'{self.lead_no} - {self.company_name}'
 
     def save(self, *args, **kwargs):
         if not self.lead_no:
             from apps.core.models import CodeRule
+
             self.lead_no = CodeRule.generate_code('LEAD')
         super().save(*args, **kwargs)
 
@@ -128,6 +122,7 @@ class Opportunity(BaseModel):
     """
     销售商机 - 确认的销售机会
     """
+
     STAGE_CHOICES = [
         ('QUALIFICATION', '需求确认'),
         ('NEEDS_ANALYSIS', '需求分析'),
@@ -150,10 +145,7 @@ class Opportunity(BaseModel):
 
     # 客户信息
     customer = models.ForeignKey(
-        'masterdata.Customer',
-        on_delete=models.PROTECT,
-        related_name='opportunities',
-        verbose_name='客户'
+        'masterdata.Customer', on_delete=models.PROTECT, related_name='opportunities', verbose_name='客户'
     )
     contact_name = models.CharField(max_length=50, blank=True, verbose_name='联系人')
     contact_phone = models.CharField(max_length=20, blank=True, verbose_name='联系电话')
@@ -179,17 +171,10 @@ class Opportunity(BaseModel):
 
     # 负责人和团队
     owner = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='owned_opportunities',
-        verbose_name='负责人'
+        'accounts.User', on_delete=models.SET_NULL, null=True, related_name='owned_opportunities', verbose_name='负责人'
     )
     sales_team = models.ManyToManyField(
-        'accounts.User',
-        blank=True,
-        related_name='team_opportunities',
-        verbose_name='销售团队'
+        'accounts.User', blank=True, related_name='team_opportunities', verbose_name='销售团队'
     )
 
     # 竞争信息
@@ -203,7 +188,7 @@ class Opportunity(BaseModel):
         null=True,
         blank=True,
         related_name='won_opportunities',
-        verbose_name='成交报价'
+        verbose_name='成交报价',
     )
     won_order = models.ForeignKey(
         'SalesOrder',
@@ -211,7 +196,7 @@ class Opportunity(BaseModel):
         null=True,
         blank=True,
         related_name='won_opportunities',
-        verbose_name='成交订单'
+        verbose_name='成交订单',
     )
     lost_reason = models.TextField(blank=True, verbose_name='丢单原因')
 
@@ -224,11 +209,12 @@ class Opportunity(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.opportunity_no} - {self.name}"
+        return f'{self.opportunity_no} - {self.name}'
 
     def save(self, *args, **kwargs):
         if not self.opportunity_no:
             from apps.core.models import CodeRule
+
             self.opportunity_no = CodeRule.generate_code('OPPORTUNITY')
 
         # 计算加权金额
@@ -241,6 +227,7 @@ class OpportunityActivity(BaseModel):
     """
     商机跟进活动
     """
+
     ACTIVITY_TYPE = [
         ('CALL', '电话'),
         ('EMAIL', '邮件'),
@@ -253,10 +240,7 @@ class OpportunityActivity(BaseModel):
     ]
 
     opportunity = models.ForeignKey(
-        Opportunity,
-        on_delete=models.CASCADE,
-        related_name='activities',
-        verbose_name='商机'
+        Opportunity, on_delete=models.CASCADE, related_name='activities', verbose_name='商机'
     )
 
     activity_type = models.CharField(max_length=20, choices=ACTIVITY_TYPE, verbose_name='活动类型')
@@ -278,12 +262,7 @@ class OpportunityActivity(BaseModel):
     attachments = models.JSONField(default=list, blank=True, verbose_name='附件')
 
     # 记录人
-    recorded_by = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        verbose_name='记录人'
-    )
+    recorded_by = models.ForeignKey('accounts.User', on_delete=models.SET_NULL, null=True, verbose_name='记录人')
 
     class Meta:
         db_table = 'opportunity_activity'
@@ -292,22 +271,19 @@ class OpportunityActivity(BaseModel):
         ordering = ['-activity_date']
 
     def __str__(self):
-        return f"{self.opportunity.opportunity_no} - {self.subject}"
+        return f'{self.opportunity.opportunity_no} - {self.subject}'
 
 
 class SalesForecast(BaseModel):
     """
     销售预测 - 按月汇总
     """
+
     year = models.IntegerField(verbose_name='年份')
     month = models.IntegerField(verbose_name='月份')
 
     owner = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='sales_forecasts',
-        verbose_name='销售人员'
+        'accounts.User', on_delete=models.SET_NULL, null=True, related_name='sales_forecasts', verbose_name='销售人员'
     )
 
     # 预测金额
@@ -335,4 +311,4 @@ class SalesForecast(BaseModel):
         ordering = ['-year', '-month']
 
     def __str__(self):
-        return f"{self.year}年{self.month}月 - {self.owner}"
+        return f'{self.year}年{self.month}月 - {self.owner}'

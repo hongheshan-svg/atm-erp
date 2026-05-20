@@ -1,6 +1,7 @@
 """
 设备台账和工装夹具序列化器
 """
+
 from rest_framework import serializers
 
 from .equipment_models import (
@@ -18,8 +19,10 @@ from .fixture_models import Fixture, FixtureCalibration, FixtureCategory, Fixtur
 # 设备台账序列化器
 # ============================================================
 
+
 class EquipmentSerializer(serializers.ModelSerializer):
     """设备台账序列化器"""
+
     project_name = serializers.CharField(source='project.name', read_only=True)
     project_no = serializers.CharField(source='project.project_no', read_only=True)
     customer_name = serializers.CharField(source='customer.name', read_only=True)
@@ -34,6 +37,7 @@ class EquipmentSerializer(serializers.ModelSerializer):
 
 class EquipmentListSerializer(serializers.ModelSerializer):
     """设备台账列表序列化器（简化）"""
+
     project_name = serializers.CharField(source='project.name', read_only=True)
     customer_name = serializers.CharField(source='customer.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
@@ -42,15 +46,27 @@ class EquipmentListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Equipment
         fields = [
-            'id', 'equipment_no', 'name', 'model', 'serial_no',
-            'project', 'project_name', 'customer', 'customer_name',
-            'status', 'status_display', 'acceptance_date',
-            'warranty_end_date', 'is_in_warranty', 'installation_address'
+            'id',
+            'equipment_no',
+            'name',
+            'model',
+            'serial_no',
+            'project',
+            'project_name',
+            'customer',
+            'customer_name',
+            'status',
+            'status_display',
+            'acceptance_date',
+            'warranty_end_date',
+            'is_in_warranty',
+            'installation_address',
         ]
 
 
 class EquipmentShipmentSerializer(serializers.ModelSerializer):
     """设备发货记录序列化器"""
+
     equipment_name = serializers.CharField(source='equipment.name', read_only=True)
     equipment_no = serializers.CharField(source='equipment.equipment_no', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
@@ -62,6 +78,7 @@ class EquipmentShipmentSerializer(serializers.ModelSerializer):
 
 class InstallationLogSerializer(serializers.ModelSerializer):
     """安装日志序列化器"""
+
     recorded_by_name = serializers.CharField(source='recorded_by.name', read_only=True)
 
     class Meta:
@@ -71,6 +88,7 @@ class InstallationLogSerializer(serializers.ModelSerializer):
 
 class EquipmentInstallationSerializer(serializers.ModelSerializer):
     """现场安装记录序列化器"""
+
     equipment_name = serializers.CharField(source='equipment.name', read_only=True)
     equipment_no = serializers.CharField(source='equipment.equipment_no', read_only=True)
     team_leader_name = serializers.CharField(source='team_leader.name', read_only=True)
@@ -84,6 +102,7 @@ class EquipmentInstallationSerializer(serializers.ModelSerializer):
 
 class EquipmentAcceptanceSerializer(serializers.ModelSerializer):
     """设备验收记录序列化器"""
+
     equipment_name = serializers.CharField(source='equipment.name', read_only=True)
     equipment_no = serializers.CharField(source='equipment.equipment_no', read_only=True)
     our_representative_name = serializers.CharField(source='our_representative.name', read_only=True)
@@ -96,6 +115,7 @@ class EquipmentAcceptanceSerializer(serializers.ModelSerializer):
 
 class MaintenanceScheduleSerializer(serializers.ModelSerializer):
     """设备保养计划序列化器"""
+
     equipment_name = serializers.CharField(source='equipment.name', read_only=True)
     equipment_no = serializers.CharField(source='equipment.equipment_no', read_only=True)
     maintenance_type_display = serializers.CharField(source='get_maintenance_type_display', read_only=True)
@@ -108,6 +128,7 @@ class MaintenanceScheduleSerializer(serializers.ModelSerializer):
 
 class TrainingRecordSerializer(serializers.ModelSerializer):
     """客户培训记录序列化器"""
+
     equipment_name = serializers.CharField(source='equipment.name', read_only=True)
     equipment_no = serializers.CharField(source='equipment.equipment_no', read_only=True)
     trainer_name = serializers.CharField(source='trainer.name', read_only=True)
@@ -123,8 +144,10 @@ class TrainingRecordSerializer(serializers.ModelSerializer):
 # 工装夹具序列化器
 # ============================================================
 
+
 class FixtureCategorySerializer(serializers.ModelSerializer):
     """工装分类序列化器"""
+
     parent_name = serializers.CharField(source='parent.name', read_only=True)
     children_count = serializers.SerializerMethodField()
 
@@ -138,6 +161,7 @@ class FixtureCategorySerializer(serializers.ModelSerializer):
 
 class FixtureCategoryTreeSerializer(serializers.ModelSerializer):
     """工装分类树形序列化器"""
+
     children = serializers.SerializerMethodField()
 
     class Meta:
@@ -151,6 +175,7 @@ class FixtureCategoryTreeSerializer(serializers.ModelSerializer):
 
 class FixtureSerializer(serializers.ModelSerializer):
     """工装夹具序列化器"""
+
     category_name = serializers.CharField(source='category.name', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     equipment_name = serializers.CharField(source='equipment.name', read_only=True)
@@ -167,6 +192,7 @@ class FixtureSerializer(serializers.ModelSerializer):
 
 class FixtureListSerializer(serializers.ModelSerializer):
     """工装夹具列表序列化器（简化）"""
+
     category_name = serializers.CharField(source='category.name', read_only=True)
     custodian_name = serializers.CharField(source='custodian.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
@@ -175,15 +201,28 @@ class FixtureListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Fixture
         fields = [
-            'id', 'fixture_no', 'name', 'model', 'category', 'category_name',
-            'status', 'status_display', 'location', 'custodian', 'custodian_name',
-            'needs_calibration', 'next_calibration', 'is_calibration_due',
-            'usage_count', 'max_usage'
+            'id',
+            'fixture_no',
+            'name',
+            'model',
+            'category',
+            'category_name',
+            'status',
+            'status_display',
+            'location',
+            'custodian',
+            'custodian_name',
+            'needs_calibration',
+            'next_calibration',
+            'is_calibration_due',
+            'usage_count',
+            'max_usage',
         ]
 
 
 class FixtureUsageRecordSerializer(serializers.ModelSerializer):
     """工装使用记录序列化器"""
+
     fixture_name = serializers.CharField(source='fixture.name', read_only=True)
     fixture_no = serializers.CharField(source='fixture.fixture_no', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
@@ -196,6 +235,7 @@ class FixtureUsageRecordSerializer(serializers.ModelSerializer):
 
 class FixtureCalibrationSerializer(serializers.ModelSerializer):
     """工装校验记录序列化器"""
+
     fixture_name = serializers.CharField(source='fixture.name', read_only=True)
     fixture_no = serializers.CharField(source='fixture.fixture_no', read_only=True)
     result_display = serializers.CharField(source='get_result_display', read_only=True)
@@ -207,6 +247,7 @@ class FixtureCalibrationSerializer(serializers.ModelSerializer):
 
 class FixtureMaintenanceSerializer(serializers.ModelSerializer):
     """工装维护记录序列化器"""
+
     fixture_name = serializers.CharField(source='fixture.name', read_only=True)
     fixture_no = serializers.CharField(source='fixture.fixture_no', read_only=True)
     performed_by_name = serializers.CharField(source='performed_by.name', read_only=True)

@@ -3,6 +3,7 @@
 Supplier Qualification Management
 管理供应商资质证书、有效期提醒等
 """
+
 from datetime import date, timedelta
 
 from django.db import models
@@ -20,18 +21,12 @@ class QualificationType(BaseModel):
     """
     资质类型
     """
+
     code = models.CharField(max_length=50, unique=True, verbose_name='类型编码')
     name = models.CharField(max_length=100, verbose_name='类型名称')
     is_required = models.BooleanField(default=False, verbose_name='必须资质')
-    validity_period = models.IntegerField(
-        default=365,
-        verbose_name='有效期(天)',
-        help_text='默认有效期'
-    )
-    remind_days = models.IntegerField(
-        default=30,
-        verbose_name='提前提醒天数'
-    )
+    validity_period = models.IntegerField(default=365, verbose_name='有效期(天)', help_text='默认有效期')
+    remind_days = models.IntegerField(default=30, verbose_name='提前提醒天数')
     category = models.CharField(
         max_length=50,
         choices=[
@@ -43,7 +38,7 @@ class QualificationType(BaseModel):
             ('OTHER', '其他'),
         ],
         default='BUSINESS',
-        verbose_name='资质分类'
+        verbose_name='资质分类',
     )
     description = models.TextField(blank=True, verbose_name='说明')
     is_active = models.BooleanField(default=True, verbose_name='启用')
@@ -63,6 +58,7 @@ class SupplierQualification(BaseModel):
     """
     供应商资质
     """
+
     STATUS_CHOICES = [
         ('PENDING', '待审核'),
         ('VALID', '有效'),
@@ -72,16 +68,10 @@ class SupplierQualification(BaseModel):
     ]
 
     supplier = models.ForeignKey(
-        'masterdata.Supplier',
-        on_delete=models.CASCADE,
-        related_name='qualifications',
-        verbose_name='供应商'
+        'masterdata.Supplier', on_delete=models.CASCADE, related_name='qualifications', verbose_name='供应商'
     )
     qualification_type = models.ForeignKey(
-        QualificationType,
-        on_delete=models.PROTECT,
-        related_name='qualifications',
-        verbose_name='资质类型'
+        QualificationType, on_delete=models.PROTECT, related_name='qualifications', verbose_name='资质类型'
     )
 
     # 证书信息
@@ -94,21 +84,11 @@ class SupplierQualification(BaseModel):
     expiry_date = models.DateField(verbose_name='到期日期')
 
     # 附件
-    attachment = models.FileField(
-        upload_to='qualifications/',
-        blank=True,
-        null=True,
-        verbose_name='附件'
-    )
+    attachment = models.FileField(upload_to='qualifications/', blank=True, null=True, verbose_name='附件')
     attachment_url = models.URLField(blank=True, verbose_name='附件链接')
 
     # 状态
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='PENDING',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
 
     # 审核
     verified_by = models.ForeignKey(
@@ -117,7 +97,7 @@ class SupplierQualification(BaseModel):
         null=True,
         blank=True,
         related_name='verified_qualifications',
-        verbose_name='审核人'
+        verbose_name='审核人',
     )
     verified_at = models.DateTimeField(null=True, blank=True, verbose_name='审核时间')
     rejection_reason = models.CharField(max_length=500, blank=True, verbose_name='拒绝原因')
@@ -178,11 +158,9 @@ class QualificationReminder(BaseModel):
     """
     资质提醒记录
     """
+
     qualification = models.ForeignKey(
-        SupplierQualification,
-        on_delete=models.CASCADE,
-        related_name='reminders',
-        verbose_name='资质'
+        SupplierQualification, on_delete=models.CASCADE, related_name='reminders', verbose_name='资质'
     )
     remind_date = models.DateField(verbose_name='提醒日期')
     remind_type = models.CharField(
@@ -193,7 +171,7 @@ class QualificationReminder(BaseModel):
             ('SYSTEM', '系统消息'),
         ],
         default='SYSTEM',
-        verbose_name='提醒方式'
+        verbose_name='提醒方式',
     )
     recipients = models.CharField(max_length=500, blank=True, verbose_name='接收人')
     content = models.TextField(blank=True, verbose_name='提醒内容')
@@ -210,6 +188,7 @@ class QualificationReminder(BaseModel):
 # =====================
 # Serializers
 # =====================
+
 
 class QualificationTypeSerializer(serializers.ModelSerializer):
     category_display = serializers.CharField(source='get_category_display', read_only=True)
@@ -244,9 +223,19 @@ class SupplierQualificationListSerializer(serializers.ModelSerializer):
     class Meta:
         model = SupplierQualification
         fields = [
-            'id', 'supplier', 'supplier_name', 'qualification_type', 'type_name',
-            'certificate_no', 'certificate_name', 'issue_date', 'expiry_date',
-            'status', 'status_display', 'days_to_expiry', 'created_at'
+            'id',
+            'supplier',
+            'supplier_name',
+            'qualification_type',
+            'type_name',
+            'certificate_no',
+            'certificate_name',
+            'issue_date',
+            'expiry_date',
+            'status',
+            'status_display',
+            'days_to_expiry',
+            'created_at',
         ]
 
 
@@ -263,8 +252,10 @@ class QualificationReminderSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class QualificationTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """资质类型管理"""
+
     queryset = QualificationType.objects.filter(is_deleted=False)
     serializer_class = QualificationTypeSerializer
     permission_classes = [IsAuthenticated]
@@ -274,14 +265,16 @@ class QualificationTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
     @action(detail=False, methods=['get'])
     def categories(self, request):
         """获取资质分类"""
-        return Response([
-            {'value': 'BUSINESS', 'label': '企业资质'},
-            {'value': 'QUALITY', 'label': '质量认证'},
-            {'value': 'SAFETY', 'label': '安全资质'},
-            {'value': 'ENVIRONMENT', 'label': '环境资质'},
-            {'value': 'INDUSTRY', 'label': '行业资质'},
-            {'value': 'OTHER', 'label': '其他'},
-        ])
+        return Response(
+            [
+                {'value': 'BUSINESS', 'label': '企业资质'},
+                {'value': 'QUALITY', 'label': '质量认证'},
+                {'value': 'SAFETY', 'label': '安全资质'},
+                {'value': 'ENVIRONMENT', 'label': '环境资质'},
+                {'value': 'INDUSTRY', 'label': '行业资质'},
+                {'value': 'OTHER', 'label': '其他'},
+            ]
+        )
 
     @action(detail=False, methods=['post'])
     def init_types(self, request):
@@ -307,8 +300,8 @@ class QualificationTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
                     'category': category,
                     'is_required': is_required,
                     'validity_period': validity,
-                    'created_by': request.user
-                }
+                    'created_by': request.user,
+                },
             )
             if c:
                 created += 1
@@ -318,6 +311,7 @@ class QualificationTypeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
 
 class SupplierQualificationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """供应商资质管理"""
+
     queryset = SupplierQualification.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['supplier', 'qualification_type', 'status']
@@ -358,20 +352,20 @@ class SupplierQualificationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.
         days = int(request.query_params.get('days', 30))
         expiry_date = date.today() + timedelta(days=days)
 
-        qualifications = self.get_queryset().filter(
-            status='VALID',
-            expiry_date__lte=expiry_date,
-            expiry_date__gte=date.today()
-        ).order_by('expiry_date')
+        qualifications = (
+            self.get_queryset()
+            .filter(status='VALID', expiry_date__lte=expiry_date, expiry_date__gte=date.today())
+            .order_by('expiry_date')
+        )
 
         return Response(SupplierQualificationListSerializer(qualifications, many=True).data)
 
     @action(detail=False, methods=['get'])
     def expired(self, request):
         """已过期的资质"""
-        qualifications = self.get_queryset().filter(
-            expiry_date__lt=date.today()
-        ).exclude(status='REJECTED').order_by('-expiry_date')
+        qualifications = (
+            self.get_queryset().filter(expiry_date__lt=date.today()).exclude(status='REJECTED').order_by('-expiry_date')
+        )
 
         return Response(SupplierQualificationListSerializer(qualifications, many=True).data)
 
@@ -397,10 +391,7 @@ class SupplierQualificationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.
             if q.status != old_status:
                 updated += 1
 
-        return Response({
-            'success': True,
-            'updated': updated
-        })
+        return Response({'success': True, 'updated': updated})
 
     @action(detail=False, methods=['get'])
     def statistics(self, request):
@@ -417,25 +408,26 @@ class SupplierQualificationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.
 
         # 即将过期数量
         expiring_30 = qs.filter(
-            status='VALID',
-            expiry_date__lte=date.today() + timedelta(days=30),
-            expiry_date__gte=date.today()
+            status='VALID', expiry_date__lte=date.today() + timedelta(days=30), expiry_date__gte=date.today()
         ).count()
 
         # 已过期数量
         expired = qs.filter(expiry_date__lt=date.today()).exclude(status='REJECTED').count()
 
-        return Response({
-            'total': qs.count(),
-            'expiring_30_days': expiring_30,
-            'expired': expired,
-            'by_status': list(by_status),
-            'by_type': list(by_type)
-        })
+        return Response(
+            {
+                'total': qs.count(),
+                'expiring_30_days': expiring_30,
+                'expired': expired,
+                'by_status': list(by_status),
+                'by_type': list(by_type),
+            }
+        )
 
 
 class QualificationReminderViewSet(viewsets.ReadOnlyModelViewSet):
     """资质提醒记录"""
+
     queryset = QualificationReminder.objects.filter(is_deleted=False)
     serializer_class = QualificationReminderSerializer
     permission_classes = [IsAuthenticated]

@@ -1,6 +1,7 @@
 """
 知识库视图
 """
+
 from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -25,6 +26,7 @@ from .knowledge_serializers import (
 
 class KnowledgeCategoryViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     """知识分类管理"""
+
     queryset = KnowledgeCategory.objects.all()
     serializer_class = KnowledgeCategorySerializer
     filterset_fields = ['parent']
@@ -33,16 +35,16 @@ class KnowledgeCategoryViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def tree(self, request):
         """获取树形结构"""
-        root_categories = self.get_queryset().filter(
-            parent__isnull=True,
-            is_deleted=False
-        ).order_by('sort_order', 'code')
+        root_categories = (
+            self.get_queryset().filter(parent__isnull=True, is_deleted=False).order_by('sort_order', 'code')
+        )
 
         return Response(KnowledgeCategoryTreeSerializer(root_categories, many=True).data)
 
 
 class KnowledgeArticleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """知识文章管理"""
+
     queryset = KnowledgeArticle.objects.select_related('category', 'project', 'author')
     serializer_class = KnowledgeArticleSerializer
     filterset_fields = ['category', 'article_type', 'status', 'author', 'project']
@@ -79,7 +81,7 @@ class KnowledgeArticleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
             'by_type': {},
             'by_category': {},
             'top_viewed': [],
-            'recent': []
+            'recent': [],
         }
 
         # 按类型统计
@@ -129,20 +131,25 @@ class KnowledgeArticleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         if not keyword:
             return Response([])
 
-        results = self.get_queryset().filter(
-            Q(title__icontains=keyword) |
-            Q(summary__icontains=keyword) |
-            Q(content__icontains=keyword) |
-            Q(tags__contains=[keyword]),
-            status='PUBLISHED',
-            is_deleted=False
-        ).order_by('-view_count')[:20]
+        results = (
+            self.get_queryset()
+            .filter(
+                Q(title__icontains=keyword)
+                | Q(summary__icontains=keyword)
+                | Q(content__icontains=keyword)
+                | Q(tags__contains=[keyword]),
+                status='PUBLISHED',
+                is_deleted=False,
+            )
+            .order_by('-view_count')[:20]
+        )
 
         return Response(KnowledgeArticleListSerializer(results, many=True).data)
 
 
 class ProjectArchiveViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目归档报告管理"""
+
     queryset = ProjectArchive.objects.select_related('project', 'reviewer')
     serializer_class = ProjectArchiveSerializer
     filterset_fields = ['status', 'project']
@@ -206,27 +213,25 @@ class ProjectArchiveViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         # 生成技术总结文章
         if archive.technical_challenges and archive.solutions_applied:
             article = KnowledgeArticle.objects.create(
-                title=f"{archive.project.name} - 技术总结",
+                title=f'{archive.project.name} - 技术总结',
                 article_type='SOLUTION',
-                summary=f"项目{archive.project.name}的技术难点和解决方案",
-                content=f"## 技术难点\n{archive.technical_challenges}\n\n## 解决方案\n{archive.solutions_applied}\n\n## 技术创新\n{archive.innovations}",
+                summary=f'项目{archive.project.name}的技术难点和解决方案',
+                content=f'## 技术难点\n{archive.technical_challenges}\n\n## 解决方案\n{archive.solutions_applied}\n\n## 技术创新\n{archive.innovations}',
                 project=archive.project,
                 author=request.user,
                 status='DRAFT',
                 created_by=request.user,
-                updated_by=request.user
+                updated_by=request.user,
             )
 
-            return Response({
-                'message': '知识文章已创建',
-                'article_id': article.id
-            })
+            return Response({'message': '知识文章已创建', 'article_id': article.id})
 
         return Response({'error': '归档报告缺少技术总结内容'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class TechnicalIssueViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术问题记录管理"""
+
     queryset = TechnicalIssue.objects.select_related('project', 'category', 'reported_by', 'resolved_by')
     serializer_class = TechnicalIssueSerializer
     filterset_fields = ['project', 'category', 'severity', 'status']
@@ -276,27 +281,25 @@ class TechnicalIssueViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
             category=issue.category,
             article_type='SOLUTION',
             summary=issue.description[:200] if len(issue.description) > 200 else issue.description,
-            content=f"## 问题描述\n{issue.description}\n\n## 问题现象\n{issue.symptoms}\n\n## 根本原因\n{issue.root_cause}\n\n## 解决方案\n{issue.solution}\n\n## 预防措施\n{issue.prevention}",
+            content=f'## 问题描述\n{issue.description}\n\n## 问题现象\n{issue.symptoms}\n\n## 根本原因\n{issue.root_cause}\n\n## 解决方案\n{issue.solution}\n\n## 预防措施\n{issue.prevention}',
             project=issue.project,
             author=request.user,
             tags=issue.tags,
             status='DRAFT',
             created_by=request.user,
-            updated_by=request.user
+            updated_by=request.user,
         )
 
         issue.knowledge_article = article
         issue.status = 'CLOSED'
         issue.save()
 
-        return Response({
-            'message': '知识文章已创建',
-            'article_id': article.id
-        })
+        return Response({'message': '知识文章已创建', 'article_id': article.id})
 
 
 class StandardComponentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """标准部件管理"""
+
     queryset = StandardComponent.objects.select_related('category', 'maintainer')
     serializer_class = StandardComponentSerializer
     filterset_fields = ['category', 'status']
@@ -311,6 +314,7 @@ class StandardComponentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
     def perform_create(self, serializer):
         # 自动生成编码
         from apps.core.models import CodeRule
+
         code = CodeRule.generate_code('COMPONENT')
         serializer.save(code=code, maintainer=self.request.user)
 

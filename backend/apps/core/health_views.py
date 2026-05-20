@@ -1,6 +1,7 @@
 """
 Health check and system status endpoints.
 """
+
 import time
 
 from django.conf import settings
@@ -35,7 +36,7 @@ def readiness_check(request):
     # Check database
     try:
         with connection.cursor() as cursor:
-            cursor.execute("SELECT 1")
+            cursor.execute('SELECT 1')
         checks['database'] = True
     except Exception as e:
         checks['database_error'] = str(e)
@@ -52,10 +53,9 @@ def readiness_check(request):
     # Overall status
     all_healthy = all(v for k, v in checks.items() if not k.endswith('_error'))
 
-    return Response({
-        'status': 'ready' if all_healthy else 'not_ready',
-        'checks': checks
-    }, status=200 if all_healthy else 503)
+    return Response(
+        {'status': 'ready' if all_healthy else 'not_ready', 'checks': checks}, status=200 if all_healthy else 503
+    )
 
 
 @api_view(['GET'])
@@ -78,7 +78,7 @@ def system_status(request):
     try:
         start = time.time()
         with connection.cursor() as cursor:
-            cursor.execute("SELECT 1")
+            cursor.execute('SELECT 1')
         status['database'] = {
             'status': 'connected',
             'latency_ms': round((time.time() - start) * 1000, 2),
@@ -184,7 +184,7 @@ def security_status(request):
         'score': score,
         'max_score': max_score,
         'percentage': round(score / max_score * 100, 1),
-        'grade': 'A' if score >= 90 else 'B' if score >= 70 else 'C' if score >= 50 else 'D'
+        'grade': 'A' if score >= 90 else 'B' if score >= 70 else 'C' if score >= 50 else 'D',
     }
 
     return Response(security_config)

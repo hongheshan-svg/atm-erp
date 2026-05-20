@@ -7,6 +7,7 @@ BOM Version Comparison Service
 - 与CAD导出BOM对比
 - 变更报告生成
 """
+
 import logging
 from decimal import Decimal
 from typing import Dict, List
@@ -41,16 +42,15 @@ class BOMCompareService:
     }
 
     @classmethod
-    def compare_bom_versions(cls, old_bom_items: List, new_bom_items: List,
-                             compare_fields: List[str] = None) -> Dict:
+    def compare_bom_versions(cls, old_bom_items: List, new_bom_items: List, compare_fields: List[str] = None) -> Dict:
         """
         对比两个版本的BOM差异
-        
+
         Args:
             old_bom_items: 旧版本BOM项列表（QuerySet或dict列表）
             new_bom_items: 新版本BOM项列表
             compare_fields: 要对比的字段列表，默认对比常用字段
-            
+
         Returns:
             {
                 'summary': {'added': 5, 'removed': 2, 'modified': 3, 'unchanged': 10},
@@ -61,7 +61,12 @@ class BOMCompareService:
             }
         """
         compare_fields = compare_fields or [
-            'planned_qty', 'material_spec', 'estimated_cost', 'supplier_id', 'level', 'parent_id'
+            'planned_qty',
+            'material_spec',
+            'estimated_cost',
+            'supplier_id',
+            'level',
+            'parent_id',
         ]
 
         # 将BOM项转换为字典格式（以item_id或item.sku为key）
@@ -82,26 +87,30 @@ class BOMCompareService:
         # 新增项
         for key in added_keys:
             item = new_dict[key]
-            details.append({
-                'item_sku': item.get('item_sku', key),
-                'item_name': item.get('item_name', ''),
-                'change_type': 'ADDED',
-                'new_qty': float(item.get('planned_qty', 0)),
-                'old_qty': 0,
-                'new_data': item
-            })
+            details.append(
+                {
+                    'item_sku': item.get('item_sku', key),
+                    'item_name': item.get('item_name', ''),
+                    'change_type': 'ADDED',
+                    'new_qty': float(item.get('planned_qty', 0)),
+                    'old_qty': 0,
+                    'new_data': item,
+                }
+            )
 
         # 删除项
         for key in removed_keys:
             item = old_dict[key]
-            details.append({
-                'item_sku': item.get('item_sku', key),
-                'item_name': item.get('item_name', ''),
-                'change_type': 'REMOVED',
-                'new_qty': 0,
-                'old_qty': float(item.get('planned_qty', 0)),
-                'old_data': item
-            })
+            details.append(
+                {
+                    'item_sku': item.get('item_sku', key),
+                    'item_name': item.get('item_name', ''),
+                    'change_type': 'REMOVED',
+                    'new_qty': 0,
+                    'old_qty': float(item.get('planned_qty', 0)),
+                    'old_data': item,
+                }
+            )
 
         # 对比共同项
         for key in common_keys:
@@ -112,16 +121,18 @@ class BOMCompareService:
 
             if changes:
                 modified_count += 1
-                details.append({
-                    'item_sku': new_item.get('item_sku', key),
-                    'item_name': new_item.get('item_name', ''),
-                    'change_type': changes[0]['type'],  # 主要变更类型
-                    'changes': changes,
-                    'old_qty': float(old_item.get('planned_qty', 0)),
-                    'new_qty': float(new_item.get('planned_qty', 0)),
-                    'old_data': old_item,
-                    'new_data': new_item
-                })
+                details.append(
+                    {
+                        'item_sku': new_item.get('item_sku', key),
+                        'item_name': new_item.get('item_name', ''),
+                        'change_type': changes[0]['type'],  # 主要变更类型
+                        'changes': changes,
+                        'old_qty': float(old_item.get('planned_qty', 0)),
+                        'new_qty': float(new_item.get('planned_qty', 0)),
+                        'old_data': old_item,
+                        'new_data': new_item,
+                    }
+                )
             else:
                 unchanged_count += 1
 
@@ -132,10 +143,10 @@ class BOMCompareService:
                 'modified': modified_count,
                 'unchanged': unchanged_count,
                 'total_old': len(old_keys),
-                'total_new': len(new_keys)
+                'total_new': len(new_keys),
             },
             'details': details,
-            'compare_time': timezone.now().isoformat()
+            'compare_time': timezone.now().isoformat(),
         }
 
     @classmethod
@@ -192,19 +203,23 @@ class BOMCompareService:
             # 数值类型特殊处理
             if isinstance(old_val, (int, float, Decimal)) and isinstance(new_val, (int, float, Decimal)):
                 if abs(float(old_val) - float(new_val)) > 0.0001:
-                    changes.append({
+                    changes.append(
+                        {
+                            'field': field,
+                            'type': field_change_types.get(field, 'SPEC_CHANGED'),
+                            'old_value': float(old_val),
+                            'new_value': float(new_val),
+                        }
+                    )
+            elif old_val != new_val:
+                changes.append(
+                    {
                         'field': field,
                         'type': field_change_types.get(field, 'SPEC_CHANGED'),
-                        'old_value': float(old_val),
-                        'new_value': float(new_val)
-                    })
-            elif old_val != new_val:
-                changes.append({
-                    'field': field,
-                    'type': field_change_types.get(field, 'SPEC_CHANGED'),
-                    'old_value': old_val,
-                    'new_value': new_val
-                })
+                        'old_value': old_val,
+                        'new_value': new_val,
+                    }
+                )
 
         return changes
 
@@ -212,27 +227,23 @@ class BOMCompareService:
     def compare_with_cad_bom(cls, project_id: int, cad_items: List[Dict]) -> Dict:
         """
         对比项目现有BOM与CAD导出BOM的差异
-        
+
         Args:
             project_id: 项目ID
             cad_items: CAD导出的BOM项列表
-            
+
         Returns:
             对比结果
         """
         from apps.projects.models import ProjectBOM
 
         # 获取项目现有BOM
-        existing_bom = ProjectBOM.objects.filter(
-            project_id=project_id,
-            is_deleted=False
-        ).select_related('item')
+        existing_bom = ProjectBOM.objects.filter(project_id=project_id, is_deleted=False).select_related('item')
 
         return cls.compare_bom_versions(existing_bom, cad_items)
 
     @classmethod
-    def compare_project_snapshots(cls, project_id: int,
-                                   snapshot_date1: str, snapshot_date2: str) -> Dict:
+    def compare_project_snapshots(cls, project_id: int, snapshot_date1: str, snapshot_date2: str) -> Dict:
         """
         对比项目BOM在两个时间点的差异（需要BOM快照功能支持）
         """
@@ -243,11 +254,11 @@ class BOMCompareService:
     def generate_change_report(cls, diff_result: Dict, format: str = 'dict') -> any:
         """
         生成变更报告
-        
+
         Args:
             diff_result: compare_bom_versions的返回结果
             format: 输出格式 'dict'|'excel'|'pdf'
-            
+
         Returns:
             根据format返回不同格式的报告
         """
@@ -276,13 +287,13 @@ class BOMCompareService:
             'statistics': {
                 '原BOM项数': summary['total_old'],
                 '新BOM项数': summary['total_new'],
-                '变更率': f"{(summary['added'] + summary['removed'] + summary['modified']) / max(summary['total_old'], 1) * 100:.1f}%"
+                '变更率': f"{(summary['added'] + summary['removed'] + summary['modified']) / max(summary['total_old'], 1) * 100:.1f}%",
             },
             'changes': {
                 'added': [d for d in details if d['change_type'] == 'ADDED'],
                 'removed': [d for d in details if d['change_type'] == 'REMOVED'],
-                'modified': [d for d in details if d['change_type'] not in ('ADDED', 'REMOVED')]
-            }
+                'modified': [d for d in details if d['change_type'] not in ('ADDED', 'REMOVED')],
+            },
         }
 
         return report
@@ -344,10 +355,7 @@ class BOMSnapshot(BaseModel):
     """BOM快照 - 保存某个时间点的BOM状态"""
 
     project = models.ForeignKey(
-        'projects.Project',
-        on_delete=models.CASCADE,
-        related_name='bom_snapshots',
-        verbose_name='项目'
+        'projects.Project', on_delete=models.CASCADE, related_name='bom_snapshots', verbose_name='项目'
     )
     name = models.CharField(max_length=200, verbose_name='快照名称')
     description = models.TextField(blank=True, verbose_name='描述')
@@ -362,7 +370,7 @@ class BOMSnapshot(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.project.code} - {self.name}"
+        return f'{self.project.code} - {self.name}'
 
     @classmethod
     def create_snapshot(cls, project_id: int, name: str, user, description: str = '') -> 'BOMSnapshot':
@@ -370,9 +378,7 @@ class BOMSnapshot(BaseModel):
         from apps.projects.models import Project, ProjectBOM
 
         project = Project.objects.get(id=project_id)
-        bom_items = ProjectBOM.objects.filter(
-            project=project, is_deleted=False
-        ).select_related('item', 'parent')
+        bom_items = ProjectBOM.objects.filter(project=project, is_deleted=False).select_related('item', 'parent')
 
         # 序列化BOM数据
         snapshot_data = []
@@ -407,7 +413,7 @@ class BOMSnapshot(BaseModel):
             snapshot_data=snapshot_data,
             item_count=len(snapshot_data),
             total_cost=total_cost,
-            created_by=user
+            created_by=user,
         )
 
         return snapshot
@@ -430,8 +436,17 @@ class BOMSnapshotSerializer(serializers.ModelSerializer):
     class Meta:
         model = BOMSnapshot
         fields = [
-            'id', 'project', 'project_name', 'project_code', 'name', 'description',
-            'item_count', 'total_cost', 'created_at', 'created_by', 'created_by_name'
+            'id',
+            'project',
+            'project_name',
+            'project_code',
+            'name',
+            'description',
+            'item_count',
+            'total_cost',
+            'created_at',
+            'created_by',
+            'created_by_name',
         ]
         read_only_fields = ['item_count', 'total_cost']
 
@@ -451,6 +466,7 @@ class BOMSnapshotDetailSerializer(BOMSnapshotSerializer):
 # ViewSet
 class BOMCompareViewSet(viewsets.ViewSet):
     """BOM版本对比"""
+
     permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['post'])
@@ -468,10 +484,7 @@ class BOMCompareViewSet(viewsets.ViewSet):
                 snapshot1 = BOMSnapshot.objects.get(id=snapshot_id_1)
                 snapshot2 = BOMSnapshot.objects.get(id=snapshot_id_2)
 
-                result = BOMCompareService.compare_bom_versions(
-                    snapshot1.snapshot_data,
-                    snapshot2.snapshot_data
-                )
+                result = BOMCompareService.compare_bom_versions(snapshot1.snapshot_data, snapshot2.snapshot_data)
             except BOMSnapshot.DoesNotExist:
                 return Response({'error': '快照不存在'}, status=404)
 
@@ -481,9 +494,7 @@ class BOMCompareViewSet(viewsets.ViewSet):
 
             try:
                 session = CreoBOMImportSession.objects.get(id=cad_session_id)
-                cad_items = list(session.items.values(
-                    'part_number', 'part_name', 'quantity', 'level', 'material'
-                ))
+                cad_items = list(session.items.values('part_number', 'part_name', 'quantity', 'level', 'material'))
                 # 转换字段名
                 for item in cad_items:
                     item['item_sku'] = item.pop('part_number', '')
@@ -499,12 +510,14 @@ class BOMCompareViewSet(viewsets.ViewSet):
         # 生成报告
         if output_format == 'excel':
             from django.http import HttpResponse
+
             excel_file = BOMCompareService.generate_change_report(result, 'excel')
             response = HttpResponse(
-                excel_file.read(),
-                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                excel_file.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             )
-            response['Content-Disposition'] = f'attachment; filename=bom_compare_{timezone.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+            response['Content-Disposition'] = (
+                f'attachment; filename=bom_compare_{timezone.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+            )
             return response
 
         report = BOMCompareService.generate_change_report(result, 'dict')
@@ -513,6 +526,7 @@ class BOMCompareViewSet(viewsets.ViewSet):
 
 class BOMSnapshotViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """BOM快照管理"""
+
     queryset = BOMSnapshot.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['project']
@@ -533,9 +547,7 @@ class BOMSnapshotViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
             return Response({'error': '请指定项目ID'}, status=400)
 
         try:
-            snapshot = BOMSnapshot.create_snapshot(
-                int(project_id), name, request.user, description
-            )
+            snapshot = BOMSnapshot.create_snapshot(int(project_id), name, request.user, description)
             return Response(BOMSnapshotSerializer(snapshot).data)
         except Exception as e:
             return Response({'error': str(e)}, status=500)
@@ -546,15 +558,10 @@ class BOMSnapshotViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
         snapshot = self.get_object()
 
         from apps.projects.models import ProjectBOM
-        current_bom = ProjectBOM.objects.filter(
-            project=snapshot.project,
-            is_deleted=False
-        ).select_related('item')
 
-        result = BOMCompareService.compare_bom_versions(
-            snapshot.snapshot_data,
-            current_bom
-        )
+        current_bom = ProjectBOM.objects.filter(project=snapshot.project, is_deleted=False).select_related('item')
+
+        result = BOMCompareService.compare_bom_versions(snapshot.snapshot_data, current_bom)
 
         report = BOMCompareService.generate_change_report(result, 'dict')
         return Response(report)

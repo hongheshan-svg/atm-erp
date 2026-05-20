@@ -1,6 +1,7 @@
 """
 Middleware for audit logging
 """
+
 import json
 
 from django.utils.deprecation import MiddlewareMixin
@@ -58,11 +59,11 @@ class AuditLogMiddleware(MiddlewareMixin):
                 object_repr=model_name,
                 changes=changes,
                 ip_address=ip_address,
-                user_agent=user_agent[:200] if user_agent else None
+                user_agent=user_agent[:200] if user_agent else None,
             )
         except Exception as e:
             # Don't break the request if audit logging fails
-            print(f"Audit logging error: {e}")
+            print(f'Audit logging error: {e}')
 
         return response
 
@@ -75,12 +76,7 @@ class AuditLogMiddleware(MiddlewareMixin):
 
     def _map_method_to_action(self, method):
         """Map HTTP method to action"""
-        mapping = {
-            'POST': 'CREATE',
-            'PUT': 'UPDATE',
-            'PATCH': 'UPDATE',
-            'DELETE': 'DELETE'
-        }
+        mapping = {'POST': 'CREATE', 'PUT': 'UPDATE', 'PATCH': 'UPDATE', 'DELETE': 'DELETE'}
         return mapping.get(method, 'UPDATE')
 
     def _get_client_ip(self, request):
@@ -91,4 +87,3 @@ class AuditLogMiddleware(MiddlewareMixin):
         else:
             ip = request.META.get('REMOTE_ADDR')
         return ip
-

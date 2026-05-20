@@ -1,6 +1,7 @@
 """
 供应商评价管理序列化器
 """
+
 from rest_framework import serializers
 
 from apps.accounts.serializers import UserSerializer
@@ -60,29 +61,41 @@ class SupplierEvaluationSerializer(serializers.ModelSerializer):
         model = SupplierEvaluation
         fields = '__all__'
         read_only_fields = [
-            'created_by', 'updated_by', 'evaluation_no',
-            'total_score', 'quality_score', 'delivery_score',
-            'price_score', 'service_score', 'grade',
-            'approver', 'approved_at'
+            'created_by',
+            'updated_by',
+            'evaluation_no',
+            'total_score',
+            'quality_score',
+            'delivery_score',
+            'price_score',
+            'service_score',
+            'grade',
+            'approver',
+            'approved_at',
         ]
 
 
 class SupplierEvaluationCreateSerializer(serializers.ModelSerializer):
     """创建评价时的序列化器"""
-    score_items = serializers.ListField(
-        child=serializers.DictField(),
-        write_only=True,
-        required=False
-    )
+
+    score_items = serializers.ListField(child=serializers.DictField(), write_only=True, required=False)
 
     class Meta:
         model = SupplierEvaluation
         fields = '__all__'
         read_only_fields = [
-            'created_by', 'updated_by', 'evaluation_no',
-            'total_score', 'quality_score', 'delivery_score',
-            'price_score', 'service_score', 'grade',
-            'approver', 'approved_at', 'status'
+            'created_by',
+            'updated_by',
+            'evaluation_no',
+            'total_score',
+            'quality_score',
+            'delivery_score',
+            'price_score',
+            'service_score',
+            'grade',
+            'approver',
+            'approved_at',
+            'status',
         ]
 
     def create(self, validated_data):
@@ -96,7 +109,7 @@ class SupplierEvaluationCreateSerializer(serializers.ModelSerializer):
                 criteria_id=item_data['criteria'],
                 score=item_data['score'],
                 comments=item_data.get('comments', ''),
-                created_by=evaluation.created_by
+                created_by=evaluation.created_by,
             )
 
         # 计算评分

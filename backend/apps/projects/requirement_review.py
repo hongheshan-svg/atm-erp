@@ -3,6 +3,7 @@
 Requirement Review
 需求评审流程、评审记录、评审结果管理
 """
+
 from datetime import date
 from decimal import Decimal
 
@@ -21,6 +22,7 @@ from apps.core.models import BaseModel
 
 class ReviewTemplate(BaseModel):
     """评审模板"""
+
     name = models.CharField(max_length=100, verbose_name='模板名称')
     code = models.CharField(max_length=50, unique=True, verbose_name='模板编码')
     description = models.TextField(blank=True, verbose_name='描述')
@@ -32,7 +34,7 @@ class ReviewTemplate(BaseModel):
             ('TECHNICAL', '技术评审'),
         ],
         default='REQUIREMENT',
-        verbose_name='评审类型'
+        verbose_name='评审类型',
     )
     is_active = models.BooleanField(default=True, verbose_name='是否启用')
 
@@ -47,21 +49,15 @@ class ReviewTemplate(BaseModel):
 
 class ReviewCheckItem(BaseModel):
     """评审检查项"""
+
     template = models.ForeignKey(
-        ReviewTemplate,
-        on_delete=models.CASCADE,
-        related_name='check_items',
-        verbose_name='评审模板'
+        ReviewTemplate, on_delete=models.CASCADE, related_name='check_items', verbose_name='评审模板'
     )
     name = models.CharField(max_length=200, verbose_name='检查项名称')
     description = models.TextField(blank=True, verbose_name='检查说明')
     sort_order = models.IntegerField(default=0, verbose_name='排序')
     is_required = models.BooleanField(default=True, verbose_name='是否必填')
-    weight = models.DecimalField(
-        max_digits=5, decimal_places=2,
-        default=1.0,
-        verbose_name='权重'
-    )
+    weight = models.DecimalField(max_digits=5, decimal_places=2, default=1.0, verbose_name='权重')
 
     class Meta:
         db_table = 'plm_review_check_item'
@@ -70,11 +66,12 @@ class ReviewCheckItem(BaseModel):
         ordering = ['template', 'sort_order']
 
     def __str__(self):
-        return f"{self.template.name} - {self.name}"
+        return f'{self.template.name} - {self.name}'
 
 
 class RequirementReview(BaseModel):
     """需求评审"""
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('SCHEDULED', '已安排'),
@@ -95,10 +92,7 @@ class RequirementReview(BaseModel):
 
     # 关联需求
     requirement = models.ForeignKey(
-        'projects.Requirement',
-        on_delete=models.CASCADE,
-        related_name='reviews',
-        verbose_name='需求'
+        'projects.Requirement', on_delete=models.CASCADE, related_name='reviews', verbose_name='需求'
     )
 
     # 评审模板
@@ -108,7 +102,7 @@ class RequirementReview(BaseModel):
         null=True,
         blank=True,
         related_name='reviews',
-        verbose_name='评审模板'
+        verbose_name='评审模板',
     )
 
     # 评审安排
@@ -116,9 +110,7 @@ class RequirementReview(BaseModel):
     scheduled_time = models.TimeField(null=True, blank=True, verbose_name='计划时间')
     location = models.CharField(max_length=200, blank=True, verbose_name='评审地点')
     duration_hours = models.DecimalField(
-        max_digits=5, decimal_places=2,
-        null=True, blank=True,
-        verbose_name='预计时长(小时)'
+        max_digits=5, decimal_places=2, null=True, blank=True, verbose_name='预计时长(小时)'
     )
 
     # 评审组织者
@@ -127,22 +119,12 @@ class RequirementReview(BaseModel):
         on_delete=models.SET_NULL,
         null=True,
         related_name='organized_req_reviews',
-        verbose_name='组织者'
+        verbose_name='组织者',
     )
 
     # 状态和结果
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='DRAFT',
-        verbose_name='状态'
-    )
-    result = models.CharField(
-        max_length=20,
-        choices=RESULT_CHOICES,
-        default='PENDING',
-        verbose_name='评审结果'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', verbose_name='状态')
+    result = models.CharField(max_length=20, choices=RESULT_CHOICES, default='PENDING', verbose_name='评审结果')
 
     # 实际评审信息
     actual_start_time = models.DateTimeField(null=True, blank=True, verbose_name='实际开始时间')
@@ -154,11 +136,7 @@ class RequirementReview(BaseModel):
     action_items = models.TextField(blank=True, verbose_name='后续行动项')
 
     # 评审得分
-    total_score = models.DecimalField(
-        max_digits=5, decimal_places=2,
-        null=True, blank=True,
-        verbose_name='总评分'
-    )
+    total_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name='总评分')
 
     # 附件
     attachments = models.JSONField(default=list, blank=True, verbose_name='附件')
@@ -170,11 +148,12 @@ class RequirementReview(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.review_no} - {self.title}"
+        return f'{self.review_no} - {self.title}'
 
     def save(self, *args, **kwargs):
         if not self.review_no:
             from apps.core.utils import generate_code
+
             self.review_no = generate_code('RRV')
         super().save(*args, **kwargs)
 
@@ -185,10 +164,7 @@ class RequirementReview(BaseModel):
             return None
 
         total_weight = results.aggregate(total=Sum('check_item__weight'))['total'] or 1
-        weighted_score = sum(
-            r.score * float(r.check_item.weight)
-            for r in results if r.score is not None
-        )
+        weighted_score = sum(r.score * float(r.check_item.weight) for r in results if r.score is not None)
 
         self.total_score = round(Decimal(weighted_score / float(total_weight)), 2)
         return self.total_score
@@ -196,6 +172,7 @@ class RequirementReview(BaseModel):
 
 class ReviewParticipant(BaseModel):
     """评审参与者"""
+
     ROLE_CHOICES = [
         ('REVIEWER', '评审人'),
         ('EXPERT', '专家'),
@@ -204,23 +181,12 @@ class ReviewParticipant(BaseModel):
     ]
 
     review = models.ForeignKey(
-        RequirementReview,
-        on_delete=models.CASCADE,
-        related_name='participants',
-        verbose_name='评审'
+        RequirementReview, on_delete=models.CASCADE, related_name='participants', verbose_name='评审'
     )
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='review_participations',
-        verbose_name='参与者'
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='review_participations', verbose_name='参与者'
     )
-    role = models.CharField(
-        max_length=20,
-        choices=ROLE_CHOICES,
-        default='REVIEWER',
-        verbose_name='角色'
-    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='REVIEWER', verbose_name='角色')
     is_required = models.BooleanField(default=True, verbose_name='是否必须参加')
     attended = models.BooleanField(default=False, verbose_name='是否出席')
     feedback = models.TextField(blank=True, verbose_name='反馈意见')
@@ -232,28 +198,19 @@ class ReviewParticipant(BaseModel):
         unique_together = ('review', 'user')
 
     def __str__(self):
-        return f"{self.review.review_no} - {self.user.username}"
+        return f'{self.review.review_no} - {self.user.username}'
 
 
 class ReviewItemResult(BaseModel):
     """评审检查项结果"""
+
     review = models.ForeignKey(
-        RequirementReview,
-        on_delete=models.CASCADE,
-        related_name='item_results',
-        verbose_name='评审'
+        RequirementReview, on_delete=models.CASCADE, related_name='item_results', verbose_name='评审'
     )
     check_item = models.ForeignKey(
-        ReviewCheckItem,
-        on_delete=models.CASCADE,
-        related_name='results',
-        verbose_name='检查项'
+        ReviewCheckItem, on_delete=models.CASCADE, related_name='results', verbose_name='检查项'
     )
-    score = models.DecimalField(
-        max_digits=5, decimal_places=2,
-        null=True, blank=True,
-        verbose_name='评分'
-    )
+    score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name='评分')
     result = models.CharField(
         max_length=20,
         choices=[
@@ -262,7 +219,7 @@ class ReviewItemResult(BaseModel):
             ('NA', '不适用'),
         ],
         default='PASS',
-        verbose_name='结果'
+        verbose_name='结果',
     )
     comment = models.TextField(blank=True, verbose_name='评审意见')
     issues = models.TextField(blank=True, verbose_name='发现问题')
@@ -274,11 +231,12 @@ class ReviewItemResult(BaseModel):
         unique_together = ('review', 'check_item')
 
     def __str__(self):
-        return f"{self.review.review_no} - {self.check_item.name}"
+        return f'{self.review.review_no} - {self.check_item.name}'
 
 
 class ReviewActionItem(BaseModel):
     """评审行动项"""
+
     STATUS_CHOICES = [
         ('OPEN', '待处理'),
         ('IN_PROGRESS', '处理中'),
@@ -287,10 +245,7 @@ class ReviewActionItem(BaseModel):
     ]
 
     review = models.ForeignKey(
-        RequirementReview,
-        on_delete=models.CASCADE,
-        related_name='action_item_list',
-        verbose_name='评审'
+        RequirementReview, on_delete=models.CASCADE, related_name='action_item_list', verbose_name='评审'
     )
     title = models.CharField(max_length=200, verbose_name='行动项标题')
     description = models.TextField(blank=True, verbose_name='描述')
@@ -299,15 +254,10 @@ class ReviewActionItem(BaseModel):
         on_delete=models.SET_NULL,
         null=True,
         related_name='assigned_review_actions',
-        verbose_name='负责人'
+        verbose_name='负责人',
     )
     due_date = models.DateField(null=True, blank=True, verbose_name='截止日期')
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='OPEN',
-        verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='OPEN', verbose_name='状态')
     completed_date = models.DateField(null=True, blank=True, verbose_name='完成日期')
     resolution = models.TextField(blank=True, verbose_name='解决方案')
 
@@ -318,12 +268,13 @@ class ReviewActionItem(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.review.review_no} - {self.title}"
+        return f'{self.review.review_no} - {self.title}'
 
 
 # =====================
 # Serializers
 # =====================
+
 
 class ReviewCheckItemSerializer(serializers.ModelSerializer):
     class Meta:
@@ -398,9 +349,21 @@ class RequirementReviewListSerializer(serializers.ModelSerializer):
     class Meta:
         model = RequirementReview
         fields = [
-            'id', 'review_no', 'title', 'requirement', 'requirement_title',
-            'scheduled_date', 'status', 'status_display', 'result', 'result_display',
-            'organizer', 'organizer_name', 'total_score', 'participant_count', 'created_at'
+            'id',
+            'review_no',
+            'title',
+            'requirement',
+            'requirement_title',
+            'scheduled_date',
+            'status',
+            'status_display',
+            'result',
+            'result_display',
+            'organizer',
+            'organizer_name',
+            'total_score',
+            'participant_count',
+            'created_at',
         ]
 
     def get_participant_count(self, obj):
@@ -411,8 +374,10 @@ class RequirementReviewListSerializer(serializers.ModelSerializer):
 # ViewSets
 # =====================
 
+
 class ReviewTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """评审模板管理"""
+
     queryset = ReviewTemplate.objects.filter(is_deleted=False)
     serializer_class = ReviewTemplateSerializer
     permission_classes = [IsAuthenticated]
@@ -431,7 +396,7 @@ class ReviewTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
             sort_order=request.data.get('sort_order', 0),
             is_required=request.data.get('is_required', True),
             weight=request.data.get('weight', 1.0),
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(ReviewCheckItemSerializer(item).data, status=status.HTTP_201_CREATED)
@@ -439,6 +404,7 @@ class ReviewTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
 
 class RequirementReviewViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """需求评审管理"""
+
     queryset = RequirementReview.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['requirement', 'status', 'result', 'organizer', 'template']
@@ -461,8 +427,8 @@ class RequirementReviewViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
             defaults={
                 'role': request.data.get('role', 'REVIEWER'),
                 'is_required': request.data.get('is_required', True),
-                'created_by': request.user
-            }
+                'created_by': request.user,
+            },
         )
 
         return Response(ReviewParticipantSerializer(participant).data)
@@ -523,8 +489,8 @@ class RequirementReviewViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
                 'result': request.data.get('result', 'PASS'),
                 'comment': request.data.get('comment', ''),
                 'issues': request.data.get('issues', ''),
-                'created_by': request.user
-            }
+                'created_by': request.user,
+            },
         )
 
         return Response(ReviewItemResultSerializer(result).data)
@@ -540,7 +506,7 @@ class RequirementReviewViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
             description=request.data.get('description', ''),
             assignee_id=request.data.get('assignee_id'),
             due_date=request.data.get('due_date'),
-            created_by=request.user
+            created_by=request.user,
         )
 
         return Response(ReviewActionItemSerializer(action_item).data, status=status.HTTP_201_CREATED)
@@ -555,35 +521,31 @@ class RequirementReviewViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
         by_result = qs.filter(status='COMPLETED').values('result').annotate(count=Count('id'))
 
         # 平均评审时长
-        completed = qs.filter(
-            status='COMPLETED',
-            actual_start_time__isnull=False,
-            actual_end_time__isnull=False
-        )
+        completed = qs.filter(status='COMPLETED', actual_start_time__isnull=False, actual_end_time__isnull=False)
 
         avg_duration = None
         if completed.exists():
-            durations = [
-                (r.actual_end_time - r.actual_start_time).total_seconds() / 3600
-                for r in completed
-            ]
+            durations = [(r.actual_end_time - r.actual_start_time).total_seconds() / 3600 for r in completed]
             avg_duration = round(sum(durations) / len(durations), 2)
 
         # 本月评审数
         month_start = date.today().replace(day=1)
         this_month = qs.filter(created_at__date__gte=month_start).count()
 
-        return Response({
-            'total': total,
-            'this_month': this_month,
-            'by_status': list(by_status),
-            'by_result': list(by_result),
-            'avg_duration_hours': avg_duration
-        })
+        return Response(
+            {
+                'total': total,
+                'this_month': this_month,
+                'by_status': list(by_status),
+                'by_result': list(by_result),
+                'avg_duration_hours': avg_duration,
+            }
+        )
 
 
 class ReviewActionItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """评审行动项管理"""
+
     queryset = ReviewActionItem.objects.filter(is_deleted=False)
     serializer_class = ReviewActionItemSerializer
     permission_classes = [IsAuthenticated]

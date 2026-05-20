@@ -1,6 +1,7 @@
 """
 设备台账和工装夹具视图
 """
+
 from django.db.models import Count
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -41,10 +42,12 @@ from .fixture_models import Fixture, FixtureCalibration, FixtureCategory, Fixtur
 # 设备台账视图
 # ============================================================
 
+
 class EquipmentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     设备台账管理
     """
+
     queryset = Equipment.objects.select_related('project', 'customer', 'sales_order')
     serializer_class = EquipmentSerializer
     filterset_fields = ['status', 'project', 'customer']
@@ -75,14 +78,12 @@ class EquipmentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
             stats['by_status'][item['status']] = item['count']
 
         # 质保统计
-        stats['in_warranty'] = queryset.filter(
-            warranty_end_date__gte=today
-        ).count()
+        stats['in_warranty'] = queryset.filter(warranty_end_date__gte=today).count()
 
         from datetime import timedelta
+
         stats['warranty_expiring_soon'] = queryset.filter(
-            warranty_end_date__gte=today,
-            warranty_end_date__lte=today + timedelta(days=30)
+            warranty_end_date__gte=today, warranty_end_date__lte=today + timedelta(days=30)
         ).count()
 
         return Response(stats)
@@ -138,9 +139,7 @@ class EquipmentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
         serializer = EquipmentAcceptanceSerializer(data=acceptance_data)
         if serializer.is_valid():
             acceptance = serializer.save(
-                created_by=request.user,
-                updated_by=request.user,
-                our_representative=request.user
+                created_by=request.user, updated_by=request.user, our_representative=request.user
             )
 
             # 如果验收通过，更新设备状态
@@ -159,6 +158,7 @@ class EquipmentShipmentViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
     """
     设备发货记录管理
     """
+
     queryset = EquipmentShipment.objects.select_related('equipment')
     serializer_class = EquipmentShipmentSerializer
     filterset_fields = ['status', 'equipment']
@@ -185,6 +185,7 @@ class EquipmentInstallationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.
     """
     现场安装记录管理
     """
+
     queryset = EquipmentInstallation.objects.select_related('equipment', 'team_leader')
     serializer_class = EquipmentInstallationSerializer
     filterset_fields = ['status', 'equipment', 'team_leader']
@@ -242,6 +243,7 @@ class InstallationLogViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     """
     安装日志管理
     """
+
     queryset = InstallationLog.objects.select_related('installation', 'recorded_by')
     serializer_class = InstallationLogSerializer
     filterset_fields = ['installation']
@@ -251,6 +253,7 @@ class EquipmentAcceptanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
     """
     设备验收记录管理
     """
+
     queryset = EquipmentAcceptance.objects.select_related('equipment', 'our_representative')
     serializer_class = EquipmentAcceptanceSerializer
     filterset_fields = ['status', 'equipment']
@@ -289,6 +292,7 @@ class MaintenanceScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
     """
     设备保养计划管理
     """
+
     queryset = MaintenanceSchedule.objects.select_related('equipment')
     serializer_class = MaintenanceScheduleSerializer
     filterset_fields = ['status', 'maintenance_type', 'equipment']
@@ -299,10 +303,11 @@ class MaintenanceScheduleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mo
         today = timezone.now().date()
         from datetime import timedelta
 
-        upcoming = self.get_queryset().filter(
-            status='PLANNED',
-            scheduled_date__lte=today + timedelta(days=7)
-        ).order_by('scheduled_date')
+        upcoming = (
+            self.get_queryset()
+            .filter(status='PLANNED', scheduled_date__lte=today + timedelta(days=7))
+            .order_by('scheduled_date')
+        )
 
         return Response(MaintenanceScheduleSerializer(upcoming, many=True).data)
 
@@ -323,6 +328,7 @@ class TrainingRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
     """
     客户培训记录管理
     """
+
     queryset = TrainingRecord.objects.select_related('equipment', 'trainer')
     serializer_class = TrainingRecordSerializer
     filterset_fields = ['training_type', 'equipment', 'trainer']
@@ -333,10 +339,12 @@ class TrainingRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
 # 工装夹具视图
 # ============================================================
 
+
 class FixtureCategoryViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     """
     工装分类管理
     """
+
     queryset = FixtureCategory.objects.all()
     serializer_class = FixtureCategorySerializer
     filterset_fields = ['parent']
@@ -345,10 +353,9 @@ class FixtureCategoryViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def tree(self, request):
         """获取树形结构"""
-        root_categories = self.get_queryset().filter(
-            parent__isnull=True,
-            is_deleted=False
-        ).order_by('sort_order', 'code')
+        root_categories = (
+            self.get_queryset().filter(parent__isnull=True, is_deleted=False).order_by('sort_order', 'code')
+        )
 
         return Response(FixtureCategoryTreeSerializer(root_categories, many=True).data)
 
@@ -357,9 +364,8 @@ class FixtureViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     工装夹具管理
     """
-    queryset = Fixture.objects.select_related(
-        'category', 'project', 'equipment', 'custodian', 'warehouse', 'supplier'
-    )
+
+    queryset = Fixture.objects.select_related('category', 'project', 'equipment', 'custodian', 'warehouse', 'supplier')
     serializer_class = FixtureSerializer
     filterset_fields = ['status', 'category', 'ownership', 'custodian', 'needs_calibration']
     search_fields = ['fixture_no', 'name', 'model', 'drawing_no']
@@ -390,15 +396,11 @@ class FixtureViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
 
         # 校验统计
         from datetime import timedelta
-        stats['calibration_due'] = queryset.filter(
-            needs_calibration=True,
-            next_calibration__lte=today
-        ).count()
+
+        stats['calibration_due'] = queryset.filter(needs_calibration=True, next_calibration__lte=today).count()
 
         stats['calibration_upcoming'] = queryset.filter(
-            needs_calibration=True,
-            next_calibration__gt=today,
-            next_calibration__lte=today + timedelta(days=30)
+            needs_calibration=True, next_calibration__gt=today, next_calibration__lte=today + timedelta(days=30)
         ).count()
 
         return Response(stats)
@@ -408,10 +410,9 @@ class FixtureViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         """获取需要校验的工装"""
         today = timezone.now().date()
 
-        due_fixtures = self.get_queryset().filter(
-            needs_calibration=True,
-            next_calibration__lte=today
-        ).order_by('next_calibration')
+        due_fixtures = (
+            self.get_queryset().filter(needs_calibration=True, next_calibration__lte=today).order_by('next_calibration')
+        )
 
         return Response(FixtureListSerializer(due_fixtures, many=True).data)
 
@@ -421,10 +422,7 @@ class FixtureViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         fixture = self.get_object()
 
         if fixture.status != 'IDLE' and fixture.status != 'IN_USE':
-            return Response(
-                {'error': '工装状态不允许领用'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '工装状态不允许领用'}, status=status.HTTP_400_BAD_REQUEST)
 
         usage_data = {
             'fixture': fixture.id,
@@ -454,10 +452,7 @@ class FixtureViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
         usage_record = fixture.usage_records.filter(return_time__isnull=True).order_by('-checkout_time').first()
 
         if not usage_record:
-            return Response(
-                {'error': '未找到领用记录'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '未找到领用记录'}, status=status.HTTP_400_BAD_REQUEST)
 
         usage_record.return_time = timezone.now()
         usage_record.condition_after = request.data.get('condition', '良好')
@@ -487,6 +482,7 @@ class FixtureUsageRecordViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     """
     工装使用记录管理
     """
+
     queryset = FixtureUsageRecord.objects.select_related('fixture', 'project', 'used_by')
     serializer_class = FixtureUsageRecordSerializer
     filterset_fields = ['fixture', 'project', 'used_by']
@@ -496,6 +492,7 @@ class FixtureCalibrationViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
     """
     工装校验记录管理
     """
+
     queryset = FixtureCalibration.objects.select_related('fixture')
     serializer_class = FixtureCalibrationSerializer
     filterset_fields = ['fixture', 'result']
@@ -505,6 +502,7 @@ class FixtureMaintenanceViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
     """
     工装维护记录管理
     """
+
     queryset = FixtureMaintenance.objects.select_related('fixture', 'performed_by')
     serializer_class = FixtureMaintenanceSerializer
     filterset_fields = ['fixture', 'maintenance_type', 'performed_by']

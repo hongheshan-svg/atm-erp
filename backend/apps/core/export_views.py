@@ -1,6 +1,7 @@
 """
 Export views for all modules.
 """
+
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -22,12 +23,7 @@ def export_projects(request):
     if status_filter:
         queryset = queryset.filter(status=status_filter)
 
-    return ExcelExportService.export_queryset(
-        queryset,
-        EXPORT_COLUMNS['project'],
-        'projects',
-        '项目列表'
-    )
+    return ExcelExportService.export_queryset(queryset, EXPORT_COLUMNS['project'], 'projects', '项目列表')
 
 
 @api_view(['GET'])
@@ -47,12 +43,7 @@ def export_sales_orders(request):
     if project_id:
         queryset = queryset.filter(project_id=project_id)
 
-    return ExcelExportService.export_queryset(
-        queryset,
-        EXPORT_COLUMNS['sales_order'],
-        'sales_orders',
-        '销售订单'
-    )
+    return ExcelExportService.export_queryset(queryset, EXPORT_COLUMNS['sales_order'], 'sales_orders', '销售订单')
 
 
 @api_view(['GET'])
@@ -67,12 +58,7 @@ def export_purchase_orders(request):
     if status_filter:
         queryset = queryset.filter(status=status_filter)
 
-    return ExcelExportService.export_queryset(
-        queryset,
-        EXPORT_COLUMNS['purchase_order'],
-        'purchase_orders',
-        '采购订单'
-    )
+    return ExcelExportService.export_queryset(queryset, EXPORT_COLUMNS['purchase_order'], 'purchase_orders', '采购订单')
 
 
 @api_view(['GET'])
@@ -87,12 +73,7 @@ def export_stock(request):
     if warehouse_id:
         queryset = queryset.filter(warehouse_id=warehouse_id)
 
-    return ExcelExportService.export_queryset(
-        queryset,
-        EXPORT_COLUMNS['stock'],
-        'stock',
-        '库存列表'
-    )
+    return ExcelExportService.export_queryset(queryset, EXPORT_COLUMNS['stock'], 'stock', '库存列表')
 
 
 @api_view(['GET'])
@@ -107,12 +88,7 @@ def export_expenses(request):
     if status_filter:
         queryset = queryset.filter(status=status_filter)
 
-    return ExcelExportService.export_queryset(
-        queryset,
-        EXPORT_COLUMNS['expense'],
-        'expenses',
-        '费用报销'
-    )
+    return ExcelExportService.export_queryset(queryset, EXPORT_COLUMNS['expense'], 'expenses', '费用报销')
 
 
 @api_view(['GET'])
@@ -131,12 +107,7 @@ def export_ar(request):
     if customer_id:
         queryset = queryset.filter(customer_id=customer_id)
 
-    return ExcelExportService.export_queryset(
-        queryset,
-        EXPORT_COLUMNS['ar'],
-        'accounts_receivable',
-        '应收账款'
-    )
+    return ExcelExportService.export_queryset(queryset, EXPORT_COLUMNS['ar'], 'accounts_receivable', '应收账款')
 
 
 @api_view(['GET'])
@@ -151,12 +122,7 @@ def export_ap(request):
     if status_filter:
         queryset = queryset.filter(status=status_filter)
 
-    return ExcelExportService.export_queryset(
-        queryset,
-        EXPORT_COLUMNS['ap'],
-        'accounts_payable',
-        '应付账款'
-    )
+    return ExcelExportService.export_queryset(queryset, EXPORT_COLUMNS['ap'], 'accounts_payable', '应付账款')
 
 
 @api_view(['GET'])
@@ -185,9 +151,4 @@ def export_project_profit_report(request):
         {'field': 'margin_percent', 'header': '利润率(%)', 'width': 12},
     ]
 
-    return ExcelExportService.export_queryset(
-        df.to_dict('records'),
-        columns,
-        'project_profit_report',
-        '项目利润报表'
-    )
+    return ExcelExportService.export_queryset(df.to_dict('records'), columns, 'project_profit_report', '项目利润报表')
