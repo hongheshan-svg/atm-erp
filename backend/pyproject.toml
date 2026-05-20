@@ -38,3 +38,14 @@ ignore = [
 
 [tool.ruff.format]
 quote-style = "single"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --tb=short"
+markers = [
+    "integration: integration test (requires postgres + redis + bootstrapped DB)",
+]

@@ -1,0 +1,17 @@
+{
+  "include": ["apps", "config"],
+  "exclude": [
+    "**/migrations",
+    "**/__pycache__",
+    "**/node_modules"
+  ],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "error",
+  "reportUndefinedVariable": "error",
+  "reportInvalidTypeForm": "error",
+  "reportGeneralTypeIssues": "warning",
+  "reportOptionalMemberAccess": "warning",
+  "reportArgumentType": "none",
+  "reportAttributeAccessIssue": "none"
+}
