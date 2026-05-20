@@ -2,6 +2,7 @@
 Master data models for Items, Customers, Suppliers, and Warehouses.
 """
 from django.db import models
+
 from apps.core.models import BaseModel
 
 
@@ -21,13 +22,13 @@ class ItemCategory(BaseModel):
     )
     description = models.TextField(blank=True, verbose_name='描述')
     sort_order = models.IntegerField(default=0, verbose_name='排序')
-    
+
     class Meta:
         db_table = 'item_category'
         verbose_name = '物料类别'
         verbose_name_plural = verbose_name
         ordering = ['sort_order', 'code']
-    
+
     def __str__(self):
         return self.name
 
@@ -44,7 +45,7 @@ class Item(BaseModel):
         ('SEMI', '半成品'),
         ('SERVICE', '服务'),
     ]
-    
+
     # ==================== 物料属性(非标自动化行业专用) ====================
     ITEM_PROPERTY_CHOICES = [
         ('STANDARD', '标准件'),       # 标准螺丝、轴承、密封圈等
@@ -55,14 +56,14 @@ class Item(BaseModel):
         ('VIRTUAL', '虚拟件'),        # 仅用于BOM层级结构，不实际采购
         ('ASSEMBLY', '组件'),         # 由多个零件组成的装配件
     ]
-    
+
     # ==================== ABC分类(库存管理) ====================
     ABC_CLASS_CHOICES = [
         ('A', 'A类-高价值'),
         ('B', 'B类-中价值'),
         ('C', 'C类-低价值'),
     ]
-    
+
     # ==================== 检验方式 ====================
     INSPECTION_TYPE_CHOICES = [
         ('NONE', '免检'),
@@ -70,7 +71,7 @@ class Item(BaseModel):
         ('SAMPLE', '抽检'),
         ('FULL', '全检'),
     ]
-    
+
     UNIT_CHOICES = [
         ('PCS', '个'),
         ('KG', '千克'),
@@ -88,7 +89,7 @@ class Item(BaseModel):
         ('ROLL', '卷'),
         ('PAIR', '对'),
     ]
-    
+
     TAX_RATE_CHOICES = [
         (0, '0%'),
         (1, '1%'),
@@ -97,18 +98,18 @@ class Item(BaseModel):
         (9, '9%'),
         (13, '13%'),
     ]
-    
+
     # ==================== 基础信息 ====================
     sku = models.CharField(max_length=100, unique=True, verbose_name='SKU编码')
     name = models.CharField(max_length=200, verbose_name='物料名称')
     specification = models.CharField(max_length=200, blank=True, verbose_name='规格型号')
-    
+
     # 品牌型号相关
     brand = models.CharField(max_length=100, blank=True, verbose_name='品牌')
     model = models.CharField(max_length=100, blank=True, verbose_name='型号')
     manufacturer = models.CharField(max_length=200, blank=True, verbose_name='生产厂家')
     origin_country = models.CharField(max_length=100, blank=True, verbose_name='产地')
-    
+
     category = models.ForeignKey(
         ItemCategory,
         on_delete=models.SET_NULL,
@@ -123,7 +124,7 @@ class Item(BaseModel):
         default='MATERIAL',
         verbose_name='物料类型'
     )
-    
+
     # ==================== 非标自动化行业专用字段 ====================
     item_property = models.CharField(
         max_length=20,
@@ -132,32 +133,32 @@ class Item(BaseModel):
         verbose_name='物料属性',
         help_text='标准件/外购件/外协件/自制件等'
     )
-    
+
     abc_class = models.CharField(
         max_length=1,
         choices=ABC_CLASS_CHOICES,
         default='C',
         verbose_name='ABC分类'
     )
-    
+
     # 图纸与技术资料
     drawing_no = models.CharField(max_length=100, blank=True, verbose_name='图纸号')
     drawing_version = models.CharField(max_length=50, blank=True, verbose_name='图纸版本')
-    
+
     # 材质与表面处理(非标件常用)
-    material = models.CharField(max_length=100, blank=True, verbose_name='材质', 
+    material = models.CharField(max_length=100, blank=True, verbose_name='材质',
                                 help_text='如：45#钢、SUS304、6061铝合金等')
     surface_treatment = models.CharField(max_length=100, blank=True, verbose_name='表面处理',
                                          help_text='如：镀锌、发黑、阳极氧化、喷涂等')
     heat_treatment = models.CharField(max_length=100, blank=True, verbose_name='热处理',
                                       help_text='如：调质HRC28-32、渗碳淬火等')
-    
+
     # 尺寸规格
     length = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name='长度(mm)')
     width = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name='宽度(mm)')
     height = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name='高度(mm)')
     diameter = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name='直径(mm)')
-    
+
     # 技术参数(JSON格式，支持灵活扩展)
     technical_params = models.JSONField(
         default=dict,
@@ -165,7 +166,7 @@ class Item(BaseModel):
         verbose_name='技术参数',
         help_text='如：{"电压":"24V", "功率":"100W", "精度":"0.01mm"}'
     )
-    
+
     # 检验要求
     inspection_type = models.CharField(
         max_length=20,
@@ -174,13 +175,13 @@ class Item(BaseModel):
         verbose_name='检验方式'
     )
     inspection_standard = models.TextField(blank=True, verbose_name='检验标准')
-    
+
     # 是否关键件
     is_critical = models.BooleanField(default=False, verbose_name='关键件',
                                       help_text='影响产品关键性能或交期的核心部件')
     is_long_lead = models.BooleanField(default=False, verbose_name='长周期件',
                                        help_text='采购周期超过项目标准周期')
-    
+
     # 替代品信息
     can_substitute = models.BooleanField(default=False, verbose_name='允许替代')
     alternate_items = models.ManyToManyField(
@@ -190,9 +191,9 @@ class Item(BaseModel):
         related_name='alternate_for',
         verbose_name='可替代物料'
     )
-    
+
     unit = models.CharField(max_length=20, choices=UNIT_CHOICES, default='PCS', verbose_name='单位')
-    
+
     # ==================== 价格和税率 ====================
     standard_cost = models.DecimalField(
         max_digits=15,
@@ -223,7 +224,7 @@ class Item(BaseModel):
         default=13,
         verbose_name='税率(%)'
     )
-    
+
     default_supplier = models.ForeignKey(
         'Supplier',
         on_delete=models.SET_NULL,
@@ -232,7 +233,7 @@ class Item(BaseModel):
         related_name='default_items',
         verbose_name='默认供应商'
     )
-    
+
     # ==================== 库存相关 ====================
     min_stock = models.DecimalField(
         max_digits=15,
@@ -265,7 +266,7 @@ class Item(BaseModel):
         verbose_name='经济订货批量'
     )
     lead_time = models.IntegerField(default=0, verbose_name='采购周期(天)')
-    
+
     # 默认仓库和库位
     default_warehouse = models.ForeignKey(
         'Warehouse',
@@ -276,7 +277,7 @@ class Item(BaseModel):
         verbose_name='默认仓库'
     )
     default_location = models.CharField(max_length=100, blank=True, verbose_name='默认库位')
-    
+
     # ==================== 其他信息 ====================
     description = models.TextField(blank=True, verbose_name='描述')
     image = models.ImageField(upload_to='items/', blank=True, verbose_name='图片')
@@ -286,7 +287,7 @@ class Item(BaseModel):
     volume = models.DecimalField(max_digits=10, decimal_places=3, default=0, verbose_name='体积(m³)')
     shelf_life = models.IntegerField(default=0, verbose_name='保质期(天)')
     is_active = models.BooleanField(default=True, verbose_name='激活状态')
-    
+
     # 扩展字段(JSON格式，支持用户自定义字段)
     extra_fields = models.JSONField(
         default=dict,
@@ -294,7 +295,7 @@ class Item(BaseModel):
         verbose_name='扩展字段',
         help_text='用户自定义的扩展字段'
     )
-    
+
     class Meta:
         db_table = 'item'
         verbose_name = '物料'
@@ -306,10 +307,10 @@ class Item(BaseModel):
             models.Index(fields=['is_critical']),
             models.Index(fields=['drawing_no']),
         ]
-    
+
     def __str__(self):
         return f"{self.sku} - {self.name}"
-    
+
     @property
     def full_specification(self):
         """完整规格描述"""
@@ -330,7 +331,7 @@ class Customer(BaseModel):
         ('INACTIVE', '停用'),
         ('POTENTIAL', '潜在客户'),
     ]
-    
+
     code = models.CharField(max_length=50, unique=True, verbose_name='客户编码')
     name = models.CharField(max_length=200, verbose_name='客户名称')
     short_name = models.CharField(max_length=100, blank=True, verbose_name='简称')
@@ -345,7 +346,7 @@ class Customer(BaseModel):
         verbose_name='信用额度'
     )
     payment_terms = models.CharField(max_length=100, blank=True, verbose_name='付款条款')
-    
+
     # 开票信息 (Invoice Information)
     invoice_title = models.CharField(max_length=200, blank=True, verbose_name='开票名称')
     tax_number = models.CharField(max_length=100, blank=True, verbose_name='税号')
@@ -353,7 +354,7 @@ class Customer(BaseModel):
     bank_account = models.CharField(max_length=100, blank=True, verbose_name='银行账号')
     registered_address = models.TextField(blank=True, verbose_name='注册地址')
     registered_phone = models.CharField(max_length=50, blank=True, verbose_name='注册电话')
-    
+
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -361,13 +362,13 @@ class Customer(BaseModel):
         verbose_name='状态'
     )
     notes = models.TextField(blank=True, verbose_name='备注')
-    
+
     class Meta:
         db_table = 'customer'
         verbose_name = '客户'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f"{self.code} - {self.name}"
 
@@ -381,7 +382,7 @@ class Supplier(BaseModel):
         ('INACTIVE', '停用'),
         ('POTENTIAL', '潜在供应商'),
     ]
-    
+
     # 结款方式选项
     SETTLEMENT_METHOD_CHOICES = [
         ('PREPAY', '预付款'),
@@ -395,7 +396,7 @@ class Supplier(BaseModel):
         ('ACCEPTANCE', '承兑汇票'),
         ('OTHER', '其他'),
     ]
-    
+
     code = models.CharField(max_length=50, unique=True, verbose_name='供应商编码')
     name = models.CharField(max_length=200, verbose_name='供应商名称')
     short_name = models.CharField(max_length=100, blank=True, verbose_name='简称')
@@ -410,7 +411,7 @@ class Supplier(BaseModel):
         blank=True,
         verbose_name='结款方式'
     )
-    
+
     # 开票信息 (Invoice Information)
     invoice_title = models.CharField(max_length=200, blank=True, verbose_name='开票名称')
     tax_number = models.CharField(max_length=100, blank=True, verbose_name='税号')
@@ -418,7 +419,7 @@ class Supplier(BaseModel):
     bank_account = models.CharField(max_length=100, blank=True, verbose_name='银行账号')
     registered_address = models.TextField(blank=True, verbose_name='注册地址')
     registered_phone = models.CharField(max_length=50, blank=True, verbose_name='注册电话')
-    
+
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -426,13 +427,13 @@ class Supplier(BaseModel):
         verbose_name='状态'
     )
     notes = models.TextField(blank=True, verbose_name='备注')
-    
+
     class Meta:
         db_table = 'supplier'
         verbose_name = '供应商'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f"{self.code} - {self.name}"
 
@@ -447,7 +448,7 @@ class Warehouse(BaseModel):
         ('TRANSIT', '中转仓'),
         ('VIRTUAL', '虚拟仓'),
     ]
-    
+
     code = models.CharField(max_length=50, unique=True, verbose_name='仓库编码')
     name = models.CharField(max_length=200, verbose_name='仓库名称')
     warehouse_type = models.CharField(
@@ -468,13 +469,13 @@ class Warehouse(BaseModel):
     contact_phone = models.CharField(max_length=50, blank=True, verbose_name='联系电话')
     is_active = models.BooleanField(default=True, verbose_name='激活状态')
     notes = models.TextField(blank=True, verbose_name='备注')
-    
+
     class Meta:
         db_table = 'warehouse'
         verbose_name = '仓库'
         verbose_name_plural = verbose_name
         ordering = ['code']
-    
+
     def __str__(self):
         return f"{self.code} - {self.name}"
 
@@ -491,7 +492,7 @@ class WarehouseLocation(BaseModel):
         ('SHELF', '层'),
         ('BIN', '库位'),
     ]
-    
+
     warehouse = models.ForeignKey(
         Warehouse,
         on_delete=models.CASCADE,
@@ -516,7 +517,7 @@ class WarehouseLocation(BaseModel):
     )
     # Full path code like "A-01-03-02" for easier search
     full_path = models.CharField(max_length=200, blank=True, verbose_name='完整路径')
-    
+
     # Capacity limits
     max_weight = models.DecimalField(
         max_digits=10,
@@ -532,25 +533,25 @@ class WarehouseLocation(BaseModel):
         blank=True,
         verbose_name='最大容积(m³)'
     )
-    
+
     # Status
     is_active = models.BooleanField(default=True, verbose_name='启用')
     is_pickable = models.BooleanField(default=True, verbose_name='可拣货')
     is_storable = models.BooleanField(default=True, verbose_name='可存储')
-    
+
     sort_order = models.IntegerField(default=0, verbose_name='排序')
     notes = models.TextField(blank=True, verbose_name='备注')
-    
+
     class Meta:
         db_table = 'warehouse_location'
         verbose_name = '库位'
         verbose_name_plural = verbose_name
         unique_together = ['warehouse', 'code']
         ordering = ['warehouse', 'sort_order', 'code']
-    
+
     def __str__(self):
         return f"{self.warehouse.code}-{self.full_path or self.code}"
-    
+
     def save(self, *args, **kwargs):
         # Auto-generate full path
         if self.parent:
@@ -558,7 +559,7 @@ class WarehouseLocation(BaseModel):
         else:
             self.full_path = self.code
         super().save(*args, **kwargs)
-    
+
     def get_descendants(self):
         """Get all descendant locations."""
         descendants = list(self.children.all())

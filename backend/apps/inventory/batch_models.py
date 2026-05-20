@@ -10,6 +10,7 @@ Batch and Lot Tracking Models
 如不需要，可在物料主数据中关闭批次管理选项
 """
 from django.db import models
+
 from apps.core.models import BaseModel
 from apps.masterdata.models import Item, Warehouse
 
@@ -63,7 +64,7 @@ class Batch(BaseModel):
         verbose_name='质量状态'
     )
     notes = models.TextField(null=True, blank=True, verbose_name='备注')
-    
+
     class Meta:
         db_table = 'batch'
         verbose_name = '批次'
@@ -74,10 +75,10 @@ class Batch(BaseModel):
             models.Index(fields=['item', 'warehouse']),
             models.Index(fields=['expiry_date']),
         ]
-    
+
     def __str__(self):
         return f"{self.batch_no} - {self.item.sku}"
-    
+
     @property
     def is_expired(self):
         """Check if batch is expired"""
@@ -85,7 +86,7 @@ class Batch(BaseModel):
             return False
         from django.utils import timezone
         return self.expiry_date < timezone.now().date()
-    
+
     @property
     def days_to_expiry(self):
         """Calculate days until expiry"""
@@ -114,7 +115,7 @@ class InventoryLot(BaseModel):
         related_name='inventory_lots',
         verbose_name='物料'
     )
-    
+
     # Quantity tracking
     initial_qty = models.DecimalField(
         max_digits=15,
@@ -126,21 +127,21 @@ class InventoryLot(BaseModel):
         decimal_places=2,
         verbose_name='剩余数量'
     )
-    
+
     # Cost
     unit_cost = models.DecimalField(
         max_digits=15,
         decimal_places=2,
         verbose_name='单位成本'
     )
-    
+
     # Receipt info
     receipt_date = models.DateField(auto_now_add=True, verbose_name='入库日期', db_index=True)
     reference_type = models.CharField(max_length=50, blank=True, verbose_name='参考类型')
     reference_id = models.IntegerField(null=True, blank=True, verbose_name='参考ID')
-    
+
     notes = models.TextField(blank=True, verbose_name='备注')
-    
+
     class Meta:
         db_table = 'inventory_lot'
         verbose_name = 'FIFO库存批次'
@@ -150,21 +151,21 @@ class InventoryLot(BaseModel):
             models.Index(fields=['item', 'warehouse', 'receipt_date']),
             models.Index(fields=['remaining_qty']),
         ]
-    
+
     def __str__(self):
         return f"{self.lot_no} - {self.item.sku} ({self.remaining_qty}/{self.initial_qty})"
-    
+
     def save(self, *args, **kwargs):
         if not self.lot_no:
             from apps.core.utils import generate_code
             self.lot_no = generate_code('LOT')
         super().save(*args, **kwargs)
-    
+
     @property
     def total_value(self):
         """Current value of remaining inventory."""
         return self.remaining_qty * self.unit_cost
-    
+
     @property
     def consumed_qty(self):
         """Quantity that has been consumed."""
@@ -197,7 +198,7 @@ class LotConsumption(BaseModel):
         decimal_places=2,
         verbose_name='总成本'
     )
-    
+
     # Optional project for cost allocation
     project = models.ForeignKey(
         'projects.Project',
@@ -207,15 +208,15 @@ class LotConsumption(BaseModel):
         related_name='lot_consumptions',
         verbose_name='项目'
     )
-    
+
     consumption_date = models.DateTimeField(auto_now_add=True, verbose_name='消耗时间')
-    
+
     class Meta:
         db_table = 'lot_consumption'
         verbose_name = '批次消耗记录'
         verbose_name_plural = verbose_name
         ordering = ['-consumption_date']
-    
+
     def __str__(self):
         return f"{self.lot.lot_no} - {self.qty} @ {self.unit_cost}"
 
@@ -245,13 +246,13 @@ class BatchMove(BaseModel):
     reference_id = models.IntegerField(verbose_name='参考ID')
     move_date = models.DateTimeField(auto_now_add=True, verbose_name='移动时间')
     notes = models.TextField(null=True, blank=True, verbose_name='备注')
-    
+
     class Meta:
         db_table = 'batch_move'
         verbose_name = '批次移动'
         verbose_name_plural = verbose_name
         ordering = ['-move_date']
-    
+
     def __str__(self):
         return f"{self.batch.batch_no} - {self.get_move_type_display()} - {self.qty}"
 

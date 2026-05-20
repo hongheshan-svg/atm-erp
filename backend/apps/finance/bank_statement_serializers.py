@@ -2,6 +2,7 @@
 Serializers for bank statement.
 """
 from rest_framework import serializers
+
 from .bank_statement_models import BankStatement, BankStatementImportLog
 
 
@@ -18,7 +19,7 @@ class BankStatementSerializer(serializers.ModelSerializer):
     project_code = serializers.CharField(source='project.code', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     amount = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = BankStatement
         fields = [
@@ -38,14 +39,14 @@ class BankStatementSerializer(serializers.ModelSerializer):
             'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['import_batch', 'import_date', 'created_at', 'updated_at']
-    
+
     def get_amount(self, obj):
         return float(obj.amount)
 
 
 class BankStatementImportLogSerializer(serializers.ModelSerializer):
     """BankStatementImportLog serializer."""
-    
+
     class Meta:
         model = BankStatementImportLog
         fields = [

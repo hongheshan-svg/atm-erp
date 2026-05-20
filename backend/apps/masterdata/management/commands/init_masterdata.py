@@ -3,14 +3,16 @@
 创建示例物料、客户、供应商、仓库
 """
 from django.core.management.base import BaseCommand
-from apps.masterdata.models import Item, ItemCategory, Customer, Supplier, Warehouse
+
+from apps.masterdata.models import Customer, Item, ItemCategory, Supplier, Warehouse
+
 
 class Command(BaseCommand):
     help = '初始化主数据（物料、客户、供应商、仓库）'
 
     def handle(self, *args, **options):
         self.stdout.write(self.style.SUCCESS('开始初始化主数据...'))
-        
+
         # 1. 创建物料分类
         self.stdout.write('创建物料分类...')
         categories = [
@@ -20,7 +22,7 @@ class Command(BaseCommand):
             {'name': '辅料', 'code': 'AUX', 'description': '辅助材料'},
             {'name': '办公用品', 'code': 'OFFICE', 'description': '办公用品'},
         ]
-        
+
         cat_objs = {}
         for cat_data in categories:
             cat, created = ItemCategory.objects.get_or_create(
@@ -35,7 +37,7 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f'  ✓ 创建分类: {cat.name}'))
             else:
                 self.stdout.write(f'  - 分类已存在: {cat.name}')
-        
+
         # 2. 创建物料
         self.stdout.write('创建物料...')
         items = [
@@ -80,7 +82,7 @@ class Command(BaseCommand):
                 'standard_cost': 0.15
             },
         ]
-        
+
         for item_data in items:
             item, created = Item.objects.get_or_create(
                 sku=item_data['sku'],
@@ -96,7 +98,7 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f'  ✓ 创建物料: {item.sku} - {item.name}'))
             else:
                 self.stdout.write(f'  - 物料已存在: {item.sku}')
-        
+
         # 3. 创建客户
         self.stdout.write('创建客户...')
         customers = [
@@ -128,7 +130,7 @@ class Command(BaseCommand):
                 'credit_limit': 200000.00
             },
         ]
-        
+
         for cust_data in customers:
             cust, created = Customer.objects.get_or_create(
                 code=cust_data['code'],
@@ -145,7 +147,7 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f'  ✓ 创建客户: {cust.code} - {cust.name}'))
             else:
                 self.stdout.write(f'  - 客户已存在: {cust.code}')
-        
+
         # 4. 创建供应商
         self.stdout.write('创建供应商...')
         suppliers = [
@@ -177,7 +179,7 @@ class Command(BaseCommand):
                 'payment_terms': '月结60天'
             },
         ]
-        
+
         for sup_data in suppliers:
             sup, created = Supplier.objects.get_or_create(
                 code=sup_data['code'],
@@ -194,7 +196,7 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f'  ✓ 创建供应商: {sup.code} - {sup.name}'))
             else:
                 self.stdout.write(f'  - 供应商已存在: {sup.code}')
-        
+
         # 5. 创建仓库
         self.stdout.write('创建仓库...')
         warehouses = [
@@ -220,7 +222,7 @@ class Command(BaseCommand):
                 'notes': '存放半成品'
             },
         ]
-        
+
         for wh_data in warehouses:
             wh, created = Warehouse.objects.get_or_create(
                 code=wh_data['code'],
@@ -235,6 +237,6 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f'  ✓ 创建仓库: {wh.code} - {wh.name}'))
             else:
                 self.stdout.write(f'  - 仓库已存在: {wh.code}')
-        
+
         self.stdout.write(self.style.SUCCESS('\n主数据初始化完成！'))
 

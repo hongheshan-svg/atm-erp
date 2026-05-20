@@ -16,17 +16,18 @@ Quote Template Management
 - 综合报价模板（设备+安装+调试+培训等）
 """
 import os
-from decimal import Decimal
 from datetime import datetime
-from django.db import models
-from django.conf import settings
-from rest_framework import viewsets, serializers, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from decimal import Decimal
 
-from apps.core.models import BaseModel
+from django.conf import settings
+from django.db import models
+from rest_framework import serializers, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.models import BaseModel
 
 
 class QuoteTemplate(BaseModel):
@@ -39,7 +40,7 @@ class QuoteTemplate(BaseModel):
         ('WORD', 'Word模板'),
         ('HTML', 'HTML模板'),
     ]
-    
+
     code = models.CharField(max_length=50, unique=True, verbose_name='模板编码')
     name = models.CharField(max_length=100, verbose_name='模板名称')
     format = models.CharField(
@@ -81,16 +82,16 @@ class QuoteTemplate(BaseModel):
     is_default = models.BooleanField(default=False, verbose_name='默认模板')
     is_enabled = models.BooleanField(default=True, verbose_name='是否启用')
     description = models.TextField(blank=True, verbose_name='模板说明')
-    
+
     class Meta:
         db_table = 'sales_quote_template'
         verbose_name = '报价单模板'
         verbose_name_plural = verbose_name
         ordering = ['code']
-    
+
     def __str__(self):
         return f'{self.code} - {self.name}'
-    
+
     def save(self, *args, **kwargs):
         # 如果设为默认，取消其他默认
         if self.is_default:
@@ -139,13 +140,13 @@ class QuoteHistory(BaseModel):
         default='DRAFT',
         verbose_name='状态'
     )
-    
+
     class Meta:
         db_table = 'sales_quote_history'
         verbose_name = '报价单历史'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f'{self.quote_no} - {self.customer_name}'
 
@@ -156,23 +157,23 @@ class QuoteHistory(BaseModel):
 
 class QuoteGenerationService:
     """报价单生成服务"""
-    
+
     def __init__(self, template: QuoteTemplate):
         self.template = template
-    
+
     def generate_excel(self, quote_data: dict, output_path: str = None) -> str:
         """生成Excel报价单"""
         try:
             import openpyxl
-            from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+            from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
             from openpyxl.utils import get_column_letter
         except ImportError:
             raise ImportError('openpyxl 库未安装')
-        
+
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = '报价单'
-        
+
         # 样式定义
         header_font = Font(name='微软雅黑', size=16, bold=True)
         title_font = Font(name='微软雅黑', size=11, bold=True)
@@ -184,9 +185,9 @@ class QuoteGenerationService:
             bottom=Side(style='thin')
         )
         header_fill = PatternFill(start_color='E0E0E0', end_color='E0E0E0', fill_type='solid')
-        
+
         row = 1
-        
+
         # 公司信息头
         header_config = self.template.header_config or {}
         company_name = header_config.get('company_name', '公司名称')
@@ -195,14 +196,14 @@ class QuoteGenerationService:
         ws[f'A{row}'].font = header_font
         ws[f'A{row}'].alignment = Alignment(horizontal='center')
         row += 1
-        
+
         # 报价单标题
         ws.merge_cells(f'A{row}:H{row}')
         ws[f'A{row}'] = '报 价 单'
         ws[f'A{row}'].font = Font(name='微软雅黑', size=14, bold=True)
         ws[f'A{row}'].alignment = Alignment(horizontal='center')
         row += 2
-        
+
         # 基本信息
         info_items = [
             ('报价单号', quote_data.get('quote_no', '')),
@@ -213,7 +214,7 @@ class QuoteGenerationService:
             ('联系人', quote_data.get('contact_person', '')),
             ('联系电话', quote_data.get('contact_phone', '')),
         ]
-        
+
         for label, value in info_items:
             if value:
                 ws[f'A{row}'] = label + '：'
@@ -221,9 +222,9 @@ class QuoteGenerationService:
                 ws[f'B{row}'] = value
                 ws[f'B{row}'].font = normal_font
                 row += 1
-        
+
         row += 1
-        
+
         # 列配置
         column_config = self.template.column_config or [
             {'key': 'index', 'label': '序号', 'width': 8},
@@ -235,11 +236,11 @@ class QuoteGenerationService:
             {'key': 'amount', 'label': '金额', 'width': 18},
             {'key': 'remark', 'label': '备注', 'width': 20},
         ]
-        
+
         # 设置列宽
         for idx, col in enumerate(column_config):
             ws.column_dimensions[get_column_letter(idx + 1)].width = col.get('width', 15)
-        
+
         # 表头
         header_row = row
         for idx, col in enumerate(column_config):
@@ -249,11 +250,11 @@ class QuoteGenerationService:
             cell.border = thin_border
             cell.fill = header_fill
         row += 1
-        
+
         # 明细行
         items = quote_data.get('items', [])
         total_amount = Decimal('0')
-        
+
         for item_idx, item in enumerate(items):
             for col_idx, col in enumerate(column_config):
                 key = col['key']
@@ -261,38 +262,38 @@ class QuoteGenerationService:
                     value = item_idx + 1
                 else:
                     value = item.get(key, '')
-                
+
                 cell = ws.cell(row=row, column=col_idx + 1, value=value)
                 cell.font = normal_font
                 cell.border = thin_border
-                
+
                 if key in ('quantity', 'unit_price', 'amount'):
                     cell.alignment = Alignment(horizontal='right')
                     if key == 'amount' and value:
                         total_amount += Decimal(str(value))
                 else:
                     cell.alignment = Alignment(horizontal='center' if key == 'index' else 'left')
-            
+
             row += 1
-        
+
         # 合计行
         ws.merge_cells(f'A{row}:F{row}')
         ws[f'A{row}'] = '合计'
         ws[f'A{row}'].font = title_font
         ws[f'A{row}'].alignment = Alignment(horizontal='right')
         ws[f'A{row}'].border = thin_border
-        
+
         ws[f'G{row}'] = float(total_amount)
         ws[f'G{row}'].font = title_font
         ws[f'G{row}'].alignment = Alignment(horizontal='right')
         ws[f'G{row}'].border = thin_border
         ws[f'G{row}'].number_format = '#,##0.00'
-        
+
         for col_idx in range(1, len(column_config) + 1):
             ws.cell(row=row, column=col_idx).border = thin_border
-        
+
         row += 2
-        
+
         # 备注
         footer_config = self.template.footer_config or {}
         remarks = footer_config.get('remarks', quote_data.get('remarks', ''))
@@ -304,7 +305,7 @@ class QuoteGenerationService:
             ws[f'A{row}'] = remarks
             ws[f'A{row}'].font = normal_font
             row += 2
-        
+
         # 条款
         terms = footer_config.get('terms', [])
         if terms:
@@ -317,7 +318,7 @@ class QuoteGenerationService:
                 ws[f'A{row}'].font = normal_font
                 row += 1
             row += 1
-        
+
         # 签章区
         row += 1
         ws[f'A{row}'] = '供方（盖章）：'
@@ -327,7 +328,7 @@ class QuoteGenerationService:
         row += 3
         ws[f'A{row}'] = '日期：'
         ws[f'E{row}'] = '日期：'
-        
+
         # 保存文件
         if not output_path:
             output_dir = os.path.join(settings.MEDIA_ROOT, 'quotes', 'generated')
@@ -336,24 +337,24 @@ class QuoteGenerationService:
                 output_dir,
                 f"{quote_data.get('quote_no', 'quote')}_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
             )
-        
+
         wb.save(output_path)
         return output_path
-    
+
     def generate_html(self, quote_data: dict) -> str:
         """生成HTML报价单"""
-        from django.template import Template, Context
-        
+        from django.template import Context, Template
+
         if self.template.html_content:
             tpl = Template(self.template.html_content)
         else:
             # 默认HTML模板
             tpl = Template(self._get_default_html_template())
-        
+
         # 计算合计
         items = quote_data.get('items', [])
         total_amount = sum(Decimal(str(item.get('amount', 0))) for item in items)
-        
+
         context = Context({
             'quote': quote_data,
             'header': self.template.header_config or {},
@@ -362,9 +363,9 @@ class QuoteGenerationService:
             'total_amount': total_amount,
             'generated_at': datetime.now(),
         })
-        
+
         return tpl.render(context)
-    
+
     def _get_default_html_template(self) -> str:
         return """
 <!DOCTYPE html>
@@ -488,7 +489,7 @@ class QuoteGenerationService:
 
 class QuoteTemplateSerializer(serializers.ModelSerializer):
     format_display = serializers.CharField(source='get_format_display', read_only=True)
-    
+
     class Meta:
         model = QuoteTemplate
         fields = '__all__'
@@ -497,7 +498,7 @@ class QuoteTemplateSerializer(serializers.ModelSerializer):
 
 class QuoteTemplateListSerializer(serializers.ModelSerializer):
     format_display = serializers.CharField(source='get_format_display', read_only=True)
-    
+
     class Meta:
         model = QuoteTemplate
         fields = [
@@ -509,7 +510,7 @@ class QuoteTemplateListSerializer(serializers.ModelSerializer):
 class QuoteHistorySerializer(serializers.ModelSerializer):
     template_name = serializers.CharField(source='template.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = QuoteHistory
         fields = '__all__'
@@ -550,12 +551,12 @@ class QuoteTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
     filterset_fields = ['format', 'is_default', 'is_enabled']
     search_fields = ['code', 'name', 'description']
     ordering_fields = ['code', 'name', 'created_at']
-    
+
     def get_serializer_class(self):
         if self.action == 'list':
             return QuoteTemplateListSerializer
         return QuoteTemplateSerializer
-    
+
     @action(detail=True, methods=['post'])
     def set_default(self, request, pk=None):
         """设为默认模板"""
@@ -563,7 +564,7 @@ class QuoteTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         instance.is_default = True
         instance.save()
         return Response(self.get_serializer(instance).data)
-    
+
     @action(detail=True, methods=['post'])
     def toggle_enable(self, request, pk=None):
         """切换启用状态"""
@@ -571,14 +572,14 @@ class QuoteTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         instance.is_enabled = not instance.is_enabled
         instance.save()
         return Response(self.get_serializer(instance).data)
-    
+
     @action(detail=False, methods=['post'])
     def generate(self, request):
         """生成报价单"""
         serializer = QuoteGenerateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        
+
         # 获取模板
         template_id = data.get('template_id')
         if template_id:
@@ -619,7 +620,7 @@ class QuoteTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                     },
                     created_by=request.user
                 )
-        
+
         # 准备报价数据
         quote_data = {
             'quote_no': data['quote_no'],
@@ -632,11 +633,11 @@ class QuoteTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
             'remarks': data.get('remarks', ''),
             'items': data.get('items', []),
         }
-        
+
         # 生成报价单
         service = QuoteGenerationService(template)
         output_format = data.get('output_format', 'excel')
-        
+
         try:
             if output_format == 'excel':
                 file_path = service.generate_excel(quote_data)
@@ -658,25 +659,25 @@ class QuoteTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                     'history_id': history.id,
                     'download_url': f'/media/{history.generated_file}'
                 })
-            
+
             elif output_format == 'html':
                 html_content = service.generate_html(quote_data)
                 return Response({
                     'success': True,
                     'html_content': html_content
                 })
-            
+
             else:
                 return Response({'error': '不支持的输出格式'}, status=400)
-        
+
         except Exception as e:
             return Response({'error': str(e)}, status=500)
-    
+
     @action(detail=True, methods=['post'])
     def preview(self, request, pk=None):
         """预览模板效果"""
         template = self.get_object()
-        
+
         # 使用示例数据预览
         sample_data = {
             'quote_no': 'QT-2025-SAMPLE',
@@ -693,9 +694,9 @@ class QuoteTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                 {'name': '控制系统', 'spec': 'PLC-S7', 'unit': '套', 'quantity': 1, 'unit_price': 35000, 'amount': 35000, 'remark': '西门子'},
             ]
         }
-        
+
         service = QuoteGenerationService(template)
-        
+
         if template.format == 'HTML':
             html_content = service.generate_html(sample_data)
             return Response({'html_content': html_content})
@@ -717,34 +718,34 @@ class QuoteHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ['status', 'template']
     search_fields = ['quote_no', 'customer_name', 'project_name']
     ordering_fields = ['created_at', 'total_amount']
-    
+
     @action(detail=True, methods=['post'])
     def update_status(self, request, pk=None):
         """更新状态"""
         history = self.get_object()
         new_status = request.data.get('status')
-        
+
         if new_status not in dict(QuoteHistory._meta.get_field('status').choices):
             return Response({'error': '无效的状态'}, status=400)
-        
+
         history.status = new_status
         history.save()
         return Response(self.get_serializer(history).data)
-    
+
     @action(detail=False, methods=['get'])
     def statistics(self, request):
         """报价统计"""
         from django.db.models import Count, Sum
         from django.db.models.functions import TruncMonth
-        
+
         qs = self.get_queryset()
-        
+
         # 按状态统计
         by_status = qs.values('status').annotate(
             count=Count('id'),
             total=Sum('total_amount')
         )
-        
+
         # 按月统计
         by_month = qs.annotate(
             month=TruncMonth('created_at')
@@ -752,11 +753,11 @@ class QuoteHistoryViewSet(viewsets.ReadOnlyModelViewSet):
             count=Count('id'),
             total=Sum('total_amount')
         ).order_by('month')
-        
+
         # 转化率
         total = qs.count()
         accepted = qs.filter(status='ACCEPTED').count()
-        
+
         return Response({
             'total_count': total,
             'total_amount': qs.aggregate(Sum('total_amount'))['total_amount__sum'] or 0,

@@ -3,7 +3,8 @@ User, Role, and Department models for RBAC system.
 """
 from django.contrib.auth.models import AbstractUser
 from django.db import models
-from apps.core.models import TimeStampedModel, SoftDeleteModel
+
+from apps.core.models import SoftDeleteModel, TimeStampedModel
 
 
 class Department(TimeStampedModel, SoftDeleteModel):
@@ -30,13 +31,13 @@ class Department(TimeStampedModel, SoftDeleteModel):
     )
     description = models.TextField(blank=True, verbose_name='描述')
     sort_order = models.IntegerField(default=0, verbose_name='排序')
-    
+
     class Meta:
         db_table = 'department'
         verbose_name = '部门'
         verbose_name_plural = verbose_name
         ordering = ['sort_order', 'code']
-    
+
     def __str__(self):
         return self.name
 
@@ -50,7 +51,7 @@ class Role(TimeStampedModel, SoftDeleteModel):
         ('DEPARTMENT', '部门数据'),
         ('SELF', '仅本人数据'),
     ]
-    
+
     name = models.CharField(max_length=100, unique=True, verbose_name='角色名称')
     code = models.CharField(max_length=50, unique=True, verbose_name='角色编码')
     description = models.TextField(blank=True, verbose_name='描述')
@@ -73,13 +74,13 @@ class Role(TimeStampedModel, SoftDeleteModel):
     )
     is_active = models.BooleanField(default=True, verbose_name='激活状态')
     sort_order = models.IntegerField(default=0, verbose_name='排序')
-    
+
     class Meta:
         db_table = 'role'
         verbose_name = '角色'
         verbose_name_plural = verbose_name
         ordering = ['sort_order', 'code']
-    
+
     def __str__(self):
         return self.name
 
@@ -93,17 +94,17 @@ class User(AbstractUser, SoftDeleteModel):
         ('F', '女'),
         ('O', '其他'),
     ]
-    
+
     employee_id = models.CharField(max_length=50, unique=True, verbose_name='工号')
     phone = models.CharField(max_length=20, blank=True, verbose_name='手机号')
     avatar = models.ImageField(upload_to='avatars/', blank=True, verbose_name='头像')
     gender = models.CharField(max_length=1, choices=GENDER_CHOICES, blank=True, verbose_name='性别')
     birth_date = models.DateField(null=True, blank=True, verbose_name='出生日期')
-    
+
     # 企业微信/钉钉用户ID，用于发送个人消息
     wechat_work_id = models.CharField(max_length=100, blank=True, verbose_name='企业微信用户ID')
     dingtalk_id = models.CharField(max_length=100, blank=True, verbose_name='钉钉用户ID')
-    
+
     department = models.ForeignKey(
         Department,
         on_delete=models.SET_NULL,
@@ -132,25 +133,25 @@ class User(AbstractUser, SoftDeleteModel):
 
     position = models.CharField(max_length=100, blank=True, verbose_name='职位')
     hire_date = models.DateField(null=True, blank=True, verbose_name='入职日期')
-    
+
     # Timestamp fields
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
-    
+
     class Meta:
         db_table = 'user'
         verbose_name = '用户'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f"{self.username} ({self.get_full_name() or self.employee_id})"
-    
+
     def get_full_name(self):
         """中文姓名格式：姓(last_name) + 名(first_name)"""
         full_name = f"{self.last_name}{self.first_name}".strip()
         return full_name or self.username
-    
+
     def has_permission(self, permission_code):
         """
         Check if user has a specific permission.
@@ -159,12 +160,13 @@ class User(AbstractUser, SoftDeleteModel):
         """
         from apps.core.permission_service import has_permission
         return has_permission(self, permission_code)
-    
+
     def soft_delete(self):
         """Soft delete user and free up username/email for reuse."""
-        from django.utils import timezone
         import uuid
-        
+
+        from django.utils import timezone
+
         # 添加删除标记到用户名和邮箱，避免唯一约束冲突
         deleted_suffix = f"_deleted_{uuid.uuid4().hex[:8]}"
         self.username = f"{self.username}{deleted_suffix}"

@@ -2,11 +2,10 @@
 实时通知服务
 Real-time Notification Service using Django Channels
 """
-import json
 import logging
-from channels.generic.websocket import AsyncJsonWebsocketConsumer
+
 from channels.db import database_sync_to_async
-from asgiref.sync import sync_to_async
+from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -16,41 +15,41 @@ class NotificationConsumer(AsyncJsonWebsocketConsumer):
     """
     WebSocket消费者 - 处理实时通知
     """
-    
+
     async def connect(self):
         """建立WebSocket连接"""
         self.user = self.scope.get('user')
-        
+
         if not self.user or not self.user.is_authenticated:
             await self.close()
             return
-        
+
         # 用户专属通知组
         self.user_group = f"notifications_{self.user.id}"
-        
+
         # 加入用户专属组
         await self.channel_layer.group_add(
             self.user_group,
             self.channel_name
         )
-        
+
         # 加入广播组
         await self.channel_layer.group_add(
             "notifications_broadcast",
             self.channel_name
         )
-        
+
         await self.accept()
-        
+
         # 发送未读通知数量
         unread_count = await self.get_unread_count()
         await self.send_json({
             'type': 'connection_established',
             'unread_count': unread_count
         })
-        
+
         logger.info(f"WebSocket connected for user {self.user.id}")
-    
+
     async def disconnect(self, close_code):
         """断开WebSocket连接"""
         if hasattr(self, 'user_group'):
@@ -58,18 +57,18 @@ class NotificationConsumer(AsyncJsonWebsocketConsumer):
                 self.user_group,
                 self.channel_name
             )
-        
+
         await self.channel_layer.group_discard(
             "notifications_broadcast",
             self.channel_name
         )
-        
+
         logger.info(f"WebSocket disconnected: {close_code}")
-    
+
     async def receive_json(self, content):
         """接收客户端消息"""
         message_type = content.get('type')
-        
+
         if message_type == 'mark_read':
             notification_id = content.get('notification_id')
             if notification_id:
@@ -80,14 +79,14 @@ class NotificationConsumer(AsyncJsonWebsocketConsumer):
                     'notification_id': notification_id,
                     'unread_count': unread_count
                 })
-        
+
         elif message_type == 'mark_all_read':
             await self.mark_all_read()
             await self.send_json({
                 'type': 'all_read',
                 'unread_count': 0
             })
-        
+
         elif message_type == 'get_unread':
             unread_count = await self.get_unread_count()
             notifications = await self.get_recent_notifications()
@@ -96,21 +95,21 @@ class NotificationConsumer(AsyncJsonWebsocketConsumer):
                 'unread_count': unread_count,
                 'notifications': notifications
             })
-    
+
     async def notification_message(self, event):
         """处理通知消息（从channel layer接收）"""
         await self.send_json({
             'type': 'new_notification',
             'notification': event['notification']
         })
-    
+
     async def broadcast_message(self, event):
         """处理广播消息"""
         await self.send_json({
             'type': 'broadcast',
             'message': event['message']
         })
-    
+
     @database_sync_to_async
     def get_unread_count(self):
         """获取未读通知数量"""
@@ -119,7 +118,7 @@ class NotificationConsumer(AsyncJsonWebsocketConsumer):
             user=self.user,
             is_read=False
         ).count()
-    
+
     @database_sync_to_async
     def get_recent_notifications(self, limit=10):
         """获取最近通知"""
@@ -127,7 +126,7 @@ class NotificationConsumer(AsyncJsonWebsocketConsumer):
         notifications = Notification.objects.filter(
             user=self.user
         ).order_by('-created_at')[:limit]
-        
+
         return [
             {
                 'id': n.id,
@@ -141,7 +140,7 @@ class NotificationConsumer(AsyncJsonWebsocketConsumer):
             }
             for n in notifications
         ]
-    
+
     @database_sync_to_async
     def mark_notification_read(self, notification_id):
         """标记通知已读"""
@@ -150,7 +149,7 @@ class NotificationConsumer(AsyncJsonWebsocketConsumer):
             id=notification_id,
             user=self.user
         ).update(is_read=True, read_at=timezone.now())
-    
+
     @database_sync_to_async
     def mark_all_read(self):
         """标记所有通知已读"""
@@ -167,7 +166,7 @@ async def send_notification_to_user(user_id, notification_data):
     """
     from channels.layers import get_channel_layer
     channel_layer = get_channel_layer()
-    
+
     await channel_layer.group_send(
         f"notifications_{user_id}",
         {
@@ -183,7 +182,7 @@ async def send_broadcast(message):
     """
     from channels.layers import get_channel_layer
     channel_layer = get_channel_layer()
-    
+
     await channel_layer.group_send(
         "notifications_broadcast",
         {
@@ -199,9 +198,9 @@ def send_notification_sync(user_id, notification_data):
     """
     from asgiref.sync import async_to_sync
     from channels.layers import get_channel_layer
-    
+
     channel_layer = get_channel_layer()
-    
+
     async_to_sync(channel_layer.group_send)(
         f"notifications_{user_id}",
         {

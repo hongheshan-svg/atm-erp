@@ -2,15 +2,17 @@
 设备台账和工装夹具序列化器
 """
 from rest_framework import serializers
-from .equipment_models import (
-    Equipment, EquipmentShipment, EquipmentInstallation,
-    InstallationLog, EquipmentAcceptance, MaintenanceSchedule, TrainingRecord
-)
-from .fixture_models import (
-    FixtureCategory, Fixture, FixtureUsageRecord,
-    FixtureCalibration, FixtureMaintenance
-)
 
+from .equipment_models import (
+    Equipment,
+    EquipmentAcceptance,
+    EquipmentInstallation,
+    EquipmentShipment,
+    InstallationLog,
+    MaintenanceSchedule,
+    TrainingRecord,
+)
+from .fixture_models import Fixture, FixtureCalibration, FixtureCategory, FixtureMaintenance, FixtureUsageRecord
 
 # ============================================================
 # 设备台账序列化器
@@ -23,7 +25,7 @@ class EquipmentSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source='customer.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     is_in_warranty = serializers.BooleanField(read_only=True)
-    
+
     class Meta:
         model = Equipment
         fields = '__all__'
@@ -36,7 +38,7 @@ class EquipmentListSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source='customer.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     is_in_warranty = serializers.BooleanField(read_only=True)
-    
+
     class Meta:
         model = Equipment
         fields = [
@@ -52,7 +54,7 @@ class EquipmentShipmentSerializer(serializers.ModelSerializer):
     equipment_name = serializers.CharField(source='equipment.name', read_only=True)
     equipment_no = serializers.CharField(source='equipment.equipment_no', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = EquipmentShipment
         fields = '__all__'
@@ -61,7 +63,7 @@ class EquipmentShipmentSerializer(serializers.ModelSerializer):
 class InstallationLogSerializer(serializers.ModelSerializer):
     """安装日志序列化器"""
     recorded_by_name = serializers.CharField(source='recorded_by.name', read_only=True)
-    
+
     class Meta:
         model = InstallationLog
         fields = '__all__'
@@ -74,7 +76,7 @@ class EquipmentInstallationSerializer(serializers.ModelSerializer):
     team_leader_name = serializers.CharField(source='team_leader.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     daily_logs = InstallationLogSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = EquipmentInstallation
         fields = '__all__'
@@ -86,7 +88,7 @@ class EquipmentAcceptanceSerializer(serializers.ModelSerializer):
     equipment_no = serializers.CharField(source='equipment.equipment_no', read_only=True)
     our_representative_name = serializers.CharField(source='our_representative.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = EquipmentAcceptance
         fields = '__all__'
@@ -98,7 +100,7 @@ class MaintenanceScheduleSerializer(serializers.ModelSerializer):
     equipment_no = serializers.CharField(source='equipment.equipment_no', read_only=True)
     maintenance_type_display = serializers.CharField(source='get_maintenance_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = MaintenanceSchedule
         fields = '__all__'
@@ -110,7 +112,7 @@ class TrainingRecordSerializer(serializers.ModelSerializer):
     equipment_no = serializers.CharField(source='equipment.equipment_no', read_only=True)
     trainer_name = serializers.CharField(source='trainer.name', read_only=True)
     training_type_display = serializers.CharField(source='get_training_type_display', read_only=True)
-    
+
     class Meta:
         model = TrainingRecord
         fields = '__all__'
@@ -125,11 +127,11 @@ class FixtureCategorySerializer(serializers.ModelSerializer):
     """工装分类序列化器"""
     parent_name = serializers.CharField(source='parent.name', read_only=True)
     children_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = FixtureCategory
         fields = '__all__'
-    
+
     def get_children_count(self, obj):
         return obj.children.filter(is_deleted=False).count()
 
@@ -137,11 +139,11 @@ class FixtureCategorySerializer(serializers.ModelSerializer):
 class FixtureCategoryTreeSerializer(serializers.ModelSerializer):
     """工装分类树形序列化器"""
     children = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = FixtureCategory
         fields = ['id', 'code', 'name', 'description', 'sort_order', 'children']
-    
+
     def get_children(self, obj):
         children = obj.children.filter(is_deleted=False).order_by('sort_order', 'code')
         return FixtureCategoryTreeSerializer(children, many=True).data
@@ -156,7 +158,7 @@ class FixtureSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     ownership_display = serializers.CharField(source='get_ownership_display', read_only=True)
     is_calibration_due = serializers.BooleanField(read_only=True)
-    
+
     class Meta:
         model = Fixture
         fields = '__all__'
@@ -169,7 +171,7 @@ class FixtureListSerializer(serializers.ModelSerializer):
     custodian_name = serializers.CharField(source='custodian.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     is_calibration_due = serializers.BooleanField(read_only=True)
-    
+
     class Meta:
         model = Fixture
         fields = [
@@ -186,7 +188,7 @@ class FixtureUsageRecordSerializer(serializers.ModelSerializer):
     fixture_no = serializers.CharField(source='fixture.fixture_no', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     used_by_name = serializers.CharField(source='used_by.name', read_only=True)
-    
+
     class Meta:
         model = FixtureUsageRecord
         fields = '__all__'
@@ -197,7 +199,7 @@ class FixtureCalibrationSerializer(serializers.ModelSerializer):
     fixture_name = serializers.CharField(source='fixture.name', read_only=True)
     fixture_no = serializers.CharField(source='fixture.fixture_no', read_only=True)
     result_display = serializers.CharField(source='get_result_display', read_only=True)
-    
+
     class Meta:
         model = FixtureCalibration
         fields = '__all__'
@@ -209,7 +211,7 @@ class FixtureMaintenanceSerializer(serializers.ModelSerializer):
     fixture_no = serializers.CharField(source='fixture.fixture_no', read_only=True)
     performed_by_name = serializers.CharField(source='performed_by.name', read_only=True)
     maintenance_type_display = serializers.CharField(source='get_maintenance_type_display', read_only=True)
-    
+
     class Meta:
         model = FixtureMaintenance
         fields = '__all__'

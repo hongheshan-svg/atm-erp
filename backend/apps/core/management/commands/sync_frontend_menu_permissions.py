@@ -5,7 +5,6 @@ from django.core.management.base import BaseCommand, CommandError
 
 from apps.core.permission_models_new import Permission
 
-
 TOP_LEVEL_MENUS = {
     # 非标自动化行业(100人规模)优化菜单
     'dashboard':  {'name': '工作台',   'icon': 'DataAnalysis',    'route_path': '/dashboard',              'sort_order': 0},

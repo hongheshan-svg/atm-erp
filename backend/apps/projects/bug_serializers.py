@@ -1,15 +1,16 @@
 """
 Bug跟踪系统序列化器
 """
-from rest_framework import serializers
 from django.utils import timezone
-from .bug_models import Bug, BugComment, BugAttachment, BugHistory
+from rest_framework import serializers
+
+from .bug_models import Bug, BugAttachment, BugComment, BugHistory
 
 
 class BugAttachmentSerializer(serializers.ModelSerializer):
     """Bug附件序列化器"""
     uploaded_by_name = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = BugAttachment
         fields = [
@@ -17,12 +18,12 @@ class BugAttachmentSerializer(serializers.ModelSerializer):
             'uploaded_by', 'uploaded_by_name', 'created_at'
         ]
         read_only_fields = ['uploaded_by', 'file_size', 'created_at']
-    
+
     def get_uploaded_by_name(self, obj):
         if obj.uploaded_by:
             return f"{obj.uploaded_by.last_name}{obj.uploaded_by.first_name}" or obj.uploaded_by.username
         return ''
-    
+
     def create(self, validated_data):
         validated_data['uploaded_by'] = self.context['request'].user
         if 'file' in validated_data:
@@ -36,7 +37,7 @@ class BugCommentSerializer(serializers.ModelSerializer):
     """Bug评论序列化器"""
     user_name = serializers.SerializerMethodField()
     user_avatar = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = BugComment
         fields = [
@@ -44,18 +45,18 @@ class BugCommentSerializer(serializers.ModelSerializer):
             'content', 'created_at', 'updated_at'
         ]
         read_only_fields = ['user', 'created_at', 'updated_at']
-    
+
     def get_user_name(self, obj):
         if obj.user:
             name = f"{obj.user.last_name}{obj.user.first_name}"
             return name if name else obj.user.username
         return ''
-    
+
     def get_user_avatar(self, obj):
         if obj.user and obj.user.avatar:
             return obj.user.avatar.url
         return None
-    
+
     def create(self, validated_data):
         validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
@@ -64,7 +65,7 @@ class BugCommentSerializer(serializers.ModelSerializer):
 class BugHistorySerializer(serializers.ModelSerializer):
     """Bug变更历史序列化器"""
     user_name = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = BugHistory
         fields = [
@@ -73,7 +74,7 @@ class BugHistorySerializer(serializers.ModelSerializer):
             'created_at'
         ]
         read_only_fields = ['created_at']
-    
+
     def get_user_name(self, obj):
         if obj.user:
             name = f"{obj.user.last_name}{obj.user.first_name}"
@@ -93,7 +94,7 @@ class BugListSerializer(serializers.ModelSerializer):
     bug_type_display = serializers.CharField(source='get_bug_type_display', read_only=True)
     comment_count = serializers.SerializerMethodField()
     attachment_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = Bug
         fields = [
@@ -108,22 +109,22 @@ class BugListSerializer(serializers.ModelSerializer):
             'comment_count', 'attachment_count',
             'created_at', 'updated_at'
         ]
-    
+
     def get_reporter_name(self, obj):
         if obj.reporter:
             name = f"{obj.reporter.last_name}{obj.reporter.first_name}"
             return name if name else obj.reporter.username
         return ''
-    
+
     def get_assignee_name(self, obj):
         if obj.assignee:
             name = f"{obj.assignee.last_name}{obj.assignee.first_name}"
             return name if name else obj.assignee.username
         return ''
-    
+
     def get_comment_count(self, obj):
         return obj.comments.count()
-    
+
     def get_attachment_count(self, obj):
         return obj.attachments.count()
 
@@ -143,7 +144,7 @@ class BugDetailSerializer(serializers.ModelSerializer):
     attachments = BugAttachmentSerializer(many=True, read_only=True)
     histories = BugHistorySerializer(many=True, read_only=True)
     duplicate_of_number = serializers.CharField(source='duplicate_of.bug_number', read_only=True)
-    
+
     class Meta:
         model = Bug
         fields = [
@@ -163,13 +164,13 @@ class BugDetailSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['bug_number', 'reporter', 'resolved_at', 'closed_at', 'created_at', 'updated_at']
-    
+
     def get_reporter_name(self, obj):
         if obj.reporter:
             name = f"{obj.reporter.last_name}{obj.reporter.first_name}"
             return name if name else obj.reporter.username
         return ''
-    
+
     def get_assignee_name(self, obj):
         if obj.assignee:
             name = f"{obj.assignee.last_name}{obj.assignee.first_name}"
@@ -179,7 +180,7 @@ class BugDetailSerializer(serializers.ModelSerializer):
 
 class BugCreateUpdateSerializer(serializers.ModelSerializer):
     """Bug创建/更新序列化器"""
-    
+
     class Meta:
         model = Bug
         fields = [
@@ -188,11 +189,11 @@ class BugCreateUpdateSerializer(serializers.ModelSerializer):
             'assignee', 'resolution', 'solution',
             'environment', 'version', 'duplicate_of'
         ]
-    
+
     def create(self, validated_data):
         validated_data['reporter'] = self.context['request'].user
         bug = super().create(validated_data)
-        
+
         # 记录创建历史
         BugHistory.objects.create(
             bug=bug,
@@ -202,12 +203,12 @@ class BugCreateUpdateSerializer(serializers.ModelSerializer):
             old_value='',
             new_value='新建'
         )
-        
+
         return bug
-    
+
     def update(self, instance, validated_data):
         user = self.context['request'].user
-        
+
         # 记录字段变更
         field_labels = {
             'title': '标题',
@@ -223,12 +224,12 @@ class BugCreateUpdateSerializer(serializers.ModelSerializer):
             'environment': '环境',
             'version': '版本',
         }
-        
+
         for field, label in field_labels.items():
             if field in validated_data:
                 old_value = getattr(instance, field)
                 new_value = validated_data[field]
-                
+
                 if old_value != new_value:
                     # 转换显示值
                     if field == 'assignee':
@@ -240,7 +241,7 @@ class BugCreateUpdateSerializer(serializers.ModelSerializer):
                     else:
                         old_display = str(old_value) if old_value else ''
                         new_display = str(new_value) if new_value else ''
-                    
+
                     BugHistory.objects.create(
                         bug=instance,
                         user=user,
@@ -249,7 +250,7 @@ class BugCreateUpdateSerializer(serializers.ModelSerializer):
                         old_value=old_display,
                         new_value=new_display
                     )
-        
+
         # 状态变更时更新时间
         if 'status' in validated_data:
             new_status = validated_data['status']
@@ -257,7 +258,7 @@ class BugCreateUpdateSerializer(serializers.ModelSerializer):
                 validated_data['resolved_at'] = timezone.now()
             elif new_status == 'CLOSED' and instance.status != 'CLOSED':
                 validated_data['closed_at'] = timezone.now()
-        
+
         return super().update(instance, validated_data)
 
 

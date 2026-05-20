@@ -2,8 +2,9 @@
 初始化系统数据
 创建基础角色、部门和示例数据
 """
-from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
+from django.core.management.base import BaseCommand
+
 from apps.accounts.models import Department, Role
 from apps.core.permission_models_new import DataScope
 
@@ -20,7 +21,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self.stdout.write(self.style.SUCCESS('开始初始化数据...'))
-        
+
         # 1. 创建部门
         self.stdout.write('创建部门...')
         departments = [
@@ -32,7 +33,7 @@ class Command(BaseCommand):
             {'name': '财务部', 'code': 'FINANCE', 'description': '财务管理'},
             {'name': '项目部', 'code': 'PROJECT', 'description': '项目管理'},
         ]
-        
+
         dept_objs = {}
         for dept_data in departments:
             dept, created = Department.objects.get_or_create(
@@ -47,7 +48,7 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f'  ✓ 创建部门: {dept.name}'))
             else:
                 self.stdout.write(f'  - 部门已存在: {dept.name}')
-        
+
         # 2. 创建角色
         self.stdout.write('创建角色...')
         roles = [
@@ -112,7 +113,7 @@ class Command(BaseCommand):
                 'data_scope': 'SELF'
             },
         ]
-        
+
         role_objs = {}
         for role_data in roles:
             created = False
@@ -152,7 +153,7 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f'  ✓ 创建角色: {role.name}'))
             else:
                 self.stdout.write(f'  - 角色已存在: {role.name}')
-        
+
         # 3. 更新admin用户
         self.stdout.write('更新admin用户...')
         try:
@@ -162,7 +163,7 @@ class Command(BaseCommand):
                 admin.employee_id = 'EMP001'
                 admin.save()
                 self.stdout.write(self.style.SUCCESS('  ✓ 更新admin用户信息'))
-            
+
             # 为admin分配系统管理员角色
             if not admin.role or admin.role.code != 'admin':
                 admin.role = role_objs['admin']
@@ -171,7 +172,7 @@ class Command(BaseCommand):
             admin.roles.set([role_objs['admin']])
         except User.DoesNotExist:
             self.stdout.write(self.style.WARNING('  ! admin用户不存在'))
-        
+
         # 4. 创建示例用户
         self.stdout.write('创建示例用户...')
         sample_users = [
@@ -236,7 +237,7 @@ class Command(BaseCommand):
                 'password': 'erp123456'
             },
         ]
-        
+
         for user_data in sample_users:
             user, created = User.objects.get_or_create(
                 username=user_data['username'],
@@ -266,7 +267,7 @@ class Command(BaseCommand):
                 ))
             else:
                 self.stdout.write(f'  - 用户已更新: {user.username}')
-        
+
         self.stdout.write(self.style.SUCCESS('\n数据初始化完成！'))
         self.stdout.write(self.style.SUCCESS('\n可用的测试账号：'))
         self.stdout.write('  admin / admin123 (系统管理员)')

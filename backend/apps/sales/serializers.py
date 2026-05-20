@@ -1,14 +1,18 @@
 """
 Serializers for sales app.
 """
-from rest_framework import serializers
 from django.db import transaction
 from django.db.models import Sum
+from rest_framework import serializers
+
 from .models import (
-    SalesQuotation, SalesQuotationLine,
-    SalesOrder, SalesOrderLine,
-    DeliveryOrder, DeliveryOrderLine,
-    SalesContract
+    DeliveryOrder,
+    DeliveryOrderLine,
+    SalesContract,
+    SalesOrder,
+    SalesOrderLine,
+    SalesQuotation,
+    SalesQuotationLine,
 )
 
 
@@ -19,7 +23,7 @@ class SalesQuotationLineSerializer(serializers.ModelSerializer):
     item_sku = serializers.SerializerMethodField()
     item_unit = serializers.SerializerMethodField()
     item_spec = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = SalesQuotationLine
         fields = [
@@ -28,25 +32,25 @@ class SalesQuotationLineSerializer(serializers.ModelSerializer):
             'qty', 'unit_price', 'line_amount', 'notes', 'is_deleted'
         ]
         read_only_fields = ['line_amount']
-    
+
     def get_item_name(self, obj):
         """返回产品名称：优先物料，其次手动填写"""
         if obj.item:
             return obj.item.name
         return obj.custom_name or ''
-    
+
     def get_item_sku(self, obj):
         """返回产品编码"""
         if obj.item:
             return obj.item.sku
         return ''
-    
+
     def get_item_unit(self, obj):
         """返回单位"""
         if obj.item:
             return obj.item.get_unit_display()
         return obj.custom_unit or '件'
-    
+
     def get_item_spec(self, obj):
         """返回规格型号"""
         if obj.item:
@@ -62,12 +66,12 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
     tax_rate_display = serializers.CharField(source='get_tax_rate_display', read_only=True)
     created_by_name = serializers.SerializerMethodField()
     lines = SalesQuotationLineSerializer(many=True, read_only=True)
-    
+
     def get_created_by_name(self, obj):
         if obj.created_by:
             return obj.created_by.get_full_name() or obj.created_by.username
         return ''
-    
+
     class Meta:
         model = SalesQuotation
         fields = [
@@ -77,19 +81,19 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
             'notes', 'lines', 'is_deleted', 'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
         read_only_fields = ['quote_no', 'quote_date', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
-    
+
     def create(self, validated_data):
         """Create quotation with lines."""
         lines_data = self.initial_data.get('lines', [])
-        
+
         with transaction.atomic():
             quotation = SalesQuotation.objects.create(**validated_data)
-            
+
             for line_data in lines_data:
                 # 支持两种模式：选择物料 或 手动填写产品信息
                 has_item = line_data.get('item')
                 has_custom = line_data.get('custom_name')
-                
+
                 if (has_item or has_custom) and line_data.get('qty'):
                     SalesQuotationLine.objects.create(
                         quotation=quotation,
@@ -102,34 +106,34 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
                         notes=line_data.get('notes', ''),
                         created_by=quotation.created_by
                     )
-            
+
             # Update total amount and tax
             total = quotation.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
             quotation.total_amount = total
             quotation.tax_amount = total * quotation.tax_rate / 100
             quotation.total_with_tax = total + quotation.tax_amount
             quotation.save()
-        
+
         return quotation
-    
+
     def update(self, instance, validated_data):
         """Update quotation with lines."""
         lines_data = self.initial_data.get('lines', [])
-        
+
         with transaction.atomic():
             # Update quotation fields
             for attr, value in validated_data.items():
                 setattr(instance, attr, value)
             instance.save()
-            
+
             # Delete old lines and create new ones
             instance.lines.all().delete()
-            
+
             for line_data in lines_data:
                 # 支持两种模式：选择物料 或 手动填写产品信息
                 has_item = line_data.get('item')
                 has_custom = line_data.get('custom_name')
-                
+
                 if (has_item or has_custom) and line_data.get('qty'):
                     SalesQuotationLine.objects.create(
                         quotation=instance,
@@ -142,14 +146,14 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
                         notes=line_data.get('notes', ''),
                         created_by=instance.created_by
                     )
-            
+
             # Update total amount and tax
             total = instance.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
             instance.total_amount = total
             instance.tax_amount = total * instance.tax_rate / 100
             instance.total_with_tax = total + instance.tax_amount
             instance.save()
-        
+
         return instance
 
 
@@ -161,7 +165,7 @@ class SalesOrderLineSerializer(serializers.ModelSerializer):
     item_unit = serializers.SerializerMethodField()
     item_spec = serializers.SerializerMethodField()
     remaining_qty = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = SalesOrderLine
         fields = [
@@ -171,31 +175,31 @@ class SalesOrderLineSerializer(serializers.ModelSerializer):
             'notes', 'is_deleted'
         ]
         read_only_fields = ['line_amount', 'delivered_qty']
-    
+
     def get_item_name(self, obj):
         """返回产品名称：优先物料，其次手动填写"""
         if obj.item:
             return obj.item.name
         return obj.custom_name or ''
-    
+
     def get_item_sku(self, obj):
         """返回产品编码"""
         if obj.item:
             return obj.item.sku
         return ''
-    
+
     def get_item_unit(self, obj):
         """返回单位"""
         if obj.item:
             return obj.item.get_unit_display()
         return obj.custom_unit or '件'
-    
+
     def get_item_spec(self, obj):
         """返回规格型号"""
         if obj.item:
             return obj.item.specification or ''
         return obj.custom_spec or ''
-    
+
     def get_remaining_qty(self, obj):
         return float(obj.qty - obj.delivered_qty)
 
@@ -208,7 +212,7 @@ class SalesOrderLineWriteSerializer(serializers.Serializer):
     custom_name = serializers.CharField(required=False, allow_blank=True, default='')
     custom_spec = serializers.CharField(required=False, allow_blank=True, default='')
     custom_unit = serializers.CharField(required=False, allow_blank=True, default='件')
-    
+
     qty = serializers.DecimalField(max_digits=15, decimal_places=2)
     unit_price = serializers.DecimalField(max_digits=15, decimal_places=2)
     notes = serializers.CharField(required=False, allow_blank=True, default='')
@@ -227,25 +231,25 @@ class SalesOrderSerializer(serializers.ModelSerializer):
     payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
     created_by_name = serializers.SerializerMethodField()
     lines = SalesOrderLineSerializer(many=True, read_only=True)
-    
+
     def get_project_name(self, obj):
         return obj.project.name if obj.project else '未关联项目'
-    
+
     def get_created_by_name(self, obj):
         if obj.created_by:
             return obj.created_by.get_full_name() or obj.created_by.username
         return ''
-    
+
     class Meta:
         model = SalesOrder
         fields = [
-            'id', 'order_no', 'customer_order_no', 'customer', 'customer_name', 
+            'id', 'order_no', 'customer_order_no', 'customer', 'customer_name',
             'customer_address', 'customer_contact', 'customer_phone',
             'project', 'project_name',
             'order_date', 'delivery_date', 'status', 'status_display',
             'tax_rate', 'tax_rate_display', 'total_amount', 'tax_amount', 'total_with_tax',
             'payment_terms', 'payment_terms_display', 'payment_method', 'payment_method_display',
-            'payment_terms_detail', 'notes', 'lines', 'is_deleted', 
+            'payment_terms_detail', 'notes', 'lines', 'is_deleted',
             'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
         read_only_fields = ['order_date', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
@@ -255,19 +259,19 @@ class SalesOrderSerializer(serializers.ModelSerializer):
             # 客户订单号可选
             'customer_order_no': {'required': False, 'allow_blank': True},
         }
-    
+
     def create(self, validated_data):
         """Create SO with lines."""
         lines_data = self.initial_data.get('lines', [])
-        
+
         with transaction.atomic():
             so = SalesOrder.objects.create(**validated_data)
-            
+
             for line_data in lines_data:
                 # 支持两种模式：选择物料 或 手动填写产品信息
                 has_item = line_data.get('item')
                 has_custom = line_data.get('custom_name')
-                
+
                 if (has_item or has_custom) and line_data.get('qty'):
                     SalesOrderLine.objects.create(
                         so=so,
@@ -280,34 +284,34 @@ class SalesOrderSerializer(serializers.ModelSerializer):
                         notes=line_data.get('notes', ''),
                         created_by=so.created_by
                     )
-            
+
             # Update total amount and tax
             total = so.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
             so.total_amount = total
             so.tax_amount = total * so.tax_rate / 100
             so.total_with_tax = total + so.tax_amount
             so.save()
-        
+
         return so
-    
+
     def update(self, instance, validated_data):
         """Update SO with lines."""
         lines_data = self.initial_data.get('lines', [])
-        
+
         with transaction.atomic():
             # Update SO fields
             for attr, value in validated_data.items():
                 setattr(instance, attr, value)
             instance.save()
-            
+
             # Delete old lines and create new ones
             instance.lines.all().delete()
-            
+
             for line_data in lines_data:
                 # 支持两种模式：选择物料 或 手动填写产品信息
                 has_item = line_data.get('item')
                 has_custom = line_data.get('custom_name')
-                
+
                 if (has_item or has_custom) and line_data.get('qty'):
                     SalesOrderLine.objects.create(
                         so=instance,
@@ -320,14 +324,14 @@ class SalesOrderSerializer(serializers.ModelSerializer):
                         notes=line_data.get('notes', ''),
                         created_by=instance.created_by
                     )
-            
+
             # Update total amount and tax
             total = instance.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
             instance.total_amount = total
             instance.tax_amount = total * instance.tax_rate / 100
             instance.total_with_tax = total + instance.tax_amount
             instance.save()
-        
+
         return instance
 
 
@@ -338,32 +342,32 @@ class DeliveryOrderLineSerializer(serializers.ModelSerializer):
     item_unit = serializers.SerializerMethodField()
     unit = serializers.SerializerMethodField()  # 前端兼容字段
     specification = serializers.SerializerMethodField()  # 规格型号
-    
+
     def get_item_name(self, obj):
         if obj.item:
             return obj.item.name
         return ''
-    
+
     def get_item_sku(self, obj):
         if obj.item:
             return obj.item.sku
         return ''
-    
+
     def get_item_unit(self, obj):
         if obj.item:
             return obj.item.get_unit_display()
         return ''
-    
+
     def get_unit(self, obj):
         if obj.item:
             return obj.item.get_unit_display()
         return ''
-    
+
     def get_specification(self, obj):
         if obj.item:
             return obj.item.specification or ''
         return ''
-    
+
     class Meta:
         model = DeliveryOrderLine
         fields = [
@@ -386,11 +390,11 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
     packaging_type_display = serializers.CharField(source='get_packaging_type_display', read_only=True)
     total_amount = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
     lines = DeliveryOrderLineSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = DeliveryOrder
         fields = [
-            'id', 'delivery_no', 'so', 'so_no', 
+            'id', 'delivery_no', 'so', 'so_no',
             # 客户信息
             'customer_name', 'customer_contact', 'customer_phone', 'customer_address',
             'project_name',
@@ -413,14 +417,14 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
             'is_deleted', 'created_at', 'updated_at', 'created_by'
         ]
         read_only_fields = ['delivery_no', 'created_at', 'updated_at', 'total_amount']
-    
+
     def create(self, validated_data):
         """Create delivery order with lines."""
         lines_data = self.initial_data.get('lines', [])
-        
+
         with transaction.atomic():
             delivery = DeliveryOrder.objects.create(**validated_data)
-            
+
             for line_data in lines_data:
                 if line_data.get('item') and line_data.get('qty'):
                     DeliveryOrderLine.objects.create(
@@ -431,22 +435,22 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
                         notes=line_data.get('notes', ''),
                         created_by=delivery.created_by
                     )
-        
+
         return delivery
-    
+
     def update(self, instance, validated_data):
         """Update delivery order with lines."""
         lines_data = self.initial_data.get('lines', [])
-        
+
         with transaction.atomic():
             # Update delivery fields
             for attr, value in validated_data.items():
                 setattr(instance, attr, value)
             instance.save()
-            
+
             # Delete old lines and create new ones
             instance.lines.all().delete()
-            
+
             for line_data in lines_data:
                 if line_data.get('item') and line_data.get('qty'):
                     DeliveryOrderLine.objects.create(
@@ -457,7 +461,7 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
                         notes=line_data.get('notes', ''),
                         created_by=instance.created_by
                     )
-        
+
         return instance
 
 
@@ -468,12 +472,12 @@ class SalesContractSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(source='project.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     so_lines = SalesOrderLineSerializer(source='so.lines', many=True, read_only=True)
-    
+
     class Meta:
         model = SalesContract
         fields = [
-            'id', 'contract_no', 'so', 'so_no', 'customer', 'customer_name', 
-            'project', 'project_name', 'title', 'contract_date', 
+            'id', 'contract_no', 'so', 'so_no', 'customer', 'customer_name',
+            'project', 'project_name', 'title', 'contract_date',
             'effective_date', 'expiry_date', 'total_amount', 'tax_rate',
             'tax_amount', 'total_with_tax', 'payment_terms', 'delivery_terms',
             'quality_terms', 'warranty_terms', 'buyer_signer', 'seller_signer',
@@ -481,7 +485,7 @@ class SalesContractSerializer(serializers.ModelSerializer):
             'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['contract_no', 'created_at', 'updated_at']
-    
+
     def create(self, validated_data):
         """Create contract and auto-fill from SO."""
         so = validated_data.get('so')
@@ -498,5 +502,5 @@ class SalesContractSerializer(serializers.ModelSerializer):
                 validated_data['tax_amount'] = so.tax_amount
             if not validated_data.get('total_with_tax'):
                 validated_data['total_with_tax'] = so.total_with_tax
-        
+
         return super().create(validated_data)

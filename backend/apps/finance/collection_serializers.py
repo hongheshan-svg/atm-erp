@@ -2,16 +2,15 @@
 回款计划管理序列化器
 """
 from rest_framework import serializers
-from .collection_models import (
-    CollectionPlan, CollectionMilestone, CollectionRecord, CollectionReminder
-)
+
+from .collection_models import CollectionMilestone, CollectionPlan, CollectionRecord, CollectionReminder
 
 
 class CollectionRecordSerializer(serializers.ModelSerializer):
     """收款记录序列化器"""
     payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
     confirmed_by_name = serializers.CharField(source='confirmed_by.name', read_only=True)
-    
+
     class Meta:
         model = CollectionRecord
         fields = '__all__'
@@ -25,11 +24,11 @@ class CollectionMilestoneSerializer(serializers.ModelSerializer):
     overdue_days = serializers.IntegerField(read_only=True)
     records = CollectionRecordSerializer(many=True, read_only=True)
     remaining_amount = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = CollectionMilestone
         fields = '__all__'
-    
+
     def get_remaining_amount(self, obj):
         return float(obj.planned_amount - obj.collected_amount)
 
@@ -43,7 +42,7 @@ class CollectionMilestoneListSerializer(serializers.ModelSerializer):
     plan_no = serializers.CharField(source='plan.plan_no', read_only=True)
     customer_name = serializers.CharField(source='plan.customer.name', read_only=True)
     project_name = serializers.CharField(source='plan.project.name', read_only=True)
-    
+
     class Meta:
         model = CollectionMilestone
         fields = [
@@ -63,7 +62,7 @@ class CollectionPlanSerializer(serializers.ModelSerializer):
     collection_rate = serializers.FloatField(read_only=True)
     remaining_amount = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
     milestones = CollectionMilestoneSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = CollectionPlan
         fields = '__all__'
@@ -80,7 +79,7 @@ class CollectionPlanListSerializer(serializers.ModelSerializer):
     remaining_amount = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
     milestone_count = serializers.SerializerMethodField()
     overdue_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = CollectionPlan
         fields = [
@@ -90,10 +89,10 @@ class CollectionPlanListSerializer(serializers.ModelSerializer):
             'collection_rate', 'remaining_amount', 'milestone_count',
             'overdue_count', 'created_at'
         ]
-    
+
     def get_milestone_count(self, obj):
         return obj.milestones.filter(is_deleted=False).count()
-    
+
     def get_overdue_count(self, obj):
         from django.utils import timezone
         return obj.milestones.filter(
@@ -108,7 +107,7 @@ class CollectionReminderSerializer(serializers.ModelSerializer):
     reminder_type_display = serializers.CharField(source='get_reminder_type_display', read_only=True)
     milestone_name = serializers.CharField(source='milestone.name', read_only=True)
     plan_no = serializers.CharField(source='milestone.plan.plan_no', read_only=True)
-    
+
     class Meta:
         model = CollectionReminder
         fields = '__all__'

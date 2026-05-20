@@ -2,6 +2,7 @@
 Batch tracking serializers
 """
 from rest_framework import serializers
+
 from .batch_models import Batch, BatchMove
 
 
@@ -13,7 +14,7 @@ class BatchSerializer(serializers.ModelSerializer):
     quality_status_display = serializers.CharField(source='get_quality_status_display', read_only=True)
     is_expired = serializers.BooleanField(read_only=True)
     days_to_expiry = serializers.IntegerField(read_only=True)
-    
+
     class Meta:
         model = Batch
         fields = [
@@ -30,7 +31,7 @@ class BatchMoveSerializer(serializers.ModelSerializer):
     """Batch move serializer"""
     batch_no = serializers.CharField(source='batch.batch_no', read_only=True)
     move_type_display = serializers.CharField(source='get_move_type_display', read_only=True)
-    
+
     class Meta:
         model = BatchMove
         fields = [

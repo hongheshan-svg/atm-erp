@@ -2,12 +2,12 @@
 审批流程可视化API
 Workflow Visualization API
 """
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from django.db.models import Count, Avg, F
+
+from django.db.models import Avg, Count, F
 from django.utils import timezone
-from datetime import timedelta
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 
 class WorkflowVisualizationView(APIView):
@@ -15,33 +15,32 @@ class WorkflowVisualizationView(APIView):
     审批流程可视化数据API
     """
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request, workflow_id=None):
-        from apps.core.workflow.models import WorkflowInstance, WorkflowStep
-        
+
         if workflow_id:
             return self.get_workflow_detail(workflow_id)
-        
+
         return self.get_workflow_overview()
-    
+
     def get_workflow_detail(self, workflow_id):
         """获取单个工作流详情"""
         from apps.core.workflow.models import WorkflowInstance, WorkflowStep
-        
+
         try:
             instance = WorkflowInstance.objects.get(id=workflow_id)
         except WorkflowInstance.DoesNotExist:
             return Response({'error': '工作流不存在'}, status=404)
-        
+
         # 获取所有步骤
         steps = WorkflowStep.objects.filter(
             instance=instance
         ).order_by('step_order')
-        
+
         # 构建流程图数据
         nodes = []
         edges = []
-        
+
         # 添加开始节点
         nodes.append({
             'id': 'start',
@@ -49,12 +48,12 @@ class WorkflowVisualizationView(APIView):
             'label': '开始',
             'status': 'completed'
         })
-        
+
         prev_node_id = 'start'
-        
+
         for i, step in enumerate(steps):
             node_id = f'step_{step.id}'
-            
+
             # 确定节点状态
             if step.status == 'APPROVED':
                 status = 'completed'
@@ -64,7 +63,7 @@ class WorkflowVisualizationView(APIView):
                 status = 'current' if i == 0 or steps[i-1].status in ['APPROVED'] else 'pending'
             else:
                 status = 'pending'
-            
+
             nodes.append({
                 'id': node_id,
                 'type': 'approval',
@@ -74,15 +73,15 @@ class WorkflowVisualizationView(APIView):
                 'approved_at': step.approved_at.isoformat() if step.approved_at else None,
                 'comments': step.comments,
             })
-            
+
             # 添加边
             edges.append({
                 'source': prev_node_id,
                 'target': node_id
             })
-            
+
             prev_node_id = node_id
-        
+
         # 添加结束节点
         end_status = 'completed' if instance.status == 'APPROVED' else (
             'rejected' if instance.status == 'REJECTED' else 'pending'
@@ -93,12 +92,12 @@ class WorkflowVisualizationView(APIView):
             'label': '结束',
             'status': end_status
         })
-        
+
         edges.append({
             'source': prev_node_id,
             'target': 'end'
         })
-        
+
         return Response({
             'workflow': {
                 'id': instance.id,
@@ -113,24 +112,24 @@ class WorkflowVisualizationView(APIView):
                 'edges': edges
             }
         })
-    
+
     def get_workflow_overview(self):
         """获取工作流概览统计"""
         from apps.core.workflow.models import WorkflowInstance
-        
+
         today = timezone.now().date()
         this_month_start = today.replace(day=1)
-        
+
         # 状态统计
         status_stats = WorkflowInstance.objects.values('status').annotate(
             count=Count('id')
         )
-        
+
         # 类型统计
         type_stats = WorkflowInstance.objects.values('workflow_type').annotate(
             count=Count('id')
         )
-        
+
         # 本月趋势
         from django.db.models.functions import TruncDate
         monthly_trend = WorkflowInstance.objects.filter(
@@ -140,26 +139,26 @@ class WorkflowVisualizationView(APIView):
         ).values('date').annotate(
             count=Count('id')
         ).order_by('date')
-        
+
         # 平均处理时间
         completed_instances = WorkflowInstance.objects.filter(
             status__in=['APPROVED', 'REJECTED'],
             completed_at__isnull=False
         )
-        
+
         avg_processing_time = None
         if completed_instances.exists():
-            from django.db.models import ExpressionWrapper, DurationField
+            from django.db.models import DurationField, ExpressionWrapper
             avg_time = completed_instances.annotate(
                 processing_time=ExpressionWrapper(
                     F('completed_at') - F('created_at'),
                     output_field=DurationField()
                 )
             ).aggregate(avg=Avg('processing_time'))
-            
+
             if avg_time['avg']:
                 avg_processing_time = avg_time['avg'].total_seconds() / 3600  # 转换为小时
-        
+
         return Response({
             'status_stats': list(status_stats),
             'type_stats': list(type_stats),
@@ -177,37 +176,37 @@ class WorkflowStepStatisticsView(APIView):
     审批步骤统计API
     """
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
         from apps.core.workflow.models import WorkflowStep
-        
+
         user = request.user
-        
+
         # 我的待审批
         my_pending = WorkflowStep.objects.filter(
             approver=user,
             status='PENDING'
         ).count()
-        
+
         # 我已审批
         my_approved = WorkflowStep.objects.filter(
             approver=user,
             status__in=['APPROVED', 'REJECTED']
         ).count()
-        
+
         # 本月审批量
         today = timezone.now().date()
         this_month_start = today.replace(day=1)
-        
+
         monthly_approved = WorkflowStep.objects.filter(
             approver=user,
             status__in=['APPROVED', 'REJECTED'],
             approved_at__gte=this_month_start
         ).count()
-        
+
         # 审批效率（平均处理时间）
-        from django.db.models import ExpressionWrapper, DurationField
-        
+        from django.db.models import DurationField, ExpressionWrapper
+
         my_steps = WorkflowStep.objects.filter(
             approver=user,
             approved_at__isnull=False
@@ -217,12 +216,12 @@ class WorkflowStepStatisticsView(APIView):
                 output_field=DurationField()
             )
         )
-        
+
         avg_time = my_steps.aggregate(avg=Avg('processing_time'))
         avg_hours = None
         if avg_time['avg']:
             avg_hours = round(avg_time['avg'].total_seconds() / 3600, 1)
-        
+
         return Response({
             'pending_count': my_pending,
             'approved_count': my_approved,
@@ -236,17 +235,17 @@ class WorkflowTimelineView(APIView):
     审批流程时间线API
     """
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request, workflow_id):
         from apps.core.workflow.models import WorkflowInstance, WorkflowStep
-        
+
         try:
             instance = WorkflowInstance.objects.get(id=workflow_id)
         except WorkflowInstance.DoesNotExist:
             return Response({'error': '工作流不存在'}, status=404)
-        
+
         timeline = []
-        
+
         # 创建事件
         timeline.append({
             'time': instance.created_at.isoformat(),
@@ -255,12 +254,12 @@ class WorkflowTimelineView(APIView):
             'description': f'{instance.initiator.username if instance.initiator else "系统"} 发起了审批申请',
             'status': 'completed'
         })
-        
+
         # 审批步骤事件
         steps = WorkflowStep.objects.filter(
             instance=instance
         ).order_by('step_order')
-        
+
         for step in steps:
             if step.status == 'APPROVED':
                 timeline.append({
@@ -288,7 +287,7 @@ class WorkflowTimelineView(APIView):
                     'description': f'等待 {step.approver.username if step.approver else "审批人"} 审批',
                     'status': 'pending'
                 })
-        
+
         # 完成事件
         if instance.status in ['APPROVED', 'REJECTED']:
             timeline.append({
@@ -298,7 +297,7 @@ class WorkflowTimelineView(APIView):
                 'description': '审批流程已结束',
                 'status': 'completed' if instance.status == 'APPROVED' else 'rejected'
             })
-        
+
         return Response({
             'workflow_id': workflow_id,
             'timeline': timeline

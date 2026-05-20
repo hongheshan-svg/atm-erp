@@ -1,19 +1,12 @@
 """
 URL configuration for accounts app.
 """
-from django.urls import path, include
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
-from .views import (
-    CustomTokenObtainPairView,
-    DepartmentViewSet,
-    RoleViewSet,
-    UserViewSet
-)
-from .attendance import (
-    AttendanceConfigViewSet, AttendanceRecordViewSet,
-    LeaveRequestViewSet, OvertimeRequestViewSet
-)
+
+from .attendance import AttendanceConfigViewSet, AttendanceRecordViewSet, LeaveRequestViewSet, OvertimeRequestViewSet
+from .views import CustomTokenObtainPairView, DepartmentViewSet, RoleViewSet, UserViewSet
 
 router = DefaultRouter()
 router.register(r'departments', DepartmentViewSet, basename='department')
@@ -30,7 +23,7 @@ urlpatterns = [
     # JWT Authentication
     path('login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    
+
     # Router URLs
     path('', include(router.urls)),
 ]

@@ -2,6 +2,7 @@
 Sales management models - Quotation, SO, Delivery Order.
 """
 from django.db import models
+
 from apps.core.models import BaseModel
 from apps.core.utils import generate_code
 
@@ -19,7 +20,7 @@ class SalesQuotation(BaseModel):
         ('REJECTED', '已拒绝'),
         ('EXPIRED', '已过期'),
     ]
-    
+
     TAX_RATE_CHOICES = [
         (0, '0% (免税)'),
         (1, '1%'),
@@ -28,7 +29,7 @@ class SalesQuotation(BaseModel):
         (9, '9%'),
         (13, '13%'),
     ]
-    
+
     quote_no = models.CharField(max_length=50, unique=True, verbose_name='报价单号')
     customer = models.ForeignKey(
         'masterdata.Customer',
@@ -53,7 +54,7 @@ class SalesQuotation(BaseModel):
         verbose_name='状态'
     )
     version = models.IntegerField(default=1, verbose_name='版本号')
-    
+
     # 税率相关
     tax_rate = models.IntegerField(
         choices=TAX_RATE_CHOICES,
@@ -79,16 +80,16 @@ class SalesQuotation(BaseModel):
         verbose_name='含税总额'
     )
     notes = models.TextField(blank=True, verbose_name='备注')
-    
+
     class Meta:
         db_table = 'sales_quotation'
         verbose_name = '销售报价'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f"{self.quote_no}"
-    
+
     def save(self, *args, **kwargs):
         if not self.quote_no:
             self.quote_no = generate_code('QT', rule_type='SALES_QUOTE')
@@ -119,7 +120,7 @@ class SalesQuotationLine(BaseModel):
     custom_name = models.CharField(max_length=200, blank=True, verbose_name='产品名称')
     custom_spec = models.CharField(max_length=200, blank=True, verbose_name='规格型号')
     custom_unit = models.CharField(max_length=50, blank=True, default='件', verbose_name='单位')
-    
+
     qty = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='数量')
     unit_price = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='单价')
     line_amount = models.DecimalField(
@@ -129,23 +130,23 @@ class SalesQuotationLine(BaseModel):
         verbose_name='行金额'
     )
     notes = models.TextField(blank=True, verbose_name='备注')
-    
+
     @property
     def display_name(self):
         """返回产品显示名称"""
         if self.item:
             return self.item.name
         return self.custom_name or '未命名产品'
-    
+
     class Meta:
         db_table = 'sales_quotation_line'
         verbose_name = '销售报价明细'
         verbose_name_plural = verbose_name
         ordering = ['id']
-    
+
     def __str__(self):
         return f"{self.quotation.quote_no} - {self.item.sku}"
-    
+
     def save(self, *args, **kwargs):
         self.line_amount = self.qty * self.unit_price
         super().save(*args, **kwargs)
@@ -165,7 +166,7 @@ class SalesOrder(BaseModel):
         ('COMPLETED', '完成'),
         ('CANCELLED', '已取消'),
     ]
-    
+
     TAX_RATE_CHOICES = [
         (0, '0% (免税)'),
         (1, '1%'),
@@ -174,7 +175,7 @@ class SalesOrder(BaseModel):
         (9, '9%'),
         (13, '13%'),
     ]
-    
+
     # 付款条款选项 - 账期/分期
     PAYMENT_TERMS_CHOICES = [
         ('FULL_PREPAY', '全款预付'),
@@ -192,7 +193,7 @@ class SalesOrder(BaseModel):
         ('CUSTOM', '自定义分期'),
         ('OTHER', '其他'),
     ]
-    
+
     # 付款方式选项
     PAYMENT_METHOD_CHOICES = [
         ('WIRE', '电汇'),
@@ -202,7 +203,7 @@ class SalesOrder(BaseModel):
         ('LC', '信用证'),
         ('OTHER', '其他'),
     ]
-    
+
     order_no = models.CharField(max_length=50, unique=True, verbose_name='销售订单号')
     customer_order_no = models.CharField(max_length=100, blank=True, default='', verbose_name='客户订单号')
     customer = models.ForeignKey(
@@ -227,7 +228,7 @@ class SalesOrder(BaseModel):
         default='DRAFT',
         verbose_name='状态'
     )
-    
+
     # 税率相关
     tax_rate = models.IntegerField(
         choices=TAX_RATE_CHOICES,
@@ -252,7 +253,7 @@ class SalesOrder(BaseModel):
         default=0,
         verbose_name='含税总额'
     )
-    
+
     # 付款条款与方式
     payment_terms = models.CharField(
         max_length=20,
@@ -268,16 +269,16 @@ class SalesOrder(BaseModel):
     )
     payment_terms_detail = models.CharField(max_length=500, blank=True, verbose_name='付款条款说明')
     notes = models.TextField(blank=True, verbose_name='备注')
-    
+
     class Meta:
         db_table = 'sales_order'
         verbose_name = '销售订单'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f"{self.order_no}"
-    
+
     def save(self, *args, **kwargs):
         if not self.order_no:
             self.order_no = generate_code('SO', rule_type='SALES_ORDER')
@@ -308,7 +309,7 @@ class SalesOrderLine(BaseModel):
     custom_name = models.CharField(max_length=200, blank=True, verbose_name='产品名称')
     custom_spec = models.CharField(max_length=200, blank=True, verbose_name='规格型号')
     custom_unit = models.CharField(max_length=50, blank=True, default='件', verbose_name='单位')
-    
+
     qty = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='订购数量')
     unit_price = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='单价')
     line_amount = models.DecimalField(
@@ -324,30 +325,30 @@ class SalesOrderLine(BaseModel):
         verbose_name='已发货数量'
     )
     notes = models.TextField(blank=True, verbose_name='备注')
-    
+
     @property
     def display_name(self):
         """返回产品显示名称"""
         if self.item:
             return self.item.name
         return self.custom_name or '未命名产品'
-    
+
     @property
     def display_spec(self):
         """返回产品规格"""
         if self.item:
             return self.item.spec or ''
         return self.custom_spec or ''
-    
+
     class Meta:
         db_table = 'sales_order_line'
         verbose_name = '销售订单明细'
         verbose_name_plural = verbose_name
         ordering = ['id']
-    
+
     def __str__(self):
         return f"{self.so.order_no} - {self.item.sku}"
-    
+
     def save(self, *args, **kwargs):
         self.line_amount = self.qty * self.unit_price
         super().save(*args, **kwargs)
@@ -382,7 +383,7 @@ class DeliveryOrder(BaseModel):
         ('COMPLETED', '已完成'),
         ('REJECTED', '已拒绝'),
     ]
-    
+
     PACKAGING_CHOICES = [
         ('STANDARD', '标准包装'),
         ('WOODEN_CASE', '木箱包装'),
@@ -390,7 +391,7 @@ class DeliveryOrder(BaseModel):
         ('PALLET', '托盘包装'),
         ('CUSTOM', '特殊包装'),
     ]
-    
+
     delivery_no = models.CharField(max_length=50, unique=True, verbose_name='发货单号')
     so = models.ForeignKey(
         SalesOrder,
@@ -412,12 +413,12 @@ class DeliveryOrder(BaseModel):
         default='DRAFT',
         verbose_name='状态'
     )
-    
+
     # 收货信息
     receiver_name = models.CharField(max_length=100, blank=True, verbose_name='收货人')
     receiver_phone = models.CharField(max_length=50, blank=True, verbose_name='收货电话')
     receiver_address = models.TextField(blank=True, verbose_name='收货地址')
-    
+
     # 包装、保险、物流要求
     packaging_type = models.CharField(
         max_length=20,
@@ -428,11 +429,11 @@ class DeliveryOrder(BaseModel):
     packaging_notes = models.TextField(blank=True, verbose_name='包装要求说明')
     needs_insurance = models.BooleanField(default=False, verbose_name='需要保险')
     insurance_amount = models.DecimalField(
-        max_digits=15, decimal_places=2, 
-        null=True, blank=True, 
+        max_digits=15, decimal_places=2,
+        null=True, blank=True,
         verbose_name='保险金额'
     )
-    
+
     # 物流信息
     logistics_company = models.CharField(max_length=100, blank=True, verbose_name='物流公司')
     logistics_contact = models.CharField(max_length=100, blank=True, verbose_name='物流联系人')
@@ -440,37 +441,37 @@ class DeliveryOrder(BaseModel):
     tracking_number = models.CharField(max_length=100, blank=True, verbose_name='物流单号')
     logistics_notes = models.TextField(blank=True, verbose_name='物流要求')
     logistics_cost = models.DecimalField(
-        max_digits=15, decimal_places=2, 
-        null=True, blank=True, 
+        max_digits=15, decimal_places=2,
+        null=True, blank=True,
         verbose_name='物流费用'
     )
-    
+
     # 送货单签收
     signed_receipt = models.FileField(
-        upload_to='delivery_receipts/', 
-        null=True, blank=True, 
+        upload_to='delivery_receipts/',
+        null=True, blank=True,
         verbose_name='签收单据'
     )
     signed_date = models.DateField(null=True, blank=True, verbose_name='签收日期')
     signed_by = models.CharField(max_length=100, blank=True, verbose_name='签收人')
-    
+
     notes = models.TextField(blank=True, verbose_name='备注')
     rejection_reason = models.TextField(blank=True, verbose_name='拒绝原因')
-    
+
     class Meta:
         db_table = 'delivery_order'
         verbose_name = '发货单'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f"{self.delivery_no}"
-    
+
     def save(self, *args, **kwargs):
         if not self.delivery_no:
             self.delivery_no = generate_code('DO', rule_type='DELIVERY_ORDER')
         super().save(*args, **kwargs)
-    
+
     @property
     def total_amount(self):
         """计算发货单总金额"""
@@ -507,13 +508,13 @@ class DeliveryOrderLine(BaseModel):
     )
     qty = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='发货数量')
     notes = models.TextField(blank=True, verbose_name='备注')
-    
+
     class Meta:
         db_table = 'delivery_order_line'
         verbose_name = '发货明细'
         verbose_name_plural = verbose_name
         ordering = ['id']
-    
+
     def __str__(self):
         item_desc = self.item.sku if self.item else self.so_line.display_name
         return f"{self.delivery.delivery_no} - {item_desc}"
@@ -532,7 +533,7 @@ class SalesContract(BaseModel):
         ('COMPLETED', '已完成'),
         ('CANCELLED', '已取消'),
     ]
-    
+
     contract_no = models.CharField(max_length=50, unique=True, verbose_name='合同编号')
     so = models.ForeignKey(
         SalesOrder,
@@ -554,30 +555,30 @@ class SalesContract(BaseModel):
         related_name='sales_contracts',
         verbose_name='关联项目'
     )
-    
+
     # 合同信息
     title = models.CharField(max_length=200, verbose_name='合同标题')
     contract_date = models.DateField(verbose_name='合同日期')
     effective_date = models.DateField(null=True, blank=True, verbose_name='生效日期')
     expiry_date = models.DateField(null=True, blank=True, verbose_name='到期日期')
-    
+
     # 金额
     total_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='合同金额')
     tax_rate = models.IntegerField(default=13, verbose_name='税率(%)')
     tax_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='税额')
     total_with_tax = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='含税总额')
-    
+
     # 条款
     payment_terms = models.TextField(blank=True, verbose_name='付款条款')
     delivery_terms = models.TextField(blank=True, verbose_name='交货条款')
     quality_terms = models.TextField(blank=True, verbose_name='质量条款')
     warranty_terms = models.TextField(blank=True, verbose_name='质保条款')
-    
+
     # 签署信息
     buyer_signer = models.CharField(max_length=100, blank=True, verbose_name='甲方签署人')
     seller_signer = models.CharField(max_length=100, blank=True, verbose_name='乙方签署人')
     signed_date = models.DateField(null=True, blank=True, verbose_name='签署日期')
-    
+
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -585,16 +586,16 @@ class SalesContract(BaseModel):
         verbose_name='状态'
     )
     notes = models.TextField(blank=True, verbose_name='备注')
-    
+
     class Meta:
         db_table = 'sales_contract'
         verbose_name = '销售合同'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f"{self.contract_no}"
-    
+
     def save(self, *args, **kwargs):
         if not self.contract_no:
             self.contract_no = generate_code('SC', rule_type='SALES_CONTRACT')
@@ -602,27 +603,11 @@ class SalesContract(BaseModel):
 
 
 # Import models from win_loss_analysis
-from .win_loss_analysis import WinLossReason, OpportunityCloseRecord
 
 # Import models from quote_prediction
-from .quote_prediction import (
-    QuoteVersion, QuoteCostItem, QuoteComparison, QuoteProjectCostRef
-)
 
 # Import models from after_sales_service
-from .after_sales_service import (
-    ServiceContract, PreventiveMaintenance, ServiceRequest,
-    ServiceActivity, CustomerPortalAccount, KnowledgeBaseArticle
-)
 
 # Import models from quote_estimation
-from .quote_estimation import (
-    CostCategory, LaborRate, QuoteEstimation,
-    EstimationMaterialItem, EstimationLaborItem,
-    EstimationOutsourceItem, EstimationOtherCost, ProjectCostHistory
-)
 
 # Import models from performance
-from .performance import (
-    SalesTarget, SalesCommission, CustomerSegment, CustomerRFMAnalysis
-)

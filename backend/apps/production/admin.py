@@ -1,8 +1,14 @@
 from django.contrib import admin
+
 from .models import (
-    ProductionProcess, ProductionPlan, ProductionPlanProcess,
-    ProductionLog, DebugRecord, DebugCheckItem,
-    QualityInspection, InspectionItem
+    DebugCheckItem,
+    DebugRecord,
+    InspectionItem,
+    ProductionLog,
+    ProductionPlan,
+    ProductionPlanProcess,
+    ProductionProcess,
+    QualityInspection,
 )
 
 

@@ -1,53 +1,50 @@
 """
 数据导入导出视图
 """
+from django.http import HttpResponse
 from rest_framework import status
-from rest_framework.views import APIView
-from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
-from django.http import HttpResponse
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from .import_export_service import (
-    ExportService, ImportService, 
-    required, max_length, is_number, is_positive
-)
+from .import_export_service import ExportService, ImportService, max_length, required
 
 
 class ItemImportView(APIView):
     """物料导入"""
     parser_classes = [MultiPartParser]
     permission_classes = [IsAuthenticated]
-    
+
     def post(self, request):
         file = request.FILES.get('file')
         if not file:
             return Response({'error': '请上传文件'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # 解析Excel
         column_mapping = {
             'A': 'code',
-            'B': 'name', 
+            'B': 'name',
             'C': 'spec',
             'D': 'unit',
             'E': 'category',
             'F': 'brand',
             'G': 'model',
         }
-        
+
         result = ImportService.parse_excel(file, column_mapping)
         if not result['success']:
             return Response({'error': result['error']}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # 验证数据
         from apps.masterdata.models import Item
         validators = {
             'code': [required, max_length(50)],
             'name': [required, max_length(200)],
         }
-        
+
         validation = ImportService.validate_data(result['data'], validators)
-        
+
         if validation['errors']:
             return Response({
                 'success': False,
@@ -55,7 +52,7 @@ class ItemImportView(APIView):
                 'error_count': len(validation['errors']),
                 'errors': validation['errors'][:50]  # 只返回前50个错误
             })
-        
+
         # 导入数据
         field_mapping = {
             'code': 'code',
@@ -65,37 +62,37 @@ class ItemImportView(APIView):
             'brand': 'brand',
             'model': 'model',
         }
-        
+
         import_result = ImportService.import_data(
             Item, validation['valid'], field_mapping, request.user
         )
-        
+
         return Response({
             'success': True,
             'created': import_result['created'],
             'errors': import_result['errors']
         })
-    
+
     def get(self, request):
         """下载导入模板"""
         from openpyxl import Workbook
-        from openpyxl.styles import Font, PatternFill, Alignment
-        
+        from openpyxl.styles import Font, PatternFill
+
         wb = Workbook()
         ws = wb.active
         ws.title = '物料导入模板'
-        
+
         headers = ['物料编码*', '物料名称*', '规格型号', '单位', '分类', '品牌', '型号']
         for col, header in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col, value=header)
             cell.font = Font(bold=True)
             cell.fill = PatternFill(start_color="E0E0E0", fill_type="solid")
-        
+
         # 示例数据
         example = ['M001', '螺栓M8x20', 'M8x20 不锈钢', '个', '紧固件', '国标', '304']
         for col, value in enumerate(example, 1):
             ws.cell(row=2, column=col, value=value)
-        
+
         response = HttpResponse(
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
@@ -107,24 +104,24 @@ class ItemImportView(APIView):
 class ItemExportView(APIView):
     """物料导出"""
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
         from apps.masterdata.models import Item
         from apps.masterdata.serializers import ItemSerializer
-        
+
         queryset = Item.objects.filter(is_deleted=False)
-        
+
         # 应用筛选
         category = request.query_params.get('category')
         if category:
             queryset = queryset.filter(category_id=category)
-        
+
         search = request.query_params.get('search')
         if search:
             queryset = queryset.filter(name__icontains=search) | queryset.filter(code__icontains=search)
-        
+
         serializer = ItemSerializer(queryset[:5000], many=True)
-        
+
         columns = [
             {'field': 'code', 'title': '物料编码', 'width': 15},
             {'field': 'name', 'title': '物料名称', 'width': 30},
@@ -135,7 +132,7 @@ class ItemExportView(APIView):
             {'field': 'model', 'title': '型号', 'width': 15},
             {'field': 'reference_price', 'title': '参考价', 'width': 12},
         ]
-        
+
         export_format = request.query_params.get('format', 'excel')
         if export_format == 'csv':
             return ExportService.export_to_csv(serializer.data, columns, 'items')
@@ -146,12 +143,12 @@ class SupplierImportView(APIView):
     """供应商导入"""
     parser_classes = [MultiPartParser]
     permission_classes = [IsAuthenticated]
-    
+
     def post(self, request):
         file = request.FILES.get('file')
         if not file:
             return Response({'error': '请上传文件'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         column_mapping = {
             'A': 'code',
             'B': 'name',
@@ -160,19 +157,19 @@ class SupplierImportView(APIView):
             'E': 'email',
             'F': 'address',
         }
-        
+
         result = ImportService.parse_excel(file, column_mapping)
         if not result['success']:
             return Response({'error': result['error']}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         from apps.masterdata.models import Supplier
         validators = {
             'code': [required, max_length(50)],
             'name': [required, max_length(200)],
         }
-        
+
         validation = ImportService.validate_data(result['data'], validators)
-        
+
         if validation['errors']:
             return Response({
                 'success': False,
@@ -180,7 +177,7 @@ class SupplierImportView(APIView):
                 'error_count': len(validation['errors']),
                 'errors': validation['errors'][:50]
             })
-        
+
         field_mapping = {
             'code': 'code',
             'name': 'name',
@@ -189,36 +186,36 @@ class SupplierImportView(APIView):
             'email': 'email',
             'address': 'address',
         }
-        
+
         import_result = ImportService.import_data(
             Supplier, validation['valid'], field_mapping, request.user
         )
-        
+
         return Response({
             'success': True,
             'created': import_result['created'],
             'errors': import_result['errors']
         })
-    
+
     def get(self, request):
         """下载导入模板"""
         from openpyxl import Workbook
         from openpyxl.styles import Font, PatternFill
-        
+
         wb = Workbook()
         ws = wb.active
         ws.title = '供应商导入模板'
-        
+
         headers = ['供应商编码*', '供应商名称*', '联系人', '联系电话', '邮箱', '地址']
         for col, header in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col, value=header)
             cell.font = Font(bold=True)
             cell.fill = PatternFill(start_color="E0E0E0", fill_type="solid")
-        
+
         example = ['S001', '深圳XX精密机械有限公司', '张三', '13800138000', 'zhangsan@example.com', '深圳市宝安区XX路XX号']
         for col, value in enumerate(example, 1):
             ws.cell(row=2, column=col, value=value)
-        
+
         response = HttpResponse(
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
@@ -230,14 +227,14 @@ class SupplierImportView(APIView):
 class SupplierExportView(APIView):
     """供应商导出"""
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
         from apps.masterdata.models import Supplier
         from apps.masterdata.serializers import SupplierSerializer
-        
+
         queryset = Supplier.objects.filter(is_deleted=False)
         serializer = SupplierSerializer(queryset[:5000], many=True)
-        
+
         columns = [
             {'field': 'code', 'title': '供应商编码', 'width': 15},
             {'field': 'name', 'title': '供应商名称', 'width': 30},
@@ -246,7 +243,7 @@ class SupplierExportView(APIView):
             {'field': 'email', 'title': '邮箱', 'width': 25},
             {'field': 'address', 'title': '地址', 'width': 40},
         ]
-        
+
         export_format = request.query_params.get('format', 'excel')
         if export_format == 'csv':
             return ExportService.export_to_csv(serializer.data, columns, 'suppliers')
@@ -256,14 +253,14 @@ class SupplierExportView(APIView):
 class CustomerExportView(APIView):
     """客户导出"""
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
         from apps.masterdata.models import Customer
         from apps.masterdata.serializers import CustomerSerializer
-        
+
         queryset = Customer.objects.filter(is_deleted=False)
         serializer = CustomerSerializer(queryset[:5000], many=True)
-        
+
         columns = [
             {'field': 'code', 'title': '客户编码', 'width': 15},
             {'field': 'name', 'title': '客户名称', 'width': 30},
@@ -272,26 +269,26 @@ class CustomerExportView(APIView):
             {'field': 'email', 'title': '邮箱', 'width': 25},
             {'field': 'address', 'title': '地址', 'width': 40},
         ]
-        
+
         return ExportService.export_to_excel(serializer.data, columns, 'customers', '客户列表')
 
 
 class BOMExportView(APIView):
     """BOM清单导出"""
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
         from apps.projects.models import ProjectBOM
-        
+
         project_id = request.query_params.get('project')
         if not project_id:
             return Response({'error': '请指定项目'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         queryset = ProjectBOM.objects.filter(
-            project_id=project_id, 
+            project_id=project_id,
             is_deleted=False
         ).select_related('item', 'project')
-        
+
         data = []
         for bom in queryset:
             data.append({
@@ -303,7 +300,7 @@ class BOMExportView(APIView):
                 'unit': bom.unit,
                 'remark': bom.remark,
             })
-        
+
         columns = [
             {'field': 'project_name', 'title': '项目名称', 'width': 25},
             {'field': 'item_code', 'title': '物料编码', 'width': 15},
@@ -313,5 +310,5 @@ class BOMExportView(APIView):
             {'field': 'unit', 'title': '单位', 'width': 8},
             {'field': 'remark', 'title': '备注', 'width': 30},
         ]
-        
+
         return ExportService.export_to_excel(data, columns, 'bom', 'BOM清单')

@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import User, Role, Department
+
+from .models import Department, Role, User
 
 
 @admin.register(Department)
@@ -25,17 +26,17 @@ class UserAdmin(BaseUserAdmin):
     list_filter = ['is_active', 'is_staff', 'is_superuser', 'department', 'role']
     search_fields = ['username', 'employee_id', 'email', 'first_name', 'last_name']
     ordering = ['-date_joined']
-    
+
     fieldsets = BaseUserAdmin.fieldsets + (
         ('扩展信息', {
-            'fields': ('employee_id', 'phone', 'avatar', 'gender', 'birth_date', 
+            'fields': ('employee_id', 'phone', 'avatar', 'gender', 'birth_date',
                       'department', 'role', 'position', 'hire_date')
         }),
         ('软删除', {
             'fields': ('is_deleted', 'deleted_at')
         }),
     )
-    
+
     add_fieldsets = BaseUserAdmin.add_fieldsets + (
         ('扩展信息', {
             'fields': ('employee_id', 'phone', 'department', 'role')

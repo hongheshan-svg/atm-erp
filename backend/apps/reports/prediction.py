@@ -1,15 +1,14 @@
 """
 Predictive Analytics for ERP
 """
-from decimal import Decimal
-from django.db import models
 from django.conf import settings
+from django.db import models
 from django.utils import timezone
-from rest_framework import serializers, viewsets, status
-from rest_framework.views import APIView
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.core.models import BaseModel
 
@@ -124,7 +123,7 @@ class PredictionService:
 
     @staticmethod
     def analyze_cost_trend():
-        from django.db.models import Sum, Count
+        from django.db.models import Count, Sum
         from django.db.models.functions import TruncMonth
         try:
             from apps.projects.models import Project
@@ -163,8 +162,9 @@ class PredictionService:
     @staticmethod
     def analyze_capacity_load():
         try:
-            from apps.production.models import ProductionOrder
             from django.db.models import Count
+
+            from apps.production.models import ProductionOrder
             load = ProductionOrder.objects.filter(
                 is_deleted=False, status='in_progress'
             ).values('work_center').annotate(

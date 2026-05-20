@@ -2,14 +2,13 @@
 批量打印服务
 Print Service for generating printable documents
 """
-from django.template import Template, Context
+
 from django.apps import apps
 from django.http import HttpResponse
-from rest_framework.views import APIView
-from rest_framework.response import Response
+from django.template import Context, Template
 from rest_framework.permissions import IsAuthenticated
-from io import BytesIO
-import json
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 
 class PrintTemplate:
@@ -118,7 +117,7 @@ class PrintTemplate:
 </html>
             '''
         },
-        
+
         # 销售订单打印模板
         'sales_order': {
             'title': '销售订单',
@@ -214,7 +213,7 @@ class PrintTemplate:
 </html>
             '''
         },
-        
+
         # 领料单打印模板
         'requisition': {
             'title': '领料单',
@@ -293,7 +292,7 @@ class PrintTemplate:
 </html>
             '''
         },
-        
+
         # 设备台账打印模板
         'equipment': {
             'title': '设备台账',
@@ -397,15 +396,15 @@ class PrintTemplate:
             '''
         }
     }
-    
+
     @classmethod
     def get_template(cls, template_name):
         return cls.TEMPLATES.get(template_name)
-    
+
     @classmethod
     def list_templates(cls):
         return [
-            {'key': k, 'title': v['title']} 
+            {'key': k, 'title': v['title']}
             for k, v in cls.TEMPLATES.items()
         ]
 
@@ -413,13 +412,13 @@ class PrintTemplate:
 class PrintView(APIView):
     """打印服务API"""
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request, template_name, pk):
         """获取打印预览HTML"""
         template_config = PrintTemplate.get_template(template_name)
         if not template_config:
             return Response({'error': '模板不存在'}, status=400)
-        
+
         # 获取数据
         app_label, model_name = template_config['model']
         try:
@@ -427,7 +426,7 @@ class PrintView(APIView):
             obj = model.objects.get(pk=pk)
         except Exception as e:
             return Response({'error': f'获取数据失败: {str(e)}'}, status=400)
-        
+
         # 渲染模板
         template = Template(template_config['template'])
         context = Context({
@@ -436,26 +435,26 @@ class PrintView(APIView):
             'requisition': obj,
             'equipment': obj,
         })
-        
+
         html = template.render(context)
-        
+
         return HttpResponse(html, content_type='text/html')
 
 
 class BatchPrintView(APIView):
     """批量打印服务API"""
     permission_classes = [IsAuthenticated]
-    
+
     def post(self, request, template_name):
         """批量打印多个文档"""
         ids = request.data.get('ids', [])
         if not ids:
             return Response({'error': '请选择要打印的记录'}, status=400)
-        
+
         template_config = PrintTemplate.get_template(template_name)
         if not template_config:
             return Response({'error': '模板不存在'}, status=400)
-        
+
         # 获取数据
         app_label, model_name = template_config['model']
         try:
@@ -463,11 +462,11 @@ class BatchPrintView(APIView):
             objects = model.objects.filter(pk__in=ids)
         except Exception as e:
             return Response({'error': f'获取数据失败: {str(e)}'}, status=400)
-        
+
         # 渲染所有模板
         template = Template(template_config['template'])
         html_parts = []
-        
+
         for obj in objects:
             context = Context({
                 template_name.split('_')[-1] if '_' in template_name else template_name: obj,
@@ -476,7 +475,7 @@ class BatchPrintView(APIView):
                 'equipment': obj,
             })
             html_parts.append(template.render(context))
-        
+
         # 合并为一个HTML页面，添加分页符
         combined_html = '''
 <!DOCTYPE html>
@@ -499,14 +498,14 @@ class BatchPrintView(APIView):
 </body>
 </html>
 '''
-        
+
         return HttpResponse(combined_html, content_type='text/html')
 
 
 class PrintTemplateListView(APIView):
     """打印模板列表API"""
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
         """获取可用的打印模板列表"""
         templates = PrintTemplate.list_templates()

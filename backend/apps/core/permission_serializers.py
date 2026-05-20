@@ -2,8 +2,9 @@
 权限系统序列化器
 """
 from rest_framework import serializers
-from apps.core.permission_models_new import Permission, DataScope
+
 from apps.accounts.models import Department
+from apps.core.permission_models_new import DataScope, Permission
 
 
 class PermissionSerializer(serializers.ModelSerializer):

@@ -3,9 +3,16 @@ RFQ serializers
 询价单、供应商报价、比价分析序列化器
 """
 from rest_framework import serializers
+
 from .rfq_models import (
-    RFQ, RFQLine, RFQSupplier, SupplierQuotation, SupplierQuotationLine,
-    QuotationComparison, QuotationScore, ItemPriceHistory
+    RFQ,
+    ItemPriceHistory,
+    QuotationComparison,
+    QuotationScore,
+    RFQLine,
+    RFQSupplier,
+    SupplierQuotation,
+    SupplierQuotationLine,
 )
 
 
@@ -16,7 +23,7 @@ class RFQLineSerializer(serializers.ModelSerializer):
     item_unit = serializers.CharField(source='item.unit', read_only=True)
     drawing_name = serializers.CharField(source='drawing.name', read_only=True)
     last_supplier_name = serializers.CharField(source='last_supplier.name', read_only=True)
-    
+
     class Meta:
         model = RFQLine
         fields = [
@@ -36,7 +43,7 @@ class RFQLineSerializer(serializers.ModelSerializer):
 class RFQSupplierSerializer(serializers.ModelSerializer):
     """RFQ supplier serializer"""
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
-    
+
     class Meta:
         model = RFQSupplier
         fields = [
@@ -58,7 +65,7 @@ class RFQSerializer(serializers.ModelSerializer):
     supplier_rfqs = RFQSupplierSerializer(many=True, read_only=True)
     supplier_count = serializers.SerializerMethodField()
     line_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = RFQ
         fields = [
@@ -74,10 +81,10 @@ class RFQSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['rfq_no', 'request_date', 'attachment_count', 'created_at', 'updated_at']
-    
+
     def get_supplier_count(self, obj):
         return obj.supplier_rfqs.count()
-    
+
     def get_line_count(self, obj):
         return obj.lines.filter(is_deleted=False).count()
 
@@ -87,7 +94,7 @@ class SupplierQuotationLineSerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source='rfq_line.item.name', read_only=True)
     item_sku = serializers.CharField(source='rfq_line.item.sku', read_only=True)
     item_unit = serializers.CharField(source='rfq_line.item.unit', read_only=True)
-    
+
     class Meta:
         model = SupplierQuotationLine
         fields = [
@@ -119,7 +126,7 @@ class SupplierQuotationSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     tax_rate_display = serializers.CharField(source='get_tax_rate_display', read_only=True)
     lines = SupplierQuotationLineSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = SupplierQuotation
         fields = [
@@ -155,7 +162,7 @@ class QuotationScoreSerializer(serializers.ModelSerializer):
         decimal_places=2,
         read_only=True
     )
-    
+
     class Meta:
         model = QuotationScore
         fields = [
@@ -163,9 +170,9 @@ class QuotationScoreSerializer(serializers.ModelSerializer):
             'supplier_id', 'supplier_name', 'total_amount', 'total_with_tax',
             'score_price', 'score_quality', 'score_delivery', 'score_service',
             'score_technical', 'score_reliability',  # 新增评分维度
-            'total_score', 'ranking', 
+            'total_score', 'ranking',
             'price_rank', 'delivery_rank', 'quality_rank',  # 多维度排名
-            'recommend_type', 'is_recommended', 
+            'recommend_type', 'is_recommended',
             'risk_warnings',  # 风险提示
             'notes', 'created_at', 'updated_at'
         ]
@@ -193,7 +200,7 @@ class QuotationComparisonSerializer(serializers.ModelSerializer):
         read_only=True
     )
     supplier_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = QuotationComparison
         fields = [
@@ -217,7 +224,7 @@ class QuotationComparisonSerializer(serializers.ModelSerializer):
             'critical_items_count', 'long_lead_items_count',
             'approved_by', 'approved_at', 'created_at', 'updated_at'
         ]
-    
+
     def get_supplier_count(self, obj):
         return obj.scores.count()
 
@@ -234,7 +241,7 @@ class QuotationComparisonListSerializer(serializers.ModelSerializer):
         read_only=True
     )
     supplier_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = QuotationComparison
         fields = [
@@ -246,7 +253,7 @@ class QuotationComparisonListSerializer(serializers.ModelSerializer):
             'recommended_supplier', 'supplier_count',
             'status', 'status_display', 'created_at'
         ]
-    
+
     def get_supplier_count(self, obj):
         return obj.scores.count()
 
@@ -257,7 +264,7 @@ class ItemPriceHistorySerializer(serializers.ModelSerializer):
     item_sku = serializers.CharField(source='item.sku', read_only=True)
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
     source_type_display = serializers.CharField(source='get_source_type_display', read_only=True)
-    
+
     class Meta:
         model = ItemPriceHistory
         fields = [
@@ -286,7 +293,7 @@ class CreateComparisonSerializer(serializers.Serializer):
     weight_delivery = serializers.DecimalField(max_digits=5, decimal_places=2, default=20, required=False)
     weight_service = serializers.DecimalField(max_digits=5, decimal_places=2, default=15, required=False)
     weight_technical = serializers.DecimalField(max_digits=5, decimal_places=2, default=0, required=False)
-    
+
     def validate(self, data):
         """验证权重总和为100（仅在自定义权重时）"""
         if data.get('weight_template') == 'CUSTOM':

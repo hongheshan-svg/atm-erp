@@ -446,9 +446,9 @@ BOM_DRAWING_FIELDS = [
 
 # 项目BOM表格（前端显示）- 完整版（全局BOM）
 PROJECT_BOM_TABLE_COLUMNS = (
-    BOM_CORE_FIELDS + 
-    BOM_PURCHASE_FIELDS + 
-    BOM_INVENTORY_FIELDS + 
+    BOM_CORE_FIELDS +
+    BOM_PURCHASE_FIELDS +
+    BOM_INVENTORY_FIELDS +
     BOM_COST_FIELDS[:2] +  # 预估单价、预估成本
     BOM_REQUIREMENT_FIELDS[:2]  # 需求日期、申请人
 )
@@ -667,7 +667,7 @@ BOM_FORMAT_CONFIG = {
     'mechanical_subcategory': MECHANICAL_SUBCATEGORY,
     'electrical_subcategory': ELECTRICAL_SUBCATEGORY,
     'pneumatic_subcategory': PNEUMATIC_SUBCATEGORY,
-    
+
     # 字段定义
     'core_fields': BOM_CORE_FIELDS,
     'purchase_fields': BOM_PURCHASE_FIELDS,
@@ -677,22 +677,22 @@ BOM_FORMAT_CONFIG = {
     'process_fields': BOM_PROCESS_FIELDS,
     'drawing_fields': BOM_DRAWING_FIELDS,
     'technical_fields': BOM_TECHNICAL_FIELDS,
-    
+
     # 全局BOM模板
     'project_bom_table': PROJECT_BOM_TABLE_COLUMNS,
     'project_bom_import': PROJECT_BOM_IMPORT_TEMPLATE,
     'project_bom_export': PROJECT_BOM_EXPORT_COLUMNS,
     'quote_bom': QUOTE_BOM_TEMPLATE,
-    
+
     # 分类BOM模板
     'mechanical_bom': MECHANICAL_BOM_TEMPLATE,      # 机械类（CAD导入用）
     'electrical_bom': ELECTRICAL_BOM_TEMPLATE,      # 电气类
     'pneumatic_bom': PNEUMATIC_BOM_TEMPLATE,        # 气动类
     'standard_parts_bom': STANDARD_PARTS_BOM_TEMPLATE,  # 标准件
-    
+
     # 物料主数据
     'item_master': ITEM_MASTER_TABLE_COLUMNS,
-    
+
     # CAD导入映射（仅机械部分）
     'cad_mapping': CAD_BOM_FIELD_MAPPING,
 }

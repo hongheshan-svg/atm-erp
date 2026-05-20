@@ -3,8 +3,9 @@ Workflow enforcement mixins for ViewSets.
 Ensures configured workflows are respected and provides auto-approve for unconfigured flows.
 """
 import logging
-from rest_framework.response import Response
+
 from rest_framework import status
+from rest_framework.response import Response
 
 from .models import WorkflowInstance
 from .services import WorkflowService
@@ -25,7 +26,7 @@ class WorkflowEnforcementMixin:
     workflow_business_type = None  # 子类必须设置，对应 WorkflowDefinition.business_type
     workflow_amount_field = 'total_amount'  # 金额字段名
     workflow_no_field = None  # 单据编号字段名，如 'request_no', 'order_no'
-    
+
     def has_active_workflow(self, obj):
         """
         检查对象是否有活跃的工作流实例
@@ -35,16 +36,16 @@ class WorkflowEnforcementMixin:
         """
         if not self.workflow_business_type:
             return False, None
-        
+
         instance = WorkflowInstance.objects.filter(
             business_type=self.workflow_business_type,
             business_id=obj.id,
             status='PENDING',
             is_deleted=False
         ).first()
-        
+
         return bool(instance), instance
-    
+
     def check_workflow_allows_direct_action(self, obj, action_name='审批'):
         """
         检查是否允许直接执行操作（如直接审批）
@@ -60,7 +61,7 @@ class WorkflowEnforcementMixin:
                 status=status.HTTP_400_BAD_REQUEST
             )
         return None
-    
+
     def start_workflow_or_auto_approve(self, obj, submitter, approved_status='APPROVED', submitted_status='SUBMITTED'):
         """
         启动工作流或自动批准
@@ -88,17 +89,17 @@ class WorkflowEnforcementMixin:
                 'instance': None,
                 'message': '未配置业务类型，已自动批准'
             }
-        
+
         # 获取金额
         amount = None
         if self.workflow_amount_field:
             amount = getattr(obj, self.workflow_amount_field, None)
-        
+
         # 获取单据编号
         business_no = str(obj.id)
         if self.workflow_no_field:
             business_no = getattr(obj, self.workflow_no_field, business_no)
-        
+
         # 尝试启动工作流
         instance, error = WorkflowService.start_workflow(
             business_type=self.workflow_business_type,
@@ -107,7 +108,7 @@ class WorkflowEnforcementMixin:
             submitter=submitter,
             amount=amount
         )
-        
+
         if instance:
             logger.info(f'{self.workflow_business_type} {business_no} 已启动工作流审批')
             return {
@@ -143,7 +144,7 @@ def check_workflow_status(business_type, business_id):
         status='PENDING',
         is_deleted=False
     ).first()
-    
+
     return bool(instance), instance
 
 
@@ -162,7 +163,7 @@ def start_workflow_or_auto_approve(business_type, business_id, business_no, subm
         submitter=submitter,
         amount=amount
     )
-    
+
     if instance:
         logger.info(f'{business_type} {business_no} 已启动工作流审批')
         return 'SUBMITTED', True, instance

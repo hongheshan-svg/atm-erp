@@ -6,14 +6,14 @@ Multi-channel notification service supporting:
 - WeChat Work (企业微信)
 - SMS (optional)
 """
-import json
-import logging
-import requests
-import hashlib
 import base64
+import hashlib
 import hmac
+import logging
 import time
 from urllib.parse import quote_plus
+
+import requests
 from django.conf import settings
 from django.core.mail import send_mail
 
@@ -22,14 +22,14 @@ logger = logging.getLogger(__name__)
 
 class NotificationChannel:
     """Base class for notification channels."""
-    
+
     def send(self, recipient, title, content, **kwargs):
         raise NotImplementedError
 
 
 class EmailChannel(NotificationChannel):
     """Email notification channel."""
-    
+
     def send(self, recipient, title, content, **kwargs):
         """
         Send email notification.
@@ -58,19 +58,19 @@ class DingTalkChannel(NotificationChannel):
     - Robot webhook (群机器人)
     - Work notification (工作通知)
     """
-    
+
     def __init__(self):
         self.webhook_url = getattr(settings, 'DINGTALK_WEBHOOK_URL', '')
         self.webhook_secret = getattr(settings, 'DINGTALK_WEBHOOK_SECRET', '')
         self.app_key = getattr(settings, 'DINGTALK_APP_KEY', '')
         self.app_secret = getattr(settings, 'DINGTALK_APP_SECRET', '')
         self.agent_id = getattr(settings, 'DINGTALK_AGENT_ID', '')
-    
+
     def _get_sign(self):
         """Generate signature for webhook with secret."""
         if not self.webhook_secret:
             return '', ''
-        
+
         timestamp = str(round(time.time() * 1000))
         secret_enc = self.webhook_secret.encode('utf-8')
         string_to_sign = f'{timestamp}\n{self.webhook_secret}'
@@ -78,12 +78,12 @@ class DingTalkChannel(NotificationChannel):
         hmac_code = hmac.new(secret_enc, string_to_sign_enc, digestmod=hashlib.sha256).digest()
         sign = quote_plus(base64.b64encode(hmac_code))
         return timestamp, sign
-    
+
     def _get_access_token(self):
         """Get access token for work notification API."""
         if not self.app_key or not self.app_secret:
             return None
-        
+
         url = f'https://oapi.dingtalk.com/gettoken?appkey={self.app_key}&appsecret={self.app_secret}'
         try:
             response = requests.get(url, timeout=10)
@@ -94,7 +94,7 @@ class DingTalkChannel(NotificationChannel):
         except Exception as e:
             logger.error(f"DingTalk get token failed: {e}")
         return None
-    
+
     def send_webhook(self, title, content, msg_type='text', at_mobiles=None, at_all=False):
         """
         Send message via robot webhook.
@@ -109,12 +109,12 @@ class DingTalkChannel(NotificationChannel):
         if not self.webhook_url:
             logger.warning("DingTalk webhook URL not configured")
             return False
-        
+
         url = self.webhook_url
         if self.webhook_secret:
             timestamp, sign = self._get_sign()
             url = f"{url}&timestamp={timestamp}&sign={sign}"
-        
+
         if msg_type == 'text':
             data = {
                 "msgtype": "text",
@@ -141,7 +141,7 @@ class DingTalkChannel(NotificationChannel):
                 "msgtype": "text",
                 "text": {"content": f"{title}\n{content}"}
             }
-        
+
         try:
             response = requests.post(
                 url,
@@ -159,7 +159,7 @@ class DingTalkChannel(NotificationChannel):
         except Exception as e:
             logger.error(f"DingTalk webhook failed: {e}")
             return False
-    
+
     def send_work_notification(self, user_ids, title, content):
         """
         Send work notification to specific users.
@@ -172,9 +172,9 @@ class DingTalkChannel(NotificationChannel):
         access_token = self._get_access_token()
         if not access_token:
             return False
-        
+
         url = f'https://oapi.dingtalk.com/topapi/message/corpconversation/asyncsend_v2?access_token={access_token}'
-        
+
         data = {
             "agent_id": self.agent_id,
             "userid_list": ",".join(user_ids) if isinstance(user_ids, list) else user_ids,
@@ -192,7 +192,7 @@ class DingTalkChannel(NotificationChannel):
                 }
             }
         }
-        
+
         try:
             response = requests.post(
                 url,
@@ -210,12 +210,12 @@ class DingTalkChannel(NotificationChannel):
         except Exception as e:
             logger.error(f"DingTalk work notification failed: {e}")
             return False
-    
+
     def send(self, recipient, title, content, **kwargs):
         """Send notification via DingTalk."""
         msg_type = kwargs.get('msg_type', 'text')
         use_work_notification = kwargs.get('use_work_notification', False)
-        
+
         if use_work_notification and recipient:
             return self.send_work_notification([recipient], title, content)
         else:
@@ -230,7 +230,7 @@ class WeChatWorkChannel(NotificationChannel):
     - Robot webhook (群机器人)
     - Application message (应用消息)
     """
-    
+
     def __init__(self):
         self.webhook_url = getattr(settings, 'WECHAT_WORK_WEBHOOK_URL', '')
         self.corp_id = getattr(settings, 'WECHAT_WORK_CORP_ID', '')
@@ -238,16 +238,16 @@ class WeChatWorkChannel(NotificationChannel):
         self.agent_id = getattr(settings, 'WECHAT_WORK_AGENT_ID', '')
         self._access_token = None
         self._token_expires_at = 0
-    
+
     def _get_access_token(self):
         """Get access token for application message API."""
         if not self.corp_id or not self.corp_secret:
             return None
-        
+
         # Check if token is still valid
         if self._access_token and time.time() < self._token_expires_at:
             return self._access_token
-        
+
         url = f'https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid={self.corp_id}&corpsecret={self.corp_secret}'
         try:
             response = requests.get(url, timeout=10)
@@ -260,7 +260,7 @@ class WeChatWorkChannel(NotificationChannel):
         except Exception as e:
             logger.error(f"WeChat Work get token failed: {e}")
         return None
-    
+
     def send_webhook(self, title, content, msg_type='text', mentioned_list=None):
         """
         Send message via robot webhook.
@@ -274,7 +274,7 @@ class WeChatWorkChannel(NotificationChannel):
         if not self.webhook_url:
             logger.warning("WeChat Work webhook URL not configured")
             return False
-        
+
         if msg_type == 'text':
             data = {
                 "msgtype": "text",
@@ -295,7 +295,7 @@ class WeChatWorkChannel(NotificationChannel):
                 "msgtype": "text",
                 "text": {"content": f"{title}\n{content}"}
             }
-        
+
         try:
             response = requests.post(
                 self.webhook_url,
@@ -313,7 +313,7 @@ class WeChatWorkChannel(NotificationChannel):
         except Exception as e:
             logger.error(f"WeChat Work webhook failed: {e}")
             return False
-    
+
     def send_app_message(self, user_ids, title, content):
         """
         Send application message to specific users.
@@ -326,11 +326,11 @@ class WeChatWorkChannel(NotificationChannel):
         access_token = self._get_access_token()
         if not access_token:
             return False
-        
+
         url = f'https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={access_token}'
-        
+
         touser = "|".join(user_ids) if isinstance(user_ids, list) else user_ids
-        
+
         data = {
             "touser": touser,
             "msgtype": "textcard",
@@ -342,7 +342,7 @@ class WeChatWorkChannel(NotificationChannel):
                 "btntxt": "查看详情"
             }
         }
-        
+
         try:
             response = requests.post(
                 url,
@@ -360,12 +360,12 @@ class WeChatWorkChannel(NotificationChannel):
         except Exception as e:
             logger.error(f"WeChat Work app message failed: {e}")
             return False
-    
+
     def send(self, recipient, title, content, **kwargs):
         """Send notification via WeChat Work."""
         msg_type = kwargs.get('msg_type', 'text')
         use_app_message = kwargs.get('use_app_message', False)
-        
+
         if use_app_message and recipient:
             return self.send_app_message([recipient], title, content)
         else:
@@ -376,16 +376,16 @@ class NotificationService:
     """
     Unified notification service supporting multiple channels.
     """
-    
+
     CHANNELS = {
         'email': EmailChannel,
         'dingtalk': DingTalkChannel,
         'wechat_work': WeChatWorkChannel,
     }
-    
+
     def __init__(self):
         self._channel_instances = {}
-    
+
     def _get_channel(self, channel_name):
         """Get or create channel instance."""
         if channel_name not in self._channel_instances:
@@ -395,7 +395,7 @@ class NotificationService:
             else:
                 raise ValueError(f"Unknown notification channel: {channel_name}")
         return self._channel_instances[channel_name]
-    
+
     def send(self, channel, recipient, title, content, **kwargs):
         """
         Send notification via specified channel.
@@ -413,7 +413,7 @@ class NotificationService:
         except Exception as e:
             logger.error(f"Notification send failed ({channel}): {e}")
             return False
-    
+
     def send_multi(self, channels, recipient_map, title, content, **kwargs):
         """
         Send notification via multiple channels.
@@ -436,7 +436,7 @@ class NotificationService:
             else:
                 results[channel] = False
         return results
-    
+
     def broadcast(self, title, content, channels=None, **kwargs):
         """
         Broadcast notification to all configured channels.
@@ -450,7 +450,7 @@ class NotificationService:
         """
         if channels is None:
             channels = ['dingtalk', 'wechat_work']
-        
+
         results = {}
         for channel in channels:
             if channel in ['dingtalk', 'wechat_work']:

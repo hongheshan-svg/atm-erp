@@ -2,14 +2,15 @@
 编码规则序列化器
 """
 from rest_framework import serializers
-from .code_rule_models import CodeRule, CodeHistory
+
+from .code_rule_models import CodeHistory, CodeRule
 
 
 class CodeRuleSerializer(serializers.ModelSerializer):
     """编码规则序列化器"""
     rule_type_display = serializers.CharField(source='get_rule_type_display', read_only=True)
     reset_mode_display = serializers.CharField(source='get_reset_mode_display', read_only=True)
-    
+
     class Meta:
         model = CodeRule
         fields = [
@@ -20,19 +21,19 @@ class CodeRuleSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['example', 'last_reset_date', 'created_at', 'updated_at']
-    
+
     def validate_prefix(self, value):
         """验证前缀"""
         if value and len(value) > 20:
             raise serializers.ValidationError('前缀长度不能超过20个字符')
         return value
-    
+
     def validate_seq_length(self, value):
         """验证序列号长度"""
         if value < 1 or value > 10:
             raise serializers.ValidationError('序列号长度必须在1-10之间')
         return value
-    
+
     def validate_date_format(self, value):
         """验证日期格式"""
         if value:
@@ -56,7 +57,7 @@ class CodeHistorySerializer(serializers.ModelSerializer):
     rule_name = serializers.CharField(source='rule.rule_name', read_only=True)
     rule_type_display = serializers.CharField(source='rule.get_rule_type_display', read_only=True)
     generated_by_name = serializers.CharField(source='generated_by.username', read_only=True)
-    
+
     class Meta:
         model = CodeHistory
         fields = [

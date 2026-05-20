@@ -4,7 +4,8 @@ Utility functions for the core app.
 import random
 import string
 from datetime import datetime
-from apps.core.permission_service import resolve_data_scope, get_department_tree_ids
+
+from apps.core.permission_service import get_department_tree_ids, resolve_data_scope
 
 
 def generate_code(prefix, length=8, rule_type=None):
@@ -23,13 +24,13 @@ def generate_code(prefix, length=8, rule_type=None):
     # 如果指定了规则类型，尝试使用编码规则
     if rule_type:
         try:
-            from apps.core.code_rule_models import CodeRule, CodeHistory
-            
+            from apps.core.code_rule_models import CodeHistory, CodeRule
+
             # 查找活动的编码规则
             rule = CodeRule.objects.filter(rule_type=rule_type, is_active=True).first()
             if rule:
                 code = rule.generate_code()
-                
+
                 # 记录历史（可选）
                 try:
                     CodeHistory.objects.create(
@@ -39,14 +40,14 @@ def generate_code(prefix, length=8, rule_type=None):
                     )
                 except:
                     pass  # 历史记录失败不影响编码生成
-                
+
                 return code
         except Exception as e:
             # 编码规则不可用时，使用默认规则
             import logging
             logger = logging.getLogger(__name__)
             logger.warning(f'使用编码规则失败，回退到默认规则: {e}')
-    
+
     # 默认规则：前缀 + 日期 + 时间戳后缀 + 随机后缀
     date_str = datetime.now().strftime('%Y%m%d')
     import time

@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import Stock, StockMove, StockAdjustment, StockAdjustmentLine
+
+from .models import Stock, StockAdjustment, StockAdjustmentLine, StockMove
 
 
 @admin.register(Stock)

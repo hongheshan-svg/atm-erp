@@ -2,14 +2,15 @@
 Serializers for core app.
 """
 from rest_framework import serializers
-from .models import AuditLog, SystemNotification, Attachment, SystemConfig
+
+from .models import Attachment, AuditLog, SystemConfig, SystemNotification
 
 
 class AuditLogSerializer(serializers.ModelSerializer):
     """审计日志序列化器"""
     user_name = serializers.CharField(source='user.username', read_only=True)
     action_display = serializers.CharField(source='get_action_display', read_only=True)
-    
+
     class Meta:
         model = AuditLog
         fields = [
@@ -23,7 +24,7 @@ class AuditLogSerializer(serializers.ModelSerializer):
 class SystemNotificationSerializer(serializers.ModelSerializer):
     """系统通知序列化器"""
     type_display = serializers.CharField(source='get_type_display', read_only=True)
-    
+
     class Meta:
         model = SystemNotification
         fields = [
@@ -39,7 +40,7 @@ class AttachmentSerializer(serializers.ModelSerializer):
     category_display = serializers.CharField(source='get_category_display', read_only=True)
     file_url = serializers.SerializerMethodField()
     file_size_display = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = Attachment
         fields = [
@@ -49,13 +50,13 @@ class AttachmentSerializer(serializers.ModelSerializer):
             'uploaded_by', 'uploaded_by_name', 'uploaded_at'
         ]
         read_only_fields = ['id', 'file_size', 'file_type', 'uploaded_by', 'uploaded_at']
-    
+
     def get_file_url(self, obj):
         if obj.file:
             # 返回相对路径，让前端使用当前域名访问
             return f"/media/{obj.file.name}"
         return None
-    
+
     def get_file_size_display(self, obj):
         """将文件大小转换为人类可读格式"""
         size = obj.file_size
@@ -76,7 +77,7 @@ class AttachmentUploadSerializer(serializers.Serializer):
     related_id = serializers.IntegerField()
     category = serializers.ChoiceField(choices=Attachment.CATEGORY_CHOICES, default='OTHER')
     description = serializers.CharField(required=False, allow_blank=True, default='')
-    
+
     def create(self, validated_data):
         file = validated_data['file']
         attachment = Attachment.objects.create(
@@ -94,7 +95,7 @@ class AttachmentUploadSerializer(serializers.Serializer):
 class SystemConfigSerializer(serializers.ModelSerializer):
     """系统配置序列化器"""
     updated_by_name = serializers.CharField(source='updated_by.username', read_only=True)
-    
+
     class Meta:
         model = SystemConfig
         fields = [

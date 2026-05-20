@@ -1,49 +1,47 @@
-from django.urls import path, include
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from . import views
-from .search_views import GlobalSearchViewSet
-from . import export_views
-from .security_views import LoginLogViewSet, SensitiveOperationLogViewSet, PasswordPolicyViewSet
-from .webhook_views import WebhookEndpointViewSet, WebhookDeliveryViewSet
-from .dashboard_views import DashboardWidgetViewSet, UserDashboardViewSet
-from .dashboard_api import (
-    ExecutiveDashboardView, ProjectManagerDashboardView,
-    SalesDashboardView, ProductionDashboardView, FinanceDashboardView
-)
-from . import health_views
-from .import_export_views import (
-    ItemImportView, ItemExportView, 
-    SupplierImportView, SupplierExportView,
-    CustomerExportView, BOMExportView
-)
-from .print_service import PrintView, BatchPrintView, PrintTemplateListView
-from .backup_service import (
-    BackupListView, BackupCreateView, BackupRestoreView, 
-    BackupDeleteView, BackupCleanupView
-)
-from .audit_analytics import (
-    AuditLogAnalyticsView, AuditLogSecurityView, UserActivityView
-)
-from .import_templates import (
-    ImportTemplateListView, ImportTemplateDownloadView
-)
-from .data_dict import DictTypeViewSet, DictItemViewSet
-from .email_templates import EmailTemplateViewSet, EmailLogViewSet
-from .file_preview import FilePreviewView, FileUploadView, FileListView
-from .custom_fields import CustomFieldDefinitionViewSet, CustomFieldValueViewSet
+
+from . import export_views, health_views, views
 from .announcement import AnnouncementViewSet
-from .schedule import (
-    ScheduleViewSet, MeetingViewSet, MeetingRoomViewSet
+from .audit_analytics import AuditLogAnalyticsView, AuditLogSecurityView, UserActivityView
+from .backup_service import BackupCleanupView, BackupCreateView, BackupDeleteView, BackupListView, BackupRestoreView
+from .custom_fields import CustomFieldDefinitionViewSet, CustomFieldValueViewSet
+from .dashboard_api import (
+    ExecutiveDashboardView,
+    FinanceDashboardView,
+    ProductionDashboardView,
+    ProjectManagerDashboardView,
+    SalesDashboardView,
 )
-from .instant_message import (
-    ConversationViewSet, MessageViewSet, ConversationMemberViewSet
+from .dashboard_views import DashboardWidgetViewSet, UserDashboardViewSet
+from .data_dict import DictItemViewSet, DictTypeViewSet
+from .email_templates import EmailLogViewSet, EmailTemplateViewSet
+from .file_preview import FileListView, FilePreviewView, FileUploadView
+from .import_export_views import (
+    BOMExportView,
+    CustomerExportView,
+    ItemExportView,
+    ItemImportView,
+    SupplierExportView,
+    SupplierImportView,
 )
+from .import_templates import ImportTemplateDownloadView, ImportTemplateListView
+from .instant_message import ConversationMemberViewSet, ConversationViewSet, MessageViewSet
 from .mobile_api import (
-    MobileTimeEntryViewSet, MobilePhotoViewSet, MobileScanRecordViewSet,
-    MobileApprovalViewSet, MobileNotificationViewSet,
-    MobileDashboardView, MobileQuickActionsView
+    MobileApprovalViewSet,
+    MobileDashboardView,
+    MobileNotificationViewSet,
+    MobilePhotoViewSet,
+    MobileQuickActionsView,
+    MobileScanRecordViewSet,
+    MobileTimeEntryViewSet,
 )
-from .permission_views import PermissionViewSet, DataScopeViewSet
+from .permission_views import DataScopeViewSet, PermissionViewSet
+from .print_service import BatchPrintView, PrintTemplateListView, PrintView
+from .schedule import MeetingRoomViewSet, MeetingViewSet, ScheduleViewSet
+from .search_views import GlobalSearchViewSet
+from .security_views import LoginLogViewSet, PasswordPolicyViewSet, SensitiveOperationLogViewSet
+from .webhook_views import WebhookDeliveryViewSet, WebhookEndpointViewSet
 
 router = DefaultRouter()
 router.register(r'audit-logs', views.AuditLogViewSet, basename='audit-log')
@@ -66,7 +64,8 @@ router.register(r'dashboard-widgets', DashboardWidgetViewSet, basename='dashboar
 router.register(r'user-dashboard', UserDashboardViewSet, basename='user-dashboard')
 
 # Code Rules
-from .code_rule_views import CodeRuleViewSet, CodeHistoryViewSet
+from .code_rule_views import CodeHistoryViewSet, CodeRuleViewSet
+
 router.register(r'code-rules', CodeRuleViewSet, basename='code-rule')
 router.register(r'code-history', CodeHistoryViewSet, basename='code-history')
 
@@ -112,7 +111,7 @@ router.register(r'data-scopes', DataScopeViewSet, basename='data-scope')
 urlpatterns = [
     path('', include(router.urls)),
     path('workflow/', include('apps.core.workflow.urls')),
-    
+
     # Export endpoints
     path('export/projects/', export_views.export_projects, name='export-projects'),
     path('export/sales-orders/', export_views.export_sales_orders, name='export-sales-orders'),
@@ -122,20 +121,20 @@ urlpatterns = [
     path('export/ar/', export_views.export_ar, name='export-ar'),
     path('export/ap/', export_views.export_ap, name='export-ap'),
     path('export/project-profit/', export_views.export_project_profit_report, name='export-project-profit'),
-    
+
     # Health check endpoints
     path('health/', health_views.health_check, name='health-check'),
     path('health/ready/', health_views.readiness_check, name='readiness-check'),
     path('health/status/', health_views.system_status, name='system-status'),
     path('health/security/', health_views.security_status, name='security-status'),
-    
+
     # Dashboard API endpoints
     path('dashboards/executive/', ExecutiveDashboardView.as_view(), name='dashboard-executive'),
     path('dashboards/project-manager/', ProjectManagerDashboardView.as_view(), name='dashboard-pm'),
     path('dashboards/sales/', SalesDashboardView.as_view(), name='dashboard-sales'),
     path('dashboards/production/', ProductionDashboardView.as_view(), name='dashboard-production'),
     path('dashboards/finance/', FinanceDashboardView.as_view(), name='dashboard-finance'),
-    
+
     # Import/Export endpoints
     path('import/items/', ItemImportView.as_view(), name='import-items'),
     path('export/items/', ItemExportView.as_view(), name='export-items'),
@@ -143,33 +142,33 @@ urlpatterns = [
     path('export/suppliers/', SupplierExportView.as_view(), name='export-suppliers'),
     path('export/customers/', CustomerExportView.as_view(), name='export-customers'),
     path('export/bom/', BOMExportView.as_view(), name='export-bom'),
-    
+
     # Print endpoints
     path('print/templates/', PrintTemplateListView.as_view(), name='print-templates'),
     path('print/<str:template_name>/<int:pk>/', PrintView.as_view(), name='print-preview'),
     path('print/<str:template_name>/batch/', BatchPrintView.as_view(), name='batch-print'),
-    
+
     # Backup endpoints
     path('backups/', BackupListView.as_view(), name='backup-list'),
     path('backups/create/', BackupCreateView.as_view(), name='backup-create'),
     path('backups/restore/', BackupRestoreView.as_view(), name='backup-restore'),
     path('backups/cleanup/', BackupCleanupView.as_view(), name='backup-cleanup'),
     path('backups/<str:backup_name>/', BackupDeleteView.as_view(), name='backup-delete'),
-    
+
     # Audit analytics endpoints
     path('audit-analytics/', AuditLogAnalyticsView.as_view(), name='audit-analytics'),
     path('audit-analytics/security/', AuditLogSecurityView.as_view(), name='audit-security'),
     path('audit-analytics/user-activity/', UserActivityView.as_view(), name='user-activity'),
-    
+
     # Import template endpoints
     path('import-templates/', ImportTemplateListView.as_view(), name='import-template-list'),
     path('import-templates/<str:template_type>/download/', ImportTemplateDownloadView.as_view(), name='import-template-download'),
-    
+
     # File preview endpoints
     path('files/preview/', FilePreviewView.as_view(), name='file-preview'),
     path('files/upload/', FileUploadView.as_view(), name='file-upload'),
     path('files/list/', FileListView.as_view(), name='file-list'),
-    
+
     # 移动端API
     path('mobile/dashboard/', MobileDashboardView.as_view(), name='mobile-dashboard'),
     path('mobile/quick-actions/', MobileQuickActionsView.as_view(), name='mobile-quick-actions'),

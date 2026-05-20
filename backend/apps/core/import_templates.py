@@ -2,12 +2,13 @@
 批量导入模板服务
 Import Template Service - Generate downloadable import templates
 """
-import pandas as pd
 from io import BytesIO
+
+import pandas as pd
 from django.http import HttpResponse
-from rest_framework.views import APIView
-from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 
 class ImportTemplateConfig:
@@ -124,11 +125,11 @@ class ImportTemplateConfig:
             ]
         }
     }
-    
+
     @classmethod
     def get_template_config(cls, template_type):
         return cls.TEMPLATES.get(template_type)
-    
+
     @classmethod
     def list_templates(cls):
         return [
@@ -140,7 +141,7 @@ class ImportTemplateConfig:
 class ImportTemplateListView(APIView):
     """获取可用的导入模板列表"""
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
         templates = ImportTemplateConfig.list_templates()
         return Response(templates)
@@ -149,27 +150,27 @@ class ImportTemplateListView(APIView):
 class ImportTemplateDownloadView(APIView):
     """下载导入模板"""
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request, template_type):
         config = ImportTemplateConfig.get_template_config(template_type)
-        
+
         if not config:
             return Response({'error': '模板不存在'}, status=404)
-        
+
         # 创建Excel文件
         output = BytesIO()
-        
+
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             workbook = writer.book
-            
+
             # 数据Sheet
             columns = config['columns']
             headers = [c['label'] for c in columns]
             examples = [[c['example'] for c in columns]]
-            
+
             df = pd.DataFrame(examples, columns=headers)
             df.to_excel(writer, sheet_name='数据', index=False, startrow=0)
-            
+
             # 格式化数据Sheet
             worksheet = writer.sheets['数据']
             header_format = workbook.add_format({
@@ -184,20 +185,20 @@ class ImportTemplateDownloadView(APIView):
                 'font_color': 'white',
                 'border': 1
             })
-            
+
             for col_num, column in enumerate(columns):
                 if column['required']:
                     worksheet.write(0, col_num, column['label'], required_format)
                 else:
                     worksheet.write(0, col_num, column['label'], header_format)
                 worksheet.set_column(col_num, col_num, 15)
-            
+
             # 说明Sheet
             instructions_df = pd.DataFrame({
                 '填写说明': config['instructions']
             })
             instructions_df.to_excel(writer, sheet_name='填写说明', index=False)
-            
+
             # 字段说明Sheet
             field_info = pd.DataFrame({
                 '字段名': [c['label'] for c in columns],
@@ -206,13 +207,13 @@ class ImportTemplateDownloadView(APIView):
                 '示例值': [c['example'] for c in columns],
             })
             field_info.to_excel(writer, sheet_name='字段说明', index=False)
-        
+
         output.seek(0)
-        
+
         response = HttpResponse(
             output.getvalue(),
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         response['Content-Disposition'] = f'attachment; filename="{config["filename"]}"'
-        
+
         return response

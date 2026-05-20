@@ -3,17 +3,18 @@
 Email Notification Template Management
 """
 import re
-from django.db import models
-from django.core.mail import send_mail
-from django.template import Template, Context
-from django.conf import settings
-from rest_framework import viewsets, serializers, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 
-from apps.core.models import BaseModel
+from django.conf import settings
+from django.core.mail import send_mail
+from django.db import models
+from django.template import Context, Template
+from rest_framework import serializers, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.models import BaseModel
 
 
 class EmailTemplate(BaseModel):
@@ -37,7 +38,7 @@ class EmailTemplate(BaseModel):
         ('PASSWORD_RESET', '密码重置'),
         ('CUSTOM', '自定义'),
     ]
-    
+
     code = models.CharField(max_length=50, unique=True, verbose_name='模板编码')
     name = models.CharField(max_length=100, verbose_name='模板名称')
     template_type = models.CharField(
@@ -58,16 +59,16 @@ class EmailTemplate(BaseModel):
     is_enabled = models.BooleanField(default=True, verbose_name='是否启用')
     is_system = models.BooleanField(default=False, verbose_name='系统模板')
     description = models.TextField(blank=True, verbose_name='模板说明')
-    
+
     class Meta:
         db_table = 'core_email_template'
         verbose_name = '邮件模板'
         verbose_name_plural = verbose_name
         ordering = ['template_type', 'code']
-    
+
     def __str__(self):
         return f'{self.code} - {self.name}'
-    
+
     def render(self, context_data: dict) -> tuple:
         """
         渲染模板
@@ -76,30 +77,30 @@ class EmailTemplate(BaseModel):
         # 渲染主题
         subject_template = Template(self.subject)
         rendered_subject = subject_template.render(Context(context_data))
-        
+
         # 渲染HTML内容
         html_template = Template(self.body_html)
         rendered_html = html_template.render(Context(context_data))
-        
+
         # 渲染纯文本内容
         text_body = ''
         if self.body_text:
             text_template = Template(self.body_text)
             text_body = text_template.render(Context(context_data))
-        
+
         return rendered_subject, rendered_html, text_body
-    
+
     def extract_variables(self) -> list:
         """从模板内容中提取变量"""
         # 匹配 {{ variable }} 格式
         pattern = r'\{\{\s*(\w+(?:\.\w+)*)\s*\}\}'
         all_vars = set()
-        
+
         for text in [self.subject, self.body_html, self.body_text]:
             if text:
                 matches = re.findall(pattern, text)
                 all_vars.update(matches)
-        
+
         return list(all_vars)
 
 
@@ -112,7 +113,7 @@ class EmailLog(BaseModel):
         ('SENT', '已发送'),
         ('FAILED', '发送失败'),
     ]
-    
+
     template = models.ForeignKey(
         EmailTemplate,
         on_delete=models.SET_NULL,
@@ -135,13 +136,13 @@ class EmailLog(BaseModel):
     sent_at = models.DateTimeField(null=True, blank=True, verbose_name='发送时间')
     error_message = models.TextField(blank=True, verbose_name='错误信息')
     context_data = models.JSONField(default=dict, blank=True, verbose_name='上下文数据')
-    
+
     class Meta:
         db_table = 'core_email_log'
         verbose_name = '邮件日志'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f'{self.recipient_email} - {self.subject}'
 
@@ -156,12 +157,12 @@ class EmailTemplateSerializer(serializers.ModelSerializer):
         read_only=True
     )
     extracted_variables = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = EmailTemplate
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by']
-    
+
     def get_extracted_variables(self, obj):
         return obj.extract_variables()
 
@@ -171,7 +172,7 @@ class EmailTemplateListSerializer(serializers.ModelSerializer):
         source='get_template_type_display',
         read_only=True
     )
-    
+
     class Meta:
         model = EmailTemplate
         fields = [
@@ -183,7 +184,7 @@ class EmailTemplateListSerializer(serializers.ModelSerializer):
 class EmailLogSerializer(serializers.ModelSerializer):
     template_name = serializers.CharField(source='template.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = EmailLog
         fields = '__all__'
@@ -195,7 +196,7 @@ class EmailLogSerializer(serializers.ModelSerializer):
 
 class EmailService:
     """邮件服务"""
-    
+
     @staticmethod
     def send_by_template(
         template_code: str,
@@ -208,7 +209,7 @@ class EmailService:
         使用模板发送邮件
         """
         from django.utils import timezone
-        
+
         try:
             template = EmailTemplate.objects.get(
                 code=template_code,
@@ -228,10 +229,10 @@ class EmailService:
                 created_by=created_by
             )
             return log
-        
+
         # 渲染模板
         subject, html_body, text_body = template.render(context_data)
-        
+
         # 创建日志记录
         log = EmailLog.objects.create(
             template=template,
@@ -244,7 +245,7 @@ class EmailService:
             context_data=context_data,
             created_by=created_by
         )
-        
+
         # 尝试发送邮件
         try:
             send_mail(
@@ -262,9 +263,9 @@ class EmailService:
             log.status = 'FAILED'
             log.error_message = str(e)
             log.save()
-        
+
         return log
-    
+
     @staticmethod
     def send_direct(
         recipient_email: str,
@@ -278,7 +279,7 @@ class EmailService:
         直接发送邮件（不使用模板）
         """
         from django.utils import timezone
-        
+
         log = EmailLog.objects.create(
             recipient_email=recipient_email,
             recipient_name=recipient_name,
@@ -288,7 +289,7 @@ class EmailService:
             status='PENDING',
             created_by=created_by
         )
-        
+
         try:
             send_mail(
                 subject=subject,
@@ -305,7 +306,7 @@ class EmailService:
             log.status = 'FAILED'
             log.error_message = str(e)
             log.save()
-        
+
         return log
 
 
@@ -322,12 +323,12 @@ class EmailTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
     filterset_fields = ['template_type', 'is_enabled', 'is_system']
     search_fields = ['code', 'name', 'subject', 'description']
     ordering_fields = ['template_type', 'code', 'name']
-    
+
     def get_serializer_class(self):
         if self.action == 'list':
             return EmailTemplateListSerializer
         return EmailTemplateSerializer
-    
+
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         if instance.is_system:
@@ -336,7 +337,7 @@ class EmailTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                 status=status.HTTP_400_BAD_REQUEST
             )
         return super().destroy(request, *args, **kwargs)
-    
+
     @action(detail=True, methods=['post'])
     def toggle_enable(self, request, pk=None):
         """切换启用状态"""
@@ -344,13 +345,13 @@ class EmailTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         instance.is_enabled = not instance.is_enabled
         instance.save()
         return Response(self.get_serializer(instance).data)
-    
+
     @action(detail=True, methods=['post'])
     def preview(self, request, pk=None):
         """预览模板渲染结果"""
         instance = self.get_object()
         context_data = request.data.get('context', {})
-        
+
         try:
             subject, html_body, text_body = instance.render(context_data)
             return Response({
@@ -364,32 +365,32 @@ class EmailTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                 {'error': f'模板渲染失败: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-    
+
     @action(detail=True, methods=['post'])
     def test_send(self, request, pk=None):
         """发送测试邮件"""
         instance = self.get_object()
         recipient_email = request.data.get('email')
         context_data = request.data.get('context', {})
-        
+
         if not recipient_email:
             return Response(
                 {'error': '请提供收件人邮箱'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         log = EmailService.send_by_template(
             template_code=instance.code,
             recipient_email=recipient_email,
             context_data=context_data,
             created_by=request.user
         )
-        
+
         return Response({
             'status': log.status,
             'message': '发送成功' if log.status == 'SENT' else log.error_message
         })
-    
+
     @action(detail=False, methods=['get'])
     def template_types(self, request):
         """获取所有模板类型"""
@@ -397,13 +398,13 @@ class EmailTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
             {'value': choice[0], 'label': choice[1]}
             for choice in EmailTemplate.TEMPLATE_TYPES
         ])
-    
+
     @action(detail=False, methods=['post'])
     def init_system_templates(self, request):
         """初始化系统模板"""
         if not request.user.is_superuser:
             return Response({'error': '仅超级管理员可执行此操作'}, status=403)
-        
+
         base_style = """
 <style>
 body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; }
@@ -417,7 +418,7 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height
 .info-table td:first-child { font-weight: bold; width: 120px; color: #666; }
 </style>
 """
-        
+
         system_templates = [
             {
                 'code': 'APPROVAL_PENDING',
@@ -510,7 +511,7 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height
                 'variables': ['recipient_name', 'customer_name', 'contract_no', 'amount', 'due_date', 'days_left', 'link']
             },
         ]
-        
+
         created_count = 0
         for tpl_data in system_templates:
             _, created = EmailTemplate.objects.update_or_create(
@@ -527,7 +528,7 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height
             )
             if created:
                 created_count += 1
-        
+
         return Response({
             'message': f'初始化完成，创建了 {created_count} 个新模板'
         })
@@ -543,40 +544,41 @@ class EmailLogViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ['status', 'template']
     search_fields = ['recipient_email', 'recipient_name', 'subject']
     ordering_fields = ['created_at', 'sent_at']
-    
+
     @action(detail=False, methods=['get'])
     def statistics(self, request):
         """邮件发送统计"""
+        from datetime import timedelta
+
         from django.db.models import Count
         from django.utils import timezone
-        from datetime import timedelta
-        
+
         today = timezone.now().date()
         last_7_days = today - timedelta(days=7)
         last_30_days = today - timedelta(days=30)
-        
+
         total = self.get_queryset().count()
         total_sent = self.get_queryset().filter(status='SENT').count()
         total_failed = self.get_queryset().filter(status='FAILED').count()
-        
+
         today_count = self.get_queryset().filter(
             created_at__date=today
         ).count()
-        
+
         last_7_days_count = self.get_queryset().filter(
             created_at__date__gte=last_7_days
         ).count()
-        
+
         last_30_days_count = self.get_queryset().filter(
             created_at__date__gte=last_30_days
         ).count()
-        
+
         by_template = self.get_queryset().values(
             'template__name'
         ).annotate(
             count=Count('id')
         ).order_by('-count')[:10]
-        
+
         return Response({
             'total': total,
             'total_sent': total_sent,
@@ -587,7 +589,7 @@ class EmailLogViewSet(viewsets.ReadOnlyModelViewSet):
             'last_30_days': last_30_days_count,
             'by_template': list(by_template)
         })
-    
+
     @action(detail=True, methods=['post'])
     def retry(self, request, pk=None):
         """重试发送失败的邮件"""
@@ -597,9 +599,9 @@ class EmailLogViewSet(viewsets.ReadOnlyModelViewSet):
                 {'error': '只能重试发送失败的邮件'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         from django.utils import timezone
-        
+
         try:
             send_mail(
                 subject=log.subject,

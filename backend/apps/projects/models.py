@@ -1,8 +1,9 @@
 """
 Project management models.
 """
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
-from django.core.validators import MinValueValidator, MaxValueValidator
+
 from apps.core.models import BaseModel
 
 
@@ -22,7 +23,7 @@ class Project(BaseModel):
         ('CANCELLED', '已取消'),
         ('ARCHIVED', '已归档'),
     ]
-    
+
     code = models.CharField(max_length=50, unique=True, blank=True, verbose_name='项目编号')
     name = models.CharField(max_length=200, verbose_name='项目名称')
     customer = models.ForeignKey(
@@ -53,7 +54,7 @@ class Project(BaseModel):
         default='DRAFT',
         verbose_name='状态'
     )
-    
+
     # Budget fields
     budget_total = models.DecimalField(
         max_digits=15,
@@ -79,31 +80,32 @@ class Project(BaseModel):
         default=0,
         verbose_name='费用预算'
     )
-    
+
     description = models.TextField(blank=True, verbose_name='项目描述')
     notes = models.TextField(blank=True, verbose_name='备注')
-    
+
     class Meta:
         db_table = 'project'
         verbose_name = '项目'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f"{self.code} - {self.name}"
-    
+
     def save(self, *args, **kwargs):
         # 自动生成项目编号
         if not self.code:
             from apps.core.utils import generate_code
             self.code = generate_code('PRJ', rule_type='PROJECT')
         super().save(*args, **kwargs)
-    
+
     def get_actual_material_cost(self):
         """Get actual material cost from stock moves."""
+        from django.db.models import F, Sum
+
         from apps.inventory.models import StockMove
-        from django.db.models import Sum, F
-        
+
         result = StockMove.objects.filter(
             project=self,
             move_type='OUT_PROJECT',
@@ -112,23 +114,24 @@ class Project(BaseModel):
             total=Sum(F('qty') * F('unit_cost'))
         )
         return result['total'] or 0
-    
+
     def get_actual_labor_cost(self):
         """Get actual labor cost from project tasks."""
-        from django.db.models import Sum, F
-        
+        from django.db.models import F, Sum
+
         result = ProjectMember.objects.filter(
             project=self
         ).aggregate(
             total=Sum(F('actual_hours') * F('hourly_rate'))
         )
         return result['total'] or 0
-    
+
     def get_actual_expense_cost(self):
         """Get actual expense cost."""
-        from apps.finance.models import Expense
         from django.db.models import Sum
-        
+
+        from apps.finance.models import Expense
+
         result = Expense.objects.filter(
             project=self,
             status='APPROVED'
@@ -137,31 +140,34 @@ class Project(BaseModel):
 
     def get_total_receivables(self):
         """Get total receivables amount for this project."""
-        from apps.finance.models import AccountReceivable
         from django.db.models import Sum
-        
+
+        from apps.finance.models import AccountReceivable
+
         result = AccountReceivable.objects.filter(
             project=self,
             is_deleted=False
         ).aggregate(total=Sum('amount_due'))
         return result['total'] or 0
-    
+
     def get_total_payables(self):
         """Get total payables amount for this project."""
-        from apps.finance.models import AccountPayable
         from django.db.models import Sum
-        
+
+        from apps.finance.models import AccountPayable
+
         result = AccountPayable.objects.filter(
             project=self,
             is_deleted=False
         ).aggregate(total=Sum('amount_due'))
         return result['total'] or 0
-    
+
     def get_invoice_summary(self):
         """Get invoice summary for this project (input vs output)."""
+        from django.db.models import Count, Q, Sum
+
         from apps.finance.models import Invoice
-        from django.db.models import Sum, Count, Q
-        
+
         result = Invoice.objects.filter(
             project=self,
             is_deleted=False
@@ -177,12 +183,13 @@ class Project(BaseModel):
             'output_count': result['output_count'] or 0,
             'output_amount': result['output_amount'] or 0,
         }
-    
+
     def get_bank_statement_summary(self):
         """Get bank statement summary for this project."""
+        from django.db.models import Count, Q, Sum
+
         from apps.finance.bank_statement_models import BankStatement
-        from django.db.models import Sum, Count, Q
-        
+
         result = BankStatement.objects.filter(
             project=self,
             is_deleted=False
@@ -236,14 +243,14 @@ class ProjectMember(BaseModel):
         verbose_name='实际工时'
     )
     is_active = models.BooleanField(default=True, verbose_name='激活状态')
-    
+
     class Meta:
         db_table = 'project_member'
         verbose_name = '项目成员'
         verbose_name_plural = verbose_name
         unique_together = ['project', 'user']
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f"{self.project.code} - {self.user.get_full_name()}"
 
@@ -258,7 +265,7 @@ class ProjectTask(BaseModel):
         ('COMPLETED', '已完成'),
         ('CANCELLED', '已取消'),
     ]
-    
+
     project = models.ForeignKey(
         Project,
         on_delete=models.CASCADE,
@@ -310,14 +317,14 @@ class ProjectTask(BaseModel):
     end_date = models.DateField(null=True, blank=True, verbose_name='结束日期')
     description = models.TextField(blank=True, verbose_name='描述')
     sort_order = models.IntegerField(default=0, verbose_name='排序')
-    
+
     class Meta:
         db_table = 'project_task'
         verbose_name = '项目任务'
         verbose_name_plural = verbose_name
         unique_together = ['project', 'code']
         ordering = ['project', 'sort_order', 'code']
-    
+
     def __str__(self):
         return f"{self.project.code} - {self.code} - {self.name}"
 
@@ -334,7 +341,7 @@ class ProjectBOM(BaseModel):
         ('PENDING', '待定'),
         ('DESIGNING', '设计中'),
     ]
-    
+
     # ==================== 下单/采购状态 ====================
     ORDER_STATUS_CHOICES = [
         ('NOT_ORDERED', '未下单'),         # 初始状态
@@ -348,7 +355,7 @@ class ProjectBOM(BaseModel):
         ('RETURNED', '已退货'),            # 退货
         ('CANCELLED', '已取消'),           # 采购取消
     ]
-    
+
     # ==================== 物料属性(可覆盖Item默认值) ====================
     ITEM_PROPERTY_CHOICES = [
         ('', '继承物料属性'),
@@ -360,7 +367,7 @@ class ProjectBOM(BaseModel):
         ('VIRTUAL', '虚拟件'),
         ('ASSEMBLY', '组件'),
     ]
-    
+
     # ==================== 优先级 ====================
     PRIORITY_CHOICES = [
         ('LOW', '低'),
@@ -368,7 +375,7 @@ class ProjectBOM(BaseModel):
         ('HIGH', '高'),
         ('URGENT', '紧急'),
     ]
-    
+
     # ==================== 状态 ====================
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
@@ -377,7 +384,7 @@ class ProjectBOM(BaseModel):
         ('COMPLETED', '已完成'),
         ('CANCELLED', '已取消'),
     ]
-    
+
     # ==================== 基础信息 ====================
     project = models.ForeignKey(
         Project,
@@ -391,10 +398,10 @@ class ProjectBOM(BaseModel):
         related_name='project_boms',
         verbose_name='物料'
     )
-    
+
     # 项目内物料编码(可自定义)
     item_code = models.CharField(max_length=50, blank=True, verbose_name='项目物料编码')
-    
+
     # 物料属性覆盖
     item_property = models.CharField(
         max_length=20,
@@ -404,21 +411,21 @@ class ProjectBOM(BaseModel):
         verbose_name='物料属性',
         help_text='留空则继承物料主数据的属性'
     )
-    
+
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
         default='DRAFT',
         verbose_name='状态'
     )
-    
+
     priority = models.CharField(
         max_length=20,
         choices=PRIORITY_CHOICES,
         default='NORMAL',
         verbose_name='优先级'
     )
-    
+
     # ==================== 数量信息 ====================
     planned_qty = models.DecimalField(
         max_digits=15,
@@ -432,7 +439,7 @@ class ProjectBOM(BaseModel):
         default=0,
         verbose_name='实际使用数量'
     )
-    
+
     # 单位用量（子件对父件的用量）
     unit_qty = models.DecimalField(
         max_digits=15,
@@ -440,7 +447,7 @@ class ProjectBOM(BaseModel):
         default=1,
         verbose_name='单位用量'
     )
-    
+
     # 损耗率(百分比)
     scrap_rate = models.DecimalField(
         max_digits=5,
@@ -448,7 +455,7 @@ class ProjectBOM(BaseModel):
         default=0,
         verbose_name='损耗率(%)'
     )
-    
+
     # ==================== 成本信息 ====================
     estimated_cost = models.DecimalField(
         max_digits=15,
@@ -477,7 +484,7 @@ class ProjectBOM(BaseModel):
         verbose_name='总成本',
         help_text='实际成本 × 实际数量'
     )
-    
+
     # ==================== 图纸与技术资料 ====================
     version_brand = models.CharField(max_length=100, blank=True, verbose_name='版本/品牌')
     has_drawing = models.CharField(
@@ -486,7 +493,7 @@ class ProjectBOM(BaseModel):
         default='PENDING',
         verbose_name='有图/无图'
     )
-    
+
     # 图纸关联
     drawing = models.ForeignKey(
         'projects.Drawing',
@@ -498,13 +505,13 @@ class ProjectBOM(BaseModel):
     )
     drawing_no = models.CharField(max_length=100, blank=True, verbose_name='图纸号')
     drawing_version = models.CharField(max_length=50, blank=True, verbose_name='图纸版本')
-    
+
     # 技术规格覆盖
     material_spec = models.CharField(max_length=200, blank=True, verbose_name='材质规格',
                                      help_text='可覆盖物料主数据中的材质要求')
     surface_treatment = models.CharField(max_length=100, blank=True, verbose_name='表面处理')
     technical_requirement = models.TextField(blank=True, verbose_name='技术要求')
-    
+
     # ==================== 装配与工艺(非标自动化专用) ====================
     work_center = models.ForeignKey(
         'production.WorkCenter',
@@ -524,10 +531,10 @@ class ProjectBOM(BaseModel):
     )
     assembly_sequence = models.IntegerField(default=0, verbose_name='装配顺序',
                                             help_text='在工位上的装配先后顺序')
-    
+
     # 装配说明
     assembly_instruction = models.TextField(blank=True, verbose_name='装配说明')
-    
+
     # ==================== 需求追溯 ====================
     requirement_id_ref = models.IntegerField(
         null=True,
@@ -535,16 +542,16 @@ class ProjectBOM(BaseModel):
         verbose_name='关联需求ID',
         help_text='该物料对应的客户需求ID'
     )
-    
+
     # 功能模块标识
     function_module = models.CharField(max_length=100, blank=True, verbose_name='功能模块',
                                        help_text='如：上料机构、定位机构、检测模块')
-    
+
     # ==================== 日期与时间 ====================
     required_date = models.DateField(null=True, blank=True, verbose_name='需求日期')
     latest_order_date = models.DateField(null=True, blank=True, verbose_name='最晚下单日期',
                                          help_text='根据需求日期和采购周期自动计算')
-    
+
     requester = models.ForeignKey(
         'accounts.User',
         on_delete=models.SET_NULL,
@@ -553,10 +560,10 @@ class ProjectBOM(BaseModel):
         related_name='requested_boms',
         verbose_name='申请人'
     )
-    
+
     description = models.TextField(blank=True, verbose_name='说明')
     notes = models.TextField(blank=True, verbose_name='备注')
-    
+
     # ==================== 采购与库存跟踪 ====================
     order_status = models.CharField(
         max_length=20,
@@ -574,7 +581,7 @@ class ProjectBOM(BaseModel):
     )
     delivery_date = models.DateField(null=True, blank=True, verbose_name='预计交期')
     actual_delivery_date = models.DateField(null=True, blank=True, verbose_name='实际到货日期')
-    
+
     ordered_qty = models.DecimalField(
         max_digits=15,
         decimal_places=2,
@@ -600,7 +607,7 @@ class ProjectBOM(BaseModel):
         verbose_name='预留数量',
         help_text='从库存预留的数量'
     )
-    
+
     # 采购申请关联
     purchase_request = models.ForeignKey(
         'purchase.PurchaseRequest',
@@ -617,7 +624,7 @@ class ProjectBOM(BaseModel):
         verbose_name='采购申请数量',
         help_text='已创建采购申请的数量'
     )
-    
+
     # 采购订单关联
     purchase_order = models.ForeignKey(
         'purchase.PurchaseOrder',
@@ -627,7 +634,7 @@ class ProjectBOM(BaseModel):
         related_name='bom_items',
         verbose_name='采购订单'
     )
-    
+
     # 发货和退货数量
     shipped_qty = models.DecimalField(
         max_digits=15,
@@ -642,12 +649,12 @@ class ProjectBOM(BaseModel):
         default=0,
         verbose_name='退货数量'
     )
-    
+
     # ==================== 质量与检验 ====================
     inspection_required = models.BooleanField(default=True, verbose_name='需要检验')
     inspection_passed = models.BooleanField(null=True, blank=True, verbose_name='检验通过')
     inspection_notes = models.TextField(blank=True, verbose_name='检验备注')
-    
+
     # ==================== 多级BOM结构 ====================
     parent = models.ForeignKey(
         'self',
@@ -659,18 +666,18 @@ class ProjectBOM(BaseModel):
     )
     level = models.IntegerField(default=0, verbose_name='BOM层级')
     sort_order = models.IntegerField(default=0, verbose_name='排序')
-    
+
     # 关键件标识
     is_critical = models.BooleanField(default=False, verbose_name='关键件',
                                       help_text='影响项目关键路径的物料')
     is_long_lead = models.BooleanField(default=False, verbose_name='长周期件',
                                        help_text='采购周期较长需要提前采购')
-    
+
     # ==================== 非标自动化行业增强 ====================
     # 装配体代号（用于CAD图纸关联）
     assembly_code = models.CharField(max_length=100, blank=True, verbose_name='装配体代号',
                                      help_text='CAD装配体文件名或代号，用于自动关联图纸')
-    
+
     # 非标件识别
     CUSTOM_PART_TYPE_CHOICES = [
         ('', '非自制件'),
@@ -693,20 +700,20 @@ class ProjectBOM(BaseModel):
         default='',
         verbose_name='非标件类型'
     )
-    
+
     # CAD来源信息
     cad_file_name = models.CharField(max_length=200, blank=True, verbose_name='CAD文件名',
                                      help_text='来源CAD文件名（如.prt/.asm）')
     cad_software = models.CharField(max_length=50, blank=True, verbose_name='CAD软件',
                                     help_text='来源CAD软件类型')
-    
+
     # ==================== 询价信息 ====================
     QUOTE_STATUS_CHOICES = [
         ('NOT_QUOTED', '未询价'),
         ('QUOTING', '询价中'),
         ('QUOTED', '已询价'),
     ]
-    
+
     quote_status = models.CharField(
         max_length=20,
         choices=QUOTE_STATUS_CHOICES,
@@ -754,7 +761,7 @@ class ProjectBOM(BaseModel):
         verbose_name='询价日期'
     )
     quote_notes = models.TextField(blank=True, verbose_name='询价备注')
-    
+
     # ==================== 扩展字段 ====================
     extra_fields = models.JSONField(
         default=dict,
@@ -762,7 +769,7 @@ class ProjectBOM(BaseModel):
         verbose_name='扩展字段',
         help_text='用户自定义的扩展字段'
     )
-    
+
     class Meta:
         db_table = 'project_bom'
         verbose_name = '项目BOM'
@@ -775,20 +782,20 @@ class ProjectBOM(BaseModel):
             models.Index(fields=['required_date']),
             models.Index(fields=['function_module']),
         ]
-    
+
     def __str__(self):
         return f"{self.project.code} - {self.item.sku}"
-    
+
     @property
     def effective_item_property(self):
         """获取有效的物料属性(优先使用BOM上的覆盖值)"""
         return self.item_property or self.item.item_property
-    
+
     @property
     def shortage_qty(self):
         """缺料数量"""
         return max(0, self.planned_qty - self.received_qty - self.reserved_qty)
-    
+
     @property
     def is_overdue(self):
         """是否延期"""
@@ -796,7 +803,7 @@ class ProjectBOM(BaseModel):
         if self.required_date and self.order_status not in ['RECEIVED', 'COMPLETED']:
             return date.today() > self.required_date
         return False
-    
+
     def calculate_latest_order_date(self):
         """计算最晚下单日期"""
         from datetime import timedelta
@@ -805,7 +812,7 @@ class ProjectBOM(BaseModel):
             self.latest_order_date = self.required_date - timedelta(days=lead_time)
             return self.latest_order_date
         return None
-    
+
     def update_total_cost(self):
         """更新总成本"""
         self.total_cost = self.actual_cost * self.actual_qty
@@ -821,7 +828,7 @@ class TimeLog(BaseModel):
         ('APPROVED', '已通过'),
         ('REJECTED', '已驳回'),
     ]
-    
+
     project = models.ForeignKey(
         Project,
         on_delete=models.CASCADE,
@@ -856,13 +863,13 @@ class TimeLog(BaseModel):
         default='PENDING',
         verbose_name='状态'
     )
-    
+
     class Meta:
         db_table = 'project_time_log'
         verbose_name = '工时记录'
         verbose_name_plural = verbose_name
         ordering = ['-date', '-created_at']
-    
+
     def __str__(self):
         return f"{self.project.code} - {self.user.username} - {self.date} - {self.hours}h"
 
@@ -881,7 +888,7 @@ class ECN(BaseModel):
         ('COMPLETED', '已完成'),
         ('CANCELLED', '已取消'),
     ]
-    
+
     CHANGE_TYPE_CHOICES = [
         ('DESIGN', '设计变更'),
         ('PROCESS', '工艺变更'),
@@ -890,14 +897,14 @@ class ECN(BaseModel):
         ('DRAWING', '图纸变更'),
         ('OTHER', '其他变更'),
     ]
-    
+
     PRIORITY_CHOICES = [
         ('URGENT', '紧急'),
         ('HIGH', '高'),
         ('MEDIUM', '中'),
         ('LOW', '低'),
     ]
-    
+
     ecn_no = models.CharField(max_length=50, unique=True, verbose_name='变更编号')
     project = models.ForeignKey(
         Project,
@@ -934,7 +941,7 @@ class ECN(BaseModel):
         verbose_name='成本影响'
     )
     schedule_impact = models.CharField(max_length=200, blank=True, verbose_name='进度影响')
-    
+
     # 申请信息
     requested_by = models.ForeignKey(
         'accounts.User',
@@ -943,7 +950,7 @@ class ECN(BaseModel):
         verbose_name='申请人'
     )
     requested_date = models.DateField(verbose_name='申请日期')
-    
+
     # 批准信息
     approved_by = models.ForeignKey(
         'accounts.User',
@@ -954,7 +961,7 @@ class ECN(BaseModel):
         verbose_name='批准人'
     )
     approved_date = models.DateField(null=True, blank=True, verbose_name='批准日期')
-    
+
     # 实施信息
     implemented_by = models.ForeignKey(
         'accounts.User',
@@ -966,16 +973,16 @@ class ECN(BaseModel):
     )
     implemented_date = models.DateField(null=True, blank=True, verbose_name='实施日期')
     implementation_notes = models.TextField(blank=True, verbose_name='实施说明')
-    
+
     class Meta:
         db_table = 'project_ecn'
         verbose_name = '工程变更通知'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f"{self.ecn_no} - {self.title}"
-    
+
     def save(self, *args, **kwargs):
         if not self.ecn_no:
             # 自动生成ECN编号
@@ -1001,7 +1008,7 @@ class ECNItem(BaseModel):
         ('MODIFY', '修改'),
         ('REPLACE', '替换'),
     ]
-    
+
     ecn = models.ForeignKey(
         ECN,
         on_delete=models.CASCADE,
@@ -1056,13 +1063,13 @@ class ECNItem(BaseModel):
         verbose_name='新数量'
     )
     notes = models.TextField(blank=True, verbose_name='备注')
-    
+
     class Meta:
         db_table = 'project_ecn_item'
         verbose_name = 'ECN变更明细'
         verbose_name_plural = verbose_name
         ordering = ['id']
-    
+
     def __str__(self):
         return f"{self.ecn.ecn_no} - {self.get_change_type_display()}"
 
@@ -1080,7 +1087,7 @@ class ECNApproval(BaseModel):
         ('COMPLETE', '完成实施'),
         ('CANCEL', '取消'),
     ]
-    
+
     ecn = models.ForeignKey(
         ECN,
         on_delete=models.CASCADE,
@@ -1099,13 +1106,13 @@ class ECNApproval(BaseModel):
         verbose_name='操作'
     )
     comment = models.TextField(blank=True, verbose_name='审批意见')
-    
+
     class Meta:
         db_table = 'project_ecn_approval'
         verbose_name = 'ECN审批记录'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f"{self.ecn.ecn_no} - {self.approver.username} - {self.get_action_display()}"
 
@@ -1126,14 +1133,14 @@ class AfterSalesOrder(BaseModel):
         ('COMPLAINT', '客户投诉'),
         ('OTHER', '其他'),
     ]
-    
+
     PRIORITY_CHOICES = [
         ('LOW', '低'),
         ('MEDIUM', '中'),
         ('HIGH', '高'),
         ('URGENT', '紧急'),
     ]
-    
+
     STATUS_CHOICES = [
         ('PENDING', '待处理'),
         ('ASSIGNED', '已派单'),
@@ -1144,7 +1151,7 @@ class AfterSalesOrder(BaseModel):
         ('CLOSED', '已关闭'),
         ('CANCELLED', '已取消'),
     ]
-    
+
     order_no = models.CharField(max_length=50, unique=True, verbose_name='工单编号')
     project = models.ForeignKey(
         Project,
@@ -1176,24 +1183,24 @@ class AfterSalesOrder(BaseModel):
         default='PENDING',
         verbose_name='状态'
     )
-    
+
     # 问题描述
     title = models.CharField(max_length=200, verbose_name='问题标题')
     description = models.TextField(verbose_name='问题描述')
     equipment_info = models.CharField(max_length=500, blank=True, verbose_name='设备信息')
     fault_code = models.CharField(max_length=50, blank=True, verbose_name='故障代码')
-    
+
     # 联系信息
     contact_person = models.CharField(max_length=50, verbose_name='联系人')
     contact_phone = models.CharField(max_length=20, verbose_name='联系电话')
     site_address = models.CharField(max_length=500, blank=True, verbose_name='现场地址')
-    
+
     # 时间信息
     reported_at = models.DateTimeField(auto_now_add=True, verbose_name='报修时间')
     expected_date = models.DateField(null=True, blank=True, verbose_name='期望完成日期')
     resolved_at = models.DateTimeField(null=True, blank=True, verbose_name='解决时间')
     closed_at = models.DateTimeField(null=True, blank=True, verbose_name='关闭时间')
-    
+
     # 责任人
     assigned_to = models.ForeignKey(
         'accounts.User',
@@ -1203,19 +1210,19 @@ class AfterSalesOrder(BaseModel):
         related_name='assigned_aftersales',
         verbose_name='负责人'
     )
-    
+
     # 费用信息
     is_warranty = models.BooleanField(default=True, verbose_name='是否保修期内')
     labor_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name='人工费用')
     travel_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name='差旅费用')
     parts_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name='备件费用')
     other_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name='其他费用')
-    
+
     # 解决方案
     solution = models.TextField(blank=True, verbose_name='解决方案')
     root_cause = models.TextField(blank=True, verbose_name='根本原因')
     preventive_action = models.TextField(blank=True, verbose_name='预防措施')
-    
+
     # 客户满意度
     satisfaction_score = models.IntegerField(
         null=True, blank=True,
@@ -1223,16 +1230,16 @@ class AfterSalesOrder(BaseModel):
         verbose_name='满意度评分(1-5)'
     )
     customer_feedback = models.TextField(blank=True, verbose_name='客户反馈')
-    
+
     class Meta:
         db_table = 'aftersales_order'
         verbose_name = '售后工单'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f"{self.order_no} - {self.title}"
-    
+
     @property
     def total_cost(self):
         """计算总成本"""
@@ -1249,7 +1256,7 @@ class ServiceRecord(BaseModel):
         ('PHONE', '电话支持'),
         ('VIDEO', '视频会议'),
     ]
-    
+
     aftersales_order = models.ForeignKey(
         AfterSalesOrder,
         on_delete=models.CASCADE,
@@ -1268,34 +1275,34 @@ class ServiceRecord(BaseModel):
         related_name='service_records',
         verbose_name='服务人员'
     )
-    
+
     # 时间记录
     service_date = models.DateField(verbose_name='服务日期')
     start_time = models.TimeField(null=True, blank=True, verbose_name='开始时间')
     end_time = models.TimeField(null=True, blank=True, verbose_name='结束时间')
     work_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name='工时(小时)')
-    
+
     # 服务内容
     work_content = models.TextField(verbose_name='工作内容')
     findings = models.TextField(blank=True, verbose_name='现场发现')
     actions_taken = models.TextField(blank=True, verbose_name='采取措施')
     result = models.TextField(blank=True, verbose_name='服务结果')
     next_steps = models.TextField(blank=True, verbose_name='后续计划')
-    
+
     # 费用
     labor_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name='人工费用')
     travel_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name='差旅费用')
-    
+
     # 客户签字
     customer_signature = models.CharField(max_length=100, blank=True, verbose_name='客户签字')
     signed_at = models.DateTimeField(null=True, blank=True, verbose_name='签字时间')
-    
+
     class Meta:
         db_table = 'aftersales_service_record'
         verbose_name = '服务记录'
         verbose_name_plural = verbose_name
         ordering = ['-service_date', '-start_time']
-    
+
     def __str__(self):
         return f"{self.aftersales_order.order_no} - {self.service_date}"
 
@@ -1324,23 +1331,23 @@ class SparePartUsage(BaseModel):
         related_name='spare_part_usages',
         verbose_name='备件'
     )
-    
+
     qty = models.DecimalField(max_digits=12, decimal_places=2, verbose_name='数量')
     unit_cost = models.DecimalField(max_digits=12, decimal_places=2, verbose_name='单价')
     is_warranty = models.BooleanField(default=True, verbose_name='保修范围')
     is_replaced = models.BooleanField(default=True, verbose_name='是否更换')
     serial_no = models.CharField(max_length=100, blank=True, verbose_name='序列号')
     notes = models.TextField(blank=True, verbose_name='备注')
-    
+
     class Meta:
         db_table = 'aftersales_spare_part_usage'
         verbose_name = '备件使用记录'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f"{self.aftersales_order.order_no} - {self.item.name}"
-    
+
     @property
     def total_cost(self):
         return self.qty * self.unit_cost
@@ -1364,7 +1371,7 @@ class Drawing(BaseModel):
         ('INVENTOR', 'Inventor文件'),
         ('OTHER', '其他'),
     ]
-    
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('REVIEWING', '审核中'),
@@ -1372,7 +1379,7 @@ class Drawing(BaseModel):
         ('RELEASED', '已发布'),
         ('OBSOLETE', '已废弃'),
     ]
-    
+
     # 图纸类型（非标自动化行业分类）
     PART_TYPE_CHOICES = [
         ('ASSEMBLY', '装配图'),
@@ -1386,12 +1393,12 @@ class Drawing(BaseModel):
         ('LAYOUT', '布局图'),
         ('OTHER', '其他'),
     ]
-    
+
     drawing_no = models.CharField(max_length=100, verbose_name='图纸号')
     name = models.CharField(max_length=200, verbose_name='图纸名称')
     version = models.CharField(max_length=20, default='A0', verbose_name='版本')
     revision = models.IntegerField(default=1, verbose_name='修订号')
-    
+
     # 图纸类型
     part_type = models.CharField(
         max_length=20,
@@ -1399,7 +1406,7 @@ class Drawing(BaseModel):
         default='PART',
         verbose_name='图纸类型'
     )
-    
+
     # 关联
     project = models.ForeignKey(
         Project,
@@ -1423,7 +1430,7 @@ class Drawing(BaseModel):
         related_name='drawings',
         verbose_name='关联BOM项'
     )
-    
+
     # 父级图纸（装配图-零件图层级关系）
     parent_drawing = models.ForeignKey(
         'self',
@@ -1434,7 +1441,7 @@ class Drawing(BaseModel):
         verbose_name='父级图纸',
         help_text='所属的装配图'
     )
-    
+
     # 技术参数（非标自动化行业常用）
     material = models.CharField(max_length=100, blank=True, verbose_name='材质',
                                 help_text='从图纸标题栏提取的材质信息')
@@ -1448,11 +1455,11 @@ class Drawing(BaseModel):
                                        help_text='未注公差等级')
     roughness = models.CharField(max_length=50, blank=True, verbose_name='表面粗糙度',
                                  help_text='未注粗糙度要求')
-    
+
     # CAD来源信息
     cad_file_name = models.CharField(max_length=200, blank=True, verbose_name='CAD文件名')
     cad_software = models.CharField(max_length=50, blank=True, verbose_name='CAD软件类型')
-    
+
     # 文件信息
     file_type = models.CharField(
         max_length=20,
@@ -1462,10 +1469,10 @@ class Drawing(BaseModel):
     )
     file_path = models.CharField(max_length=500, verbose_name='文件路径')
     file_size = models.BigIntegerField(default=0, verbose_name='文件大小(bytes)')
-    
+
     # 公共盘存储路径
     public_share_path = models.CharField(max_length=500, blank=True, verbose_name='公共盘路径')
-    
+
     # 状态
     status = models.CharField(
         max_length=20,
@@ -1473,7 +1480,7 @@ class Drawing(BaseModel):
         default='DRAFT',
         verbose_name='状态'
     )
-    
+
     # 审批信息
     designer = models.ForeignKey(
         'accounts.User',
@@ -1499,22 +1506,22 @@ class Drawing(BaseModel):
         related_name='approved_drawings',
         verbose_name='批准人'
     )
-    
+
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name='批准时间')
     released_at = models.DateTimeField(null=True, blank=True, verbose_name='发布时间')
-    
+
     # 变更信息
     change_description = models.TextField(blank=True, verbose_name='变更说明')
-    
+
     notes = models.TextField(blank=True, verbose_name='备注')
-    
+
     class Meta:
         db_table = 'project_drawing'
         verbose_name = '图纸'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
         unique_together = [['drawing_no', 'version', 'revision']]
-    
+
     def __str__(self):
         return f"{self.drawing_no} v{self.version}.{self.revision}"
 
@@ -1528,7 +1535,7 @@ class DrawingChangeNotice(BaseModel):
         ('REVISION', '修订'),
         ('OBSOLETE', '废弃'),
     ]
-    
+
     drawing = models.ForeignKey(
         Drawing,
         on_delete=models.CASCADE,
@@ -1544,7 +1551,7 @@ class DrawingChangeNotice(BaseModel):
     old_version = models.CharField(max_length=20, blank=True, verbose_name='原版本')
     new_version = models.CharField(max_length=20, blank=True, verbose_name='新版本')
     change_description = models.TextField(verbose_name='变更说明')
-    
+
     # 通知
     notified_users = models.ManyToManyField(
         'accounts.User',
@@ -1554,98 +1561,51 @@ class DrawingChangeNotice(BaseModel):
     )
     email_sent = models.BooleanField(default=False, verbose_name='邮件已发送')
     email_sent_at = models.DateTimeField(null=True, blank=True, verbose_name='发送时间')
-    
+
     class Meta:
         db_table = 'project_drawing_change_notice'
         verbose_name = '图纸变更通知'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f"{self.drawing.drawing_no} - {self.get_change_type_display()}"
 
 
 # 导入设备和工装模型，使其成为 projects app 的一部分
-from .equipment_models import (
-    Equipment, EquipmentShipment, EquipmentInstallation,
-    InstallationLog, EquipmentAcceptance, MaintenanceSchedule, TrainingRecord
-)
-from .fixture_models import (
-    FixtureCategory, Fixture, FixtureUsageRecord,
-    FixtureCalibration, FixtureMaintenance
-)
 
 
 # Import models from requirement_review
-from .requirement_review import (
-    ReviewTemplate, ReviewCheckItem, RequirementReview,
-    ReviewParticipant, ReviewItemResult, ReviewActionItem
-)
 
 # Import models from bom_advanced
-from .bom_advanced import BOMSubstitute, BOMVersion, BOMComparison
 
 # Import models from cad_integration
-from .cad_integration import (
-    CADSoftware, CADSession, CADFile,
-    CADBOMImport, CADBOMItem, CADPropertyMapping
-)
 
 # Import models from field_service
-from .field_service import (
-    SkillCategory, Skill, TechnicianProfile, TechnicianSkill,
-    TechnicianSchedule, ServiceOrder, ServiceDispatch, ServiceCheckIn,
-    ServiceExpense, ServiceLog
-)
 
 # Import models from equipment_archive
-from .equipment_archive import (
-    EquipmentArchive, EquipmentSparePart, EquipmentMaintenancePlan,
-    EquipmentMaintenanceRecord
-)
 
 # Import models from remote_monitoring
-from .remote_monitoring import (
-    EquipmentConnection, EquipmentDataPoint, EquipmentDataMapping,
-    EquipmentDataRecord, EquipmentAlarm, PredictiveMaintenanceModel,
-    PredictiveMaintenanceResult, DiagnosticSession, DiagnosticLog
-)
 
 # Import models from acceptance
-from .acceptance import (
-    AcceptanceTemplate, Acceptance, AcceptanceCheckItem, AcceptanceIssue
-)
 
 # Import models from technical_agreement
-from .technical_agreement import (
-    TechnicalAgreementTemplate, TechnicalAgreement, TechnicalAgreementChange
-)
 
 # Import models from cost_tracking
-from .cost_tracking import (
-    ProjectBudget, ProjectCostRecord, CostAlert, ProjectCostSnapshot
-)
 
 # Import models from advanced_cost_tracking
-from .advanced_cost_tracking import (
-    StandardCostCategory, LaborRateStandard, ManufacturingOverheadRate,
-    ProjectCostDetail, ProjectCostSummary, CostVarianceAnalysis
-)
 
 # Import models from document_collaboration
-from .document_collaboration import (
-    TechDocumentCategory, TechnicalDocument, TechDocumentVersion,
-    DocumentAnnotation, DocumentDistribution, DocumentAccessLog, DocumentReview
-)
 
 # Import models from creo_integration
-from .creo_integration import (
-    CreoBOMImportSession, CreoBOMImportItem
-)
 
 # Import new improvement module models
-from .drawing_version import DrawingVersion, DrawingAffectedPart  # noqa: E402, F401
-from .bom_cost_rollup import BOMCostSnapshot, BOMCostDetail  # noqa: E402, F401
+from .bom_cost_rollup import BOMCostDetail, BOMCostSnapshot  # noqa: E402, F401
+from .drawing_version import DrawingAffectedPart, DrawingVersion  # noqa: E402, F401
 from .installation import (  # noqa: E402, F401
-    InstallationTask, SiteLog, CommissioningRecord, SiteIssue, CustomerAcceptance
+    CommissioningRecord,
+    CustomerAcceptance,
+    InstallationTask,
+    SiteIssue,
+    SiteLog,
 )

@@ -2,10 +2,14 @@
 对账单序列化器
 """
 from rest_framework import serializers
+
 from .reconciliation_models import (
-    PurchaseReconciliation, PurchaseReconciliationLine,
-    SalesReconciliation, SalesReconciliationLine,
-    InvoiceReconciliation, InvoiceReconciliationLine
+    InvoiceReconciliation,
+    InvoiceReconciliationLine,
+    PurchaseReconciliation,
+    PurchaseReconciliationLine,
+    SalesReconciliation,
+    SalesReconciliationLine,
 )
 
 
@@ -15,7 +19,7 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
     receipt_status_display = serializers.CharField(source='get_receipt_status_display', read_only=True)
     po_order_no = serializers.CharField(source='po.order_no', read_only=True)
     order_items = serializers.SerializerMethodField()
-    
+
     # 前端打印模板需要的字段映射
     description = serializers.SerializerMethodField()
     specification = serializers.SerializerMethodField()
@@ -26,12 +30,12 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
     order_amount = serializers.DecimalField(source='debit_amount', max_digits=12, decimal_places=2, read_only=True)
     received_amount = serializers.SerializerMethodField()
     invoice_amount = serializers.SerializerMethodField()
-    
+
     # 发票和付款相关字段
     tax_amount = serializers.SerializerMethodField()
     payment_method = serializers.SerializerMethodField()
     is_deducted = serializers.BooleanField(default=False, read_only=True)
-    
+
     class Meta:
         model = PurchaseReconciliationLine
         fields = [
@@ -48,20 +52,20 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
             # 发票和付款字段
             'tax_amount', 'payment_method', 'is_deducted'
         ]
-    
+
     def get_tax_amount(self, obj):
         """获取税额"""
         if obj.line_type == 'INVOICE':
             # 假设税率为13%
             return float(obj.debit_amount or 0) * 0.13 / 1.13
         return 0
-    
+
     def get_payment_method(self, obj):
         """获取付款方式"""
         if obj.line_type == 'PAYMENT':
             return obj.notes or '银行转账'
         return ''
-    
+
     def get_order_items(self, obj):
         """获取订单行明细"""
         if obj.line_type != 'ORDER' or not obj.po:
@@ -78,7 +82,7 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
                 'amount': float(line.amount or 0),
             })
         return items
-    
+
     def get_description(self, obj):
         """获取物料描述"""
         if obj.line_type != 'ORDER' or not obj.po:
@@ -89,7 +93,7 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
                 return first_line.material.name
             return first_line.description or ''
         return ''
-    
+
     def get_specification(self, obj):
         """获取规格"""
         if obj.line_type != 'ORDER' or not obj.po:
@@ -98,7 +102,7 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
         if first_line and hasattr(first_line, 'material') and first_line.material:
             return getattr(first_line.material, 'specification', '') or getattr(first_line.material, 'model', '')
         return ''
-    
+
     def get_drawing_no(self, obj):
         """获取图号"""
         if obj.line_type != 'ORDER' or not obj.po:
@@ -107,7 +111,7 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
         if first_line and hasattr(first_line, 'material') and first_line.material:
             return getattr(first_line.material, 'drawing_no', '') or ''
         return ''
-    
+
     def get_unit_price(self, obj):
         """获取单价"""
         if obj.line_type != 'ORDER' or not obj.po:
@@ -116,7 +120,7 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
         if first_line:
             return float(first_line.unit_price or 0)
         return 0
-    
+
     def get_unit(self, obj):
         """获取单位"""
         if obj.line_type != 'ORDER' or not obj.po:
@@ -125,14 +129,14 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
         if first_line:
             return first_line.unit or ''
         return ''
-    
+
     def get_quantity(self, obj):
         """获取数量"""
         if obj.line_type != 'ORDER' or not obj.po:
             return 0
         total_qty = sum(line.qty for line in obj.po.lines.filter(is_deleted=False))
         return float(total_qty)
-    
+
     def get_received_amount(self, obj):
         """计算已收货金额"""
         if obj.line_type != 'ORDER' or not obj.po:
@@ -143,13 +147,14 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
                 if hasattr(line, 'po_line') and line.po_line:
                     total += float(line.qty * line.po_line.unit_price)
         return total
-    
+
     def get_invoice_amount(self, obj):
         """获取已开票金额"""
         if obj.line_type != 'ORDER' or not obj.po:
             return 0
-        from apps.finance.models import AccountPayable
         from django.db.models import Sum
+
+        from apps.finance.models import AccountPayable
         total = AccountPayable.objects.filter(po=obj.po, is_deleted=False).aggregate(
             total=Sum('amount_due')
         )['total'] or 0
@@ -166,12 +171,12 @@ class PurchaseReconciliationSerializer(serializers.ModelSerializer):
     confirmed_by_name = serializers.CharField(source='confirmed_by.username', read_only=True, allow_null=True)
     created_by_name = serializers.SerializerMethodField()
     lines = PurchaseReconciliationLineSerializer(many=True, read_only=True)
-    
+
     def get_created_by_name(self, obj):
         if obj.created_by:
             return obj.created_by.get_full_name() or obj.created_by.username
         return ''
-    
+
     class Meta:
         model = PurchaseReconciliation
         fields = [
@@ -199,7 +204,7 @@ class PurchaseReconciliationListSerializer(serializers.ModelSerializer):
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     line_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = PurchaseReconciliation
         fields = [
@@ -209,7 +214,7 @@ class PurchaseReconciliationListSerializer(serializers.ModelSerializer):
             'total_invoice_amount', 'total_paid_amount', 'balance_amount',
             'status', 'status_display', 'line_count', 'created_at'
         ]
-    
+
     def get_line_count(self, obj):
         return obj.lines.count()
 
@@ -220,7 +225,7 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
     delivery_status_display = serializers.CharField(source='get_delivery_status_display', read_only=True)
     so_order_no = serializers.CharField(source='so.order_no', read_only=True)
     order_items = serializers.SerializerMethodField()
-    
+
     # 前端打印模板需要的字段映射
     description = serializers.SerializerMethodField()
     specification = serializers.SerializerMethodField()
@@ -231,11 +236,11 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
     order_amount = serializers.DecimalField(source='debit_amount', max_digits=12, decimal_places=2, read_only=True)
     delivered_amount = serializers.SerializerMethodField()
     invoice_amount = serializers.SerializerMethodField()
-    
+
     # 发票和收款相关字段
     tax_amount = serializers.SerializerMethodField()
     payment_method = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = SalesReconciliationLine
         fields = [
@@ -252,20 +257,20 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
             # 发票和收款字段
             'tax_amount', 'payment_method'
         ]
-    
+
     def get_tax_amount(self, obj):
         """获取税额"""
         if obj.line_type == 'INVOICE':
             # 假设税率为13%
             return float(obj.debit_amount or 0) * 0.13 / 1.13
         return 0
-    
+
     def get_payment_method(self, obj):
         """获取收款方式"""
         if obj.line_type == 'RECEIPT':
             return obj.notes or '银行转账'
         return ''
-    
+
     def get_order_items(self, obj):
         """获取订单行明细"""
         if obj.line_type != 'ORDER' or not obj.so:
@@ -282,7 +287,7 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
                 'amount': float(line.amount or 0),
             })
         return items
-    
+
     def get_description(self, obj):
         """获取物料描述"""
         if obj.line_type != 'ORDER' or not obj.so:
@@ -293,7 +298,7 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
                 return first_line.material.name
             return first_line.description or ''
         return ''
-    
+
     def get_specification(self, obj):
         """获取规格"""
         if obj.line_type != 'ORDER' or not obj.so:
@@ -302,7 +307,7 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
         if first_line and hasattr(first_line, 'material') and first_line.material:
             return getattr(first_line.material, 'specification', '') or getattr(first_line.material, 'model', '')
         return ''
-    
+
     def get_drawing_no(self, obj):
         """获取图号"""
         if obj.line_type != 'ORDER' or not obj.so:
@@ -311,7 +316,7 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
         if first_line and hasattr(first_line, 'material') and first_line.material:
             return getattr(first_line.material, 'drawing_no', '') or ''
         return ''
-    
+
     def get_unit_price(self, obj):
         """获取单价"""
         if obj.line_type != 'ORDER' or not obj.so:
@@ -320,7 +325,7 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
         if first_line:
             return float(first_line.unit_price or 0)
         return 0
-    
+
     def get_unit(self, obj):
         """获取单位"""
         if obj.line_type != 'ORDER' or not obj.so:
@@ -329,14 +334,14 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
         if first_line:
             return first_line.unit or ''
         return ''
-    
+
     def get_quantity(self, obj):
         """获取数量"""
         if obj.line_type != 'ORDER' or not obj.so:
             return 0
         total_qty = sum(line.qty for line in obj.so.lines.filter(is_deleted=False))
         return float(total_qty)
-    
+
     def get_delivered_amount(self, obj):
         """计算已发货金额"""
         if obj.line_type != 'ORDER' or not obj.so:
@@ -347,13 +352,14 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
                 if hasattr(line, 'so_line') and line.so_line:
                     total += float(line.qty * line.so_line.unit_price)
         return total
-    
+
     def get_invoice_amount(self, obj):
         """获取已开票金额"""
         if obj.line_type != 'ORDER' or not obj.so:
             return 0
-        from apps.finance.models import AccountReceivable
         from django.db.models import Sum
+
+        from apps.finance.models import AccountReceivable
         total = AccountReceivable.objects.filter(so=obj.so, is_deleted=False).aggregate(
             total=Sum('amount_due')
         )['total'] or 0
@@ -370,12 +376,12 @@ class SalesReconciliationSerializer(serializers.ModelSerializer):
     confirmed_by_name = serializers.CharField(source='confirmed_by.username', read_only=True, allow_null=True)
     created_by_name = serializers.SerializerMethodField()
     lines = SalesReconciliationLineSerializer(many=True, read_only=True)
-    
+
     def get_created_by_name(self, obj):
         if obj.created_by:
             return obj.created_by.get_full_name() or obj.created_by.username
         return ''
-    
+
     class Meta:
         model = SalesReconciliation
         fields = [
@@ -403,7 +409,7 @@ class SalesReconciliationListSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source='customer.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     line_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = SalesReconciliation
         fields = [
@@ -413,7 +419,7 @@ class SalesReconciliationListSerializer(serializers.ModelSerializer):
             'total_invoice_amount', 'total_received_amount', 'balance_amount',
             'status', 'status_display', 'line_count', 'created_at'
         ]
-    
+
     def get_line_count(self, obj):
         return obj.lines.count()
 
@@ -421,7 +427,7 @@ class SalesReconciliationListSerializer(serializers.ModelSerializer):
 class InvoiceReconciliationLineSerializer(serializers.ModelSerializer):
     """发票对账单明细序列化器"""
     match_status_display = serializers.CharField(source='get_match_status_display', read_only=True)
-    
+
     class Meta:
         model = InvoiceReconciliationLine
         fields = [
@@ -438,7 +444,7 @@ class InvoiceReconciliationSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     reconciled_by_name = serializers.CharField(source='reconciled_by.username', read_only=True)
     lines = InvoiceReconciliationLineSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = InvoiceReconciliation
         fields = [
@@ -463,7 +469,7 @@ class InvoiceReconciliationListSerializer(serializers.ModelSerializer):
     """发票对账单列表序列化器"""
     invoice_type_display = serializers.CharField(source='get_invoice_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = InvoiceReconciliation
         fields = [

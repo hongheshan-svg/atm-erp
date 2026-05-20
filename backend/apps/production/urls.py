@@ -1,47 +1,45 @@
 """
 生产管理模块 URL 配置
 """
-from django.urls import path, include
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from .views import (
-    ProductionProcessViewSet, ProductionPlanViewSet,
-    ProductionPlanProcessViewSet, ProductionLogViewSet,
-    DebugRecordViewSet, DebugCheckItemViewSet,
-    QualityInspectionViewSet, InspectionItemViewSet
+
+from apps.projects.equipment_oee import EquipmentOEERecordViewSet
+
+from .andon import AndonActionViewSet, AndonCallViewSet, AndonStationViewSet, AndonTypeViewSet
+from .aps import APSScheduleTaskViewSet, ScheduleOrderViewSet
+from .assembly_guide import AssemblyGuideViewSet, AssemblySessionViewSet, AssemblyStepViewSet
+from .capacity_planning import (
+    CapacityDashboardView,
+    CapacityResourceConflictViewSet,
+    ResourceAllocationViewSet,
+    ResourceTypeViewSet,
+    ResourceViewSet,
 )
-from .aps import (
-    ScheduleOrderViewSet, APSScheduleTaskViewSet
+from .data_acquisition import DataAlarmViewSet, DataPointViewSet, DataRecordViewSet, DataSourceViewSet
+from .equipment_capability import EquipmentCapabilityViewSet
+from .finite_capacity import FiniteCapacityPlanViewSet, ScheduledTaskViewSet
+from .kanban import AndonAlertView, ProductionKanbanView, ProductionTrendView, WorkCenterKanbanView
+from .kanban_wip import KanbanWIPAlertViewSet, KanbanWIPRuleViewSet, KanbanWIPStatusView
+from .routing import (
+    ProjectRoutingOperationViewSet,
+    ProjectRoutingViewSet,
+    RoutingOperationViewSet,
+    RoutingTemplateViewSet,
+    WorkStationViewSet,
 )
 from .scheduling import WorkCenterViewSet
-from .kanban import (
-    ProductionKanbanView, WorkCenterKanbanView,
-    ProductionTrendView, AndonAlertView
+from .sn_traceability import ComponentBindingViewSet, SerialNumberViewSet, SNRuleViewSet, SNTraceRecordViewSet
+from .views import (
+    DebugCheckItemViewSet,
+    DebugRecordViewSet,
+    InspectionItemViewSet,
+    ProductionLogViewSet,
+    ProductionPlanProcessViewSet,
+    ProductionPlanViewSet,
+    ProductionProcessViewSet,
+    QualityInspectionViewSet,
 )
-from .andon import (
-    AndonTypeViewSet, AndonStationViewSet, AndonCallViewSet, AndonActionViewSet
-)
-from .data_acquisition import (
-    DataSourceViewSet, DataPointViewSet, DataRecordViewSet, DataAlarmViewSet
-)
-from .sn_traceability import (
-    SNRuleViewSet, SerialNumberViewSet, SNTraceRecordViewSet, ComponentBindingViewSet
-)
-from .routing import (
-    WorkStationViewSet, RoutingTemplateViewSet, RoutingOperationViewSet,
-    ProjectRoutingViewSet, ProjectRoutingOperationViewSet
-)
-from .assembly_guide import (
-    AssemblyGuideViewSet, AssemblyStepViewSet, AssemblySessionViewSet
-)
-from .capacity_planning import (
-    ResourceTypeViewSet, ResourceViewSet, ResourceAllocationViewSet,
-    CapacityResourceConflictViewSet,
-    CapacityDashboardView
-)
-from .finite_capacity import FiniteCapacityPlanViewSet, ScheduledTaskViewSet
-from .equipment_capability import EquipmentCapabilityViewSet
-from apps.projects.equipment_oee import EquipmentOEERecordViewSet
-from .kanban_wip import KanbanWIPRuleViewSet, KanbanWIPAlertViewSet, KanbanWIPStatusView
 
 router = DefaultRouter()
 router.register(r'processes', ProductionProcessViewSet, basename='process')
@@ -108,16 +106,16 @@ router.register(r'kanban-wip-alerts', KanbanWIPAlertViewSet, basename='kanban-wi
 
 urlpatterns = [
     path('', include(router.urls)),
-    
+
     # 电子看板
     path('kanban/', ProductionKanbanView.as_view(), name='production-kanban'),
     path('kanban/work-center/<int:work_center_id>/', WorkCenterKanbanView.as_view(), name='work-center-kanban'),
     path('kanban/trend/', ProductionTrendView.as_view(), name='production-trend'),
     path('kanban/alerts/', AndonAlertView.as_view(), name='andon-alerts'),
-    
+
     # 产能资源规划看板
     path('capacity/dashboard/', CapacityDashboardView.as_view(), name='capacity-dashboard'),
-    
+
     # 看板WIP状态
     path('kanban/wip-status/', KanbanWIPStatusView.as_view(), name='kanban-wip-status'),
 ]

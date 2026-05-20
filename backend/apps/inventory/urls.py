@@ -1,38 +1,36 @@
 """
 URL configuration for inventory app.
 """
-from django.urls import path, include
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from .views import (
-    StockViewSet,
-    StockMoveViewSet,
-    StockAdjustmentViewSet,
-    StockAdjustmentLineViewSet
-)
-from .batch_views import BatchViewSet, BatchMoveViewSet
-from .material_views import (
-    MaterialRequisitionViewSet,
-    MaterialRequisitionLineViewSet,
-    MaterialReturnViewSet,
-    MaterialReturnLineViewSet
-)
-from .cost_accounting import (
-    InventoryCostConfigViewSet, ItemCostRecordViewSet, PeriodCostSummaryViewSet
-)
-from .mrp import MRPPlanViewSet, MRPLineViewSet
-from .stock_alert import StockAlertRuleViewSet, StockAlertViewSet
-from .spare_parts import (
-    SparePartCategoryViewSet, SparePartViewSet, SparePartEquipmentRelationViewSet,
-    SparePartConsumptionViewSet, SparePartAlertViewSet
-)
+
+from .batch_views import BatchMoveViewSet, BatchViewSet
+from .cost_accounting import InventoryCostConfigViewSet, ItemCostRecordViewSet, PeriodCostSummaryViewSet
 from .data_accuracy import (
-    DataValidationRuleViewSet, DataValidationResultViewSet,
-    ReconciliationSessionViewSet, InventoryAccuracyReportView, InOutBalanceReportView
+    DataValidationResultViewSet,
+    DataValidationRuleViewSet,
+    InOutBalanceReportView,
+    InventoryAccuracyReportView,
+    ReconciliationSessionViewSet,
 )
-from .mrp_enhanced import MRPExplosionView, MRPAutoGenerateView
-from .spare_parts_prediction import (
-    LifecyclePredictionView, PurchaseSuggestionView, SparePartCostAnalysisView
+from .material_views import (
+    MaterialRequisitionLineViewSet,
+    MaterialRequisitionViewSet,
+    MaterialReturnLineViewSet,
+    MaterialReturnViewSet,
 )
+from .mrp import MRPLineViewSet, MRPPlanViewSet
+from .mrp_enhanced import MRPAutoGenerateView, MRPExplosionView
+from .spare_parts import (
+    SparePartAlertViewSet,
+    SparePartCategoryViewSet,
+    SparePartConsumptionViewSet,
+    SparePartEquipmentRelationViewSet,
+    SparePartViewSet,
+)
+from .spare_parts_prediction import LifecyclePredictionView, PurchaseSuggestionView, SparePartCostAnalysisView
+from .stock_alert import StockAlertRuleViewSet, StockAlertViewSet
+from .views import StockAdjustmentLineViewSet, StockAdjustmentViewSet, StockMoveViewSet, StockViewSet
 
 router = DefaultRouter()
 router.register(r'stocks', StockViewSet, basename='stock')
@@ -77,15 +75,15 @@ router.register(r'reconciliation-sessions', ReconciliationSessionViewSet, basena
 
 urlpatterns = [
     path('', include(router.urls)),
-    
+
     # 数据准确性报表
     path('reports/accuracy/', InventoryAccuracyReportView.as_view(), name='inventory-accuracy-report'),
     path('reports/in-out-balance/', InOutBalanceReportView.as_view(), name='in-out-balance-report'),
-    
+
     # MRP增强（多层BOM展开）
     path('mrp/explosion/', MRPExplosionView.as_view(), name='mrp-explosion'),
     path('mrp/auto-generate/', MRPAutoGenerateView.as_view(), name='mrp-auto-generate'),
-    
+
     # 备件智能预测
     path('spare-parts/lifecycle-prediction/', LifecyclePredictionView.as_view(), name='lifecycle-prediction'),
     path('spare-parts/purchase-suggestions/', PurchaseSuggestionView.as_view(), name='purchase-suggestions'),

@@ -2,10 +2,16 @@
 生产管理模块序列化器
 """
 from rest_framework import serializers
+
 from .models import (
-    ProductionProcess, ProductionPlan, ProductionPlanProcess,
-    ProductionLog, DebugRecord, DebugCheckItem,
-    QualityInspection, InspectionItem
+    DebugCheckItem,
+    DebugRecord,
+    InspectionItem,
+    ProductionLog,
+    ProductionPlan,
+    ProductionPlanProcess,
+    ProductionProcess,
+    QualityInspection,
 )
 
 
@@ -15,7 +21,7 @@ class ProductionProcessSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(source='project.name', read_only=True)
     process_type_display = serializers.CharField(source='get_process_type_display', read_only=True)
     assignee_name = serializers.CharField(source='assignee.get_full_name', read_only=True)
-    
+
     class Meta:
         model = ProductionProcess
         fields = [
@@ -37,7 +43,7 @@ class ProductionPlanProcessSerializer(serializers.ModelSerializer):
     process_type = serializers.CharField(source='process.process_type', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     operator_name = serializers.CharField(source='operator.get_full_name', read_only=True)
-    
+
     class Meta:
         model = ProductionPlanProcess
         fields = [
@@ -59,7 +65,7 @@ class ProductionPlanSerializer(serializers.ModelSerializer):
     planner_name = serializers.CharField(source='planner.get_full_name', read_only=True)
     production_manager_name = serializers.CharField(source='production_manager.get_full_name', read_only=True)
     plan_processes = ProductionPlanProcessSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = ProductionPlan
         fields = [
@@ -79,7 +85,7 @@ class ProductionLogSerializer(serializers.ModelSerializer):
     plan_no = serializers.CharField(source='plan_process.plan.plan_no', read_only=True)
     process_name = serializers.CharField(source='plan_process.process.name', read_only=True)
     operator_name = serializers.CharField(source='operator.get_full_name', read_only=True)
-    
+
     class Meta:
         model = ProductionLog
         fields = [
@@ -95,7 +101,7 @@ class ProductionLogSerializer(serializers.ModelSerializer):
 class DebugCheckItemSerializer(serializers.ModelSerializer):
     """调试检查项序列化器"""
     result_display = serializers.CharField(source='get_result_display', read_only=True)
-    
+
     class Meta:
         model = DebugCheckItem
         fields = [
@@ -117,12 +123,12 @@ class DebugRecordSerializer(serializers.ModelSerializer):
     debugger_name = serializers.CharField(source='debugger.get_full_name', read_only=True)
     reviewer_name = serializers.CharField(source='reviewer.get_full_name', read_only=True)
     check_items = DebugCheckItemSerializer(many=True, read_only=True)
-    
+
     # 统计字段
     total_items = serializers.SerializerMethodField()
     pass_items = serializers.SerializerMethodField()
     fail_items = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = DebugRecord
         fields = [
@@ -138,13 +144,13 @@ class DebugRecordSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at', 'is_deleted'
         ]
         read_only_fields = ['record_no', 'created_at', 'updated_at']
-    
+
     def get_total_items(self, obj):
         return obj.check_items.count()
-    
+
     def get_pass_items(self, obj):
         return obj.check_items.filter(result='PASS').count()
-    
+
     def get_fail_items(self, obj):
         return obj.check_items.filter(result='FAIL').count()
 
@@ -152,7 +158,7 @@ class DebugRecordSerializer(serializers.ModelSerializer):
 class InspectionItemSerializer(serializers.ModelSerializer):
     """检验项目序列化器"""
     result_display = serializers.CharField(source='get_result_display', read_only=True)
-    
+
     class Meta:
         model = InspectionItem
         fields = [
@@ -177,10 +183,10 @@ class QualityInspectionSerializer(serializers.ModelSerializer):
     plan_no = serializers.CharField(source='production_plan.plan_no', read_only=True)
     process_name = serializers.CharField(source='process.name', read_only=True)
     items = InspectionItemSerializer(many=True, read_only=True)
-    
+
     # 统计字段
     pass_rate = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = QualityInspection
         fields = [
@@ -197,7 +203,7 @@ class QualityInspectionSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at', 'is_deleted'
         ]
         read_only_fields = ['inspection_no', 'created_at', 'updated_at']
-    
+
     def get_pass_rate(self, obj):
         if obj.sample_qty > 0:
             return round(obj.pass_qty / obj.sample_qty * 100, 2)

@@ -10,10 +10,10 @@
 """
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from apps.accounts.models import Role
-from apps.core.permission_models_new import Permission, DataScope
-from apps.core.permission_service import on_role_permission_change
 
+from apps.accounts.models import Role
+from apps.core.permission_models_new import DataScope, Permission
+from apps.core.permission_service import on_role_permission_change
 
 SCOPE_MAP = {
     'ALL': 'all',
@@ -550,12 +550,12 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f'完成！创建: {created_count}, 更新: {updated_count}, 跳过: {skipped_count}'
         ))
-        
+
         # 输出角色权限摘要
         self.stdout.write('')
         self.stdout.write(self.style.NOTICE('=== 非标自动化行业角色权限摘要 ==='))
         self.stdout.write('')
-        
+
         summaries = [
             ('总经理', '全部权限 + 报表分析'),
             ('项目经理', '项目全局 + PLM + 技术文档 + 成本'),
@@ -575,7 +575,7 @@ class Command(BaseCommand):
             ('行政人事', 'OA + 考勤 + 审批配置'),
             ('普通员工', '工作台 + 审批 + 考勤'),
         ]
-        
+
         for name, desc in summaries:
             self.stdout.write(f'  {name}: {desc}')
 

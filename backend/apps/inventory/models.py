@@ -2,7 +2,7 @@
 Inventory management models - Stock, StockMove, Adjustment.
 """
 from django.db import models
-from django.db.models import Sum, F
+
 from apps.core.models import BaseModel
 from apps.core.utils import generate_code
 
@@ -41,7 +41,7 @@ class Stock(models.Model):
     def qty_available(self):
         """Available quantity = on_hand - reserved."""
         return self.qty_on_hand - self.qty_reserved
-    
+
     # Weighted average cost
     weighted_avg_cost = models.DecimalField(
         max_digits=15,
@@ -49,16 +49,16 @@ class Stock(models.Model):
         default=0,
         verbose_name='加权平均成本'
     )
-    
+
     last_updated = models.DateTimeField(auto_now=True, verbose_name='最后更新时间')
-    
+
     class Meta:
         db_table = 'stock'
         verbose_name = '库存'
         verbose_name_plural = verbose_name
         unique_together = ['warehouse', 'item']
         ordering = ['warehouse', 'item']
-    
+
     def __str__(self):
         return f"{self.warehouse.code} - {self.item.sku}: {self.qty_on_hand}"
 
@@ -75,13 +75,13 @@ class StockMove(BaseModel):
         ('TRANSFER', '调拨'),
         ('ADJUSTMENT', '调整'),
     ]
-    
+
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
         ('COMPLETED', '完成'),
         ('CANCELLED', '已取消'),
     ]
-    
+
     move_no = models.CharField(max_length=50, unique=True, verbose_name='移动单号')
     item = models.ForeignKey(
         'masterdata.Item',
@@ -134,49 +134,49 @@ class StockMove(BaseModel):
         verbose_name='状态'
     )
     notes = models.TextField(blank=True, verbose_name='备注')
-    
+
     class Meta:
         db_table = 'stock_move'
         verbose_name = '库存移动'
         verbose_name_plural = verbose_name
         ordering = ['-move_date', '-created_at']
-    
+
     def __str__(self):
         return f"{self.move_no} - {self.item.sku}"
-    
+
     def save(self, *args, **kwargs):
         if not self.move_no:
             self.move_no = generate_code('SM', rule_type='STOCK_MOVE')
-        
+
         is_new = self.pk is None
         super().save(*args, **kwargs)
-        
+
         # Auto-update stock when status is COMPLETED
         if self.status == 'COMPLETED' and is_new:
             self._update_stock()
-    
+
     def _update_stock(self):
         """Update stock levels based on move type."""
         if self.move_type == 'IN_PURCHASE':
             # Incoming stock
             self._update_stock_in(self.warehouse_to, self.qty, self.unit_cost)
-        
+
         elif self.move_type in ['OUT_SALES', 'OUT_PROJECT']:
             # Outgoing stock
             self._update_stock_out(self.warehouse_from, self.qty)
-        
+
         elif self.move_type == 'TRANSFER':
             # Transfer between warehouses
             self._update_stock_out(self.warehouse_from, self.qty)
             self._update_stock_in(self.warehouse_to, self.qty, self.unit_cost)
-        
+
         elif self.move_type == 'ADJUSTMENT':
             # Adjustment can be positive or negative
             if self.qty > 0:
                 self._update_stock_in(self.warehouse_to, self.qty, self.unit_cost)
             else:
                 self._update_stock_out(self.warehouse_from, abs(self.qty))
-    
+
     def _update_stock_in(self, warehouse, qty, cost):
         """Update stock for incoming movement (weighted average)."""
         stock, created = Stock.objects.get_or_create(
@@ -184,20 +184,20 @@ class StockMove(BaseModel):
             item=self.item,
             defaults={'qty_on_hand': 0, 'weighted_avg_cost': 0}
         )
-        
+
         # Calculate weighted average cost
         old_value = stock.qty_on_hand * stock.weighted_avg_cost
         new_value = qty * cost
         new_qty = stock.qty_on_hand + qty
-        
+
         if new_qty > 0:
             stock.weighted_avg_cost = (old_value + new_value) / new_qty
         else:
             stock.weighted_avg_cost = cost
-        
+
         stock.qty_on_hand = new_qty
         stock.save()
-    
+
     def _update_stock_out(self, warehouse, qty):
         """Update stock for outgoing movement."""
         try:
@@ -222,7 +222,7 @@ class StockAdjustment(BaseModel):
         ('REJECTED', '已拒绝'),
         ('CONFIRMED', '已确认'),
     ]
-    
+
     adjustment_no = models.CharField(max_length=50, unique=True, verbose_name='调整单号')
     warehouse = models.ForeignKey(
         'masterdata.Warehouse',
@@ -239,32 +239,32 @@ class StockAdjustment(BaseModel):
         verbose_name='状态'
     )
     notes = models.TextField(blank=True, verbose_name='备注')
-    
+
     class Meta:
         db_table = 'stock_adjustment'
         verbose_name = '库存调整'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f"{self.adjustment_no}"
-    
+
     def save(self, *args, **kwargs):
         if not self.adjustment_no:
             self.adjustment_no = generate_code('ADJ', rule_type='STOCK_ADJUSTMENT')
         super().save(*args, **kwargs)
-    
+
     def apply_adjustment(self):
         """执行库存调整，创建库存变动记录"""
         from django.db import transaction as db_transaction
-        
+
         with db_transaction.atomic():
             for line in self.lines.filter(is_deleted=False):
                 if line.qty_diff != 0:
                     # Create stock move for adjustment
                     warehouse_to = self.warehouse if line.qty_diff > 0 else None
                     warehouse_from = self.warehouse if line.qty_diff < 0 else None
-                    
+
                     # Get current weighted average cost
                     try:
                         stock = Stock.objects.get(
@@ -274,7 +274,7 @@ class StockAdjustment(BaseModel):
                         unit_cost = stock.weighted_avg_cost
                     except Stock.DoesNotExist:
                         unit_cost = 0
-                    
+
                     StockMove.objects.create(
                         item=line.item,
                         warehouse_from=warehouse_from,
@@ -288,7 +288,7 @@ class StockAdjustment(BaseModel):
                         status='COMPLETED',
                         created_by=self.created_by
                     )
-            
+
             self.status = 'CONFIRMED'
             self.save()
 
@@ -331,32 +331,30 @@ class StockAdjustmentLine(BaseModel):
         verbose_name='成本影响'
     )
     notes = models.TextField(blank=True, verbose_name='备注')
-    
+
     class Meta:
         db_table = 'stock_adjustment_line'
         verbose_name = '库存调整明细'
         verbose_name_plural = verbose_name
         ordering = ['id']
-    
+
     def __str__(self):
         return f"{self.adjustment.adjustment_no} - {self.item.sku}"
-    
+
     def save(self, *args, **kwargs):
         self.qty_diff = self.qty_actual - self.qty_system
         super().save(*args, **kwargs)
 
 
 # 导入领料/退料模型，使其可被迁移系统发现
-from .material_models import (
-    MaterialRequisition, MaterialRequisitionLine,
-    MaterialReturn, MaterialReturnLine
-)
 
 # Import new improvement module models
 from .spare_parts import (  # noqa: E402, F401
-    SparePartCategory, SparePart, SparePartEquipmentRelation,
-    SparePartConsumption, SparePartForecast, SparePartAlert
+    SparePart,
+    SparePartAlert,
+    SparePartCategory,
+    SparePartConsumption,
+    SparePartEquipmentRelation,
+    SparePartForecast,
 )
-from .spare_parts_prediction import (  # noqa: E402, F401
-    SparePartLifecyclePrediction, PurchaseSuggestion
-)
+from .spare_parts_prediction import PurchaseSuggestion, SparePartLifecyclePrediction  # noqa: E402, F401

@@ -8,19 +8,16 @@
 - BOM关联展示
 - 装配工时记录
 """
-from decimal import Decimal
-from datetime import date, timedelta
 from django.db import models
-from django.db.models import Sum, Count, Avg, F
+from django.db.models import Sum
 from django.utils import timezone
-from rest_framework import viewsets, serializers, status
+from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
-from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
-from apps.core.models import BaseModel
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
-
+from apps.core.models import BaseModel
 
 # =============================================================================
 # 模型定义
@@ -30,7 +27,7 @@ class AssemblyGuide(BaseModel):
     """装配指导书"""
     guide_code = models.CharField(max_length=50, unique=True, verbose_name='指导书编码')
     name = models.CharField(max_length=200, verbose_name='名称')
-    
+
     # 关联产品/BOM
     product = models.ForeignKey(
         'masterdata.Item',
@@ -48,7 +45,7 @@ class AssemblyGuide(BaseModel):
         related_name='assembly_guides',
         verbose_name='关联BOM'
     )
-    
+
     # 3D模型
     model_file = models.FileField(upload_to='assembly/models/', blank=True, verbose_name='3D模型文件')
     model_url = models.URLField(blank=True, verbose_name='3D模型链接')
@@ -66,11 +63,11 @@ class AssemblyGuide(BaseModel):
         blank=True,
         verbose_name='模型格式'
     )
-    
+
     # 版本控制
     version = models.CharField(max_length=20, default='1.0', verbose_name='版本')
     is_current = models.BooleanField(default=True, verbose_name='当前版本')
-    
+
     # 装配信息
     total_steps = models.IntegerField(default=0, verbose_name='总步骤数')
     estimated_time_minutes = models.IntegerField(default=0, verbose_name='预计工时(分钟)')
@@ -85,14 +82,14 @@ class AssemblyGuide(BaseModel):
         default='MEDIUM',
         verbose_name='难度等级'
     )
-    
+
     # 工具和材料
     required_tools = models.JSONField(default=list, blank=True, verbose_name='所需工具')
     required_materials = models.JSONField(default=list, blank=True, verbose_name='所需材料')
     safety_notes = models.TextField(blank=True, verbose_name='安全注意事项')
-    
+
     description = models.TextField(blank=True, verbose_name='描述')
-    
+
     # 状态
     status = models.CharField(
         max_length=20,
@@ -105,16 +102,16 @@ class AssemblyGuide(BaseModel):
         default='DRAFT',
         verbose_name='状态'
     )
-    
+
     class Meta:
         db_table = 'assembly_guide'
         verbose_name = '装配指导书'
         verbose_name_plural = verbose_name
         ordering = ['guide_code']
-    
+
     def __str__(self):
         return f'{self.guide_code} - {self.name}'
-    
+
     def update_step_count(self):
         """更新步骤数"""
         self.total_steps = self.steps.filter(is_deleted=False).count()
@@ -132,17 +129,17 @@ class AssemblyStep(BaseModel):
         related_name='steps',
         verbose_name='装配指导书'
     )
-    
+
     # 步骤信息
     step_number = models.IntegerField(verbose_name='步骤号')
     title = models.CharField(max_length=200, verbose_name='步骤标题')
     description = models.TextField(verbose_name='操作说明')
-    
+
     # 3D视图
     camera_position = models.JSONField(default=dict, blank=True, verbose_name='相机位置')
     highlighted_parts = models.JSONField(default=list, blank=True, verbose_name='高亮零件')
     animation_data = models.JSONField(default=dict, blank=True, verbose_name='动画数据')
-    
+
     # 关联零件
     parts = models.ManyToManyField(
         'masterdata.Item',
@@ -150,32 +147,32 @@ class AssemblyStep(BaseModel):
         related_name='assembly_steps',
         verbose_name='相关零件'
     )
-    
+
     # 工时
     estimated_minutes = models.IntegerField(default=5, verbose_name='预计时间(分钟)')
-    
+
     # 图片和视频
     images = models.JSONField(default=list, blank=True, verbose_name='图片')
     video_url = models.URLField(blank=True, verbose_name='视频链接')
-    
+
     # 检验点
     is_checkpoint = models.BooleanField(default=False, verbose_name='检验点')
     checkpoint_items = models.JSONField(default=list, blank=True, verbose_name='检验项目')
-    
+
     # 工具
     required_tools = models.JSONField(default=list, blank=True, verbose_name='所需工具')
-    
+
     # 注意事项
     warnings = models.TextField(blank=True, verbose_name='警告提示')
     tips = models.TextField(blank=True, verbose_name='操作技巧')
-    
+
     class Meta:
         db_table = 'assembly_step'
         verbose_name = '装配步骤'
         verbose_name_plural = verbose_name
         unique_together = ['guide', 'step_number']
         ordering = ['guide', 'step_number']
-    
+
     def __str__(self):
         return f'{self.guide.guide_code}-{self.step_number:03d}: {self.title}'
 
@@ -194,15 +191,15 @@ class AssemblyStepPart(BaseModel):
         related_name='step_usages',
         verbose_name='零件'
     )
-    
+
     quantity = models.DecimalField(max_digits=10, decimal_places=2, default=1, verbose_name='数量')
-    
+
     # 3D定位
     position = models.JSONField(default=dict, blank=True, verbose_name='安装位置')
     orientation = models.JSONField(default=dict, blank=True, verbose_name='安装方向')
-    
+
     notes = models.CharField(max_length=500, blank=True, verbose_name='备注')
-    
+
     class Meta:
         db_table = 'assembly_step_part'
         verbose_name = '装配步骤零件'
@@ -218,9 +215,9 @@ class AssemblySession(BaseModel):
         related_name='sessions',
         verbose_name='装配指导书'
     )
-    
+
     session_no = models.CharField(max_length=50, unique=True, verbose_name='作业编号')
-    
+
     # 关联生产计划
     production_plan = models.ForeignKey(
         'production.ProductionPlan',
@@ -230,7 +227,7 @@ class AssemblySession(BaseModel):
         related_name='assembly_sessions',
         verbose_name='生产计划'
     )
-    
+
     # 操作员
     operator = models.ForeignKey(
         'accounts.User',
@@ -239,15 +236,15 @@ class AssemblySession(BaseModel):
         related_name='assembly_sessions',
         verbose_name='操作员'
     )
-    
+
     # 时间
     started_at = models.DateTimeField(verbose_name='开始时间')
     completed_at = models.DateTimeField(null=True, blank=True, verbose_name='完成时间')
-    
+
     # 进度
     current_step = models.IntegerField(default=1, verbose_name='当前步骤')
     completed_steps = models.IntegerField(default=0, verbose_name='已完成步骤')
-    
+
     # 状态
     status = models.CharField(
         max_length=20,
@@ -260,25 +257,25 @@ class AssemblySession(BaseModel):
         default='IN_PROGRESS',
         verbose_name='状态'
     )
-    
+
     # 实际工时
     actual_time_minutes = models.IntegerField(default=0, verbose_name='实际工时(分钟)')
-    
+
     # 质量
     issues_found = models.IntegerField(default=0, verbose_name='发现问题数')
     rework_count = models.IntegerField(default=0, verbose_name='返工次数')
-    
+
     remarks = models.TextField(blank=True, verbose_name='备注')
-    
+
     class Meta:
         db_table = 'assembly_session'
         verbose_name = '装配作业'
         verbose_name_plural = verbose_name
         ordering = ['-started_at']
-    
+
     def __str__(self):
         return f'{self.session_no}'
-    
+
     def save(self, *args, **kwargs):
         if not self.session_no:
             from apps.core.models import CodeRule
@@ -300,12 +297,12 @@ class AssemblyStepRecord(BaseModel):
         related_name='records',
         verbose_name='装配步骤'
     )
-    
+
     # 时间
     started_at = models.DateTimeField(verbose_name='开始时间')
     completed_at = models.DateTimeField(null=True, blank=True, verbose_name='完成时间')
     duration_minutes = models.IntegerField(default=0, verbose_name='耗时(分钟)')
-    
+
     # 状态
     status = models.CharField(
         max_length=20,
@@ -319,22 +316,22 @@ class AssemblyStepRecord(BaseModel):
         default='PENDING',
         verbose_name='状态'
     )
-    
+
     # 检验结果
     checkpoint_passed = models.BooleanField(null=True, blank=True, verbose_name='检验通过')
     checkpoint_results = models.JSONField(default=dict, blank=True, verbose_name='检验结果')
-    
+
     # 问题记录
     issues = models.TextField(blank=True, verbose_name='问题记录')
     photos = models.JSONField(default=list, blank=True, verbose_name='照片')
-    
+
     class Meta:
         db_table = 'assembly_step_record'
         verbose_name = '装配步骤记录'
         verbose_name_plural = verbose_name
         unique_together = ['session', 'step']
         ordering = ['step__step_number']
-    
+
     def save(self, *args, **kwargs):
         if self.completed_at and self.started_at:
             delta = self.completed_at - self.started_at
@@ -349,7 +346,7 @@ class AssemblyStepRecord(BaseModel):
 class AssemblyStepPartSerializer(serializers.ModelSerializer):
     part_code = serializers.CharField(source='part.code', read_only=True)
     part_name = serializers.CharField(source='part.name', read_only=True)
-    
+
     class Meta:
         model = AssemblyStepPart
         fields = '__all__'
@@ -357,7 +354,7 @@ class AssemblyStepPartSerializer(serializers.ModelSerializer):
 
 class AssemblyStepSerializer(serializers.ModelSerializer):
     step_parts = AssemblyStepPartSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = AssemblyStep
         fields = '__all__'
@@ -368,7 +365,7 @@ class AssemblyGuideSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     difficulty_display = serializers.CharField(source='get_difficulty_level_display', read_only=True)
     steps = AssemblyStepSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = AssemblyGuide
         fields = '__all__'
@@ -378,7 +375,7 @@ class AssemblyGuideListSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     difficulty_display = serializers.CharField(source='get_difficulty_level_display', read_only=True)
-    
+
     class Meta:
         model = AssemblyGuide
         fields = [
@@ -392,7 +389,7 @@ class AssemblyStepRecordSerializer(serializers.ModelSerializer):
     step_number = serializers.IntegerField(source='step.step_number', read_only=True)
     step_title = serializers.CharField(source='step.title', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = AssemblyStepRecord
         fields = '__all__'
@@ -404,12 +401,12 @@ class AssemblySessionSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     step_records = AssemblyStepRecordSerializer(many=True, read_only=True)
     progress_rate = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = AssemblySession
         fields = '__all__'
         read_only_fields = ['session_no']
-    
+
     def get_progress_rate(self, obj):
         if obj.guide.total_steps > 0:
             return round(obj.completed_steps / obj.guide.total_steps * 100, 1)
@@ -426,12 +423,12 @@ class AssemblyGuideViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
     permission_classes = [IsAuthenticated]
     filterset_fields = ['product', 'status', 'difficulty_level', 'is_current']
     search_fields = ['guide_code', 'name']
-    
+
     def get_serializer_class(self):
         if self.action == 'list':
             return AssemblyGuideListSerializer
         return AssemblyGuideSerializer
-    
+
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         """批准指导书"""
@@ -440,14 +437,14 @@ class AssemblyGuideViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         guide.save()
         guide.update_step_count()
         return Response(AssemblyGuideSerializer(guide).data)
-    
+
     @action(detail=True, methods=['post'])
     def create_version(self, request, pk=None):
         """创建新版本"""
         original = self.get_object()
-        
+
         new_version = f"{float(original.version) + 0.1:.1f}"
-        
+
         new_guide = AssemblyGuide.objects.create(
             guide_code=f"{original.guide_code}_V{new_version}",
             name=original.name,
@@ -462,11 +459,11 @@ class AssemblyGuideViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
             description=original.description,
             created_by=request.user
         )
-        
+
         # 设置原版本为非当前
         original.is_current = False
         original.save()
-        
+
         # 复制步骤
         for step in original.steps.filter(is_deleted=False):
             new_step = AssemblyStep.objects.create(
@@ -487,7 +484,7 @@ class AssemblyGuideViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                 tips=step.tips,
                 created_by=request.user
             )
-            
+
             # 复制零件
             for sp in step.step_parts.filter(is_deleted=False):
                 AssemblyStepPart.objects.create(
@@ -499,9 +496,9 @@ class AssemblyGuideViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
                     notes=sp.notes,
                     created_by=request.user
                 )
-        
+
         new_guide.update_step_count()
-        
+
         return Response(AssemblyGuideSerializer(new_guide).data)
 
 
@@ -511,11 +508,11 @@ class AssemblyStepViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
     serializer_class = AssemblyStepSerializer
     permission_classes = [IsAuthenticated]
     filterset_fields = ['guide', 'is_checkpoint']
-    
+
     def perform_create(self, serializer):
         instance = serializer.save(created_by=self.request.user)
         instance.guide.update_step_count()
-    
+
     def perform_update(self, serializer):
         instance = serializer.save(updated_by=self.request.user)
         instance.guide.update_step_count()
@@ -528,13 +525,13 @@ class AssemblySessionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
     permission_classes = [IsAuthenticated]
     filterset_fields = ['guide', 'operator', 'status', 'production_order']
     ordering_fields = ['started_at', 'actual_time_minutes']
-    
+
     @action(detail=True, methods=['post'])
     def start_step(self, request, pk=None):
         """开始步骤"""
         session = self.get_object()
         step_id = request.data.get('step_id')
-        
+
         record, created = AssemblyStepRecord.objects.get_or_create(
             session=session,
             step_id=step_id,
@@ -544,46 +541,46 @@ class AssemblySessionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
                 'created_by': request.user
             }
         )
-        
+
         if not created:
             record.started_at = timezone.now()
             record.status = 'IN_PROGRESS'
             record.save()
-        
+
         return Response(AssemblyStepRecordSerializer(record).data)
-    
+
     @action(detail=True, methods=['post'])
     def complete_step(self, request, pk=None):
         """完成步骤"""
         session = self.get_object()
         step_id = request.data.get('step_id')
-        
+
         try:
             record = AssemblyStepRecord.objects.get(session=session, step_id=step_id)
         except AssemblyStepRecord.DoesNotExist:
             return Response({'error': '步骤记录不存在'}, status=404)
-        
+
         record.completed_at = timezone.now()
         record.status = 'COMPLETED'
         record.checkpoint_passed = request.data.get('checkpoint_passed')
         record.checkpoint_results = request.data.get('checkpoint_results', {})
         record.issues = request.data.get('issues', '')
         record.save()
-        
+
         # 更新作业进度
         session.completed_steps = session.step_records.filter(status='COMPLETED').count()
         session.current_step = record.step.step_number + 1
         session.actual_time_minutes = session.step_records.aggregate(
             total=Sum('duration_minutes')
         )['total'] or 0
-        
+
         if record.issues:
             session.issues_found += 1
-        
+
         session.save()
-        
+
         return Response(AssemblyStepRecordSerializer(record).data)
-    
+
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
         """完成作业"""
@@ -592,7 +589,7 @@ class AssemblySessionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
         session.completed_at = timezone.now()
         session.save()
         return Response(AssemblySessionSerializer(session).data)
-    
+
     @action(detail=True, methods=['post'])
     def pause(self, request, pk=None):
         """暂停作业"""
@@ -600,7 +597,7 @@ class AssemblySessionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelV
         session.status = 'PAUSED'
         session.save()
         return Response(AssemblySessionSerializer(session).data)
-    
+
     @action(detail=True, methods=['post'])
     def resume(self, request, pk=None):
         """恢复作业"""

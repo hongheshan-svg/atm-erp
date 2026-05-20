@@ -3,19 +3,19 @@
 Project Progress Alert
 监控项目进度，自动预警延期风险
 """
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
-from django.db import models
-from django.db.models import Sum, Avg, Count, F, Q
-from django.utils import timezone
-from rest_framework import viewsets, serializers, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.views import APIView
 
-from apps.core.models import BaseModel
+from django.db import models
+from django.db.models import Count, Sum
+from django.utils import timezone
+from rest_framework import serializers, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.models import BaseModel
 
 
 class ProjectAlertRule(BaseModel):
@@ -29,13 +29,13 @@ class ProjectAlertRule(BaseModel):
         ('TASK', '任务预警'),
         ('RESOURCE', '资源预警'),
     ]
-    
+
     SEVERITY_LEVELS = [
         ('INFO', '提示'),
         ('WARNING', '警告'),
         ('CRITICAL', '严重'),
     ]
-    
+
     name = models.CharField(max_length=100, verbose_name='规则名称')
     alert_type = models.CharField(
         max_length=20,
@@ -48,28 +48,28 @@ class ProjectAlertRule(BaseModel):
         default='WARNING',
         verbose_name='严重程度'
     )
-    
+
     # 规则条件
     condition = models.JSONField(
         default=dict,
         verbose_name='条件配置',
         help_text='{"field": "progress_gap", "operator": ">", "value": 10}'
     )
-    
+
     # 通知设置
     notify_roles = models.JSONField(default=list, blank=True, verbose_name='通知角色')
     notify_users = models.JSONField(default=list, blank=True, verbose_name='通知用户')
     notify_pm = models.BooleanField(default=True, verbose_name='通知项目经理')
-    
+
     is_active = models.BooleanField(default=True, verbose_name='启用')
     description = models.TextField(blank=True, verbose_name='描述')
-    
+
     class Meta:
         db_table = 'project_alert_rule'
         verbose_name = '预警规则'
         verbose_name_plural = verbose_name
         ordering = ['alert_type', 'severity']
-    
+
     def __str__(self):
         return self.name
 
@@ -84,7 +84,7 @@ class ProjectAlert(BaseModel):
         ('RESOLVED', '已解决'),
         ('IGNORED', '已忽略'),
     ]
-    
+
     project = models.ForeignKey(
         'projects.Project',
         on_delete=models.CASCADE,
@@ -99,22 +99,22 @@ class ProjectAlert(BaseModel):
         related_name='alerts',
         verbose_name='预警规则'
     )
-    
+
     alert_type = models.CharField(max_length=20, verbose_name='预警类型')
     severity = models.CharField(max_length=20, verbose_name='严重程度')
     title = models.CharField(max_length=200, verbose_name='预警标题')
     description = models.TextField(verbose_name='预警描述')
-    
+
     # 预警数据
     alert_data = models.JSONField(default=dict, blank=True, verbose_name='预警数据')
-    
+
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
         default='ACTIVE',
         verbose_name='状态'
     )
-    
+
     # 处理
     acknowledged_by = models.ForeignKey(
         'accounts.User',
@@ -127,27 +127,27 @@ class ProjectAlert(BaseModel):
     acknowledged_at = models.DateTimeField(null=True, blank=True, verbose_name='确认时间')
     resolved_at = models.DateTimeField(null=True, blank=True, verbose_name='解决时间')
     resolution = models.TextField(blank=True, verbose_name='解决方案')
-    
+
     class Meta:
         db_table = 'project_alert'
         verbose_name = '项目预警'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f'{self.project.name} - {self.title}'
 
 
 class AlertService:
     """预警服务"""
-    
+
     @staticmethod
     def check_project_alerts(project=None):
         """检查项目预警"""
         from apps.projects.models import Project, ProjectTask
-        
+
         alerts_created = []
-        
+
         # 获取需要检查的项目
         if project:
             projects = [project]
@@ -156,13 +156,13 @@ class AlertService:
                 status__in=['PLANNING', 'IN_PROGRESS'],
                 is_deleted=False
             )
-        
+
         for proj in projects:
             # 1. 进度预警：实际进度落后计划进度
             expected_progress = AlertService._calculate_expected_progress(proj)
             actual_progress = proj.progress or 0
             progress_gap = expected_progress - actual_progress
-            
+
             if progress_gap > 10:  # 落后超过10%
                 alert = AlertService._create_alert(
                     project=proj,
@@ -178,12 +178,12 @@ class AlertService:
                 )
                 if alert:
                     alerts_created.append(alert)
-            
+
             # 2. 时间预警：距离截止日期不足
             if proj.end_date:
                 days_remaining = (proj.end_date - date.today()).days
                 remaining_work = 100 - actual_progress
-                
+
                 if days_remaining > 0 and remaining_work > 0:
                     # 按当前进度预估能否按时完成
                     if proj.start_date:
@@ -207,7 +207,7 @@ class AlertService:
                                     )
                                     if alert:
                                         alerts_created.append(alert)
-                
+
                 # 即将到期预警
                 if 0 < days_remaining <= 7 and actual_progress < 90:
                     alert = AlertService._create_alert(
@@ -223,7 +223,7 @@ class AlertService:
                     )
                     if alert:
                         alerts_created.append(alert)
-            
+
             # 3. 任务预警：逾期任务
             overdue_tasks = ProjectTask.objects.filter(
                 project=proj,
@@ -231,7 +231,7 @@ class AlertService:
                 end_date__lt=date.today(),
                 is_deleted=False
             ).count()
-            
+
             if overdue_tasks > 0:
                 alert = AlertService._create_alert(
                     project=proj,
@@ -243,12 +243,12 @@ class AlertService:
                 )
                 if alert:
                     alerts_created.append(alert)
-            
+
             # 4. 预算预警（如果有预算数据）
             if hasattr(proj, 'budget') and proj.budget and proj.budget > 0:
                 # 获取实际成本
                 actual_cost = Decimal('0')
-                
+
                 # 从财务模块获取成本（如果存在）
                 try:
                     from apps.finance.models import Expense
@@ -259,10 +259,10 @@ class AlertService:
                     ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
                 except:
                     pass
-                
+
                 if actual_cost > 0:
                     budget_usage = float(actual_cost / proj.budget * 100)
-                    
+
                     if budget_usage > 90:
                         alert = AlertService._create_alert(
                             project=proj,
@@ -278,24 +278,24 @@ class AlertService:
                         )
                         if alert:
                             alerts_created.append(alert)
-        
+
         return alerts_created
-    
+
     @staticmethod
     def _calculate_expected_progress(project):
         """计算项目预期进度"""
         if not project.start_date or not project.end_date:
             return 0
-        
+
         total_days = (project.end_date - project.start_date).days
         elapsed_days = (date.today() - project.start_date).days
-        
+
         if total_days <= 0:
             return 100
-        
+
         expected = min(elapsed_days / total_days * 100, 100)
         return max(expected, 0)
-    
+
     @staticmethod
     def _create_alert(project, alert_type, severity, title, description, alert_data):
         """创建预警记录（避免重复）"""
@@ -306,10 +306,10 @@ class AlertService:
             status='ACTIVE',
             title=title
         ).exists()
-        
+
         if existing:
             return None
-        
+
         return ProjectAlert.objects.create(
             project=project,
             alert_type=alert_type,
@@ -327,7 +327,7 @@ class AlertService:
 class ProjectAlertRuleSerializer(serializers.ModelSerializer):
     alert_type_display = serializers.CharField(source='get_alert_type_display', read_only=True)
     severity_display = serializers.CharField(source='get_severity_display', read_only=True)
-    
+
     class Meta:
         model = ProjectAlertRule
         fields = '__all__'
@@ -340,7 +340,7 @@ class ProjectAlertSerializer(serializers.ModelSerializer):
     rule_name = serializers.CharField(source='rule.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     acknowledged_by_name = serializers.CharField(source='acknowledged_by.get_full_name', read_only=True)
-    
+
     class Meta:
         model = ProjectAlert
         fields = '__all__'
@@ -351,7 +351,7 @@ class ProjectAlertListSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(source='project.name', read_only=True)
     project_code = serializers.CharField(source='project.code', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = ProjectAlert
         fields = [
@@ -371,7 +371,7 @@ class ProjectAlertRuleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
     serializer_class = ProjectAlertRuleSerializer
     permission_classes = [IsAuthenticated]
     filterset_fields = ['alert_type', 'severity', 'is_active']
-    
+
     @action(detail=False, methods=['post'])
     def init_rules(self, request):
         """初始化默认规则"""
@@ -382,7 +382,7 @@ class ProjectAlertRuleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
             ('预算超支预警', 'BUDGET', 'WARNING', {'field': 'budget_usage', 'operator': '>', 'value': 90}),
             ('任务逾期预警', 'TASK', 'WARNING', {'field': 'overdue_tasks', 'operator': '>', 'value': 0}),
         ]
-        
+
         created = 0
         for name, alert_type, severity, condition in rules:
             _, c = ProjectAlertRule.objects.get_or_create(
@@ -396,7 +396,7 @@ class ProjectAlertRuleViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
             )
             if c:
                 created += 1
-        
+
         return Response({'success': True, 'created': created})
 
 
@@ -407,12 +407,12 @@ class ProjectAlertViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
     filterset_fields = ['project', 'alert_type', 'severity', 'status']
     search_fields = ['title', 'description', 'project__name']
     ordering_fields = ['created_at', 'severity']
-    
+
     def get_serializer_class(self):
         if self.action == 'list':
             return ProjectAlertListSerializer
         return ProjectAlertSerializer
-    
+
     @action(detail=False, methods=['post'])
     def check_all(self, request):
         """检查所有项目预警"""
@@ -422,57 +422,57 @@ class ProjectAlertViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelView
             'alerts_created': len(alerts),
             'alerts': ProjectAlertListSerializer(alerts, many=True).data
         })
-    
+
     @action(detail=True, methods=['post'])
     def acknowledge(self, request, pk=None):
         """确认预警"""
         alert = self.get_object()
-        
+
         alert.status = 'ACKNOWLEDGED'
         alert.acknowledged_by = request.user
         alert.acknowledged_at = timezone.now()
         alert.save()
-        
+
         return Response(self.get_serializer(alert).data)
-    
+
     @action(detail=True, methods=['post'])
     def resolve(self, request, pk=None):
         """解决预警"""
         alert = self.get_object()
-        
+
         alert.status = 'RESOLVED'
         alert.resolved_at = timezone.now()
         alert.resolution = request.data.get('resolution', '')
         alert.save()
-        
+
         return Response(self.get_serializer(alert).data)
-    
+
     @action(detail=True, methods=['post'])
     def ignore(self, request, pk=None):
         """忽略预警"""
         alert = self.get_object()
-        
+
         alert.status = 'IGNORED'
         alert.resolution = request.data.get('reason', '已忽略')
         alert.save()
-        
+
         return Response(self.get_serializer(alert).data)
-    
+
     @action(detail=False, methods=['get'])
     def active(self, request):
         """获取活跃预警"""
         alerts = self.get_queryset().filter(status='ACTIVE')
         return Response(ProjectAlertListSerializer(alerts, many=True).data)
-    
+
     @action(detail=False, methods=['get'])
     def summary(self, request):
         """预警汇总"""
         qs = self.get_queryset().filter(status='ACTIVE')
-        
+
         by_type = qs.values('alert_type').annotate(count=Count('id'))
         by_severity = qs.values('severity').annotate(count=Count('id'))
         by_project = qs.values('project__id', 'project__name').annotate(count=Count('id')).order_by('-count')[:10]
-        
+
         return Response({
             'total_active': qs.count(),
             'by_type': list(by_type),

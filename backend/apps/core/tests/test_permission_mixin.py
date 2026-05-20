@@ -1,13 +1,14 @@
 """
 Tests for PermissionMixin
 """
-from django.test import TestCase
 from django.contrib.auth import get_user_model
+from django.test import TestCase
+from rest_framework import serializers, viewsets
 from rest_framework.test import APIRequestFactory
-from rest_framework import viewsets, serializers
+
+from apps.accounts.models import Role
 from apps.core.permission_mixin import PermissionMixin
 from apps.core.permission_models_new import Permission, RolePermission
-from apps.accounts.models import Role
 from apps.projects.models import Project
 
 User = get_user_model()

@@ -3,19 +3,18 @@
 Contract Template Management
 支持销售合同、采购合同等多种合同模板配置和生成
 """
-import os
 from datetime import datetime
 from decimal import Decimal
-from django.db import models
-from django.conf import settings
-from django.template import Template, Context
-from rest_framework import viewsets, serializers, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 
-from apps.core.models import BaseModel
+from django.db import models
+from django.template import Context, Template
+from rest_framework import serializers, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.models import BaseModel
 
 
 class ContractTemplate(BaseModel):
@@ -32,13 +31,13 @@ class ContractTemplate(BaseModel):
         ('MAINTENANCE', '维保合同'),
         ('OTHER', '其他'),
     ]
-    
+
     TEMPLATE_FORMATS = [
         ('WORD', 'Word文档'),
         ('HTML', 'HTML模板'),
         ('PDF', 'PDF模板'),
     ]
-    
+
     code = models.CharField(max_length=50, unique=True, verbose_name='模板编码')
     name = models.CharField(max_length=200, verbose_name='模板名称')
     contract_type = models.CharField(
@@ -60,7 +59,7 @@ class ContractTemplate(BaseModel):
         verbose_name='模板文件'
     )
     html_content = models.TextField(blank=True, verbose_name='HTML模板内容')
-    
+
     # 合同条款配置
     party_a_config = models.JSONField(
         default=dict,
@@ -87,28 +86,28 @@ class ContractTemplate(BaseModel):
         blank=True,
         verbose_name='质保条款'
     )
-    
+
     # 可用变量
     available_variables = models.JSONField(
         default=list,
         blank=True,
         verbose_name='可用变量列表'
     )
-    
+
     is_default = models.BooleanField(default=False, verbose_name='默认模板')
     is_enabled = models.BooleanField(default=True, verbose_name='是否启用')
     version = models.CharField(max_length=20, default='1.0', verbose_name='版本号')
     description = models.TextField(blank=True, verbose_name='模板说明')
-    
+
     class Meta:
         db_table = 'sales_contract_template'
         verbose_name = '合同模板'
         verbose_name_plural = verbose_name
         ordering = ['contract_type', 'code']
-    
+
     def __str__(self):
         return f'{self.code} - {self.name}'
-    
+
     def save(self, *args, **kwargs):
         if self.is_default:
             ContractTemplate.objects.filter(
@@ -133,7 +132,7 @@ class ContractClause(BaseModel):
         ('DISPUTE', '争议解决'),
         ('OTHER', '其他'),
     ]
-    
+
     code = models.CharField(max_length=50, unique=True, verbose_name='条款编码')
     name = models.CharField(max_length=200, verbose_name='条款名称')
     clause_type = models.CharField(
@@ -152,13 +151,13 @@ class ContractClause(BaseModel):
         verbose_name='适用合同类型',
         help_text='留空表示适用所有类型'
     )
-    
+
     class Meta:
         db_table = 'sales_contract_clause'
         verbose_name = '合同条款'
         verbose_name_plural = verbose_name
         ordering = ['clause_type', 'sort_order']
-    
+
     def __str__(self):
         return f'{self.code} - {self.name}'
 
@@ -176,7 +175,7 @@ class GeneratedContract(BaseModel):
         ('EXPIRED', '已过期'),
         ('TERMINATED', '已终止'),
     ]
-    
+
     template = models.ForeignKey(
         ContractTemplate,
         on_delete=models.SET_NULL,
@@ -191,7 +190,7 @@ class GeneratedContract(BaseModel):
         choices=ContractTemplate.CONTRACT_TYPES,
         verbose_name='合同类型'
     )
-    
+
     # 甲方信息
     party_a_name = models.CharField(max_length=200, verbose_name='甲方名称')
     party_a_address = models.CharField(max_length=500, blank=True, verbose_name='甲方地址')
@@ -199,7 +198,7 @@ class GeneratedContract(BaseModel):
     party_a_phone = models.CharField(max_length=50, blank=True, verbose_name='甲方电话')
     party_a_bank = models.CharField(max_length=200, blank=True, verbose_name='甲方开户行')
     party_a_account = models.CharField(max_length=100, blank=True, verbose_name='甲方账号')
-    
+
     # 乙方信息
     party_b_name = models.CharField(max_length=200, verbose_name='乙方名称')
     party_b_address = models.CharField(max_length=500, blank=True, verbose_name='乙方地址')
@@ -207,7 +206,7 @@ class GeneratedContract(BaseModel):
     party_b_phone = models.CharField(max_length=50, blank=True, verbose_name='乙方电话')
     party_b_bank = models.CharField(max_length=200, blank=True, verbose_name='乙方开户行')
     party_b_account = models.CharField(max_length=100, blank=True, verbose_name='乙方账号')
-    
+
     # 合同金额
     total_amount = models.DecimalField(
         max_digits=18,
@@ -222,12 +221,12 @@ class GeneratedContract(BaseModel):
         default=13,
         verbose_name='税率(%)'
     )
-    
+
     # 日期
     sign_date = models.DateField(null=True, blank=True, verbose_name='签订日期')
     effective_date = models.DateField(null=True, blank=True, verbose_name='生效日期')
     expiry_date = models.DateField(null=True, blank=True, verbose_name='到期日期')
-    
+
     # 状态
     status = models.CharField(
         max_length=20,
@@ -235,7 +234,7 @@ class GeneratedContract(BaseModel):
         default='DRAFT',
         verbose_name='状态'
     )
-    
+
     # 内容
     contract_content = models.TextField(blank=True, verbose_name='合同内容')
     selected_clauses = models.JSONField(
@@ -244,7 +243,7 @@ class GeneratedContract(BaseModel):
         verbose_name='选用条款'
     )
     custom_terms = models.TextField(blank=True, verbose_name='自定义条款')
-    
+
     # 附件
     generated_file = models.FileField(
         upload_to='contracts/generated/',
@@ -258,7 +257,7 @@ class GeneratedContract(BaseModel):
         null=True,
         verbose_name='签署的文件'
     )
-    
+
     # 关联
     project = models.ForeignKey(
         'projects.Project',
@@ -276,13 +275,13 @@ class GeneratedContract(BaseModel):
         related_name='contracts_generated',
         verbose_name='关联销售订单'
     )
-    
+
     class Meta:
         db_table = 'sales_generated_contract'
         verbose_name = '生成的合同'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f'{self.contract_no} - {self.contract_name}'
 
@@ -293,17 +292,17 @@ class GeneratedContract(BaseModel):
 
 class ContractGenerationService:
     """合同生成服务"""
-    
+
     def __init__(self, template: ContractTemplate):
         self.template = template
-    
+
     def generate_html(self, contract_data: dict) -> str:
         """生成HTML合同"""
         if self.template.html_content:
             tpl = Template(self.template.html_content)
         else:
             tpl = Template(self._get_default_html_template())
-        
+
         # 获取适用的条款
         clauses = ContractClause.objects.filter(
             is_enabled=True,
@@ -312,7 +311,7 @@ class ContractGenerationService:
             models.Q(applicable_types=[]) |
             models.Q(applicable_types__contains=[self.template.contract_type])
         ).order_by('clause_type', 'sort_order')
-        
+
         # 分组条款
         grouped_clauses = {}
         for clause in clauses:
@@ -320,7 +319,7 @@ class ContractGenerationService:
             if clause_type not in grouped_clauses:
                 grouped_clauses[clause_type] = []
             grouped_clauses[clause_type].append(clause)
-        
+
         context = Context({
             'contract': contract_data,
             'template': self.template,
@@ -331,9 +330,9 @@ class ContractGenerationService:
             'payment_terms': self.template.payment_terms or [],
             'warranty_terms': self.template.warranty_terms or {},
         })
-        
+
         return tpl.render(context)
-    
+
     def _get_default_html_template(self) -> str:
         return """
 <!DOCTYPE html>
@@ -492,7 +491,7 @@ class ContractGenerationService:
 class ContractTemplateSerializer(serializers.ModelSerializer):
     contract_type_display = serializers.CharField(source='get_contract_type_display', read_only=True)
     format_display = serializers.CharField(source='get_format_display', read_only=True)
-    
+
     class Meta:
         model = ContractTemplate
         fields = '__all__'
@@ -502,7 +501,7 @@ class ContractTemplateSerializer(serializers.ModelSerializer):
 class ContractTemplateListSerializer(serializers.ModelSerializer):
     contract_type_display = serializers.CharField(source='get_contract_type_display', read_only=True)
     format_display = serializers.CharField(source='get_format_display', read_only=True)
-    
+
     class Meta:
         model = ContractTemplate
         fields = [
@@ -513,7 +512,7 @@ class ContractTemplateListSerializer(serializers.ModelSerializer):
 
 class ContractClauseSerializer(serializers.ModelSerializer):
     clause_type_display = serializers.CharField(source='get_clause_type_display', read_only=True)
-    
+
     class Meta:
         model = ContractClause
         fields = '__all__'
@@ -524,7 +523,7 @@ class GeneratedContractSerializer(serializers.ModelSerializer):
     template_name = serializers.CharField(source='template.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     contract_type_display = serializers.CharField(source='get_contract_type_display', read_only=True)
-    
+
     class Meta:
         model = GeneratedContract
         fields = '__all__'
@@ -534,7 +533,7 @@ class GeneratedContractSerializer(serializers.ModelSerializer):
 class GeneratedContractListSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     contract_type_display = serializers.CharField(source='get_contract_type_display', read_only=True)
-    
+
     class Meta:
         model = GeneratedContract
         fields = [
@@ -555,12 +554,12 @@ class ContractTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
     filterset_fields = ['contract_type', 'format', 'is_default', 'is_enabled']
     search_fields = ['code', 'name', 'description']
     ordering_fields = ['contract_type', 'code', 'created_at']
-    
+
     def get_serializer_class(self):
         if self.action == 'list':
             return ContractTemplateListSerializer
         return ContractTemplateSerializer
-    
+
     @action(detail=False, methods=['get'])
     def contract_types(self, request):
         """获取合同类型"""
@@ -568,7 +567,7 @@ class ContractTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
             {'value': t[0], 'label': t[1]}
             for t in ContractTemplate.CONTRACT_TYPES
         ])
-    
+
     @action(detail=True, methods=['post'])
     def set_default(self, request, pk=None):
         """设为默认模板"""
@@ -576,12 +575,12 @@ class ContractTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
         instance.is_default = True
         instance.save()
         return Response(self.get_serializer(instance).data)
-    
+
     @action(detail=True, methods=['post'])
     def preview(self, request, pk=None):
         """预览模板"""
         template = self.get_object()
-        
+
         sample_data = {
             'contract_no': 'HT-2025-SAMPLE',
             'contract_name': '非标自动化设备采购合同',
@@ -598,18 +597,18 @@ class ContractTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
             'project_name': '自动化装配线',
             'delivery_days': 45,
         }
-        
+
         service = ContractGenerationService(template)
         html_content = service.generate_html(sample_data)
-        
+
         return Response({'html_content': html_content})
-    
+
     @action(detail=False, methods=['post'])
     def generate(self, request):
         """生成合同"""
         data = request.data
         template_id = data.get('template_id')
-        
+
         if template_id:
             try:
                 template = ContractTemplate.objects.get(id=template_id, is_enabled=True, is_deleted=False)
@@ -623,7 +622,7 @@ class ContractTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
                 is_enabled=True,
                 is_deleted=False
             ).first()
-            
+
             if not template:
                 template = ContractTemplate.objects.create(
                     code=f'DEFAULT_{contract_type}',
@@ -640,7 +639,7 @@ class ContractTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
                     },
                     created_by=request.user
                 )
-        
+
         contract_data = {
             'contract_no': data.get('contract_no'),
             'contract_name': data.get('contract_name'),
@@ -657,10 +656,10 @@ class ContractTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
             'delivery_days': data.get('delivery_days', 45),
             'custom_terms': data.get('custom_terms', ''),
         }
-        
+
         service = ContractGenerationService(template)
         html_content = service.generate_html(contract_data)
-        
+
         # 保存生成的合同
         contract = GeneratedContract.objects.create(
             template=template,
@@ -680,7 +679,7 @@ class ContractTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
             custom_terms=contract_data.get('custom_terms', ''),
             created_by=request.user
         )
-        
+
         return Response({
             'success': True,
             'contract_id': contract.id,
@@ -696,7 +695,7 @@ class ContractClauseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
     filterset_fields = ['clause_type', 'is_required', 'is_enabled']
     search_fields = ['code', 'name', 'content']
     ordering_fields = ['clause_type', 'sort_order', 'code']
-    
+
     @action(detail=False, methods=['get'])
     def clause_types(self, request):
         """获取条款类型"""
@@ -704,19 +703,19 @@ class ContractClauseViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
             {'value': t[0], 'label': t[1]}
             for t in ContractClause.CLAUSE_TYPES
         ])
-    
+
     @action(detail=False, methods=['get'])
     def by_contract_type(self, request):
         """根据合同类型获取适用条款"""
         contract_type = request.query_params.get('contract_type')
-        
+
         queryset = self.get_queryset().filter(is_enabled=True)
         if contract_type:
             queryset = queryset.filter(
                 models.Q(applicable_types=[]) |
                 models.Q(applicable_types__contains=[contract_type])
             )
-        
+
         return Response(self.get_serializer(queryset, many=True).data)
 
 
@@ -727,49 +726,49 @@ class GeneratedContractViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
     filterset_fields = ['contract_type', 'status']
     search_fields = ['contract_no', 'contract_name', 'party_a_name', 'party_b_name']
     ordering_fields = ['created_at', 'sign_date', 'total_amount']
-    
+
     def get_serializer_class(self):
         if self.action == 'list':
             return GeneratedContractListSerializer
         return GeneratedContractSerializer
-    
+
     @action(detail=True, methods=['post'])
     def update_status(self, request, pk=None):
         """更新合同状态"""
         contract = self.get_object()
         new_status = request.data.get('status')
-        
+
         if new_status not in dict(GeneratedContract.STATUS_CHOICES):
             return Response({'error': '无效的状态'}, status=400)
-        
+
         contract.status = new_status
-        
+
         if new_status == 'SIGNED' and not contract.sign_date:
             contract.sign_date = datetime.now().date()
-        
+
         contract.save()
         return Response(self.get_serializer(contract).data)
-    
+
     @action(detail=False, methods=['get'])
     def statistics(self, request):
         """合同统计"""
         from django.db.models import Count, Sum
         from django.db.models.functions import TruncMonth
-        
+
         qs = self.get_queryset()
-        
+
         # 按状态统计
         by_status = qs.values('status').annotate(
             count=Count('id'),
             total=Sum('total_amount')
         )
-        
+
         # 按类型统计
         by_type = qs.values('contract_type').annotate(
             count=Count('id'),
             total=Sum('total_amount')
         )
-        
+
         # 按月统计
         by_month = qs.annotate(
             month=TruncMonth('created_at')
@@ -777,7 +776,7 @@ class GeneratedContractViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
             count=Count('id'),
             total=Sum('total_amount')
         ).order_by('month')
-        
+
         return Response({
             'total_count': qs.count(),
             'total_amount': qs.aggregate(Sum('total_amount'))['total_amount__sum'] or 0,

@@ -1,8 +1,9 @@
-from django.test import TestCase
-from django.db import IntegrityError
 from django.core.exceptions import ValidationError
-from apps.core.permission_models_new import Permission, RolePermission, DataScope
-from apps.accounts.models import Role, Department
+from django.db import IntegrityError
+from django.test import TestCase
+
+from apps.accounts.models import Department, Role
+from apps.core.permission_models_new import DataScope, Permission, RolePermission
 
 
 class PermissionModelTest(TestCase):

@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import Expense, AccountReceivable, AccountPayable
+
+from .models import AccountPayable, AccountReceivable, Expense
 
 
 @admin.register(Expense)

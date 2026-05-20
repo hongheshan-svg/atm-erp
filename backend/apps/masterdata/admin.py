@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import ItemCategory, Item, Customer, Supplier, Warehouse
+
+from .models import Customer, Item, ItemCategory, Supplier, Warehouse
 
 
 @admin.register(ItemCategory)

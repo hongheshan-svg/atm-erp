@@ -3,12 +3,14 @@ Permission service functions for checking user permissions.
 
 Provides caching and wildcard support for permission checks.
 """
-from typing import Set, Tuple, List
-from django.core.cache import cache
+from typing import List, Set, Tuple
+
 from django.contrib.auth import get_user_model
-from django.db.models import QuerySet, Q
-from apps.core.permission_models_new import Permission, RolePermission, DataScope
+from django.core.cache import cache
+from django.db.models import Q, QuerySet
+
 from apps.accounts.models import Department
+from apps.core.permission_models_new import DataScope, Permission
 
 User = get_user_model()
 

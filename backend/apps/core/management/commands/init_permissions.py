@@ -3,6 +3,7 @@
 幂等操作：按 code 创建或更新权限节点
 """
 from django.core.management.base import BaseCommand
+
 from apps.core.permission_models_new import Permission
 
 

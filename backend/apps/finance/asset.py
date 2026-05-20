@@ -3,18 +3,18 @@
 Fixed Asset Management
 ERP财务管理功能
 """
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
-from django.db import models
-from django.db.models import Sum, Count, Avg, F, Q
-from django.utils import timezone
-from rest_framework import viewsets, serializers, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 
-from apps.core.models import BaseModel
+from django.db import models
+from django.db.models import Count, Sum
+from rest_framework import serializers, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.models import BaseModel
 from apps.core.permission_mixin import PermissionMixin
 
 
@@ -30,7 +30,7 @@ class AssetCategory(BaseModel):
         related_name='children',
         verbose_name='上级分类'
     )
-    
+
     # 折旧配置
     depreciation_method = models.CharField(
         max_length=20,
@@ -49,15 +49,15 @@ class AssetCategory(BaseModel):
         default=5,
         verbose_name='残值率(%)'
     )
-    
+
     description = models.TextField(blank=True, verbose_name='描述')
-    
+
     class Meta:
         db_table = 'erp_asset_category'
         verbose_name = '资产分类'
         verbose_name_plural = verbose_name
         ordering = ['code']
-    
+
     def __str__(self):
         return f'{self.code} - {self.name}'
 
@@ -71,10 +71,10 @@ class FixedAsset(BaseModel):
         ('SCRAPPED', '已报废'),
         ('SOLD', '已变卖'),
     ]
-    
+
     asset_no = models.CharField(max_length=50, unique=True, verbose_name='资产编号')
     name = models.CharField(max_length=200, verbose_name='资产名称')
-    
+
     category = models.ForeignKey(
         AssetCategory,
         on_delete=models.SET_NULL,
@@ -83,12 +83,12 @@ class FixedAsset(BaseModel):
         related_name='assets',
         verbose_name='资产分类'
     )
-    
+
     # 规格信息
     model = models.CharField(max_length=100, blank=True, verbose_name='规格型号')
     manufacturer = models.CharField(max_length=100, blank=True, verbose_name='制造商')
     serial_no = models.CharField(max_length=100, blank=True, verbose_name='出厂编号')
-    
+
     # 财务信息
     purchase_date = models.DateField(null=True, blank=True, verbose_name='购置日期')
     purchase_price = models.DecimalField(
@@ -121,7 +121,7 @@ class FixedAsset(BaseModel):
         default=0,
         verbose_name='残值'
     )
-    
+
     # 折旧信息
     depreciation_method = models.CharField(
         max_length=20,
@@ -141,7 +141,7 @@ class FixedAsset(BaseModel):
         default=0,
         verbose_name='月折旧额'
     )
-    
+
     # 使用信息
     status = models.CharField(
         max_length=20,
@@ -166,7 +166,7 @@ class FixedAsset(BaseModel):
         related_name='custodian_assets',
         verbose_name='保管人'
     )
-    
+
     # 供应商
     supplier = models.ForeignKey(
         'masterdata.Supplier',
@@ -176,7 +176,7 @@ class FixedAsset(BaseModel):
         related_name='supplied_assets',
         verbose_name='供应商'
     )
-    
+
     # 关联项目
     project = models.ForeignKey(
         'projects.Project',
@@ -186,7 +186,7 @@ class FixedAsset(BaseModel):
         related_name='assets',
         verbose_name='项目'
     )
-    
+
     warranty_end_date = models.DateField(null=True, blank=True, verbose_name='保修到期')
     disposal_date = models.DateField(null=True, blank=True, verbose_name='处置日期')
     disposal_value = models.DecimalField(
@@ -196,34 +196,34 @@ class FixedAsset(BaseModel):
         blank=True,
         verbose_name='处置金额'
     )
-    
+
     remarks = models.TextField(blank=True, verbose_name='备注')
     attachments = models.JSONField(default=list, blank=True, verbose_name='附件')
-    
+
     class Meta:
         db_table = 'erp_fixed_asset'
         verbose_name = '固定资产'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f'{self.asset_no} - {self.name}'
-    
+
     def save(self, *args, **kwargs):
         if not self.asset_no:
             from apps.core.utils import generate_code
             self.asset_no = generate_code('FA')
-        
+
         # 计算净值
         self.net_value = self.original_value - self.accumulated_depreciation
-        
+
         # 计算月折旧额
         if self.useful_life_months > 0 and self.original_value > 0:
             depreciable_value = self.original_value - self.residual_value
             self.monthly_depreciation = depreciable_value / self.useful_life_months
-        
+
         super().save(*args, **kwargs)
-    
+
     def calculate_depreciation(self, year, month):
         """计算指定月份的折旧额"""
         if self.depreciation_method == 'STRAIGHT':
@@ -244,25 +244,25 @@ class AssetDepreciation(BaseModel):
         related_name='depreciations',
         verbose_name='资产'
     )
-    
+
     year = models.IntegerField(verbose_name='年份')
     month = models.IntegerField(verbose_name='月份')
-    
+
     # 期初值
     opening_value = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='期初净值')
-    
+
     # 折旧
     depreciation_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='折旧金额')
-    
+
     # 期末值
     closing_value = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='期末净值')
-    
+
     # 累计
     accumulated_depreciation = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='累计折旧')
-    
+
     is_posted = models.BooleanField(default=False, verbose_name='已过账')
     posted_at = models.DateTimeField(null=True, blank=True, verbose_name='过账时间')
-    
+
     class Meta:
         db_table = 'erp_asset_depreciation'
         verbose_name = '资产折旧'
@@ -279,9 +279,9 @@ class AssetTransfer(BaseModel):
         related_name='transfers',
         verbose_name='资产'
     )
-    
+
     transfer_date = models.DateField(default=date.today, verbose_name='转移日期')
-    
+
     # 原信息
     from_department = models.ForeignKey(
         'accounts.Department',
@@ -300,7 +300,7 @@ class AssetTransfer(BaseModel):
         verbose_name='原保管人'
     )
     from_location = models.CharField(max_length=200, blank=True, verbose_name='原存放地点')
-    
+
     # 新信息
     to_department = models.ForeignKey(
         'accounts.Department',
@@ -319,9 +319,9 @@ class AssetTransfer(BaseModel):
         verbose_name='新保管人'
     )
     to_location = models.CharField(max_length=200, blank=True, verbose_name='新存放地点')
-    
+
     reason = models.TextField(blank=True, verbose_name='转移原因')
-    
+
     class Meta:
         db_table = 'erp_asset_transfer'
         verbose_name = '资产转移'
@@ -337,29 +337,29 @@ class AssetDisposal(BaseModel):
         ('DONATE', '捐赠'),
         ('LOSS', '损失'),
     ]
-    
+
     asset = models.ForeignKey(
         FixedAsset,
         on_delete=models.CASCADE,
         related_name='disposals',
         verbose_name='资产'
     )
-    
+
     disposal_type = models.CharField(
         max_length=20,
         choices=DISPOSAL_TYPES,
         verbose_name='处置类型'
     )
     disposal_date = models.DateField(default=date.today, verbose_name='处置日期')
-    
+
     # 金额
     disposal_value = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='处置收入')
     net_book_value = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='账面净值')
     gain_loss = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='处置损益')
-    
+
     reason = models.TextField(blank=True, verbose_name='处置原因')
     approval_no = models.CharField(max_length=50, blank=True, verbose_name='审批单号')
-    
+
     class Meta:
         db_table = 'erp_asset_disposal'
         verbose_name = '资产处置'
@@ -373,7 +373,7 @@ class AssetDisposal(BaseModel):
 
 class AssetCategorySerializer(serializers.ModelSerializer):
     depreciation_method_display = serializers.CharField(source='get_depreciation_method_display', read_only=True)
-    
+
     class Meta:
         model = AssetCategory
         fields = '__all__'
@@ -382,7 +382,7 @@ class AssetCategorySerializer(serializers.ModelSerializer):
 
 class AssetDepreciationSerializer(serializers.ModelSerializer):
     asset_name = serializers.CharField(source='asset.name', read_only=True)
-    
+
     class Meta:
         model = AssetDepreciation
         fields = '__all__'
@@ -393,7 +393,7 @@ class AssetTransferSerializer(serializers.ModelSerializer):
     asset_name = serializers.CharField(source='asset.name', read_only=True)
     from_department_name = serializers.CharField(source='from_department.name', read_only=True)
     to_department_name = serializers.CharField(source='to_department.name', read_only=True)
-    
+
     class Meta:
         model = AssetTransfer
         fields = '__all__'
@@ -403,7 +403,7 @@ class AssetTransferSerializer(serializers.ModelSerializer):
 class AssetDisposalSerializer(serializers.ModelSerializer):
     asset_name = serializers.CharField(source='asset.name', read_only=True)
     disposal_type_display = serializers.CharField(source='get_disposal_type_display', read_only=True)
-    
+
     class Meta:
         model = AssetDisposal
         fields = '__all__'
@@ -419,7 +419,7 @@ class FixedAssetSerializer(serializers.ModelSerializer):
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
     depreciations = AssetDepreciationSerializer(many=True, read_only=True)
     transfers = AssetTransferSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = FixedAsset
         fields = '__all__'
@@ -431,7 +431,7 @@ class FixedAssetListSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     department_name = serializers.CharField(source='department.name', read_only=True)
     custodian_name = serializers.CharField(source='custodian.get_full_name', read_only=True)
-    
+
     class Meta:
         model = FixedAsset
         fields = [
@@ -461,7 +461,7 @@ class AssetCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
     def tree(self, request):
         """获取分类树形结构"""
         categories = self.get_queryset().filter(parent__isnull=True)
-        
+
         def build_tree(category):
             node = {
                 'id': category.id,
@@ -473,7 +473,7 @@ class AssetCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
             for child in children:
                 node['children'].append(build_tree(child))
             return node
-        
+
         tree = [build_tree(cat) for cat in categories]
         return Response(tree)
 
@@ -488,17 +488,17 @@ class FixedAssetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
     filterset_fields = ['status', 'category', 'department', 'custodian']
     search_fields = ['asset_no', 'name', 'model', 'serial_no']
     ordering_fields = ['created_at', 'purchase_date', 'original_value']
-    
+
     def get_serializer_class(self):
         if self.action == 'list':
             return FixedAssetListSerializer
         return FixedAssetSerializer
-    
+
     @action(detail=True, methods=['post'])
     def transfer(self, request, pk=None):
         """资产转移"""
         asset = self.get_object()
-        
+
         transfer = AssetTransfer.objects.create(
             asset=asset,
             from_department=asset.department,
@@ -510,20 +510,20 @@ class FixedAssetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
             reason=request.data.get('reason', ''),
             created_by=request.user
         )
-        
+
         # 更新资产信息
         asset.department_id = request.data.get('to_department')
         asset.custodian_id = request.data.get('to_custodian')
         asset.location = request.data.get('to_location', '')
         asset.save()
-        
+
         return Response(AssetTransferSerializer(transfer).data)
-    
+
     @action(detail=True, methods=['post'])
     def dispose(self, request, pk=None):
         """资产处置"""
         asset = self.get_object()
-        
+
         disposal = AssetDisposal.objects.create(
             asset=asset,
             disposal_type=request.data.get('disposal_type'),
@@ -534,34 +534,34 @@ class FixedAssetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
             approval_no=request.data.get('approval_no', ''),
             created_by=request.user
         )
-        
+
         # 更新资产状态
         asset.status = 'SCRAPPED' if request.data.get('disposal_type') == 'SCRAP' else 'SOLD'
         asset.disposal_date = date.today()
         asset.disposal_value = request.data.get('disposal_value', 0)
         asset.save()
-        
+
         return Response(AssetDisposalSerializer(disposal).data)
-    
+
     @action(detail=False, methods=['post'])
     def run_depreciation(self, request):
         """执行折旧计算"""
         year = request.data.get('year', date.today().year)
         month = request.data.get('month', date.today().month)
-        
+
         assets = self.get_queryset().filter(status='IN_USE')
         depreciated_count = 0
-        
+
         for asset in assets:
             if asset.start_depreciation_date and asset.start_depreciation_date <= date(year, month, 1):
                 # 检查是否已折旧
                 exists = AssetDepreciation.objects.filter(
                     asset=asset, year=year, month=month
                 ).exists()
-                
+
                 if not exists:
                     depreciation_amount = asset.calculate_depreciation(year, month)
-                    
+
                     AssetDepreciation.objects.create(
                         asset=asset,
                         year=year,
@@ -572,43 +572,43 @@ class FixedAssetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                         accumulated_depreciation=asset.accumulated_depreciation + depreciation_amount,
                         created_by=request.user
                     )
-                    
+
                     # 更新资产累计折旧
                     asset.accumulated_depreciation += depreciation_amount
                     asset.save()
-                    
+
                     depreciated_count += 1
-        
+
         return Response({
             'success': True,
             'year': year,
             'month': month,
             'depreciated_count': depreciated_count
         })
-    
+
     @action(detail=False, methods=['get'])
     def statistics(self, request):
         """资产统计"""
         qs = self.get_queryset()
-        
+
         by_status = qs.values('status').annotate(
             count=Count('id'),
             total_value=Sum('original_value'),
             net_value=Sum('net_value')
         )
-        
+
         by_category = qs.values('category__name').annotate(
             count=Count('id'),
             total_value=Sum('original_value')
         )
-        
+
         total = qs.aggregate(
             count=Count('id'),
             total_original=Sum('original_value'),
             total_depreciation=Sum('accumulated_depreciation'),
             total_net=Sum('net_value')
         )
-        
+
         return Response({
             'total': total,
             'by_status': list(by_status),
@@ -621,7 +621,7 @@ class FixedAssetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
         items = request.data.get('items', [])
         if not items:
             return Response({'detail': '盘点项目不能为空'}, status=400)
-        
+
         results = []
         for item in items:
             asset_id = item.get('asset_id')
@@ -636,7 +636,7 @@ class FixedAssetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                 results.append({'asset_id': asset_id, 'status': 'ok'})
             except FixedAsset.DoesNotExist:
                 results.append({'asset_id': asset_id, 'status': 'not_found'})
-        
+
         return Response({'success': True, 'results': results})
 
 class AssetDepreciationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
@@ -648,17 +648,17 @@ class AssetDepreciationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
     serializer_class = AssetDepreciationSerializer
     permission_classes = [IsAuthenticated]
     filterset_fields = ['asset', 'year', 'month', 'is_posted']
-    
+
     @action(detail=False, methods=['get'])
     def summary(self, request):
         """折旧汇总"""
         year = request.query_params.get('year', date.today().year)
-        
+
         summary = self.get_queryset().filter(year=year).values('month').annotate(
             total_depreciation=Sum('depreciation_amount'),
             asset_count=Count('asset', distinct=True)
         ).order_by('month')
-        
+
         return Response(list(summary))
 
 

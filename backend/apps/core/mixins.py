@@ -10,7 +10,7 @@ class UserTrackingMixin:
     """
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
-    
+
     def perform_update(self, serializer):
         serializer.save(updated_by=self.request.user)
 
@@ -22,7 +22,7 @@ class DataScopeMixin:
     """
     data_scope_field = 'created_by'  # Can be overridden in view
     module_name = None  # 模块名称，用于模块级权限控制
-    
+
     def get_queryset(self):
         queryset = super().get_queryset()
         # 自动检测模块名称（从app名称推断）
@@ -32,7 +32,7 @@ class DataScopeMixin:
             module = getattr(queryset.model, '_meta', None)
             if module:
                 module = module.app_label
-        
+
         return apply_data_scope_filter(
             queryset,
             self.request.user,
@@ -57,7 +57,7 @@ class SoftDeleteMixin:
             instance.save(update_fields=['is_deleted', 'deleted_at'])
         else:
             instance.delete()
-    
+
     def get_queryset(self):
         queryset = super().get_queryset()
         # 仍然过滤掉旧的软删除记录（向后兼容）

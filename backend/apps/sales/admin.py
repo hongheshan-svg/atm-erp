@@ -1,9 +1,6 @@
 from django.contrib import admin
-from .models import (
-    SalesQuotation, SalesQuotationLine,
-    SalesOrder, SalesOrderLine,
-    DeliveryOrder, DeliveryOrderLine
-)
+
+from .models import DeliveryOrder, DeliveryOrderLine, SalesOrder, SalesOrderLine, SalesQuotation, SalesQuotationLine
 
 
 class SalesQuotationLineInline(admin.TabularInline):

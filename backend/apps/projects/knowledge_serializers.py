@@ -2,21 +2,19 @@
 知识库序列化器
 """
 from rest_framework import serializers
-from .knowledge_models import (
-    KnowledgeCategory, KnowledgeArticle, ProjectArchive,
-    TechnicalIssue, StandardComponent
-)
+
+from .knowledge_models import KnowledgeArticle, KnowledgeCategory, ProjectArchive, StandardComponent, TechnicalIssue
 
 
 class KnowledgeCategorySerializer(serializers.ModelSerializer):
     """知识分类序列化器"""
     parent_name = serializers.CharField(source='parent.name', read_only=True)
     article_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = KnowledgeCategory
         fields = '__all__'
-    
+
     def get_article_count(self, obj):
         return obj.articles.filter(is_deleted=False, status='PUBLISHED').count()
 
@@ -24,11 +22,11 @@ class KnowledgeCategorySerializer(serializers.ModelSerializer):
 class KnowledgeCategoryTreeSerializer(serializers.ModelSerializer):
     """知识分类树形序列化器"""
     children = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = KnowledgeCategory
         fields = ['id', 'code', 'name', 'description', 'icon', 'sort_order', 'children']
-    
+
     def get_children(self, obj):
         children = obj.children.filter(is_deleted=False).order_by('sort_order', 'code')
         return KnowledgeCategoryTreeSerializer(children, many=True).data
@@ -41,7 +39,7 @@ class KnowledgeArticleSerializer(serializers.ModelSerializer):
     author_name = serializers.CharField(source='author.name', read_only=True)
     article_type_display = serializers.CharField(source='get_article_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = KnowledgeArticle
         fields = '__all__'
@@ -52,7 +50,7 @@ class KnowledgeArticleListSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     author_name = serializers.CharField(source='author.name', read_only=True)
     article_type_display = serializers.CharField(source='get_article_type_display', read_only=True)
-    
+
     class Meta:
         model = KnowledgeArticle
         fields = [
@@ -70,14 +68,14 @@ class ProjectArchiveSerializer(serializers.ModelSerializer):
     reviewer_name = serializers.CharField(source='reviewer.name', read_only=True)
     cost_variance_amount = serializers.SerializerMethodField()
     schedule_variance_days = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = ProjectArchive
         fields = '__all__'
-    
+
     def get_cost_variance_amount(self, obj):
         return float(obj.actual_cost - obj.budget_amount)
-    
+
     def get_schedule_variance_days(self, obj):
         if obj.original_end and obj.actual_end:
             return (obj.actual_end - obj.original_end).days
@@ -92,7 +90,7 @@ class TechnicalIssueSerializer(serializers.ModelSerializer):
     resolved_by_name = serializers.CharField(source='resolved_by.name', read_only=True)
     severity_display = serializers.CharField(source='get_severity_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = TechnicalIssue
         fields = '__all__'
@@ -104,7 +102,7 @@ class TechnicalIssueListSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     severity_display = serializers.CharField(source='get_severity_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = TechnicalIssue
         fields = [
@@ -119,7 +117,7 @@ class StandardComponentSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     maintainer_name = serializers.CharField(source='maintainer.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = StandardComponent
         fields = '__all__'
@@ -130,7 +128,7 @@ class StandardComponentListSerializer(serializers.ModelSerializer):
     """标准部件列表序列化器（简化）"""
     category_name = serializers.CharField(source='category.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = StandardComponent
         fields = [

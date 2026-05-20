@@ -1,11 +1,13 @@
 """
 Serializers for accounts app.
 """
-from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
-from apps.core.permission_models_new import Permission, DataScope
+from rest_framework import serializers
+
+from apps.core.permission_models_new import DataScope, Permission
 from apps.core.permission_service import normalize_scope_type, on_role_permission_change
-from .models import User, Role, Department
+
+from .models import Department, Role, User
 
 
 class RoleDataScopeConfigSerializer(serializers.Serializer):
@@ -23,7 +25,7 @@ class DepartmentSerializer(serializers.ModelSerializer):
     """Department serializer."""
     parent_name = serializers.CharField(source='parent.name', read_only=True)
     manager_name = serializers.SerializerMethodField()
-    
+
     def get_manager_name(self, obj):
         if obj.manager:
             # 中文姓名：姓在前，名在后
@@ -31,7 +33,7 @@ class DepartmentSerializer(serializers.ModelSerializer):
                 return f"{obj.manager.last_name}{obj.manager.first_name}"
             return obj.manager.username
         return ''
-    
+
     class Meta:
         model = Department
         fields = [
@@ -39,7 +41,7 @@ class DepartmentSerializer(serializers.ModelSerializer):
             'description', 'sort_order', 'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['code', 'created_at', 'updated_at']
-    
+
     def create(self, validated_data):
         import uuid
         # 自动生成部门编码
@@ -173,7 +175,7 @@ class UserSerializer(serializers.ModelSerializer):
     """User serializer for list and retrieve."""
     department_name = serializers.CharField(source='department.name', read_only=True)
     role_name = serializers.CharField(source='role.name', read_only=True)
-    
+
     class Meta:
         model = User
         fields = [
@@ -193,7 +195,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
     """User serializer for creation."""
     password = serializers.CharField(write_only=True, required=True, min_length=6)
     password_confirm = serializers.CharField(write_only=True, required=True)
-    
+
     class Meta:
         model = User
         fields = [
@@ -208,12 +210,12 @@ class UserCreateSerializer(serializers.ModelSerializer):
             'last_name': {'required': False, 'allow_blank': True},
             'phone': {'required': False, 'allow_blank': True},
         }
-    
+
     def validate(self, attrs):
         if attrs['password'] != attrs['password_confirm']:
             raise serializers.ValidationError({"password_confirm": "两次密码不一致"})
         return attrs
-    
+
     def create(self, validated_data):
         validated_data.pop('password_confirm')
         # 如果 employee_id 为空，自动生成一个
@@ -228,7 +230,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
 class UserUpdateSerializer(serializers.ModelSerializer):
     """User serializer for update."""
-    
+
     class Meta:
         model = User
         fields = [
@@ -243,7 +245,7 @@ class ChangePasswordSerializer(serializers.Serializer):
     old_password = serializers.CharField(required=True)
     new_password = serializers.CharField(required=True, validators=[validate_password])
     new_password_confirm = serializers.CharField(required=True)
-    
+
     def validate(self, attrs):
         if attrs['new_password'] != attrs['new_password_confirm']:
             raise serializers.ValidationError({"new_password": "两次密码不一致"})
@@ -281,9 +283,10 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     def get_menus(self, obj):
         """返回用户可访问的菜单树（支持三级分组）"""
+        from django.db.models import Q
+
         from apps.core.permission_models_new import Permission
         from apps.core.permission_service import get_user_permissions
-        from django.db.models import Q
 
         if obj.is_superuser:
             all_menus = list(Permission.active.filter(type='menu').order_by('sort_order'))

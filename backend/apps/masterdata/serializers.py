@@ -2,14 +2,15 @@
 Serializers for masterdata app.
 """
 from rest_framework import serializers
-from .models import ItemCategory, Item, Customer, Supplier, Warehouse, WarehouseLocation
+
+from .models import Customer, Item, ItemCategory, Supplier, Warehouse, WarehouseLocation
 
 
 class ItemCategorySerializer(serializers.ModelSerializer):
     """ItemCategory serializer."""
     parent_name = serializers.CharField(source='parent.name', read_only=True)
     item_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = ItemCategory
         fields = [
@@ -17,7 +18,7 @@ class ItemCategorySerializer(serializers.ModelSerializer):
             'sort_order', 'item_count', 'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
-    
+
     def get_item_count(self, obj):
         return obj.items.filter(is_deleted=False).count()
 
@@ -36,14 +37,14 @@ class ItemSerializer(serializers.ModelSerializer):
     unit_display = serializers.CharField(source='get_unit_display', read_only=True)
     tax_rate_display = serializers.SerializerMethodField()
     full_specification = serializers.CharField(read_only=True)
-    
+
     class Meta:
         model = Item
         fields = [
-            'id', 'sku', 'name', 'specification', 
+            'id', 'sku', 'name', 'specification',
             # 品牌型号
             'brand', 'model', 'manufacturer', 'origin_country',
-            'category', 'category_name', 'item_type', 'item_type_display', 
+            'category', 'category_name', 'item_type', 'item_type_display',
             'unit', 'unit_display',
             # ===== 非标自动化行业专用字段 =====
             'item_property', 'item_property_display',  # 物料属性(标准件/外购件/外协件/自制件)
@@ -78,7 +79,7 @@ class ItemSerializer(serializers.ModelSerializer):
             'extra_fields'
         ]
         read_only_fields = ['created_at', 'updated_at', 'full_specification']
-    
+
     def get_tax_rate_display(self, obj):
         return f"{obj.tax_rate}%"
 
@@ -87,7 +88,7 @@ class ItemSimpleSerializer(serializers.ModelSerializer):
     """Item简洁序列化器 - 用于下拉选择等场景"""
     item_property_display = serializers.CharField(source='get_item_property_display', read_only=True)
     unit_display = serializers.CharField(source='get_unit_display', read_only=True)
-    
+
     class Meta:
         model = Item
         fields = [
@@ -102,7 +103,7 @@ class CustomerSerializer(serializers.ModelSerializer):
     """Customer serializer."""
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     code = serializers.CharField(required=False, allow_blank=True)
-    
+
     class Meta:
         model = Customer
         fields = [
@@ -122,7 +123,7 @@ class SupplierSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     settlement_method_display = serializers.CharField(source='get_settlement_method_display', read_only=True)
     code = serializers.CharField(required=False, allow_blank=True)
-    
+
     class Meta:
         model = Supplier
         fields = [
@@ -142,7 +143,7 @@ class WarehouseSerializer(serializers.ModelSerializer):
     manager_name = serializers.CharField(source='manager.get_full_name', read_only=True)
     type_display = serializers.CharField(source='get_warehouse_type_display', read_only=True)
     location_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = Warehouse
         fields = [
@@ -151,7 +152,7 @@ class WarehouseSerializer(serializers.ModelSerializer):
             'is_deleted', 'created_at', 'updated_at', 'location_count'
         ]
         read_only_fields = ['created_at', 'updated_at']
-    
+
     def get_location_count(self, obj):
         return obj.locations.filter(is_deleted=False).count()
 
@@ -163,7 +164,7 @@ class WarehouseLocationSerializer(serializers.ModelSerializer):
     parent_name = serializers.CharField(source='parent.name', read_only=True)
     type_display = serializers.CharField(source='get_location_type_display', read_only=True)
     children_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = WarehouseLocation
         fields = [
@@ -174,7 +175,7 @@ class WarehouseLocationSerializer(serializers.ModelSerializer):
             'is_deleted', 'created_at', 'updated_at', 'children_count'
         ]
         read_only_fields = ['full_path', 'created_at', 'updated_at']
-    
+
     def get_children_count(self, obj):
         return obj.children.filter(is_deleted=False).count()
 
@@ -183,14 +184,14 @@ class WarehouseLocationTreeSerializer(serializers.ModelSerializer):
     """WarehouseLocation serializer with children for tree view."""
     type_display = serializers.CharField(source='get_location_type_display', read_only=True)
     children = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = WarehouseLocation
         fields = [
             'id', 'code', 'name', 'full_path', 'location_type', 'type_display',
             'is_active', 'children'
         ]
-    
+
     def get_children(self, obj):
         children = obj.children.filter(is_deleted=False).order_by('sort_order', 'code')
         return WarehouseLocationTreeSerializer(children, many=True).data

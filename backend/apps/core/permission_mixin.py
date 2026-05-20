@@ -14,12 +14,8 @@ Provides:
 - Sensitive field filtering (get_serializer)
 """
 from rest_framework.exceptions import PermissionDenied
-from apps.core.permission_service import (
-    has_permission,
-    resolve_data_scope,
-    apply_scope_filter,
-    get_hidden_fields
-)
+
+from apps.core.permission_service import apply_scope_filter, get_hidden_fields, has_permission, resolve_data_scope
 
 
 class PermissionMixin:

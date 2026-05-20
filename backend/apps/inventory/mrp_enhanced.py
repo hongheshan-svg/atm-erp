@@ -2,10 +2,11 @@
 Enhanced MRP with BOM Explosion
 """
 from decimal import Decimal
+
 from rest_framework import status
-from rest_framework.views import APIView
-from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 
 class MRPExplosionService:
@@ -13,8 +14,8 @@ class MRPExplosionService:
 
     @staticmethod
     def explode_bom(project_id):
-        from apps.projects.models import BOM
         from apps.inventory.models import Stock
+        from apps.projects.models import BOM
 
         requirements = []
         bom_items = BOM.objects.filter(

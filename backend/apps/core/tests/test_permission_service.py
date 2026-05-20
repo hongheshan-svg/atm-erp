@@ -2,18 +2,19 @@
 Tests for permission service functions.
 Following TDD: write tests first, then implement the service.
 """
-from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from apps.accounts.models import Role, Department
-from apps.core.permission_models_new import Permission, RolePermission, DataScope
+from django.test import TestCase
+
+from apps.accounts.models import Department, Role
+from apps.core.permission_models_new import DataScope, Permission, RolePermission
 from apps.core.permission_service import (
+    get_department_tree_ids,
     get_user_permissions,
     has_permission,
     on_role_permission_change,
     on_user_role_change,
     resolve_data_scope,
-    get_department_tree_ids,
 )
 
 User = get_user_model()

@@ -1,8 +1,9 @@
 """
 Django settings for ERP project.
 """
-from pathlib import Path
 from datetime import timedelta
+from pathlib import Path
+
 from decouple import config
 
 # Build paths inside the project
@@ -26,7 +27,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
+
     # Third party apps
     'rest_framework',
     'rest_framework_simplejwt',
@@ -37,7 +38,7 @@ INSTALLED_APPS = [
     'channels',
     'django_elasticsearch_dsl',
     'django_elasticsearch_dsl_drf',
-    
+
     # Local apps
     'apps.core',
     'apps.core.workflow',
@@ -242,7 +243,6 @@ SPECTACULAR_SETTINGS = {
 }
 
 # Logging
-import os
 LOG_DIR = BASE_DIR / 'logs'  # Use /app/logs in Docker
 try:
     if not LOG_DIR.exists():

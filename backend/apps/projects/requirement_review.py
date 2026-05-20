@@ -3,19 +3,20 @@
 Requirement Review
 需求评审流程、评审记录、评审结果管理
 """
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
-from django.db import models
-from django.db.models import Sum, Count, Q, Avg
-from django.utils import timezone
-from django.conf import settings
-from rest_framework import viewsets, serializers, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 
-from apps.core.models import BaseModel
+from django.conf import settings
+from django.db import models
+from django.db.models import Count, Sum
+from django.utils import timezone
+from rest_framework import serializers, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
+from apps.core.models import BaseModel
 
 
 class ReviewTemplate(BaseModel):
@@ -34,12 +35,12 @@ class ReviewTemplate(BaseModel):
         verbose_name='评审类型'
     )
     is_active = models.BooleanField(default=True, verbose_name='是否启用')
-    
+
     class Meta:
         db_table = 'plm_review_template'
         verbose_name = '评审模板'
         verbose_name_plural = verbose_name
-    
+
     def __str__(self):
         return self.name
 
@@ -57,17 +58,17 @@ class ReviewCheckItem(BaseModel):
     sort_order = models.IntegerField(default=0, verbose_name='排序')
     is_required = models.BooleanField(default=True, verbose_name='是否必填')
     weight = models.DecimalField(
-        max_digits=5, decimal_places=2, 
-        default=1.0, 
+        max_digits=5, decimal_places=2,
+        default=1.0,
         verbose_name='权重'
     )
-    
+
     class Meta:
         db_table = 'plm_review_check_item'
         verbose_name = '评审检查项'
         verbose_name_plural = verbose_name
         ordering = ['template', 'sort_order']
-    
+
     def __str__(self):
         return f"{self.template.name} - {self.name}"
 
@@ -81,17 +82,17 @@ class RequirementReview(BaseModel):
         ('COMPLETED', '已完成'),
         ('CANCELLED', '已取消'),
     ]
-    
+
     RESULT_CHOICES = [
         ('PENDING', '待定'),
         ('APPROVED', '通过'),
         ('CONDITIONAL', '有条件通过'),
         ('REJECTED', '不通过'),
     ]
-    
+
     review_no = models.CharField(max_length=50, unique=True, verbose_name='评审编号')
     title = models.CharField(max_length=200, verbose_name='评审标题')
-    
+
     # 关联需求
     requirement = models.ForeignKey(
         'projects.Requirement',
@@ -99,7 +100,7 @@ class RequirementReview(BaseModel):
         related_name='reviews',
         verbose_name='需求'
     )
-    
+
     # 评审模板
     template = models.ForeignKey(
         ReviewTemplate,
@@ -109,7 +110,7 @@ class RequirementReview(BaseModel):
         related_name='reviews',
         verbose_name='评审模板'
     )
-    
+
     # 评审安排
     scheduled_date = models.DateField(null=True, blank=True, verbose_name='计划日期')
     scheduled_time = models.TimeField(null=True, blank=True, verbose_name='计划时间')
@@ -119,7 +120,7 @@ class RequirementReview(BaseModel):
         null=True, blank=True,
         verbose_name='预计时长(小时)'
     )
-    
+
     # 评审组织者
     organizer = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -128,7 +129,7 @@ class RequirementReview(BaseModel):
         related_name='organized_req_reviews',
         verbose_name='组织者'
     )
-    
+
     # 状态和结果
     status = models.CharField(
         max_length=20,
@@ -142,53 +143,53 @@ class RequirementReview(BaseModel):
         default='PENDING',
         verbose_name='评审结果'
     )
-    
+
     # 实际评审信息
     actual_start_time = models.DateTimeField(null=True, blank=True, verbose_name='实际开始时间')
     actual_end_time = models.DateTimeField(null=True, blank=True, verbose_name='实际结束时间')
-    
+
     # 评审总结
     summary = models.TextField(blank=True, verbose_name='评审总结')
     issues_found = models.TextField(blank=True, verbose_name='发现的问题')
     action_items = models.TextField(blank=True, verbose_name='后续行动项')
-    
+
     # 评审得分
     total_score = models.DecimalField(
         max_digits=5, decimal_places=2,
         null=True, blank=True,
         verbose_name='总评分'
     )
-    
+
     # 附件
     attachments = models.JSONField(default=list, blank=True, verbose_name='附件')
-    
+
     class Meta:
         db_table = 'plm_requirement_review'
         verbose_name = '需求评审'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f"{self.review_no} - {self.title}"
-    
+
     def save(self, *args, **kwargs):
         if not self.review_no:
             from apps.core.utils import generate_code
             self.review_no = generate_code('RRV')
         super().save(*args, **kwargs)
-    
+
     def calculate_score(self):
         """计算评审总分"""
         results = self.item_results.filter(is_deleted=False)
         if not results.exists():
             return None
-        
+
         total_weight = results.aggregate(total=Sum('check_item__weight'))['total'] or 1
         weighted_score = sum(
-            r.score * float(r.check_item.weight) 
+            r.score * float(r.check_item.weight)
             for r in results if r.score is not None
         )
-        
+
         self.total_score = round(Decimal(weighted_score / float(total_weight)), 2)
         return self.total_score
 
@@ -201,7 +202,7 @@ class ReviewParticipant(BaseModel):
         ('OBSERVER', '观察员'),
         ('PRESENTER', '汇报人'),
     ]
-    
+
     review = models.ForeignKey(
         RequirementReview,
         on_delete=models.CASCADE,
@@ -223,13 +224,13 @@ class ReviewParticipant(BaseModel):
     is_required = models.BooleanField(default=True, verbose_name='是否必须参加')
     attended = models.BooleanField(default=False, verbose_name='是否出席')
     feedback = models.TextField(blank=True, verbose_name='反馈意见')
-    
+
     class Meta:
         db_table = 'plm_review_participant'
         verbose_name = '评审参与者'
         verbose_name_plural = verbose_name
         unique_together = ('review', 'user')
-    
+
     def __str__(self):
         return f"{self.review.review_no} - {self.user.username}"
 
@@ -265,13 +266,13 @@ class ReviewItemResult(BaseModel):
     )
     comment = models.TextField(blank=True, verbose_name='评审意见')
     issues = models.TextField(blank=True, verbose_name='发现问题')
-    
+
     class Meta:
         db_table = 'plm_review_item_result'
         verbose_name = '评审检查项结果'
         verbose_name_plural = verbose_name
         unique_together = ('review', 'check_item')
-    
+
     def __str__(self):
         return f"{self.review.review_no} - {self.check_item.name}"
 
@@ -284,7 +285,7 @@ class ReviewActionItem(BaseModel):
         ('COMPLETED', '已完成'),
         ('CANCELLED', '已取消'),
     ]
-    
+
     review = models.ForeignKey(
         RequirementReview,
         on_delete=models.CASCADE,
@@ -309,13 +310,13 @@ class ReviewActionItem(BaseModel):
     )
     completed_date = models.DateField(null=True, blank=True, verbose_name='完成日期')
     resolution = models.TextField(blank=True, verbose_name='解决方案')
-    
+
     class Meta:
         db_table = 'plm_review_action_item'
         verbose_name = '评审行动项'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f"{self.review.review_no} - {self.title}"
 
@@ -334,7 +335,7 @@ class ReviewCheckItemSerializer(serializers.ModelSerializer):
 class ReviewTemplateSerializer(serializers.ModelSerializer):
     check_items = ReviewCheckItemSerializer(many=True, read_only=True)
     type_display = serializers.CharField(source='get_review_type_display', read_only=True)
-    
+
     class Meta:
         model = ReviewTemplate
         fields = '__all__'
@@ -344,7 +345,7 @@ class ReviewTemplateSerializer(serializers.ModelSerializer):
 class ReviewParticipantSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.get_full_name', read_only=True)
     role_display = serializers.CharField(source='get_role_display', read_only=True)
-    
+
     class Meta:
         model = ReviewParticipant
         fields = '__all__'
@@ -354,7 +355,7 @@ class ReviewParticipantSerializer(serializers.ModelSerializer):
 class ReviewItemResultSerializer(serializers.ModelSerializer):
     check_item_name = serializers.CharField(source='check_item.name', read_only=True)
     result_display = serializers.CharField(source='get_result_display', read_only=True)
-    
+
     class Meta:
         model = ReviewItemResult
         fields = '__all__'
@@ -364,7 +365,7 @@ class ReviewItemResultSerializer(serializers.ModelSerializer):
 class ReviewActionItemSerializer(serializers.ModelSerializer):
     assignee_name = serializers.CharField(source='assignee.get_full_name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = ReviewActionItem
         fields = '__all__'
@@ -380,7 +381,7 @@ class RequirementReviewSerializer(serializers.ModelSerializer):
     participants = ReviewParticipantSerializer(many=True, read_only=True)
     item_results = ReviewItemResultSerializer(many=True, read_only=True)
     action_item_list = ReviewActionItemSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = RequirementReview
         fields = '__all__'
@@ -393,7 +394,7 @@ class RequirementReviewListSerializer(serializers.ModelSerializer):
     requirement_title = serializers.CharField(source='requirement.title', read_only=True)
     organizer_name = serializers.CharField(source='organizer.get_full_name', read_only=True)
     participant_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = RequirementReview
         fields = [
@@ -401,7 +402,7 @@ class RequirementReviewListSerializer(serializers.ModelSerializer):
             'scheduled_date', 'status', 'status_display', 'result', 'result_display',
             'organizer', 'organizer_name', 'total_score', 'participant_count', 'created_at'
         ]
-    
+
     def get_participant_count(self, obj):
         return obj.participants.count()
 
@@ -417,12 +418,12 @@ class ReviewTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
     permission_classes = [IsAuthenticated]
     filterset_fields = ['review_type', 'is_active']
     search_fields = ['name', 'code']
-    
+
     @action(detail=True, methods=['post'])
     def add_check_item(self, request, pk=None):
         """添加检查项"""
         template = self.get_object()
-        
+
         item = ReviewCheckItem.objects.create(
             template=template,
             name=request.data.get('name'),
@@ -432,7 +433,7 @@ class ReviewTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
             weight=request.data.get('weight', 1.0),
             created_by=request.user
         )
-        
+
         return Response(ReviewCheckItemSerializer(item).data, status=status.HTTP_201_CREATED)
 
 
@@ -443,17 +444,17 @@ class RequirementReviewViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
     filterset_fields = ['requirement', 'status', 'result', 'organizer', 'template']
     search_fields = ['review_no', 'title']
     ordering_fields = ['scheduled_date', 'created_at']
-    
+
     def get_serializer_class(self):
         if self.action == 'list':
             return RequirementReviewListSerializer
         return RequirementReviewSerializer
-    
+
     @action(detail=True, methods=['post'])
     def add_participant(self, request, pk=None):
         """添加参与者"""
         review = self.get_object()
-        
+
         participant, created = ReviewParticipant.objects.get_or_create(
             review=review,
             user_id=request.data.get('user_id'),
@@ -463,57 +464,57 @@ class RequirementReviewViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
                 'created_by': request.user
             }
         )
-        
+
         return Response(ReviewParticipantSerializer(participant).data)
-    
+
     @action(detail=True, methods=['post'])
     def start_review(self, request, pk=None):
         """开始评审"""
         review = self.get_object()
         if review.status not in ['DRAFT', 'SCHEDULED']:
             return Response({'error': '只有草稿或已安排的评审可以开始'}, status=400)
-        
+
         review.status = 'IN_PROGRESS'
         review.actual_start_time = timezone.now()
         review.save()
-        
+
         # 将需求状态改为评审中
         review.requirement.status = 'REVIEWING'
         review.requirement.save()
-        
+
         return Response(self.get_serializer(review).data)
-    
+
     @action(detail=True, methods=['post'])
     def complete_review(self, request, pk=None):
         """完成评审"""
         review = self.get_object()
         if review.status != 'IN_PROGRESS':
             return Response({'error': '只有进行中的评审可以完成'}, status=400)
-        
+
         review.status = 'COMPLETED'
         review.actual_end_time = timezone.now()
         review.result = request.data.get('result', 'APPROVED')
         review.summary = request.data.get('summary', '')
         review.issues_found = request.data.get('issues_found', '')
-        
+
         # 计算总分
         review.calculate_score()
         review.save()
-        
+
         # 更新需求状态
         if review.result == 'APPROVED':
             review.requirement.status = 'APPROVED'
         elif review.result == 'REJECTED':
             review.requirement.status = 'DRAFT'  # 退回草稿
         review.requirement.save()
-        
+
         return Response(self.get_serializer(review).data)
-    
+
     @action(detail=True, methods=['post'])
     def add_item_result(self, request, pk=None):
         """添加检查项结果"""
         review = self.get_object()
-        
+
         result, created = ReviewItemResult.objects.update_or_create(
             review=review,
             check_item_id=request.data.get('check_item_id'),
@@ -525,14 +526,14 @@ class RequirementReviewViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
                 'created_by': request.user
             }
         )
-        
+
         return Response(ReviewItemResultSerializer(result).data)
-    
+
     @action(detail=True, methods=['post'])
     def add_action_item(self, request, pk=None):
         """添加行动项"""
         review = self.get_object()
-        
+
         action_item = ReviewActionItem.objects.create(
             review=review,
             title=request.data.get('title'),
@@ -541,25 +542,25 @@ class RequirementReviewViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
             due_date=request.data.get('due_date'),
             created_by=request.user
         )
-        
+
         return Response(ReviewActionItemSerializer(action_item).data, status=status.HTTP_201_CREATED)
-    
+
     @action(detail=False, methods=['get'])
     def statistics(self, request):
         """评审统计"""
         qs = self.get_queryset()
-        
+
         total = qs.count()
         by_status = qs.values('status').annotate(count=Count('id'))
         by_result = qs.filter(status='COMPLETED').values('result').annotate(count=Count('id'))
-        
+
         # 平均评审时长
         completed = qs.filter(
             status='COMPLETED',
             actual_start_time__isnull=False,
             actual_end_time__isnull=False
         )
-        
+
         avg_duration = None
         if completed.exists():
             durations = [
@@ -567,11 +568,11 @@ class RequirementReviewViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mode
                 for r in completed
             ]
             avg_duration = round(sum(durations) / len(durations), 2)
-        
+
         # 本月评审数
         month_start = date.today().replace(day=1)
         this_month = qs.filter(created_at__date__gte=month_start).count()
-        
+
         return Response({
             'total': total,
             'this_month': this_month,
@@ -588,7 +589,7 @@ class ReviewActionItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
     permission_classes = [IsAuthenticated]
     filterset_fields = ['review', 'assignee', 'status']
     search_fields = ['title', 'description']
-    
+
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
         """完成行动项"""

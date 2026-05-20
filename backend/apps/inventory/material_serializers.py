@@ -1,12 +1,10 @@
 """
 生产领料/退料序列化器
 """
-from rest_framework import serializers
 from django.db import transaction
-from .material_models import (
-    MaterialRequisition, MaterialRequisitionLine,
-    MaterialReturn, MaterialReturnLine
-)
+from rest_framework import serializers
+
+from .material_models import MaterialRequisition, MaterialRequisitionLine, MaterialReturn, MaterialReturnLine
 
 
 class MaterialRequisitionLineSerializer(serializers.ModelSerializer):
@@ -21,7 +19,7 @@ class MaterialRequisitionLineSerializer(serializers.ModelSerializer):
     line_amount = serializers.DecimalField(
         max_digits=15, decimal_places=2, read_only=True
     )
-    
+
     class Meta:
         model = MaterialRequisitionLine
         fields = [
@@ -60,9 +58,9 @@ class MaterialRequisitionSerializer(serializers.ModelSerializer):
     issued_qty = serializers.DecimalField(
         max_digits=15, decimal_places=2, read_only=True
     )
-    
+
     lines = MaterialRequisitionLineSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = MaterialRequisition
         fields = [
@@ -80,24 +78,24 @@ class MaterialRequisitionSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'requisition_no', 'requestor', 'warehouse_operator', 'issue_date'
         ]
-    
+
     def get_requestor_name(self, obj):
         if obj.requestor:
             return f"{obj.requestor.last_name}{obj.requestor.first_name}" or obj.requestor.username
         return ''
-    
+
     def get_warehouse_operator_name(self, obj):
         if obj.warehouse_operator:
             return f"{obj.warehouse_operator.last_name}{obj.warehouse_operator.first_name}" or obj.warehouse_operator.username
         return ''
-    
+
     def create(self, validated_data):
         validated_data['requestor'] = self.context['request'].user
         lines_data = self.initial_data.get('lines', [])
-        
+
         with transaction.atomic():
             requisition = MaterialRequisition.objects.create(**validated_data)
-            
+
             for line_data in lines_data:
                 if line_data.get('item') and line_data.get('qty'):
                     MaterialRequisitionLine.objects.create(
@@ -107,7 +105,7 @@ class MaterialRequisitionSerializer(serializers.ModelSerializer):
                         notes=line_data.get('notes', ''),
                         created_by=self.context['request'].user
                     )
-            
+
             return requisition
 
 
@@ -130,7 +128,7 @@ class MaterialRequisitionListSerializer(serializers.ModelSerializer):
     )
     requestor_name = serializers.SerializerMethodField()
     line_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = MaterialRequisition
         fields = [
@@ -140,12 +138,12 @@ class MaterialRequisitionListSerializer(serializers.ModelSerializer):
             'requestor', 'requestor_name', 'request_date', 'required_date',
             'line_count', 'created_at'
         ]
-    
+
     def get_requestor_name(self, obj):
         if obj.requestor:
             return f"{obj.requestor.last_name}{obj.requestor.first_name}" or obj.requestor.username
         return ''
-    
+
     def get_line_count(self, obj):
         return obj.lines.count()
 
@@ -167,7 +165,7 @@ class MaterialReturnLineSerializer(serializers.ModelSerializer):
     line_amount = serializers.DecimalField(
         max_digits=15, decimal_places=2, read_only=True
     )
-    
+
     class Meta:
         model = MaterialReturnLine
         fields = [
@@ -209,9 +207,9 @@ class MaterialReturnSerializer(serializers.ModelSerializer):
     received_qty = serializers.DecimalField(
         max_digits=15, decimal_places=2, read_only=True
     )
-    
+
     lines = MaterialReturnLineSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = MaterialReturn
         fields = [
@@ -230,24 +228,24 @@ class MaterialReturnSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'return_no', 'requestor', 'warehouse_operator', 'receive_date'
         ]
-    
+
     def get_requestor_name(self, obj):
         if obj.requestor:
             return f"{obj.requestor.last_name}{obj.requestor.first_name}" or obj.requestor.username
         return ''
-    
+
     def get_warehouse_operator_name(self, obj):
         if obj.warehouse_operator:
             return f"{obj.warehouse_operator.last_name}{obj.warehouse_operator.first_name}" or obj.warehouse_operator.username
         return ''
-    
+
     def create(self, validated_data):
         validated_data['requestor'] = self.context['request'].user
         lines_data = self.initial_data.get('lines', [])
-        
+
         with transaction.atomic():
             material_return = MaterialReturn.objects.create(**validated_data)
-            
+
             for line_data in lines_data:
                 if line_data.get('item') and line_data.get('qty'):
                     MaterialReturnLine.objects.create(
@@ -258,7 +256,7 @@ class MaterialReturnSerializer(serializers.ModelSerializer):
                         notes=line_data.get('notes', ''),
                         created_by=self.context['request'].user
                     )
-            
+
             return material_return
 
 
@@ -284,7 +282,7 @@ class MaterialReturnListSerializer(serializers.ModelSerializer):
     )
     requestor_name = serializers.SerializerMethodField()
     line_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = MaterialReturn
         fields = [
@@ -295,12 +293,12 @@ class MaterialReturnListSerializer(serializers.ModelSerializer):
             'requestor', 'requestor_name', 'request_date',
             'line_count', 'created_at'
         ]
-    
+
     def get_requestor_name(self, obj):
         if obj.requestor:
             return f"{obj.requestor.last_name}{obj.requestor.first_name}" or obj.requestor.username
         return ''
-    
+
     def get_line_count(self, obj):
         return obj.lines.count()
 

@@ -2,7 +2,8 @@
 Workflow serializers.
 """
 from rest_framework import serializers
-from .models import WorkflowDefinition, WorkflowStep, WorkflowInstance, WorkflowTask
+
+from .models import WorkflowDefinition, WorkflowInstance, WorkflowStep, WorkflowTask
 
 
 class WorkflowStepSerializer(serializers.ModelSerializer):
@@ -13,7 +14,7 @@ class WorkflowStepSerializer(serializers.ModelSerializer):
     approver_role_name = serializers.CharField(source='approver_role.name', read_only=True)
     cc_users_detail = serializers.SerializerMethodField(read_only=True)
     cc_roles_detail = serializers.SerializerMethodField(read_only=True)
-    
+
     class Meta:
         model = WorkflowStep
         fields = [
@@ -26,13 +27,13 @@ class WorkflowStepSerializer(serializers.ModelSerializer):
             'cc_users', 'cc_users_detail', 'cc_roles', 'cc_roles_detail',
             'can_reject', 'created_at', 'updated_at'
         ]
-    
+
     def get_cc_users_detail(self, obj):
         return [
             {'id': u.id, 'name': u.get_full_name() or u.username}
             for u in obj.cc_users.all()
         ]
-    
+
     def get_cc_roles_detail(self, obj):
         return [
             {'id': r.id, 'name': r.name}
@@ -44,7 +45,7 @@ class WorkflowDefinitionSerializer(serializers.ModelSerializer):
     """Serializer for WorkflowDefinition."""
     business_type_display = serializers.CharField(source='get_business_type_display', read_only=True)
     steps = WorkflowStepSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = WorkflowDefinition
         fields = [
@@ -70,7 +71,7 @@ class WorkflowTaskSerializer(serializers.ModelSerializer):
     amount = serializers.DecimalField(
         source='instance.amount', max_digits=15, decimal_places=2, read_only=True
     )
-    
+
     class Meta:
         model = WorkflowTask
         fields = [
@@ -93,7 +94,7 @@ class WorkflowInstanceSerializer(serializers.ModelSerializer):
     submitter_name = serializers.CharField(source='submitter.get_full_name', read_only=True)
     tasks = WorkflowTaskSerializer(many=True, read_only=True)
     total_steps = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = WorkflowInstance
         fields = [
@@ -104,6 +105,6 @@ class WorkflowInstanceSerializer(serializers.ModelSerializer):
             'amount', 'completed_at', 'tasks',
             'created_at', 'updated_at'
         ]
-    
+
     def get_total_steps(self, obj):
         return obj.workflow.steps.filter(is_deleted=False).count()

@@ -2,20 +2,20 @@
 数据导入导出服务
 Data Import/Export Service
 """
-import io
 import csv
-import json
+import io
 from datetime import datetime
-from django.http import HttpResponse
+
 from django.db import transaction
+from django.http import HttpResponse
 from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
-from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
 
 class ExportService:
     """数据导出服务"""
-    
+
     @staticmethod
     def export_to_excel(data, columns, filename='export', sheet_name='Sheet1'):
         """
@@ -30,7 +30,7 @@ class ExportService:
         wb = Workbook()
         ws = wb.active
         ws.title = sheet_name
-        
+
         # 样式定义
         header_font = Font(bold=True, color="FFFFFF")
         header_fill = PatternFill(start_color="409EFF", end_color="409EFF", fill_type="solid")
@@ -41,7 +41,7 @@ class ExportService:
             top=Side(style='thin'),
             bottom=Side(style='thin')
         )
-        
+
         # 写入表头
         for col_idx, col in enumerate(columns, 1):
             cell = ws.cell(row=1, column=col_idx, value=col['title'])
@@ -49,36 +49,36 @@ class ExportService:
             cell.fill = header_fill
             cell.alignment = header_alignment
             cell.border = thin_border
-            
+
             # 设置列宽
             ws.column_dimensions[get_column_letter(col_idx)].width = col.get('width', 15)
-        
+
         # 写入数据
         for row_idx, row_data in enumerate(data, 2):
             for col_idx, col in enumerate(columns, 1):
                 field = col['field']
                 value = ExportService._get_nested_value(row_data, field)
-                
+
                 # 格式化日期
                 if isinstance(value, datetime):
                     value = value.strftime('%Y-%m-%d %H:%M:%S')
-                
+
                 cell = ws.cell(row=row_idx, column=col_idx, value=value)
                 cell.border = thin_border
                 cell.alignment = Alignment(vertical='center')
-        
+
         # 冻结首行
         ws.freeze_panes = 'A2'
-        
+
         # 生成响应
         response = HttpResponse(
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         response['Content-Disposition'] = f'attachment; filename="{filename}_{datetime.now().strftime("%Y%m%d%H%M%S")}.xlsx"'
-        
+
         wb.save(response)
         return response
-    
+
     @staticmethod
     def export_to_csv(data, columns, filename='export'):
         """
@@ -86,12 +86,12 @@ class ExportService:
         """
         response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
         response['Content-Disposition'] = f'attachment; filename="{filename}_{datetime.now().strftime("%Y%m%d%H%M%S")}.csv"'
-        
+
         writer = csv.writer(response)
-        
+
         # 写入表头
         writer.writerow([col['title'] for col in columns])
-        
+
         # 写入数据
         for row_data in data:
             row = []
@@ -101,9 +101,9 @@ class ExportService:
                     value = value.strftime('%Y-%m-%d %H:%M:%S')
                 row.append(value)
             writer.writerow(row)
-        
+
         return response
-    
+
     @staticmethod
     def _get_nested_value(data, field):
         """获取嵌套字段值"""
@@ -121,7 +121,7 @@ class ExportService:
 
 class ImportService:
     """数据导入服务"""
-    
+
     @staticmethod
     def parse_excel(file, column_mapping, start_row=2):
         """
@@ -135,7 +135,7 @@ class ImportService:
         try:
             wb = load_workbook(file, data_only=True)
             ws = wb.active
-            
+
             data = []
             for row_idx, row in enumerate(ws.iter_rows(min_row=start_row), start_row):
                 row_data = {}
@@ -144,16 +144,16 @@ class ImportService:
                     if col_idx <= len(row):
                         value = row[col_idx - 1].value
                         row_data[field] = value
-                
+
                 # 跳过空行
                 if any(row_data.values()):
                     row_data['_row'] = row_idx  # 记录行号用于错误提示
                     data.append(row_data)
-            
+
             return {'success': True, 'data': data}
         except Exception as e:
             return {'success': False, 'error': str(e)}
-    
+
     @staticmethod
     def parse_csv(file, column_mapping):
         """
@@ -175,23 +175,23 @@ class ImportService:
                     continue
             else:
                 return {'success': False, 'error': '无法识别文件编码'}
-            
+
             reader = csv.DictReader(io.StringIO(text))
-            
+
             data = []
             for row_idx, row in enumerate(reader, 2):
                 row_data = {}
                 for csv_col, field in column_mapping.items():
                     row_data[field] = row.get(csv_col, '')
-                
+
                 if any(row_data.values()):
                     row_data['_row'] = row_idx
                     data.append(row_data)
-            
+
             return {'success': True, 'data': data}
         except Exception as e:
             return {'success': False, 'error': str(e)}
-    
+
     @staticmethod
     def validate_data(data, validators):
         """
@@ -203,7 +203,7 @@ class ImportService:
         """
         valid_data = []
         errors = []
-        
+
         for row_data in data:
             row_errors = []
             for field, field_validators in validators.items():
@@ -217,14 +217,14 @@ class ImportService:
                             'message': result
                         })
                         break
-            
+
             if row_errors:
                 errors.extend(row_errors)
             else:
                 valid_data.append(row_data)
-        
+
         return {'valid': valid_data, 'errors': errors}
-    
+
     @staticmethod
     def import_data(model_class, data, field_mapping, user=None, batch_size=100):
         """
@@ -239,43 +239,43 @@ class ImportService:
         """
         created_count = 0
         errors = []
-        
+
         try:
             with transaction.atomic():
                 objects_to_create = []
-                
+
                 for row_data in data:
                     try:
                         obj_data = {}
                         for import_field, model_field in field_mapping.items():
                             if import_field in row_data:
                                 obj_data[model_field] = row_data[import_field]
-                        
+
                         if user:
                             obj_data['created_by'] = user
-                        
+
                         obj = model_class(**obj_data)
                         objects_to_create.append(obj)
-                        
+
                         if len(objects_to_create) >= batch_size:
                             model_class.objects.bulk_create(objects_to_create)
                             created_count += len(objects_to_create)
                             objects_to_create = []
-                    
+
                     except Exception as e:
                         errors.append({
                             'row': row_data.get('_row', 0),
                             'error': str(e)
                         })
-                
+
                 # 创建剩余对象
                 if objects_to_create:
                     model_class.objects.bulk_create(objects_to_create)
                     created_count += len(objects_to_create)
-        
+
         except Exception as e:
             return {'created': 0, 'errors': [{'error': str(e)}]}
-        
+
         return {'created': created_count, 'errors': errors}
 
 

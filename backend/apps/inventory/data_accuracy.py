@@ -11,21 +11,21 @@ Inventory Data Accuracy and Reconciliation Module
 - 数据修复建议
 - 定期对账任务
 """
-from decimal import Decimal, ROUND_HALF_UP
 from datetime import date, datetime, timedelta
-from django.db import models, transaction, connection
-from django.db.models import Sum, Count, Avg, F, Q, Case, When, Value, OuterRef, Subquery
+from decimal import Decimal
+
+from django.db import models
+from django.db.models import Count, Sum
 from django.db.models.functions import Coalesce, TruncDate
 from django.utils import timezone
-from rest_framework import viewsets, serializers, status
+from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
-from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.core.models import BaseModel
 from apps.core.mixins import SoftDeleteMixin
-
+from apps.core.models import BaseModel
 
 # =============================================================================
 # 数据校验规则模型
@@ -44,15 +44,15 @@ class DataValidationRule(BaseModel):
         ('DATE_SEQUENCE', '日期顺序'),
         ('CUSTOM', '自定义规则'),
     ]
-    
+
     code = models.CharField(max_length=50, unique=True, verbose_name='规则编码')
     name = models.CharField(max_length=200, verbose_name='规则名称')
     rule_type = models.CharField(max_length=30, choices=RULE_TYPE_CHOICES, verbose_name='规则类型')
-    
+
     description = models.TextField(verbose_name='规则描述')
     sql_expression = models.TextField(blank=True, verbose_name='SQL表达式')
     python_expression = models.TextField(blank=True, verbose_name='Python表达式')
-    
+
     severity = models.CharField(
         max_length=20,
         choices=[
@@ -64,10 +64,10 @@ class DataValidationRule(BaseModel):
         default='WARNING',
         verbose_name='严重级别'
     )
-    
+
     is_active = models.BooleanField(default=True, verbose_name='启用')
     auto_fix = models.BooleanField(default=False, verbose_name='支持自动修复')
-    
+
     check_frequency = models.CharField(
         max_length=20,
         choices=[
@@ -81,12 +81,12 @@ class DataValidationRule(BaseModel):
         default='DAILY',
         verbose_name='检查频率'
     )
-    
+
     class Meta:
         db_table = 'data_validation_rule'
         verbose_name = '数据校验规则'
         verbose_name_plural = verbose_name
-    
+
     def __str__(self):
         return f'{self.code} - {self.name}'
 
@@ -100,21 +100,21 @@ class DataValidationResult(BaseModel):
         ('IGNORED', '已忽略'),
         ('FALSE_POSITIVE', '误报'),
     ]
-    
+
     rule = models.ForeignKey(
         DataValidationRule,
         on_delete=models.CASCADE,
         related_name='results',
         verbose_name='校验规则'
     )
-    
+
     check_date = models.DateTimeField(auto_now_add=True, verbose_name='检查时间')
-    
+
     # 问题定位
     entity_type = models.CharField(max_length=50, verbose_name='实体类型')
     entity_id = models.IntegerField(null=True, blank=True, verbose_name='实体ID')
     entity_code = models.CharField(max_length=100, blank=True, verbose_name='实体编码')
-    
+
     warehouse = models.ForeignKey(
         'masterdata.Warehouse',
         on_delete=models.SET_NULL,
@@ -127,16 +127,16 @@ class DataValidationResult(BaseModel):
         null=True, blank=True,
         verbose_name='物料'
     )
-    
+
     # 问题详情
     issue_description = models.TextField(verbose_name='问题描述')
     expected_value = models.CharField(max_length=200, blank=True, verbose_name='期望值')
     actual_value = models.CharField(max_length=200, blank=True, verbose_name='实际值')
     variance = models.DecimalField(max_digits=18, decimal_places=4, null=True, blank=True, verbose_name='差异值')
-    
+
     # 处理状态
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name='状态')
-    
+
     # 处理信息
     handled_by = models.ForeignKey(
         'accounts.User',
@@ -147,11 +147,11 @@ class DataValidationResult(BaseModel):
     )
     handled_at = models.DateTimeField(null=True, blank=True, verbose_name='处理时间')
     resolution = models.TextField(blank=True, verbose_name='处理说明')
-    
+
     # 修复操作
     fix_action = models.TextField(blank=True, verbose_name='修复操作')
     fix_result = models.TextField(blank=True, verbose_name='修复结果')
-    
+
     class Meta:
         db_table = 'data_validation_result'
         verbose_name = '数据校验结果'
@@ -179,7 +179,7 @@ class ReconciliationSession(BaseModel):
         ],
         verbose_name='对账类型'
     )
-    
+
     # 对账范围
     warehouse = models.ForeignKey(
         'masterdata.Warehouse',
@@ -189,7 +189,7 @@ class ReconciliationSession(BaseModel):
     )
     start_date = models.DateField(verbose_name='开始日期')
     end_date = models.DateField(verbose_name='结束日期')
-    
+
     # 状态
     status = models.CharField(
         max_length=20,
@@ -202,18 +202,18 @@ class ReconciliationSession(BaseModel):
         default='DRAFT',
         verbose_name='状态'
     )
-    
+
     # 统计
     total_items_checked = models.IntegerField(default=0, verbose_name='检查物料数')
     issues_found = models.IntegerField(default=0, verbose_name='发现问题数')
     issues_resolved = models.IntegerField(default=0, verbose_name='已解决数')
-    
+
     # 结果
     summary = models.TextField(blank=True, verbose_name='对账总结')
-    
+
     started_at = models.DateTimeField(null=True, blank=True, verbose_name='开始时间')
     completed_at = models.DateTimeField(null=True, blank=True, verbose_name='完成时间')
-    
+
     class Meta:
         db_table = 'reconciliation_session'
         verbose_name = '对账会话'
@@ -229,7 +229,7 @@ class ReconciliationItem(BaseModel):
         related_name='items',
         verbose_name='对账会话'
     )
-    
+
     item = models.ForeignKey(
         'masterdata.Item',
         on_delete=models.CASCADE,
@@ -241,35 +241,35 @@ class ReconciliationItem(BaseModel):
         null=True, blank=True,
         verbose_name='仓库'
     )
-    
+
     # 期初数据
     opening_qty = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='期初数量')
     opening_cost = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='期初金额')
-    
+
     # 入库汇总
     in_qty = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='入库数量')
     in_cost = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='入库金额')
-    
+
     # 出库汇总
     out_qty = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='出库数量')
     out_cost = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='出库金额')
-    
+
     # 理论期末
     calculated_qty = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='计算数量')
     calculated_cost = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='计算金额')
-    
+
     # 实际期末（从库存表读取）
     actual_qty = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='实际数量')
     actual_cost = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='实际金额')
-    
+
     # 差异
     qty_variance = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='数量差异')
     cost_variance = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='金额差异')
-    
+
     # 状态
     is_matched = models.BooleanField(default=False, verbose_name='是否平衡')
     variance_reason = models.TextField(blank=True, verbose_name='差异原因')
-    
+
     class Meta:
         db_table = 'reconciliation_item'
         verbose_name = '对账明细'
@@ -283,18 +283,18 @@ class ReconciliationItem(BaseModel):
 
 class InventoryDataValidator:
     """库存数据校验服务"""
-    
+
     @classmethod
     def check_negative_stock(cls):
         """检查负库存"""
         from .models import Stock
-        
+
         results = []
         negative_stocks = Stock.objects.filter(
             qty_on_hand__lt=0,
             is_deleted=False
         ).select_related('item', 'warehouse')
-        
+
         for stock in negative_stocks:
             results.append({
                 'rule_type': 'STOCK_NEGATIVE',
@@ -308,22 +308,22 @@ class InventoryDataValidator:
                 'variance': stock.qty_on_hand,
                 'severity': 'ERROR',
             })
-        
+
         return results
-    
+
     @classmethod
     def check_stock_cost_mismatch(cls):
         """检查库存成本不匹配"""
-        from .models import Stock
         from .cost_accounting import ItemCostRecord
-        
+        from .models import Stock
+
         results = []
-        
+
         stocks = Stock.objects.filter(
             qty_on_hand__gt=0,
             is_deleted=False
         ).select_related('item', 'warehouse')
-        
+
         for stock in stocks:
             # 获取最新成本记录
             last_cost = ItemCostRecord.objects.filter(
@@ -331,7 +331,7 @@ class InventoryDataValidator:
                 warehouse=stock.warehouse,
                 is_deleted=False
             ).order_by('-created_at').first()
-            
+
             if last_cost:
                 if abs(stock.qty_on_hand - last_cost.balance_qty) > Decimal('0.0001'):
                     results.append({
@@ -346,34 +346,33 @@ class InventoryDataValidator:
                         'variance': stock.qty_on_hand - last_cost.balance_qty,
                         'severity': 'WARNING',
                     })
-        
+
         return results
-    
+
     @classmethod
     def check_in_out_balance(cls, warehouse_id=None, start_date=None, end_date=None):
         """检查进销存平衡"""
         from .models import Stock, StockMove
-        from .cost_accounting import PeriodCostSummary
-        
+
         results = []
-        
+
         # 获取期间汇总
         filters = {'is_deleted': False}
         if warehouse_id:
             filters['warehouse_id'] = warehouse_id
-        
+
         if not start_date:
             start_date = date.today().replace(day=1)
         if not end_date:
             end_date = date.today()
-        
+
         # 获取所有物料-仓库组合
         stocks = Stock.objects.filter(**filters).select_related('item', 'warehouse')
-        
+
         for stock in stocks:
             # 计算期初（假设从历史记录获取）
             opening_qty = Decimal('0')
-            
+
             # 计算本期入库
             in_moves = StockMove.objects.filter(
                 item=stock.item,
@@ -384,7 +383,7 @@ class InventoryDataValidator:
                 is_deleted=False
             ).aggregate(total=Sum('quantity'))
             in_qty = in_moves['total'] or Decimal('0')
-            
+
             # 计算本期出库
             out_moves = StockMove.objects.filter(
                 item=stock.item,
@@ -395,10 +394,10 @@ class InventoryDataValidator:
                 is_deleted=False
             ).aggregate(total=Sum('quantity'))
             out_qty = out_moves['total'] or Decimal('0')
-            
+
             # 计算理论期末
             calculated_qty = opening_qty + in_qty - out_qty
-            
+
             # 比较差异
             variance = stock.qty_on_hand - calculated_qty
             if abs(variance) > Decimal('0.0001'):
@@ -414,16 +413,16 @@ class InventoryDataValidator:
                     'variance': variance,
                     'severity': 'WARNING' if abs(variance) < 10 else 'ERROR',
                 })
-        
+
         return results
-    
+
     @classmethod
     def check_orphan_moves(cls):
         """检查孤立的库存移动记录"""
         from .models import StockMove
-        
+
         results = []
-        
+
         # 检查没有关联单据的移动记录
         orphan_moves = StockMove.objects.filter(
             reference_type='',
@@ -431,7 +430,7 @@ class InventoryDataValidator:
         ).exclude(
             move_type__in=['ADJUSTMENT', 'INITIAL']
         )
-        
+
         for move in orphan_moves:
             results.append({
                 'rule_type': 'ORPHAN_RECORD',
@@ -445,26 +444,26 @@ class InventoryDataValidator:
                 'actual_value': '无关联单据',
                 'severity': 'INFO',
             })
-        
+
         return results
-    
+
     @classmethod
     def run_all_checks(cls, warehouse_id=None):
         """运行所有校验"""
         all_results = []
-        
+
         # 负库存检查
         all_results.extend(cls.check_negative_stock())
-        
+
         # 成本不匹配检查
         all_results.extend(cls.check_stock_cost_mismatch())
-        
+
         # 进销存平衡检查
         all_results.extend(cls.check_in_out_balance(warehouse_id=warehouse_id))
-        
+
         # 孤立记录检查
         all_results.extend(cls.check_orphan_moves())
-        
+
         # 保存结果
         saved_count = 0
         for result in all_results:
@@ -472,7 +471,7 @@ class InventoryDataValidator:
                 rule_type=result['rule_type'],
                 is_active=True
             ).first()
-            
+
             if rule:
                 DataValidationResult.objects.create(
                     rule=rule,
@@ -487,7 +486,7 @@ class InventoryDataValidator:
                     variance=result.get('variance'),
                 )
                 saved_count += 1
-        
+
         return {
             'total_issues': len(all_results),
             'saved_count': saved_count,
@@ -497,14 +496,14 @@ class InventoryDataValidator:
 
 class ReconciliationService:
     """对账服务"""
-    
+
     @classmethod
     def create_session(cls, session_type, warehouse_id, start_date, end_date, user):
         """创建对账会话"""
         from apps.core.models import CodeRule
-        
+
         session_no = CodeRule.generate_code('RECONCILE')
-        
+
         session = ReconciliationSession.objects.create(
             session_no=session_no,
             session_type=session_type,
@@ -513,44 +512,44 @@ class ReconciliationService:
             end_date=end_date,
             created_by=user
         )
-        
+
         return session
-    
+
     @classmethod
     def run_in_out_balance_check(cls, session):
         """运行进销存平衡检查"""
-        from .models import Stock, StockMove
-        from .cost_accounting import ItemCostRecord, PeriodCostSummary
-        
+        from .cost_accounting import ItemCostRecord
+        from .models import Stock
+
         session.status = 'IN_PROGRESS'
         session.started_at = timezone.now()
         session.save()
-        
+
         # 获取需要检查的物料
         filters = {'is_deleted': False}
         if session.warehouse:
             filters['warehouse'] = session.warehouse
-        
+
         stocks = Stock.objects.filter(**filters).select_related('item', 'warehouse')
-        
+
         items_checked = 0
         issues_found = 0
-        
+
         for stock in stocks:
             # 计算期初
             # 从前一期的期末获取，或者从最早的成本记录反推
             prev_period = session.start_date - timedelta(days=1)
-            
+
             opening_record = ItemCostRecord.objects.filter(
                 item=stock.item,
                 warehouse=stock.warehouse,
                 transaction_date__lte=prev_period,
                 is_deleted=False
             ).order_by('-transaction_date', '-created_at').first()
-            
+
             opening_qty = opening_record.balance_qty if opening_record else Decimal('0')
             opening_cost = opening_record.balance_cost if opening_record else Decimal('0')
-            
+
             # 计算期间入库
             in_records = ItemCostRecord.objects.filter(
                 item=stock.item,
@@ -565,7 +564,7 @@ class ReconciliationService:
             )
             in_qty = in_records['qty']
             in_cost = in_records['cost']
-            
+
             # 计算期间出库
             out_records = ItemCostRecord.objects.filter(
                 item=stock.item,
@@ -580,21 +579,21 @@ class ReconciliationService:
             )
             out_qty = abs(out_records['qty'])
             out_cost = abs(out_records['cost'])
-            
+
             # 计算理论期末
             calculated_qty = opening_qty + in_qty - out_qty
             calculated_cost = opening_cost + in_cost - out_cost
-            
+
             # 获取实际库存
             actual_qty = stock.qty_on_hand
             actual_cost = stock.qty_on_hand * stock.weighted_avg_cost if hasattr(stock, 'weighted_avg_cost') else Decimal('0')
-            
+
             # 计算差异
             qty_variance = actual_qty - calculated_qty
             cost_variance = actual_cost - calculated_cost
-            
+
             is_matched = abs(qty_variance) < Decimal('0.0001') and abs(cost_variance) < Decimal('0.01')
-            
+
             # 保存对账明细
             ReconciliationItem.objects.update_or_create(
                 session=session,
@@ -616,18 +615,18 @@ class ReconciliationService:
                     'is_matched': is_matched,
                 }
             )
-            
+
             items_checked += 1
             if not is_matched:
                 issues_found += 1
-        
+
         # 更新会话统计
         session.total_items_checked = items_checked
         session.issues_found = issues_found
         session.status = 'COMPLETED'
         session.completed_at = timezone.now()
         session.save()
-        
+
         return session
 
 
@@ -638,7 +637,7 @@ class ReconciliationService:
 class DataValidationRuleSerializer(serializers.ModelSerializer):
     rule_type_display = serializers.CharField(source='get_rule_type_display', read_only=True)
     severity_display = serializers.CharField(source='get_severity_display', read_only=True)
-    
+
     class Meta:
         model = DataValidationRule
         fields = '__all__'
@@ -652,7 +651,7 @@ class DataValidationResultSerializer(serializers.ModelSerializer):
     item_code = serializers.CharField(source='item.code', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
-    
+
     class Meta:
         model = DataValidationResult
         fields = '__all__'
@@ -662,7 +661,7 @@ class ReconciliationSessionSerializer(serializers.ModelSerializer):
     session_type_display = serializers.CharField(source='get_session_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
-    
+
     class Meta:
         model = ReconciliationSession
         fields = '__all__'
@@ -672,7 +671,7 @@ class ReconciliationItemSerializer(serializers.ModelSerializer):
     item_code = serializers.CharField(source='item.code', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
-    
+
     class Meta:
         model = ReconciliationItem
         fields = '__all__'
@@ -688,7 +687,7 @@ class DataValidationRuleViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
     serializer_class = DataValidationRuleSerializer
     permission_classes = [IsAuthenticated]
     filterset_fields = ['rule_type', 'severity', 'is_active', 'check_frequency']
-    
+
     @action(detail=False, methods=['post'])
     def init_default_rules(self, request):
         """初始化默认规则"""
@@ -726,7 +725,7 @@ class DataValidationRuleViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
                 'check_frequency': 'WEEKLY',
             },
         ]
-        
+
         created_count = 0
         for rule_data in default_rules:
             rule, created = DataValidationRule.objects.get_or_create(
@@ -735,7 +734,7 @@ class DataValidationRuleViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
             )
             if created:
                 created_count += 1
-        
+
         return Response({
             'success': True,
             'created_count': created_count,
@@ -750,7 +749,7 @@ class DataValidationResultViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filterset_fields = ['rule', 'status', 'item', 'warehouse']
     ordering = ['-check_date']
-    
+
     @action(detail=True, methods=['post'])
     def handle(self, request, pk=None):
         """处理校验结果"""
@@ -761,28 +760,28 @@ class DataValidationResultViewSet(viewsets.ModelViewSet):
         result.handled_at = timezone.now()
         result.save()
         return Response(self.get_serializer(result).data)
-    
+
     @action(detail=False, methods=['post'])
     def run_checks(self, request):
         """运行校验"""
         warehouse_id = request.data.get('warehouse_id')
         result = InventoryDataValidator.run_all_checks(warehouse_id=warehouse_id)
         return Response(result)
-    
+
     @action(detail=False, methods=['get'])
     def summary(self, request):
         """校验结果汇总"""
         results = self.get_queryset()
-        
+
         # 按状态统计
         by_status = results.values('status').annotate(count=Count('id'))
-        
+
         # 按规则类型统计
         by_type = results.values('rule__rule_type').annotate(count=Count('id'))
-        
+
         # 按严重程度统计
         by_severity = results.values('rule__severity').annotate(count=Count('id'))
-        
+
         # 最近7天趋势
         week_ago = timezone.now() - timedelta(days=7)
         trend = results.filter(
@@ -792,7 +791,7 @@ class DataValidationResultViewSet(viewsets.ModelViewSet):
         ).values('day').annotate(
             count=Count('id')
         ).order_by('day')
-        
+
         return Response({
             'total': results.count(),
             'pending': results.filter(status='PENDING').count(),
@@ -809,7 +808,7 @@ class ReconciliationSessionViewSet(viewsets.ModelViewSet):
     serializer_class = ReconciliationSessionSerializer
     permission_classes = [IsAuthenticated]
     filterset_fields = ['session_type', 'status', 'warehouse']
-    
+
     @action(detail=False, methods=['post'])
     def create_and_run(self, request):
         """创建并运行对账"""
@@ -817,12 +816,12 @@ class ReconciliationSessionViewSet(viewsets.ModelViewSet):
         warehouse_id = request.data.get('warehouse_id')
         start_date = request.data.get('start_date', date.today().replace(day=1))
         end_date = request.data.get('end_date', date.today())
-        
+
         if isinstance(start_date, str):
             start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
         if isinstance(end_date, str):
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
-        
+
         # 创建会话
         session = ReconciliationService.create_session(
             session_type=session_type,
@@ -831,24 +830,24 @@ class ReconciliationSessionViewSet(viewsets.ModelViewSet):
             end_date=end_date,
             user=request.user
         )
-        
+
         # 运行对账
         if session_type == 'IN_OUT_BALANCE':
             session = ReconciliationService.run_in_out_balance_check(session)
-        
+
         return Response(self.get_serializer(session).data)
-    
+
     @action(detail=True, methods=['get'])
     def items(self, request, pk=None):
         """获取对账明细"""
         session = self.get_object()
         items = ReconciliationItem.objects.filter(session=session)
-        
+
         # 筛选
         show_variance_only = request.query_params.get('variance_only', 'false').lower() == 'true'
         if show_variance_only:
             items = items.filter(is_matched=False)
-        
+
         return Response(ReconciliationItemSerializer(items, many=True).data)
 
 
@@ -859,19 +858,19 @@ class ReconciliationSessionViewSet(viewsets.ModelViewSet):
 class InventoryAccuracyReportView(APIView):
     """库存准确性报表"""
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
         from .models import Stock
-        
+
         warehouse_id = request.query_params.get('warehouse')
-        
+
         # 获取最近的对账会话
         filters = {'status': 'COMPLETED'}
         if warehouse_id:
             filters['warehouse_id'] = warehouse_id
-        
+
         sessions = ReconciliationSession.objects.filter(**filters).order_by('-completed_at')[:10]
-        
+
         # 计算准确率趋势
         accuracy_trend = []
         for session in sessions:
@@ -879,7 +878,7 @@ class InventoryAccuracyReportView(APIView):
             total = items.count()
             matched = items.filter(is_matched=True).count()
             accuracy = round(matched / total * 100, 2) if total > 0 else 100
-            
+
             accuracy_trend.append({
                 'session_no': session.session_no,
                 'date': session.completed_at.date().isoformat() if session.completed_at else None,
@@ -887,21 +886,21 @@ class InventoryAccuracyReportView(APIView):
                 'matched_items': matched,
                 'accuracy': accuracy,
             })
-        
+
         # 当前待处理问题
         pending_issues = DataValidationResult.objects.filter(
             status='PENDING'
         ).count()
-        
+
         # 按严重程度分布
         issue_by_severity = DataValidationResult.objects.filter(
             status='PENDING'
         ).values('rule__severity').annotate(count=Count('id'))
-        
+
         # 当前库存状态
         total_items = Stock.objects.filter(is_deleted=False, qty_on_hand__gt=0).count()
         negative_items = Stock.objects.filter(is_deleted=False, qty_on_hand__lt=0).count()
-        
+
         return Response({
             'accuracy_trend': accuracy_trend,
             'current_status': {
@@ -916,15 +915,14 @@ class InventoryAccuracyReportView(APIView):
 class InOutBalanceReportView(APIView):
     """进销存平衡报表"""
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
-        from .models import Stock
         from .cost_accounting import PeriodCostSummary
-        
+
         year = int(request.query_params.get('year', date.today().year))
         month = int(request.query_params.get('month', date.today().month))
         warehouse_id = request.query_params.get('warehouse')
-        
+
         # 获取期间汇总
         filters = {
             'period_year': year,
@@ -933,9 +931,9 @@ class InOutBalanceReportView(APIView):
         }
         if warehouse_id:
             filters['warehouse_id'] = warehouse_id
-        
+
         summaries = PeriodCostSummary.objects.filter(**filters).select_related('item', 'warehouse')
-        
+
         # 汇总统计
         totals = summaries.aggregate(
             opening_qty=Coalesce(Sum('opening_qty'), Decimal('0')),
@@ -947,14 +945,14 @@ class InOutBalanceReportView(APIView):
             closing_qty=Coalesce(Sum('closing_qty'), Decimal('0')),
             closing_cost=Coalesce(Sum('closing_cost'), Decimal('0')),
         )
-        
+
         # 验证平衡
         calculated_closing_qty = totals['opening_qty'] + totals['in_qty'] - totals['out_qty']
         calculated_closing_cost = totals['opening_cost'] + totals['in_cost'] - totals['out_cost']
-        
+
         qty_balanced = abs(calculated_closing_qty - totals['closing_qty']) < Decimal('0.01')
         cost_balanced = abs(calculated_closing_cost - totals['closing_cost']) < Decimal('0.01')
-        
+
         # 按仓库分组
         by_warehouse = summaries.values('warehouse__name').annotate(
             opening_cost=Sum('opening_cost'),
@@ -962,13 +960,13 @@ class InOutBalanceReportView(APIView):
             out_cost=Sum('out_cost'),
             closing_cost=Sum('closing_cost'),
         )
-        
+
         # 按物料类别分组
         by_category = summaries.values('item__category__name').annotate(
             closing_qty=Sum('closing_qty'),
             closing_cost=Sum('closing_cost'),
         )
-        
+
         return Response({
             'period': f'{year}年{month}月',
             'totals': {

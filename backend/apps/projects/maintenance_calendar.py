@@ -4,32 +4,32 @@ Equipment Maintenance Calendar
 设备维护计划日历视图
 """
 from datetime import date, timedelta
-from django.db.models import Q
-from rest_framework.views import APIView
-from rest_framework.response import Response
+
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 
 class MaintenanceCalendarView(APIView):
     """设备维护日历API"""
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
         """获取维护日历数据"""
-        from apps.projects.equipment_models import MaintenanceSchedule, Equipment
-        
+        from apps.projects.equipment_models import Equipment, MaintenanceSchedule
+
         # 获取日期范围
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
         equipment_id = request.query_params.get('equipment_id')
-        
+
         if not start_date:
             # 默认当月
             today = date.today()
             start_date = date(today.year, today.month, 1)
         else:
             start_date = date.fromisoformat(start_date)
-        
+
         if not end_date:
             # 默认下月底
             if start_date.month == 12:
@@ -38,28 +38,28 @@ class MaintenanceCalendarView(APIView):
                 end_date = date(start_date.year, start_date.month + 2, 1) - timedelta(days=1)
         else:
             end_date = date.fromisoformat(end_date)
-        
+
         # 查询维护计划
         schedules = MaintenanceSchedule.objects.filter(
             is_deleted=False
         ).select_related('equipment')
-        
+
         if equipment_id:
             schedules = schedules.filter(equipment_id=equipment_id)
-        
+
         # 构建日历事件
         events = []
-        
+
         for schedule in schedules:
             # 获取计划维护日期
             planned_dates = MaintenanceCalendarView._get_planned_dates(
                 schedule, start_date, end_date
             )
-            
+
             for planned_date in planned_dates:
                 event_type = 'maintenance'
                 title = f'{schedule.equipment.name} - {schedule.maintenance_type}'
-                
+
                 # 判断状态
                 if planned_date < date.today():
                     if schedule.status == 'COMPLETED':
@@ -70,7 +70,7 @@ class MaintenanceCalendarView(APIView):
                     status = 'today'
                 else:
                     status = 'upcoming'
-                
+
                 events.append({
                     'id': f'{schedule.id}_{planned_date.isoformat()}',
                     'schedule_id': schedule.id,
@@ -84,14 +84,14 @@ class MaintenanceCalendarView(APIView):
                     'maintenance_type': schedule.maintenance_type,
                     'description': schedule.description if hasattr(schedule, 'description') else ''
                 })
-        
+
         # 添加设备保修到期提醒
         equipments = Equipment.objects.filter(
             warranty_end_date__gte=start_date,
             warranty_end_date__lte=end_date,
             is_deleted=False
         )
-        
+
         for eq in equipments:
             events.append({
                 'id': f'warranty_{eq.id}',
@@ -105,10 +105,10 @@ class MaintenanceCalendarView(APIView):
                 'maintenance_type': 'WARRANTY_EXPIRE',
                 'description': f'设备保修将于 {eq.warranty_end_date} 到期'
             })
-        
+
         # 按日期排序
         events.sort(key=lambda x: x['date'])
-        
+
         return Response({
             'start_date': start_date.isoformat(),
             'end_date': end_date.isoformat(),
@@ -121,12 +121,12 @@ class MaintenanceCalendarView(APIView):
                 'today': sum(1 for e in events if e['status'] == 'today')
             }
         })
-    
+
     @staticmethod
     def _get_planned_dates(schedule, start_date, end_date):
         """获取计划维护日期列表"""
         dates = []
-        
+
         # 获取基准日期
         if hasattr(schedule, 'next_date') and schedule.next_date:
             next_date = schedule.next_date
@@ -134,47 +134,48 @@ class MaintenanceCalendarView(APIView):
             next_date = schedule.last_date + timedelta(days=schedule.interval_days or 30)
         else:
             next_date = start_date
-        
+
         interval = schedule.interval_days if hasattr(schedule, 'interval_days') else 30
         if not interval or interval <= 0:
             interval = 30
-        
+
         # 找到第一个在范围内的日期
         while next_date < start_date:
             next_date += timedelta(days=interval)
-        
+
         # 生成日期范围内的所有计划日期
         while next_date <= end_date:
             dates.append(next_date)
             next_date += timedelta(days=interval)
-        
+
         return dates
 
 
 class MaintenanceStatisticsView(APIView):
     """维护统计API"""
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
         """获取维护统计"""
-        from apps.projects.equipment_models import MaintenanceSchedule, Equipment
         from django.db.models import Count
-        
+
+        from apps.projects.equipment_models import Equipment, MaintenanceSchedule
+
         today = date.today()
-        
+
         # 逾期维护
         overdue_count = MaintenanceSchedule.objects.filter(
             next_date__lt=today,
             status__in=['PENDING', 'IN_PROGRESS'],
             is_deleted=False
         ).count()
-        
+
         # 今日维护
         today_count = MaintenanceSchedule.objects.filter(
             next_date=today,
             is_deleted=False
         ).count()
-        
+
         # 本周维护
         week_end = today + timedelta(days=7)
         week_count = MaintenanceSchedule.objects.filter(
@@ -182,7 +183,7 @@ class MaintenanceStatisticsView(APIView):
             next_date__lte=week_end,
             is_deleted=False
         ).count()
-        
+
         # 本月完成
         month_start = date(today.year, today.month, 1)
         completed_count = MaintenanceSchedule.objects.filter(
@@ -190,19 +191,19 @@ class MaintenanceStatisticsView(APIView):
             status='COMPLETED',
             is_deleted=False
         ).count()
-        
+
         # 保修即将到期
         warranty_warning = Equipment.objects.filter(
             warranty_end__gte=today,
             warranty_end__lte=today + timedelta(days=30),
             is_deleted=False
         ).count()
-        
+
         # 按维护类型统计
         by_type = MaintenanceSchedule.objects.filter(
             is_deleted=False
         ).values('maintenance_type').annotate(count=Count('id'))
-        
+
         return Response({
             'overdue': overdue_count,
             'today': today_count,
@@ -216,16 +217,16 @@ class MaintenanceStatisticsView(APIView):
 class EquipmentMaintenanceHistoryView(APIView):
     """设备维护历史API"""
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request, equipment_id):
         """获取设备维护历史"""
         from apps.projects.equipment_models import MaintenanceSchedule
-        
+
         schedules = MaintenanceSchedule.objects.filter(
             equipment_id=equipment_id,
             is_deleted=False
         ).order_by('-completed_date', '-created_at')
-        
+
         history = []
         for s in schedules:
             history.append({
@@ -238,7 +239,7 @@ class EquipmentMaintenanceHistoryView(APIView):
                 'cost': float(s.cost) if hasattr(s, 'cost') and s.cost else 0,
                 'created_at': s.created_at.isoformat()
             })
-        
+
         return Response({
             'equipment_id': equipment_id,
             'history': history,

@@ -1,21 +1,29 @@
 """
 外协加工管理视图
 """
-from rest_framework import viewsets, status
+from django.db import transaction
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db import transaction
+
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.permission_mixin import PermissionMixin
+
 from .outsource_models import (
-    OutsourceOrder, OutsourceOrderLine,
-    OutsourceMaterialIssue, OutsourceMaterialIssueLine,
-    OutsourceReceipt, OutsourceReceiptLine
+    OutsourceMaterialIssue,
+    OutsourceMaterialIssueLine,
+    OutsourceOrder,
+    OutsourceOrderLine,
+    OutsourceReceipt,
+    OutsourceReceiptLine,
 )
 from .outsource_serializers import (
-    OutsourceOrderSerializer, OutsourceOrderLineSerializer,
-    OutsourceMaterialIssueSerializer, OutsourceMaterialIssueLineSerializer,
-    OutsourceReceiptSerializer, OutsourceReceiptLineSerializer
+    OutsourceMaterialIssueLineSerializer,
+    OutsourceMaterialIssueSerializer,
+    OutsourceOrderLineSerializer,
+    OutsourceOrderSerializer,
+    OutsourceReceiptLineSerializer,
+    OutsourceReceiptSerializer,
 )
 
 
@@ -32,7 +40,7 @@ class OutsourceOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 
     permission_module = 'purchase'
     permission_resource = 'outsource_order'
-    
+
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
         """确认外协单"""
@@ -42,17 +50,17 @@ class OutsourceOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
                 {'error': '只能确认草稿状态的外协单'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # 检查是否有明细
         if not order.lines.filter(is_deleted=False).exists():
             return Response(
                 {'error': '请添加加工明细'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         order.status = 'CONFIRMED'
         order.save()
-        
+
         # 创建应付账款
         from apps.finance.models import AccountPayable
         AccountPayable.objects.create(
@@ -64,9 +72,9 @@ class OutsourceOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
             notes=f'外协加工单: {order.order_no}',
             created_by=request.user
         )
-        
+
         return Response(OutsourceOrderSerializer(order).data)
-    
+
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
         """取消外协单"""
@@ -76,18 +84,18 @@ class OutsourceOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
                 {'error': '无法取消已完成或已取消的外协单'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # 检查是否有发料
         if order.lines.filter(sent_qty__gt=0).exists():
             return Response(
                 {'error': '已有发料记录，无法取消'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         order.status = 'CANCELLED'
         order.save()
         return Response(OutsourceOrderSerializer(order).data)
-    
+
     @action(detail=True, methods=['get'])
     def pending_lines(self, request, pk=None):
         """获取待发料的明细"""
@@ -122,7 +130,7 @@ class OutsourceMaterialIssueViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets
     search_fields = ['issue_no']
     ordering_fields = ['issue_date', 'created_at']
     ordering = ['-created_at']
-    
+
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
         """确认发料"""
@@ -132,11 +140,11 @@ class OutsourceMaterialIssueViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets
                 {'error': '只能确认草稿状态的发料单'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         with transaction.atomic():
             # 创建库存出库记录
             from apps.inventory.models import StockMove
-            
+
             for line in issue.lines.filter(is_deleted=False):
                 # 创建库存移动
                 StockMove.objects.create(
@@ -150,20 +158,20 @@ class OutsourceMaterialIssueViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets
                     status='COMPLETED',
                     created_by=request.user
                 )
-                
+
                 # 更新外协单明细的发料数量
                 line.outsource_line.sent_qty += line.qty
                 line.outsource_line.save()
-            
+
             issue.status = 'CONFIRMED'
             issue.save()
-            
+
             # 更新外协单状态
             order = issue.outsource_order
             if order.status == 'CONFIRMED':
                 order.status = 'PROCESSING'
                 order.save()
-        
+
         return Response(OutsourceMaterialIssueSerializer(issue).data)
 
 
@@ -186,7 +194,7 @@ class OutsourceReceiptViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
     search_fields = ['receipt_no']
     ordering_fields = ['receipt_date', 'created_at']
     ordering = ['-created_at']
-    
+
     @action(detail=True, methods=['post'])
     def start_inspect(self, request, pk=None):
         """开始质检"""
@@ -196,12 +204,12 @@ class OutsourceReceiptViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
                 {'error': '只能对草稿状态的收货单进行质检'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         receipt.status = 'INSPECTING'
         receipt.inspector = request.user
         receipt.save()
         return Response(OutsourceReceiptSerializer(receipt).data)
-    
+
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
         """确认收货入库"""
@@ -211,14 +219,15 @@ class OutsourceReceiptViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
                 {'error': '只能确认草稿或质检中的收货单'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         with transaction.atomic():
-            from apps.inventory.models import StockMove
             from django.utils import timezone
-            
+
+            from apps.inventory.models import StockMove
+
             total_qty = 0
             qualified_qty = 0
-            
+
             for line in receipt.lines.filter(is_deleted=False):
                 # 创建库存入库记录（只入合格品）
                 if line.qualified_qty > 0:
@@ -233,14 +242,14 @@ class OutsourceReceiptViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
                         status='COMPLETED',
                         created_by=request.user
                     )
-                
+
                 # 更新外协单明细的收货数量
                 line.outsource_line.received_qty += line.qualified_qty
                 line.outsource_line.save()
-                
+
                 total_qty += line.qty
                 qualified_qty += line.qualified_qty
-            
+
             # 更新质检状态
             if qualified_qty == 0:
                 receipt.quality_status = 'FAILED'
@@ -248,11 +257,11 @@ class OutsourceReceiptViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
                 receipt.quality_status = 'PASSED'
             else:
                 receipt.quality_status = 'PARTIAL'
-            
+
             receipt.status = 'CONFIRMED'
             receipt.inspect_date = timezone.now().date()
             receipt.save()
-            
+
             # 检查外协单是否完成
             order = receipt.outsource_order
             all_received = all(
@@ -269,7 +278,7 @@ class OutsourceReceiptViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Model
                 if any_received:
                     order.status = 'PARTIAL'
             order.save()
-        
+
         return Response(OutsourceReceiptSerializer(receipt).data)
 
 

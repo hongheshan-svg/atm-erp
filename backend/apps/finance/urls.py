@@ -1,49 +1,51 @@
 """
 URL configuration for finance app.
 """
-from django.urls import path, include
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from .views import (
-    CurrencyViewSet,
-    PaymentViewSet,
-    ExpenseViewSet,
-    AccountReceivableViewSet,
-    AccountPayableViewSet,
-    InvoiceViewSet,
-    SharedExpenseViewSet,
-    SharedExpenseAllocationViewSet,
-    PaymentScheduleViewSet,
-    PurchasePaymentScheduleViewSet,
-    PaymentRequestViewSet
-)
-from .reconciliation_views import (
-    PurchaseReconciliationViewSet,
-    SalesReconciliationViewSet,
-    InvoiceReconciliationViewSet
-)
-from .bank_statement_views import (
-    BankStatementViewSet,
-    BankStatementImportLogViewSet
-)
-from .collection_views import (
-    CollectionPlanViewSet,
-    CollectionMilestoneViewSet,
-    CollectionRecordViewSet,
-    CollectionReminderViewSet
+
+from apps.purchase.budget import BudgetLineViewSet, PurchaseBudgetViewSet
+
+from .accounting import (
+    AccountBalanceViewSet,
+    AccountCategoryViewSet,
+    ChartOfAccountViewSet,
+    FiscalPeriodViewSet,
+    JournalVoucherViewSet,
 )
 from .asset import (
-    AssetCategoryViewSet, FixedAssetViewSet,
-    AssetTransferViewSet, AssetDisposalViewSet, AssetDepreciationViewSet
+    AssetCategoryViewSet,
+    AssetDepreciationViewSet,
+    AssetDisposalViewSet,
+    AssetTransferViewSet,
+    FixedAssetViewSet,
 )
-from .accounting import (
-    AccountCategoryViewSet, ChartOfAccountViewSet, FiscalPeriodViewSet,
-    JournalVoucherViewSet, AccountBalanceViewSet
+from .bank_statement_views import BankStatementImportLogViewSet, BankStatementViewSet
+from .collection_views import (
+    CollectionMilestoneViewSet,
+    CollectionPlanViewSet,
+    CollectionRecordViewSet,
+    CollectionReminderViewSet,
 )
-from .tax_management import (
-    TaxTypeViewSet, TaxRateViewSet, TaxPeriodViewSet,
-    TaxDeclarationViewSet, TaxInvoiceViewSet
+from .reconciliation_views import (
+    InvoiceReconciliationViewSet,
+    PurchaseReconciliationViewSet,
+    SalesReconciliationViewSet,
 )
-from apps.purchase.budget import PurchaseBudgetViewSet, BudgetLineViewSet
+from .tax_management import TaxDeclarationViewSet, TaxInvoiceViewSet, TaxPeriodViewSet, TaxRateViewSet, TaxTypeViewSet
+from .views import (
+    AccountPayableViewSet,
+    AccountReceivableViewSet,
+    CurrencyViewSet,
+    ExpenseViewSet,
+    InvoiceViewSet,
+    PaymentRequestViewSet,
+    PaymentScheduleViewSet,
+    PaymentViewSet,
+    PurchasePaymentScheduleViewSet,
+    SharedExpenseAllocationViewSet,
+    SharedExpenseViewSet,
+)
 
 router = DefaultRouter()
 router.register(r'currencies', CurrencyViewSet, basename='currency')

@@ -3,11 +3,11 @@ Workflow service for managing approval processes.
 """
 import logging
 from datetime import timedelta
-from django.utils import timezone
-from django.db import transaction
-from django.db.models import Q
 
-from .models import WorkflowDefinition, WorkflowStep, WorkflowInstance, WorkflowTask
+from django.db import transaction
+from django.utils import timezone
+
+from .models import WorkflowDefinition, WorkflowInstance, WorkflowTask
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ class WorkflowService:
     """
     Service class for workflow operations.
     """
-    
+
     @classmethod
     def get_workflow_for_business(cls, business_type, amount=None):
         """
@@ -27,16 +27,16 @@ class WorkflowService:
             is_active=True,
             is_deleted=False
         ).order_by('-amount_threshold')
-        
+
         if amount is not None:
             # Find workflow with matching amount threshold
             for workflow in workflows:
                 if workflow.amount_threshold is None or amount >= workflow.amount_threshold:
                     return workflow
-        
+
         # Return first active workflow or None
         return workflows.first()
-    
+
     @classmethod
     def start_workflow(cls, business_type, business_id, business_no, submitter, amount=None):
         """
@@ -46,10 +46,10 @@ class WorkflowService:
             tuple: (WorkflowInstance, error_message)
         """
         workflow = cls.get_workflow_for_business(business_type, amount)
-        
+
         if not workflow:
             return None, f"未找到适用于 {business_type} 的审批流程"
-        
+
         # Check if there's already an active workflow for this business object
         existing = WorkflowInstance.objects.filter(
             business_type=business_type,
@@ -57,10 +57,10 @@ class WorkflowService:
             status='PENDING',
             is_deleted=False
         ).first()
-        
+
         if existing:
             return None, "该单据已有进行中的审批流程"
-        
+
         with transaction.atomic():
             # Create workflow instance
             instance = WorkflowInstance.objects.create(
@@ -74,12 +74,12 @@ class WorkflowService:
                 current_step=1,
                 created_by=submitter
             )
-            
+
             # Create first task
             cls._create_next_task(instance)
-        
+
         return instance, None
-    
+
     @classmethod
     def _create_next_task(cls, instance):
         """
@@ -88,7 +88,7 @@ class WorkflowService:
         steps = instance.workflow.steps.filter(
             is_deleted=False
         ).order_by('step_order')
-        
+
         current_step = None
         for step in steps:
             if step.step_order >= instance.current_step:
@@ -98,7 +98,7 @@ class WorkflowService:
                         continue
                 current_step = step
                 break
-        
+
         if not current_step:
             # No more steps, workflow is complete
             instance.status = 'APPROVED'
@@ -106,20 +106,20 @@ class WorkflowService:
             instance.save()
             cls._on_workflow_complete(instance, 'APPROVED')
             return None
-        
+
         # Determine assignee
         assignee = cls._get_step_assignee(current_step, instance)
-        
+
         if not assignee:
             logger.warning(f"No assignee found for step {current_step.id}")
             # Skip this step and try next
             instance.current_step = current_step.step_order + 1
             instance.save()
             return cls._create_next_task(instance)
-        
+
         # Calculate deadline
         deadline = timezone.now() + timedelta(hours=current_step.timeout_hours)
-        
+
         task = WorkflowTask.objects.create(
             instance=instance,
             step=current_step,
@@ -128,12 +128,12 @@ class WorkflowService:
             deadline=deadline,
             created_by=instance.submitter
         )
-        
+
         # Send notification
         cls._notify_assignee(task)
-        
+
         return task
-    
+
     @classmethod
     def _get_step_assignee(cls, step, instance):
         """
@@ -141,12 +141,12 @@ class WorkflowService:
         Falls back to approver_role if dynamic assignee is not found.
         """
         from apps.accounts.models import User
-        
+
         assignee = None
-        
+
         if step.approver_type == 'USER':
             assignee = step.approver_user
-        
+
         elif step.approver_type == 'ROLE':
             if step.approver_role:
                 # Get first active user with this role
@@ -155,21 +155,21 @@ class WorkflowService:
                     is_active=True,
                     is_deleted=False
                 ).first()
-        
+
         elif step.approver_type == 'DEPARTMENT_MANAGER':
             # Get submitter's department manager
             if instance.submitter.department and instance.submitter.department.manager:
                 assignee = instance.submitter.department.manager
-        
+
         elif step.approver_type == 'PROJECT_MANAGER':
             # Get project manager from business object
             assignee = cls._get_project_manager(instance)
-        
+
         elif step.approver_type == 'SUPERIOR':
             # Get submitter's superior (department manager or higher)
             if instance.submitter.department and instance.submitter.department.manager:
                 assignee = instance.submitter.department.manager
-        
+
         # Fallback to approver_role if no assignee found
         if not assignee and step.approver_role:
             assignee = User.objects.filter(
@@ -177,13 +177,13 @@ class WorkflowService:
                 is_active=True,
                 is_deleted=False
             ).first()
-        
+
         # Last resort: use first superuser
         if not assignee:
             assignee = User.objects.filter(is_superuser=True, is_active=True).first()
-        
+
         return assignee
-    
+
     @classmethod
     def _get_project_manager(cls, instance):
         """
@@ -196,73 +196,73 @@ class WorkflowService:
                 pr = PurchaseRequest.objects.get(id=instance.business_id)
                 if pr.project:
                     return pr.project.manager
-            
+
             elif instance.business_type == 'PURCHASE_ORDER':
                 from apps.purchase.models import PurchaseOrder
                 po = PurchaseOrder.objects.get(id=instance.business_id)
                 if hasattr(po, 'project') and po.project:
                     return po.project.manager
-            
+
             elif instance.business_type == 'EXPENSE':
                 from apps.finance.models import Expense
                 expense = Expense.objects.get(id=instance.business_id)
                 if expense.project:
                     return expense.project.manager
-            
+
             elif instance.business_type == 'PAYMENT':
                 from apps.finance.models import PaymentRequest
                 payment_req = PaymentRequest.objects.get(id=instance.business_id)
                 if payment_req.project:
                     return payment_req.project.manager
-            
+
             elif instance.business_type == 'QUOTATION':
                 from apps.sales.models import Quotation
                 quot = Quotation.objects.get(id=instance.business_id)
                 if hasattr(quot, 'project') and quot.project:
                     return quot.project.manager
-            
+
             elif instance.business_type == 'SALES_ORDER':
                 from apps.sales.models import SalesOrder
                 so = SalesOrder.objects.get(id=instance.business_id)
                 if hasattr(so, 'project') and so.project:
                     return so.project.manager
-            
+
             elif instance.business_type == 'SALES_CONTRACT':
                 from apps.sales.models import SalesContract
                 contract = SalesContract.objects.get(id=instance.business_id)
                 if hasattr(contract, 'project') and contract.project:
                     return contract.project.manager
-            
+
             elif instance.business_type == 'DELIVERY_ORDER':
                 from apps.sales.models import DeliveryOrder
                 delivery = DeliveryOrder.objects.get(id=instance.business_id)
                 if delivery.so and hasattr(delivery.so, 'project') and delivery.so.project:
                     return delivery.so.project.manager
-            
+
             elif instance.business_type == 'PROJECT':
                 from apps.projects.models import Project
                 project = Project.objects.get(id=instance.business_id)
                 return project.manager
-            
+
             elif instance.business_type == 'STOCK_ADJUSTMENT':
                 # 库存调整没有项目经理，返回None
                 return None
-            
+
             elif instance.business_type == 'ECN':
                 from apps.projects.models import ECN
                 ecn = ECN.objects.get(id=instance.business_id)
                 if ecn.project:
                     return ecn.project.manager
-            
+
             # OA模块没有项目经理
             elif instance.business_type in ['LEAVE_REQUEST', 'OVERTIME_REQUEST', 'VEHICLE_REQUEST', 'ASSET_BORROW']:
                 return None
-                
+
         except Exception as e:
             logger.error(f"Error getting project manager: {e}")
-        
+
         return None
-    
+
     @classmethod
     def approve_task(cls, task, user, comment=''):
         """
@@ -270,27 +270,27 @@ class WorkflowService:
         """
         if task.status != 'PENDING':
             return False, "该任务已处理"
-        
+
         if task.assignee != user and not user.is_superuser:
             return False, "您没有权限处理此任务"
-        
+
         with transaction.atomic():
             task.status = 'APPROVED'
             task.action_time = timezone.now()
             task.comment = comment
             task.updated_by = user
             task.save()
-            
+
             # Move to next step
             instance = task.instance
             instance.current_step = task.step.step_order + 1
             instance.save()
-            
+
             # Create next task or complete workflow
             cls._create_next_task(instance)
-        
+
         return True, "审批通过"
-    
+
     @classmethod
     def reject_task(cls, task, user, comment=''):
         """
@@ -298,27 +298,27 @@ class WorkflowService:
         """
         if task.status != 'PENDING':
             return False, "该任务已处理"
-        
+
         if task.assignee != user and not user.is_superuser:
             return False, "您没有权限处理此任务"
-        
+
         with transaction.atomic():
             task.status = 'REJECTED'
             task.action_time = timezone.now()
             task.comment = comment
             task.updated_by = user
             task.save()
-            
+
             # Reject the entire workflow
             instance = task.instance
             instance.status = 'REJECTED'
             instance.completed_at = timezone.now()
             instance.save()
-            
+
             cls._on_workflow_complete(instance, 'REJECTED')
-        
+
         return True, "已拒绝"
-    
+
     @classmethod
     def withdraw_workflow(cls, instance, user):
         """
@@ -326,25 +326,25 @@ class WorkflowService:
         """
         if instance.status != 'PENDING':
             return False, "只能撤回进行中的审批"
-        
+
         if instance.submitter != user and not user.is_superuser:
             return False, "只有提交人可以撤回"
-        
+
         with transaction.atomic():
             # Cancel all pending tasks
             instance.tasks.filter(status='PENDING').update(
                 status='SKIPPED',
                 action_time=timezone.now()
             )
-            
+
             instance.status = 'WITHDRAWN'
             instance.completed_at = timezone.now()
             instance.save()
-            
+
             cls._on_workflow_complete(instance, 'WITHDRAWN')
-        
+
         return True, "已撤回"
-    
+
     @classmethod
     def _on_workflow_complete(cls, instance, result):
         """
@@ -362,7 +362,7 @@ class WorkflowService:
                 elif result == 'WITHDRAWN':
                     pr.status = 'DRAFT'
                 pr.save()
-            
+
             elif instance.business_type == 'EXPENSE':
                 from apps.finance.models import Expense
                 expense = Expense.objects.get(id=instance.business_id)
@@ -373,7 +373,7 @@ class WorkflowService:
                 elif result == 'WITHDRAWN':
                     expense.status = 'DRAFT'
                 expense.save()
-            
+
             elif instance.business_type == 'DELIVERY_ORDER':
                 from apps.sales.models import DeliveryOrder
                 delivery = DeliveryOrder.objects.get(id=instance.business_id)
@@ -388,7 +388,7 @@ class WorkflowService:
                 elif result == 'WITHDRAWN':
                     delivery.status = 'DRAFT'
                     delivery.save()
-            
+
             elif instance.business_type == 'SALES_ORDER':
                 from apps.sales.models import SalesOrder
                 so = SalesOrder.objects.get(id=instance.business_id)
@@ -402,7 +402,7 @@ class WorkflowService:
                 elif result == 'WITHDRAWN':
                     so.status = 'DRAFT'
                     so.save()
-            
+
             elif instance.business_type == 'PROJECT':
                 from apps.projects.models import Project
                 project = Project.objects.get(id=instance.business_id)
@@ -417,7 +417,7 @@ class WorkflowService:
                 elif result == 'WITHDRAWN':
                     project.status = 'DRAFT'  # 撤回后回到草稿状态
                     project.save()
-            
+
             elif instance.business_type == 'STOCK_ADJUSTMENT':
                 from apps.inventory.models import StockAdjustment
                 adjustment = StockAdjustment.objects.get(id=instance.business_id)
@@ -433,18 +433,19 @@ class WorkflowService:
                 elif result == 'WITHDRAWN':
                     adjustment.status = 'DRAFT'
                     adjustment.save()
-            
+
             elif instance.business_type == 'ECN':
-                from apps.projects.models import ECN, ECNApproval
                 from django.utils import timezone
+
+                from apps.projects.models import ECN, ECNApproval
                 ecn = ECN.objects.get(id=instance.business_id)
-                
+
                 # 获取最后一个审批任务的审批人（而非提交人）
                 last_task = instance.tasks.filter(
                     status__in=['APPROVED', 'REJECTED']
                 ).order_by('-action_time').first()
                 approver = last_task.assignee if last_task else instance.submitter
-                
+
                 if result == 'APPROVED':
                     ecn.status = 'APPROVED'
                     ecn.approved_date = timezone.now().date()
@@ -471,9 +472,9 @@ class WorkflowService:
                 elif result == 'WITHDRAWN':
                     ecn.status = 'DRAFT'
                     ecn.save()
-            
+
             # ============ 新增业务类型处理 ============
-            
+
             elif instance.business_type == 'PURCHASE_ORDER':
                 from apps.purchase.models import PurchaseOrder
                 po = PurchaseOrder.objects.get(id=instance.business_id)
@@ -487,7 +488,7 @@ class WorkflowService:
                 elif result == 'WITHDRAWN':
                     po.status = 'DRAFT'
                     po.save()
-            
+
             elif instance.business_type == 'QUOTATION':
                 from apps.sales.models import Quotation
                 quot = Quotation.objects.get(id=instance.business_id)
@@ -501,7 +502,7 @@ class WorkflowService:
                 elif result == 'WITHDRAWN':
                     quot.status = 'DRAFT'
                     quot.save()
-            
+
             elif instance.business_type == 'SALES_CONTRACT':
                 from apps.sales.models import SalesContract
                 contract = SalesContract.objects.get(id=instance.business_id)
@@ -515,7 +516,7 @@ class WorkflowService:
                 elif result == 'WITHDRAWN':
                     contract.status = 'DRAFT'
                     contract.save()
-            
+
             elif instance.business_type == 'PAYMENT':
                 from apps.finance.models import PaymentRequest
                 payment_req = PaymentRequest.objects.get(id=instance.business_id)
@@ -529,7 +530,7 @@ class WorkflowService:
                 elif result == 'WITHDRAWN':
                     payment_req.status = 'DRAFT'
                     payment_req.save()
-            
+
             elif instance.business_type == 'LEAVE_REQUEST':
                 from apps.accounts.attendance import LeaveRequest
                 leave = LeaveRequest.objects.get(id=instance.business_id)
@@ -543,7 +544,7 @@ class WorkflowService:
                 elif result == 'WITHDRAWN':
                     leave.status = 'DRAFT'
                     leave.save()
-            
+
             elif instance.business_type == 'OVERTIME_REQUEST':
                 from apps.accounts.attendance import OvertimeRequest
                 overtime = OvertimeRequest.objects.get(id=instance.business_id)
@@ -557,7 +558,7 @@ class WorkflowService:
                 elif result == 'WITHDRAWN':
                     overtime.status = 'DRAFT'
                     overtime.save()
-            
+
             elif instance.business_type == 'VEHICLE_REQUEST':
                 from apps.oa.vehicle import VehicleRequest
                 vehicle_req = VehicleRequest.objects.get(id=instance.business_id)
@@ -571,7 +572,7 @@ class WorkflowService:
                 elif result == 'WITHDRAWN':
                     vehicle_req.status = 'PENDING'
                     vehicle_req.save()
-            
+
             elif instance.business_type == 'ASSET_BORROW':
                 from apps.oa.asset import AssetBorrow
                 borrow = AssetBorrow.objects.get(id=instance.business_id)
@@ -585,13 +586,13 @@ class WorkflowService:
                 elif result == 'WITHDRAWN':
                     borrow.status = 'PENDING'
                     borrow.save()
-            
+
             # Notify submitter
             cls._notify_submitter(instance, result)
-            
+
         except Exception as e:
             logger.error(f"Error updating business object: {e}")
-    
+
     @classmethod
     def _notify_assignee(cls, task):
         """
@@ -599,7 +600,7 @@ class WorkflowService:
         """
         from apps.core.models import SystemNotification
         from apps.core.notification_service import NotificationService
-        
+
         try:
             # Create system notification
             SystemNotification.objects.create(
@@ -608,13 +609,13 @@ class WorkflowService:
                 title='您有新的审批任务',
                 message=f'单据 {task.instance.business_no} 等待您审批。'
             )
-            
+
             # Send external notification (DingTalk/WeChat)
             NotificationService.send_approval_notification(task)
-            
+
         except Exception as e:
             logger.error(f"Error sending notification: {e}")
-    
+
     @classmethod
     def _notify_submitter(cls, instance, result):
         """
@@ -622,13 +623,13 @@ class WorkflowService:
         """
         from apps.core.models import SystemNotification
         from apps.core.notification_service import NotificationService
-        
+
         result_text = {
             'APPROVED': '已通过',
             'REJECTED': '已拒绝',
             'WITHDRAWN': '已撤回'
         }.get(result, result)
-        
+
         try:
             SystemNotification.objects.create(
                 user=instance.submitter,
@@ -636,13 +637,13 @@ class WorkflowService:
                 title=f'审批{result_text}',
                 message=f'您提交的单据 {instance.business_no} {result_text}。'
             )
-            
+
             # Send external notification
             NotificationService.send_workflow_result_notification(instance, result)
-            
+
         except Exception as e:
             logger.error(f"Error sending notification: {e}")
-    
+
     @classmethod
     def get_pending_tasks(cls, user):
         """
@@ -655,7 +656,7 @@ class WorkflowService:
         ).select_related(
             'instance', 'instance__workflow', 'step'
         ).order_by('-created_at')
-    
+
     @classmethod
     def get_submitted_workflows(cls, user):
         """
@@ -665,7 +666,7 @@ class WorkflowService:
             submitter=user,
             is_deleted=False
         ).select_related('workflow').order_by('-submit_time')
-    
+
     @classmethod
     def get_workflow_history(cls, business_type, business_id):
         """

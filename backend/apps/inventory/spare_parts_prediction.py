@@ -2,13 +2,13 @@
 Spare Parts Lifecycle Prediction and Purchase Suggestions
 """
 from decimal import Decimal
+
 from django.db import models
-from django.conf import settings
 from django.utils import timezone
-from rest_framework import serializers, viewsets, status
-from rest_framework.views import APIView
-from rest_framework.response import Response
+from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.core.models import BaseModel
 
@@ -149,7 +149,7 @@ class SparePartPredictionService:
 
     @classmethod
     def cost_analysis(cls):
-        from django.db.models import Sum, Count, Avg
+        from django.db.models import Avg, Sum
         suggestions = PurchaseSuggestion.objects.filter(is_deleted=False)
         analysis = {
             'total_suggestions': suggestions.count(),

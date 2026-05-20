@@ -6,7 +6,7 @@
 2. 角色模块权限
 """
 from django.db import models
-from django.conf import settings
+
 from .models import TimeStampedModel
 
 
@@ -24,13 +24,13 @@ class ModulePermissionRule(TimeStampedModel):
         ('masterdata', '基础数据'),
         ('accounts', '用户管理'),
     ]
-    
+
     RULE_TYPE_CHOICES = [
         ('user', '关联用户'),
         ('department', '关联部门'),
         ('value', '固定值'),
     ]
-    
+
     module = models.CharField(
         max_length=50,
         choices=MODULE_CHOICES,
@@ -54,17 +54,17 @@ class ModulePermissionRule(TimeStampedModel):
     )
     is_active = models.BooleanField(default=True, verbose_name='是否启用')
     sort_order = models.IntegerField(default=0, verbose_name='排序')
-    
+
     class Meta:
         db_table = 'module_permission_rule'
         verbose_name = '模块权限规则'
         verbose_name_plural = verbose_name
         ordering = ['module', 'sort_order']
         unique_together = ['module', 'field_path']
-    
+
     def __str__(self):
         return f"{self.get_module_display()} - {self.description or self.field_path}"
-    
+
     def to_rule_dict(self):
         """转换为规则字典格式"""
         return {
@@ -86,7 +86,7 @@ class RoleModulePermission(TimeStampedModel):
         ('self', '仅本人'),
         ('rules', '按规则'),
     ]
-    
+
     role = models.ForeignKey(
         'accounts.Role',
         on_delete=models.CASCADE,
@@ -105,13 +105,13 @@ class RoleModulePermission(TimeStampedModel):
         verbose_name='权限类型'
     )
     is_active = models.BooleanField(default=True, verbose_name='是否启用')
-    
+
     class Meta:
         db_table = 'role_module_permission'
         verbose_name = '角色模块权限'
         verbose_name_plural = verbose_name
         unique_together = ['role', 'module']
-    
+
     def __str__(self):
         return f"{self.role.name} - {self.get_module_display()} - {self.get_permission_type_display()}"
 

@@ -2,6 +2,7 @@
 Initialize default dashboard widgets.
 """
 from django.core.management.base import BaseCommand
+
 from apps.core.dashboard_config import DashboardWidget
 
 

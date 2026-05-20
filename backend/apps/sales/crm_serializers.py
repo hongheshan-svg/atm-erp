@@ -2,7 +2,8 @@
 CRM - 商机/线索管理序列化器
 """
 from rest_framework import serializers
-from .crm_models import LeadSource, Lead, Opportunity, OpportunityActivity, SalesForecast
+
+from .crm_models import Lead, LeadSource, Opportunity, OpportunityActivity, SalesForecast
 
 
 class LeadSourceSerializer(serializers.ModelSerializer):
@@ -18,7 +19,7 @@ class LeadSerializer(serializers.ModelSerializer):
     owner_name = serializers.CharField(source='owner.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     converted_customer_name = serializers.CharField(source='converted_customer.name', read_only=True)
-    
+
     class Meta:
         model = Lead
         fields = '__all__'
@@ -30,7 +31,7 @@ class LeadListSerializer(serializers.ModelSerializer):
     source_name = serializers.CharField(source='source.name', read_only=True)
     owner_name = serializers.CharField(source='owner.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = Lead
         fields = [
@@ -44,7 +45,7 @@ class OpportunityActivitySerializer(serializers.ModelSerializer):
     """商机活动序列化器"""
     activity_type_display = serializers.CharField(source='get_activity_type_display', read_only=True)
     recorded_by_name = serializers.CharField(source='recorded_by.name', read_only=True)
-    
+
     class Meta:
         model = OpportunityActivity
         fields = '__all__'
@@ -59,12 +60,12 @@ class OpportunitySerializer(serializers.ModelSerializer):
     activities = OpportunityActivitySerializer(many=True, read_only=True)
     recent_activity = serializers.SerializerMethodField()
     days_in_stage = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = Opportunity
         fields = '__all__'
         read_only_fields = ['opportunity_no', 'weighted_amount', 'actual_close_date']
-    
+
     def get_recent_activity(self, obj):
         activity = obj.activities.order_by('-activity_date').first()
         if activity:
@@ -74,7 +75,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
                 'date': activity.activity_date
             }
         return None
-    
+
     def get_days_in_stage(self, obj):
         from django.utils import timezone
         return (timezone.now() - obj.updated_at).days
@@ -86,7 +87,7 @@ class OpportunityListSerializer(serializers.ModelSerializer):
     owner_name = serializers.CharField(source='owner.name', read_only=True)
     stage_display = serializers.CharField(source='get_stage_display', read_only=True)
     priority_display = serializers.CharField(source='get_priority_display', read_only=True)
-    
+
     class Meta:
         model = Opportunity
         fields = [
@@ -100,7 +101,7 @@ class OpportunityListSerializer(serializers.ModelSerializer):
 class SalesForecastSerializer(serializers.ModelSerializer):
     """销售预测序列化器"""
     owner_name = serializers.CharField(source='owner.name', read_only=True)
-    
+
     class Meta:
         model = SalesForecast
         fields = '__all__'

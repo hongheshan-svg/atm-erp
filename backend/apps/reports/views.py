@@ -2,17 +2,17 @@
 Views for reports app.
 """
 import csv
-import io
+from io import BytesIO
+
+import pandas as pd
+from django.db.models import Q
 from django.http import HttpResponse
-from rest_framework import viewsets, status
-from rest_framework.views import APIView
-from rest_framework.decorators import api_view, permission_classes, action
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from django.http import HttpResponse
-from django.db.models import Q
-from io import BytesIO
-import pandas as pd
+from rest_framework.views import APIView
+
 from .services.cost_service import CostCalculationService
 
 
@@ -29,7 +29,7 @@ def project_profitability(request):
     project_id = request.query_params.get('project_id') or request.query_params.get('project')
     status = request.query_params.get('status')
     output_format = request.query_params.get('format', 'json')
-    
+
     if project_id:
         # Single project analysis - 需要补充项目基本信息
         from apps.projects.models import Project
@@ -37,7 +37,7 @@ def project_profitability(request):
             project = Project.objects.select_related('manager').get(id=project_id, is_deleted=False)
         except Project.DoesNotExist:
             return Response({'error': '项目不存在'}, status=status.HTTP_404_NOT_FOUND)
-        
+
         result = CostCalculationService.calculate_project_profit(project_id)
         # 补充项目基本信息
         result.update({
@@ -46,7 +46,7 @@ def project_profitability(request):
             'status': project.status,
             'manager': project.manager.username if project.manager else ''
         })
-        
+
         if output_format == 'excel':
             df = pd.DataFrame([result])
             output = BytesIO()
@@ -62,11 +62,11 @@ def project_profitability(request):
         else:
             # 返回数组格式以保持前端一致性
             return Response([result] if result else [])
-    
+
     else:
         # All projects analysis
         df = CostCalculationService.calculate_all_projects_profit(status=status)
-        
+
         if output_format == 'excel':
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -91,13 +91,13 @@ def project_cost_detail(request):
         - project_id: required
     """
     project_id = request.query_params.get('project_id')
-    
+
     if not project_id:
         return Response(
             {'error': '请提供project_id参数'},
             status=status.HTTP_400_BAD_REQUEST
         )
-    
+
     detail = CostCalculationService.get_project_cost_detail_with_pandas(project_id)
     return Response(detail)
 
@@ -111,16 +111,16 @@ def refresh_project_cache(request):
         - project_id: required
     """
     project_id = request.data.get('project_id')
-    
+
     if not project_id:
         return Response(
             {'error': '请提供project_id参数'},
             status=status.HTTP_400_BAD_REQUEST
         )
-    
+
     CostCalculationService.clear_project_cache(project_id)
     result = CostCalculationService.calculate_project_profit(project_id)
-    
+
     return Response({
         'message': '缓存已刷新',
         'data': result
@@ -133,49 +133,50 @@ def dashboard_summary(request):
     """
     Get dashboard summary with key metrics.
     """
-    from apps.projects.models import Project
-    from apps.sales.models import SalesOrder
-    from apps.purchase.models import PurchaseOrder
+    from django.db.models import Count, Sum
+
     from apps.inventory.models import Stock
-    from django.db.models import Count, Sum, Q
-    
+    from apps.projects.models import Project
+    from apps.purchase.models import PurchaseOrder
+    from apps.sales.models import SalesOrder
+
     # Project stats
     project_stats = Project.objects.filter(is_deleted=False).aggregate(
         total=Count('id'),
         active=Count('id', filter=Q(status='ACTIVE')),
         completed=Count('id', filter=Q(status='COMPLETED'))
     )
-    
+
     # Sales stats - 使用含税金额
     sales_stats = SalesOrder.objects.filter(is_deleted=False).aggregate(
         total_orders=Count('id'),
         total_amount=Sum('total_with_tax', filter=Q(status__in=['CONFIRMED', 'PARTIAL', 'COMPLETED']))
     )
-    
+
     # Purchase stats - 使用含税金额
     purchase_stats = PurchaseOrder.objects.filter(is_deleted=False).aggregate(
         total_orders=Count('id'),
         total_amount=Sum('total_with_tax', filter=Q(status__in=['CONFIRMED', 'PARTIAL', 'COMPLETED']))
     )
-    
+
     # Inventory stats
     from django.db.models import F as DbF
     low_stock_count = Stock.objects.filter(
         qty_on_hand__lt=DbF('item__min_stock'),
         item__min_stock__gt=0
     ).count()
-    
+
     total_stock_value = Stock.objects.aggregate(
         total=Sum(DbF('qty_on_hand') * DbF('weighted_avg_cost'))
     )['total'] or 0
-    
+
     # Get top profitable projects
     df_projects = CostCalculationService.calculate_all_projects_profit()
     if not df_projects.empty:
         top_projects = df_projects.nlargest(5, 'profit')[['code', 'name', 'profit', 'margin_percent']].to_dict('records')
     else:
         top_projects = []
-    
+
     return Response({
         'projects': project_stats,
         'sales': {
@@ -203,12 +204,13 @@ def aging_report(request):
         - type: 'ar' or 'ap'
         - customer/supplier: filter by customer/supplier
     """
-    from apps.finance.models import AccountReceivable, AccountPayable
-    from datetime import datetime, timedelta
-    
+    from datetime import datetime
+
+    from apps.finance.models import AccountPayable, AccountReceivable
+
     report_type = request.query_params.get('type', 'ar')
     today = datetime.now().date()
-    
+
     # Define aging buckets
     buckets = [
         ('current', 0, 30),
@@ -216,25 +218,25 @@ def aging_report(request):
         ('60_90', 61, 90),
         ('over_90', 91, 9999)
     ]
-    
+
     if report_type == 'ar':
         customer_id = request.query_params.get('customer')
         queryset = AccountReceivable.objects.filter(is_deleted=False, status__in=['PENDING', 'PARTIAL'])
         if customer_id:
             queryset = queryset.filter(customer_id=customer_id)
-        
+
         results = []
         for ar in queryset.select_related('customer'):
             days_overdue = (today - ar.due_date).days if ar.due_date else 0
             balance = float(ar.amount_due) - float(ar.amount_paid)
-            
+
             # Determine bucket
             bucket = 'current'
             for name, min_days, max_days in buckets:
                 if min_days <= days_overdue <= max_days:
                     bucket = name
                     break
-            
+
             results.append({
                 'id': ar.id,
                 'ar_no': ar.ar_no,
@@ -253,18 +255,18 @@ def aging_report(request):
         queryset = AccountPayable.objects.filter(is_deleted=False, status__in=['PENDING', 'PARTIAL'])
         if supplier_id:
             queryset = queryset.filter(supplier_id=supplier_id)
-        
+
         results = []
         for ap in queryset.select_related('supplier'):
             days_overdue = (today - ap.due_date).days if ap.due_date else 0
             balance = float(ap.amount_due) - float(ap.amount_paid)
-            
+
             bucket = 'current'
             for name, min_days, max_days in buckets:
                 if min_days <= days_overdue <= max_days:
                     bucket = name
                     break
-            
+
             results.append({
                 'id': ap.id,
                 'ap_no': ap.ap_no,
@@ -278,7 +280,7 @@ def aging_report(request):
                 'days_overdue': max(0, days_overdue),
                 'bucket': bucket
             })
-    
+
     # Calculate summary
     summary = {
         'current': sum(r['balance'] for r in results if r['bucket'] == 'current'),
@@ -287,7 +289,7 @@ def aging_report(request):
         'over_90': sum(r['balance'] for r in results if r['bucket'] == 'over_90'),
         'total': sum(r['balance'] for r in results)
     }
-    
+
     return Response({
         'results': results,
         'summary': summary,
@@ -299,21 +301,21 @@ def aging_report(request):
 class TimelogReportExportView(APIView):
     """工时报表导出"""
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
         from apps.projects.models import WorkLog
         qs = WorkLog.objects.filter(is_deleted=False).select_related('project', 'task', 'user')
-        
+
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
         if start_date:
             qs = qs.filter(work_date__gte=start_date)
         if end_date:
             qs = qs.filter(work_date__lte=end_date)
-        
+
         response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
         response['Content-Disposition'] = 'attachment; filename="timelog_report.csv"'
-        
+
         writer = csv.writer(response)
         writer.writerow(['日期', '项目', '任务', '人员', '工时(小时)', '描述'])
         for log in qs[:5000]:
@@ -331,14 +333,14 @@ class TimelogReportExportView(APIView):
 class ProjectProfitabilityExportView(APIView):
     """项目利润分析导出"""
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
         from apps.projects.models import Project
         projects = Project.objects.filter(is_deleted=False)
-        
+
         response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
         response['Content-Disposition'] = 'attachment; filename="project_profitability.csv"'
-        
+
         writer = csv.writer(response)
         writer.writerow(['项目编号', '项目名称', '状态', '合同金额', '实际成本', '利润', '利润率'])
         for p in projects[:5000]:

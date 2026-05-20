@@ -31,7 +31,7 @@ from apps.core.permission_service import get_user_permissions, has_permission
 
 MODULE_VIEW_POLICY = {
     # ========== 全员可查看的模块 ==========
-    
+
     # 项目相关 - 促进团队协作
     'projects': {
         'default_view': 'view_all',
@@ -48,7 +48,7 @@ MODULE_VIEW_POLICY = {
             'aftersalesorder': 'view_all',  # 售后工单全员可见
         }
     },
-    
+
     # 生产相关 - 全员可查看生产进度
     'production': {
         'default_view': 'view_all',
@@ -61,7 +61,7 @@ MODULE_VIEW_POLICY = {
             'qualityinspection': 'view_all',
         }
     },
-    
+
     # 基础数据 - 全员可查看
     'masterdata': {
         'default_view': 'view_all',
@@ -77,7 +77,7 @@ MODULE_VIEW_POLICY = {
             'creditadjustment': 'view_all',
         }
     },
-    
+
     # 库存相关 - 全员可查看库存状态
     'inventory': {
         'default_view': 'view_all',
@@ -92,7 +92,7 @@ MODULE_VIEW_POLICY = {
             'materialreturn': 'view_all',
         }
     },
-    
+
     # 采购相关 - 全员可查看（非标自动化行业项目制，需要跨部门跟踪采购进度）
     # 注意：采购价格对项目成员可见，便于成本控制（见SENSITIVE_FIELDS配置）
     'purchase': {
@@ -116,7 +116,7 @@ MODULE_VIEW_POLICY = {
             'reconciliationcollaboration': 'view_all',
         }
     },
-    
+
     # 销售相关 - 全员可查看（非标行业项目从销售开始，全程需要跟踪）
     # 注意：利润率等敏感字段通过SENSITIVE_FIELDS控制
     'sales': {
@@ -129,21 +129,21 @@ MODULE_VIEW_POLICY = {
             'deliveryorder': 'view_all',
         }
     },
-    
+
     # 售后相关 - 全员可查看（售后问题需要多部门协作解决）
     'aftersales': {
         'default_view': 'view_all',
         'description': '售后数据全员可见，便于多部门协作解决客户问题',
     },
-    
+
     # OA协同 - 全员可查看（公告、日程等协同数据）
     'oa': {
         'default_view': 'view_all',
         'description': 'OA协同数据全员可见',
     },
-    
+
     # ========== 敏感数据 - 严格控制 ==========
-    
+
     # 财务相关 - 核心财务数据受限，业务协作数据开放
     'finance': {
         'default_view': 'restricted',
@@ -212,7 +212,7 @@ MODULE_VIEW_POLICY = {
             'taxinvoice': 'restricted',
         }
     },
-    
+
     # 系统管理 - 仅管理员可查看
     'accounts': {
         'default_view': 'admin_only',
@@ -224,7 +224,7 @@ MODULE_VIEW_POLICY = {
             'overtimerequest': 'view_self',
         }
     },
-    
+
     'core': {
         'default_view': 'admin_only',
         'description': '系统配置仅管理员可操作',
@@ -239,7 +239,7 @@ MODULE_VIEW_POLICY = {
 
 # ============================================================
 # 敏感字段配置 - 即使有查看权限也隐藏的字段
-# 
+#
 # 设计思路：
 # - 采购价格是核心商业机密，仅采购/财务/管理层可见
 # - 销售利润率仅销售经理/财务/管理层可见
@@ -365,7 +365,7 @@ OPERATION_PERMISSIONS = {
             'delete': ['admin', 'project_manager'],
         },
     },
-    
+
     # 采购管理
     'purchase': {
         'purchaserequest': {
@@ -382,7 +382,7 @@ OPERATION_PERMISSIONS = {
             'confirm': ['admin', 'purchase_manager'],
         },
     },
-    
+
     # 销售管理
     'sales': {
         'salesquotation': {
@@ -399,7 +399,7 @@ OPERATION_PERMISSIONS = {
             'confirm': ['admin', 'sales_manager', 'general_manager'],
         },
     },
-    
+
     # 生产管理
     'production': {
         'productionplan': {
@@ -420,7 +420,7 @@ OPERATION_PERMISSIONS = {
             'complete': ['admin', 'owner', 'qa_engineer'],
         },
     },
-    
+
     # 库存管理
     'inventory': {
         'materialrequisition': {
@@ -435,7 +435,7 @@ OPERATION_PERMISSIONS = {
             'complete': ['admin', 'warehouse_staff', 'warehouse_manager'],
         },
     },
-    
+
     # 财务管理
     'finance': {
         'expensereimbursement': {
@@ -606,10 +606,10 @@ DEFAULT_ROLES = [
 def get_module_view_policy(module_name: str, model_name: str = None) -> str:
     """获取模块/模型的查看策略"""
     policy = MODULE_VIEW_POLICY.get(module_name, {})
-    
+
     if model_name and 'models' in policy:
         return policy['models'].get(model_name.lower(), policy.get('default_view', 'view_related'))
-    
+
     return policy.get('default_view', 'view_related')
 
 
@@ -643,17 +643,17 @@ def get_hidden_fields(user, module_name: str, model_name: str) -> list:
     """获取需要对用户隐藏的字段列表"""
     if can_view_sensitive_fields(user, module_name, model_name):
         return []
-    
+
     hidden = []
-    
+
     # 模块级隐藏字段
     module_sensitive = SENSITIVE_FIELDS.get(module_name, {})
     hidden.extend(module_sensitive.get('all', []))
-    
+
     # 模型级隐藏字段
     if model_name:
         hidden.extend(module_sensitive.get(model_name.lower(), []))
-    
+
     return list(set(hidden))
 
 

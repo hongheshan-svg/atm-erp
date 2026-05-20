@@ -1,13 +1,13 @@
 """
 WebSocket utility functions for sending real-time notifications
 """
-from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 
 
 class WebSocketNotifier:
     """Utility class for sending WebSocket notifications"""
-    
+
     @staticmethod
     def send_notification_to_user(user_id, notification_data):
         """
@@ -26,7 +26,7 @@ class WebSocketNotifier:
                     'data': notification_data
                 }
             )
-    
+
     @staticmethod
     def send_notification_to_users(user_ids, notification_data):
         """
@@ -38,7 +38,7 @@ class WebSocketNotifier:
         """
         for user_id in user_ids:
             WebSocketNotifier.send_notification_to_user(user_id, notification_data)
-    
+
     @staticmethod
     def send_system_alert(alert_data, user_ids=None):
         """
@@ -51,7 +51,7 @@ class WebSocketNotifier:
         channel_layer = get_channel_layer()
         if not channel_layer:
             return
-        
+
         if user_ids:
             for user_id in user_ids:
                 async_to_sync(channel_layer.group_send)(
@@ -64,7 +64,7 @@ class WebSocketNotifier:
         else:
             # Broadcast to all (would need a global broadcast group)
             pass
-    
+
     @staticmethod
     def update_dashboard(dashboard_data):
         """

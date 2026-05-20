@@ -1,5 +1,5 @@
-from django.db import models
 from django.conf import settings
+from django.db import models
 
 
 class TimeStampedModel(models.Model):
@@ -22,7 +22,7 @@ class SoftDeleteModel(models.Model):
 
     class Meta:
         abstract = True
-    
+
     def soft_delete(self):
         """Soft delete the instance by setting is_deleted to True."""
         from django.utils import timezone
@@ -69,7 +69,7 @@ class AuditLog(models.Model):
         ('APPROVE', '审批'),
         ('REJECT', '拒绝'),
     ]
-    
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -85,7 +85,7 @@ class AuditLog(models.Model):
     ip_address = models.GenericIPAddressField(null=True, blank=True, verbose_name='IP地址')
     user_agent = models.TextField(null=True, blank=True, verbose_name='用户代理')
     timestamp = models.DateTimeField(auto_now_add=True, verbose_name='操作时间', db_index=True)
-    
+
     class Meta:
         db_table = 'audit_log'
         verbose_name = '审计日志'
@@ -95,7 +95,7 @@ class AuditLog(models.Model):
             models.Index(fields=['-timestamp', 'user']),
             models.Index(fields=['model_name', 'object_id']),
         ]
-    
+
     def __str__(self):
         return f"{self.user} - {self.action} - {self.model_name} - {self.timestamp}"
 
@@ -116,21 +116,21 @@ class Attachment(models.Model):
         ('FAULT_VIDEO', '故障视频'),
         ('OTHER', '其他'),
     ]
-    
+
     # 关联信息 - 使用通用外键方式
     related_model = models.CharField(max_length=100, verbose_name='关联模型', db_index=True)
     related_id = models.IntegerField(verbose_name='关联ID', db_index=True)
-    
+
     # 文件信息
     file = models.FileField(upload_to='attachments/%Y/%m/', verbose_name='文件')
     original_name = models.CharField(max_length=255, verbose_name='原始文件名')
     file_size = models.IntegerField(default=0, verbose_name='文件大小(字节)')
     file_type = models.CharField(max_length=100, blank=True, verbose_name='文件类型')
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='OTHER', verbose_name='分类')
-    
+
     # 描述信息
     description = models.TextField(blank=True, verbose_name='描述')
-    
+
     # 时间戳
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -140,7 +140,7 @@ class Attachment(models.Model):
         verbose_name='上传人'
     )
     uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name='上传时间')
-    
+
     class Meta:
         db_table = 'attachment'
         verbose_name = '附件'
@@ -149,10 +149,10 @@ class Attachment(models.Model):
         indexes = [
             models.Index(fields=['related_model', 'related_id']),
         ]
-    
+
     def __str__(self):
         return f"{self.original_name} ({self.related_model}:{self.related_id})"
-    
+
     def save(self, *args, **kwargs):
         if self.file and not self.file_size:
             self.file_size = self.file.size
@@ -172,7 +172,7 @@ class SystemNotification(models.Model):
         ('ERROR', '错误'),
         ('SUCCESS', '成功'),
     ]
-    
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -185,13 +185,13 @@ class SystemNotification(models.Model):
     is_read = models.BooleanField(default=False, verbose_name='已读')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     read_at = models.DateTimeField(null=True, blank=True, verbose_name='阅读时间')
-    
+
     class Meta:
         db_table = 'system_notification'
         verbose_name = '系统通知'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     def __str__(self):
         return f"{self.user} - {self.title}"
 
@@ -210,19 +210,19 @@ class SystemConfig(models.Model):
     company_email = models.EmailField(blank=True, verbose_name='公司邮箱')
     company_website = models.URLField(blank=True, verbose_name='公司网站')
     company_logo = models.ImageField(upload_to='company/', blank=True, null=True, verbose_name='公司Logo')
-    
+
     # 银行信息
     bank_name = models.CharField(max_length=100, blank=True, verbose_name='开户银行')
     bank_account = models.CharField(max_length=50, blank=True, verbose_name='银行账号')
-    
+
     # 法人信息
     legal_representative = models.CharField(max_length=50, blank=True, verbose_name='法人代表')
     registered_capital = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True, verbose_name='注册资本')
-    
+
     # 系统设置
     default_currency = models.CharField(max_length=10, default='CNY', verbose_name='默认货币')
     fiscal_year_start = models.IntegerField(default=1, verbose_name='财年起始月份')
-    
+
     # 时间戳
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
     updated_by = models.ForeignKey(
@@ -232,21 +232,21 @@ class SystemConfig(models.Model):
         blank=True,
         verbose_name='更新人'
     )
-    
+
     class Meta:
         db_table = 'system_config'
         verbose_name = '系统配置'
         verbose_name_plural = verbose_name
-    
+
     def __str__(self):
         return self.company_name or '系统配置'
-    
+
     @classmethod
     def get_config(cls):
         """获取系统配置（单例模式）"""
         config, created = cls.objects.get_or_create(pk=1)
         return config
-    
+
     def save(self, *args, **kwargs):
         # 确保只有一条记录
         self.pk = 1
@@ -254,14 +254,7 @@ class SystemConfig(models.Model):
 
 
 # 导入权限配置模型，使其可被迁移系统发现
-from .permission_models import ModulePermissionRule, RoleModulePermission
-from .permission_models_new import Permission, RolePermission, DataScope
 
 # 导入编码规则模型
-from .code_rule_models import CodeRule, CodeHistory
 
 # 导入移动端API模型
-from .mobile_api import (
-    MobileTimeEntry, MobilePhoto, MobileScanRecord,
-    MobileApproval, MobileNotification
-)
