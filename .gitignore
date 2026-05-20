@@ -79,3 +79,6 @@ htmlcov/
 coverage.xml
 *.cover
 .worktrees/
+*.xls
+*.xlsx
+frontend/coverage/
