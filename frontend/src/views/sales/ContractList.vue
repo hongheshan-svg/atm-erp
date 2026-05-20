@@ -1,11 +1,21 @@
-<template>
+await patchSalesContract(form.id, {
+      title: form.title,
+      contract_date: form.contract_date,
+      effective_date: form.effective_date || null,
+      expiry_date: form.expiry_date || null,
+      payment_terms: form.payment_terms,
+      delivery_terms: form.delivery_terms,
+      quality_terms: form.quality_terms,
+      warranty_terms: form.warranty_terms,
+      notes: form.notes
+    })<template>
   <div class="sales-contract-list">
     <el-card>
       <template #header>
         <div class="card-header">
           <span>销售合同</span>
           <div class="header-actions">
-            <el-button type="primary" @click="handleCreate">
+            <el-button type="primary" v-permission="'sales:contract:create'" @click="handleCreate">
               <el-icon><Plus /></el-icon>
               创建合同
             </el-button>
@@ -38,13 +48,13 @@
       </el-form>
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'sales:contract:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" v-permission="'sales:contract:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <el-table :data="contracts" v-loading="loading" stripe border @selection-change="handleSelectionChange">
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'sales:contract:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="contract_no" label="合同编号" width="150" />
         <el-table-column prop="title" label="合同标题" min-width="180" />
         <el-table-column prop="customer_name" label="客户" width="150" />
@@ -65,7 +75,7 @@
         <el-table-column label="操作" width="400" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
-            <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
+            <el-button size="small" v-permission="'sales:contract:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button size="small" type="warning" @click="handleSubmitApproval(row)" v-if="row.status === 'DRAFT' || row.status === 'REJECTED'">提交审批</el-button>
             <el-button size="small" type="info" @click="showWorkflowProgress(row)" v-if="row.status === 'PENDING'">审批进度</el-button>
             <el-button size="small" type="warning" @click="handleApprove(row)" v-if="row.status === 'PENDING'">审批</el-button>
@@ -118,7 +128,7 @@
       </el-form>
       <template #footer>
         <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleCreateFromSO" :loading="creating">创建</el-button>
+        <el-button type="primary" v-permission="'sales:contract:create'" @click="handleCreateFromSO" :loading="creating">创建</el-button>
       </template>
     </el-dialog>
     
@@ -278,9 +288,10 @@ import WorkflowProgress from '@/components/WorkflowProgress.vue'
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getSalesContracts, getSalesContract, createContractFromSO, patchSalesContract, submitSalesContract, approveSalesContract, signSalesContract, printPreviewContract, getOrdersForLinking } from '@/api/sales'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { getCustomerList } from '@/api/masterdata'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -402,7 +413,7 @@ const loadContracts = async () => {
     if (searchForm.customer) params.customer = searchForm.customer
     if (searchForm.status) params.status = searchForm.status
     
-    const res = await request.get('/sales/contracts/', { params })
+    const res = await getSalesContracts(params)
     contracts.value = res.data?.results || res.results || res.data || []
     pagination.total = res.data?.count || res.count || 0
   } catch (error) {
@@ -414,7 +425,7 @@ const loadContracts = async () => {
 
 const loadCustomers = async () => {
   try {
-    const res = await request.get('/masterdata/customers/')
+    const res = await getCustomerList()
     customers.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('加载客户失败:', error)
@@ -425,9 +436,7 @@ const searchOrders = async (query) => {
   if (query) {
     searchingOrders.value = true
     try {
-      const res = await request.get('/sales/orders/for_linking/', { 
-        params: { search: query } 
-      })
+      const res = await getOrdersForLinking({ search: query })
       salesOrders.value = res.data || res || []
     } catch (error) {
       console.error('搜索订单失败:', error)
@@ -457,9 +466,7 @@ const handleCreateFromSO = async () => {
     await createFormRef.value?.validate()
     creating.value = true
     
-    const res = await request.post('/sales/contracts/create_from_so/', {
-      so_id: createForm.so_id
-    })
+    const res = await createContractFromSO({ so_id: createForm.so_id })
     
     ElMessage.success('合同创建成功')
     createDialogVisible.value = false
@@ -479,7 +486,7 @@ const handleCreateFromSO = async () => {
 
 const handleView = async (row) => {
   try {
-    const res = await request.get(`/sales/contracts/${row.id}/`)
+    const res = await getSalesContract(row.id)
     currentContract.value = res.data || res
     viewDialogVisible.value = true
   } catch (error) {
@@ -491,7 +498,7 @@ const handleEdit = async (row) => {
   dialogTitle.value = '编辑合同'
   
   try {
-    const res = await request.get(`/sales/contracts/${row.id}/`)
+    const res = await getSalesContract(row.id)
     const data = res.data || res
     
     Object.assign(form, {
@@ -518,7 +525,7 @@ const handleSave = async () => {
     await formRef.value?.validate()
     saving.value = true
     
-    await request.patch(`/sales/contracts/${form.id}/`, {
+    await patchSalesContract(form.id, {
       title: form.title,
       contract_date: form.contract_date,
       effective_date: form.effective_date || null,
@@ -545,7 +552,7 @@ const handleSave = async () => {
 const handleSubmitApproval = async (row) => {
   try {
     await ElMessageBox.confirm('确定要提交该合同进行审批吗？', '提交审批', { type: 'warning' })
-    const response = await request.post(`/sales/contracts/${row.id}/submit/`)
+    const response = await submitSalesContract(row.id)
     const data = response.data || response
     if (data.workflow_started) {
       ElMessage.success(data.message || '已提交审批')
@@ -564,7 +571,7 @@ const handleSubmitApproval = async (row) => {
 const handleApprove = async (row) => {
   try {
     await ElMessageBox.confirm('确定要审批通过该合同吗？', '审批合同', { type: 'warning' })
-    await request.post(`/sales/contracts/${row.id}/approve/`)
+    await approveSalesContract(row.id)
     ElMessage.success('合同已审批')
     loadContracts()
   } catch (error) {
@@ -586,7 +593,7 @@ const handleSignSubmit = async () => {
     await signFormRef.value?.validate()
     signing.value = true
     
-    await request.post(`/sales/contracts/${currentContract.value.id}/sign/`, {
+    await signSalesContract(currentContract.value.id, {
       buyer_signer: signForm.buyer_signer,
       seller_signer: signForm.seller_signer
     })
@@ -605,7 +612,7 @@ const handleSignSubmit = async () => {
 
 const handlePrint = async (row) => {
   try {
-    const res = await request.get(`/sales/contracts/${row.id}/print_preview/`)
+    const res = await printPreviewContract(row.id)
     const data = res.data || res
     
     // 创建打印窗口

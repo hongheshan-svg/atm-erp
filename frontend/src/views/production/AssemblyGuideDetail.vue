@@ -43,7 +43,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getAssemblyGuide } from '@/api/production'
 
 const route = useRoute()
 const router = useRouter()
@@ -55,7 +55,7 @@ const pageTitle = computed(() => guide.value.name ? `装配指导 - ${guide.valu
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await request.get(`/production/assembly-guides/${route.params.id}/`)
+    const res = await getAssemblyGuide(route.params.id)
     guide.value = res.data || res
   } catch (error) {
     ElMessage.error('加载数据失败')

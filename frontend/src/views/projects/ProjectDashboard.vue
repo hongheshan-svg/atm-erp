@@ -121,7 +121,7 @@
                 <span>预算使用率 {{ dashboard.budget.budget_utilization }}%</span>
               </el-progress>
               <div class="variance" :class="dashboard.budget.budget_variance >= 0 ? 'positive' : 'negative'">
-                {{ dashboard.budget.budget_variance >= 0 ? '节余' : '超支' }}: ¥{{ Math.abs(dashboard.budget.budget_variance).toFixed(2) }}
+                {{ dashboard.budget.budget_variance >= 0 ? '节余' : '超支' }}: ¥{{ toFixedSafe(Math.abs(dashboard.budget.budget_variance)) }}
               </div>
             </div>
           </el-card>
@@ -153,7 +153,7 @@
             </el-row>
             <el-divider />
             <div class="cash-flow" :class="dashboard.finance.cash_flow >= 0 ? 'positive' : 'negative'">
-              现金流: ¥{{ dashboard.finance.cash_flow.toFixed(2) }}
+              现金流: ¥{{ toFixedSafe(dashboard.finance.cash_flow) }}
             </div>
           </el-card>
         </el-col>
@@ -182,7 +182,7 @@
                   </div>
                   <div class="stat-row">
                     <span>采购总额:</span>
-                    <span>¥{{ dashboard.purchase.total_amount.toFixed(2) }}</span>
+                    <span>¥{{ toFixedSafe(dashboard.purchase.total_amount) }}</span>
                   </div>
                 </div>
               </el-col>
@@ -267,7 +267,8 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, WarningFilled, SuccessFilled, View } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getProjectList, getProjectDashboard, getProjectBOMItems } from '@/api/projects/project'
+import { toFixedSafe } from '@/utils/number'
 
 const loading = ref(false)
 const projects = ref([])
@@ -310,7 +311,7 @@ const getStatusName = (status) => statusMap[status] || status
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res
     
     // 自动选择第一个进行中的项目
@@ -329,7 +330,7 @@ const loadDashboard = async () => {
   
   try {
     loading.value = true
-    const res = await request.get(`/projects/dashboard/${selectedProjectId.value}/`)
+    const res = await getProjectDashboard(selectedProjectId.value)
     dashboard.value = res
   } catch (error) {
     console.error('加载仪表盘失败:', error)
@@ -344,9 +345,10 @@ const loadBOMCost = async () => {
   bomDialogVisible.value = true
   bomLoading.value = true
   try {
-    const res = await request.get(`/projects/projects/${selectedProjectId.value}/bom-items/`)
+    const res = await getProjectBOMItems(selectedProjectId.value)
     bomItems.value = res.data?.results || res.results || res.data || []
-  } catch {
+  } catch (error) {
+    console.error(error)
     bomItems.value = []
   } finally {
     bomLoading.value = false

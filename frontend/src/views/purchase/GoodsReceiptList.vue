@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>收货管理</span>
-          <el-button type="primary" @click="handleAdd">
+          <el-button type="primary" v-permission="'purchase:goods_receipt:create'" @click="handleAdd">
             <el-icon><Plus /></el-icon>
             创建收货单
           </el-button>
@@ -34,7 +34,7 @@
       </el-form>
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'purchase:goods_receipt:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
         <el-button 
           type="danger" 
@@ -47,7 +47,7 @@
       </div>
 
       <el-table :data="receipts" v-loading="loading" border stripe @selection-change="handleSelectionChange">
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'purchase:goods_receipt:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="receipt_no" label="收货单号" width="150" />
         <el-table-column prop="purchase_order_no" label="采购订单号" width="150" />
         <el-table-column prop="supplier_name" label="供应商" min-width="150" />
@@ -62,7 +62,7 @@
         <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
-            <el-button size="small" type="primary" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
+            <el-button size="small" type="primary" v-permission="'purchase:goods_receipt:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button size="small" type="success" @click="handleConfirm(row)" v-if="row.status === 'DRAFT'">确认入库</el-button>
             <el-button 
               v-if="canDelete"
@@ -215,9 +215,13 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import {
+  getGoodsReceipts, getGoodsReceipt, createGoodsReceipt, updateGoodsReceipt,
+  confirmGoodsReceipt, getPurchaseOrders, getPurchaseOrder
+} from '@/api/purchase'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { getWarehouseList } from '@/api/masterdata'
 
 const route = useRoute()
 
@@ -292,7 +296,7 @@ const loadReceipts = async () => {
     if (searchForm.purchase_order) params.purchase_order = searchForm.purchase_order
     if (searchForm.status) params.status = searchForm.status
     
-    const response = await request.get('/purchase/receipts/', { params })
+    const response = await getGoodsReceipts(params)
     receipts.value = response.data?.results || response.results || response.data || []
     pagination.total = response.data?.count || response.count || 0
   } catch (error) {
@@ -304,7 +308,7 @@ const loadReceipts = async () => {
 
 const loadPurchaseOrders = async () => {
   try {
-    const response = await request.get('/purchase/orders/', { params: { page_size: 1000 } })
+    const response = await getPurchaseOrders({ page_size: 1000 })
     purchaseOrders.value = response.data?.results || response.results || response.data || []
   } catch (error) {
     console.error('加载采购订单失败:', error)
@@ -313,7 +317,7 @@ const loadPurchaseOrders = async () => {
 
 const loadWarehouses = async () => {
   try {
-    const response = await request.get('/masterdata/warehouses/')
+    const response = await getWarehouseList()
     warehouses.value = response.data?.results || response.results || response.data || []
   } catch (error) {
     console.error('加载仓库失败:', error)
@@ -348,7 +352,7 @@ const handleEdit = async (row) => {
   dialogTitle.value = '编辑收货单'
   isEdit.value = true
   try {
-    const response = await request.get(`/purchase/receipts/${row.id}/`)
+    const response = await getGoodsReceipt(row.id)
     const data = response.data || response
     Object.assign(form, {
       id: data.id,
@@ -381,7 +385,7 @@ const onPurchaseOrderChange = async (poId) => {
   }
   
   try {
-    const response = await request.get(`/purchase/orders/${poId}/`)
+    const response = await getPurchaseOrder(poId)
     const po = response.data || response
     
     // 从采购订单明细生成收货明细
@@ -426,10 +430,10 @@ const handleSave = async () => {
     }
     
     if (isEdit.value) {
-      await request.put(`/purchase/receipts/${form.id}/`, payload)
+      await updateGoodsReceipt(form.id, payload)
       ElMessage.success('更新收货单成功')
     } else {
-      await request.post('/purchase/receipts/', payload)
+      await createGoodsReceipt(payload)
       ElMessage.success('创建收货单成功')
     }
     
@@ -448,7 +452,7 @@ const handleSave = async () => {
 
 const handleView = async (row) => {
   try {
-    const response = await request.get(`/purchase/receipts/${row.id}/`)
+    const response = await getGoodsReceipt(row.id)
     current.value = response.data || response
     detailVisible.value = true
   } catch (error) {
@@ -459,7 +463,7 @@ const handleView = async (row) => {
 const handleConfirm = async (row) => {
   try {
     await ElMessageBox.confirm('确定要确认收货吗？确认后将生成入库记录。', '提示', { type: 'warning' })
-    await request.post(`/purchase/receipts/${row.id}/confirm/`)
+    await confirmGoodsReceipt(row.id)
     ElMessage.success('收货确认成功，已生成入库记录')
     loadReceipts()
     loadPurchaseOrders()

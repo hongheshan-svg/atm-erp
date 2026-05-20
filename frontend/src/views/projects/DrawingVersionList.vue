@@ -104,7 +104,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload } from '@element-plus/icons-vue'
 import {
   getDrawingVersions, createDrawingVersion, getDrawingTimeline,
-  approveDrawingVersion, rejectDrawingVersion
+  approveDrawingVersion, rejectDrawingVersion, submitDrawingReview
 } from '@/api/projects/enhancement'
 
 const loading = ref(false)
@@ -142,9 +142,13 @@ const viewTimeline = async (row) => {
 
 const submitReview = async (row) => {
   await ElMessageBox.confirm('确认提交审核？', '提示')
-  // would call a submit endpoint
-  ElMessage.success('已提交审核')
-  loadList()
+  try {
+    await submitDrawingReview(row.id)
+    ElMessage.success('已提交审核')
+    loadList()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '提交审核失败')
+  }
 }
 
 const approveDrawing = async (row) => {

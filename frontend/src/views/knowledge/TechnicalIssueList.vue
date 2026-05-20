@@ -120,7 +120,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
 import { getTechnicalIssueList, getTechnicalIssue, createTechnicalIssue, convertIssueToKnowledge } from '@/api/projects/knowledge'
-import request from '@/utils/request'
+import { getProjectList } from '@/api/projects/project'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -158,9 +158,11 @@ const fetchData = async () => {
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
-    projectList.value = res.data?.results || res.results || []
-  } catch {}
+    const res = await getProjectList({ page_size: 1000 })
+    projectList.value = res.results || res.data?.results || []
+  } catch (error) {
+    console.error('TechnicalIssueList getProjectList error:', error)
+  }
 }
 
 const handleCreate = () => {
@@ -174,7 +176,8 @@ const handleView = async (row) => {
     const res = await getTechnicalIssue(row.id)
     viewDetail.value = res.data || res
     viewDialogVisible.value = true
-  } catch {
+  } catch (error) {
+    console.error(error)
     viewDetail.value = row
     viewDialogVisible.value = true
   }

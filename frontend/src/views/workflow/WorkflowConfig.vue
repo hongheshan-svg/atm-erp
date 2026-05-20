@@ -39,7 +39,7 @@
           default-expand-all
           class="workflow-tree"
         >
-          <template #default="{ node, data }">
+          <template #default="{ node: _node, data }">
             <div class="tree-node" :class="{ 'is-workflow': data.isWorkflow }">
               <div class="node-content">
                 <el-icon v-if="!data.isWorkflow" class="folder-icon"><Folder /></el-icon>

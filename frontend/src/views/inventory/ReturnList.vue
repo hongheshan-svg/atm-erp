@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>生产退料管理</span>
-          <el-button type="primary" @click="handleAdd">
+          <el-button type="primary" v-permission="'inventory:material_return:create'" @click="handleAdd">
             <el-icon><Plus /></el-icon> 新建退料单
           </el-button>
         </div>
@@ -66,7 +66,7 @@
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
-            <el-button size="small" type="primary" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
+            <el-button size="small" type="primary" v-permission="'inventory:material_return:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button size="small" type="success" @click="handleSubmit(row)" v-if="row.status === 'DRAFT'">提交</el-button>
             <el-button size="small" type="warning" @click="handleInspect(row)" v-if="row.status === 'PENDING'">开始检验</el-button>
             <el-button size="small" type="primary" @click="handleReceive(row)" v-if="['PENDING', 'INSPECTING', 'PARTIAL'].includes(row.status)">入库</el-button>
@@ -286,8 +286,11 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Warning } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getReturns, getReturn, createReturn, updateReturn, submitReturn, startInspectReturn, receiveReturn, rejectReturn } from '@/api/inventory'
 import { usePermissionStore } from '@/stores/permission'
+import { getAfterSalesOrderList } from '@/api/aftersales'
+import { getItemList, getWarehouseList } from '@/api/masterdata'
+import { getProjectList } from '@/api/projects/project'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -371,7 +374,7 @@ const loadList = async () => {
       page_size: pagination.pageSize,
       ...searchForm
     }
-    const response = await request.get('/inventory/returns/', { params })
+    const response = await getReturns(params)
     list.value = response.results || response || []
     pagination.total = response.count || list.value.length
   } catch (error) {
@@ -387,7 +390,7 @@ const loadProjects = async () => {
   }
 
   try {
-    const response = await request.get('/projects/projects/')
+    const response = await getProjectList()
     projects.value = response.results || response || []
     projectsLoaded.value = true
     return true
@@ -401,7 +404,7 @@ const loadProjects = async () => {
 
 const loadWarehouses = async () => {
   try {
-    const response = await request.get('/masterdata/warehouses/')
+    const response = await getWarehouseList()
     warehouses.value = response.results || response || []
   } catch (error) {
     console.error('加载仓库失败:', error)
@@ -414,7 +417,7 @@ const loadAftersalesOrders = async () => {
   }
 
   try {
-    const response = await request.get('/projects/aftersales/')
+    const response = await getAfterSalesOrderList()
     aftersalesOrders.value = response.results || response || []
     aftersalesOrdersLoaded.value = true
     return true
@@ -446,7 +449,7 @@ const searchItems = async () => {
     return
   }
   try {
-    const response = await request.get('/masterdata/items/', { params: { search: itemSearch.value } })
+    const response = await getItemList({ search: itemSearch.value })
     searchedItems.value = response.results || response || []
   } catch (error) {
     console.error('搜索物料失败:', error)
@@ -523,7 +526,7 @@ const handleEdit = async (row) => {
   isEdit.value = true
   
   try {
-    const response = await request.get(`/inventory/returns/${row.id}/`)
+    const response = await getReturn(row.id)
     Object.assign(form, {
       id: response.id,
       return_type: response.return_type,
@@ -550,7 +553,7 @@ const handleEdit = async (row) => {
 
 const handleView = async (row) => {
   try {
-    const response = await request.get(`/inventory/returns/${row.id}/`)
+    const response = await getReturn(row.id)
     currentItem.value = response
     viewDialogVisible.value = true
   } catch (error) {
@@ -561,7 +564,8 @@ const handleView = async (row) => {
 const handleSave = async () => {
   try {
     await formRef.value.validate()
-  } catch {
+  } catch (error) {
+    console.error(error)
     return
   }
   
@@ -588,10 +592,10 @@ const handleSave = async () => {
     }
     
     if (isEdit.value) {
-      await request.put(`/inventory/returns/${form.id}/`, data)
+      await updateReturn(form.id, data)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/inventory/returns/', data)
+      await createReturn(data)
       ElMessage.success('创建成功')
     }
     
@@ -607,7 +611,7 @@ const handleSave = async () => {
 const handleSubmit = async (row) => {
   try {
     await ElMessageBox.confirm('确定提交该退料申请？', '确认')
-    await request.post(`/inventory/returns/${row.id}/submit/`)
+    await submitReturn(row.id)
     ElMessage.success('提交成功')
     loadList()
   } catch (error) {
@@ -619,7 +623,7 @@ const handleSubmit = async (row) => {
 
 const handleInspect = async (row) => {
   try {
-    await request.post(`/inventory/returns/${row.id}/start_inspect/`)
+    await startInspectReturn(row.id)
     ElMessage.success('开始检验')
     loadList()
   } catch (error) {
@@ -629,7 +633,7 @@ const handleInspect = async (row) => {
 
 const handleReceive = async (row) => {
   try {
-    const response = await request.get(`/inventory/returns/${row.id}/`)
+    const response = await getReturn(row.id)
     currentReturnId.value = row.id
     receiveLines.value = (response.lines || []).filter(l => l.qty > l.received_qty).map(l => ({
       id: l.id,
@@ -661,7 +665,7 @@ const confirmReceive = async () => {
   
   receiving.value = true
   try {
-    await request.post(`/inventory/returns/${currentReturnId.value}/receive/`, { lines })
+    await receiveReturn(currentReturnId.value, { lines })
     ElMessage.success('入库成功')
     receiveDialogVisible.value = false
     loadList()
@@ -686,7 +690,7 @@ const confirmReject = async () => {
   
   rejecting.value = true
   try {
-    await request.post(`/inventory/returns/${rejectReturnId.value}/reject/`, { reason: rejectReason.value })
+    await rejectReturn(rejectReturnId.value, { reason: rejectReason.value })
     ElMessage.success('已拒绝')
     rejectDialogVisible.value = false
     loadList()

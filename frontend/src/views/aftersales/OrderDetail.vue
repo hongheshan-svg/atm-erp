@@ -75,12 +75,12 @@
               </div>
             </template>
             <el-descriptions :column="1" border size="small">
-              <el-descriptions-item label="人工费用">¥{{ (order.labor_cost || 0).toFixed(2) }}</el-descriptions-item>
-              <el-descriptions-item label="差旅费用">¥{{ (order.travel_cost || 0).toFixed(2) }}</el-descriptions-item>
-              <el-descriptions-item label="备件费用">¥{{ (order.parts_cost || 0).toFixed(2) }}</el-descriptions-item>
-              <el-descriptions-item label="其他费用">¥{{ (order.other_cost || 0).toFixed(2) }}</el-descriptions-item>
+              <el-descriptions-item label="人工费用">¥{{ toFixedSafe(order.labor_cost) }}</el-descriptions-item>
+              <el-descriptions-item label="差旅费用">¥{{ toFixedSafe(order.travel_cost) }}</el-descriptions-item>
+              <el-descriptions-item label="备件费用">¥{{ toFixedSafe(order.parts_cost) }}</el-descriptions-item>
+              <el-descriptions-item label="其他费用">¥{{ toFixedSafe(order.other_cost) }}</el-descriptions-item>
               <el-descriptions-item label="总成本">
-                <span class="total-cost">¥{{ (order.total_cost || 0).toFixed(2) }}</span>
+                <span class="total-cost">¥{{ toFixedSafe(order.total_cost) }}</span>
               </el-descriptions-item>
             </el-descriptions>
           </el-card>
@@ -125,7 +125,7 @@
           </el-table-column>
           <el-table-column label="操作" width="80">
             <template #default="{ row }">
-              <el-button type="danger" link size="small" @click="deleteServiceRecord(row)">删除</el-button>
+              <el-button type="danger" link size="small" @click="handleDeleteServiceRecord(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -159,7 +159,7 @@
           <el-table-column prop="serial_no" label="序列号" width="120" />
           <el-table-column label="操作" width="80">
             <template #default="{ row }">
-              <el-button type="danger" link size="small" @click="deleteSparePart(row)">删除</el-button>
+              <el-button type="danger" link size="small" @click="handleDeleteSparePart(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -223,7 +223,7 @@
               </div>
               <div class="attachment-actions">
                 <el-button type="primary" link size="small" @click="downloadAttachment(attachment)">下载</el-button>
-                <el-button type="danger" link size="small" @click="deleteAttachment(attachment)">删除</el-button>
+                <el-button type="danger" link size="small" @click="handleDeleteAttachment(attachment)">删除</el-button>
               </div>
             </div>
           </div>
@@ -397,8 +397,11 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, VideoPlay, Document } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getAfterSalesOrder, startService, onSiteService, waitingParts, resolveAfterSalesOrder, closeAfterSalesOrder, cancelAfterSalesOrder, createServiceRecord, deleteServiceRecord, createSparePart, deleteSparePart, updateAfterSalesCost } from '@/api/aftersales'
 import { useUserStore } from '@/stores/user'
+import { deleteAttachment, getAttachmentList, uploadAttachment } from '@/api/core'
+import { getItemList } from '@/api/masterdata'
+import { toFixedSafe } from '@/utils/number'
 
 const route = useRoute()
 const router = useRouter()
@@ -498,7 +501,7 @@ const goBack = () => {
 const loadOrder = async () => {
   loading.value = true
   try {
-    const res = await request.get(`/projects/aftersales/${route.params.id}/`)
+    const res = await getAfterSalesOrder(route.params.id)
     order.value = res.data || res
   } catch (error) {
     ElMessage.error('加载工单失败')
@@ -510,7 +513,7 @@ const loadOrder = async () => {
 
 const loadItems = async () => {
   try {
-    const res = await request.get('/masterdata/items/')
+    const res = await getItemList()
     items.value = res.data?.results || res.results || []
   } catch (error) {
     console.error('加载物料失败:', error)
@@ -519,7 +522,7 @@ const loadItems = async () => {
 
 const handleStartService = async () => {
   try {
-    await request.post(`/projects/aftersales/${order.value.id}/start_service/`)
+    await startService(order.value.id)
     ElMessage.success('已开始服务')
     loadOrder()
   } catch (error) {
@@ -529,7 +532,7 @@ const handleStartService = async () => {
 
 const handleOnSite = async () => {
   try {
-    await request.post(`/projects/aftersales/${order.value.id}/on_site/`)
+    await onSiteService(order.value.id)
     ElMessage.success('已到达现场')
     loadOrder()
   } catch (error) {
@@ -539,7 +542,7 @@ const handleOnSite = async () => {
 
 const handleWaitingParts = async () => {
   try {
-    await request.post(`/projects/aftersales/${order.value.id}/waiting_parts/`)
+    await waitingParts(order.value.id)
     ElMessage.success('状态已更新')
     loadOrder()
   } catch (error) {
@@ -561,7 +564,7 @@ const handleResolve = async () => {
   }
   submitting.value = true
   try {
-    await request.post(`/projects/aftersales/${order.value.id}/resolve/`, resolveForm)
+    await resolveAfterSalesOrder(order.value.id, resolveForm)
     ElMessage.success('问题已解决')
     resolveDialogVisible.value = false
     loadOrder()
@@ -581,7 +584,7 @@ const showCloseDialog = () => {
 const handleClose = async () => {
   submitting.value = true
   try {
-    await request.post(`/projects/aftersales/${order.value.id}/close/`, closeForm)
+    await closeAfterSalesOrder(order.value.id, closeForm)
     ElMessage.success('工单已关闭')
     closeDialogVisible.value = false
     loadOrder()
@@ -595,7 +598,7 @@ const handleClose = async () => {
 const handleCancel = async () => {
   try {
     await ElMessageBox.confirm('确定要取消此工单吗？', '取消工单', { type: 'warning' })
-    await request.post(`/projects/aftersales/${order.value.id}/cancel/`)
+    await cancelAfterSalesOrder(order.value.id)
     ElMessage.success('工单已取消')
     loadOrder()
   } catch (error) {
@@ -630,7 +633,7 @@ const saveServiceRecord = async () => {
       ...serviceForm
     }
     
-    await request.post('/projects/service-records/', data)
+    await createServiceRecord(data)
     ElMessage.success('服务记录已添加')
     serviceDialogVisible.value = false
     loadOrder()
@@ -643,10 +646,10 @@ const saveServiceRecord = async () => {
   }
 }
 
-const deleteServiceRecord = async (row) => {
+const handleDeleteServiceRecord = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除此服务记录吗？', '删除确认', { type: 'warning' })
-    await request.delete(`/projects/service-records/${row.id}/`)
+    await deleteServiceRecord(row.id)
     ElMessage.success('删除成功')
     loadOrder()
   } catch (error) {
@@ -683,7 +686,7 @@ const saveSparePart = async () => {
       ...sparePartForm
     }
     
-    await request.post('/projects/spare-parts/', data)
+    await createSparePart(data)
     ElMessage.success('备件记录已添加')
     sparePartDialogVisible.value = false
     loadOrder()
@@ -696,10 +699,10 @@ const saveSparePart = async () => {
   }
 }
 
-const deleteSparePart = async (row) => {
+const handleDeleteSparePart = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除此备件记录吗？', '删除确认', { type: 'warning' })
-    await request.delete(`/projects/spare-parts/${row.id}/`)
+    await deleteSparePart(row.id)
     ElMessage.success('删除成功')
     loadOrder()
   } catch (error) {
@@ -720,7 +723,7 @@ const showCostDialog = () => {
 const saveCost = async () => {
   submitting.value = true
   try {
-    await request.post(`/projects/aftersales/${order.value.id}/update_cost/`, costForm)
+    await updateAfterSalesCost(order.value.id, costForm)
     ElMessage.success('成本更新成功')
     costDialogVisible.value = false
     loadOrder()
@@ -735,7 +738,7 @@ const saveCost = async () => {
 
 const loadAttachments = async () => {
   try {
-    const res = await request.get('/core/attachments/', {
+    const res = await getAttachmentList({
       params: {
         related_model: 'AfterSalesOrder',
         related_id: route.params.id
@@ -771,7 +774,7 @@ const handleFileSelect = async (file) => {
     }
     formData.append('category', category)
     
-    await request.post('/core/attachments/', formData, {
+    await uploadAttachment(formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress: (progressEvent) => {
         uploadItem.progress = Math.round((progressEvent.loaded * 100) / progressEvent.total)
@@ -840,10 +843,10 @@ const downloadAttachment = (attachment) => {
   window.open(`/api/core/attachments/${attachment.id}/download/`, '_blank')
 }
 
-const deleteAttachment = async (attachment) => {
+const handleDeleteAttachment = async (attachment) => {
   try {
     await ElMessageBox.confirm('确定要删除该附件吗？', '删除确认', { type: 'warning' })
-    await request.delete(`/core/attachments/${attachment.id}/`)
+    await deleteAttachment(attachment.id)
     ElMessage.success('删除成功')
     loadAttachments()
   } catch (error) {
@@ -974,4 +977,3 @@ onMounted(() => {
   gap: 5px;
 }
 </style>
-

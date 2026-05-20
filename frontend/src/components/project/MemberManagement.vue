@@ -17,7 +17,7 @@
         <el-table-column prop="role" label="项目角色" width="150" />
         <el-table-column prop="hourly_rate" label="时薪（元/小时）" width="130" align="right">
           <template #default="{ row }">
-            ¥{{ (row.hourly_rate || 0).toFixed(2) }}
+            ¥{{ toFixedSafe(row.hourly_rate) }}
           </template>
         </el-table-column>
         <el-table-column prop="allocated_hours" label="分配工时" width="100" align="right">
@@ -146,6 +146,7 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { toFixedSafe } from '@/utils/number'
 
 const props = defineProps({
   projectId: {
@@ -338,4 +339,3 @@ defineExpose({
   align-items: center;
 }
 </style>
-

@@ -34,8 +34,8 @@
 
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
+import { getCapacityUtilizationReport } from '@/api/reports'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
 import * as echarts from 'echarts'
 
 const loading = ref(false)
@@ -51,7 +51,7 @@ const loadData = async () => {
       params.start_date = dateRange.value[0]
       params.end_date = dateRange.value[1]
     }
-    const res = await request.get('/reports/industry/capacity-utilization/', { params })
+    const res = await getCapacityUtilizationReport(params)
     tableData.value = res.data?.work_centers || res.work_centers || []
     await nextTick()
     renderChart()

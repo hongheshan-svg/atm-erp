@@ -5,7 +5,7 @@
         <div class="card-header">
           <span>工时填报</span>
           <div class="header-actions">
-            <el-button type="primary" @click="handleAdd">
+            <el-button type="primary" v-permission="'projects:project:create'" @click="handleAdd">
               <el-icon><Plus /></el-icon>
               填报工时
             </el-button>
@@ -67,14 +67,14 @@
       </el-row>
       
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'projects:project:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" v-permission="'projects:project:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <!-- 工时列表 -->
       <el-table :data="timeLogs" border stripe v-loading="loading" @selection-change="handleSelectionChange">
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'projects:project:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="date" label="日期" width="110" />
         <el-table-column prop="project_name" label="项目" width="180" />
         <el-table-column prop="task_name" label="任务" min-width="200" />
@@ -94,7 +94,7 @@
         <el-table-column prop="created_at" label="提交时间" width="160" />
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="handleEdit(row)" :disabled="row.status !== 'PENDING'">编辑</el-button>
+            <el-button type="primary" link size="small" v-permission="'projects:project:edit'" @click="handleEdit(row)" :disabled="row.status !== 'PENDING'">编辑</el-button>
             <el-button v-if="canDelete" type="danger" link size="small" @click="deleteRow(row)" :loading="deleteLoading">删除</el-button>
           </template>
         </el-table-column>
@@ -158,7 +158,7 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getProjectList, getTaskList, getTimeLogList, createTimeLog, updateTimeLog } from '@/api/projects/project'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 
@@ -234,7 +234,7 @@ const getStatusLabel = (status) => {
 
 const fetchProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/')
+    const res = await getProjectList()
     projects.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('获取项目列表失败:', error)
@@ -254,7 +254,7 @@ const fetchData = async () => {
       params.end_date = searchForm.dateRange[1]
     }
     
-    const res = await request.get('/projects/time-logs/', { params })
+    const res = await getTimeLogList(params)
     timeLogs.value = res.data?.results || res.results || res.data || []
     pagination.total = res.data?.count || res.count || 0
     
@@ -296,9 +296,7 @@ const fetchProjectTasks = async (projectId) => {
   
   try {
     // 使用查询参数过滤项目任务
-    const res = await request.get('/projects/tasks/', {
-      params: { project: projectId }
-    })
+    const res = await getTaskList({ project: projectId })
     projectTasks.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     projectTasks.value = [
@@ -354,10 +352,10 @@ const handleSubmit = async () => {
     await formRef.value.validate()
     
     if (form.id) {
-      await request.put(`/projects/time-logs/${form.id}/`, form)
+      await updateTimeLog(form.id, form)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/projects/time-logs/', form)
+      await createTimeLog(form)
       ElMessage.success('提交成功')
     }
     

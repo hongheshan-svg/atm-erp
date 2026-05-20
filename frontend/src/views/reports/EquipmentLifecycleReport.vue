@@ -42,8 +42,8 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { getEquipmentLifecycleReport } from '@/api/reports'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
 
 const loading = ref(false)
 const tableData = ref([])
@@ -55,7 +55,7 @@ const formatMoney = (v) => v ? parseFloat(v).toLocaleString('zh-CN', { minimumFr
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await request.get('/reports/industry/equipment-lifecycle/', { params: filters.value })
+    const res = await getEquipmentLifecycleReport(filters.value)
     tableData.value = res.data?.equipment || res.equipment || []
     stats.value = res.data?.stats || res.stats || stats.value
   } catch (error) {

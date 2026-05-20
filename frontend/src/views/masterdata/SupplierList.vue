@@ -25,7 +25,7 @@
             <el-button @click="handleExport">
               <el-icon><Download /></el-icon> 导出
             </el-button>
-            <el-button type="primary" @click="handleAdd">
+            <el-button type="primary" v-permission="'masterdata:supplier:create'" @click="handleAdd">
               <el-icon><Plus /></el-icon> 新增供应商
             </el-button>
           </div>
@@ -50,7 +50,7 @@
       </el-form>
 
       <!-- 批量操作工具栏 - 仅管理员可见 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'masterdata:supplier:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
         <el-button 
           type="danger" 
@@ -64,7 +64,7 @@
       
       <el-table :data="suppliers" v-loading="loading" stripe border @selection-change="handleSelectionChange" :table-layout="'auto'" style="width: 100%;">
         <!-- 仅管理员显示选择列 -->
-        <el-table-column v-if="canDelete" type="selection" width="45" fixed />
+        <el-table-column v-permission="'masterdata:supplier:delete'" v-if="canDelete" type="selection" width="45" fixed />
         <el-table-column prop="code" label="编码" width="110" />
         <el-table-column prop="name" label="供应商名称" min-width="200" />
         <el-table-column prop="contact_person" label="联系人" width="80" />
@@ -81,7 +81,7 @@
         </el-table-column>
         <el-table-column label="操作" :width="canDelete ? 200 : 140" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" link type="primary" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" link type="primary" v-permission="'masterdata:supplier:edit'" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" link type="success" @click="handleViewAttachments(row)">附件</el-button>
             <!-- 仅管理员显示删除按钮 -->
             <el-button 
@@ -257,7 +257,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Upload, Download, Document } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getSupplierList, createSupplier, updateSupplier, exportSuppliers, downloadSupplierTemplate } from '@/api/masterdata'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
@@ -338,7 +338,7 @@ const loadSuppliers = async () => {
       ...searchForm
     }
     Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
-    const response = await request.get('/masterdata/suppliers/', { params })
+    const response = await getSupplierList(params)
     suppliers.value = response.results || response || []
     pagination.total = response.count || 0
   } catch (error) {
@@ -383,10 +383,10 @@ const handleSubmit = async () => {
     await formRef.value.validate()
     submitting.value = true
     if (isEdit.value) {
-      await request.put(`/masterdata/suppliers/${form.id}/`, form)
+      await updateSupplier(form.id, form)
       ElMessage.success('更新供应商成功')
     } else {
-      await request.post('/masterdata/suppliers/', form)
+      await createSupplier(form)
       ElMessage.success('创建供应商成功')
     }
     dialogVisible.value = false
@@ -428,10 +428,7 @@ const handleExport = async () => {
     const params = { ...searchForm }
     Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
     
-    const response = await request.get('/masterdata/suppliers/export_excel/', {
-      params,
-      responseType: 'blob'
-    })
+    const response = await exportSuppliers(params)
     
     const filename = `供应商列表_${new Date().toISOString().split('T')[0]}.xlsx`
     const blob = response.data
@@ -457,9 +454,7 @@ const handleExport = async () => {
 
 const downloadTemplate = async () => {
   try {
-    const response = await request.get('/masterdata/suppliers/download_template/', {
-      responseType: 'blob'
-    })
+    const response = await downloadSupplierTemplate()
     
     if (!response || !response.data) {
       ElMessage.error('下载失败：没有收到响应数据')

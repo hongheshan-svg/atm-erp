@@ -49,14 +49,14 @@
             <el-table-column prop="invoice_date" label="发票日期" width="120" />
             <el-table-column prop="due_date" label="到期日期" width="120" />
             <el-table-column prop="amount_due" label="应收金额" width="130" align="right">
-              <template #default="{ row }">¥{{ (row.amount_due || 0).toFixed(2) }}</template>
+              <template #default="{ row }">¥{{ toFixedSafe(row.amount_due) }}</template>
             </el-table-column>
             <el-table-column prop="amount_paid" label="已收金额" width="130" align="right">
-              <template #default="{ row }">¥{{ (row.amount_paid || 0).toFixed(2) }}</template>
+              <template #default="{ row }">¥{{ toFixedSafe(row.amount_paid) }}</template>
             </el-table-column>
             <el-table-column label="未收金额" width="130" align="right">
               <template #default="{ row }">
-                <span style="font-weight: 600;">¥{{ ((row.amount_due || 0) - (row.amount_paid || 0)).toFixed(2) }}</span>
+                <span style="font-weight: 600;">¥{{ subtractFixedSafe(row.amount_due, row.amount_paid) }}</span>
               </template>
             </el-table-column>
             <el-table-column label="逾期天数" width="100" align="right">
@@ -113,10 +113,10 @@
             <el-table-column prop="invoice_date" label="发票日期" width="120" />
             <el-table-column prop="due_date" label="到期日期" width="120" />
             <el-table-column prop="amount_due" label="应付金额" width="130" align="right">
-              <template #default="{ row }">¥{{ (row.amount_due || 0).toFixed(2) }}</template>
+              <template #default="{ row }">¥{{ toFixedSafe(row.amount_due) }}</template>
             </el-table-column>
             <el-table-column prop="amount_paid" label="已付金额" width="130" align="right">
-              <template #default="{ row }">¥{{ (row.amount_paid || 0).toFixed(2) }}</template>
+              <template #default="{ row }">¥{{ toFixedSafe(row.amount_paid) }}</template>
             </el-table-column>
             <el-table-column label="未付金额" width="130" align="right">
               <template #default="{ row }">
@@ -152,10 +152,13 @@
 
 <script setup>
 import { ref, reactive, onMounted, nextTick } from 'vue'
+import { getAgingReport } from '@/api/reports'
+import { getCustomerList } from '@/api/masterdata'
+import { getSupplierList } from '@/api/masterdata'
 import { ElMessage } from 'element-plus'
 import { Clock, TrendCharts, Money, Warning, SuccessFilled, CircleCloseFilled } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
-import request from '@/utils/request'
+import { subtractFixedSafe, toFixedSafe } from '@/utils/number'
 
 const loading = ref(false)
 const reportData = ref([])
@@ -187,7 +190,7 @@ const loadReport = async () => {
       params.supplier = searchForm.supplier
     }
     
-    const response = await request.get('/reports/aging/', { params })
+    const response = await getAgingReport(params)
     
     // 映射后端的 summary 字段到前端期望的格式
     const summary = response.summary || {}
@@ -216,7 +219,7 @@ const loadReport = async () => {
 
 const loadCustomers = async () => {
   try {
-    const response = await request.get('/masterdata/customers/', { params: { page_size: 100 } })
+    const response = await getCustomerList({ page_size: 100 })
     customers.value = response.results || response || []
   } catch (error) {
     console.error('加载客户失败:', error)
@@ -225,7 +228,7 @@ const loadCustomers = async () => {
 
 const loadSuppliers = async () => {
   try {
-    const response = await request.get('/masterdata/suppliers/', { params: { page_size: 100 } })
+    const response = await getSupplierList({ page_size: 100 })
     suppliers.value = response.results || response || []
   } catch (error) {
     console.error('加载供应商失败:', error)
@@ -293,4 +296,3 @@ onMounted(() => {
 .aging-report { padding: 20px; }
 .search-form { margin-bottom: 20px; }
 </style>
-

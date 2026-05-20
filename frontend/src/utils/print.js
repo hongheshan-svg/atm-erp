@@ -2,6 +2,8 @@
  * 打印工具函数
  */
 
+import { toFixedSafe } from '@/utils/number'
+
 /**
  * 打印HTML内容
  * @param {String} content - HTML内容
@@ -107,7 +109,7 @@ export function printHtml(content, title = '打印') {
           window.print();
           window.close();
         }
-      <\/script>
+      </script>
     </body>
     </html>
   `)
@@ -133,8 +135,8 @@ export function generateQuotationPrintContent(quotation) {
         <td>${line.specification || '-'}</td>
         <td>${line.unit || '-'}</td>
         <td class="text-right">${line.qty || 0}</td>
-        <td class="text-right">¥${(line.unit_price || 0).toFixed(2)}</td>
-        <td class="text-right">¥${amount.toFixed(2)}</td>
+        <td class="text-right">¥${toFixedSafe(line.unit_price)}</td>
+        <td class="text-right">¥${toFixedSafe(amount)}</td>
         <td>${line.notes || '-'}</td>
       </tr>
     `
@@ -296,4 +298,3 @@ export function generateDeliveryOrderPrintContent(delivery) {
     </div>
   `
 }
-

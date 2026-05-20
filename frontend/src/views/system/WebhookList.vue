@@ -133,7 +133,8 @@ const toggleStatus = async (row) => {
   try {
     await webhookApi.toggleWebhook(row.id)
     ElMessage.success('状态已更新')
-  } catch {
+  } catch (error) {
+    console.error(error)
     row.is_active = !row.is_active
   }
 }

@@ -66,7 +66,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getUserProfile, updateProfile } from '@/api/auth'
 
 const formRef = ref(null)
 const loading = ref(false)
@@ -90,7 +90,7 @@ const rules = {
 
 const fetchProfile = async () => {
   try {
-    const res = await request.get('/auth/users/profile/')
+    const res = await getUserProfile()
     Object.assign(form, res)
   } catch (error) {
     ElMessage.error('获取个人信息失败')
@@ -104,7 +104,7 @@ const handleSave = async () => {
     if (valid) {
       loading.value = true
       try {
-        await request.put('/auth/users/update_profile/', {
+        await updateProfile({
           email: form.email,
           first_name: form.first_name,
           phone: form.phone

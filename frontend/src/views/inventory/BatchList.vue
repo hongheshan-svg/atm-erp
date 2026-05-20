@@ -10,7 +10,7 @@
               <el-radio-button label="expiring">即将过期</el-radio-button>
               <el-radio-button label="expired">已过期</el-radio-button>
             </el-radio-group>
-            <el-button type="primary" :icon="Plus" @click="handleAdd">新增批次</el-button>
+            <el-button type="primary" :icon="Plus" v-permission="'inventory:stock:create'" @click="handleAdd">新增批次</el-button>
           </div>
         </div>
       </template>
@@ -258,7 +258,8 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getBatches, getBatchesExpiringSoon, getBatchesExpired, createBatch, getBatchMovesByBatch, adjustBatchQty, updateBatch } from '@/api/inventory'
+import { getItemList, getWarehouseList } from '@/api/masterdata'
 
 const loading = ref(false)
 const batches = ref([])
@@ -339,7 +340,7 @@ const getQualityTagType = (status) => {
 
 const loadItems = async () => {
   try {
-    const response = await request.get('/masterdata/items/', { params: { page_size: 500 } })
+    const response = await getItemList({ page_size: 500 })
     items.value = response.results || response || [] || []
   } catch (error) {
     console.error('加载物料失败:', error)
@@ -348,7 +349,7 @@ const loadItems = async () => {
 
 const loadWarehouses = async () => {
   try {
-    const response = await request.get('/masterdata/warehouses/', { params: { is_active: true } })
+    const response = await getWarehouseList({ is_active: true })
     warehouses.value = response.results || response || [] || []
   } catch (error) {
     console.error('加载仓库失败:', error)
@@ -358,21 +359,21 @@ const loadWarehouses = async () => {
 const loadBatches = async () => {
   loading.value = true
   try {
-    let url = '/inventory/batches/'
     const params = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
     }
     
+    let response
     if (viewMode.value === 'expiring') {
-      url = '/inventory/batches/expiring_soon/'
       params.days = 30
+      response = await getBatchesExpiringSoon(params)
     } else if (viewMode.value === 'expired') {
-      url = '/inventory/batches/expired/'
+      response = await getBatchesExpired(params)
+    } else {
+      response = await getBatches(params)
     }
-    
-    const response = await request.get(url, { params })
     
     if (viewMode.value === 'all') {
       batches.value = response.results || response || []
@@ -391,19 +392,19 @@ const loadBatches = async () => {
 const loadSummary = async () => {
   try {
     // Get total
-    const allData = await request.get('/inventory/batches/', { params: { page_size: 1 } })
+    const allData = await getBatches({ page_size: 1 })
     summary.total = allData.count || 0
     
     // Get expiring
-    const expiringData = await request.get('/inventory/batches/expiring_soon/', { params: { days: 30 } })
+    const expiringData = await getBatchesExpiringSoon({ days: 30 })
     summary.expiring = Array.isArray(expiringData) ? expiringData.length : 0
     
     // Get expired
-    const expiredData = await request.get('/inventory/batches/expired/')
+    const expiredData = await getBatchesExpired()
     summary.expired = Array.isArray(expiredData) ? expiredData.length : 0
     
     // Get pending
-    const pendingData = await request.get('/inventory/batches/', { params: { quality_status: 'PENDING', page_size: 1 } })
+    const pendingData = await getBatches({ quality_status: 'PENDING', page_size: 1 })
     summary.pending = pendingData.count || 0
   } catch (error) {
     console.error('加载统计失败:', error)
@@ -435,7 +436,7 @@ const handleSubmit = async () => {
   
   submitting.value = true
   try {
-    await request.post('/inventory/batches/', form)
+    await createBatch(form)
     ElMessage.success('创建成功')
     dialogVisible.value = false
     loadBatches()
@@ -453,7 +454,7 @@ const handleView = async (batch) => {
   
   // Load move history
   try {
-    const response = await request.get('/inventory/batch-moves/by_batch/', { params: { batch_id: batch.id } })
+    const response = await getBatchMovesByBatch({ batch_id: batch.id })
     batchMoves.value = response.results || response || []
   } catch (error) {
     console.error('加载移动历史失败:', error)
@@ -473,7 +474,7 @@ const handleAdjust = (batch) => {
 const handleAdjustSubmit = async () => {
   submitting.value = true
   try {
-    await request.post(`/inventory/batches/${currentBatch.value.id}/adjust_qty/`, {
+    await adjustBatchQty(currentBatch.value.id, {
       qty: adjustForm.qty,
       reason: adjustForm.reason
     })
@@ -497,7 +498,7 @@ const handleStatusChange = (batch) => {
 const handleStatusSubmit = async () => {
   submitting.value = true
   try {
-    await request.patch(`/inventory/batches/${currentBatch.value.id}/`, {
+    await updateBatch(currentBatch.value.id, {
       quality_status: newStatus.value
     })
     ElMessage.success('状态更新成功')

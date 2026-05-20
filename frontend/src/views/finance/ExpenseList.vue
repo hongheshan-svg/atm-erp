@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>费用报销</span>
-          <el-button type="primary" @click="handleAdd">
+          <el-button type="primary" v-permission="'finance:expense:create'" @click="handleAdd">
             <el-icon><Plus /></el-icon>
             提交报销
           </el-button>
@@ -44,13 +44,13 @@
       </el-form>
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'finance:expense:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" v-permission="'finance:expense:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <el-table :data="expenses" v-loading="loading" stripe border @selection-change="handleSelectionChange">
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'finance:expense:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="expense_no" label="费用编号" width="150" />
         <el-table-column prop="user_name" label="提交人" width="100" />
         <el-table-column prop="project_name" label="项目" />
@@ -74,7 +74,7 @@
         <el-table-column label="操作" width="340" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
-            <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
+            <el-button size="small" v-permission="'finance:expense:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button size="small" type="info" @click="handleAttachments(row)">附件</el-button>
             <el-button size="small" type="warning" @click="handleSubmit(row)" v-if="row.status === 'DRAFT'">提交</el-button>
             <el-button size="small" type="success" @click="handleApprove(row)" v-if="row.status === 'SUBMITTED'">批准</el-button>
@@ -230,11 +230,14 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Upload } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getExpenses, createExpense, updateExpense, submitExpense, approveExpense, rejectExpense, reimburseExpense } from '@/api/finance'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 import { usePermissionStore } from '@/stores/permission'
+import { getDepartments } from '@/api/auth'
+import { batchUploadAttachments } from '@/api/core'
+import { getProjectList } from '@/api/projects/project'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -338,7 +341,7 @@ const loadExpenses = async () => {
     if (searchForm.category) params.category = searchForm.category
     if (searchForm.status) params.status = searchForm.status
     
-    const res = await request.get('/finance/expenses/', { params })
+    const res = await getExpenses(params)
     expenses.value = res.data?.results || res.results || res.data || []
     pagination.total = res.data?.count || res.count || 0
   } catch (error) {
@@ -354,7 +357,7 @@ const loadProjects = async () => {
   }
 
   try {
-    const res = await request.get('/projects/projects/')
+    const res = await getProjectList()
     projects.value = res.data?.results || res.results || res.data || []
     projectsLoaded.value = true
     return true
@@ -378,7 +381,7 @@ const ensureProjectsLoaded = async () => {
 
 const loadDepartments = async () => {
   try {
-    const res = await request.get('/auth/departments/')
+    const res = await getDepartments()
     departments.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('加载部门失败:', error)
@@ -419,7 +422,7 @@ const uploadTempFiles = async (expenseId) => {
   }
   
   try {
-    await request.post('/core/attachments/batch_upload/', formData, {
+    await batchUploadAttachments(formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
   } catch (error) {
@@ -494,10 +497,10 @@ const handleSave = async () => {
     }
     
     if (isEdit.value) {
-      await request.put(`/finance/expenses/${form.id}/`, payload)
+      await updateExpense(form.id, payload)
       ElMessage.success('更新费用报销成功')
     } else {
-      const response = await request.post('/finance/expenses/', payload)
+      const response = await createExpense(payload)
       // 上传附件
       if (tempFiles.value.length && response.id) {
         await uploadTempFiles(response.id)
@@ -521,7 +524,7 @@ const handleSave = async () => {
 const handleSubmit = async (row) => {
   try {
     await ElMessageBox.confirm('确定要提交该费用报销吗？提交后将进入审批流程。', '提交确认', { type: 'warning' })
-    await request.post(`/finance/expenses/${row.id}/submit/`)
+    await submitExpense(row.id)
     ElMessage.success('提交成功')
     loadExpenses()
   } catch (error) {
@@ -534,7 +537,7 @@ const handleSubmit = async (row) => {
 const handleApprove = async (row) => {
   try {
     await ElMessageBox.confirm('确定要批准该费用报销吗？', '批准确认', { type: 'warning' })
-    await request.post(`/finance/expenses/${row.id}/approve/`)
+    await approveExpense(row.id)
     ElMessage.success('批准成功')
     loadExpenses()
   } catch (error) {
@@ -547,7 +550,7 @@ const handleApprove = async (row) => {
 const handleReject = async (row) => {
   try {
     await ElMessageBox.confirm('确定要拒绝该费用报销吗？', '拒绝确认', { type: 'warning' })
-    await request.post(`/finance/expenses/${row.id}/reject/`)
+    await rejectExpense(row.id)
     ElMessage.success('已拒绝')
     loadExpenses()
   } catch (error) {
@@ -560,7 +563,7 @@ const handleReject = async (row) => {
 const handleReimburse = async (row) => {
   try {
     await ElMessageBox.confirm('确定要标记该费用为已报销吗？', '报销确认', { type: 'warning' })
-    await request.post(`/finance/expenses/${row.id}/reimburse/`)
+    await reimburseExpense(row.id)
     ElMessage.success('已报销')
     loadExpenses()
   } catch (error) {

@@ -48,6 +48,10 @@ export function getDrawingTimeline(drawingNumber) {
   return request({ url: `/projects/drawing-versions/${drawingNumber}/timeline/`, method: 'get' })
 }
 
+export function submitDrawingReview(id) {
+  return request({ url: `/projects/drawing-versions/${id}/submit_review/`, method: 'post' })
+}
+
 export function approveDrawingVersion(id) {
   return request({ url: `/projects/drawing-versions/${id}/approve/`, method: 'post' })
 }

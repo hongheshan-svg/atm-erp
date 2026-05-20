@@ -145,12 +145,12 @@
                   <el-button 
                     v-if="row.status === 'ACTIVE'" 
                     link type="primary" size="small" 
-                    @click="acknowledgeAlarm(row)"
+                    @click="handleAcknowledgeAlarm(row)"
                   >确认</el-button>
                   <el-button 
                     v-if="row.status === 'ACKNOWLEDGED'" 
                     link type="success" size="small"
-                    @click="resolveAlarm(row)"
+                    @click="handleResolveAlarm(row)"
                   >解决</el-button>
                 </template>
               </el-table-column>
@@ -336,7 +336,7 @@
 import { ref, onMounted, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Connection, Monitor, DataLine } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getDataSourceList, getDataPointList, getDataAlarmList, updateDataSource, createDataSource, updateDataPoint, createDataPoint, deleteDataPoint, patchDataPoint, acknowledgeAlarm, resolveAlarm, getDataPointDetailHistory } from '@/api/mes'
 import * as echarts from 'echarts'
 
 // 数据
@@ -440,7 +440,7 @@ const formatDateTime = (time) => {
 const fetchDataSources = async () => {
   loadingSource.value = true
   try {
-    const data = await request.get('/production/data-sources/')
+    const data = await getDataSourceList()
     dataSources.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -452,9 +452,7 @@ const fetchDataSources = async () => {
 const fetchDataPoints = async (sourceId) => {
   loadingPoints.value = true
   try {
-    const data = await request.get('/production/data-points/', {
-      params: { data_source: sourceId }
-    })
+    const data = await getDataPointList({ data_source: sourceId })
     dataPoints.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -466,7 +464,7 @@ const fetchDataPoints = async (sourceId) => {
 const fetchAlarms = async () => {
   loadingAlarms.value = true
   try {
-    const data = await request.get('/production/data-alarms/')
+    const data = await getDataAlarmList()
     alarms.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -492,10 +490,10 @@ const saveDataSource = async () => {
   await sourceFormRef.value.validate()
   try {
     if (editingSource.value) {
-      await request.put(`/production/data-sources/${editingSource.value.id}/`, sourceForm.value)
+      await updateDataSource(editingSource.value.id, sourceForm.value)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/production/data-sources/', sourceForm.value)
+      await createDataSource(sourceForm.value)
       ElMessage.success('创建成功')
     }
     showDataSourceDialog.value = false
@@ -510,10 +508,10 @@ const saveDataPoint = async () => {
   try {
     const data = { ...pointForm.value, data_source: currentSource.value?.id }
     if (editingPoint.value) {
-      await request.put(`/production/data-points/${editingPoint.value.id}/`, data)
+      await updateDataPoint(editingPoint.value.id, data)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/production/data-points/', data)
+      await createDataPoint(data)
       ElMessage.success('创建成功')
     }
     showPointDialog.value = false
@@ -532,7 +530,7 @@ const editPoint = (row) => {
 const deletePoint = async (row) => {
   await ElMessageBox.confirm('确定要删除该数据点吗？', '提示', { type: 'warning' })
   try {
-    await request.delete(`/production/data-points/${row.id}/`)
+    await deleteDataPoint(row.id)
     ElMessage.success('删除成功')
     fetchDataPoints(currentSource.value.id)
   } catch (e) {
@@ -542,7 +540,7 @@ const deletePoint = async (row) => {
 
 const togglePoint = async (row) => {
   try {
-    await request.patch(`/production/data-points/${row.id}/`, { is_active: row.is_active })
+    await patchDataPoint(row.id, { is_active: row.is_active })
     ElMessage.success(row.is_active ? '已启用' : '已禁用')
   } catch (e) {
     ElMessage.error('操作失败')
@@ -550,9 +548,9 @@ const togglePoint = async (row) => {
   }
 }
 
-const acknowledgeAlarm = async (row) => {
+const handleAcknowledgeAlarm = async (row) => {
   try {
-    await request.post(`/production/data-alarms/${row.id}/acknowledge/`)
+    await acknowledgeAlarm(row.id)
     ElMessage.success('已确认')
     fetchAlarms()
   } catch (e) {
@@ -560,9 +558,9 @@ const acknowledgeAlarm = async (row) => {
   }
 }
 
-const resolveAlarm = async (row) => {
+const handleResolveAlarm = async (row) => {
   try {
-    await request.post(`/production/data-alarms/${row.id}/resolve/`)
+    await resolveAlarm(row.id)
     ElMessage.success('已解决')
     fetchAlarms()
   } catch (e) {
@@ -586,7 +584,7 @@ const fetchHistory = async () => {
       params.end = historyDateRange.value[1].toISOString()
     }
     
-    const data = await request.get(`/production/data-points/${selectedPointId.value}/history/`, { params })
+    const data = await getDataPointDetailHistory(selectedPointId.value, params)
     historyData.value = data
     renderHistoryChart()
   } catch (e) {

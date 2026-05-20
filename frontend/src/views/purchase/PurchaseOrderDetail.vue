@@ -127,7 +127,11 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Box } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getWarehouseList } from '@/api/masterdata'
+import {
+  getPurchaseOrder, confirmPurchaseOrder, cancelPurchaseOrder,
+  getGoodsReceipts, createGoodsReceipt
+} from '@/api/purchase'
 
 const route = useRoute()
 const router = useRouter()
@@ -145,9 +149,9 @@ const formatMoney = (val) => parseFloat(val || 0).toFixed(2)
 const loadOrderDetail = async () => {
   loading.value = true
   try {
-    const response = await request.get(`/purchase/orders/${route.params.id}/`)
+    const response = await getPurchaseOrder(route.params.id)
     order.value = response.data || response
-    const receiptRes = await request.get(`/purchase/receipts/`, { params: { purchase_order: route.params.id } })
+    const receiptRes = await getGoodsReceipts({ purchase_order: route.params.id })
     receipts.value = receiptRes.data?.results || receiptRes.results || receiptRes.data || []
   } catch (error) {
     console.error('加载订单详情失败:', error)
@@ -159,7 +163,7 @@ const loadOrderDetail = async () => {
 
 const loadWarehouses = async () => {
   try {
-    const response = await request.get('/masterdata/warehouses/', { params: { page_size: 100 } })
+    const response = await getWarehouseList({ page_size: 100 })
     warehouses.value = response.results || response || []
   } catch (error) {
     console.error('加载仓库失败:', error)
@@ -171,7 +175,7 @@ const goBack = () => router.back()
 const handleConfirm = async () => {
   try {
     await ElMessageBox.confirm('确定要确认此订单吗？', '提示', { type: 'warning' })
-    await request.post(`/purchase/orders/${route.params.id}/confirm/`)
+    await confirmPurchaseOrder(route.params.id)
     ElMessage.success('订单确认成功')
     loadOrderDetail()
   } catch (error) {
@@ -182,7 +186,7 @@ const handleConfirm = async () => {
 const handleCancel = async () => {
   try {
     await ElMessageBox.confirm('确定要取消此订单吗？', '提示', { type: 'warning' })
-    await request.post(`/purchase/orders/${route.params.id}/cancel/`)
+    await cancelPurchaseOrder(route.params.id)
     ElMessage.success('订单取消成功')
     loadOrderDetail()
   } catch (error) {
@@ -211,7 +215,7 @@ const submitReceipt = async () => {
       lines: receiptForm.value.lines.filter(l => l.receipt_qty > 0).map(l => ({ order_line: l.order_line, qty: l.receipt_qty }))
     }
     if (payload.lines.length === 0) return ElMessage.warning('请至少选择一项要收货的明细')
-    await request.post('/purchase/receipts/', payload)
+    await createGoodsReceipt(payload)
     ElMessage.success('收货单创建成功')
     receiptDialogVisible.value = false
     loadOrderDetail()

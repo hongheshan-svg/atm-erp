@@ -225,8 +225,8 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { getProposalList, getProposal, createProposal, patchProposal, getProposalStatistics, submitProposal, startProposalReview, approveProposal, createProposalVersion } from '@/api/plm/proposal'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import request from '@/utils/request'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -281,7 +281,7 @@ const fetchList = async () => {
       page_size: pagination.size,
       ...queryParams
     }
-    const data = await request.get('/projects/proposals/', { params })
+    const data = await getProposalList(params)
     proposalList.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {
@@ -293,7 +293,7 @@ const fetchList = async () => {
 
 const fetchStats = async () => {
   try {
-    const data = await request.get('/projects/proposals/statistics/')
+    const data = await getProposalStatistics()
     stats.value = data
   } catch (e) {
     console.error(e)
@@ -323,9 +323,9 @@ const submitForm = async () => {
   submitLoading.value = true
   try {
     if (isEdit.value) {
-      await request.patch(`/projects/proposals/${currentProposal.value.id}/`, formData)
+      await patchProposal(currentProposal.value.id, formData)
     } else {
-      await request.post('/projects/proposals/', formData)
+      await createProposal(formData)
     }
     ElMessage.success('保存成功')
     dialogVisible.value = false
@@ -340,7 +340,7 @@ const submitForm = async () => {
 
 const handleView = async (row) => {
   try {
-    const data = await request.get(`/projects/proposals/${row.id}/`)
+    const data = await getProposal(row.id)
     currentProposal.value = data
     detailDialogVisible.value = true
   } catch (e) {
@@ -350,7 +350,7 @@ const handleView = async (row) => {
 
 const handleSubmit = async (row) => {
   try {
-    await request.post(`/projects/proposals/${row.id}/submit/`)
+    await submitProposal(row.id)
     ElMessage.success('已提交')
     fetchList()
     fetchStats()
@@ -361,7 +361,7 @@ const handleSubmit = async (row) => {
 
 const handleStartReview = async (row) => {
   try {
-    await request.post(`/projects/proposals/${row.id}/start_review/`, { review_type: '技术评审' })
+    await startProposalReview(row.id, { review_type: '技术评审' })
     ElMessage.success('已开始评审')
     fetchList()
     fetchStats()
@@ -372,7 +372,7 @@ const handleStartReview = async (row) => {
 
 const handleApprove = async (row) => {
   try {
-    await request.post(`/projects/proposals/${row.id}/approve/`)
+    await approveProposal(row.id)
     ElMessage.success('已批准')
     fetchList()
     fetchStats()
@@ -384,11 +384,11 @@ const handleApprove = async (row) => {
 const handleNewVersion = async (row) => {
   try {
     await ElMessageBox.confirm('确定创建新版本吗?', '提示')
-    await request.post(`/projects/proposals/${row.id}/create_new_version/`)
+    await createProposalVersion(row.id)
     ElMessage.success('新版本已创建')
     fetchList()
   } catch (e) {
-    // 取消
+    console.error('ProposalList fetchList error:', e)
   }
 }
 

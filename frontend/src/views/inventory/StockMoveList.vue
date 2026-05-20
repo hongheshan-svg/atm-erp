@@ -177,7 +177,9 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh, Download } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getMoves } from '@/api/inventory'
+import { getItemList, getWarehouseList } from '@/api/masterdata'
+import { getProjectList } from '@/api/projects/project'
 
 const loading = ref(false)
 const tableData = ref([])
@@ -256,7 +258,7 @@ const fetchData = async () => {
       params.end_date = searchForm.dateRange[1]
     }
     
-    const res = await request.get('/inventory/moves/', { params })
+    const res = await getMoves(params)
     tableData.value = res.data?.results || res.results || res.data || []
     pagination.total = res.data?.count || res.count || 0
     
@@ -292,7 +294,7 @@ const calculateStats = () => {
 
 const fetchItems = async () => {
   try {
-    const res = await request.get('/masterdata/items/')
+    const res = await getItemList()
     items.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('获取物料列表失败:', error)
@@ -301,7 +303,7 @@ const fetchItems = async () => {
 
 const fetchWarehouses = async () => {
   try {
-    const res = await request.get('/masterdata/warehouses/')
+    const res = await getWarehouseList()
     warehouses.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('获取仓库列表失败:', error)
@@ -310,7 +312,7 @@ const fetchWarehouses = async () => {
 
 const fetchProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/')
+    const res = await getProjectList()
     projects.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('获取项目列表失败:', error)
@@ -332,7 +334,7 @@ const handleReset = () => {
 }
 
 const handleExport = () => {
-  if (!stockMoves.value.length) {
+  if (!tableData.value.length) {
     ElMessage.warning('没有数据可导出')
     return
   }
@@ -349,7 +351,7 @@ const handleExport = () => {
       { field: 'move_date', title: '移动日期' },
       { field: 'status', title: '状态' }
     ]
-    exportToExcel(stockMoves.value, columns, '库存流水')
+    exportToExcel(tableData.value, columns, '库存流水')
     ElMessage.success('导出成功')
   })
 }

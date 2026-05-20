@@ -88,3 +88,57 @@ export function getDepartmentTree() {
   })
 }
 
+
+export function createRole(data) {
+  return request({
+    url: '/auth/roles/',
+    method: 'post',
+    data
+  })
+}
+
+export function updateRole(id, data) {
+  return request({
+    url: `/auth/roles/${id}/`,
+    method: 'put',
+    data
+  })
+}
+
+export function deleteRole(id) {
+  return request({
+    url: `/auth/roles/${id}/`,
+    method: 'delete'
+  })
+}
+
+export function createDepartment(data) {
+  return request({
+    url: '/auth/departments/',
+    method: 'post',
+    data
+  })
+}
+
+export function updateDepartment(id, data) {
+  return request({
+    url: `/auth/departments/${id}/`,
+    method: 'put',
+    data
+  })
+}
+
+export function deleteDepartment(id) {
+  return request({
+    url: `/auth/departments/${id}/`,
+    method: 'delete'
+  })
+}
+
+export function getDepartmentUsers(deptId) {
+  return request({
+    url: '/auth/users/',
+    method: 'get',
+    params: { department: deptId }
+  })
+}

@@ -3,6 +3,10 @@
 
 FROM python:3.11-slim-bookworm
 
+ARG APT_MIRROR=mirrors.aliyun.com
+ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+ARG PIP_TRUSTED_HOST=mirrors.aliyun.com
+
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -14,6 +18,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Set work directory
 WORKDIR /app
 
+# Use domestic Debian mirror to speed up package installation
+RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g; s|security.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -23,8 +30,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Configure pip to use Chinese mirror (faster in China)
-RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
-    && pip config set global.trusted-host mirrors.aliyun.com
+RUN pip config set global.index-url ${PIP_INDEX_URL} \
+    && pip config set global.trusted-host ${PIP_TRUSTED_HOST}
 
 # Install Python dependencies with retry
 COPY backend/requirements.txt /app/requirements.txt
@@ -57,4 +64,3 @@ EXPOSE 8000
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "config.asgi:application"]
-

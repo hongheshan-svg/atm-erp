@@ -108,7 +108,7 @@
         <div class="card-header">
           <span>采购申请列表</span>
           <div class="header-actions">
-          <el-button type="primary" @click="handleAdd">
+          <el-button type="primary" v-permission="'purchase:request:create'" @click="handleAdd">
             <el-icon><Plus /></el-icon>
             创建申请
           </el-button>
@@ -183,7 +183,7 @@
       />
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'purchase:request:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
         <el-button 
           type="danger" 
@@ -196,7 +196,7 @@
       </div>
 
       <el-table :data="requests" v-loading="loading" stripe border @selection-change="handleSelectionChange">
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'purchase:request:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="request_no" label="采购申请号" width="140" fixed />
         <el-table-column prop="project_name" label="项目" width="160" show-overflow-tooltip />
         <el-table-column label="物料名称" width="150" show-overflow-tooltip>
@@ -213,7 +213,7 @@
         </el-table-column>
         <el-table-column label="单价" width="90" align="right">
           <template #default="{ row }">
-            <span v-if="row.item_summary">¥{{ row.item_summary.unit_price?.toFixed(2) }}</span>
+            <span v-if="row.item_summary">¥{{ formatMoney(row.item_summary.unit_price) }}</span>
             <span v-else>-</span>
           </template>
         </el-table-column>
@@ -237,14 +237,14 @@
         </el-table-column>
         <el-table-column prop="total_with_tax" label="含税总额" width="100" align="right">
           <template #default="{ row }">
-            ¥{{ parseFloat(row.total_with_tax || row.total_amount || 0).toFixed(2) }}
+            ¥{{ formatMoney(row.total_with_tax || row.total_amount) }}
           </template>
         </el-table-column>
         <el-table-column prop="created_at" label="创建时间" width="140" />
         <el-table-column label="操作" width="420" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
-            <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
+            <el-button size="small" v-permission="'purchase:request:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button size="small" type="warning" @click="handleSubmit(row)" v-if="row.status === 'DRAFT'">提交</el-button>
             <el-button size="small" type="info" @click="showWorkflowProgress(row)" v-if="row.status === 'SUBMITTED'">审批进度</el-button>
             <el-button size="small" type="success" @click="handleApprove(row)" v-if="row.status === 'SUBMITTED'">批准</el-button>
@@ -333,6 +333,21 @@
               <div v-if="form.project && projectItems.length === 0" style="color: #E6A23C; font-size: 12px;">
                 该项目无未申请物料
               </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="物料名称" min-width="120" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ getItemName(row.item) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="型号/图号" width="120" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ getItemModel(row.item) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="类型" width="80" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ getItemType(row.item) }}
             </template>
           </el-table-column>
           <el-table-column label="数量" width="90">
@@ -563,7 +578,7 @@
               <el-table-column prop="supplier_name" label="供应商" />
               <el-table-column prop="lines_count" label="物料数" width="70" align="center" />
               <el-table-column prop="total_amount" label="金额" width="100" align="right">
-                <template #default="{ row }">¥{{ row.total_amount.toFixed(2) }}</template>
+                <template #default="{ row }">¥{{ formatMoney(row.total_amount) }}</template>
               </el-table-column>
             </el-table>
           </div>
@@ -601,9 +616,17 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete, Search, RefreshLeft, ArrowDown, Upload, Download, Document, UploadFilled, List, Refresh } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import {
+  getPurchaseRequests, getPurchaseRequest, createPurchaseRequest, updatePurchaseRequest,
+  submitPurchaseRequest, approvePurchaseRequest, rejectPurchaseRequest, withdrawPurchaseRequest,
+  convertRequestToPO, importPurchaseRequests, exportPurchaseRequestTemplate
+} from '@/api/purchase'
+import { getWorkflowByBusiness, approveTask, rejectTask } from '@/api/workflow'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { getItemList, getSupplierList } from '@/api/masterdata'
+import { exportBOMForQuote, getBOMList } from '@/api/projects/bom'
+import { getProjectList } from '@/api/projects/project'
 
 const route = useRoute()
 
@@ -737,6 +760,11 @@ const rules = {
   required_date: [{ required: true, message: '请选择需求日期', trigger: 'change' }]
 }
 
+const formatMoney = (value) => {
+  const amount = Number.parseFloat(value ?? 0)
+  return Number.isFinite(amount) ? amount.toFixed(2) : '0.00'
+}
+
 const getStatusType = (status) => {
   const types = { 
     DRAFT: 'info', 
@@ -771,7 +799,7 @@ const loadRequests = async () => {
     if (searchForm.project) params.project = searchForm.project
     if (searchForm.status) params.status = searchForm.status
     
-    const res = await request.get('/purchase/requests/', { params })
+    const res = await getPurchaseRequests(params)
     requests.value = res.data?.results || res.results || res.data || []
     pagination.total = res.data?.count || res.count || 0
   } catch (error) {
@@ -783,7 +811,7 @@ const loadRequests = async () => {
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/')
+    const res = await getProjectList({ page_size: 9999 })
     projects.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('加载项目失败:', error)
@@ -792,7 +820,7 @@ const loadProjects = async () => {
 
 const loadItems = async () => {
   try {
-    const res = await request.get('/masterdata/items/')
+    const res = await getItemList({ page_size: 9999 })
     items.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('加载物料失败:', error)
@@ -807,12 +835,11 @@ const loadProjectItems = async (projectId) => {
   }
   
   try {
-    const res = await request.get('/projects/bom/', {
-      params: { 
-        project: projectId, 
-        is_deleted: false,
-        order_status: 'NOT_ORDERED'  // 只加载未申请的物料
-      }
+    const res = await getBOMList({ 
+      project: projectId, 
+      is_deleted: false,
+      order_status: 'NOT_ORDERED',
+      page_size: 9999
     })
     const bomItems = res.data?.results || res.results || res.data || res || []
     // 从BOM中提取物料信息
@@ -821,6 +848,9 @@ const loadProjectItems = async (projectId) => {
       sku: bom.item_sku || bom.item_code || '',
       name: bom.item_name || '',
       specification: bom.specification || bom.item_specification || '',
+      item_model: bom.item_model || '',
+      drawing_no: bom.drawing_no || '',
+      item_type_display: bom.item_type || '',
       planned_qty: bom.planned_qty,
       bom_id: bom.id
     })).filter(item => item.id)  // 过滤掉没有item的
@@ -838,9 +868,18 @@ const availableItems = computed(() => {
   return items.value
 })
 
+// 记录上一次选中的项目，避免重复选择同项目时清空物料
+let lastSelectedProject = null
+
 // 项目变化时重新加载可选物料
-const onProjectChange = (projectId) => {
-  loadProjectItems(projectId)
+const onProjectChange = async (projectId) => {
+  // 如果项目没有真正变化，只刷新物料列表不清空已选
+  if (projectId === lastSelectedProject) {
+    await loadProjectItems(projectId)
+    return
+  }
+  lastSelectedProject = projectId
+  await loadProjectItems(projectId)
   // 清空已选的物料（因为可能不在新项目的BOM中）
   form.lines.forEach(line => {
     line.item = null
@@ -850,7 +889,7 @@ const onProjectChange = (projectId) => {
 
 const loadSuppliers = async () => {
   try {
-    const res = await request.get('/masterdata/suppliers/')
+    const res = await getSupplierList({ page_size: 9999 })
     suppliers.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('加载供应商失败:', error)
@@ -889,6 +928,8 @@ const getFilterTip = () => {
 const handleAdd = () => {
   dialogTitle.value = '创建采购申请'
   isEdit.value = false
+  lastSelectedProject = null
+  projectItems.value = []
   Object.assign(form, {
     id: null,
     project: null,
@@ -904,10 +945,12 @@ const handleAdd = () => {
 const handleEdit = async (row) => {
   dialogTitle.value = '编辑采购申请'
   isEdit.value = true
+  lastSelectedProject = null
+  projectItems.value = []
   
   try {
     // 获取详情包括明细
-    const res = await request.get(`/purchase/requests/${row.id}/`)
+    const res = await getPurchaseRequest(row.id)
     const data = res.data || res
     
     Object.assign(form, {
@@ -931,6 +974,12 @@ const handleEdit = async (row) => {
       form.lines = [{ item: null, qty: 1, estimated_price: 0, required_date: '', notes: '' }]
     }
     
+    // 如果有项目，加载项目BOM物料
+    if (data.project) {
+      lastSelectedProject = data.project
+      await loadProjectItems(data.project)
+    }
+    
     dialogVisible.value = true
   } catch (error) {
     ElMessage.error('获取采购申请详情失败')
@@ -939,7 +988,7 @@ const handleEdit = async (row) => {
 
 const handleView = async (row) => {
   try {
-    const res = await request.get(`/purchase/requests/${row.id}/`)
+    const res = await getPurchaseRequest(row.id)
     currentRequest.value = res.data || res
     viewDialogVisible.value = true
   } catch (error) {
@@ -972,6 +1021,30 @@ const getItemUnit = (itemId) => {
   if (!itemId) return '-'
   const item = items.value.find(i => i.id === itemId)
   return item?.unit_display || item?.unit || '-'
+}
+
+// 查找物料信息（优先从availableItems中获取，其次从items中获取）
+const findItemInfo = (itemId) => {
+  if (!itemId) return null
+  return availableItems.value.find(i => i.id === itemId) || items.value.find(i => i.id === itemId)
+}
+
+// 获取物料名称
+const getItemName = (itemId) => {
+  const item = findItemInfo(itemId)
+  return item?.name || '-'
+}
+
+// 获取物料型号/图号
+const getItemModel = (itemId) => {
+  const item = findItemInfo(itemId)
+  return item?.item_model || item?.model || item?.drawing_no || '-'
+}
+
+// 获取物料类型
+const getItemType = (itemId) => {
+  const item = findItemInfo(itemId)
+  return item?.item_type_display || item?.category_name || '-'
 }
 
 // 计算行金额（不含税）
@@ -1032,10 +1105,10 @@ const handleSave = async () => {
     }
     
     if (isEdit.value) {
-      await request.put(`/purchase/requests/${form.id}/`, payload)
+      await updatePurchaseRequest(form.id, payload)
       ElMessage.success('更新采购申请成功')
     } else {
-      await request.post('/purchase/requests/', payload)
+      await createPurchaseRequest(payload)
       ElMessage.success('创建采购申请成功')
       // 刷新物料需求清单（已采购的物料会被过滤掉）
       loadBomItems()
@@ -1061,7 +1134,7 @@ const handleSave = async () => {
 const handleSubmit = async (row) => {
   try {
     await ElMessageBox.confirm('确定要提交该采购申请吗？提交后将进入审批流程。', '提交确认', { type: 'warning' })
-    await request.post(`/purchase/requests/${row.id}/submit/`)
+    await submitPurchaseRequest(row.id)
     ElMessage.success('提交成功')
     loadRequests()
   } catch (error) {
@@ -1074,25 +1147,40 @@ const handleSubmit = async (row) => {
 const handleApprove = async (row) => {
   try {
     await ElMessageBox.confirm('确定要批准该采购申请吗？', '批准确认', { type: 'warning' })
-    await request.post(`/purchase/requests/${row.id}/approve/`)
+    
+    // 统一通过后端 approve 接口处理（后端自动检测并处理工作流）
+    await approvePurchaseRequest(row.id)
     ElMessage.success('批准成功')
     loadRequests()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('批准失败')
+      const msg = error.response?.data?.error || error.response?.data?.detail || error.message || '批准失败'
+      console.error('审批失败:', msg, error)
+      ElMessage.error(msg)
     }
   }
 }
 
 const handleReject = async (row) => {
   try {
-    await ElMessageBox.confirm('确定要拒绝该采购申请吗？', '拒绝确认', { type: 'warning' })
-    await request.post(`/purchase/requests/${row.id}/reject/`)
+    const { value: comment } = await ElMessageBox.prompt('请输入拒绝原因', '拒绝确认', {
+      type: 'warning',
+      inputType: 'textarea',
+      inputPlaceholder: '请输入拒绝原因（必填）',
+      inputValidator: (val) => val && val.trim() ? true : '请填写拒绝原因',
+      confirmButtonText: '确认拒绝',
+      cancelButtonText: '取消'
+    })
+    
+    // 统一通过后端 reject 接口处理（后端自动检测并处理工作流）
+    await rejectPurchaseRequest(row.id, { comment })
     ElMessage.success('已拒绝')
     loadRequests()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('操作失败')
+      const msg = error.response?.data?.error || error.response?.data?.detail || error.message || '操作失败'
+      console.error('拒绝失败:', msg, error)
+      ElMessage.error(msg)
     }
   }
 }
@@ -1100,7 +1188,7 @@ const handleReject = async (row) => {
 const handleWithdraw = async (row) => {
   try {
     await ElMessageBox.confirm('确定要撤回该采购申请吗？撤回后将恢复为草稿状态。', '撤回确认', { type: 'warning' })
-    await request.post(`/purchase/requests/${row.id}/withdraw/`)
+    await withdrawPurchaseRequest(row.id)
     ElMessage.success('已撤回')
     loadRequests()
   } catch (error) {
@@ -1125,7 +1213,7 @@ const doConvertToPO = async () => {
   
   converting.value = true
   try {
-    await request.post(`/purchase/requests/${currentConvertId.value}/convert_to_po/`, {
+    await convertRequestToPO(currentConvertId.value, {
       supplier: convertForm.supplier
     })
     ElMessage.success('成功转换为采购订单')
@@ -1139,7 +1227,7 @@ const doConvertToPO = async () => {
 }
 
 // 处理从BOM页面传递过来的数据
-const handleBomData = () => {
+const handleBomData = async () => {
   if (route.query.from_bom === '1') {
     const bomData = sessionStorage.getItem('bom_to_pr')
     if (bomData) {
@@ -1150,6 +1238,26 @@ const handleBomData = () => {
         // 预填充表单
         dialogTitle.value = '创建采购申请（来自BOM）'
         isEdit.value = false
+        // 先加载项目BOM物料列表，确保物料下拉框有数据
+        await loadProjectItems(data.project)
+        lastSelectedProject = data.project
+        
+        // 确保BOM传递过来的物料在下拉列表中（即使状态已变更不再是NOT_ORDERED）
+        const existingItemIds = new Set(projectItems.value.map(i => i.id))
+        data.lines.forEach(line => {
+          if (line.item && !existingItemIds.has(line.item)) {
+            projectItems.value.push({
+              id: line.item,
+              sku: line.item_sku || '',
+              name: line.item_name || '',
+              specification: '',
+              item_model: '',
+              drawing_no: '',
+              item_type_display: ''
+            })
+          }
+        })
+        
         Object.assign(form, {
           id: null,
           project: data.project,
@@ -1183,12 +1291,11 @@ const loadBomItems = async () => {
   
   bomLoading.value = true
   try {
-    const res = await request.get('/projects/bom/', {
-      params: { 
+    const res = await getBOMList({
         project: bomProject.value, 
         is_deleted: false,
-        order_status: 'NOT_ORDERED'  // 只加载未采购的物料
-      }
+        order_status: 'NOT_ORDERED',  // 只加载未采购的物料
+        page_size: 9999
     })
     const items = res.data?.results || res.results || res.data || res || []
     bomItems.value = items.map(item => ({
@@ -1247,7 +1354,7 @@ const handleExportSelectedBom = async () => {
 
 const exportBomForQuote = async (bomIds, exportName) => {
   try {
-    const response = await request.post('/projects/bom/export_for_quote/', {
+    const response = await exportBOMForQuote({
       project: bomProject.value,
       bom_ids: bomIds
     }, {
@@ -1319,7 +1426,7 @@ const handleConfirmImport = async () => {
       formData.append('project', importProject.value)
     }
     
-    const response = await request.post('/purchase/requests/import_excel/', formData, {
+    const response = await importPurchaseRequests(formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     
@@ -1366,7 +1473,7 @@ const handleConfirmImport = async () => {
 
 const handleDownloadTemplate = async () => {
   try {
-    const response = await request.get('/purchase/requests/export_template/', {
+    const response = await exportPurchaseRequestTemplate({
       responseType: 'blob'
     })
     
@@ -1410,10 +1517,8 @@ onMounted(async () => {
   // 加载采购申请列表
   loadRequests()
   
-  // 延迟处理BOM数据，确保其他数据加载完成
-  setTimeout(() => {
-    handleBomData()
-  }, 300)
+  // 处理BOM数据（其他数据已在上面的Promise.all中加载完成）
+  await handleBomData()
 })
 </script>
 

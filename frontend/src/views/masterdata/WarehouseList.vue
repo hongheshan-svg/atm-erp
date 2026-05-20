@@ -4,12 +4,12 @@
       <template #header>
         <div class="card-header">
           <span>仓库管理</span>
-          <el-button type="primary" @click="handleAdd">新增仓库</el-button>
+          <el-button type="primary" v-permission="'masterdata:warehouse:create'" @click="handleAdd">新增仓库</el-button>
         </div>
       </template>
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'masterdata:warehouse:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
         <el-button 
           type="danger" 
@@ -22,7 +22,7 @@
       </div>
 
       <el-table :data="warehouses" v-loading="loading" stripe border @selection-change="handleSelectionChange">
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'masterdata:warehouse:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="code" label="编码" width="120" />
         <el-table-column prop="name" label="仓库名称" />
         <el-table-column prop="address" label="地址" />
@@ -33,7 +33,7 @@
         </el-table-column>
         <el-table-column label="操作" :width="canDelete ? 200 : 100" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" v-permission="'masterdata:warehouse:edit'" @click="handleEdit(row)">编辑</el-button>
             <el-button 
               v-if="canDelete"
               size="small" 
@@ -79,7 +79,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getWarehouseList, createWarehouse, updateWarehouse } from '@/api/masterdata'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 
@@ -119,7 +119,7 @@ const getTypeLabel = (type) => {
 async function loadWarehouses() {
   loading.value = true
   try {
-    const response = await request.get('/masterdata/warehouses/')
+    const response = await getWarehouseList()
     warehouses.value = response.results || response || []
   } catch (error) {
     ElMessage.error('加载仓库失败')
@@ -145,10 +145,10 @@ const handleEdit = (row) => {
 const handleSubmit = async () => {
   try {
     if (isEdit.value) {
-      await request.put(`/masterdata/warehouses/${form.id}/`, form)
+      await updateWarehouse(form.id, form)
       ElMessage.success('更新仓库成功')
     } else {
-      await request.post('/masterdata/warehouses/', form)
+      await createWarehouse(form)
       ElMessage.success('创建仓库成功')
     }
     dialogVisible.value = false

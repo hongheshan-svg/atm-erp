@@ -80,3 +80,36 @@ export function acknowledgeRiskAlert(id) {
 export function resolveRiskAlert(id, data) {
   return request({ url: `/reports/risk-alerts/${id}/resolve/`, method: 'post', data })
 }
+
+// ========== 行业报表 ==========
+export function getAgingReport(params) {
+  return request({ url: '/reports/aging/', method: 'get', params })
+}
+
+export function getCapacityUtilizationReport(params) {
+  return request({ url: '/reports/industry/capacity-utilization/', method: 'get', params })
+}
+
+export function getCustomerValueReport(params) {
+  return request({ url: '/reports/industry/customer-value/', method: 'get', params })
+}
+
+export function getEquipmentLifecycleReport(params) {
+  return request({ url: '/reports/industry/equipment-lifecycle/', method: 'get', params })
+}
+
+export function getProfitabilityReport(params) {
+  return request({ url: '/reports/profitability/', method: 'get', params })
+}
+
+export function getProjectProfitabilityReport(params) {
+  return request({ url: '/reports/industry/project-profitability/', method: 'get', params })
+}
+
+export function exportProjectProfitabilityReport(params) {
+  return request({ url: '/reports/project-profitability/export/', method: 'get', params, responseType: 'blob' })
+}
+
+export function exportTimelogReport(params) {
+  return request({ url: '/reports/timelog-report/export/', method: 'get', params, responseType: 'blob' })
+}

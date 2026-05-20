@@ -2,7 +2,7 @@
   <div class="work-order-container">
     <div class="page-header">
       <h2>工单管理</h2>
-      <el-button type="primary" @click="handleAdd">
+      <el-button type="primary" v-permission="'projects:project:create'" @click="handleAdd">
         <el-icon><Plus /></el-icon> 新建工单
       </el-button>
     </div>
@@ -260,7 +260,9 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getWorkOrderList, getWorkOrder, createWorkOrder, updateWorkOrder, getWorkOrderStatistics, getWorkOrderTypes, dispatchWorkOrder, startWorkOrder, completeWorkOrder } from '@/api/projects/work-order'
+import { getProjectList } from '@/api/projects/project'
+import { getUsers } from '@/api/auth'
 
 const loading = ref(false)
 const viewDialogVisible = ref(false)
@@ -319,7 +321,7 @@ const rules = {
 const fetchData = async () => {
   loading.value = true
   try {
-    const data = await request.get('/projects/work-orders/', { params: queryParams })
+    const data = await getWorkOrderList(queryParams)
     tableData.value = data.results || data
     total.value = data.count || data.length
   } catch (e) {
@@ -331,7 +333,7 @@ const fetchData = async () => {
 
 const fetchStats = async () => {
   try {
-    const data = await request.get('/projects/work-orders/statistics/')
+    const data = await getWorkOrderStatistics()
     stats.value = data
   } catch (e) {
     console.error(e)
@@ -340,7 +342,7 @@ const fetchStats = async () => {
 
 const fetchProjects = async () => {
   try {
-    const data = await request.get('/projects/projects/', { params: { page_size: 500 } })
+    const data = await getProjectList({ page_size: 500 })
     projects.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -349,7 +351,7 @@ const fetchProjects = async () => {
 
 const fetchUsers = async () => {
   try {
-    const data = await request.get('/accounts/users/', { params: { page_size: 200 } })
+    const data = await getUsers({ page_size: 200 })
     users.value = (data.results || data).map(u => ({
       id: u.id,
       name: u.first_name || u.last_name || u.username
@@ -361,7 +363,7 @@ const fetchUsers = async () => {
 
 const fetchOrderTypes = async () => {
   try {
-    const data = await request.get('/projects/work-orders/order_types/')
+    const data = await getWorkOrderTypes()
     orderTypes.value = data
   } catch (e) {
     orderTypes.value = [
@@ -415,9 +417,10 @@ const handleAdd = () => {
 
 const handleView = async (row) => {
   try {
-    const res = await request.get(`/projects/work-orders/${row.id}/`)
+    const res = await getWorkOrder(row.id)
     viewDetail.value = res.data || res
-  } catch {
+  } catch (error) {
+    console.error(error)
     viewDetail.value = row
   }
   viewDialogVisible.value = true
@@ -430,10 +433,10 @@ const handleSubmit = async () => {
   submitLoading.value = true
   try {
     if (isEdit.value) {
-      await request.put(`/projects/work-orders/${form.id}/`, form)
+      await updateWorkOrder(form.id, form)
       ElMessage.success('修改成功')
     } else {
-      await request.post('/projects/work-orders/', form)
+      await createWorkOrder(form)
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false
@@ -461,7 +464,7 @@ const confirmDispatch = async () => {
   
   dispatchLoading.value = true
   try {
-    await request.post(`/projects/work-orders/${currentOrder.value.id}/dispatch/`, {
+    await dispatchWorkOrder(currentOrder.value.id, {
       worker_ids: dispatchForm.worker_ids
     })
     ElMessage.success('派工成功')
@@ -477,7 +480,7 @@ const confirmDispatch = async () => {
 const handleStart = (row) => {
   ElMessageBox.confirm('确定要开始执行此工单吗？', '提示', { type: 'warning' })
     .then(async () => {
-      await request.post(`/projects/work-orders/${row.id}/start/`)
+      await startWorkOrder(row.id)
       ElMessage.success('工单已开始')
       fetchData()
       fetchStats()
@@ -487,7 +490,7 @@ const handleStart = (row) => {
 const handleComplete = (row) => {
   ElMessageBox.confirm('确定要完成此工单吗？', '提示', { type: 'warning' })
     .then(async () => {
-      await request.post(`/projects/work-orders/${row.id}/complete/`)
+      await completeWorkOrder(row.id)
       ElMessage.success('工单已完成')
       fetchData()
       fetchStats()

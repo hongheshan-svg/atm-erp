@@ -3,7 +3,7 @@
     <div class="page-header">
       <h2>固定资产管理</h2>
       <div class="header-actions">
-        <el-button type="primary" @click="handleAdd">
+        <el-button type="primary" v-permission="'finance:fixed_asset:create'" @click="handleAdd">
           <el-icon><Plus /></el-icon>新增资产
         </el-button>
         <el-button @click="handleDepreciate">计提折旧</el-button>
@@ -386,7 +386,8 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Check } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getFixedAssets, getFixedAsset, createFixedAsset, patchFixedAsset, getFixedAssetStatistics, getAssetCategories, activateFixedAsset, transferFixedAsset, disposeFixedAsset, scrapFixedAsset, depreciateFixedAssets, inventoryFixedAssets } from '@/api/finance'
+import { getDepartments, getUsers } from '@/api/auth'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -468,7 +469,7 @@ const fetchList = async () => {
       status: queryParams.status,
       department: queryParams.department
     }
-    const data = await request.get('/finance/fixed-assets/', { params })
+    const data = await getFixedAssets(params)
     assetList.value = data.results || data || []
     pagination.total = data.count || (Array.isArray(assetList.value) ? assetList.value.length : 0)
   } catch (e) {
@@ -480,7 +481,7 @@ const fetchList = async () => {
 
 const fetchStats = async () => {
   try {
-    const data = await request.get('/finance/fixed-assets/statistics/')
+    const data = await getFixedAssetStatistics()
     stats.value = data.totals || {}
   } catch (e) {
     console.error(e)
@@ -490,9 +491,9 @@ const fetchStats = async () => {
 const fetchOptions = async () => {
   try {
     const [catRes, deptRes, userRes] = await Promise.all([
-      request.get('/finance/asset-categories/'),
-      request.get('/accounts/departments/'),
-      request.get('/accounts/users/')
+      getAssetCategories(),
+      getDepartments(),
+      getUsers()
     ])
     categoryTree.value = catRes.results || catRes || []
     departments.value = deptRes.results || deptRes || []
@@ -528,9 +529,9 @@ const submitForm = async () => {
   submitLoading.value = true
   try {
     if (isEdit.value) {
-      await request.patch(`/finance/fixed-assets/${currentAsset.value.id}/`, formData)
+      await patchFixedAsset(currentAsset.value.id, formData)
     } else {
-      await request.post('/finance/fixed-assets/', formData)
+      await createFixedAsset(formData)
     }
     ElMessage.success('保存成功')
     dialogVisible.value = false
@@ -545,7 +546,7 @@ const submitForm = async () => {
 
 const handleView = async (row) => {
   try {
-    const data = await request.get(`/finance/fixed-assets/${row.id}/`)
+    const data = await getFixedAsset(row.id)
     currentAsset.value = data
     detailDialogVisible.value = true
   } catch (e) {
@@ -556,12 +557,12 @@ const handleView = async (row) => {
 const handleActivate = async (row) => {
   try {
     await ElMessageBox.confirm('确定启用该资产吗？启用后将开始计提折旧', '提示')
-    await request.post(`/finance/fixed-assets/${row.id}/activate/`)
+    await activateFixedAsset(row.id)
     ElMessage.success('资产已启用')
     fetchList()
     fetchStats()
   } catch (e) {
-    // 取消
+    console.error('AssetList fetchStats error:', e)
   }
 }
 
@@ -578,7 +579,7 @@ const handleTransfer = (row) => {
 const submitTransfer = async () => {
   submitLoading.value = true
   try {
-    await request.post(`/finance/fixed-assets/${transferForm.assetId}/transfer/`, {
+    await transferFixedAsset(transferForm.assetId, {
       to_department: transferForm.to_department,
       to_custodian: transferForm.to_custodian,
       to_location: transferForm.to_location,
@@ -600,26 +601,26 @@ const handleDispose = async (row) => {
       confirmButtonText: '确认处置',
       cancelButtonText: '取消'
     })
-    await request.post(`/finance/fixed-assets/${row.id}/dispose/`, {
+    await disposeFixedAsset(row.id, {
       disposal_reason: value
     })
     ElMessage.success('资产已处置')
     fetchList()
     fetchStats()
   } catch (e) {
-    // 取消
+    console.error('AssetList fetchStats error:', e)
   }
 }
 
 const handleScrap = async (row) => {
   try {
     await ElMessageBox.confirm('确定报废该资产吗？', '资产报废', { type: 'warning' })
-    await request.post(`/finance/fixed-assets/${row.id}/scrap/`)
+    await scrapFixedAsset(row.id)
     ElMessage.success('资产已报废')
     fetchList()
     fetchStats()
   } catch (e) {
-    // 取消
+    console.error('AssetList fetchStats error:', e)
   }
 }
 
@@ -632,7 +633,7 @@ const handleDepreciate = () => {
 const submitDepreciate = async () => {
   submitLoading.value = true
   try {
-    const data = await request.post('/finance/fixed-assets/depreciate/', {
+    const data = await depreciateFixedAssets({
       year: depreciateForm.year,
       month: depreciateForm.month
     })
@@ -651,10 +652,11 @@ const handleInventory = async () => {
   inventoryDialogVisible.value = true
   inventoryLoading.value = true
   try {
-    const res = await request.get('/finance/fixed-assets/', { params: { page_size: 200 } })
+    const res = await getFixedAssets({ page_size: 200 })
     const list = res.data?.results || res.results || []
     inventoryResults.value = list.map(a => ({ ...a, checked: false, match: true, remark: '' }))
-  } catch {
+  } catch (error) {
+    console.error(error)
     inventoryResults.value = []
   } finally {
     inventoryLoading.value = false
@@ -665,7 +667,7 @@ const submitInventory = async () => {
   const items = inventoryResults.value.filter(r => r.checked)
   if (!items.length) return ElMessage.warning('请至少勾选一项')
   try {
-    await request.post('/finance/fixed-assets/asset-inventory/', { items: items.map(i => ({ asset_id: i.id, match: i.match, remark: i.remark })) })
+    await inventoryFixedAssets({ items: items.map(i => ({ asset_id: i.id, match: i.match, remark: i.remark })) })
     ElMessage.success('盘点提交成功')
     inventoryDialogVisible.value = false
   } catch (error) {

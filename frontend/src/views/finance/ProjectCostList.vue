@@ -126,7 +126,7 @@
         <el-table-column label="利润率" width="90" align="right">
           <template #default="{ row }">
             <span :class="row.profit_margin >= 0 ? 'text-success' : 'text-danger'">
-              {{ row.profit_margin?.toFixed(1) || 0 }}%
+              {{ toFixedSafe(row.profit_margin, 1, '0.0') }}%
             </span>
           </template>
         </el-table-column>
@@ -208,8 +208,10 @@
 import { ref, reactive, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh, Download } from '@element-plus/icons-vue'
-import request from '@/utils/request'
 import * as echarts from 'echarts'
+import { getProjectCosts, recalculateCosts } from '@/api/analytics'
+import { getUsers } from '@/api/auth'
+import { toFixedSafe } from '@/utils/number'
 
 const loading = ref(false)
 const tableData = ref([])
@@ -289,7 +291,7 @@ const fetchData = async () => {
     if (searchForm.status) params.status = searchForm.status
     if (searchForm.manager) params.manager = searchForm.manager
     
-    const res = await request.get('/analytics/project-costs/', { params })
+    const res = await getProjectCosts(params)
     const data = res.data?.results || res.results || res.data || []
     tableData.value = data
     pagination.total = res.data?.count || res.count || data.length
@@ -315,7 +317,7 @@ const calculateSummary = (data) => {
 
 const fetchManagers = async () => {
   try {
-    const res = await request.get('/auth/users/')
+    const res = await getUsers()
     managers.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('获取用户列表失败:', error)
@@ -336,7 +338,7 @@ const handleReset = () => {
 
 const handleRecalculate = async () => {
   try {
-    const res = await request.post('/analytics/recalculate-costs/')
+    const res = await recalculateCosts()
     ElMessage.success(res.message || '成本重新计算已触发')
     // 延迟刷新数据，给后端计算时间
     setTimeout(() => {
@@ -491,4 +493,3 @@ onMounted(() => {
   justify-content: flex-end;
 }
 </style>
-

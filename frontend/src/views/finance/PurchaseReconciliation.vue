@@ -5,7 +5,7 @@
         <div class="card-header">
           <span>采购对账管理</span>
           <div class="header-actions">
-            <el-button type="primary" @click="handleCreate">
+            <el-button type="primary" v-permission="'finance:purchase_reconciliation:create'" @click="handleCreate">
               <el-icon><Plus /></el-icon> 新建对账单
             </el-button>
           </div>
@@ -102,7 +102,7 @@
             <el-button size="small" link type="success" @click="handlePrint(row)">打印</el-button>
             <el-button v-if="row.status === 'DRAFT'" size="small" link type="warning" @click="handleSubmit(row)">提交</el-button>
             <el-button v-if="row.status === 'PENDING'" size="small" link type="success" @click="handleConfirm(row)">确认</el-button>
-            <el-button v-if="row.status === 'DRAFT'" size="small" link type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="row.status === 'DRAFT'" size="small" link type="danger" v-permission="'finance:purchase_reconciliation:delete'" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -350,7 +350,8 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getPurchaseReconciliations, getPurchaseReconciliation, createPurchaseReconciliation, deletePurchaseReconciliation, getPurchaseReconciliationSupplierSummary, getPurchaseReconciliationOpeningBalance, generatePurchaseReconciliationLines, submitPurchaseReconciliation, confirmPurchaseReconciliation, confirmPurchaseReconciliationReceipt } from '@/api/finance'
+import { getSupplierList } from '@/api/masterdata'
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -471,7 +472,7 @@ const getThreeWayMatchText = (row) => {
 
 const loadSuppliers = async () => {
   try {
-    const res = await request.get('/masterdata/suppliers/', { params: { page_size: 1000, status: 'ACTIVE' } })
+    const res = await getSupplierList({ page_size: 1000, status: 'ACTIVE' })
     suppliers.value = res.results || res || []
   } catch (error) {
     console.error('Load suppliers failed:', error)
@@ -493,7 +494,7 @@ const loadReconciliations = async () => {
     delete params.period
     Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
     
-    const res = await request.get('/finance/purchase-reconciliations/', { params })
+    const res = await getPurchaseReconciliations(params)
     reconciliations.value = res.results || res || []
     pagination.total = res.count || 0
     
@@ -507,7 +508,7 @@ const loadReconciliations = async () => {
 
 const loadSummary = async () => {
   try {
-    const res = await request.get('/finance/purchase-reconciliations/supplier_summary/')
+    const res = await getPurchaseReconciliationSupplierSummary()
     if (res) {
       summary.total_purchase = res.total_order_amount || 0
       summary.total_invoiced = res.total_invoice_amount || 0
@@ -539,7 +540,7 @@ const fetchOpeningBalance = async (supplierId) => {
     return
   }
   try {
-    const res = await request.get('/finance/purchase-reconciliations/get_opening_balance/', {
+    const res = await getPurchaseReconciliationOpeningBalance({
       params: { supplier: supplierId }
     })
     createForm.opening_balance = res.opening_balance || 0
@@ -566,8 +567,8 @@ const submitCreate = async () => {
       notes: createForm.notes
     }
     
-    const res = await request.post('/finance/purchase-reconciliations/', data)
-    await request.post(`/finance/purchase-reconciliations/${res.id}/generate_lines/`)
+    const res = await createPurchaseReconciliation(data)
+    await generatePurchaseReconciliationLines(res.id)
     
     ElMessage.success('对账单创建成功')
     createDialogVisible.value = false
@@ -582,7 +583,7 @@ const submitCreate = async () => {
 
 const handleDetail = async (row) => {
   try {
-    const res = await request.get(`/finance/purchase-reconciliations/${row.id}/`)
+    const res = await getPurchaseReconciliation(row.id)
     currentReconciliation.value = res
     reconciliationLines.value = res.lines || []
     detailTab.value = 'order'
@@ -595,7 +596,7 @@ const handleDetail = async (row) => {
 const handleSubmit = async (row) => {
   try {
     await ElMessageBox.confirm('确定提交此对账单吗？', '提交确认')
-    await request.post(`/finance/purchase-reconciliations/${row.id}/submit/`)
+    await submitPurchaseReconciliation(row.id)
     ElMessage.success('提交成功')
     loadReconciliations()
   } catch (error) {
@@ -606,7 +607,7 @@ const handleSubmit = async (row) => {
 const handleConfirm = async (row) => {
   try {
     await ElMessageBox.confirm('确定确认此对账单吗？', '确认对账')
-    await request.post(`/finance/purchase-reconciliations/${row.id}/confirm/`)
+    await confirmPurchaseReconciliation(row.id)
     ElMessage.success('确认成功')
     loadReconciliations()
     if (detailDialogVisible.value) handleDetail(row)
@@ -618,7 +619,7 @@ const handleConfirm = async (row) => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm('确定删除此对账单吗？', '删除确认', { type: 'warning' })
-    await request.delete(`/finance/purchase-reconciliations/${row.id}/`)
+    await deletePurchaseReconciliation(row.id)
     ElMessage.success('删除成功')
     loadReconciliations()
   } catch (error) {
@@ -628,7 +629,7 @@ const handleDelete = async (row) => {
 
 const confirmReceipt = async (line) => {
   try {
-    await request.post(`/finance/purchase-reconciliations/${currentReconciliation.value.id}/confirm_receipt/${line.id}/`)
+    await confirmPurchaseReconciliationReceipt(currentReconciliation.value.id, line.id)
     ElMessage.success('确认收货成功')
     handleDetail(currentReconciliation.value)
   } catch (error) {

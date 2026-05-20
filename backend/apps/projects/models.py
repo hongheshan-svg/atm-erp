@@ -1232,3 +1232,11 @@ from .installation import (  # noqa: E402, F401
     SiteIssue,
     SiteLog,
 )
+
+# Import requirement models
+from .requirement import (  # noqa: E402, F401
+    RequirementCategory, Requirement, RequirementChange, RequirementTrace
+)
+
+# Import requirement review models
+from .requirement_review import RequirementReview  # noqa: E402, F401

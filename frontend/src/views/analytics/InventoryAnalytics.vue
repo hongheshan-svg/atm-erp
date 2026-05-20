@@ -115,7 +115,7 @@
               </template>
             </el-table-column>
             <el-table-column label="滞销天数" width="100">
-              <template #default="{ row }">
+              <template #default="{ row: _row }">
                 <el-tag type="warning">{{ slowMovingDays }}天</el-tag>
               </template>
             </el-table-column>
@@ -154,7 +154,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { Box, Goods, Refresh, Warning } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
-import request from '@/utils/request'
+import { getAnalyticsDashboard, getInventoryTurnover, getSlowMovingItems, getInventoryStocks } from '@/api/analytics'
 import { ElMessage } from 'element-plus'
 
 const loading = ref(false)
@@ -187,7 +187,7 @@ const formatCurrency = (value) => {
 
 const loadInventoryMetrics = async () => {
   try {
-    const response = await request.get('/analytics/dashboard/')
+    const data = await getAnalyticsDashboard()
     metrics.inventory_value = data.inventory?.inventory_value || 0
     metrics.total_items = data.inventory?.total_items || 0
     metrics.low_stock_items = data.inventory?.low_stock_items || 0
@@ -199,9 +199,7 @@ const loadInventoryMetrics = async () => {
 
 const loadTurnoverData = async () => {
   try {
-    const response = await request.get('/analytics/inventory_turnover/', {
-      params: { days: turnoverDays.value }
-    })
+    const data = await getInventoryTurnover({ days: turnoverDays.value })
     metrics.turnover_rate = data.turnover_rate || 0
     renderTurnoverChart(data)
   } catch (error) {
@@ -214,9 +212,7 @@ const loadTurnoverData = async () => {
 const loadSlowMovingItems = async () => {
   loading.value = true
   try {
-    const response = await request.get('/analytics/slow_moving_items/', {
-      params: { days: slowMovingDays.value }
-    })
+    const data = await getSlowMovingItems({ days: slowMovingDays.value })
     slowMovingItems.value = data || []
   } catch (error) {
     console.error('加载滞销物料失败', error)
@@ -228,7 +224,7 @@ const loadSlowMovingItems = async () => {
 
 const loadWarehouseDistribution = async () => {
   try {
-    const response = await request.get('/inventory/stocks/')
+    const response = await getInventoryStocks()
     
     // Group by warehouse
     const warehouseValues = {}

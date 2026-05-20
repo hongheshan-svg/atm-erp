@@ -24,14 +24,14 @@
       </el-form>
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'sales:delivery:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" v-permission="'sales:delivery:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <!-- 发货单列表 -->
       <el-table :data="deliveryOrders" v-loading="loading" border stripe @selection-change="handleSelectionChange">
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'sales:delivery:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="delivery_no" label="发货单号" width="150" />
         <el-table-column prop="so_no" label="销售订单" width="150" />
         <el-table-column prop="customer_name" label="客户" width="180" />
@@ -303,7 +303,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getDeliveryOrders, getDeliveryOrder, submitDeliveryOrder, confirmDeliveryPrepared, confirmDeliveryLogistics, confirmDeliverySigned, uploadDeliveryReceipt, projectConfirmDelivery, rejectDeliveryOrder } from '@/api/sales'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 
@@ -420,7 +420,7 @@ const loadDeliveryOrders = async () => {
       }
     })
 
-    const response = await request.get('/sales/deliveries/', { params })
+    const response = await getDeliveryOrders(params)
     deliveryOrders.value = response.results || response.data?.results || []
     pagination.total = response.count || response.data?.count || 0
   } catch (error) {
@@ -440,7 +440,7 @@ const resetSearch = () => {
 
 const handleView = async (row) => {
   try {
-    const response = await request.get(`/sales/deliveries/${row.id}/`)
+    const response = await getDeliveryOrder(row.id)
     currentDelivery.value = response.data || response
     activeTab.value = 'basic'
     detailVisible.value = true
@@ -454,7 +454,7 @@ const handleView = async (row) => {
 const handleSubmit = async (row) => {
   try {
     await ElMessageBox.confirm('确定要提交发货申请吗？', '提交确认', { type: 'info' })
-    await request.post(`/sales/deliveries/${row.id}/submit/`)
+    await submitDeliveryOrder(row.id)
     ElMessage.success('已提交发货申请')
     loadDeliveryOrders()
   } catch (error) {
@@ -473,7 +473,7 @@ const viewWorkflow = (row) => {
 const handleConfirmPrepared = async (row) => {
   try {
     await ElMessageBox.confirm('确定备货已完成吗？确认后将扣减库存。', '确认备货', { type: 'warning' })
-    await request.post(`/sales/deliveries/${row.id}/confirm_prepared/`)
+    await confirmDeliveryPrepared(row.id)
     ElMessage.success('备货完成，已扣减库存')
     loadDeliveryOrders()
   } catch (error) {
@@ -499,7 +499,7 @@ const submitLogistics = async () => {
   }
   submitting.value = true
   try {
-    await request.post(`/sales/deliveries/${currentRowId.value}/confirm_logistics/`, logisticsForm)
+    await confirmDeliveryLogistics(currentRowId.value, logisticsForm)
     ElMessage.success('物流信息已确认')
     logisticsDialogVisible.value = false
     loadDeliveryOrders()
@@ -525,7 +525,7 @@ const submitSigned = async () => {
   }
   submitting.value = true
   try {
-    await request.post(`/sales/deliveries/${currentRowId.value}/confirm_signed/`, signedForm)
+    await confirmDeliverySigned(currentRowId.value, signedForm)
     ElMessage.success('签收信息已确认')
     signedDialogVisible.value = false
     loadDeliveryOrders()
@@ -554,9 +554,7 @@ const submitUpload = async () => {
     if (uploadFile.value) {
       formData.append('signed_receipt', uploadFile.value)
     }
-    await request.post(`/sales/deliveries/${currentRowId.value}/upload_receipt/`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
+    await uploadDeliveryReceipt(currentRowId.value, formData)
     ElMessage.success('送货单上传成功')
     uploadDialogVisible.value = false
     loadDeliveryOrders()
@@ -571,7 +569,7 @@ const submitUpload = async () => {
 const handleProjectConfirm = async (row) => {
   try {
     await ElMessageBox.confirm('确定项目已确认完成吗？', '项目确认', { type: 'success' })
-    await request.post(`/sales/deliveries/${row.id}/project_confirm/`)
+    await projectConfirmDelivery(row.id)
     ElMessage.success('发货流程已完成')
     loadDeliveryOrders()
   } catch (error) {
@@ -595,7 +593,7 @@ const submitReject = async () => {
   }
   submitting.value = true
   try {
-    await request.post(`/sales/deliveries/${currentRowId.value}/reject/`, rejectForm)
+    await rejectDeliveryOrder(currentRowId.value, rejectForm)
     ElMessage.success('已拒绝')
     rejectDialogVisible.value = false
     loadDeliveryOrders()

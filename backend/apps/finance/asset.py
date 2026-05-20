@@ -536,7 +536,7 @@ class FixedAssetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
 
         return Response({'total': total, 'by_status': list(by_status), 'by_category': list(by_category)})
 
-    @action(detail=False, methods=['post'], url_path='asset-inventory')
+    @action(detail=False, methods=['post'])
     def asset_inventory(self, request):
         """资产盘点提交"""
         items = request.data.get('items', [])

@@ -222,7 +222,8 @@ import { ElMessage } from 'element-plus'
 import { Refresh, Document } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
-import request from '@/utils/request'
+import { getAccuracyReport, getValidationResults, getReconciliationSessions, getValidationRules, runValidationChecks, createAndRunReconciliation, handleValidationResult, initDefaultValidationRules, updateValidationRule } from '@/api/inventory'
+import { getWarehouseList } from '@/api/masterdata'
 
 const router = useRouter()
 
@@ -279,7 +280,7 @@ const formatDateTime = (dt) => {
 
 const loadStats = async () => {
   try {
-    const res = await request.get('/inventory/reports/accuracy/')
+    const res = await getAccuracyReport()
     accuracyTrend.value = res.data.accuracy_trend || []
     severityData.value = res.data.issue_by_severity || []
     stats.value = {
@@ -299,9 +300,7 @@ const loadStats = async () => {
 const loadPendingIssues = async () => {
   loading.value = true
   try {
-    const res = await request.get('/inventory/validation-results/', {
-      params: { status: 'PENDING', page: issuePage.value, page_size: 10 }
-    })
+    const res = await getValidationResults({ status: 'PENDING', page: issuePage.value, page_size: 10 })
     pendingIssues.value = res.data.results || res.data
     issueTotal.value = res.data.count || pendingIssues.value.length
   } catch (e) {
@@ -313,9 +312,7 @@ const loadPendingIssues = async () => {
 
 const loadReconciliations = async () => {
   try {
-    const res = await request.get('/inventory/reconciliation-sessions/', {
-      params: { page_size: 20 }
-    })
+    const res = await getReconciliationSessions({ page_size: 20 })
     reconciliations.value = res.data.results || res.data
   } catch (e) {
     console.error(e)
@@ -324,9 +321,7 @@ const loadReconciliations = async () => {
 
 const loadValidationRules = async () => {
   try {
-    const res = await request.get('/inventory/validation-rules/', {
-      params: { page_size: 100 }
-    })
+    const res = await getValidationRules({ page_size: 100 })
     validationRules.value = res.data.results || res.data
   } catch (e) {
     console.error(e)
@@ -334,7 +329,7 @@ const loadValidationRules = async () => {
 }
 
 const loadWarehouses = async () => {
-  const res = await request.get('/masterdata/warehouses/', { params: { page_size: 100 } })
+  const res = await getWarehouseList({ page_size: 100 })
   warehouses.value = res.data.results || res.data
 }
 
@@ -394,7 +389,7 @@ const renderCharts = () => {
 const runValidation = async () => {
   validating.value = true
   try {
-    const res = await request.post('/inventory/validation-results/run_checks/')
+    const res = await runValidationChecks()
     ElMessage.success(`校验完成，发现 ${res.data.total_issues} 个问题`)
     loadStats()
     loadPendingIssues()
@@ -417,7 +412,7 @@ const showReconcileDialog = () => {
 const createReconciliation = async () => {
   submitting.value = true
   try {
-    const res = await request.post('/inventory/reconciliation-sessions/create_and_run/', reconcileForm)
+    const res = await createAndRunReconciliation(reconcileForm)
     ElMessage.success(`对账完成，检查 ${res.data.total_items_checked} 个物料，发现 ${res.data.issues_found} 个问题`)
     reconcileDialogVisible.value = false
     loadReconciliations()
@@ -438,7 +433,7 @@ const handleIssue = (issue) => {
 
 const ignoreIssue = async (issue) => {
   try {
-    await request.post(`/inventory/validation-results/${issue.id}/handle/`, {
+    await handleValidationResult(issue.id, {
       status: 'IGNORED',
       resolution: '手动忽略'
     })
@@ -453,7 +448,7 @@ const ignoreIssue = async (issue) => {
 const submitHandle = async () => {
   submitting.value = true
   try {
-    await request.post(`/inventory/validation-results/${currentIssue.value.id}/handle/`, handleForm)
+    await handleValidationResult(currentIssue.value.id, handleForm)
     ElMessage.success('处理成功')
     handleDialogVisible.value = false
     loadPendingIssues()
@@ -471,7 +466,7 @@ const viewReconciliation = (session) => {
 
 const initDefaultRules = async () => {
   try {
-    const res = await request.post('/inventory/validation-rules/init_default_rules/')
+    const res = await initDefaultValidationRules()
     ElMessage.success(`初始化完成，创建 ${res.data.created_count} 条规则`)
     loadValidationRules()
   } catch (e) {
@@ -481,7 +476,7 @@ const initDefaultRules = async () => {
 
 const toggleRule = async (rule) => {
   try {
-    await request.patch(`/inventory/validation-rules/${rule.id}/`, {
+    await updateValidationRule(rule.id, {
       is_active: rule.is_active
     })
   } catch (e) {

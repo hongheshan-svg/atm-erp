@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>外协加工管理</span>
-          <el-button type="primary" @click="handleAdd">
+          <el-button type="primary" v-permission="'purchase:outsource_order:create'" @click="handleAdd">
             <el-icon><Plus /></el-icon>
             新建外协单
           </el-button>
@@ -55,7 +55,7 @@
         <el-table-column label="操作" width="320" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
-            <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
+            <el-button size="small" v-permission="'purchase:outsource_order:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button size="small" type="warning" @click="handleConfirm(row)" v-if="row.status === 'DRAFT'">确认</el-button>
             <el-button size="small" type="primary" @click="handleIssue(row)" v-if="row.status === 'CONFIRMED' || row.status === 'PROCESSING'">发料</el-button>
             <el-button size="small" type="success" @click="handleReceipt(row)" v-if="row.status === 'PROCESSING' || row.status === 'PARTIAL'">收货</el-button>
@@ -369,7 +369,14 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getItemList, getSupplierList, getWarehouseList } from '@/api/masterdata'
+import { getProjectList } from '@/api/projects/project'
+import {
+  getOutsourceOrders, getOutsourceOrder, createOutsourceOrder, updateOutsourceOrder,
+  confirmOutsourceOrder, cancelOutsourceOrder,
+  createOutsourceIssue, confirmOutsourceIssue,
+  createOutsourceReceipt, confirmOutsourceReceipt
+} from '@/api/purchase'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -456,7 +463,7 @@ const loadOrders = async () => {
     }
     Object.keys(params).forEach(k => { if (!params[k]) delete params[k] })
     
-    const res = await request.get('/purchase/outsource-orders/', { params })
+    const res = await getOutsourceOrders(params)
     orders.value = res.results || res || []
     pagination.total = res.count || 0
   } catch (error) {
@@ -468,7 +475,7 @@ const loadOrders = async () => {
 
 const loadSuppliers = async () => {
   try {
-    const res = await request.get('/masterdata/suppliers/', { params: { page_size: 500 } })
+    const res = await getSupplierList({ page_size: 500 })
     suppliers.value = res.results || res || []
   } catch (error) {
     console.error('加载供应商失败:', error)
@@ -477,7 +484,7 @@ const loadSuppliers = async () => {
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 200 } })
+    const res = await getProjectList({ page_size: 200 })
     projects.value = res.results || res || []
   } catch (error) {
     console.error('加载项目失败:', error)
@@ -486,7 +493,7 @@ const loadProjects = async () => {
 
 const loadItems = async () => {
   try {
-    const res = await request.get('/masterdata/items/', { params: { page_size: 1000 } })
+    const res = await getItemList({ page_size: 1000 })
     items.value = res.results || res || []
   } catch (error) {
     console.error('加载物料失败:', error)
@@ -495,7 +502,7 @@ const loadItems = async () => {
 
 const loadWarehouses = async () => {
   try {
-    const res = await request.get('/masterdata/warehouses/')
+    const res = await getWarehouseList()
     warehouses.value = res.results || res || []
   } catch (error) {
     console.error('加载仓库失败:', error)
@@ -532,7 +539,7 @@ const handleEdit = async (row) => {
   isEdit.value = true
   
   try {
-    const res = await request.get(`/purchase/outsource-orders/${row.id}/`)
+    const res = await getOutsourceOrder(row.id)
     const data = res.data || res
     
     Object.assign(form, {
@@ -568,7 +575,7 @@ const handleEdit = async (row) => {
 
 const handleView = async (row) => {
   try {
-    const res = await request.get(`/purchase/outsource-orders/${row.id}/`)
+    const res = await getOutsourceOrder(row.id)
     currentOrder.value = res.data || res
     viewDialogVisible.value = true
   } catch (error) {
@@ -625,10 +632,10 @@ const handleSave = async () => {
     }
     
     if (isEdit.value) {
-      await request.put(`/purchase/outsource-orders/${form.id}/`, payload)
+      await updateOutsourceOrder(form.id, payload)
       ElMessage.success('更新外协单成功')
     } else {
-      await request.post('/purchase/outsource-orders/', payload)
+      await createOutsourceOrder(payload)
       ElMessage.success('创建外协单成功')
     }
     
@@ -644,7 +651,7 @@ const handleSave = async () => {
 const handleConfirm = async (row) => {
   try {
     await ElMessageBox.confirm('确定要确认该外协单吗？确认后将无法修改。', '确认外协单', { type: 'warning' })
-    await request.post(`/purchase/outsource-orders/${row.id}/confirm/`)
+    await confirmOutsourceOrder(row.id)
     ElMessage.success('外协单已确认')
     loadOrders()
   } catch (error) {
@@ -657,7 +664,7 @@ const handleConfirm = async (row) => {
 const handleCancel = async (row) => {
   try {
     await ElMessageBox.confirm('确定要取消该外协单吗？', '取消外协单', { type: 'warning' })
-    await request.post(`/purchase/outsource-orders/${row.id}/cancel/`)
+    await cancelOutsourceOrder(row.id)
     ElMessage.success('外协单已取消')
     loadOrders()
   } catch (error) {
@@ -669,7 +676,7 @@ const handleCancel = async (row) => {
 
 const handleIssue = async (row) => {
   try {
-    const res = await request.get(`/purchase/outsource-orders/${row.id}/`)
+    const res = await getOutsourceOrder(row.id)
     const data = res.data || res
     
     issueForm.outsource_order = data.id
@@ -715,7 +722,7 @@ const submitIssue = async () => {
   saving.value = true
   try {
     // 创建发料单
-    const issueRes = await request.post('/purchase/outsource-issues/', {
+    const issueRes = await createOutsourceIssue({
       outsource_order: issueForm.outsource_order,
       warehouse: issueForm.warehouse,
       issue_date: issueForm.issue_date,
@@ -730,7 +737,7 @@ const submitIssue = async () => {
     })
     
     // 确认发料
-    await request.post(`/purchase/outsource-issues/${issueRes.id}/confirm/`)
+    await confirmOutsourceIssue(issueRes.id)
     
     ElMessage.success('发料成功')
     issueDialogVisible.value = false
@@ -744,7 +751,7 @@ const submitIssue = async () => {
 
 const handleReceipt = async (row) => {
   try {
-    const res = await request.get(`/purchase/outsource-orders/${row.id}/`)
+    const res = await getOutsourceOrder(row.id)
     const data = res.data || res
     
     receiptForm.outsource_order = data.id
@@ -789,7 +796,7 @@ const submitReceipt = async () => {
   saving.value = true
   try {
     // 创建收货单
-    const receiptRes = await request.post('/purchase/outsource-receipts/', {
+    const receiptRes = await createOutsourceReceipt({
       outsource_order: receiptForm.outsource_order,
       warehouse: receiptForm.warehouse,
       receipt_date: receiptForm.receipt_date,
@@ -803,7 +810,7 @@ const submitReceipt = async () => {
     })
     
     // 确认收货
-    await request.post(`/purchase/outsource-receipts/${receiptRes.id}/confirm/`)
+    await confirmOutsourceReceipt(receiptRes.id)
     
     ElMessage.success('收货成功')
     receiptDialogVisible.value = false

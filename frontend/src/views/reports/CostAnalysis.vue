@@ -111,7 +111,7 @@
             </template>
           </el-table-column>
           <el-table-column prop="hours" label="工时 (h)" width="120" align="right">
-            <template #default="{ row }">{{ row.hours?.toFixed(1) }}</template>
+            <template #default="{ row }">{{ toFixedSafe(row.hours, 1, '0.0') }}</template>
           </el-table-column>
           <el-table-column prop="cost" label="人工成本" width="150" align="right">
             <template #default="{ row }">¥{{ formatNumber(row.cost) }}</template>
@@ -144,10 +144,12 @@
 
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
+import request from '@/utils/request'
+import { getProjectList } from '@/api/projects/project'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
-import request from '@/utils/request'
 import { usePermissionStore } from '@/stores/permission'
+import { toFixedSafe } from '@/utils/number'
 
 const selectedProject = ref(null)
 const hourlyRate = ref(100)
@@ -186,7 +188,7 @@ const loadProjects = async () => {
 
   projectLoading.value = true
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 500 } })
+    const res = await getProjectList({ page_size: 500 })
     projectOptions.value = res.results || res || []
     projectsLoaded.value = true
     return true

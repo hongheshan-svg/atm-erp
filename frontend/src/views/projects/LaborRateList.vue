@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>工时费率标准</span>
-          <el-button type="primary" @click="handleCreate">新增费率</el-button>
+          <el-button type="primary" v-permission="'projects:project:create'" @click="handleCreate">新增费率</el-button>
         </div>
       </template>
       
@@ -25,7 +25,7 @@
         <el-table-column prop="effective_from" label="生效日期" width="120" />
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
+            <el-button link type="primary" v-permission="'projects:project:edit'" @click="handleEdit(row)">编辑</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -70,7 +70,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getLaborRateList, createLaborRate, updateLaborRate } from '@/api/projects/labor-rate'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -90,7 +90,7 @@ const rules = {
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await request.get('/projects/labor-rates/')
+    const res = await getLaborRateList()
     tableData.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     ElMessage.error('加载数据失败')
@@ -117,10 +117,10 @@ const handleSave = async () => {
     await formRef.value?.validate()
     saving.value = true
     if (isEdit.value) {
-      await request.put(`/projects/labor-rates/${form.id}/`, form)
+      await updateLaborRate(form.id, form)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/projects/labor-rates/', form)
+      await createLaborRate(form)
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false

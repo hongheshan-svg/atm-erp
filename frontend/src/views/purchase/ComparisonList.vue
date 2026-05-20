@@ -13,7 +13,7 @@
               <el-icon><Delete /></el-icon>
               批量删除 ({{ selectedRows.length }})
             </el-button>
-            <el-button type="primary" @click="handleCreate">
+            <el-button type="primary" v-permission="'purchase:quotation_comparison:create'" @click="handleCreate">
               <el-icon><Plus /></el-icon>
               新建比价
             </el-button>
@@ -261,7 +261,10 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import {
+  getComparisons, getAvailableRFQsForComparison, createComparisonFromRFQ,
+  completeComparison, approveComparison, convertComparisonToPO, batchDeleteComparisons
+} from '@/api/purchase'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
@@ -392,7 +395,7 @@ const loadData = async () => {
       page_size: pagination.pageSize,
       ...searchForm
     }
-    const res = await request.get('/purchase/comparisons/', { params })
+    const res = await getComparisons(params)
     tableData.value = res.results || res || []
     pagination.total = res.count || 0
   } catch (error) {
@@ -406,7 +409,7 @@ const loadData = async () => {
 // 加载可用于比价的询价单（至少有2个已提交报价）
 const loadAvailableRFQs = async () => {
   try {
-    const res = await request.get('/purchase/comparisons/available-rfqs/')
+    const res = await getAvailableRFQsForComparison()
     availableRFQs.value = res || []
     if (availableRFQs.value.length === 0) {
       ElMessage.warning('暂无可用于比价的询价单，需要询价单至少有2个供应商报价')
@@ -445,7 +448,7 @@ const submitCreate = async () => {
   try {
     await createFormRef.value.validate()
     
-    const res = await request.post('/purchase/comparisons/create-comparison/', createForm)
+    const res = await createComparisonFromRFQ(createForm)
     ElMessage.success('比价分析创建成功')
     createDialogVisible.value = false
     
@@ -467,7 +470,7 @@ const handleView = (row) => {
 const handleComplete = async (row) => {
   try {
     await ElMessageBox.confirm('确定完成此比价分析？', '确认')
-    await request.post(`/purchase/comparisons/${row.id}/complete/`)
+    await completeComparison(row.id)
     ElMessage.success('比价分析已完成')
     loadData()
   } catch (error) {
@@ -481,7 +484,7 @@ const handleComplete = async (row) => {
 const handleApprove = async (row) => {
   try {
     await ElMessageBox.confirm('确定审批通过此比价分析？', '确认审批')
-    await request.post(`/purchase/comparisons/${row.id}/approve/`)
+    await approveComparison(row.id)
     ElMessage.success('审批通过')
     loadData()
   } catch (error) {
@@ -495,7 +498,7 @@ const handleApprove = async (row) => {
 const handleConvertToPO = async (row) => {
   try {
     await ElMessageBox.confirm('确定将推荐报价转换为采购订单？', '确认转换')
-    const res = await request.post(`/purchase/comparisons/${row.id}/convert-to-po/`)
+    const res = await convertComparisonToPO(row.id)
     ElMessage.success(`采购订单 ${res.order_no} 创建成功`)
     router.push(`/purchase/orders/${res.id}`)
   } catch (error) {
@@ -518,7 +521,7 @@ const handleDelete = async (row) => {
       '确认删除',
       { type: 'warning' }
     )
-    await request.post('/purchase/comparisons/batch-delete/', { ids: [row.id] })
+    await batchDeleteComparisons({ ids: [row.id] })
     ElMessage.success('删除成功')
     loadData()
   } catch (error) {
@@ -542,7 +545,7 @@ const handleBatchDelete = async () => {
       { type: 'warning' }
     )
     const ids = selectedRows.value.map(row => row.id)
-    const res = await request.post('/purchase/comparisons/batch-delete/', { ids })
+    const res = await batchDeleteComparisons({ ids })
     ElMessage.success(res.message || '批量删除成功')
     selectedRows.value = []
     loadData()

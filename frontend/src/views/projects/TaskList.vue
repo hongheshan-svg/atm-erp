@@ -13,7 +13,7 @@
                 :value="project.id"
               />
             </el-select>
-            <el-button type="primary" @click="handleAdd" :disabled="!selectedProject">
+            <el-button type="primary" v-permission="'projects:project:create'" @click="handleAdd" :disabled="!selectedProject">
               <el-icon><Plus /></el-icon>
               新增任务
             </el-button>
@@ -97,10 +97,10 @@
             <el-button type="info" link size="small" @click="handleMoveDown(row, $index)" :disabled="$index === flatTasks.length - 1" title="下移">
               <el-icon><Bottom /></el-icon>
             </el-button>
-            <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button type="primary" link size="small" v-permission="'projects:project:edit'" @click="handleEdit(row)">编辑</el-button>
             <el-button type="success" link size="small" @click="handleLogTime(row)">填报工时</el-button>
-            <el-button type="warning" link size="small" @click="handleAddChild(row)">添加子任务</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button type="warning" link size="small" v-permission="'projects:project:create'" @click="handleAddChild(row)">添加子任务</el-button>
+            <el-button type="danger" link size="small" v-permission="'projects:project:delete'" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -222,8 +222,9 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Top, Bottom, Refresh } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getProjectList, getTaskList, createTask, updateTask, deleteTask, patchTask, batchRecalculateHours, getMemberList, createTimeLog } from '@/api/projects/project'
 import { usePermissionStore } from '@/stores/permission'
+import { getUsers } from '@/api/auth'
 
 const loading = ref(false)
 const recalculating = ref(false)
@@ -381,7 +382,7 @@ const getProgressStatus = (progress) => {
 
 const fetchProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/')
+    const res = await getProjectList()
     projects.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('获取项目列表失败:', error)
@@ -402,9 +403,7 @@ const fetchTasks = async () => {
   loading.value = true
   try {
     // 使用查询参数过滤项目任务
-    const res = await request.get('/projects/tasks/', {
-      params: { project: selectedProject.value }
-    })
+    const res = await getTaskList({ project: selectedProject.value })
     const tasks = res.data?.results || res.results || res.data || []
     taskTree.value = buildTree(tasks)
     calculateStats(tasks)
@@ -455,7 +454,7 @@ const fetchProjectMembers = async () => {
   }
 
   try {
-    const membersRes = await request.get('/projects/members/', { params: { project: selectedProject.value } })
+    const membersRes = await getMemberList({ project: selectedProject.value })
     projectMembers.value = membersRes.data?.results || membersRes.results || membersRes.data || []
     projectMembersLoadedFor.value = selectedProject.value
     return true
@@ -480,7 +479,7 @@ const fetchAllUsers = async () => {
   }
 
   try {
-    const userRes = await request.get('/auth/users/')
+    const userRes = await getUsers()
     allUsers.value = userRes.data?.results || userRes.results || userRes.data || []
     allUsersLoaded.value = true
     return true
@@ -558,13 +557,13 @@ const handleDelete = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      await request.delete(`/projects/tasks/${row.id}/`)
+      await deleteTask(row.id)
       ElMessage.success('删除成功')
       fetchTasks()
     } catch (error) {
       ElMessage.error('删除失败')
     }
-  }).catch(() => {})
+  }).catch(error => { console.error(error) })
 }
 
 // 上移任务
@@ -578,8 +577,8 @@ const handleMoveUp = async (row, index) => {
     // 使用索引位置作为新的 sort_order（交换位置）
     // 当前任务移到上一个位置，上一个任务移到当前位置
     await Promise.all([
-      request.patch(`/projects/tasks/${row.id}/`, { sort_order: index - 1 }),
-      request.patch(`/projects/tasks/${prevTask.id}/`, { sort_order: index })
+      patchTask(row.id, { sort_order: index - 1 }),
+      patchTask(prevTask.id, { sort_order: index })
     ])
     
     ElMessage.success('排序已更新')
@@ -600,8 +599,8 @@ const handleMoveDown = async (row, index) => {
     // 使用索引位置作为新的 sort_order（交换位置）
     // 当前任务移到下一个位置，下一个任务移到当前位置
     await Promise.all([
-      request.patch(`/projects/tasks/${row.id}/`, { sort_order: index + 1 }),
-      request.patch(`/projects/tasks/${nextTask.id}/`, { sort_order: index })
+      patchTask(row.id, { sort_order: index + 1 }),
+      patchTask(nextTask.id, { sort_order: index })
     ])
     
     ElMessage.success('排序已更新')
@@ -654,10 +653,10 @@ const handleSubmit = async () => {
     }
     
     if (form.id) {
-      await request.put(`/projects/tasks/${form.id}/`, data)
+      await updateTask(form.id, data)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/projects/tasks/', data)
+      await createTask(data)
       ElMessage.success('创建成功')
     }
     
@@ -685,9 +684,7 @@ const handleRecalculateHours = async () => {
   
   try {
     recalculating.value = true
-    const res = await request.post('/projects/tasks/batch_recalculate_hours/', {
-      project: selectedProject.value
-    })
+    const res = await batchRecalculateHours({ project: selectedProject.value })
     ElMessage.success(res.message || '工时重算完成')
     fetchTasks() // 刷新任务列表
   } catch (error) {
@@ -700,10 +697,7 @@ const handleRecalculateHours = async () => {
 
 const handleSubmitTimeLog = async () => {
   try {
-    await request.post('/projects/time-logs/', {
-      task: currentTask.value.id,
-      ...timeLogForm
-    })
+    await createTimeLog({ task: currentTask.value.id, ...timeLogForm })
     ElMessage.success('工时填报成功')
     timeLogVisible.value = false
     fetchTasks()

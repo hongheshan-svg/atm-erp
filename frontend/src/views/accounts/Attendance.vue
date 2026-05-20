@@ -243,7 +243,21 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Location, CircleCheck } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import {
+  getAttendanceToday,
+  getMyAttendanceRecords,
+  getAttendanceMonthlySummary,
+  attendanceCheckIn,
+  attendanceCheckOut,
+  getMyLeaveRequests,
+  getLeaveTypes,
+  createLeaveRequest,
+  submitLeaveRequest,
+  cancelLeaveRequest,
+  getMyOvertimeRequests,
+  createOvertimeRequest,
+  submitOvertimeRequest
+} from '@/api/accounts'
 
 const activeTab = ref('records')
 const loading = ref(false)
@@ -309,7 +323,7 @@ const summaryData = computed(() => {
 
 const fetchTodayStatus = async () => {
   try {
-    const data = await request.get('/auth/attendance-records/today/')
+    const data = await getAttendanceToday()
     todayStatus.value = data
   } catch (e) {
     console.error(e)
@@ -319,9 +333,7 @@ const fetchTodayStatus = async () => {
 const fetchRecords = async () => {
   loading.value = true
   try {
-    const data = await request.get('/auth/attendance-records/my_records/', {
-      params: { month: queryMonth.value }
-    })
+    const data = await getMyAttendanceRecords({ month: queryMonth.value })
     records.value = data
   } catch (e) {
     console.error(e)
@@ -332,7 +344,7 @@ const fetchRecords = async () => {
 
 const fetchLeaveRequests = async () => {
   try {
-    const data = await request.get('/auth/leave-requests/my_requests/')
+    const data = await getMyLeaveRequests()
     leaveRequests.value = data
   } catch (e) {
     console.error(e)
@@ -341,7 +353,7 @@ const fetchLeaveRequests = async () => {
 
 const fetchOvertimeRequests = async () => {
   try {
-    const data = await request.get('/auth/overtime-requests/my_requests/')
+    const data = await getMyOvertimeRequests()
     overtimeRequests.value = data
   } catch (e) {
     console.error(e)
@@ -350,9 +362,7 @@ const fetchOvertimeRequests = async () => {
 
 const fetchSummary = async () => {
   try {
-    const data = await request.get('/auth/attendance-records/monthly_summary/', {
-      params: { month: summaryMonth.value }
-    })
+    const data = await getAttendanceMonthlySummary({ month: summaryMonth.value })
     monthlySummary.value = data
   } catch (e) {
     console.error(e)
@@ -361,7 +371,7 @@ const fetchSummary = async () => {
 
 const fetchLeaveTypes = async () => {
   try {
-    const data = await request.get('/auth/leave-requests/leave_types/')
+    const data = await getLeaveTypes()
     leaveTypes.value = data
   } catch (e) {
     leaveTypes.value = [
@@ -375,9 +385,7 @@ const fetchLeaveTypes = async () => {
 
 const handleCheckIn = async () => {
   try {
-    const data = await request.post('/auth/attendance-records/check_in/', {
-      location: '办公室'
-    })
+    const data = await attendanceCheckIn({ location: '办公室' })
     todayStatus.value = data
     ElMessage.success('签到成功')
     fetchRecords()
@@ -388,9 +396,7 @@ const handleCheckIn = async () => {
 
 const handleCheckOut = async () => {
   try {
-    const data = await request.post('/auth/attendance-records/check_out/', {
-      location: '办公室'
-    })
+    const data = await attendanceCheckOut({ location: '办公室' })
     todayStatus.value = data
     ElMessage.success('签退成功')
     fetchRecords()
@@ -426,7 +432,7 @@ const submitLeaveForm = async () => {
   
   submitLoading.value = true
   try {
-    await request.post('/auth/leave-requests/', leaveForm)
+    await createLeaveRequest(leaveForm)
     ElMessage.success('申请已保存')
     leaveDialogVisible.value = false
     fetchLeaveRequests()
@@ -443,7 +449,7 @@ const submitOvertimeForm = async () => {
   
   submitLoading.value = true
   try {
-    await request.post('/auth/overtime-requests/', overtimeForm)
+    await createOvertimeRequest(overtimeForm)
     ElMessage.success('申请已保存')
     overtimeDialogVisible.value = false
     fetchOvertimeRequests()
@@ -456,7 +462,7 @@ const submitOvertimeForm = async () => {
 
 const handleSubmitLeave = async (row) => {
   try {
-    await request.post(`/accounts/leave-requests/${row.id}/submit/`)
+    await submitLeaveRequest(row.id)
     ElMessage.success('已提交审批')
     fetchLeaveRequests()
   } catch (e) {
@@ -466,7 +472,7 @@ const handleSubmitLeave = async (row) => {
 
 const handleSubmitOvertime = async (row) => {
   try {
-    await request.post(`/accounts/overtime-requests/${row.id}/submit/`)
+    await submitOvertimeRequest(row.id)
     ElMessage.success('已提交审批')
     fetchOvertimeRequests()
   } catch (e) {
@@ -477,9 +483,9 @@ const handleSubmitOvertime = async (row) => {
 const handleCancelLeave = async (row) => {
   try {
     await ElMessageBox.confirm('确定要撤回该请假申请吗？', '提示', { type: 'warning' })
-    await request.post(`/accounts/leave-requests/${row.id}/cancel/`)
+    await cancelLeaveRequest(row.id)
     ElMessage.success('撤回成功')
-    loadLeaveRequests()
+    fetchLeaveRequests()
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(error.response?.data?.error || '撤回失败')
   }

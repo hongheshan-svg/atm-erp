@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>采购订单</span>
-          <el-button type="primary" @click="handleAdd">
+          <el-button type="primary" v-permission="'purchase:purchase_order:create'" @click="handleAdd">
             <el-icon><Plus /></el-icon>
             创建订单
           </el-button>
@@ -37,7 +37,7 @@
       </el-form>
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'purchase:purchase_order:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
         <el-button 
           type="danger" 
@@ -50,7 +50,7 @@
       </div>
 
       <el-table :data="orders" v-loading="loading" stripe border @selection-change="handleSelectionChange">
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'purchase:purchase_order:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="order_no" label="采购订单号" width="140" fixed />
         <el-table-column prop="project_name" label="项目" width="150" show-overflow-tooltip />
         <el-table-column label="物料名称" width="150" show-overflow-tooltip>
@@ -67,7 +67,7 @@
         </el-table-column>
         <el-table-column label="单价" width="90" align="right">
           <template #default="{ row }">
-            <span v-if="row.item_summary">¥{{ row.item_summary.unit_price?.toFixed(2) }}</span>
+            <span v-if="row.item_summary">¥{{ formatMoney(row.item_summary.unit_price) }}</span>
             <span v-else>-</span>
           </template>
         </el-table-column>
@@ -89,7 +89,7 @@
         </el-table-column>
         <el-table-column prop="total_with_tax" label="含税总额" width="100" align="right">
           <template #default="{ row }">
-            ¥{{ parseFloat(row.total_with_tax || row.total_amount || 0).toFixed(2) }}
+            ¥{{ formatMoney(row.total_with_tax || row.total_amount) }}
           </template>
         </el-table-column>
         <el-table-column prop="order_date" label="订单日期" width="100" />
@@ -97,7 +97,7 @@
         <el-table-column label="操作" width="480" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
-            <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
+            <el-button size="small" v-permission="'purchase:purchase_order:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button size="small" type="warning" @click="handleSubmit(row)" v-if="row.status === 'DRAFT' || row.status === 'REJECTED'">提交审批</el-button>
             <el-button size="small" type="info" @click="showWorkflowProgress(row)" v-if="row.status === 'PENDING'">审批进度</el-button>
             <el-button size="small" type="success" @click="handleConfirm(row)" v-if="row.status === 'APPROVED'">确认</el-button>
@@ -106,7 +106,7 @@
             <el-button size="small" type="warning" @click="handleViewAttachments(row)">附件</el-button>
             <el-button size="small" type="success" @click="receiveGoods(row)" v-if="row.status === 'CONFIRMED' || row.status === 'PARTIAL'">收货</el-button>
             <el-button size="small" type="danger" @click="handleCancel(row)" v-if="row.status === 'DRAFT' || row.status === 'CONFIRMED'">取消</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button size="small" type="danger" v-permission="'purchase:purchase_order:delete'" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -230,9 +230,9 @@
             </template>
           </el-table-column>
           <el-table-column label="小计" width="120" align="right">
-            <template #default="{ row }">
-              ¥{{ ((row.qty || 0) * (row.unit_price || 0)).toFixed(2) }}
-            </template>
+          <template #default="{ row }">
+              ¥{{ formatMoney((row.qty || 0) * (row.unit_price || 0)) }}
+          </template>
           </el-table-column>
           <el-table-column label="操作" width="80" align="center">
             <template #default="{ $index }">
@@ -246,15 +246,15 @@
         <div class="total-section">
           <div class="total-row">
             <span class="label">不含税金额：</span>
-            <span class="value">¥{{ calculateTotal().toFixed(2) }}</span>
+            <span class="value">¥{{ formatMoney(calculateTotal()) }}</span>
           </div>
           <div class="total-row">
             <span class="label">税额 ({{ form.tax_rate }}%)：</span>
-            <span class="value">¥{{ calculateTax().toFixed(2) }}</span>
+            <span class="value">¥{{ formatMoney(calculateTax()) }}</span>
           </div>
           <div class="total-row total">
             <span class="label">含税总额：</span>
-            <span class="amount">¥{{ calculateTotalWithTax().toFixed(2) }}</span>
+            <span class="amount">¥{{ formatMoney(calculateTotalWithTax()) }}</span>
           </div>
         </div>
       </el-form>
@@ -290,10 +290,16 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import {
+  getPurchaseOrders, getPurchaseOrder, createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder,
+  submitPurchaseOrder, confirmPurchaseOrder, cancelPurchaseOrder, withdrawPurchaseOrder,
+  getPurchaseContracts, createContractFromPO, printPreviewContract
+} from '@/api/purchase'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { getItemList, getSupplierList } from '@/api/masterdata'
+import { getProjectList } from '@/api/projects/project'
 
 const router = useRouter()
 
@@ -390,6 +396,11 @@ const getStatusLabel = (status) => {
   return labels[status] || status
 }
 
+const formatMoney = (value) => {
+  const amount = Number.parseFloat(value ?? 0)
+  return Number.isFinite(amount) ? amount.toFixed(2) : '0.00'
+}
+
 const loadOrders = async () => {
   loading.value = true
   try {
@@ -400,7 +411,7 @@ const loadOrders = async () => {
     if (searchForm.supplier) params.supplier = searchForm.supplier
     if (searchForm.status) params.status = searchForm.status
     
-    const res = await request.get('/purchase/orders/', { params })
+    const res = await getPurchaseOrders(params)
     orders.value = res.data?.results || res.results || res.data || []
     pagination.total = res.data?.count || res.count || 0
   } catch (error) {
@@ -412,7 +423,7 @@ const loadOrders = async () => {
 
 const loadSuppliers = async () => {
   try {
-    const res = await request.get('/masterdata/suppliers/')
+    const res = await getSupplierList()
     suppliers.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('加载供应商失败:', error)
@@ -421,7 +432,7 @@ const loadSuppliers = async () => {
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/')
+    const res = await getProjectList()
     projects.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('加载项目失败:', error)
@@ -430,7 +441,7 @@ const loadProjects = async () => {
 
 const loadItems = async () => {
   try {
-    const res = await request.get('/masterdata/items/')
+    const res = await getItemList()
     items.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('加载物料失败:', error)
@@ -467,7 +478,7 @@ const handleEdit = async (row) => {
   isEdit.value = true
   
   try {
-    const res = await request.get(`/purchase/orders/${row.id}/`)
+    const res = await getPurchaseOrder(row.id)
     const data = res.data || res
     
     Object.assign(form, {
@@ -565,10 +576,10 @@ const handleSave = async () => {
     }
     
     if (isEdit.value) {
-      await request.put(`/purchase/orders/${form.id}/`, payload)
+      await updatePurchaseOrder(form.id, payload)
       ElMessage.success('更新采购订单成功')
     } else {
-      await request.post('/purchase/orders/', payload)
+      await createPurchaseOrder(payload)
       ElMessage.success('创建采购订单成功')
     }
     
@@ -587,7 +598,7 @@ const handleSave = async () => {
 const handleSubmit = async (row) => {
   try {
     await ElMessageBox.confirm('确定要提交该采购订单审批吗？', '提交审批', { type: 'warning' })
-    const res = await request.post(`/purchase/orders/${row.id}/submit/`)
+    const res = await submitPurchaseOrder(row.id)
     if (res.workflow_started) {
       ElMessage.success(res.message || '已提交审批')
     } else {
@@ -604,7 +615,7 @@ const handleSubmit = async (row) => {
 const handleConfirm = async (row) => {
   try {
     await ElMessageBox.confirm('确定要确认该采购订单吗？确认后将无法修改。', '确认订单', { type: 'warning' })
-    await request.post(`/purchase/orders/${row.id}/confirm/`)
+    await confirmPurchaseOrder(row.id)
     ElMessage.success('订单已确认')
     loadOrders()
   } catch (error) {
@@ -617,7 +628,7 @@ const handleConfirm = async (row) => {
 const handleCancel = async (row) => {
   try {
     await ElMessageBox.confirm('确定要取消该采购订单吗？', '取消订单', { type: 'warning' })
-    await request.post(`/purchase/orders/${row.id}/cancel/`)
+    await cancelPurchaseOrder(row.id)
     ElMessage.success('订单已取消')
     loadOrders()
   } catch (error) {
@@ -630,7 +641,7 @@ const handleCancel = async (row) => {
 const handleWithdraw = async (row) => {
   try {
     await ElMessageBox.confirm('确定要撤回该采购订单吗？撤回后将恢复为草稿状态，关联的应付账款和付款计划将被删除。', '撤回确认', { type: 'warning' })
-    await request.post(`/purchase/orders/${row.id}/withdraw/`)
+    await withdrawPurchaseOrder(row.id)
     ElMessage.success('订单已撤回')
     loadOrders()
   } catch (error) {
@@ -643,7 +654,7 @@ const handleWithdraw = async (row) => {
 const handleContract = async (row) => {
   try {
     // 检查是否已有合同
-    const contractRes = await request.get('/purchase/contracts/', { params: { po: row.id } })
+    const contractRes = await getPurchaseContracts({ po: row.id })
     const contracts = contractRes.results || contractRes || []
     
     if (contracts.length > 0) {
@@ -653,7 +664,7 @@ const handleContract = async (row) => {
     } else {
       // 创建新合同
       await ElMessageBox.confirm('该订单尚未生成合同，是否现在生成？', '生成合同', { type: 'info' })
-      const res = await request.post('/purchase/contracts/create_from_po/', { po_id: row.id })
+      const res = await createContractFromPO(row.id)
       ElMessage.success(`合同 ${res.contract_no} 创建成功`)
       handlePrintContract(res)
     }
@@ -666,7 +677,7 @@ const handleContract = async (row) => {
 
 const handlePrintContract = async (contract) => {
   try {
-    const res = await request.get(`/purchase/contracts/${contract.id}/print_preview/`)
+    const res = await printPreviewContract(contract.id)
     // 打开打印预览窗口
     const printWindow = window.open('', '_blank')
     printWindow.document.write(generateContractHtml(res))
@@ -869,7 +880,7 @@ const handleDelete = async (row) => {
       '删除订单', 
       { type: 'warning' }
     )
-    await request.delete(`/purchase/orders/${row.id}/`)
+    await deletePurchaseOrder(row.id)
     ElMessage.success('订单已删除')
     loadOrders()
   } catch (error) {

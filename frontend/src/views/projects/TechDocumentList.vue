@@ -233,7 +233,8 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Upload, Document, UploadFilled } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getTechDocumentList, getTechDocument, createTechDocument, getTechDocCategoryTree, logTechDocAccess, submitTechDocReview, approveTechDocument, releaseTechDocument, newTechDocRevision, getTechDocAccessLog, distributeTechDocument } from '@/api/projects/tech-document'
+import { getProjectList } from '@/api/projects/project'
 
 const loading = ref(false)
 const uploading = ref(false)
@@ -314,7 +315,7 @@ const loadDocuments = async () => {
     if (filters.status) params.status = filters.status
     if (filters.project) params.project = filters.project
 
-    const res = await request.get('/projects/tech-documents/', { params })
+    const res = await getTechDocumentList(params)
     documents.value = res.results || res
     pagination.total = res.count || documents.value.length
   } catch (e) {
@@ -326,7 +327,7 @@ const loadDocuments = async () => {
 
 const loadCategories = async () => {
   try {
-    const res = await request.get('/projects/tech-doc-categories/tree/')
+    const res = await getTechDocCategoryTree()
     categoryTree.value = res
   } catch (e) {
     console.error('加载分类失败')
@@ -335,7 +336,7 @@ const loadCategories = async () => {
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res
   } catch (e) {
     console.error('加载项目列表失败')
@@ -352,11 +353,11 @@ const resetFilters = () => {
 
 const viewDocument = async (row) => {
   try {
-    const res = await request.get(`/projects/tech-documents/${row.id}/`)
+    const res = await getTechDocument(row.id)
     currentDocument.value = res
     showDetailDrawer.value = true
     // 记录访问
-    request.post(`/projects/tech-documents/${row.id}/log_access/`, { access_type: 'VIEW' })
+    logTechDocAccess(row.id, { access_type: 'VIEW' })
   } catch (e) {
     ElMessage.error('加载文档详情失败')
   }
@@ -364,7 +365,7 @@ const viewDocument = async (row) => {
 
 const downloadDocument = async (row) => {
   try {
-    await request.post(`/projects/tech-documents/${row.id}/log_access/`, { access_type: 'DOWNLOAD' })
+    await logTechDocAccess(row.id, { access_type: 'DOWNLOAD' })
     ElMessage.success('开始下载')
     // 实际下载逻辑
   } catch (e) {
@@ -390,7 +391,7 @@ const submitUpload = async () => {
     formData.append('keywords', JSON.stringify(uploadForm.keywords))
     if (uploadForm.file) formData.append('file', uploadForm.file)
 
-    await request.post('/projects/tech-documents/', formData, {
+    await createTechDocument(formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     ElMessage.success('文档上传成功')
@@ -408,24 +409,24 @@ const handleCommand = async (cmd, row) => {
     case 'review':
       ElMessageBox.prompt('请输入评审人ID（逗号分隔）', '提交评审').then(async ({ value }) => {
         const reviewers = value.split(',').map(v => parseInt(v.trim())).filter(v => !isNaN(v))
-        await request.post(`/projects/tech-documents/${row.id}/submit_review/`, { reviewers })
+        await submitTechDocReview(row.id, { reviewers })
         ElMessage.success('已提交评审')
         loadDocuments()
       })
       break
     case 'approve':
-      await request.post(`/projects/tech-documents/${row.id}/approve/`)
+      await approveTechDocument(row.id)
       ElMessage.success('文档已批准')
       loadDocuments()
       break
     case 'release':
-      await request.post(`/projects/tech-documents/${row.id}/release/`)
+      await releaseTechDocument(row.id)
       ElMessage.success('文档已发布')
       loadDocuments()
       break
     case 'revision':
       ElMessageBox.prompt('请输入变更说明', '创建修订版').then(async ({ value }) => {
-        await request.post(`/projects/tech-documents/${row.id}/new_revision/`, { change_description: value })
+        await newTechDocRevision(row.id, { change_description: value })
         ElMessage.success('修订版已创建')
         loadDocuments()
       })
@@ -435,10 +436,11 @@ const handleCommand = async (cmd, row) => {
       Object.assign(distributeForm, { recipients: [], remarks: '' })
       distributeDialogVisible.value = true
       break
-    case 'log':
-      const logs = await request.get(`/projects/tech-documents/${row.id}/access_log/`)
+    case 'log': {
+      const logs = await getTechDocAccessLog(row.id)
       ElMessage.info(`共 ${logs.length} 条访问记录`)
-      break
+        }
+        break
   }
 }
 
@@ -446,7 +448,7 @@ const handleCommand = async (cmd, row) => {
 const handleDistributeSave = async () => {
   distributeSaving.value = true
   try {
-    await request.post(`/projects/tech-documents/${distributeRow.value.id}/distribute/`, distributeForm)
+    await distributeTechDocument(distributeRow.value.id, distributeForm)
     ElMessage.success('发放成功')
     distributeDialogVisible.value = false
     loadDocuments()

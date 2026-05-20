@@ -2,7 +2,7 @@
   <div class="inspection-container">
     <div class="page-header">
       <h2>设备点检</h2>
-      <el-button type="primary" @click="handleCreateInspection">
+      <el-button type="primary" v-permission="'projects:project:create'" @click="handleCreateInspection">
         <el-icon><Plus /></el-icon> 新建点检
       </el-button>
     </div>
@@ -122,7 +122,7 @@
           <template #header>
             <div class="card-header">
               <span>点检模板列表</span>
-              <el-button type="primary" size="small" @click="handleAddTemplate">新增模板</el-button>
+              <el-button type="primary" size="small" v-permission="'projects:project:create'" @click="handleAddTemplate">新增模板</el-button>
             </div>
           </template>
           <el-table :data="templates" border stripe>
@@ -142,7 +142,7 @@
               <template #default="{ row }">
                 <el-button type="primary" link size="small" @click="handleViewTemplate(row)">查看</el-button>
                 <el-button type="primary" link size="small" @click="handleCopyTemplate(row)">复制</el-button>
-                <el-button type="primary" link size="small" @click="handleEditTemplate(row)">编辑</el-button>
+                <el-button type="primary" link size="small" v-permission="'projects:project:edit'" @click="handleEditTemplate(row)">编辑</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -318,7 +318,14 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import {
+  getEquipmentList,
+  getInspectionRecordList, getInspectionRecord, getInspectionStatistics,
+  createInspectionFromTemplate, completeInspectionRecord,
+  getInspectionTemplateList, getInspectionTemplate,
+  createInspectionTemplate, updateInspectionTemplate, copyInspectionTemplate,
+  getUnhandledAbnormal, handleInspectionAbnormal
+} from '@/api/equipment'
 
 const activeTab = ref('records')
 const loading = ref(false)
@@ -368,7 +375,7 @@ const handleForm = reactive({
 const fetchData = async () => {
   loading.value = true
   try {
-    const data = await request.get('/projects/inspection-records/', { params: queryParams })
+    const data = await getInspectionRecordList(queryParams)
     tableData.value = data.results || data
     total.value = data.count || data.length
   } catch (e) {
@@ -380,7 +387,7 @@ const fetchData = async () => {
 
 const fetchTemplates = async () => {
   try {
-    const data = await request.get('/projects/inspection-templates/', { params: { page_size: 100 } })
+    const data = await getInspectionTemplateList({ page_size: 100 })
     templates.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -389,7 +396,7 @@ const fetchTemplates = async () => {
 
 const fetchEquipments = async () => {
   try {
-    const data = await request.get('/projects/equipment/', { params: { page_size: 500 } })
+    const data = await getEquipmentList({ page_size: 500 })
     equipments.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -398,7 +405,7 @@ const fetchEquipments = async () => {
 
 const fetchStats = async () => {
   try {
-    const data = await request.get('/projects/inspection-records/statistics/')
+    const data = await getInspectionStatistics()
     todayStats.value = data.today || {}
   } catch (e) {
     console.error(e)
@@ -407,7 +414,7 @@ const fetchStats = async () => {
 
 const fetchUnhandledAbnormal = async () => {
   try {
-    const data = await request.get('/projects/inspection-results/unhandled_abnormal/')
+    const data = await getUnhandledAbnormal()
     unhandledAbnormal.value = data
   } catch (e) {
     console.error(e)
@@ -437,7 +444,7 @@ const confirmCreate = async () => {
   
   createLoading.value = true
   try {
-    await request.post('/projects/inspection-records/create_from_template/', createForm)
+    await createInspectionFromTemplate(createForm)
     ElMessage.success('点检记录已创建')
     createDialogVisible.value = false
     fetchData()
@@ -451,9 +458,10 @@ const confirmCreate = async () => {
 
 const handleView = async (row) => {
   try {
-    const res = await request.get(`/projects/inspection-records/${row.id}/`)
+    const res = await getInspectionRecord(row.id)
     inspectionDetail.value = res.data || res
-  } catch {
+  } catch (error) {
+    console.error(error)
     inspectionDetail.value = row
   }
   inspectionViewVisible.value = true
@@ -467,10 +475,10 @@ const handleDoInspection = async (row) => {
 const submitInspection = async () => {
   doInspectionSaving.value = true
   try {
-    await request.post(`/projects/inspection-records/${doInspectionRow.value.id}/complete/`, { results: inspectionResults })
+    await completeInspectionRecord(doInspectionRow.value.id, { results: inspectionResults })
     ElMessage.success('点检完成')
     doInspectionVisible.value = false
-    loadInspections()
+    fetchData()
   } catch (error) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
     else ElMessage.error('提交失败')
@@ -487,9 +495,10 @@ const handleAddTemplate = () => {
 
 const handleViewTemplate = async (row) => {
   try {
-    const res = await request.get(`/projects/inspection-templates/${row.id}/`)
+    const res = await getInspectionTemplate(row.id)
     templateDetail.value = res.data || res
-  } catch {
+  } catch (error) {
+    console.error(error)
     templateDetail.value = row
   }
   templateDetailVisible.value = true
@@ -505,14 +514,14 @@ const handleTemplateSave = async () => {
   templateSaving.value = true
   try {
     if (templateIsEdit.value) {
-      await request.put(`/projects/inspection-templates/${templateForm.id}/`, templateForm)
+      await updateInspectionTemplate(templateForm.id, templateForm)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/projects/inspection-templates/', templateForm)
+      await createInspectionTemplate(templateForm)
       ElMessage.success('创建成功')
     }
     templateDialogVisible.value = false
-    loadTemplates()
+    fetchTemplates()
   } catch (error) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
     else ElMessage.error('操作失败')
@@ -523,7 +532,7 @@ const handleTemplateSave = async () => {
 
 const handleCopyTemplate = async (row) => {
   try {
-    await request.post(`/projects/inspection-templates/${row.id}/copy/`, {
+    await copyInspectionTemplate(row.id, {
       code: `${row.code}_copy`,
       name: `${row.name}(副本)`
     })
@@ -548,7 +557,7 @@ const confirmHandle = async () => {
   
   handleLoading.value = true
   try {
-    await request.post(`/projects/inspection-results/${currentAbnormal.value.id}/handle/`, {
+    await handleInspectionAbnormal(currentAbnormal.value.id, {
       notes: handleForm.notes
     })
     ElMessage.success('异常已处理')

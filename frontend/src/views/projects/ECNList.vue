@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>工程变更管理 (ECN)</span>
-          <el-button type="primary" @click="handleCreate">
+          <el-button type="primary" v-permission="'projects:ecn:create'" @click="handleCreate">
             <el-icon><Plus /></el-icon>
             新建ECN
           </el-button>
@@ -60,14 +60,14 @@
       </el-form>
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'projects:ecn:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" v-permission="'projects:ecn:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <!-- 表格 -->
       <el-table :data="ecnList" v-loading="loading" border stripe @selection-change="handleSelectionChange">
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'projects:ecn:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="ecn_no" label="ECN编号" width="160" fixed />
         <el-table-column prop="title" label="变更标题" min-width="200" show-overflow-tooltip />
         <el-table-column prop="project_code" label="项目编号" width="120" />
@@ -99,7 +99,7 @@
         <el-table-column label="操作" width="380" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
-            <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
+            <el-button size="small" v-permission="'projects:ecn:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button size="small" type="primary" @click="handleSubmit(row)" v-if="row.status === 'DRAFT'">提交审批</el-button>
             <el-button size="small" type="info" @click="viewWorkflow(row)" v-if="row.status === 'PENDING' || row.status === 'REVIEWING'">审批进度</el-button>
             <el-button size="small" type="warning" @click="handleImplement(row)" v-if="row.status === 'APPROVED'">开始实施</el-button>
@@ -208,13 +208,13 @@
 
         <!-- 变更明细 -->
         <el-divider content-position="left">变更明细</el-divider>
-        <el-button type="primary" size="small" @click="addItem" style="margin-bottom: 10px;">
+        <el-button type="primary" size="small" v-permission="'projects:ecn:create'" @click="addItem" style="margin-bottom: 10px;">
           <el-icon><Plus /></el-icon>
           添加变更项
         </el-button>
         <el-table :data="form.items" border size="small">
           <el-table-column prop="change_type" label="操作类型" width="120">
-            <template #default="{ row, $index }">
+            <template #default="{ row, $index: _$index }">
               <el-select v-model="row.change_type" size="small" @change="onItemChangeTypeChange(row)">
                 <el-option label="新增" value="ADD" />
                 <el-option label="删除" value="DELETE" />
@@ -398,9 +398,12 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getECNList, getECN, createECN, updateECN, submitECN, startECNImplementation } from '@/api/projects/ecn'
+import { getProjectList } from '@/api/projects/project'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { getItemList } from '@/api/masterdata'
+import request from '@/utils/request'
 
 const router = useRouter()
 
@@ -506,7 +509,7 @@ const loadECNList = async () => {
       }
     })
     
-    const response = await request.get('/projects/ecn/', { params })
+    const response = await getECNList( { params })
     const data = response.data || response
     ecnList.value = data.results || data
     pagination.total = data.count || ecnList.value.length
@@ -521,7 +524,7 @@ const loadECNList = async () => {
 // 加载项目列表
 const loadProjects = async () => {
   try {
-    const response = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    const response = await getProjectList( { params: { page_size: 1000 } })
     const data = response.data || response
     projects.value = data.results || data
   } catch (error) {
@@ -536,7 +539,7 @@ const searchItems = async (query) => {
     return
   }
   try {
-    const response = await request.get('/masterdata/items/', { params: { search: query, page_size: 20 } })
+    const response = await getItemList({ search: query, page_size: 20 })
     const data = response.data || response
     itemOptions.value = data.results || data
   } catch (error) {
@@ -580,7 +583,7 @@ const handleCreate = () => {
 const handleEdit = async (row) => {
   isEdit.value = true
   try {
-    const response = await request.get(`/projects/ecn/${row.id}/`)
+    const response = await getECN(row.id)
     const data = response.data || response
     Object.assign(form, {
       id: data.id,
@@ -613,7 +616,7 @@ const handleEdit = async (row) => {
 // 查看ECN
 const handleView = async (row) => {
   try {
-    const response = await request.get(`/projects/ecn/${row.id}/`)
+    const response = await getECN(row.id)
     currentECN.value = response.data || response
     detailVisible.value = true
   } catch (error) {
@@ -690,10 +693,10 @@ const handleSave = async () => {
       }
       
       if (isEdit.value) {
-        await request.put(`/projects/ecn/${form.id}/`, payload)
+        await updateECN(form.id, payload)
         ElMessage.success('更新成功')
       } else {
-        await request.post('/projects/ecn/', payload)
+        await createECN( payload)
         ElMessage.success('创建成功')
       }
       
@@ -716,7 +719,7 @@ const handleSubmit = async (row) => {
       cancelButtonText: '取消',
       type: 'info'
     })
-    const response = await request.post(`/projects/ecn/${row.id}/submit/`)
+    const response = await submitECN(row.id)
     const data = response.data || response
     
     if (data.workflow_instance_id) {
@@ -729,7 +732,8 @@ const handleSubmit = async (row) => {
           type: 'success'
         })
         router.push('/workflow/my-submissions')
-      } catch {
+      } catch (error) {
+    console.error(error)
         // 用户选择稍后查看
       }
     } else {
@@ -775,7 +779,7 @@ const handleImplement = async (row) => {
       cancelButtonText: '取消',
       type: 'info'
     })
-    await request.post(`/projects/ecn/${row.id}/start_implementation/`)
+    await startECNImplementation(row.id)
     ElMessage.success('已开始实施')
     loadECNList()
   } catch (error) {

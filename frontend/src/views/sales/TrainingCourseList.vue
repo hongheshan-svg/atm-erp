@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>培训课程管理</span>
-          <el-button type="primary" @click="handleCreate">新建课程</el-button>
+          <el-button type="primary" v-permission="'sales:order:create'" @click="handleCreate">新建课程</el-button>
         </div>
       </template>
       
@@ -20,7 +20,7 @@
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
+            <el-button link type="primary" v-permission="'sales:order:edit'" @click="handleEdit(row)">编辑</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -63,7 +63,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getTrainingCourses, createTrainingCourse, updateTrainingCourse } from '@/api/sales'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -84,7 +84,7 @@ const rules = {
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await request.get('/sales/training-courses/', { params: { page: page.value, page_size: pageSize.value } })
+    const res = await getTrainingCourses({ page: page.value, page_size: pageSize.value })
     tableData.value = res.data?.results || res.results || []
     total.value = res.data?.count || res.count || 0
   } catch (error) {
@@ -112,10 +112,10 @@ const handleSave = async () => {
     await formRef.value?.validate()
     saving.value = true
     if (isEdit.value) {
-      await request.put(`/sales/training-courses/${form.id}/`, form)
+      await updateTrainingCourse(form.id, form)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/sales/training-courses/', form)
+      await createTrainingCourse(form)
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false

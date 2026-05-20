@@ -69,7 +69,7 @@
             highlight-current
             @node-click="handleBomNodeClick"
           >
-            <template #default="{ node, data }">
+            <template #default="{ node: _node, data }">
               <div class="tree-node" :class="{ 'has-drawing': data.has_drawing === 'YES', 'is-custom': data.is_custom_part }">
                 <span class="node-content">
                   <el-tag v-if="data.is_custom_part" size="small" type="warning" style="margin-right: 5px;">
@@ -205,7 +205,8 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Connection, Link, Close, Search } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getDrawingList, patchDrawing, autoLinkDrawings, manualLinkDrawing, getCreoBOMTree } from '@/api/projects/drawing'
+import { getProjectList } from '@/api/projects/project'
 
 const projects = ref([])
 const projectId = ref(null)
@@ -272,7 +273,7 @@ watch(bomSearch, (val) => {
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    const res = await getProjectList( { params: { page_size: 1000 } })
     projects.value = res.results || res || []
   } catch (error) {
     console.error('Load projects failed:', error)
@@ -291,7 +292,7 @@ const loadData = async () => {
 
 const loadBomTree = async () => {
   try {
-    const res = await request.get('/projects/creo-bom-imports/bom_tree/', {
+    const res = await getCreoBOMTree( {
       params: { project_id: projectId.value }
     })
     bomTree.value = res.tree || []
@@ -303,7 +304,7 @@ const loadBomTree = async () => {
 
 const loadDrawings = async () => {
   try {
-    const res = await request.get('/projects/drawings/', {
+    const res = await getDrawingList( {
       params: { project: projectId.value, page_size: 1000 }
     })
     drawings.value = res.results || res || []
@@ -316,7 +317,7 @@ const loadDrawings = async () => {
 const autoLink = async () => {
   linking.value = true
   try {
-    const res = await request.post('/projects/drawing-import/auto_link/', {
+    const res = await autoLinkDrawings( {
       project_id: projectId.value
     })
     linkResult.value = res
@@ -344,7 +345,7 @@ const linkDrawingToBom = async (drawing) => {
   }
   
   try {
-    await request.post('/projects/drawing-import/manual_link/', {
+    await manualLinkDrawing( {
       drawing_id: drawing.id,
       bom_id: selectedBom.value.id
     })
@@ -359,7 +360,7 @@ const linkDrawingToBom = async (drawing) => {
 const unlinkDrawing = async (drawing) => {
   await ElMessageBox.confirm('确定要解除该图纸与BOM的关联吗?', '确认')
   try {
-    await request.patch(`/projects/drawings/${drawing.id}/`, {
+    await patchDrawing(drawing.id, {
       bom_item: null,
       item: null
     })

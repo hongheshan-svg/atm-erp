@@ -6,10 +6,15 @@
 # ===============================
 FROM node:20-alpine AS builder
 
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+
 WORKDIR /app
 
 # Copy package files
 COPY frontend/package*.json ./
+
+# Use domestic npm mirror to speed up dependency installation
+RUN npm config set registry ${NPM_REGISTRY}
 
 # Install dependencies (using npm install for flexibility)
 RUN npm install --legacy-peer-deps
@@ -42,4 +47,3 @@ RUN mkdir -p /var/cache/nginx /var/log/nginx
 EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]
-

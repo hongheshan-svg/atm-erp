@@ -4,7 +4,7 @@
       <h2>项目里程碑</h2>
       <div class="header-actions">
         <el-button @click="handleInitTemplate">从模板初始化</el-button>
-        <el-button type="primary" @click="handleAdd">
+        <el-button type="primary" v-permission="'projects:project:create'" @click="handleAdd">
           <el-icon><Plus /></el-icon> 新增里程碑
         </el-button>
       </div>
@@ -125,7 +125,7 @@
               v-if="row.status !== 'COMPLETED'">更新进度</el-button>
             <el-button type="warning" link size="small" @click="handleComplete(row)" 
               v-if="row.status !== 'COMPLETED' && row.progress >= 80">完成</el-button>
-            <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button type="primary" link size="small" v-permission="'projects:project:edit'" @click="handleEdit(row)">编辑</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -278,8 +278,9 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getProjectList, getMilestoneList, getMilestone, createMilestone, updateMilestone, getMilestoneTypes, updateMilestoneProgress, addMilestoneComment, completeMilestone, initMilestoneTemplate } from '@/api/projects/project'
 import { usePermissionStore } from '@/stores/permission'
+import { getUsers } from '@/api/auth'
 
 const loading = ref(false)
 const viewDialogVisible = ref(false)
@@ -358,7 +359,7 @@ const stats = computed(() => {
 const fetchData = async () => {
   loading.value = true
   try {
-    const data = await request.get('/projects/milestones/', { params: queryParams })
+    const data = await getMilestoneList(queryParams)
     tableData.value = data.results || data
     total.value = data.count || data.length
   } catch (e) {
@@ -370,7 +371,7 @@ const fetchData = async () => {
 
 const fetchProjects = async () => {
   try {
-    const data = await request.get('/projects/projects/', { params: { page_size: 500 } })
+    const data = await getProjectList({ page_size: 500 })
     projects.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -383,7 +384,7 @@ const fetchUsers = async () => {
   }
 
   try {
-    const data = await request.get('/accounts/users/', { params: { page_size: 200 } })
+    const data = await getUsers({ page_size: 200 })
     users.value = (data.results || data).map(u => ({
       id: u.id,
       name: u.first_name || u.last_name || u.username
@@ -411,7 +412,7 @@ const ensureUsersLoaded = async () => {
 
 const fetchMilestoneTypes = async () => {
   try {
-    const data = await request.get('/projects/milestones/milestone_types/')
+    const data = await getMilestoneTypes()
     milestoneTypes.value = data
   } catch (e) {
     milestoneTypes.value = [
@@ -471,9 +472,10 @@ const handleEdit = async (row) => {
 
 const handleView = async (row) => {
   try {
-    const res = await request.get(`/projects/milestones/${row.id}/`)
+    const res = await getMilestone(row.id)
     viewDetail.value = res.data || res
-  } catch {
+  } catch (error) {
+    console.error(error)
     viewDetail.value = row
   }
   viewDialogVisible.value = true
@@ -486,10 +488,10 @@ const handleSubmit = async () => {
   submitLoading.value = true
   try {
     if (isEdit.value) {
-      await request.put(`/projects/milestones/${form.id}/`, form)
+      await updateMilestone(form.id, form)
       ElMessage.success('修改成功')
     } else {
-      await request.post('/projects/milestones/', form)
+      await createMilestone(form)
       ElMessage.success('新增成功')
     }
     dialogVisible.value = false
@@ -512,15 +514,10 @@ const handleUpdateProgress = (row) => {
 const confirmProgress = async () => {
   progressLoading.value = true
   try {
-    await request.post(`/projects/milestones/${currentMilestone.value.id}/update_progress/`, {
-      progress: progressForm.progress
-    })
+    await updateMilestoneProgress(currentMilestone.value.id, { progress: progressForm.progress })
     
     if (progressForm.comment) {
-      await request.post(`/projects/milestones/${currentMilestone.value.id}/add_comment/`, {
-        content: progressForm.comment,
-        comment_type: 'PROGRESS'
-      })
+      await addMilestoneComment(currentMilestone.value.id, { content: progressForm.comment, comment_type: 'PROGRESS' })
     }
     
     ElMessage.success('进度已更新')
@@ -536,7 +533,7 @@ const confirmProgress = async () => {
 const handleComplete = (row) => {
   ElMessageBox.confirm('确定要完成此里程碑吗？', '提示', { type: 'warning' })
     .then(async () => {
-      await request.post(`/projects/milestones/${row.id}/complete/`)
+      await completeMilestone(row.id)
       ElMessage.success('里程碑已完成')
       fetchData()
     })
@@ -556,7 +553,7 @@ const confirmInit = async () => {
   
   initLoading.value = true
   try {
-    const data = await request.post('/projects/milestones/init_template/', initForm)
+    const data = await initMilestoneTemplate(initForm)
     ElMessage.success(`成功创建${data.created}个里程碑`)
     initDialogVisible.value = false
     queryParams.project = initForm.project_id

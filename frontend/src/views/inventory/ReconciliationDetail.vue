@@ -40,7 +40,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getReconciliationSession } from '@/api/inventory'
 
 const route = useRoute()
 const router = useRouter()
@@ -53,7 +53,7 @@ const formatMoney = (v) => v ? parseFloat(v).toLocaleString('zh-CN', { minimumFr
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await request.get(`/inventory/reconciliation-sessions/${route.params.id}/`)
+    const res = await getReconciliationSession(route.params.id)
     session.value = res.data || res
   } catch (error) {
     ElMessage.error('加载数据失败')

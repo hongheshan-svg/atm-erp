@@ -189,7 +189,9 @@ const viewDetail = async (row) => {
     const res = await getBOMCostDetails({ snapshot: row.id })
     costDetails.value = res.data?.results || res.results || []
     detailVisible.value = true
-  } catch {}
+  } catch (error) {
+    console.error('BOMCostRollup getBOMCostDetails error:', error)
+  }
 }
 
 const calculateCost = async () => {
@@ -211,7 +213,9 @@ const compareCost = async () => {
     const res = await compareBOMCost(compareForm)
     ElMessage.success('对比结果已生成')
     showCompareDialog.value = false
-  } catch {}
+  } catch (error) {
+    console.error('BOMCostRollup success error:', error)
+  }
 }
 
 const handleDelete = async (row) => {

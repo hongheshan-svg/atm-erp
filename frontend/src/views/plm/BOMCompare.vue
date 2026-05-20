@@ -225,9 +225,11 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { getProjectList } from '@/api/projects/project'
+import { getBOMSnapshotList, createBOMSnapshot, compareBOMWithCurrent, compareBOM, exportBOMCompare } from '@/api/plm/bom-compare'
+import { getCreoBOMImportList } from '@/api/plm/creo'
 import { ElMessage } from 'element-plus'
 import { Right, Connection, Plus, Download } from '@element-plus/icons-vue'
-import request from '@/utils/request'
 
 const projects = ref([])
 const snapshots = ref([])
@@ -306,7 +308,7 @@ const getDiffClass = (diff) => {
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res || []
   } catch (error) {
     console.error('Load projects failed:', error)
@@ -319,8 +321,7 @@ const loadSnapshots = async () => {
     return
   }
   try {
-    const res = await request.get('/projects/bom-snapshots/', { 
-      params: { project: compareForm.project_id } 
+    const res = await getBOMSnapshotList({ params: { project: compareForm.project_id } 
     })
     snapshots.value = res.results || res || []
   } catch (error) {
@@ -329,8 +330,7 @@ const loadSnapshots = async () => {
   
   // 同时加载CAD导入会话
   try {
-    const res = await request.get('/projects/creo-bom-imports/', { 
-      params: { project_id: compareForm.project_id } 
+    const res = await getCreoBOMImportList({ params: { project_id: compareForm.project_id } 
     })
     cadSessions.value = res.results || res || []
   } catch (error) {
@@ -355,7 +355,7 @@ const runCompare = async () => {
           ElMessage.warning('请选择基准快照')
           return
         }
-        const res = await request.post(`/projects/bom-snapshots/${compareForm.snapshot_id_1}/compare_with_current/`)
+        const res = await compareBOMWithCurrent(compareForm.snapshot_id_1)
         compareResult.value = res
       } else {
         // 快照对比
@@ -365,7 +365,7 @@ const runCompare = async () => {
         }
         params.snapshot_id_1 = compareForm.snapshot_id_1
         params.snapshot_id_2 = compareForm.snapshot_id_2
-        const res = await request.post('/projects/bom-compare/compare/', params)
+        const res = await compareBOM(params)
         compareResult.value = res
       }
     } else {
@@ -375,7 +375,7 @@ const runCompare = async () => {
         return
       }
       params.cad_bom_session_id = compareForm.cad_bom_session_id
-      const res = await request.post('/projects/bom-compare/compare/', params)
+      const res = await compareBOM(params)
       compareResult.value = res
     }
     
@@ -402,7 +402,7 @@ const confirmCreateSnapshot = async () => {
   
   creatingSnapshot.value = true
   try {
-    await request.post('/projects/bom-snapshots/create_snapshot/', {
+    await createBOMSnapshot( {
       project_id: compareForm.project_id,
       name: snapshotForm.name,
       description: snapshotForm.description
@@ -432,7 +432,7 @@ const exportExcel = async () => {
       params.cad_bom_session_id = compareForm.cad_bom_session_id
     }
     
-    const res = await request.post('/projects/bom-compare/compare/', params, {
+    const res = await exportBOMCompare(params, {
       responseType: 'blob'
     })
     

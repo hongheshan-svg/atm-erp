@@ -112,7 +112,10 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import request from '@/utils/request'
+import {
+  getRFQCollaborations, getRFQCollaboration, createRFQCollaboration,
+  compareRFQCollaboration, selectRFQCollaborationSupplier
+} from '@/api/purchase'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -138,7 +141,7 @@ const getStatusType = (s) => ({ 'DRAFT': 'info', 'OPEN': 'primary', 'CLOSED': 's
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await request.get('/purchase/rfq-collaborations/', { params: { page: page.value, page_size: pageSize.value } })
+    const res = await getRFQCollaborations({ page: page.value, page_size: pageSize.value })
     tableData.value = res.data?.results || res.results || []
     total.value = res.data?.count || res.count || 0
   } catch (error) {
@@ -156,10 +159,11 @@ const handleCreate = () => {
 
 const handleView = async (row) => {
   try {
-    const res = await request.get(`/purchase/rfq-collaborations/${row.id}/`)
+    const res = await getRFQCollaboration(row.id)
     viewDetail.value = res.data || res
     viewDialogVisible.value = true
-  } catch {
+  } catch (error) {
+    console.error(error)
     viewDetail.value = row
     viewDialogVisible.value = true
   }
@@ -167,11 +171,12 @@ const handleView = async (row) => {
 
 const handleCompare = async (row) => {
   try {
-    const res = await request.get(`/purchase/rfq-collaborations/${row.id}/compare/`)
+    const res = await compareRFQCollaboration(row.id)
     compareData.value = res.data?.results || res.results || res.data || res || []
     currentRFQId.value = row.id
     compareDialogVisible.value = true
-  } catch {
+  } catch (error) {
+    console.error(error)
     ElMessage.error('加载比价数据失败')
   }
 }
@@ -179,7 +184,7 @@ const handleCompare = async (row) => {
 const selectSupplier = async (row) => {
   try {
     await ElMessageBox.confirm(`确定选定 ${row.supplier_name} 吗？`, '确认')
-    await request.post(`/purchase/rfq-collaborations/${currentRFQId.value}/select/`, { supplier_id: row.supplier_id || row.id })
+    await selectRFQCollaborationSupplier(currentRFQId.value, { supplier_id: row.supplier_id || row.id })
     ElMessage.success('选定成功')
     compareDialogVisible.value = false
     loadData()
@@ -192,7 +197,7 @@ const handleSave = async () => {
   try {
     await formRef.value?.validate()
     saving.value = true
-    await request.post('/purchase/rfq-collaborations/', form)
+    await createRFQCollaboration(form)
     ElMessage.success('创建成功')
     dialogVisible.value = false
     loadData()

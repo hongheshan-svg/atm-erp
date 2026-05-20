@@ -112,6 +112,15 @@ class DrawingVersionViewSet(PermissionMixin, viewsets.ModelViewSet):
         versions = self.get_queryset().filter(drawing_number=drawing_number)
         return Response(DrawingVersionSerializer(versions, many=True).data)
 
+    @action(detail=True, methods=['post'], url_path='submit_review')
+    def submit_review(self, request, pk=None):
+        drawing = self.get_object()
+        if drawing.status != 'draft':
+            return Response({'error': '只有草稿状态的图纸才能提交审核'}, status=status.HTTP_400_BAD_REQUEST)
+        drawing.status = 'reviewing'
+        drawing.save(update_fields=['status', 'updated_at'])
+        return Response(DrawingVersionSerializer(drawing).data)
+
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         drawing = self.get_object()

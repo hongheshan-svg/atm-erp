@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>工位管理</span>
-          <el-button type="primary" @click="handleCreate">新建工位</el-button>
+          <el-button type="primary" v-permission="'production:process:create'" @click="handleCreate">新建工位</el-button>
         </div>
       </template>
       
@@ -21,8 +21,8 @@
         </el-table-column>
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
-            <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button link type="primary" v-permission="'production:process:edit'" @click="handleEdit(row)">编辑</el-button>
+            <el-button link type="danger" v-permission="'production:process:delete'" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -69,7 +69,10 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import request from '@/utils/request'
+import {
+  getWorkStations, createWorkStation, updateWorkStation,
+  deleteWorkStation as deleteWorkStationApi, getWorkCenters
+} from '@/api/production'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -88,7 +91,7 @@ const rules = { name: [{ required: true, message: '请输入工位名称', trigg
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await request.get('/production/work-stations/', { params: { page: page.value, page_size: pageSize.value } })
+    const res = await getWorkStations({ page: page.value, page_size: pageSize.value })
     tableData.value = res.data?.results || res.results || []
     total.value = res.data?.count || res.count || 0
   } catch (error) {
@@ -100,9 +103,11 @@ const loadData = async () => {
 
 const loadWorkCenters = async () => {
   try {
-    const res = await request.get('/production/work-centers/', { params: { page_size: 1000 } })
+    const res = await getWorkCenters({ page_size: 1000 })
     workCenters.value = res.data?.results || res.results || []
-  } catch {}
+  } catch (error) {
+    console.error('WorkStationList getWorkCenters error:', error)
+  }
 }
 
 const handleCreate = () => {
@@ -123,10 +128,10 @@ const handleSave = async () => {
     await formRef.value?.validate()
     saving.value = true
     if (isEdit.value) {
-      await request.put(`/production/work-stations/${form.id}/`, form)
+      await updateWorkStation(form.id, form)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/production/work-stations/', form)
+      await createWorkStation(form)
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false
@@ -141,7 +146,7 @@ const handleSave = async () => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除该工位吗？', '提示', { type: 'warning' })
-    await request.delete(`/production/work-stations/${row.id}/`)
+    await deleteWorkStationApi(row.id)
     ElMessage.success('删除成功')
     loadData()
   } catch (error) {

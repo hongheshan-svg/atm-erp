@@ -56,7 +56,7 @@
               <el-option label="中" value="MEDIUM" />
               <el-option label="低" value="LOW" />
             </el-select>
-            <el-button type="primary" @click="showCreateDialog = true">
+            <el-button type="primary" v-permission="'sales:order:create'" @click="showCreateDialog = true">
               <el-icon><Plus /></el-icon>创建请求
             </el-button>
           </div>
@@ -171,7 +171,7 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showCreateDialog = false">取消</el-button>
+        <el-button v-permission="'sales:order:create'" @click="showCreateDialog = false">取消</el-button>
         <el-button type="primary" @click="createRequest" :loading="submitting">创建</el-button>
       </template>
     </el-dialog>
@@ -217,7 +217,8 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getServiceRequests, getServiceContracts, createServiceRequest, getServiceRequest, assignServiceRequest, completeServiceRequest } from '@/api/sales'
+import { getCustomerList } from '@/api/masterdata'
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -303,7 +304,7 @@ const loadRequests = async () => {
     if (statusFilter.value) params.status = statusFilter.value
     if (priorityFilter.value) params.priority = priorityFilter.value
 
-    const res = await request.get('/sales/service-requests/', { params })
+    const res = await getServiceRequests(params)
     requests.value = res.results || res
     pagination.total = res.count || requests.value.length
   } catch (e) {
@@ -316,9 +317,9 @@ const loadRequests = async () => {
 const loadStats = async () => {
   try {
     const [newRes, inProgressRes, waitingRes] = await Promise.all([
-      request.get('/sales/service-requests/', { params: { status: 'NEW', page_size: 1 } }),
-      request.get('/sales/service-requests/', { params: { status: 'IN_PROGRESS', page_size: 1 } }),
-      request.get('/sales/service-requests/', { params: { status: 'WAITING_PARTS', page_size: 1 } })
+      getServiceRequests({ status: 'NEW', page_size: 1 }),
+      getServiceRequests({ status: 'IN_PROGRESS', page_size: 1 }),
+      getServiceRequests({ status: 'WAITING_PARTS', page_size: 1 })
     ])
     stats.value.new = newRes.count || 0
     stats.value.inProgress = inProgressRes.count || 0
@@ -330,7 +331,7 @@ const loadStats = async () => {
 
 const loadCustomers = async () => {
   try {
-    const res = await request.get('/masterdata/customers/', { params: { page_size: 1000 } })
+    const res = await getCustomerList({ page_size: 1000 })
     customers.value = res.results || res
   } catch (e) {
     console.error('加载客户列表失败')
@@ -343,7 +344,7 @@ const loadContractsForCustomer = async (customerId) => {
     return
   }
   try {
-    const res = await request.get('/sales/service-contracts/', { params: { customer: customerId, status: 'ACTIVE' } })
+    const res = await getServiceContracts({ customer: customerId, status: 'ACTIVE' })
     customerContracts.value = res.results || res
   } catch (e) {
     console.error('加载合同列表失败')
@@ -354,7 +355,7 @@ const createRequest = async () => {
   try {
     await requestFormRef.value.validate()
     submitting.value = true
-    await request.post('/sales/service-requests/', requestForm)
+    await createServiceRequest(requestForm)
     ElMessage.success('服务请求创建成功')
     showCreateDialog.value = false
     loadRequests()
@@ -368,7 +369,7 @@ const createRequest = async () => {
 
 const viewRequest = async (row) => {
   try {
-    const res = await request.get(`/sales/service-requests/${row.id}/`)
+    const res = await getServiceRequest(row.id)
     currentRequest.value = res
     showDetailDrawer.value = true
   } catch (e) {
@@ -378,7 +379,7 @@ const viewRequest = async (row) => {
 
 const assignRequest = async (row) => {
   ElMessageBox.prompt('请输入负责人ID', '分配任务').then(async ({ value }) => {
-    await request.post(`/sales/service-requests/${row.id}/assign/`, { assigned_to: parseInt(value) })
+    await assignServiceRequest(row.id, { assigned_to: parseInt(value) })
     ElMessage.success('分配成功')
     loadRequests()
   })
@@ -386,7 +387,7 @@ const assignRequest = async (row) => {
 
 const completeRequest = async (row) => {
   ElMessageBox.prompt('请输入处理结果', '完成请求').then(async ({ value }) => {
-    await request.post(`/sales/service-requests/${row.id}/complete/`, { resolution: value })
+    await completeServiceRequest(row.id, { resolution: value })
     ElMessage.success('请求已完成')
     loadRequests()
   })

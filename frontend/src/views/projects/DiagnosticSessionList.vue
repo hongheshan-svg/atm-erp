@@ -50,7 +50,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getDiagnosticSessionList, getDiagnosticSession } from '@/api/projects/diagnostic'
 
 const loading = ref(false)
 const tableData = ref([])
@@ -65,7 +65,7 @@ const getStatusType = (s) => ({ 'IN_PROGRESS': 'primary', 'COMPLETED': 'success'
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await request.get('/projects/diagnostic-sessions/', { params: { page: page.value, page_size: pageSize.value } })
+    const res = await getDiagnosticSessionList({ page: page.value, page_size: pageSize.value })
     tableData.value = res.data?.results || res.results || []
     total.value = res.data?.count || res.count || 0
   } catch (error) {
@@ -77,10 +77,11 @@ const loadData = async () => {
 
 const handleView = async (row) => {
   try {
-    const res = await request.get(`/projects/diagnostic-sessions/${row.id}/`)
+    const res = await getDiagnosticSession(row.id)
     viewDetail.value = res.data || res
     viewDialogVisible.value = true
-  } catch {
+  } catch (error) {
+    console.error(error)
     viewDetail.value = row
     viewDialogVisible.value = true
   }

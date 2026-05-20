@@ -33,7 +33,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getRoutingTemplate } from '@/api/production'
 
 const route = useRoute()
 const router = useRouter()
@@ -45,7 +45,7 @@ const pageTitle = computed(() => template.value.name ? `工艺模板 - ${templat
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await request.get(`/production/routing-templates/${route.params.id}/`)
+    const res = await getRoutingTemplate(route.params.id)
     template.value = res.data || res
   } catch (error) {
     ElMessage.error('加载数据失败')

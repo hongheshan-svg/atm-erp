@@ -39,7 +39,7 @@
             <el-button type="success" @click="handleAutoMatch">
               <el-icon><Link /></el-icon> 自动匹配订单
             </el-button>
-            <el-button type="primary" @click="handleCreate">
+            <el-button type="primary" v-permission="'finance:invoice:create'" @click="handleCreate">
               <el-icon><Plus /></el-icon> 登记发票
             </el-button>
           </div>
@@ -75,7 +75,7 @@
           </el-form>
 
           <div class="batch-actions" v-if="selectedInvoices.length > 0" style="margin-bottom: 10px;">
-            <el-button type="danger" size="small" @click="handleBatchDelete">
+            <el-button type="danger" size="small" v-permission="'finance:invoice:delete'" @click="handleBatchDelete">
               批量删除 ({{ selectedInvoices.length }})
             </el-button>
           </div>
@@ -162,8 +162,8 @@
             <el-table-column label="操作" width="150" fixed="right">
               <template #default="{ row }">
                 <el-button size="small" link @click="handleView(row)">查看</el-button>
-                <el-button size="small" link @click="handleEdit(row)" v-if="row.status === 'REGISTERED'">编辑</el-button>
-                <el-button size="small" link type="danger" @click="handleDelete(row)">删除</el-button>
+                <el-button size="small" link v-permission="'finance:invoice:edit'" @click="handleEdit(row)" v-if="row.status === 'REGISTERED'">编辑</el-button>
+                <el-button size="small" link type="danger" v-permission="'finance:invoice:delete'" @click="handleDelete(row)">删除</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -186,7 +186,7 @@
               <el-radio-button value="INPUT">进项发票</el-radio-button>
               <el-radio-button value="OUTPUT">销项发票</el-radio-button>
             </el-radio-group>
-            <el-button type="primary" @click="handleAddReconciliation">
+            <el-button type="primary" v-permission="'finance:invoice:create'" @click="handleAddReconciliation">
               <el-icon><Plus /></el-icon> 新建对账单
             </el-button>
           </div>
@@ -343,8 +343,8 @@
           </el-table-column>
           <el-table-column label="操作" width="120" align="center">
             <template #default="{ row }">
-              <el-button size="small" link type="primary" @click="downloadAttachment(row)">下载</el-button>
-              <el-button size="small" link type="danger" @click="deleteAttachment(row)">删除</el-button>
+              <el-button size="small" link type="primary" @click="handleDownloadAttachment(row)">下载</el-button>
+              <el-button size="small" link type="danger" @click="handleDeleteAttachment(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -490,6 +490,8 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Upload, Download, Document, Files, Link } from '@element-plus/icons-vue'
+import { getInvoices, getInvoice, createInvoice, updateInvoice, deleteInvoice, certifyInvoice, autoMatchInvoices, matchInvoiceOrder, getInvoiceAttachments, bulkDeleteInvoices, downloadInvoiceTemplate, exportInvoices, getInvoiceReconciliations, getInvoiceReconciliation, createInvoiceReconciliation, generateInvoiceReconciliationLines, confirmInvoiceReconciliation } from '@/api/finance'
+import { deleteAttachment, downloadAttachment } from '@/api/core'
 import request from '@/utils/request'
 
 const loading = ref(false)
@@ -634,7 +636,7 @@ const loadInvoices = async () => {
   try {
     const params = { page: pagination.page, page_size: pagination.pageSize, ...searchForm }
     Object.keys(params).forEach(k => { if (params[k] === '' || params[k] === null) delete params[k] })
-    const response = await request.get('/finance/invoices/', { params })
+    const response = await getInvoices(params)
     invoices.value = response.results || []
     pagination.total = response.count || 0
   } catch (error) {
@@ -647,7 +649,7 @@ const loadInvoices = async () => {
 const loadReconciliationList = async () => {
   reconciliationLoading.value = true
   try {
-    const res = await request.get('/finance/invoice-reconciliations/', {
+    const res = await getInvoiceReconciliations({
       params: { invoice_type: invoiceType.value }
     })
     reconciliationList.value = res.results || res || []
@@ -687,7 +689,7 @@ const handleAutoMatch = async () => {
       cancelButtonText: '取消'
     })
     
-    const response = await request.post('/finance/invoices/auto-match/')
+    const response = await autoMatchInvoices()
     ElMessage.success(response.message || `成功匹配 ${response.matched_count} 张发票`)
     loadInvoices()
   } catch (error) {
@@ -736,7 +738,7 @@ const handleMatchOrder = async (row) => {
     }
     
     // 调用匹配接口
-    await request.post(`/finance/invoices/${row.id}/match-order/`, {
+    await matchInvoiceOrder(row.id, {
       order_type: row.invoice_type === 'OUTPUT' ? 'SALES_ORDER' : 'PURCHASE_ORDER',
       order_id: matchedOrder.id
     })
@@ -752,14 +754,15 @@ const handleMatchOrder = async (row) => {
 
 const handleView = async (row) => {
   try {
-    const response = await request.get(`/finance/invoices/${row.id}/`)
+    const response = await getInvoice(row.id)
     currentInvoice.value = response
     
     // 加载附件
     try {
-      const attachments = await request.get(`/finance/invoices/${row.id}/attachments/`)
+      const attachments = await getInvoiceAttachments(row.id)
       invoiceAttachments.value = attachments
-    } catch {
+    } catch (error) {
+    console.error(error)
       invoiceAttachments.value = []
     }
     
@@ -769,9 +772,9 @@ const handleView = async (row) => {
   }
 }
 
-const downloadAttachment = async (attachment) => {
+const handleDownloadAttachment = async (attachment) => {
   try {
-    const response = await request.get(`/core/attachments/${attachment.id}/download/`, {
+    const response = await downloadAttachment(attachment.id, {
       responseType: 'blob'
     })
     
@@ -791,13 +794,13 @@ const downloadAttachment = async (attachment) => {
   }
 }
 
-const deleteAttachment = async (attachment) => {
+const handleDeleteAttachment = async (attachment) => {
   try {
     await ElMessageBox.confirm('确定要删除此附件吗？', '提示', { type: 'warning' })
-    await request.delete(`/core/attachments/${attachment.id}/`)
+    await deleteAttachment(attachment.id)
     ElMessage.success('附件已删除')
     // 刷新附件列表
-    const attachments = await request.get(`/finance/invoices/${currentInvoice.value.id}/attachments/`)
+    const attachments = await getInvoiceAttachments(currentInvoice.value.id)
     invoiceAttachments.value = attachments
     // 刷新发票列表以更新附件数量
     loadInvoices()
@@ -829,7 +832,7 @@ const handleEdit = (row) => {
 const handleCertify = async (row) => {
   try {
     await ElMessageBox.confirm('确定要认证此发票吗？', '提示', { type: 'warning' })
-    await request.post(`/finance/invoices/${row.id}/certify/`)
+    await certifyInvoice(row.id)
     ElMessage.success('发票认证成功')
     loadInvoices()
   } catch (error) {
@@ -847,10 +850,10 @@ const handleSubmit = async () => {
         total_amount: (formData.amount_before_tax || 0) + (formData.tax_amount || 0)
       }
       if (isEdit.value) {
-        await request.put(`/finance/invoices/${currentId.value}/`, payload)
+        await updateInvoice(currentId.value, payload)
         ElMessage.success('更新成功')
       } else {
-        await request.post('/finance/invoices/', payload)
+        await createInvoice(payload)
         ElMessage.success('登记成功')
       }
       dialogVisible.value = false
@@ -880,7 +883,7 @@ const resetForm = () => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm(`确定要删除发票 ${row.invoice_no} 吗？此操作不可恢复！`, '删除发票', { type: 'warning' })
-    await request.delete(`/finance/invoices/${row.id}/`)
+    await deleteInvoice(row.id)
     ElMessage.success('发票已删除')
     loadInvoices()
   } catch (error) {
@@ -906,7 +909,7 @@ const handleBatchDelete = async () => {
     )
     
     const ids = selectedInvoices.value.map(item => item.id)
-    const response = await request.post('/finance/invoices/bulk_delete/', { ids })
+    const response = await bulkDeleteInvoices({ ids })
     
     ElMessage.success(`成功删除 ${response.deleted_count} 条发票`)
     selectedInvoices.value = []
@@ -926,7 +929,7 @@ const saveReconciliation = async () => {
   try {
     await reconciliationFormRef.value.validate()
     saving.value = true
-    await request.post('/finance/invoice-reconciliations/', reconciliationForm)
+    await createInvoiceReconciliation(reconciliationForm)
     ElMessage.success('创建成功')
     reconciliationDialogVisible.value = false
     loadReconciliationList()
@@ -939,7 +942,7 @@ const saveReconciliation = async () => {
 
 const handleViewReconciliation = async (row) => {
   try {
-    const res = await request.get(`/finance/invoice-reconciliations/${row.id}/`)
+    const res = await getInvoiceReconciliation(row.id)
     currentReconciliation.value = res
     reconciliationDetailTitle.value = `发票对账单 - ${row.reconciliation_no}`
     reconciliationDetailVisible.value = true
@@ -951,7 +954,7 @@ const handleViewReconciliation = async (row) => {
 const handleGenerateReconciliation = async (row) => {
   try {
     await ElMessageBox.confirm('确定要生成发票对账明细吗？', '确认')
-    await request.post(`/finance/invoice-reconciliations/${row.id}/generate_lines/`)
+    await generateInvoiceReconciliationLines(row.id)
     ElMessage.success('生成成功')
     loadReconciliationList()
   } catch (error) {
@@ -962,7 +965,7 @@ const handleGenerateReconciliation = async (row) => {
 const handleConfirmReconciliation = async (row) => {
   try {
     await ElMessageBox.confirm('确定要确认该对账单吗？', '确认')
-    await request.post(`/finance/invoice-reconciliations/${row.id}/confirm/`)
+    await confirmInvoiceReconciliation(row.id)
     ElMessage.success('确认成功')
     loadReconciliationList()
   } catch (error) {
@@ -1069,7 +1072,7 @@ const handlePdfFilesSelected = async (event) => {
 
 const downloadTemplate = async () => {
   try {
-    const response = await request.get('/finance/invoices/download_template/', {
+    const response = await downloadInvoiceTemplate({
       responseType: 'blob'
     })
     
@@ -1111,8 +1114,7 @@ const handleExport = async () => {
     const params = { ...searchForm }
     Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
     
-    const response = await request.get('/finance/invoices/export_excel/', {
-      params,
+    const response = await exportInvoices(params, {
       responseType: 'blob'
     })
     

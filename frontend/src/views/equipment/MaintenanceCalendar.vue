@@ -110,7 +110,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getMaintenanceCalendar } from '@/api/equipment'
 
 const maintenances = ref([])
 const statistics = ref({})
@@ -198,9 +198,7 @@ const loadData = async () => {
     const year = currentDate.value.getFullYear()
     const month = currentDate.value.getMonth() + 1
     
-    const res = await request.get('/projects/maintenance/calendar/', {
-      params: { year, month }
-    })
+    const res = await getMaintenanceCalendar({ year, month })
     maintenances.value = res.events || []
     statistics.value = res.summary || {}
   } catch (error) {

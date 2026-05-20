@@ -94,13 +94,13 @@
       </template>
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'projects:project:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" v-permission="'projects:project:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <el-table :data="tableData" stripe v-loading="loading" @row-click="handleRowClick" @selection-change="handleSelectionChange">
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'projects:project:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="fixture_no" label="工装编号" width="140" />
         <el-table-column prop="name" label="工装名称" min-width="180" show-overflow-tooltip />
         <el-table-column prop="model" label="规格型号" width="120" show-overflow-tooltip />
@@ -351,9 +351,15 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Search, Refresh, Plus, ArrowDown, Box, Aim, Clock, Compass, Folder
 } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import {
+  getFixtureList, getFixtureStatistics, createFixture, updateFixture,
+  checkoutFixture, returnFixture, calibrateFixture, maintainFixture,
+  getFixtureCategoryTree, getFixtureCategoryList, createFixtureCategory,
+  updateFixtureCategory, deleteFixtureCategory
+} from '@/api/equipment'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { getUsers } from '@/api/auth'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -430,7 +436,7 @@ const fetchData = async () => {
     if (filters.category?.length) {
       params.category = filters.category[filters.category.length - 1]
     }
-    const res = await request.get('/projects/fixtures/', { params })
+    const res = await getFixtureList(params)
     tableData.value = res.results || res || []
     pagination.total = res.count || tableData.value.length
   } catch (error) {
@@ -442,7 +448,7 @@ const fetchData = async () => {
 
 const fetchStats = async () => {
   try {
-    const res = await request.get('/projects/fixtures/statistics/')
+    const res = await getFixtureStatistics()
     stats.value = res || {}
   } catch (error) {
     console.error('获取统计失败', error)
@@ -451,10 +457,10 @@ const fetchStats = async () => {
 
 const fetchCategories = async () => {
   try {
-    const res = await request.get('/projects/fixture-categories/tree/')
+    const res = await getFixtureCategoryTree()
     categoryTree.value = res || []
     
-    const flatRes = await request.get('/projects/fixture-categories/')
+    const flatRes = await getFixtureCategoryList()
     flatCategories.value = flatRes.results || flatRes || []
   } catch (error) {
     console.error('获取分类失败', error)
@@ -463,7 +469,7 @@ const fetchCategories = async () => {
 
 const fetchUsers = async () => {
   try {
-    const res = await request.get('/auth/users/')
+    const res = await getUsers()
     users.value = res.results || res || []
   } catch (error) {
     console.error('获取用户失败', error)
@@ -516,7 +522,7 @@ const addCategory = async () => {
   
   try {
     const code = 'CAT' + Date.now().toString().slice(-6)
-    await request.post('/projects/fixture-categories/', { code, name: value })
+    await createFixtureCategory({ code, name: value })
     ElMessage.success('新增成功')
     fetchCategories()
   } catch (error) {
@@ -532,7 +538,7 @@ const editCategory = async (row) => {
   })
   
   try {
-    await request.patch(`/projects/fixture-categories/${row.id}/`, { name: value })
+    await updateFixtureCategory(row.id, { name: value })
     ElMessage.success('更新成功')
     fetchCategories()
   } catch (error) {
@@ -543,10 +549,12 @@ const editCategory = async (row) => {
 const deleteCategory = async (row) => {
   try {
     await ElMessageBox.confirm('确定删除该分类？', '警告', { type: 'warning' })
-    await request.delete(`/projects/fixture-categories/${row.id}/`)
+    await deleteFixtureCategory(row.id)
     ElMessage.success('删除成功')
     fetchCategories()
-  } catch {}
+  } catch (error) {
+    console.error('FixtureList fetchCategories error:', error)
+  }
 }
 
 const submitForm = async () => {
@@ -555,10 +563,10 @@ const submitForm = async () => {
     submitting.value = true
     
     if (dialogMode.value === 'add') {
-      await request.post('/projects/fixtures/', formData)
+      await createFixture(formData)
       ElMessage.success('新增成功')
     } else {
-      await request.put(`/projects/fixtures/${formData.id}/`, formData)
+      await updateFixture(formData.id, formData)
       ElMessage.success('更新成功')
     }
     
@@ -578,7 +586,7 @@ const handleCommand = async (command, row) => {
   switch (command) {
     case 'checkout':
       try {
-        await request.post(`/projects/fixtures/${row.id}/checkout/`, {
+        await checkoutFixture(row.id, {
           purpose: '项目使用'
         })
         ElMessage.success('领用成功')
@@ -590,7 +598,7 @@ const handleCommand = async (command, row) => {
       break
     case 'return':
       try {
-        await request.post(`/projects/fixtures/${row.id}/return_fixture/`, {
+        await returnFixture(row.id, {
           condition: '良好'
         })
         ElMessage.success('归还成功')
@@ -624,7 +632,7 @@ const handleCommand = async (command, row) => {
 const handleCalibrateSave = async () => {
   opSaving.value = true
   try {
-    await request.post(`/projects/fixtures/${opRow.value.id}/calibrate/`, calibrateForm)
+    await calibrateFixture(opRow.value.id, calibrateForm)
     ElMessage.success('校验记录已保存')
     calibrateDialogVisible.value = false
     fetchData()
@@ -638,7 +646,7 @@ const handleCalibrateSave = async () => {
 const handleMaintainSave = async () => {
   opSaving.value = true
   try {
-    await request.post(`/projects/fixtures/${opRow.value.id}/maintain/`, maintainForm)
+    await maintainFixture(opRow.value.id, maintainForm)
     ElMessage.success('维护记录已保存')
     maintainDialogVisible.value = false
     fetchData()

@@ -160,7 +160,9 @@ const loadWIPStatus = async () => {
   try {
     const res = await getKanbanWIPStatus()
     wipStatus.value = res.data || res || []
-  } catch {}
+  } catch (error) {
+    console.error('KanbanWIPManagement getKanbanWIPStatus error:', error)
+  }
 }
 
 const loadRules = async () => {
@@ -199,7 +201,9 @@ const submitRule = async () => {
     Object.assign(ruleForm, { id: null, process_name: '', wip_limit: 10, warning_threshold: 80, is_active: true })
     loadRules()
     loadWIPStatus()
-  } catch {}
+  } catch (error) {
+    console.error('KanbanWIPManagement loadWIPStatus error:', error)
+  }
 }
 
 const deleteRule = async (row) => {

@@ -166,7 +166,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getScheduleCapacity, getScheduleOrderList, getScheduleGanttList, autoSchedule as apiAutoSchedule, startScheduleOrder, completeScheduleOrder } from '@/api/mes'
 
 // 自定义Magic图标
 const Magic = {
@@ -207,9 +207,7 @@ const loadCapacity = async () => {
   loadingCapacity.value = true
   try {
     const startDate = capacityStartDate.value?.toISOString().split('T')[0]
-    const res = await request.get('/production/schedule-orders/capacity/', {
-      params: { start_date: startDate, days: 7 }
-    })
+    const res = await getScheduleCapacity({ start_date: startDate, days: 7 })
     capacityData.value = res || []
   } catch (error) {
     console.error(error)
@@ -229,7 +227,7 @@ const loadOrders = async () => {
     if (orderFilter.value) {
       params.status = orderFilter.value
     }
-    const res = await request.get('/production/schedule-orders/', { params })
+    const res = await getScheduleOrderList(params)
     orders.value = res.results || res || []
     pagination.total = res.count || (Array.isArray(orders.value) ? orders.value.length : 0)
   } catch (error) {
@@ -247,7 +245,7 @@ const loadGantt = async () => {
       params.start_date = ganttDateRange.value[0].toISOString().split('T')[0]
       params.end_date = ganttDateRange.value[1].toISOString().split('T')[0]
     }
-    const res = await request.get('/production/schedule-orders/gantt/', { params })
+    const res = await getScheduleGanttList(params)
     ganttData.value = res || []
   } catch (error) {
     console.error(error)
@@ -261,7 +259,7 @@ const autoSchedule = async () => {
   await ElMessageBox.confirm('确定执行自动排程？这将对待排程工单进行智能调度。', '确认排程')
   scheduling.value = true
   try {
-    const res = await request.post('/production/schedule-orders/auto_schedule/')
+    const res = await apiAutoSchedule()
     ElMessage.success(`排程完成，共处理 ${res.scheduled_count || 0} 个工单`)
     loadData()
   } catch (error) {
@@ -274,7 +272,7 @@ const autoSchedule = async () => {
 const startOrder = async (row) => {
   await ElMessageBox.confirm(`确定开始生产工单 ${row.order_no}？`, '确认')
   try {
-    await request.post(`/production/schedule-orders/${row.id}/start/`)
+    await startScheduleOrder(row.id)
     ElMessage.success('已开始生产')
     loadOrders()
   } catch (error) {
@@ -285,7 +283,7 @@ const startOrder = async (row) => {
 const completeOrder = async (row) => {
   await ElMessageBox.confirm(`确定完成工单 ${row.order_no}？`, '确认')
   try {
-    await request.post(`/production/schedule-orders/${row.id}/complete/`, {
+    await completeScheduleOrder(row.id, {
       completed_qty: row.quantity
     })
     ElMessage.success('工单已完成')

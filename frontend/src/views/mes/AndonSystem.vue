@@ -287,7 +287,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Bell } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getAndonCallList, getPendingAndonCalls, getAndonStatusBoard, getAndonStationList, getAndonTypeList, getAndonStatistics, createAndonCall, getAndonCallDetail, respondAndon, resolveAndon, escalateAndon } from '@/api/mes'
 import * as echarts from 'echarts'
 
 const loading = ref(false)
@@ -355,17 +355,16 @@ let refreshTimer = null
 const fetchCalls = async () => {
   loading.value = true
   try {
-    let url = '/production/andon-calls/'
+    let data
     if (callFilter.value === 'pending') {
-      url = '/production/andon-calls/pending/'
+      data = await getPendingAndonCalls()
+    } else {
+      const params = callFilter.value === 'all' ? {
+        page: pagination.page,
+        page_size: pagination.size
+      } : {}
+      data = await getAndonCallList(params)
     }
-    
-    const params = callFilter.value === 'all' ? {
-      page: pagination.page,
-      page_size: pagination.size
-    } : {}
-    
-    const data = await request.get(url, { params })
     callList.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {
@@ -377,7 +376,7 @@ const fetchCalls = async () => {
 
 const fetchStations = async () => {
   try {
-    const data = await request.get('/production/andon-stations/status_board/')
+    const data = await getAndonStatusBoard()
     stationList.value = data.stations || []
     
     // 计算状态统计
@@ -394,8 +393,8 @@ const fetchStations = async () => {
 const fetchOptions = async () => {
   try {
     const [stationsRes, typesRes] = await Promise.all([
-      request.get('/production/andon-stations/', { params: { is_active: true } }),
-      request.get('/production/andon-types/', { params: { is_active: true } })
+      getAndonStationList({ is_active: true }),
+      getAndonTypeList({ is_active: true })
     ])
     stations.value = stationsRes.results || stationsRes || []
     andonTypes.value = typesRes.results || typesRes || []
@@ -406,7 +405,7 @@ const fetchOptions = async () => {
 
 const fetchStats = async () => {
   try {
-    const data = await request.get('/production/andon-calls/statistics/', { params: { days: 1 } })
+    const data = await getAndonStatistics({ days: 1 })
     
     const byStatus = {}
     data.by_status?.forEach(s => {
@@ -472,7 +471,7 @@ const submitCall = async () => {
   
   submitLoading.value = true
   try {
-    await request.post('/production/andon-calls/', callForm)
+    await createAndonCall(callForm)
     ElMessage.success('呼叫已发起')
     callDialogVisible.value = false
     fetchCalls()
@@ -487,7 +486,7 @@ const submitCall = async () => {
 
 const handleViewCall = async (row) => {
   try {
-    const data = await request.get(`/production/andon-calls/${row.id}/`)
+    const data = await getAndonCallDetail(row.id)
     currentCall.value = data
     detailDialogVisible.value = true
   } catch (e) {
@@ -497,7 +496,7 @@ const handleViewCall = async (row) => {
 
 const handleRespond = async (row) => {
   try {
-    await request.post(`/production/andon-calls/${row.id}/respond/`)
+    await respondAndon(row.id)
     ElMessage.success('已响应')
     fetchCalls()
     fetchStations()
@@ -516,7 +515,7 @@ const handleResolve = (row) => {
 const submitResolve = async () => {
   submitLoading.value = true
   try {
-    await request.post(`/production/andon-calls/${resolveCallId.value}/resolve/`, {
+    await resolveAndon(resolveCallId.value, {
       resolution: resolveForm.resolution
     })
     ElMessage.success('问题已解决')
@@ -540,7 +539,7 @@ const handleEscalate = (row) => {
 const submitEscalate = async () => {
   submitLoading.value = true
   try {
-    await request.post(`/production/andon-calls/${escalateCallId.value}/escalate/`, {
+    await escalateAndon(escalateCallId.value, {
       reason: escalateForm.reason
     })
     ElMessage.success('已升级')

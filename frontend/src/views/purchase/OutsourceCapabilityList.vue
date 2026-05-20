@@ -80,7 +80,10 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import request from '@/utils/request'
+import { getSupplierList } from '@/api/masterdata'
+import {
+  getOutsourceCapabilities, createOutsourceCapability, updateOutsourceCapability, deleteOutsourceCapability
+} from '@/api/purchase'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -106,7 +109,7 @@ const rules = {
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await request.get('/purchase/outsource-capabilities/', { params: { page: page.value, page_size: pageSize.value } })
+    const res = await getOutsourceCapabilities({ page: page.value, page_size: pageSize.value })
     tableData.value = res.data?.results || res.results || []
     total.value = res.data?.count || res.count || 0
   } catch (error) {
@@ -118,9 +121,11 @@ const loadData = async () => {
 
 const loadSuppliers = async () => {
   try {
-    const res = await request.get('/masterdata/suppliers/', { params: { page_size: 1000 } })
+    const res = await getSupplierList({ page_size: 1000 })
     suppliers.value = res.data?.results || res.results || []
-  } catch {}
+  } catch (error) {
+    console.error('OutsourceCapabilityList getSupplierList error:', error)
+  }
 }
 
 const handleCreate = () => {
@@ -141,10 +146,10 @@ const handleSave = async () => {
     await formRef.value?.validate()
     saving.value = true
     if (isEdit.value) {
-      await request.put(`/purchase/outsource-capabilities/${form.id}/`, form)
+      await updateOutsourceCapability(form.id, form)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/purchase/outsource-capabilities/', form)
+      await createOutsourceCapability(form)
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false
@@ -159,7 +164,7 @@ const handleSave = async () => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除此记录吗？', '提示', { type: 'warning' })
-    await request.delete(`/purchase/outsource-capabilities/${row.id}/`)
+    await deleteOutsourceCapability(row.id)
     ElMessage.success('删除成功')
     loadData()
   } catch (error) {

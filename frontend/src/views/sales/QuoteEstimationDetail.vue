@@ -150,7 +150,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getQuoteEstimation, calculateQuoteEstimation, submitQuoteEstimation } from '@/api/sales'
 
 const route = useRoute()
 const router = useRouter()
@@ -197,7 +197,7 @@ const formatPercent = (value) => {
 const loadEstimation = async () => {
   loading.value = true
   try {
-    const res = await request.get(`/sales/quote-estimations/${route.params.id}/`)
+    const res = await getQuoteEstimation(route.params.id)
     estimation.value = res.data || res
   } catch (error) {
     ElMessage.error('加载估算详情失败')
@@ -216,7 +216,7 @@ const handleEdit = () => {
 
 const handleCalculate = async () => {
   try {
-    await request.post(`/sales/quote-estimations/${route.params.id}/calculate/`)
+    await calculateQuoteEstimation(route.params.id)
     ElMessage.success('重新核算成功')
     loadEstimation()
   } catch (error) {
@@ -226,7 +226,7 @@ const handleCalculate = async () => {
 
 const handleSubmit = async () => {
   try {
-    await request.post(`/sales/quote-estimations/${route.params.id}/submit/`)
+    await submitQuoteEstimation(route.params.id)
     ElMessage.success('提交审核成功')
     loadEstimation()
   } catch (error) {

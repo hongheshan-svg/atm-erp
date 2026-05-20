@@ -155,7 +155,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { WarningFilled, Warning, InfoFilled } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getStockAlerts, getStockAlertRules, getStockAlertsSummary, initStockAlertRules, checkAllStockAlerts, acknowledgeStockAlert, resolveStockAlert, ignoreStockAlert } from '@/api/inventory'
 
 const loading = ref(false)
 const activeTab = ref('alerts')
@@ -193,7 +193,7 @@ const fetchAlerts = async () => {
       page_size: pagination.size,
       ...queryParams
     }
-    const data = await request.get('/inventory/stock-alerts/', { params })
+    const data = await getStockAlerts(params)
     alertList.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {
@@ -205,7 +205,7 @@ const fetchAlerts = async () => {
 
 const fetchRules = async () => {
   try {
-    const data = await request.get('/inventory/stock-alert-rules/')
+    const data = await getStockAlertRules()
     rules.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -214,7 +214,7 @@ const fetchRules = async () => {
 
 const fetchSummary = async () => {
   try {
-    const data = await request.get('/inventory/stock-alerts/summary/')
+    const data = await getStockAlertsSummary()
     summaryData.value = data
   } catch (e) {
     console.error(e)
@@ -223,7 +223,7 @@ const fetchSummary = async () => {
 
 const handleInitRules = async () => {
   try {
-    const data = await request.post('/inventory/stock-alert-rules/init_rules/')
+    const data = await initStockAlertRules()
     ElMessage.success(`初始化完成，新增 ${data.created} 条规则`)
     fetchRules()
   } catch (e) {
@@ -234,7 +234,7 @@ const handleInitRules = async () => {
 const handleCheckAll = async () => {
   try {
     ElMessage.info('正在检查预警...')
-    const data = await request.post('/inventory/stock-alerts/check_all/')
+    const data = await checkAllStockAlerts()
     ElMessage.success(`检查完成，新增 ${data.alerts_created} 条预警`)
     fetchAlerts()
     fetchSummary()
@@ -245,7 +245,7 @@ const handleCheckAll = async () => {
 
 const handleAcknowledge = async (row) => {
   try {
-    await request.post(`/inventory/stock-alerts/${row.id}/acknowledge/`)
+    await acknowledgeStockAlert(row.id)
     ElMessage.success('已确认')
     fetchAlerts()
     fetchSummary()
@@ -259,19 +259,19 @@ const handleResolve = async (row) => {
     await ElMessageBox.prompt('请输入解决方案', '解决预警', {
       inputPlaceholder: '解决方案'
     }).then(async ({ value }) => {
-      await request.post(`/inventory/stock-alerts/${row.id}/resolve/`, { resolution: value })
+      await resolveStockAlert(row.id, { resolution: value })
       ElMessage.success('已解决')
       fetchAlerts()
       fetchSummary()
     })
   } catch (e) {
-    // 取消
+    console.error('StockAlert fetchSummary error:', e)
   }
 }
 
 const handleIgnore = async (row) => {
   try {
-    await request.post(`/inventory/stock-alerts/${row.id}/ignore/`)
+    await ignoreStockAlert(row.id)
     ElMessage.success('已忽略')
     fetchAlerts()
     fetchSummary()

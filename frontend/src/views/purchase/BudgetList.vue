@@ -2,7 +2,7 @@
   <div class="budget-list-container">
     <div class="page-header">
       <h2>采购预算管理</h2>
-      <el-button type="primary" @click="handleAdd">
+      <el-button type="primary" v-permission="'purchase:request:create'" @click="handleAdd">
         <el-icon><Plus /></el-icon> 新增预算
       </el-button>
     </div>
@@ -103,10 +103,10 @@
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleView(row)">查看</el-button>
-            <el-button type="primary" link size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
+            <el-button type="primary" link size="small" v-permission="'purchase:request:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button type="success" link size="small" @click="handleApprove(row)" v-if="row.status === 'PENDING'">审批</el-button>
             <el-button type="warning" link size="small" @click="handleActivate(row)" v-if="row.status === 'APPROVED'">激活</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row)" v-if="row.status === 'DRAFT'">删除</el-button>
+            <el-button type="danger" link size="small" v-permission="'purchase:request:delete'" @click="handleDelete(row)" v-if="row.status === 'DRAFT'">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -234,7 +234,11 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import {
+  getPurchaseBudgets, getPurchaseBudget, createPurchaseBudget, updatePurchaseBudget,
+  deletePurchaseBudget, getPurchaseBudgetStatistics, getPurchaseBudgetUsageRecords,
+  approvePurchaseBudget, activatePurchaseBudget
+} from '@/api/purchase'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -294,7 +298,7 @@ const rules = {
 const fetchData = async () => {
   loading.value = true
   try {
-    const data = await request.get('/purchase/budgets/', { params: queryParams })
+    const data = await getPurchaseBudgets(queryParams)
     tableData.value = data.results || data
     total.value = data.count || data.length
   } catch (e) {
@@ -306,8 +310,8 @@ const fetchData = async () => {
 
 const fetchStats = async () => {
   try {
-    const data = await request.get('/purchase/budgets/statistics/', { 
-      params: { year: queryParams.year } 
+    const data = await getPurchaseBudgetStatistics({ 
+      year: queryParams.year 
     })
     stats.value = data
   } catch (e) {
@@ -350,10 +354,10 @@ const handleEdit = (row) => {
 
 const handleView = async (row) => {
   try {
-    const data = await request.get(`/purchase/budgets/${row.id}/`)
+    const data = await getPurchaseBudget(row.id)
     currentBudget.value = data
     
-    const usageRes = await request.get(`/purchase/budgets/${row.id}/usage_records/`)
+    const usageRes = await getPurchaseBudgetUsageRecords(row.id)
     usageRecords.value = usageRes.data
     
     viewDialogVisible.value = true
@@ -369,10 +373,10 @@ const handleSubmit = async () => {
   submitLoading.value = true
   try {
     if (isEdit.value) {
-      await request.put(`/purchase/budgets/${form.id}/`, form)
+      await updatePurchaseBudget(form.id, form)
       ElMessage.success('修改成功')
     } else {
-      await request.post('/purchase/budgets/', form)
+      await createPurchaseBudget(form)
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false
@@ -389,7 +393,7 @@ const handleSubmit = async () => {
 const handleApprove = (row) => {
   ElMessageBox.confirm('确定要审批通过此预算吗？', '提示', { type: 'warning' })
     .then(async () => {
-      await request.post(`/purchase/budgets/${row.id}/approve/`)
+      await approvePurchaseBudget(row.id)
       ElMessage.success('审批成功')
       fetchData()
     })
@@ -398,7 +402,7 @@ const handleApprove = (row) => {
 const handleActivate = (row) => {
   ElMessageBox.confirm('确定要激活此预算吗？激活后可开始使用。', '提示', { type: 'warning' })
     .then(async () => {
-      await request.post(`/purchase/budgets/${row.id}/activate/`)
+      await activatePurchaseBudget(row.id)
       ElMessage.success('激活成功')
       fetchData()
     })
@@ -407,7 +411,7 @@ const handleActivate = (row) => {
 const handleDelete = (row) => {
   ElMessageBox.confirm('确定要删除此预算吗？', '提示', { type: 'warning' })
     .then(async () => {
-      await request.delete(`/purchase/budgets/${row.id}/`)
+      await deletePurchaseBudget(row.id)
       ElMessage.success('删除成功')
       fetchData()
       fetchStats()

@@ -276,7 +276,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { TrendCharts, Coin, Wallet, CreditCard, Folder, Sell, ShoppingCart, Box, Money, Tickets } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
-import request from '@/utils/request'
+import { getManagementDashboard } from '@/api/analytics'
 
 // 数据
 const kpis = ref({
@@ -351,7 +351,7 @@ const getProgressColor = (progress) => {
 // 加载数据
 const loadDashboardData = async () => {
   try {
-    const res = await request.get('/analytics/management_dashboard/')
+    const res = await getManagementDashboard()
     const data = res.data || res
     
     kpis.value = {

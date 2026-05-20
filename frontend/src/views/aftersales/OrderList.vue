@@ -39,7 +39,7 @@
         <div class="card-header">
           <span>售后工单管理</span>
           <div class="header-actions">
-            <el-button type="primary" @click="handleCreate">
+            <el-button type="primary" v-permission="'projects:aftersales:create'" @click="handleCreate">
               <el-icon><Plus /></el-icon>
               新建工单
             </el-button>
@@ -95,14 +95,14 @@
       </el-form>
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'projects:aftersales:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" v-permission="'projects:aftersales:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <!-- 工单列表 -->
       <el-table :data="orders" border stripe v-loading="loading" @row-click="handleRowClick" @selection-change="handleSelectionChange" style="cursor: pointer;">
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'projects:aftersales:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="order_no" label="工单号" width="140" fixed />
         <el-table-column prop="title" label="问题标题" min-width="200" show-overflow-tooltip />
         <el-table-column prop="project_name" label="项目" width="150" show-overflow-tooltip />
@@ -144,7 +144,7 @@
         </el-table-column>
         <el-table-column label="总成本" width="110" align="right">
           <template #default="{ row }">
-            ¥{{ (row.total_cost || 0).toFixed(2) }}
+            ¥{{ toFixedSafe(row.total_cost) }}
           </template>
         </el-table-column>
         <el-table-column label="报修时间" width="160">
@@ -317,12 +317,12 @@
       <!-- 成本信息 -->
       <el-divider content-position="left">成本信息</el-divider>
       <el-descriptions :column="5" border v-if="currentOrder">
-        <el-descriptions-item label="人工费用">¥{{ (currentOrder.labor_cost || 0).toFixed(2) }}</el-descriptions-item>
-        <el-descriptions-item label="差旅费用">¥{{ (currentOrder.travel_cost || 0).toFixed(2) }}</el-descriptions-item>
-        <el-descriptions-item label="备件费用">¥{{ (currentOrder.parts_cost || 0).toFixed(2) }}</el-descriptions-item>
-        <el-descriptions-item label="其他费用">¥{{ (currentOrder.other_cost || 0).toFixed(2) }}</el-descriptions-item>
+        <el-descriptions-item label="人工费用">¥{{ toFixedSafe(currentOrder.labor_cost) }}</el-descriptions-item>
+        <el-descriptions-item label="差旅费用">¥{{ toFixedSafe(currentOrder.travel_cost) }}</el-descriptions-item>
+        <el-descriptions-item label="备件费用">¥{{ toFixedSafe(currentOrder.parts_cost) }}</el-descriptions-item>
+        <el-descriptions-item label="其他费用">¥{{ toFixedSafe(currentOrder.other_cost) }}</el-descriptions-item>
         <el-descriptions-item label="总成本">
-          <span class="total-cost">¥{{ (currentOrder.total_cost || 0).toFixed(2) }}</span>
+          <span class="total-cost">¥{{ toFixedSafe(currentOrder.total_cost) }}</span>
         </el-descriptions-item>
       </el-descriptions>
 
@@ -428,7 +428,7 @@
         <el-table-column label="操作" width="120">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="downloadAttachment(row)">下载</el-button>
-            <el-button type="danger" link size="small" @click="deleteAttachment(row)">删除</el-button>
+            <el-button type="danger" link size="small" @click="handleDeleteAttachment(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -445,9 +445,14 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Upload, VideoPlay, Document } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getAfterSalesOrderList, getAfterSalesOrder, createAfterSalesOrder, updateAfterSalesOrder, assignAfterSalesOrder, getAfterSalesStatistics } from '@/api/aftersales'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { getUsers } from '@/api/auth'
+import { deleteAttachment, getAttachmentList, uploadAttachment } from '@/api/core'
+import { getCustomerList } from '@/api/masterdata'
+import { getProjectList } from '@/api/projects/project'
+import { toFixedSafe } from '@/utils/number'
 
 const router = useRouter()
 
@@ -591,7 +596,7 @@ const loadOrders = async () => {
       }
     })
     
-    const res = await request.get('/projects/aftersales/', { params })
+    const res = await getAfterSalesOrderList(params)
     orders.value = res.data?.results || res.results || []
     total.value = res.data?.count || res.count || 0
   } catch (error) {
@@ -604,7 +609,7 @@ const loadOrders = async () => {
 
 const loadStatistics = async () => {
   try {
-    const res = await request.get('/projects/aftersales/statistics/')
+    const res = await getAfterSalesStatistics()
     const data = res.data || res
     
     stats.monthlyCount = data.monthly_count || 0
@@ -628,7 +633,7 @@ const loadStatistics = async () => {
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/')
+    const res = await getProjectList()
     projects.value = res.data?.results || res.results || []
   } catch (error) {
     console.error('加载项目列表失败:', error)
@@ -637,7 +642,7 @@ const loadProjects = async () => {
 
 const loadCustomers = async () => {
   try {
-    const res = await request.get('/masterdata/customers/')
+    const res = await getCustomerList()
     customers.value = res.data?.results || res.results || []
   } catch (error) {
     console.error('加载客户列表失败:', error)
@@ -646,7 +651,7 @@ const loadCustomers = async () => {
 
 const loadUsers = async () => {
   try {
-    const res = await request.get('/auth/users/')
+    const res = await getUsers()
     users.value = res.data?.results || res.results || []
   } catch (error) {
     console.error('加载用户列表失败:', error)
@@ -722,10 +727,10 @@ const handleSubmit = async () => {
     const data = { ...form }
     
     if (form.id) {
-      await request.put(`/projects/aftersales/${form.id}/`, data)
+      await updateAfterSalesOrder(form.id, data)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/projects/aftersales/', data)
+      await createAfterSalesOrder(data)
       ElMessage.success('创建成功')
     }
     
@@ -743,7 +748,7 @@ const handleSubmit = async () => {
 
 const handleView = async (row) => {
   try {
-    const res = await request.get(`/projects/aftersales/${row.id}/`)
+    const res = await getAfterSalesOrder(row.id)
     currentOrder.value = res.data || res
     viewDialogVisible.value = true
   } catch (error) {
@@ -774,7 +779,7 @@ const confirmAssign = async () => {
   
   submitting.value = true
   try {
-    await request.post(`/projects/aftersales/${assignForm.order_id}/assign/`, {
+    await assignAfterSalesOrder(assignForm.order_id, {
       assigned_to: assignForm.assigned_to
     })
     ElMessage.success('派单成功')
@@ -799,7 +804,7 @@ const handleAttachments = async (row) => {
 const loadAttachments = async () => {
   attachmentLoading.value = true
   try {
-    const res = await request.get('/core/attachments/', {
+    const res = await getAttachmentList({
       params: {
         related_model: 'AfterSalesOrder',
         related_id: currentAttachmentOrderId.value
@@ -828,7 +833,7 @@ const handleFileUpload = async (file) => {
     }
     formData.append('category', category)
     
-    await request.post('/core/attachments/', formData, {
+    await uploadAttachment(formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     
@@ -861,10 +866,10 @@ const downloadAttachment = (attachment) => {
   window.open(`/api/core/attachments/${attachment.id}/download/`, '_blank')
 }
 
-const deleteAttachment = async (attachment) => {
+const handleDeleteAttachment = async (attachment) => {
   try {
     await ElMessageBox.confirm('确定要删除该附件吗？', '删除确认', { type: 'warning' })
-    await request.delete(`/core/attachments/${attachment.id}/`)
+    await deleteAttachment(attachment.id)
     ElMessage.success('删除成功')
     loadAttachments()
   } catch (error) {
@@ -928,4 +933,3 @@ onMounted(() => {
   font-size: 12px;
 }
 </style>
-

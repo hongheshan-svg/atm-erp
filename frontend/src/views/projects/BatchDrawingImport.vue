@@ -190,7 +190,8 @@ import {
   UploadFilled, FolderOpened, Delete, Upload, RefreshLeft, 
   QuestionFilled, Link 
 } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getDrawingImportSupportedFormats, batchImportDrawings } from '@/api/projects/drawing'
+import { getProjectList } from '@/api/projects/project'
 
 const projects = ref([])
 const fileList = ref([])
@@ -218,7 +219,7 @@ const canImport = computed(() => {
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    const res = await getProjectList( { params: { page_size: 1000 } })
     projects.value = res.results || res || []
   } catch (error) {
     console.error('Load projects failed:', error)
@@ -227,7 +228,7 @@ const loadProjects = async () => {
 
 const loadFormats = async () => {
   try {
-    const res = await request.get('/projects/drawing-import/supported_formats/')
+    const res = await getDrawingImportSupportedFormats()
     supportedFormats.value = res.formats || []
   } catch (error) {
     console.error('Load formats failed:', error)
@@ -340,7 +341,7 @@ const startImport = async () => {
       })
     }
     
-    const res = await request.post('/projects/drawing-import/batch_import/', formData, {
+    const res = await batchImportDrawings( formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     

@@ -44,7 +44,7 @@
         <el-select v-model="queryParams.priority" placeholder="优先级" clearable style="width: 120px" @change="handleSearch">
           <el-option v-for="p in priorityOptions" :key="p.value" :label="p.label" :value="p.value" />
         </el-select>
-        <el-button type="primary" @click="handleCreate"><el-icon><Plus /></el-icon> 新建商机</el-button>
+        <el-button type="primary" v-permission="'sales:quotation:create'" @click="handleCreate"><el-icon><Plus /></el-icon> 新建商机</el-button>
       </div>
     </el-card>
 

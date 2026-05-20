@@ -9,13 +9,13 @@
               <el-icon><Download /></el-icon>
               导出Excel
             </el-button>
-            <el-button type="primary" @click="handleAdd">创建项目</el-button>
+            <el-button type="primary" v-permission="'projects:project:create'" @click="handleAdd">创建项目</el-button>
           </div>
         </div>
       </template>
 
       <!-- 批量操作工具栏 - 仅管理员可见 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'projects:project:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
         <el-button 
           type="danger" 
@@ -29,7 +29,7 @@
 
       <el-table :data="projects" v-loading="loading" stripe border @selection-change="handleSelectionChange">
         <!-- 仅管理员显示选择列 -->
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'projects:project:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="code" label="项目编号" width="150" />
         <el-table-column prop="name" label="项目名称" />
         <el-table-column prop="sales_order_no" label="关联订单" width="140">
@@ -50,7 +50,7 @@
         <el-table-column label="操作" :width="canDelete ? 400 : 340" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
-            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" v-permission="'projects:project:edit'" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" type="warning" @click="handleViewAttachments(row)">附件</el-button>
             <!-- 提交审批按钮 - 仅草稿/规划中/已拒绝状态可见 -->
             <el-button 
@@ -226,12 +226,15 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
-import request from '@/utils/request'
+import { getProjectList, createProject, updateProject, submitProject } from '@/api/projects/project'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
 import { exportProjects } from '@/api/export'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 import { usePermissionStore } from '@/stores/permission'
+import { getUsers } from '@/api/auth'
+import { getCustomerList } from '@/api/masterdata'
+import { getOrdersForLinking } from '@/api/sales'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -330,7 +333,7 @@ const getUserDisplayName = (user) => {
 const loadProjects = async () => {
   loading.value = true
   try {
-    const response = await request.get('/projects/projects/')
+    const response = await getProjectList()
     projects.value = response.results || response || []
   } catch (error) {
     ElMessage.error('加载项目失败')
@@ -341,7 +344,7 @@ const loadProjects = async () => {
 
 const loadCustomers = async () => {
   try {
-    const response = await request.get('/masterdata/customers/')
+    const response = await getCustomerList()
     customers.value = response.results || response || []
   } catch (error) {
     console.error('Failed to load customers')
@@ -350,7 +353,7 @@ const loadCustomers = async () => {
 
 const loadUsers = async () => {
   try {
-    const response = await request.get('/auth/users/')
+    const response = await getUsers()
     users.value = response.results || response || []
   } catch (error) {
     console.error('Failed to load users')
@@ -363,7 +366,7 @@ const loadSalesOrders = async () => {
   }
 
   try {
-    const response = await request.get('/sales/orders/for_linking/')
+    const response = await getOrdersForLinking()
     salesOrders.value = response.data || response || []
     salesOrdersLoaded.value = true
     return true
@@ -472,10 +475,10 @@ const handleSubmit = async () => {
     
     if (isEdit.value) {
       payload.code = form.code  // 编辑时必须有编号
-      await request.put(`/projects/projects/${form.id}/`, payload)
+      await updateProject(form.id, payload)
       ElMessage.success('更新项目成功')
     } else {
-      await request.post('/projects/projects/', payload)
+      await createProject(payload)
       ElMessage.success('创建项目成功')
     }
     dialogVisible.value = false
@@ -515,7 +518,7 @@ const handleSubmitApproval = async (row) => {
     )
     
     submitLoading.value = row.id
-    const response = await request.post(`/projects/projects/${row.id}/submit/`)
+    const response = await submitProject(row.id)
     
     if (response.workflow_started) {
       ElMessage.success(response.message || '已成功提交审批，请等待审批人处理')

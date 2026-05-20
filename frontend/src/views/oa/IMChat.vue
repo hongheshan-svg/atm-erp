@@ -150,7 +150,7 @@
       </el-form>
       <template #footer>
         <el-button @click="showNewConversation = false">取消</el-button>
-        <el-button type="primary" @click="createConversation" :loading="creatingConversation">确定</el-button>
+        <el-button type="primary" @click="handleCreateConversation" :loading="creatingConversation">确定</el-button>
       </template>
     </el-dialog>
     
@@ -171,13 +171,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { 
   Plus, Search, User, UserFilled, MoreFilled, 
   Loading, Document, Paperclip, Promotion
 } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getConversations, createConversation, markConversationRead, getIMMessages, sendIMMessage, uploadIMFile } from '@/api/oa'
+import { getUsers } from '@/api/auth'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
@@ -209,9 +210,10 @@ const creatingConversation = ref(false)
 const loadConversations = async () => {
   loadingConversations.value = true
   try {
-    const data = await request.get('/core/conversations/')
+    const data = await getConversations()
     conversations.value = data.results || data
   } catch (e) {
+    console.error("加载会话失败", e)
   } finally {
     loadingConversations.value = false
   }
@@ -228,7 +230,7 @@ const selectConversation = async (conv) => {
 const loadMessages = async (convId) => {
   loadingMessages.value = true
   try {
-    const data = await request.get('/core/messages/', {
+    const data = await getIMMessages({
       params: { conversation: convId, page_size: 50 }
     })
     messagePage.value = 1
@@ -237,6 +239,7 @@ const loadMessages = async (convId) => {
     await nextTick()
     scrollToBottom()
   } catch (e) {
+    console.error("加载消息失败", e)
   } finally {
     loadingMessages.value = false
   }
@@ -248,7 +251,7 @@ const sendMessage = async () => {
   
   sendingMessage.value = true
   try {
-    const data = await request.post('/core/messages/', {
+    const data = await sendIMMessage({
       conversation: currentConversation.value.id,
       content: messageInput.value.trim(),
       message_type: 'TEXT'
@@ -279,7 +282,7 @@ const handleFileUpload = async (file) => {
   formData.append('content', file.name)
   
   try {
-    const data = await request.post('/core/messages/', formData, {
+    const data = await uploadIMFile(formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     messages.value.push(data)
@@ -295,16 +298,16 @@ const handleFileUpload = async (file) => {
 // 标记已读
 const markAsRead = async (convId) => {
   try {
-    await request.post(`/core/conversations/${convId}/mark_as_read/`)
+    await markConversationRead(convId)
     const conv = conversations.value.find(c => c.id === convId)
     if (conv) conv.unread_count = 0
   } catch (e) {
-    // 忽略
+    console.error('IMChat if error:', e)
   }
 }
 
 // 创建会话
-const createConversation = async () => {
+const handleCreateConversation = async () => {
   if (selectedMembers.value.length === 0) {
     ElMessage.warning('请选择至少一个成员')
     return
@@ -312,7 +315,7 @@ const createConversation = async () => {
   
   creatingConversation.value = true
   try {
-    const data = await request.post('/core/conversations/', {
+    const data = await createConversation({
       type: newConvType.value,
       name: newConvType.value === 'GROUP' ? newConvName.value : null,
       members: selectedMembers.value
@@ -331,9 +334,10 @@ const createConversation = async () => {
 // 加载用户列表
 const loadUserList = async () => {
   try {
-    const data = await request.get('/auth/users/', { params: { page_size: 200 } })
+    const data = await getUsers({ page_size: 200 })
     userList.value = (data.results || data).filter(u => u.id !== currentUserId.value)
   } catch (e) {
+    console.error('IMChat filter error:', e)
   }
 }
 
@@ -348,7 +352,7 @@ const loadMore = async () => {
   loadingMore.value = true
   try {
     messagePage.value++
-    const data = await request.get('/core/messages/', {
+    const data = await getIMMessages({
       params: { conversation: currentConversation.value.id, page_size: 50, page: messagePage.value }
     })
     const older = (data.results || data).reverse()
@@ -411,7 +415,6 @@ onMounted(() => {
 })
 
 // 组件卸载时清除轮询
-import { onUnmounted } from 'vue'
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)
 })

@@ -237,7 +237,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getCreditLevelList, getCustomerCreditList, getCustomerCredit, getCreditWarningList, getCreditStatistics, initCreditLevels, adjustCredit, changeCreditStatus } from '@/api/masterdata'
 
 const activeTab = ref('list')
 const loading = ref(false)
@@ -296,7 +296,7 @@ const fetchList = async () => {
       page_size: pagination.size,
       ...queryParams
     }
-    const data = await request.get('/masterdata/customer-credits/', { params })
+    const data = await getCustomerCreditList(params)
     creditList.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {
@@ -308,7 +308,7 @@ const fetchList = async () => {
 
 const fetchLevels = async () => {
   try {
-    const data = await request.get('/masterdata/credit-levels/')
+    const data = await getCreditLevelList()
     creditLevels.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -317,9 +317,7 @@ const fetchLevels = async () => {
 
 const fetchWarningList = async () => {
   try {
-    const data = await request.get('/masterdata/customer-credits/warning_list/', {
-      params: { threshold: 80 }
-    })
+    const data = await getCreditWarningList({ threshold: 80 })
     warningList.value = data
   } catch (e) {
     console.error(e)
@@ -328,7 +326,7 @@ const fetchWarningList = async () => {
 
 const fetchStatistics = async () => {
   try {
-    const data = await request.get('/masterdata/customer-credits/statistics/')
+    const data = await getCreditStatistics()
     statsData.value = data
   } catch (e) {
     console.error(e)
@@ -337,7 +335,7 @@ const fetchStatistics = async () => {
 
 const handleInitLevels = async () => {
   try {
-    const data = await request.post('/masterdata/credit-levels/init_levels/')
+    const data = await initCreditLevels()
     ElMessage.success(`初始化完成，新增 ${data.created} 个等级`)
     fetchLevels()
   } catch (e) {
@@ -365,9 +363,10 @@ const handleChangeStatus = (row) => {
 
 const handleViewDetail = async (row) => {
   try {
-    const res = await request.get(`/masterdata/customer-credits/${row.id}/`)
+    const res = await getCustomerCredit(row.id)
     creditDetail.value = res.data || res
-  } catch {
+  } catch (error) {
+    console.error(error)
     creditDetail.value = row
   }
   creditDetailVisible.value = true
@@ -381,7 +380,7 @@ const submitAdjust = async () => {
   
   submitLoading.value = true
   try {
-    await request.post(`/masterdata/customer-credits/${currentCredit.value.id}/adjust_credit/`, adjustForm)
+    await adjustCredit(currentCredit.value.id, adjustForm)
     ElMessage.success('调整成功')
     adjustDialogVisible.value = false
     fetchList()
@@ -395,7 +394,7 @@ const submitAdjust = async () => {
 const submitStatus = async () => {
   submitLoading.value = true
   try {
-    await request.post(`/masterdata/customer-credits/${currentCredit.value.id}/change_status/`, statusForm)
+    await changeCreditStatus(currentCredit.value.id, statusForm)
     ElMessage.success('状态变更成功')
     statusDialogVisible.value = false
     fetchList()

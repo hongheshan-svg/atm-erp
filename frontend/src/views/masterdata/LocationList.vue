@@ -8,7 +8,7 @@
             <el-select v-model="selectedWarehouse" placeholder="选择仓库" style="width: 200px; margin-right: 10px;" @change="loadLocations">
               <el-option v-for="w in warehouses" :key="w.id" :label="w.name" :value="w.id" />
             </el-select>
-            <el-button type="primary" :icon="Plus" @click="handleAdd" :disabled="!selectedWarehouse">新增库位</el-button>
+            <el-button type="primary" :icon="Plus" v-permission="'masterdata:warehouse_location:create'" @click="handleAdd" :disabled="!selectedWarehouse">新增库位</el-button>
           </div>
         </div>
       </template>
@@ -28,7 +28,7 @@
             highlight-current
             default-expand-all
           >
-            <template #default="{ node, data }">
+            <template #default="{ node: _node, data }">
               <span class="tree-node">
                 <el-tag :type="getTypeTagType(data.location_type)" size="small">{{ data.type_display }}</el-tag>
                 <span class="node-label">{{ data.code }} - {{ data.name }}</span>
@@ -66,9 +66,9 @@
             </el-descriptions>
 
             <div class="action-buttons">
-              <el-button type="primary" @click="handleEdit(selectedLocation)">编辑</el-button>
-              <el-button type="success" @click="handleAddChild(selectedLocation)">添加下级</el-button>
-              <el-button type="danger" @click="handleDelete(selectedLocation)">删除</el-button>
+              <el-button type="primary" v-permission="'masterdata:warehouse_location:edit'" @click="handleEdit(selectedLocation)">编辑</el-button>
+              <el-button type="success" v-permission="'masterdata:warehouse_location:create'" @click="handleAddChild(selectedLocation)">添加下级</el-button>
+              <el-button type="danger" v-permission="'masterdata:warehouse_location:delete'" @click="handleDelete(selectedLocation)">删除</el-button>
             </div>
 
             <!-- Child locations table -->
@@ -158,7 +158,7 @@
 import { ref, reactive, watch, onMounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import request from '@/utils/request'
+import { getWarehouseList, getLocationTree, getLocation, getLocationChildren, createLocation, patchLocation, deleteLocation } from '@/api/masterdata'
 
 const warehouses = ref([])
 const selectedWarehouse = ref(null)
@@ -221,7 +221,7 @@ const getTypeTagType = (type) => {
 
 const loadWarehouses = async () => {
   try {
-    const response = await request.get('/masterdata/warehouses/', { params: { is_active: true } })
+    const response = await getWarehouseList({ is_active: true })
     warehouses.value = response.results || response || [] || []
   } catch (error) {
     console.error('加载仓库失败:', error)
@@ -232,7 +232,7 @@ const loadLocations = async () => {
   if (!selectedWarehouse.value) return
   
   try {
-    const response = await request.get(`/masterdata/warehouses/${selectedWarehouse.value}/location_tree/`)
+    const response = await getLocationTree(selectedWarehouse.value)
     locationTree.value = response || []
     selectedLocation.value = null
     childLocations.value = []
@@ -243,11 +243,11 @@ const loadLocations = async () => {
 
 const handleNodeClick = async (data) => {
   try {
-    const { data: detail } = await request.get(`/masterdata/locations/${data.id}/`)
+    const detail = await getLocation(data.id)
     selectedLocation.value = detail
     
     // Load children
-    const { data: children } = await request.get(`/masterdata/locations/${data.id}/children/`)
+    const children = await getLocationChildren(data.id)
     childLocations.value = children || []
   } catch (error) {
     console.error('加载库位详情失败:', error)
@@ -320,10 +320,10 @@ const handleSubmit = async () => {
     }
     
     if (isEdit.value) {
-      await request.patch(`/masterdata/locations/${form.id}/`, payload)
+      await patchLocation(form.id, payload)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/masterdata/locations/', payload)
+      await createLocation(payload)
       ElMessage.success('创建成功')
     }
     
@@ -343,7 +343,7 @@ const handleDelete = async (location) => {
       type: 'warning'
     })
     
-    await request.delete(`/masterdata/locations/${location.id}/`)
+    await deleteLocation(location.id)
     ElMessage.success('删除成功')
     selectedLocation.value = null
     loadLocations()

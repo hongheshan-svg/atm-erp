@@ -5,7 +5,7 @@
         <div class="card-header">
           <span>物料主数据</span>
           <div class="header-actions">
-            <el-button type="primary" @click="handleAdd">新增物料</el-button>
+            <el-button type="primary" v-permission="'masterdata:item:create'" @click="handleAdd">新增物料</el-button>
             <el-dropdown style="margin-left: 10px;">
               <el-button type="success">
                 导入/导出 <el-icon class="el-icon--right"><ArrowDown /></el-icon>
@@ -42,7 +42,7 @@
       </el-form>
 
       <!-- 批量操作工具栏 - 仅管理员可见 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'masterdata:item:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
         <el-button 
           type="danger" 
@@ -56,7 +56,7 @@
       
       <el-table :data="items" v-loading="loading" stripe border @selection-change="handleSelectionChange">
         <!-- 仅管理员显示选择列 -->
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'masterdata:item:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column type="index" label="序号" width="60" fixed />
         <el-table-column prop="sku" label="物料编码" width="100" fixed />
         <el-table-column prop="name" label="物料名称" width="150" show-overflow-tooltip />
@@ -105,7 +105,7 @@
         </el-table-column>
         <el-table-column label="操作" :width="canDelete ? 180 : 80" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" v-permission="'masterdata:item:edit'" @click="handleEdit(row)">编辑</el-button>
             <!-- 仅管理员显示删除按钮 -->
             <el-button 
               v-if="canDelete"
@@ -399,10 +399,11 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Download, Document, ArrowDown, Setting } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getItemList, createItem, updateItem, exportItems, exportItemTemplate, importItems, generateItemCode } from '@/api/masterdata'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { batchUploadAttachments } from '@/api/core'
 
 // 权限检查
 const { canDelete, isAdmin } = usePermission()
@@ -495,7 +496,7 @@ const loadItems = async () => {
       page_size: pagination.pageSize,
       ...searchForm
     }
-    const response = await request.get('/masterdata/items/', { params })
+    const response = await getItemList(params)
     items.value = response.results || response || []
     pagination.total = response.count || 0
   } catch (error) {
@@ -532,7 +533,7 @@ const uploadTempFiles = async (itemId) => {
   }
   
   try {
-    await request.post('/core/attachments/batch_upload/', formData, {
+    await batchUploadAttachments(formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
   } catch (error) {
@@ -591,9 +592,7 @@ const handleEdit = (row) => {
 // 导出Excel
 const handleExport = async () => {
   try {
-    const response = await request.get('/masterdata/items/export_excel/', {
-      responseType: 'blob'
-    })
+    const response = await exportItems()
     const url = window.URL.createObjectURL(new Blob([response.data || response]))
     const link = document.createElement('a')
     link.href = url
@@ -610,9 +609,7 @@ const handleExport = async () => {
 // 下载导入模板
 const handleDownloadTemplate = async () => {
   try {
-    const response = await request.get('/masterdata/items/export_template/', {
-      responseType: 'blob'
-    })
+    const response = await exportItemTemplate()
     const url = window.URL.createObjectURL(new Blob([response.data || response]))
     const link = document.createElement('a')
     link.href = url
@@ -640,9 +637,7 @@ const handleImport = () => {
     formData.append('file', file)
     
     try {
-      const res = await request.post('/masterdata/items/import_excel/', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
+      const res = await importItems(formData)
       const data = res.data || res
       // 构建导入结果提示
       let successMsg = `导入完成：新增 ${data.created || 0} 条`
@@ -676,7 +671,7 @@ const generateCode = async () => {
 
   generating.value = true
   try {
-    const res = await request.post('/masterdata/items/generate_code/', {
+    const res = await generateItemCode({
       level1_code: codeGenForm.level1,
       level2_code: codeGenForm.level2
     })
@@ -702,10 +697,10 @@ const handleSubmit = async () => {
   try {
     await formRef.value.validate()
     if (isEdit.value) {
-      await request.put(`/masterdata/items/${form.id}/`, form)
+      await updateItem(form.id, form)
       ElMessage.success('更新物料成功')
     } else {
-      const response = await request.post('/masterdata/items/', form)
+      const response = await createItem(form)
       // 如果有临时附件，上传附件
       if (tempFiles.value.length && response.id) {
         await uploadTempFiles(response.id)

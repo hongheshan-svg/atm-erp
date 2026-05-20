@@ -77,7 +77,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getOutsourceProgress, getOutsourceProgressStatistics, updateOutsourceProgress } from '@/api/purchase'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -95,7 +95,7 @@ const getStatusType = (s) => ({ 'PENDING': 'info', 'IN_PROGRESS': 'primary', 'CO
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await request.get('/purchase/outsource-progress/', { params: { page: page.value, page_size: pageSize.value } })
+    const res = await getOutsourceProgress({ page: page.value, page_size: pageSize.value })
     tableData.value = res.data?.results || res.results || []
     total.value = res.data?.count || res.count || 0
   } catch (error) {
@@ -107,9 +107,11 @@ const loadData = async () => {
 
 const loadStats = async () => {
   try {
-    const res = await request.get('/purchase/outsource-progress/statistics/')
+    const res = await getOutsourceProgressStatistics()
     stats.value = res.data || res || stats.value
-  } catch {}
+  } catch (error) {
+    console.error('OutsourceTracking getOutsourceProgressStatistics error:', error)
+  }
 }
 
 const handleProgress = (row) => {
@@ -123,7 +125,7 @@ const handleProgress = (row) => {
 const saveProgress = async () => {
   try {
     saving.value = true
-    await request.patch(`/purchase/outsource-progress/${currentRow.value.id}/`, progressForm)
+    await updateOutsourceProgress(currentRow.value.id, progressForm)
     ElMessage.success('进度更新成功')
     progressDialogVisible.value = false
     loadData()

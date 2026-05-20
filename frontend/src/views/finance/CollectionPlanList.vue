@@ -59,7 +59,7 @@
             <el-tab-pane label="即将到期" name="upcoming" />
             <el-tab-pane label="已逾期" name="overdue" />
           </el-tabs>
-          <el-button type="primary" @click="handleCreate"><el-icon><Plus /></el-icon> 新建计划</el-button>
+          <el-button type="primary" v-permission="'finance:collection_plan:create'" @click="handleCreate"><el-icon><Plus /></el-icon> 新建计划</el-button>
         </div>
       </template>
 
@@ -111,7 +111,7 @@
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
-            <el-button size="small" type="primary" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" type="primary" v-permission="'finance:collection_plan:edit'" @click="handleEdit(row)">编辑</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -211,7 +211,7 @@
           </el-table-column>
           <el-table-column label="操作" width="100">
             <template #default="{ row }">
-              <el-button size="small" @click="handleAddRecord(row)">收款</el-button>
+              <el-button size="small" v-permission="'finance:collection_plan:create'" @click="handleAddRecord(row)">收款</el-button>
             </template>
           </el-table-column>
         </el-table>

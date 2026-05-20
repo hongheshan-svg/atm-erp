@@ -130,9 +130,10 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import request from '@/utils/request'
 import { ElMessage } from 'element-plus'
 import { Check, ArrowUp, ArrowDown, DataLine } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+
 
 const activeTab = ref('widgets')
 const saving = ref(false)
@@ -224,6 +225,7 @@ const fetchConfig = async () => {
       }
     }
   } catch (error) {
+    console.error("加载配置失败", error)
   }
 }
 

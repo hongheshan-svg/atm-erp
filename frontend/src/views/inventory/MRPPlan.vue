@@ -2,7 +2,7 @@
   <div class="mrp-container">
     <div class="page-header">
       <h2>物料需求计划 (MRP)</h2>
-      <el-button type="primary" @click="handleAdd">创建计划</el-button>
+      <el-button type="primary" v-permission="'inventory:stock:create'" @click="handleAdd">创建计划</el-button>
     </div>
     
     <el-card shadow="never">
@@ -174,7 +174,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import request from '@/utils/request'
+import { getMRPPlans, createMRPPlan, getMRPPlan, calculateMRPPlan, approveMRPPlan, generateMRPPlanPR } from '@/api/inventory'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -219,7 +219,7 @@ const fetchList = async () => {
       page_size: pagination.size,
       ...queryParams
     }
-    const data = await request.get('/inventory/mrp-plans/', { params })
+    const data = await getMRPPlans(params)
     planList.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {
@@ -250,7 +250,7 @@ const submitForm = async () => {
   
   submitLoading.value = true
   try {
-    await request.post('/inventory/mrp-plans/', formData)
+    await createMRPPlan(formData)
     ElMessage.success('创建成功')
     dialogVisible.value = false
     fetchList()
@@ -263,7 +263,7 @@ const submitForm = async () => {
 
 const handleView = async (row) => {
   try {
-    const data = await request.get(`/inventory/mrp-plans/${row.id}/`)
+    const data = await getMRPPlan(row.id)
     currentPlan.value = data
     detailDialogVisible.value = true
   } catch (e) {
@@ -276,7 +276,7 @@ const handleCalculate = async (row) => {
     await ElMessageBox.confirm('确定要执行MRP计算吗？', '提示', { type: 'warning' })
     
     ElMessage.info('正在计算...')
-    const data = await request.post(`/inventory/mrp-plans/${row.id}/calculate/`)
+    const data = await calculateMRPPlan(row.id)
     ElMessage.success(`计算完成，共 ${data.total_items} 个物料，${data.shortage_items} 个缺料`)
     fetchList()
   } catch (e) {
@@ -288,7 +288,7 @@ const handleCalculate = async (row) => {
 
 const handleApprove = async (row) => {
   try {
-    await request.post(`/inventory/mrp-plans/${row.id}/approve/`)
+    await approveMRPPlan(row.id)
     ElMessage.success('批准成功')
     fetchList()
   } catch (e) {
@@ -300,7 +300,7 @@ const handleGeneratePR = async (row) => {
   try {
     await ElMessageBox.confirm('确定要生成采购申请吗？', '提示', { type: 'warning' })
     
-    const data = await request.post(`/inventory/mrp-plans/${row.id}/generate_pr/`)
+    const data = await generateMRPPlanPR(row.id)
     ElMessage.success(`已生成采购申请: ${data.purchase_request_no}`)
     fetchList()
   } catch (e) {

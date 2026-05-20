@@ -149,9 +149,11 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { getAgreementList, createAgreement, updateAgreement, createAgreementFromTemplate, submitAgreementReview, sendAgreementToCustomer, confirmAgreement, signAgreement, makeAgreementEffective, getActiveAgreementTemplates } from '@/api/plm/agreement'
+import { getProjectList } from '@/api/projects/project'
+import { getCustomerList } from '@/api/masterdata'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
 
 const loading = ref(false)
 const tableData = ref([])
@@ -223,7 +225,7 @@ const loadData = async () => {
       page_size: pagination.pageSize,
       ...searchForm
     }
-    const res = await request.get('/projects/agreements/', { params })
+    const res = await getAgreementList(params)
     tableData.value = res.results || res
     pagination.total = res.count || tableData.value.length
   } catch (error) {
@@ -235,7 +237,7 @@ const loadData = async () => {
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res
   } catch (error) {
     console.error('加载项目失败:', error)
@@ -244,7 +246,7 @@ const loadProjects = async () => {
 
 const loadCustomers = async () => {
   try {
-    const res = await request.get('/masterdata/customers/', { params: { page_size: 1000 } })
+    const res = await getCustomerList({ page_size: 1000 })
     customers.value = res.results || res
   } catch (error) {
     console.error('加载客户失败:', error)
@@ -253,7 +255,7 @@ const loadCustomers = async () => {
 
 const loadTemplates = async () => {
   try {
-    const res = await request.get('/projects/agreement-templates/active_templates/')
+    const res = await getActiveAgreementTemplates()
     templates.value = res
   } catch (error) {
     console.error('加载模板失败:', error)
@@ -303,7 +305,7 @@ const handleView = (row) => {
 const applyTemplate = async () => {
   if (!selectedTemplate.value || !formData.id) return
   try {
-    const res = await request.post(`/projects/agreements/${formData.id}/create_from_template/`, {
+    const res = await createAgreementFromTemplate(formData.id, {
       template_id: selectedTemplate.value
     })
     Object.assign(formData, res)
@@ -317,10 +319,10 @@ const handleSubmit = async () => {
   try {
     await formRef.value.validate()
     if (formData.id) {
-      await request.put(`/projects/agreements/${formData.id}/`, formData)
+      await updateAgreement(formData.id, formData)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/projects/agreements/', formData)
+      await createAgreement(formData)
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false
@@ -333,7 +335,7 @@ const handleSubmit = async () => {
 const handleSubmitReview = async (row) => {
   await ElMessageBox.confirm('确定提交内部评审？', '提示')
   try {
-    await request.post(`/projects/agreements/${row.id}/submit_review/`)
+    await submitAgreementReview(row.id)
     ElMessage.success('已提交评审')
     loadData()
   } catch (error) {
@@ -344,7 +346,7 @@ const handleSubmitReview = async (row) => {
 const handleSendToCustomer = async (row) => {
   await ElMessageBox.confirm('确定发送给客户评审？', '提示')
   try {
-    await request.post(`/projects/agreements/${row.id}/send_to_customer/`)
+    await sendAgreementToCustomer(row.id)
     ElMessage.success('已发送客户')
     loadData()
   } catch (error) {
@@ -355,7 +357,7 @@ const handleSendToCustomer = async (row) => {
 const handleCustomerConfirm = async (row) => {
   await ElMessageBox.confirm('确定客户已确认？', '提示')
   try {
-    await request.post(`/projects/agreements/${row.id}/customer_confirm/`, {
+    await confirmAgreement(row.id, {
       customer_sign_date: new Date().toISOString().split('T')[0]
     })
     ElMessage.success('客户已确认')
@@ -368,7 +370,7 @@ const handleCustomerConfirm = async (row) => {
 const handleSign = async (row) => {
   await ElMessageBox.confirm('确定签署协议？', '提示')
   try {
-    await request.post(`/projects/agreements/${row.id}/sign/`, {
+    await signAgreement(row.id, {
       sign_date: new Date().toISOString().split('T')[0]
     })
     ElMessage.success('已签署')
@@ -381,7 +383,7 @@ const handleSign = async (row) => {
 const handleMakeEffective = async (row) => {
   await ElMessageBox.confirm('确定使协议生效？', '提示')
   try {
-    await request.post(`/projects/agreements/${row.id}/make_effective/`)
+    await makeAgreementEffective(row.id)
     ElMessage.success('协议已生效')
     loadData()
   } catch (error) {

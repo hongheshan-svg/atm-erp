@@ -213,7 +213,7 @@ import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Check, Close } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
-import request from '@/utils/request'
+import { getProjectList, getProjectCostDashboard } from '@/api/projects/project'
 
 const router = useRouter()
 
@@ -310,9 +310,7 @@ const getPhaseLabel = (phase) => {
 }
 
 const loadProjects = async () => {
-  const res = await request.get('/projects/projects/', { 
-    params: { page_size: 500, status__in: 'IN_PROGRESS,DEBUGGING,INSTALLATION' } 
-  })
+  const res = await getProjectList({ page_size: 500, status__in: 'IN_PROGRESS,DEBUGGING,INSTALLATION' })
   projects.value = res.data.results || res.data
 }
 
@@ -324,7 +322,7 @@ const loadProjectCost = async () => {
   
   loading.value = true
   try {
-    const res = await request.get(`/projects/cost/dashboard/${selectedProject.value}/`)
+    const res = await getProjectCostDashboard(selectedProject.value)
     projectData.value = res.data
     await nextTick()
     renderCharts()

@@ -28,7 +28,7 @@
         </el-table-column>
         <el-table-column prop="estimated_cost" label="预估成本" width="120" align="right">
           <template #default="{ row }">
-            ¥{{ (row.estimated_cost || 0).toFixed(2) }}
+            ¥{{ toFixedSafe(row.estimated_cost) }}
           </template>
         </el-table-column>
         <el-table-column prop="notes" label="备注" show-overflow-tooltip />
@@ -122,6 +122,7 @@ import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { toFixedSafe } from '@/utils/number'
 
 const props = defineProps({
   projectId: {
@@ -321,4 +322,3 @@ defineExpose({
   align-items: center;
 }
 </style>
-

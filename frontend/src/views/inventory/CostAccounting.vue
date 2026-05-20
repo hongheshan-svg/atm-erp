@@ -167,7 +167,7 @@
           <template #header>
             <div class="card-header">
               <span>计价方法配置</span>
-              <el-button type="primary" size="small" @click="handleAddConfig">新增配置</el-button>
+              <el-button type="primary" size="small" v-permission="'inventory:stock:create'" @click="handleAddConfig">新增配置</el-button>
             </div>
           </template>
           <el-table :data="configs" border stripe>
@@ -197,7 +197,7 @@
             <el-table-column label="操作" width="150" fixed="right">
               <template #default="{ row }">
                 <el-button type="primary" link size="small" @click="handleSetDefault(row)" v-if="!row.is_default">设为默认</el-button>
-                <el-button type="primary" link size="small" @click="handleEditConfig(row)">编辑</el-button>
+                <el-button type="primary" link size="small" v-permission="'inventory:stock:edit'" @click="handleEditConfig(row)">编辑</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -253,7 +253,7 @@
 <script setup>
 import { ref, reactive, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getInventoryValuation, getCostRecords, getCostConfigs, generatePeriodSummary, setCostConfigDefault, updateCostConfig, createCostConfig } from '@/api/inventory'
 import * as echarts from 'echarts'
 
 const activeTab = ref('valuation')
@@ -295,9 +295,9 @@ const configForm = reactive({ id: null, name: '', method: 'WEIGHTED_AVERAGE', de
 
 const fetchValuation = async () => {
   try {
-    const data = await request.get('/inventory/period-summaries/inventory_valuation/', {
-      params: queryParams
-    })
+    const data = await getInventoryValuation(
+    queryParams
+    )
     valuation.value = data
     
     nextTick(() => {
@@ -311,9 +311,9 @@ const fetchValuation = async () => {
 const fetchRecords = async () => {
   recordLoading.value = true
   try {
-    const data = await request.get('/inventory/cost-records/', {
-      params: { ...recordQuery, page_size: 100 }
-    })
+    const data = await getCostRecords(
+      { ...recordQuery, page_size: 100 }
+    )
     records.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -324,7 +324,7 @@ const fetchRecords = async () => {
 
 const fetchConfigs = async () => {
   try {
-    const data = await request.get('/inventory/cost-configs/')
+    const data = await getCostConfigs()
     configs.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -338,7 +338,7 @@ const handleGenerateSummary = () => {
 const confirmGenerate = async () => {
   generating.value = true
   try {
-    const data = await request.post('/inventory/period-summaries/generate/', generateForm)
+    const data = await generatePeriodSummary(generateForm)
     ElMessage.success(data.message)
     generateDialogVisible.value = false
     fetchValuation()
@@ -351,7 +351,7 @@ const confirmGenerate = async () => {
 
 const handleSetDefault = async (row) => {
   try {
-    await request.post(`/inventory/cost-configs/${row.id}/set_default/`)
+    await setCostConfigDefault(row.id)
     ElMessage.success('设置成功')
     fetchConfigs()
   } catch (e) {
@@ -375,14 +375,14 @@ const handleConfigSave = async () => {
   configSaving.value = true
   try {
     if (configIsEdit.value) {
-      await request.put(`/inventory/cost-configs/${configForm.id}/`, configForm)
+      await updateCostConfig(configForm.id, configForm)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/inventory/cost-configs/', configForm)
+      await createCostConfig(configForm)
       ElMessage.success('创建成功')
     }
     configDialogVisible.value = false
-    loadConfigs()
+    fetchConfigs()
   } catch (error) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
     else ElMessage.error('操作失败')

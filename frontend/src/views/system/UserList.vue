@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>用户管理</span>
-          <el-button type="primary" @click="handleAdd">新增用户</el-button>
+          <el-button type="primary" v-permission="'accounts:user:create'" @click="handleAdd">新增用户</el-button>
         </div>
       </template>
 
@@ -29,7 +29,7 @@
       </el-form>
 
       <!-- 批量操作工具栏 - 仅管理员可见 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'accounts:user:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
         <el-button 
           type="danger" 
@@ -44,7 +44,7 @@
       <!-- Data Table -->
       <el-table :data="users" v-loading="loading" stripe border @selection-change="handleSelectionChange">
         <!-- 仅管理员显示选择列 -->
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'accounts:user:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="id" label="编号" width="80" />
         <el-table-column prop="username" label="用户名" />
         <el-table-column prop="email" label="邮箱" />
@@ -60,7 +60,7 @@
         </el-table-column>
         <el-table-column label="操作" :width="canDelete ? 180 : 80" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" v-permission="'accounts:user:edit'" @click="handleEdit(row)">编辑</el-button>
             <!-- 仅管理员显示删除按钮 -->
             <el-button 
               v-if="canDelete"
@@ -149,7 +149,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import request from '@/utils/request'
+import { getUsers, createUser, updateUser, getRoles, getDepartments } from '@/api/auth'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 
@@ -234,7 +234,7 @@ const loadUsers = async () => {
       page_size: pagination.pageSize,
       ...searchForm
     }
-    const response = await request.get('/auth/users/', { params })
+    const response = await getUsers(params)
     // 兼容不同的返回格式
     if (response && response.results) {
       users.value = response.results
@@ -256,7 +256,7 @@ const loadUsers = async () => {
 
 const loadDepartments = async () => {
   try {
-    const response = await request.get('/auth/departments/')
+    const response = await getDepartments()
     departments.value = response.results || response || []
   } catch (error) {
     console.error('加载部门失败:', error)
@@ -266,7 +266,7 @@ const loadDepartments = async () => {
 
 const loadRoles = async () => {
   try {
-    const response = await request.get('/auth/roles/')
+    const response = await getRoles()
     roles.value = response.results || response || []
   } catch (error) {
     console.error('加载角色失败:', error)
@@ -318,7 +318,7 @@ const handleSubmit = async () => {
         role: form.role,
         is_active: form.is_active
       }
-      await request.put(`/auth/users/${form.id}/`, updateData)
+      await updateUser(form.id, updateData)
       ElMessage.success('更新成功')
     } else {
       const createData = {
@@ -333,7 +333,7 @@ const handleSubmit = async () => {
         role: form.role,
         is_active: form.is_active
       }
-      await request.post('/auth/users/', createData)
+      await createUser(createData)
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false

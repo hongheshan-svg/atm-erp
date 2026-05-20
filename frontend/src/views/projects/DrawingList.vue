@@ -8,7 +8,7 @@
             <el-select v-model="selectedProject" placeholder="选择项目" clearable filterable style="width: 250px; margin-right: 10px;" @change="loadDrawings">
               <el-option v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
             </el-select>
-            <el-button type="primary" @click="handleAdd" :disabled="!selectedProject">
+            <el-button type="primary" v-permission="'projects:project:create'" @click="handleAdd" :disabled="!selectedProject">
               <el-icon><Plus /></el-icon>
               新增图纸
             </el-button>
@@ -71,14 +71,14 @@
       </el-alert>
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'projects:project:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" v-permission="'projects:project:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <!-- 数据表格 -->
       <el-table :data="drawings" v-loading="loading" stripe border @selection-change="handleSelectionChange">
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'projects:project:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="drawing_no" label="图纸号" width="120" />
         <el-table-column prop="name" label="图纸名称" min-width="150" show-overflow-tooltip />
         <el-table-column label="版本" width="80" align="center">
@@ -104,7 +104,7 @@
         <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button size="small" link @click="handleView(row)">查看</el-button>
-            <el-button size="small" link @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
+            <el-button size="small" link v-permission="'projects:project:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button size="small" link type="warning" @click="handleSubmitReview(row)" v-if="row.status === 'DRAFT'">提审</el-button>
             <el-button size="small" link type="success" @click="handleApprove(row)" v-if="row.status === 'REVIEWING'">批准</el-button>
             <el-button size="small" link type="primary" @click="handleRelease(row)" v-if="row.status === 'APPROVED'">发布</el-button>
@@ -308,9 +308,11 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Download, Upload, Document, ArrowDown } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getDrawingList, getDrawing, createDrawing, updateDrawing, submitDrawingReview, approveDrawing, releaseDrawing, newDrawingRevision, exportDrawingExcel, exportDrawingTemplate, importDrawingExcel } from '@/api/projects/drawing'
+import { getProjectList } from '@/api/projects/project'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { getItemList } from '@/api/masterdata'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -404,7 +406,7 @@ const getFileTypeTag = (type) => {
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 200 } })
+    const res = await getProjectList( { params: { page_size: 200 } })
     projects.value = res.results || res || []
   } catch (error) {
     console.error('加载项目失败:', error)
@@ -413,7 +415,7 @@ const loadProjects = async () => {
 
 const loadItems = async () => {
   try {
-    const res = await request.get('/masterdata/items/', { params: { page_size: 500 } })
+    const res = await getItemList({ page_size: 500 })
     items.value = res.results || res || []
   } catch (error) {
     console.error('加载物料失败:', error)
@@ -433,7 +435,7 @@ const loadDrawings = async () => {
     }
     Object.keys(params).forEach(k => { if (!params[k]) delete params[k] })
     
-    const res = await request.get('/projects/drawings/', { params })
+    const res = await getDrawingList( { params })
     drawings.value = res.results || res || []
     pagination.total = res.count || 0
   } catch (error) {
@@ -487,9 +489,10 @@ const handleEdit = async (row) => {
 
 const handleView = async (row) => {
   try {
-    const res = await request.get(`/projects/drawings/${row.id}/`)
+    const res = await getDrawing(row.id)
     viewDetail.value = res.data || res
-  } catch {
+  } catch (error) {
+    console.error(error)
     viewDetail.value = row
   }
   viewDialogVisible.value = true
@@ -506,10 +509,10 @@ const handleSave = async () => {
     }
     
     if (form.id) {
-      await request.put(`/projects/drawings/${form.id}/`, payload)
+      await updateDrawing(form.id, payload)
       ElMessage.success('图纸更新成功')
     } else {
-      await request.post('/projects/drawings/', payload)
+      await createDrawing( payload)
       ElMessage.success('图纸创建成功')
     }
     
@@ -527,7 +530,7 @@ const handleSave = async () => {
 const handleSubmitReview = async (row) => {
   try {
     await ElMessageBox.confirm('确定要提交该图纸进行审核吗？', '提交审核', { type: 'warning' })
-    await request.post(`/projects/drawings/${row.id}/submit_review/`)
+    await submitDrawingReview(row.id)
     ElMessage.success('已提交审核')
     loadDrawings()
   } catch (error) {
@@ -540,7 +543,7 @@ const handleSubmitReview = async (row) => {
 const handleApprove = async (row) => {
   try {
     await ElMessageBox.confirm('确定要批准该图纸吗？', '批准确认', { type: 'warning' })
-    await request.post(`/projects/drawings/${row.id}/approve/`)
+    await approveDrawing(row.id)
     ElMessage.success('图纸已批准')
     loadDrawings()
   } catch (error) {
@@ -553,7 +556,7 @@ const handleApprove = async (row) => {
 const handleRelease = async (row) => {
   try {
     await ElMessageBox.confirm('确定要发布该图纸吗？发布后将发送变更通知邮件。', '发布确认', { type: 'warning' })
-    await request.post(`/projects/drawings/${row.id}/release/`)
+    await releaseDrawing(row.id)
     ElMessage.success('图纸已发布，变更通知已发送')
     loadDrawings()
   } catch (error) {
@@ -577,7 +580,7 @@ const submitNewRevision = async () => {
   
   saving.value = true
   try {
-    await request.post(`/projects/drawings/${currentDrawing.value.id}/new_revision/`, {
+    await newDrawingRevision(currentDrawing.value.id, {
       change_description: revisionForm.change_description
     })
     ElMessage.success('新版本创建成功')
@@ -601,7 +604,7 @@ const handleExport = async () => {
   }
   
   try {
-    const response = await request.get('/projects/drawings/export_excel/', {
+    const response = await exportDrawingExcel( {
       params: { project: selectedProject.value },
       responseType: 'blob'
     })
@@ -630,7 +633,7 @@ const handleExport = async () => {
 
 const handleDownloadTemplate = async () => {
   try {
-    const response = await request.get('/projects/drawings/export_template/', {
+    const response = await exportDrawingTemplate( {
       responseType: 'blob'
     })
     
@@ -691,7 +694,7 @@ const handleConfirmImport = async () => {
     formData.append('project', selectedProject.value)
     formData.append('update_existing', importOptions.updateExisting.toString())
     
-    const response = await request.post('/projects/drawings/import_excel/', formData, {
+    const response = await importDrawingExcel( formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     

@@ -181,7 +181,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Document } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getBug, changeBugStatus, addBugComment } from '@/api/projects/bug'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
@@ -291,7 +291,7 @@ const goBack = () => {
 const loadBug = async () => {
   loading.value = true
   try {
-    bug.value = await request.get(`/projects/bugs/${bugId.value}/`)
+    bug.value = await getBug(bugId.value)
   } catch (error) {
     ElMessage.error('加载Bug详情失败')
     router.push('/projects/bugs')
@@ -319,7 +319,7 @@ const handleStatusSubmit = async () => {
   
   changingStatus.value = true
   try {
-    await request.post(`/projects/bugs/${bugId.value}/change_status/`, statusForm)
+    await changeBugStatus(bugId.value, statusForm)
     ElMessage.success('状态变更成功')
     statusDialogVisible.value = false
     loadBug()
@@ -339,7 +339,7 @@ const handleAddComment = async () => {
   
   addingComment.value = true
   try {
-    await request.post(`/projects/bugs/${bugId.value}/comments/`, {
+    await addBugComment(bugId.value, {
       content: newComment.value
     })
     ElMessage.success('评论发表成功')

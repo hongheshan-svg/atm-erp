@@ -2,7 +2,7 @@
   <div class="quote-estimation">
     <el-card class="filter-card">
       <div class="filter-header">
-        <el-button type="primary" @click="handleCreate">
+        <el-button type="primary" v-permission="'sales:quotation:create'" @click="handleCreate">
           <el-icon><Plus /></el-icon> 新建估算
         </el-button>
         <div class="filter-right">
@@ -53,7 +53,7 @@
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="handleView(row)">查看</el-button>
-            <el-button type="primary" link @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
+            <el-button type="primary" link v-permission="'sales:quotation:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-dropdown trigger="click" @command="cmd => handleCommand(cmd, row)">
               <el-button type="primary" link>更多</el-button>
               <template #dropdown>
@@ -164,7 +164,8 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
-import request from '@/utils/request'
+import { getQuoteEstimations, createQuoteEstimation, patchQuoteEstimation, calculateQuoteEstimation, submitQuoteEstimationReview, approveQuoteEstimation, createQuotationFromEstimation, getOpportunities } from '@/api/sales'
+import { getCustomerList } from '@/api/masterdata'
 
 const router = useRouter()
 
@@ -226,7 +227,7 @@ const loadData = async () => {
       search: searchText.value || undefined,
       status: statusFilter.value || undefined
     }
-    const res = await request.get('/sales/quote-estimations/', { params })
+    const res = await getQuoteEstimations(params)
     tableData.value = res.data.results || res.data
     total.value = res.data.count || tableData.value.length
   } catch (e) {
@@ -237,12 +238,12 @@ const loadData = async () => {
 }
 
 const loadCustomers = async () => {
-  const res = await request.get('/masterdata/customers/', { params: { page_size: 1000 } })
+  const res = await getCustomerList({ page_size: 1000 })
   customers.value = res.data.results || res.data
 }
 
 const loadOpportunities = async () => {
-  const res = await request.get('/sales/opportunities/', { params: { page_size: 1000 } })
+  const res = await getOpportunities({ page_size: 1000 })
   opportunities.value = res.data.results || res.data
 }
 
@@ -280,10 +281,10 @@ const handleSubmit = async () => {
   submitting.value = true
   try {
     if (form.id) {
-      await request.patch(`/sales/quote-estimations/${form.id}/`, form)
+      await patchQuoteEstimation(form.id, form)
       ElMessage.success('保存成功')
     } else {
-      const res = await request.post('/sales/quote-estimations/', form)
+      const res = await createQuoteEstimation(form)
       ElMessage.success('创建成功')
       router.push(`/sales/quote-estimation/${res.data.id}`)
     }
@@ -301,27 +302,28 @@ const handleCommand = async (cmd, row) => {
   try {
     switch (cmd) {
       case 'calculate':
-        await request.post(`/sales/quote-estimations/${row.id}/calculate/`)
+        await calculateQuoteEstimation(row.id)
         ElMessage.success('计算完成')
         loadData()
         break
       case 'submit':
         await ElMessageBox.confirm('确定提交评审?', '提示')
-        await request.post(`/sales/quote-estimations/${row.id}/submit_review/`)
+        await submitQuoteEstimationReview(row.id)
         ElMessage.success('已提交评审')
         loadData()
         break
       case 'approve':
         await ElMessageBox.confirm('确定审批通过?', '提示')
-        await request.post(`/sales/quote-estimations/${row.id}/approve/`)
+        await approveQuoteEstimation(row.id)
         ElMessage.success('审批通过')
         loadData()
         break
-      case 'create_quote':
+      case 'create_quote': {
         await ElMessageBox.confirm('确定生成正式报价单?', '提示')
-        const res = await request.post(`/sales/quote-estimations/${row.id}/create_quotation/`)
+        const res = await createQuotationFromEstimation(row.id)
         ElMessage.success(`报价单 ${res.data.quotation_no} 创建成功`)
         loadData()
+        }
         break
       case 'import_bom':
         router.push(`/sales/quote-estimation/${row.id}?tab=materials`)

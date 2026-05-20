@@ -22,7 +22,7 @@
       </el-col>
       <el-col :span="6">
         <el-card shadow="hover" class="stat-card">
-          <div class="stat-value">{{ statistics.avg_scores?.avg_total?.toFixed(1) || '-' }}</div>
+          <div class="stat-value">{{ toFixedSafe(statistics.avg_scores?.avg_total, 1, '-') }}</div>
           <div class="stat-label">平均得分</div>
         </el-card>
       </el-col>
@@ -33,7 +33,7 @@
         <div class="card-header">
           <span>供应商评价管理</span>
           <div class="header-actions">
-            <el-button type="primary" @click="handleCreate">
+            <el-button type="primary" v-permission="'purchase:supplier_evaluation:create'" @click="handleCreate">
               <el-icon><Plus /></el-icon> 新建评价
             </el-button>
             <el-button @click="showRanking = true">
@@ -87,7 +87,7 @@
         <el-table-column prop="evaluation_date" label="评价日期" width="110" />
         <el-table-column label="总分" width="80" align="center">
           <template #default="{ row }">
-            <span :class="getScoreClass(row.total_score)">{{ row.total_score?.toFixed(1) }}</span>
+            <span :class="getScoreClass(row.total_score)">{{ toFixedSafe(row.total_score, 1, '-') }}</span>
           </template>
         </el-table-column>
         <el-table-column label="等级" width="80" align="center">
@@ -98,10 +98,10 @@
         <el-table-column label="分项得分" width="200">
           <template #default="{ row }">
             <div class="score-breakdown">
-              <span>质量: {{ row.quality_score?.toFixed(0) || '-' }}</span>
-              <span>交期: {{ row.delivery_score?.toFixed(0) || '-' }}</span>
-              <span>价格: {{ row.price_score?.toFixed(0) || '-' }}</span>
-              <span>服务: {{ row.service_score?.toFixed(0) || '-' }}</span>
+              <span>质量: {{ toFixedSafe(row.quality_score, 0, '-') }}</span>
+              <span>交期: {{ toFixedSafe(row.delivery_score, 0, '-') }}</span>
+              <span>价格: {{ toFixedSafe(row.price_score, 0, '-') }}</span>
+              <span>服务: {{ toFixedSafe(row.service_score, 0, '-') }}</span>
             </div>
           </template>
         </el-table-column>
@@ -139,7 +139,7 @@
         <el-table-column prop="supplier__code" label="编码" width="120" />
         <el-table-column label="平均分" width="100">
           <template #default="{ row }">
-            <span :class="getScoreClass(row.avg_score)">{{ row.avg_score?.toFixed(1) }}</span>
+            <span :class="getScoreClass(row.avg_score)">{{ toFixedSafe(row.avg_score, 1, '-') }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="evaluation_count" label="评价次数" width="100" />
@@ -264,8 +264,9 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, TrendCharts } from '@element-plus/icons-vue'
+import { toFixedSafe } from '@/utils/number'
 import { 
-  getEvaluationList, createEvaluation, submitEvaluation,
+  getEvaluationList, getEvaluation, createEvaluation, submitEvaluation,
   approveEvaluation, getEvaluationStatistics, getSupplierRanking,
   getEvaluationTemplateList
 } from '@/api/purchase/evaluation'

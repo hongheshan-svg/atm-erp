@@ -38,7 +38,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getProjectList, getProjectCostComparison } from '@/api/projects/project'
 import * as echarts from 'echarts'
 
 const loading = ref(false)
@@ -51,9 +51,11 @@ const formatMoney = (v) => v ? parseFloat(v).toLocaleString('zh-CN', { minimumFr
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    const res = await getProjectList({ page_size: 1000 })
     projects.value = res.data?.results || res.results || []
-  } catch (error) { console.error(error) }
+  } catch (error) {
+    console.error('CostComparison getProjectList error:', error)
+  }
 }
 
 const loadComparison = async () => {
@@ -63,7 +65,7 @@ const loadComparison = async () => {
   }
   loading.value = true
   try {
-    const res = await request.get('/projects/cost/comparison/', { params: { project_ids: selectedProjects.value.join(',') } })
+    const res = await getProjectCostComparison({ project_ids: selectedProjects.value.join(',') })
     comparisonData.value = res.data?.projects || res.projects || []
     renderChart()
   } catch (error) {

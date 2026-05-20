@@ -19,6 +19,13 @@ python manage.py runserver 0.0.0.0:8000
 python manage.py makemigrations
 python manage.py migrate
 
+# 首次启动需要的 bootstrap 命令（顺序敏感）
+python manage.py init_permissions
+python manage.py init_roles --force
+python manage.py init_industry_roles --force
+python manage.py seed_data            # 可选：示例数据
+python manage.py init_dashboard_widgets
+
 # 创建超级用户
 python manage.py createsuperuser
 
@@ -29,6 +36,27 @@ python manage.py collectstatic --noinput
 python manage.py shell_plus  # 需要 django-extensions
 ```
 
+### Tests
+
+```bash
+# 后端 Django 单元测试（在 backend/ 目录下）
+python manage.py test                                   # 全量
+python manage.py test apps.core                         # 单个 app
+python manage.py test apps.core.tests.test_permission_service  # 单个文件
+python manage.py test apps.core.tests.test_permission_service.PermissionServiceTest.test_xxx  # 单个用例
+
+# 集成 / 浏览器测试（仓库根目录，依赖 Docker 已启动）
+python run_all_tests.py                                  # 自动 migrate + init_roles + 跑全套测试
+python test_browser_simulation.py                        # 前端页面冒烟
+python test_browser_deep.py                              # 深度交互测试
+python test_vue_runtime.py                               # Vue 运行时报错检测
+
+# 权限相关的根目录脚本（改动 RBAC / 数据范围时必跑）
+python test_permissions.py
+python test_comprehensive_permissions.py
+python test_frontend_permissions.py
+```
+
 ### Frontend (Vue 3 + Vite)
 
 ```bash
@@ -36,12 +64,17 @@ python manage.py shell_plus  # 需要 django-extensions
 cd /home/administrator/erp/frontend
 npm install
 
-# 开发服务器 (端口 3000)
+# 开发服务器 (端口 3000，base path 为 /erp/，启动后访问 http://localhost:3000/erp/)
 npm run dev
 
 # 生产构建
 npm run build
+
+# 预览构建产物
+npm run preview
 ```
+
+Vite 已配置 `/api` 与 `/ws` 反向代理到 `http://backend:8000`（Docker 内）或 `VITE_API_BASE_URL`（本地需 export）。前端 `base: '/erp/'` 与 nginx 路由一致，**所有路由路径需带 `/erp/` 前缀**。
 
 ### Docker (完整环境)
 
@@ -135,7 +168,24 @@ celery -A config beat -l info
 
 ### Infrastructure
 
-- **Docker Compose**: 7 个服务 (postgres:5433, redis:6380, elasticsearch:9201, backend:8000, celery, celery-beat, nginx:8080/8443)
-- **Celery Worker**: 使用 host 网络模式以访问局域网设备（如考勤机）
+- **Docker Compose**: 7 个服务 (postgres:5433, redis:6380, elasticsearch:9201, backend:8000, celery, celery-beat, nginx:8080/8443)。**端口偏移是为避开宿主机已有服务**，从宿主机连接数据库时请用 `5433/6380/9201`，从容器内仍用 `5432/6379/9200`。
+- **Celery Worker**: 使用 host 网络模式以访问局域网设备（如考勤机）。修改 Celery 任务后需 `docker compose restart celery celery-beat`，否则旧 worker 仍持有旧任务定义。
 - **环境变量**: `.env` (本地开发), `.env.docker` (Docker), `.env.example` (模板)
 - **API 文档**: Swagger UI 在 `/api/docs/`, OpenAPI schema 在 `/api/schema/`
+
+## Other Codebases in the Repo
+
+- `miniprogram/` — 微信小程序客户端（独立于 Vue 前端），改动 API 契约时需同步该目录下 `pages/`、`utils/request.js`。
+- `nginx/`、`docker/` — 部署配置；改动反向代理或 Dockerfile 后必须 `docker compose build` 重新构建对应服务。
+- `docs/` — 项目文档。重点参考：
+  - `docs/DEVELOPMENT_GUIDE.md` — 环境与部署详解
+  - `docs/REQUIREMENTS-PRD.md` / `docs/REQUIREMENTS-IMPLEMENTATION-MAPPING.md` — 需求与实现映射
+  - `docs/业务流程手册.md` — 业务流程参考
+
+## Conventions Worth Knowing
+
+- 新业务模型继承 `apps.core.models.BaseModel`，删除调用 `instance.soft_delete()`，查询过滤 `is_deleted=False`（管理器 `objects` 默认已过滤，绕过需用 `all_objects`）。
+- ViewSet 修改时保留 RBAC、`DataPermissionMixin` 数据范围、`WorkflowEnforcementMixin` 审批联动与审计日志中间件的预期，不要手写一套替代逻辑。
+- 前端网络调用统一走 `frontend/src/utils/request.js`（封装 JWT 刷新、错误码、消息提示），新接口在 `frontend/src/api/<module>.js` 中按模块组织，**不要在视图组件里直接 `import axios`**。
+- 前端权限：路由 `meta.permission`、`hasMenuAccess()` 与 `v-permission` 指令三者保持一致；后端 API 契约变化要同步前端 API 封装与权限测试。
+- 业务编号通过 `CodeRule` 模型动态生成，不要硬编码前缀/序号格式。

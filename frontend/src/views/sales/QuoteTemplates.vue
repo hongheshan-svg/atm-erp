@@ -165,7 +165,7 @@
           </el-table-column>
           <el-table-column label="金额" width="120">
             <template #default="{ row }">
-              <span style="font-weight: bold;">¥{{ row.amount?.toFixed(2) || '0.00' }}</span>
+              <span style="font-weight: bold;">¥{{ toFixedSafe(row.amount) }}</span>
             </template>
           </el-table-column>
           <el-table-column label="备注" width="120">
@@ -261,7 +261,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, Document, Monitor, Delete } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { toFixedSafe } from '@/utils/number'
+import { getQuoteTemplates, createQuoteTemplate, updateQuoteTemplate, setDefaultQuoteTemplate, generateQuoteFromTemplate } from '@/api/sales'
 
 const templates = ref([])
 const selectedTemplate = ref(null)
@@ -298,7 +299,7 @@ const totalAmount = computed(() => {
 
 const loadTemplates = async () => {
   try {
-    const res = await request.get('/sales/quote-templates/')
+    const res = await getQuoteTemplates()
     templates.value = res.results || res || []
   } catch (e) {
     console.error('加载模板失败:', e)
@@ -342,10 +343,10 @@ const saveTemplate = async () => {
     delete data.footer_config_json
     
     if (editingTemplate.value) {
-      await request.put(`/sales/quote-templates/${editingTemplate.value.id}/`, data)
+      await updateQuoteTemplate(editingTemplate.value.id, data)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/sales/quote-templates/', data)
+      await createQuoteTemplate(data)
       ElMessage.success('创建成功')
     }
     showTemplateDialog.value = false
@@ -360,7 +361,7 @@ const saveTemplate = async () => {
 
 const setDefault = async () => {
   try {
-    await request.post(`/sales/quote-templates/${selectedTemplate.value.id}/set_default/`)
+    await setDefaultQuoteTemplate(selectedTemplate.value.id)
     ElMessage.success('设置成功')
     loadTemplates()
   } catch (e) {
@@ -396,7 +397,7 @@ const generateQuote = async () => {
   
   generating.value = true
   try {
-    const res = await request.post('/sales/quote-templates/generate/', {
+    const res = await generateQuoteFromTemplate({
       template_id: selectedTemplate.value?.id,
       ...quoteForm.value,
       output_format: 'excel'

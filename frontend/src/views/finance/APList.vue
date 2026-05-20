@@ -162,7 +162,7 @@
           </el-form>
 
           <div class="batch-actions" v-if="selectedBankStatements.length > 0">
-            <el-button type="danger" size="small" @click="handleBatchDelete">
+            <el-button type="danger" size="small" v-permission="'finance:payable:delete'" @click="handleBatchDelete">
               批量删除 ({{ selectedBankStatements.length }})
             </el-button>
           </div>
@@ -359,8 +359,11 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Download, Connection } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getPayables, getBankStatements, recordPayablePayment, bulkDeleteBankStatements, ignoreBankStatement, matchBankStatement, autoMatchAllBankStatements } from '@/api/finance'
 import { usePermissionStore } from '@/stores/permission'
+import { exportAPReport } from '@/api/core'
+import { getSupplierList } from '@/api/masterdata'
+import { getPurchaseOrders } from '@/api/purchase'
 
 const loading = ref(false)
 const bankLoading = ref(false)
@@ -428,7 +431,7 @@ const loadData = async () => {
   try {
     const params = { page: pagination.page, page_size: pagination.pageSize, ...searchForm }
     Object.keys(params).forEach(k => { if (params[k] === null) delete params[k] })
-    const res = await request.get('/finance/payables/', { params })
+    const res = await getPayables(params)
     dataList.value = res.results || []
     pagination.total = res.count || 0
     // 计算汇总
@@ -448,7 +451,7 @@ const loadBankStatements = async () => {
   try {
     const params = { page: bankPagination.page, page_size: bankPagination.pageSize, transaction_type: 'DEBIT', ...bankSearchForm }
     Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
-    const res = await request.get('/finance/bank-statements/', { params })
+    const res = await getBankStatements(params)
     bankStatements.value = res.results || []
     bankPagination.total = res.count || 0
   } catch (error) {
@@ -460,9 +463,11 @@ const loadBankStatements = async () => {
 
 const loadSuppliers = async () => {
   try {
-    const res = await request.get('/masterdata/suppliers/', { params: { page_size: 500 } })
+    const res = await getSupplierList({ page_size: 500 })
     suppliers.value = res.results || res || []
-  } catch (error) { console.error('加载供应商失败') }
+  } catch (error) {
+    console.error('APList getSupplierList error:', error)
+  }
 }
 
 const loadPurchaseOrders = async () => {
@@ -471,7 +476,7 @@ const loadPurchaseOrders = async () => {
   }
 
   try {
-    const res = await request.get('/purchase/orders/', { params: { page_size: 500 } })
+    const res = await getPurchaseOrders({ page_size: 500 })
     purchaseOrders.value = res.results || res || []
     purchaseOrdersLoaded.value = true
     return true
@@ -510,7 +515,7 @@ const submitPayment = async () => {
   if (!paymentForm.amount || paymentForm.amount <= 0) return ElMessage.warning('请输入付款金额')
   submitting.value = true
   try {
-    await request.post(`/finance/payables/${currentRow.value.id}/record_payment/`, paymentForm)
+    await recordPayablePayment(currentRow.value.id, paymentForm)
     ElMessage.success('付款登记成功')
     paymentVisible.value = false
     loadData()
@@ -523,7 +528,7 @@ const submitPayment = async () => {
 
 const exportData = async () => {
   try {
-    const res = await request.get('/core/export/ap/', { responseType: 'blob' })
+    const res = await exportAPReport({ responseType: 'blob' })
     const url = window.URL.createObjectURL(res.data)
     const link = document.createElement('a')
     link.href = url
@@ -558,11 +563,16 @@ const handleBatchDelete = async () => {
   try {
     await ElMessageBox.confirm(`确定要删除选中的 ${selectedBankStatements.value.length} 条记录吗？`, '批量删除', { type: 'warning' })
     const ids = selectedBankStatements.value.map(item => item.id)
-    await request.post('/finance/bank-statements/bulk_delete/', { ids })
+    await bulkDeleteBankStatements({ ids })
     ElMessage.success('删除成功')
     selectedBankStatements.value = []
     loadBankStatements()
-  } catch (error) { if (error !== 'cancel') ElMessage.error('删除失败') }
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败')
+      console.error('APList handleBatchDelete error:', error)
+    }
+  }
 }
 
 const handleViewBank = (row) => { currentBankStatement.value = row; bankDetailVisible.value = true }
@@ -579,17 +589,22 @@ const handleMatchBank = async (row) => {
 const handleIgnoreBank = async (row) => {
   try {
     await ElMessageBox.confirm('确定要忽略此银行流水记录吗？', '确认忽略', { type: 'warning' })
-    await request.post(`/finance/bank-statements/${row.id}/ignore/`, { notes: '手动忽略' })
+    await ignoreBankStatement(row.id, { notes: '手动忽略' })
     ElMessage.success('已忽略')
     loadBankStatements()
-  } catch (error) { if (error !== 'cancel') ElMessage.error('操作失败') }
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('操作失败')
+      console.error('APList handleIgnoreBank error:', error)
+    }
+  }
 }
 
 const submitBankMatch = async () => {
   if (!bankMatchForm.supplier_id) return ElMessage.warning('请选择供应商')
   matching.value = true
   try {
-    await request.post(`/finance/bank-statements/${currentBankStatement.value.id}/match/`, {
+    await matchBankStatement(currentBankStatement.value.id, {
       match_type: 'AP',
       ...bankMatchForm
     })
@@ -607,7 +622,7 @@ const submitBankMatch = async () => {
 const autoMatchAll = async () => {
   autoMatching.value = true
   try {
-    const response = await request.post('/finance/bank-statements/auto_match_all/', { type: 'AP' })
+    const response = await autoMatchAllBankStatements({ type: 'AP' })
     ElMessage.success(`成功自动匹配 ${response.matched_count} 条记录`)
     loadBankStatements()
     loadData()

@@ -32,7 +32,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getServiceOrder } from '@/api/projects/service-order'
 
 const route = useRoute()
 const router = useRouter()
@@ -44,7 +44,7 @@ const pageTitle = computed(() => order.value.order_no ? `服务工单 - ${order.
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await request.get(`/projects/service-orders/${route.params.id}/`)
+    const res = await getServiceOrder(route.params.id)
     order.value = res.data || res
   } catch (error) {
     ElMessage.error('加载数据失败')

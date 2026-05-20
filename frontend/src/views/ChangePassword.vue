@@ -67,7 +67,7 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import request from '@/utils/request'
+import { changePassword } from '@/api/auth'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
@@ -120,7 +120,7 @@ const handleSubmit = async () => {
     if (valid) {
       loading.value = true
       try {
-        await request.post('/auth/users/change_password/', {
+        await changePassword({
           old_password: form.old_password,
           new_password: form.new_password,
           new_password_confirm: form.confirm_password

@@ -2,7 +2,7 @@
   <div class="meeting-container">
     <div class="page-header">
       <h2>会议管理</h2>
-      <el-button type="primary" @click="handleAdd">预约会议</el-button>
+      <el-button type="primary" v-permission="'oa:archive:create'" @click="handleAdd">预约会议</el-button>
     </div>
     
     <el-row :gutter="16">
@@ -242,8 +242,9 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { VideoCameraFilled, Location } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getCoreMeetings, getCoreMeeting, getTodayMeetings, getMeetingRooms, startMeeting, completeMeeting, cancelMeeting, updateCoreMeeting, createCoreMeeting } from '@/api/oa'
 import { usePermissionStore } from '@/stores/permission'
+import { getUsers } from '@/api/auth'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -298,7 +299,7 @@ const fetchList = async () => {
       search: queryParams.search,
       status: queryParams.status
     }
-    const data = await request.get('/core/meetings/', { params })
+    const data = await getCoreMeetings(params)
     meetingList.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {
@@ -310,7 +311,7 @@ const fetchList = async () => {
 
 const fetchToday = async () => {
   try {
-    const data = await request.get('/core/meetings/today/')
+    const data = await getTodayMeetings()
     todayMeetings.value = data || []
   } catch (e) {
     console.error(e)
@@ -319,7 +320,7 @@ const fetchToday = async () => {
 
 const fetchRooms = async () => {
   try {
-    const data = await request.get('/core/meeting-rooms/')
+    const data = await getMeetingRooms()
     meetingRooms.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -332,7 +333,7 @@ const fetchUsers = async () => {
   }
 
   try {
-    const data = await request.get('/auth/users/')
+    const data = await getUsers()
     userList.value = (data.results || data).map(u => ({
       id: u.id,
       name: u.full_name || u.username
@@ -377,7 +378,7 @@ const handleAdd = async () => {
 
 const handleView = async (row) => {
   try {
-    const data = await request.get(`/core/meetings/${row.id}/`)
+    const data = await getCoreMeeting(row.id)
     currentMeeting.value = data
     detailDialogVisible.value = true
   } catch (e) {
@@ -387,7 +388,7 @@ const handleView = async (row) => {
 
 const handleStart = async (row) => {
   try {
-    await request.post(`/core/meetings/${row.id}/start/`)
+    await startMeeting(row.id)
     ElMessage.success('会议已开始')
     fetchList()
     fetchToday()
@@ -402,24 +403,24 @@ const handleComplete = async (row) => {
       inputType: 'textarea'
     })
     
-    await request.post(`/core/meetings/${row.id}/complete/`, { minutes: value })
+    await completeMeeting(row.id, { minutes: value })
     ElMessage.success('会议已结束')
     fetchList()
     fetchToday()
   } catch (e) {
-    // 取消
+    console.error('Meeting fetchToday error:', e)
   }
 }
 
 const handleCancel = async (row) => {
   try {
     await ElMessageBox.confirm('确定取消此会议吗?', '提示')
-    await request.post(`/core/meetings/${row.id}/cancel/`)
+    await cancelMeeting(row.id)
     ElMessage.success('已取消')
     fetchList()
     fetchToday()
   } catch (e) {
-    // 取消
+    console.error('Meeting fetchToday error:', e)
   }
 }
 
@@ -430,9 +431,9 @@ const submitForm = async () => {
   submitLoading.value = true
   try {
     if (isEdit.value) {
-      await request.patch(`/core/meetings/${currentMeeting.value.id}/`, formData)
+      await updateCoreMeeting(currentMeeting.value.id, formData)
     } else {
-      await request.post('/core/meetings/', formData)
+      await createCoreMeeting(formData)
     }
     ElMessage.success('保存成功')
     dialogVisible.value = false

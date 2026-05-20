@@ -172,7 +172,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { WarningFilled, Warning, InfoFilled } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getAlertList, getAlert, getAlertSummary, checkAllAlerts, acknowledgeAlert, resolveAlert, ignoreAlert } from '@/api/projects/alert'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -215,7 +215,7 @@ const fetchList = async () => {
       page_size: pagination.size,
       ...queryParams
     }
-    const data = await request.get('/projects/alerts/', { params })
+    const data = await getAlertList(params)
     alertList.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {
@@ -227,7 +227,7 @@ const fetchList = async () => {
 
 const fetchSummary = async () => {
   try {
-    const data = await request.get('/projects/alerts/summary/')
+    const data = await getAlertSummary()
     summaryData.value = data
   } catch (e) {
     console.error(e)
@@ -237,7 +237,7 @@ const fetchSummary = async () => {
 const handleCheckAll = async () => {
   try {
     ElMessage.info('正在检查项目预警...')
-    const data = await request.post('/projects/alerts/check_all/')
+    const data = await checkAllAlerts()
     ElMessage.success(`检查完成，新增 ${data.alerts_created} 条预警`)
     fetchList()
     fetchSummary()
@@ -248,7 +248,7 @@ const handleCheckAll = async () => {
 
 const handleView = async (row) => {
   try {
-    const data = await request.get(`/projects/alerts/${row.id}/`)
+    const data = await getAlert(row.id)
     currentAlert.value = data
     detailDialogVisible.value = true
   } catch (e) {
@@ -258,7 +258,7 @@ const handleView = async (row) => {
 
 const handleAcknowledge = async (row) => {
   try {
-    await request.post(`/projects/alerts/${row.id}/acknowledge/`)
+    await acknowledgeAlert(row.id)
     ElMessage.success('已确认')
     fetchList()
     fetchSummary()
@@ -276,7 +276,7 @@ const handleResolve = (row) => {
 const submitResolve = async () => {
   submitLoading.value = true
   try {
-    await request.post(`/projects/alerts/${currentAlert.value.id}/resolve/`, {
+    await resolveAlert(currentAlert.value.id, {
       resolution: resolution.value
     })
     ElMessage.success('已解决')
@@ -295,13 +295,13 @@ const handleIgnore = async (row) => {
     await ElMessageBox.prompt('请输入忽略原因', '忽略预警', {
       inputPlaceholder: '忽略原因'
     }).then(async ({ value }) => {
-      await request.post(`/projects/alerts/${row.id}/ignore/`, { reason: value })
+      await ignoreAlert(row.id, { reason: value })
       ElMessage.success('已忽略')
       fetchList()
       fetchSummary()
     })
   } catch (e) {
-    // 取消
+    console.error('AlertList fetchSummary error:', e)
   }
 }
 

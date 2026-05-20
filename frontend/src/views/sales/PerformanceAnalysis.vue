@@ -122,7 +122,7 @@
               <template #default="{ row }">
                 <el-progress :percentage="Math.min(row.order_rate || 0, 100)" 
                   :color="getTargetColor(row.order_rate)"
-                  :format="() => (row.order_rate || 0).toFixed(1) + '%'" />
+                  :format="() => toFixedSafe(row.order_rate, 1, '0.0') + '%'" />
               </template>
             </el-table-column>
             <el-table-column label="回款目标" align="right" width="140">
@@ -139,7 +139,7 @@
               <template #default="{ row }">
                 <el-progress :percentage="Math.min(row.collection_rate || 0, 100)" 
                   :color="getTargetColor(row.collection_rate)" 
-                  :format="() => (row.collection_rate || 0).toFixed(1) + '%'" />
+                  :format="() => toFixedSafe(row.collection_rate, 1, '0.0') + '%'" />
               </template>
             </el-table-column>
           </el-table>
@@ -197,8 +197,9 @@
 <script setup>
 import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getMyPerformance, getTeamRanking, getMonthlyTrend, getCustomerAnalysis, getPipelineAnalysis, getMyTargets, getMyCommissions, refreshTarget } from '@/api/sales'
 import * as echarts from 'echarts'
+import { toFixedSafe } from '@/utils/number'
 
 const activeTab = ref('overview')
 const trendChart = ref(null)
@@ -231,7 +232,7 @@ const fetchMyPerformance = async () => {
     const params = { year: queryYear.value }
     if (queryMonth.value) params.month = queryMonth.value
     
-    const data = await request.get('/sales/performance/my_performance/', { params })
+    const data = await getMyPerformance(params)
     myPerformance.value = data
   } catch (e) {
     console.error(e)
@@ -243,7 +244,7 @@ const fetchTeamRanking = async () => {
     const params = { year: queryYear.value, limit: 10 }
     if (queryMonth.value) params.month = queryMonth.value
     
-    const data = await request.get('/sales/performance/team_ranking/', { params })
+    const data = await getTeamRanking(params)
     teamRanking.value = data
   } catch (e) {
     console.error(e)
@@ -252,9 +253,7 @@ const fetchTeamRanking = async () => {
 
 const fetchMonthlyTrend = async () => {
   try {
-    const data = await request.get('/sales/performance/monthly_trend/', {
-      params: { year: queryYear.value }
-    })
+    const data = await getMonthlyTrend({ year: queryYear.value })
     monthlyTrend.value = data
     nextTick(() => renderTrendChart())
   } catch (e) {
@@ -264,9 +263,7 @@ const fetchMonthlyTrend = async () => {
 
 const fetchCustomerAnalysis = async () => {
   try {
-    const data = await request.get('/sales/performance/customer_analysis/', {
-      params: { year: queryYear.value }
-    })
+    const data = await getCustomerAnalysis({ year: queryYear.value })
     customerAnalysis.value = data
   } catch (e) {
     console.error(e)
@@ -275,9 +272,7 @@ const fetchCustomerAnalysis = async () => {
 
 const fetchPipelineAnalysis = async () => {
   try {
-    const data = await request.get('/sales/performance/pipeline_analysis/', {
-      params: { year: queryYear.value }
-    })
+    const data = await getPipelineAnalysis({ year: queryYear.value })
     pipelineAnalysis.value = data
     nextTick(() => renderFunnelChart())
   } catch (e) {
@@ -287,7 +282,7 @@ const fetchPipelineAnalysis = async () => {
 
 const fetchMyTargets = async () => {
   try {
-    const data = await request.get('/sales/targets/my_targets/')
+    const data = await getMyTargets()
     myTargets.value = data
   } catch (e) {
     console.error(e)
@@ -296,7 +291,7 @@ const fetchMyTargets = async () => {
 
 const fetchMyCommissions = async () => {
   try {
-    const data = await request.get('/sales/commissions/my_commissions/')
+    const data = await getMyCommissions()
     myCommissions.value = data
   } catch (e) {
     console.error(e)
@@ -314,7 +309,7 @@ const fetchAllData = () => {
 const handleRefreshTargets = async () => {
   for (const target of myTargets.value) {
     try {
-      await request.post(`/sales/targets/${target.id}/refresh/`)
+      await refreshTarget(target.id)
     } catch (e) {
       console.error(e)
     }

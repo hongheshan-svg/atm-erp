@@ -156,7 +156,8 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { User, TrendCharts, OfficeBuilding, Trophy, Plus, Edit } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getCRMDashboardStats, getSalesAnalysisStages, getLeads, getSalesRanking } from '@/api/sales'
+import { getCustomerFollowUpList } from '@/api/masterdata'
 
 const router = useRouter()
 
@@ -203,11 +204,11 @@ const getResultType = (result) => {
 const fetchDashboardData = async () => {
   try {
     const [statsData, stagesData, leadsData, followupsData, rankingData] = await Promise.all([
-      request.get('/sales/crm-dashboard/stats/').catch(() => ({})),
-      request.get('/sales/analysis/stages/').catch(() => ({ stages: [] })),
-      request.get('/sales/leads/', { params: { page_size: 5, ordering: '-created_at' } }).catch(() => ({ results: [] })),
-      request.get('/masterdata/customer-followups/', { params: { page_size: 5, ordering: '-follow_date' } }).catch(() => ({ results: [] })),
-      request.get('/sales/analysis/ranking/', { params: { limit: 5 } }).catch(() => ({ ranking: [] }))
+      getCRMDashboardStats().catch(() => ({})),
+      getSalesAnalysisStages().catch(() => ({ stages: [] })),
+      getLeads({ page_size: 5, ordering: '-created_at' }).catch(() => ({ results: [] })),
+      getCustomerFollowUpList({ page_size: 5, ordering: '-follow_date' }).catch(() => ({ results: [] })),
+      getSalesRanking({ limit: 5 }).catch(() => ({ ranking: [] }))
     ])
 
     stats.value = statsData || {}

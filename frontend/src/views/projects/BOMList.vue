@@ -13,7 +13,7 @@
                 :value="project.id"
               />
             </el-select>
-            <el-button type="primary" @click="handleAdd" :disabled="!selectedProject">
+            <el-button type="primary" v-permission="'projects:project:create'" @click="handleAdd" :disabled="!selectedProject">
               <el-icon><Plus /></el-icon>
               添加物料
             </el-button>
@@ -155,7 +155,7 @@
             <el-icon><Document /></el-icon>
               生成采购申请
           </el-button>
-          <el-button type="danger" size="small" @click="handleBatchDelete" style="margin-left: 5px;">
+          <el-button type="danger" size="small" v-permission="'projects:project:delete'" @click="handleBatchDelete" style="margin-left: 5px;">
             <el-icon><Delete /></el-icon>
             批量删除
           </el-button>
@@ -234,8 +234,8 @@
         <el-table-column prop="requester_name" label="申请人" width="80" />
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button type="primary" link size="small" v-permission="'projects:project:edit'" @click="handleEdit(row)">编辑</el-button>
+            <el-button type="danger" link size="small" v-permission="'projects:project:delete'" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -630,7 +630,7 @@
           <el-col :span="4">
             <el-statistic title="缺料金额">
               <template #value>
-                <span class="text-danger">¥{{ (materialCheckData.summary.shortage_value || 0).toFixed(2) }}</span>
+                <span class="text-danger">¥{{ toFixedSafe(materialCheckData.summary.shortage_value) }}</span>
               </template>
             </el-statistic>
           </el-col>
@@ -669,7 +669,7 @@
           </el-table-column>
           <el-table-column prop="shortage_value" label="缺料金额" width="100" align="right">
             <template #default="{ row }">
-              <span class="text-danger" v-if="row.shortage_value > 0">¥{{ row.shortage_value.toFixed(2) }}</span>
+              <span class="text-danger" v-if="row.shortage_value > 0">¥{{ toFixedSafe(row.shortage_value) }}</span>
               <span v-else>-</span>
             </template>
           </el-table-column>
@@ -695,7 +695,11 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Document, Download, Upload, ArrowDown, CopyDocument, UploadFilled, Search, Delete, Folder, Checked, Refresh } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getBOMList, createBOM, updateBOM, deleteBOM, bulkDeleteBOM, getBOMPendingQuoteCount, exportBOMExcel, exportBOMForQuote, exportBOMTemplate, exportQuoteBOM, importQuoteBOM, importBOMExcel, copyBOMFromProject, getBOMMaterialCheck } from '@/api/projects/bom'
+import { getProjectList } from '@/api/projects/project'
+import { getUsers } from '@/api/auth'
+import { getItemList, getSupplierList } from '@/api/masterdata'
+import { toFixedSafe } from '@/utils/number'
 
 const router = useRouter()
 
@@ -805,7 +809,7 @@ const fetchPendingQuoteCount = async () => {
     return
   }
   try {
-    const res = await request.get('/projects/bom/pending_quote_count/', {
+    const res = await getBOMPendingQuoteCount( {
       params: { project: selectedProject.value }
     })
     pendingQuoteCount.value = res.data?.count || res.count || 0
@@ -844,7 +848,7 @@ const getProgressStatus = (row) => {
 
 const fetchProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/')
+    const res = await getProjectList()
     projects.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('获取项目列表失败:', error)
@@ -878,7 +882,7 @@ const fetchBOM = async () => {
       params.search = searchKeyword.value.trim()
     }
     
-    const res = await request.get('/projects/bom/', { params })
+    const res = await getBOMList(params)
     bomItems.value = res.data?.results || res.results || res.data || res || []
     // 更新分页总数
     pagination.total = res.data?.count || res.count || bomItems.value.length
@@ -906,7 +910,7 @@ const handleSizeChange = (size) => {
 
 const fetchItems = async () => {
   try {
-    const res = await request.get('/masterdata/items/')
+    const res = await getItemList()
     items.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('获取物料列表失败:', error)
@@ -915,7 +919,7 @@ const fetchItems = async () => {
 
 const fetchUsers = async () => {
   try {
-    const res = await request.get('/auth/users/')
+    const res = await getUsers()
     const userList = res.data?.results || res.results || res.data || []
     users.value = userList.map(u => ({
       id: u.id,
@@ -928,7 +932,7 @@ const fetchUsers = async () => {
 
 const fetchSuppliers = async () => {
   try {
-    const res = await request.get('/masterdata/suppliers/')
+    const res = await getSupplierList()
     suppliers.value = res.data?.results || res.results || res.data || res || []
   } catch (error) {
     console.error('获取供应商列表失败:', error)
@@ -990,26 +994,26 @@ const handleDelete = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      await request.delete(`/projects/bom/${row.id}/`)
+      await deleteBOM(row.id)
       ElMessage.success('删除成功')
       fetchBOM()
     } catch (error) {
       ElMessage.error('删除失败')
     }
-  }).catch(() => {})
+  }).catch(error => { console.error(error) })
 }
 
 const handleSubmit = async () => {
   try {
     await formRef.value.validate()
     
-    const data = { ...form, project: selectedProject.value }
+    const data = { ...form, project: form.project || selectedProject.value }
     
     if (form.id) {
-      await request.put(`/projects/bom/${form.id}/`, data)
+      await updateBOM(form.id, data)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/projects/bom/', data)
+      await createBOM( data)
       ElMessage.success('添加成功')
     }
     
@@ -1058,7 +1062,7 @@ const handleBatchDelete = async () => {
     
     // 使用批量删除接口
     const ids = selectedRows.value.map(row => row.id)
-    await request.post('/projects/bom/bulk_delete/', { ids })
+    await bulkDeleteBOM( { ids })
     
     ElMessage.success(`成功删除 ${selectedRows.value.length} 项物料`)
     clearSelection()
@@ -1098,15 +1102,27 @@ const handleGeneratePR = () => {
 
 // 通用的生成采购申请函数
 const generatePurchaseRequest = (itemsToOrder) => {
+  // 确定项目：优先使用选中的项目，否则从物料行中提取
+  const projectId = selectedProject.value || itemsToOrder[0]?.project || null
+  const projectName = selectedProject.value
+    ? currentProjectName.value
+    : (itemsToOrder[0]?.project_name || '')
+
+  // 检查是否涉及多个项目
+  const projectIds = [...new Set(itemsToOrder.map(i => i.project).filter(Boolean))]
+  if (!selectedProject.value && projectIds.length > 1) {
+    ElMessage.warning('选中的物料来自多个项目，请先选择项目后再生成采购申请')
+    return
+  }
+
   ElMessageBox.confirm(
     `将根据选中物料生成采购申请，包含 ${itemsToOrder.length} 种物料。确定继续？`, 
     '生成采购申请', 
     { type: 'info' }
   ).then(() => {
-    // 将需要采购的物料信息存储到sessionStorage
     const prData = {
-      project: selectedProject.value,
-      projectName: currentProjectName.value,
+      project: projectId,
+      projectName: projectName,
       lines: itemsToOrder.map(item => ({
         item: item.item,
         item_sku: item.item_sku,
@@ -1116,10 +1132,8 @@ const generatePurchaseRequest = (itemsToOrder) => {
       }))
     }
     sessionStorage.setItem('bom_to_pr', JSON.stringify(prData))
-    
-    // 跳转到采购申请页面
     router.push('/purchase/requests?from_bom=1')
-  }).catch(() => {})
+  }).catch(error => { console.error(error) })
 }
 
 // ========== 状态显示辅助函数 ==========
@@ -1150,10 +1164,7 @@ const handleExportExcel = async () => {
   }
   
   try {
-    const response = await request.get('/projects/bom/export_excel/', {
-      params: { project: selectedProject.value },
-      responseType: 'blob'
-    })
+    const response = await exportBOMExcel({ project: selectedProject.value })
     
     // 获取实际的blob数据
     const blobData = response.data || response
@@ -1204,7 +1215,7 @@ const handleExportSelected = async () => {
 // 通用导出函数（带历史价格）
 const exportForQuote = async (bomIds, exportName) => {
   try {
-    const response = await request.post('/projects/bom/export_for_quote/', {
+    const response = await exportBOMForQuote({
       project: selectedProject.value,
       bom_ids: bomIds
     }, {
@@ -1235,9 +1246,7 @@ const exportForQuote = async (bomIds, exportName) => {
 
 const handleDownloadTemplate = async () => {
   try {
-    const response = await request.get('/projects/bom/export_template/', {
-      responseType: 'blob'
-    })
+    const response = await exportBOMTemplate()
     
     // 获取实际的blob数据
     const blobData = response.data || response
@@ -1275,10 +1284,7 @@ const handleExportQuoteBOM = async () => {
   }
   
   try {
-    const response = await request.get('/projects/bom/export_quote_bom/', {
-      params: { project: selectedProject.value },
-      responseType: 'blob'
-    })
+    const response = await exportQuoteBOM({ project: selectedProject.value })
     
     const blobData = response.data || response
     const blob = new Blob([blobData], { 
@@ -1335,7 +1341,7 @@ const handleConfirmQuoteImport = async () => {
     formData.append('file', quoteImportFile.value)
     formData.append('project', selectedProject.value)
     
-    const response = await request.post('/projects/bom/import_quote_bom/', formData, {
+    const response = await importQuoteBOM(formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     
@@ -1393,7 +1399,7 @@ const handleConfirmImport = async () => {
     formData.append('update_existing', importOptions.updateExisting.toString())
     formData.append('auto_create_items', importOptions.autoCreateItems.toString())
     
-    const response = await request.post('/projects/bom/import_excel/', formData, {
+    const response = await importBOMExcel(formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     
@@ -1438,7 +1444,7 @@ const handleConfirmCopy = async () => {
   
   copying.value = true
   try {
-    const response = await request.post('/projects/bom/copy_from_project/', {
+    const response = await copyBOMFromProject({
         source_project: copySourceProject.value,
         target_project: selectedProject.value
     })
@@ -1466,7 +1472,7 @@ const handleMaterialCheck = async () => {
   materialCheckDialogVisible.value = true
   
   try {
-    const response = await request.get('/projects/bom/material_check/', {
+    const response = await getBOMMaterialCheck({
       params: { project: selectedProject.value }
     })
     materialCheckData.value = response.data || response
@@ -1600,4 +1606,3 @@ onMounted(() => {
   border-radius: 4px;
 }
 </style>
-

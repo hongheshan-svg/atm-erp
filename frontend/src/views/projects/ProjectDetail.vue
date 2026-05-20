@@ -60,7 +60,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getProject } from '@/api/projects/project'
 import TaskManagement from '@/components/project/TaskManagement.vue'
 import BOMManagement from '@/components/project/BOMManagement.vue'
 import MemberManagement from '@/components/project/MemberManagement.vue'
@@ -110,7 +110,7 @@ const loadProject = async () => {
   }
 
   try {
-    const response = await request.get(`/projects/projects/${route.params.id}/`)
+    const response = await getProject(route.params.id)
     project.value = response.data || response
   } catch (error) {
     console.error('加载项目失败:', error)

@@ -30,7 +30,7 @@
 
     <el-card class="filter-card">
       <div class="filter-header">
-        <el-button type="primary" @click="handleCreate">
+        <el-button type="primary" v-permission="'projects:aftersales:create'" @click="handleCreate">
           <el-icon><Plus /></el-icon> 新建服务单
         </el-button>
         <div class="filter-right">
@@ -235,7 +235,10 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
-import request from '@/utils/request'
+import { getServiceOrderList, createServiceOrder, getServiceOrderDashboard, completeServiceOrder, dispatchServiceOrder } from '@/api/projects/service-order'
+import { getTechnicianProfileList } from '@/api/projects/technician'
+import { getProjectEquipmentList } from '@/api/projects/equipment-monitoring'
+import { getCustomerList } from '@/api/masterdata'
 
 const router = useRouter()
 
@@ -309,7 +312,7 @@ const loadData = async () => {
       status: statusFilter.value || undefined,
       service_type: typeFilter.value || undefined
     }
-    const res = await request.get('/projects/service-orders/', { params })
+    const res = await getServiceOrderList(params)
     tableData.value = res.data.results || res.data
     total.value = res.data.count || tableData.value.length
   } catch (e) {
@@ -321,7 +324,7 @@ const loadData = async () => {
 
 const loadStats = async () => {
   try {
-    const res = await request.get('/projects/service-orders/dashboard/')
+    const res = await getServiceOrderDashboard()
     const statusStats = res.data.status_stats || []
     stats.value = {
       pending: statusStats.find(s => s.status === 'PENDING')?.count || 0,
@@ -335,12 +338,12 @@ const loadStats = async () => {
 }
 
 const loadCustomers = async () => {
-  const res = await request.get('/masterdata/customers/', { params: { page_size: 1000 } })
+  const res = await getCustomerList({ page_size: 1000 })
   customers.value = res.data.results || res.data
 }
 
 const loadTechnicians = async () => {
-  const res = await request.get('/projects/technician-profiles/', { params: { page_size: 1000 } })
+  const res = await getTechnicianProfileList({ page_size: 1000 })
   technicians.value = res.data.results || res.data
 }
 
@@ -352,7 +355,7 @@ const handleCustomerChange = async (customerId) => {
       form.contact_name = customer.contact_person || ''
       form.contact_phone = customer.phone || ''
     }
-    const res = await request.get('/projects/equipment/', { params: { customer: customerId, page_size: 1000 } })
+    const res = await getProjectEquipmentList({ customer: customerId, page_size: 1000 })
     equipments.value = res.data.results || res.data
   }
 }
@@ -391,7 +394,7 @@ const handleDispatch = async (row) => {
 const handleComplete = async (row) => {
   try {
     await ElMessageBox.confirm('确定完成此服务单?', '提示')
-    await request.post(`/projects/service-orders/${row.id}/complete/`)
+    await completeServiceOrder(row.id)
     ElMessage.success('服务已完成')
     loadData()
     loadStats()
@@ -406,7 +409,7 @@ const handleSubmitCreate = async () => {
   
   submitting.value = true
   try {
-    await request.post('/projects/service-orders/', form)
+    await createServiceOrder(form)
     ElMessage.success('创建成功')
     createDialogVisible.value = false
     loadData()
@@ -427,7 +430,7 @@ const handleSubmitDispatch = async () => {
   
   submitting.value = true
   try {
-    await request.post(`/projects/service-orders/${currentOrder.value.id}/dispatch/`, dispatchForm)
+    await dispatchServiceOrder(currentOrder.value.id, dispatchForm)
     ElMessage.success('派工成功')
     dispatchDialogVisible.value = false
     loadData()

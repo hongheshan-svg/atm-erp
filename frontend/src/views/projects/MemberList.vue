@@ -13,7 +13,7 @@
                 :value="project.id"
               />
             </el-select>
-            <el-button type="primary" @click="handleAdd" :disabled="!selectedProject">
+            <el-button type="primary" v-permission="'projects:project:create'" @click="handleAdd" :disabled="!selectedProject">
               <el-icon><Plus /></el-icon>
               添加成员
             </el-button>
@@ -92,8 +92,8 @@
         <el-table-column prop="join_date" label="加入日期" width="110" />
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button type="danger" link size="small" @click="handleRemove(row)">移除</el-button>
+            <el-button type="primary" link size="small" v-permission="'projects:project:edit'" @click="handleEdit(row)">编辑</el-button>
+            <el-button type="danger" link size="small" v-permission="'projects:project:delete'" @click="handleRemove(row)">移除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -171,7 +171,8 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Lock } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getProjectList, getMemberList, createMember, updateMember, deleteMember } from '@/api/projects/project'
+import { getRoles, getUsers } from '@/api/auth'
 
 const loading = ref(false)
 const selectedProject = ref(null)
@@ -287,7 +288,7 @@ const getRoleLabel = (role) => {
 
 const fetchProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/')
+    const res = await getProjectList()
     projects.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('获取项目列表失败:', error)
@@ -303,9 +304,7 @@ const fetchMembers = async () => {
   loading.value = true
   try {
     // 使用查询参数过滤项目成员
-    const res = await request.get('/projects/members/', {
-      params: { project: selectedProject.value }
-    })
+    const res = await getMemberList({ project: selectedProject.value })
     members.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('获取成员列表失败:', error)
@@ -317,7 +316,7 @@ const fetchMembers = async () => {
 
 const fetchUsers = async () => {
   try {
-    const res = await request.get('/auth/users/')
+    const res = await getUsers()
     allUsers.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('获取用户列表失败:', error)
@@ -326,7 +325,7 @@ const fetchUsers = async () => {
 
 const fetchRoles = async () => {
   try {
-    const res = await request.get('/auth/roles/')
+    const res = await getRoles()
     roles.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('获取角色列表失败:', error)
@@ -367,13 +366,13 @@ const handleRemove = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      await request.delete(`/projects/members/${row.id}/`)
+      await deleteMember(row.id)
       ElMessage.success('移除成功')
       fetchMembers()
     } catch (error) {
       ElMessage.error('移除失败')
     }
-  }).catch(() => {})
+  }).catch(error => { console.error(error) })
 }
 
 const handleSubmit = async () => {
@@ -389,10 +388,10 @@ const handleSubmit = async () => {
     }
     
     if (form.id) {
-      await request.put(`/projects/members/${form.id}/`, data)
+      await updateMember(form.id, data)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/projects/members/', data)
+      await createMember(data)
       ElMessage.success('添加成功')
     }
     

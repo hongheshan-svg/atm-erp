@@ -2,20 +2,18 @@
 Tests for permission service functions.
 Following TDD: write tests first, then implement the service.
 """
-
+from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.test import TestCase
-
-from apps.accounts.models import Department, Role
-from apps.core.permission_models_new import DataScope, Permission, RolePermission
+from apps.accounts.models import Role, Department
+from apps.core.permission_models_new import Permission, RolePermission, DataScope
 from apps.core.permission_service import (
-    get_department_tree_ids,
     get_user_permissions,
     has_permission,
     on_role_permission_change,
     on_user_role_change,
     resolve_data_scope,
+    get_department_tree_ids,
 )
 
 User = get_user_model()
@@ -29,21 +27,38 @@ class GetUserPermissionsTest(TestCase):
         cache.clear()
 
         # Create role
-        self.role = Role.objects.create(name='测试角色', code='test_role', is_active=True)
+        self.role = Role.objects.create(
+            name='测试角色',
+            code='test_role',
+            is_active=True
+        )
 
         # Create permissions
-        self.perm1 = Permission.objects.create(code='purchase:order', name='采购订单', type='menu', is_active=True)
+        self.perm1 = Permission.objects.create(
+            code='purchase:order',
+            name='采购订单',
+            type='menu',
+            is_active=True
+        )
         self.perm2 = Permission.objects.create(
             code='purchase:order:create',
             name='创建采购订单',
             type='operation',
             resource='purchase_order',
             parent=self.perm1,
-            is_active=True,
+            is_active=True
         )
-        self.perm3 = Permission.objects.create(code='sales:order', name='销售订单', type='menu', is_active=True)
+        self.perm3 = Permission.objects.create(
+            code='sales:order',
+            name='销售订单',
+            type='menu',
+            is_active=True
+        )
         self.inactive_perm = Permission.objects.create(
-            code='inactive:perm', name='未激活权限', type='menu', is_active=False
+            code='inactive:perm',
+            name='未激活权限',
+            type='menu',
+            is_active=False
         )
 
         # Assign permissions to role
@@ -53,7 +68,10 @@ class GetUserPermissionsTest(TestCase):
 
         # Create user
         self.user = User.objects.create_user(
-            username='testuser', employee_id='EMP001', password='testpass123', role=self.role
+            username='testuser',
+            employee_id='EMP001',
+            password='testpass123',
+            role=self.role
         )
 
     def tearDown(self):
@@ -92,12 +110,19 @@ class GetUserPermissionsTest(TestCase):
     def test_excludes_inactive_roles(self):
         """Test that inactive roles are excluded"""
         # Create an inactive role with permissions
-        inactive_role = Role.objects.create(name='未激活角色', code='inactive_role', is_active=False)
+        inactive_role = Role.objects.create(
+            name='未激活角色',
+            code='inactive_role',
+            is_active=False
+        )
         RolePermission.objects.create(role=inactive_role, permission=self.perm3)
 
         # Create user with inactive role
         user_with_inactive_role = User.objects.create_user(
-            username='inactive_user', employee_id='EMP003', password='testpass123', role=inactive_role
+            username='inactive_user',
+            employee_id='EMP003',
+            password='testpass123',
+            role=inactive_role
         )
 
         permissions = get_user_permissions(user_with_inactive_role)
@@ -129,11 +154,18 @@ class HasPermissionTest(TestCase):
         cache.clear()
 
         # Create role
-        self.role = Role.objects.create(name='测试角色', code='test_role', is_active=True)
+        self.role = Role.objects.create(
+            name='测试角色',
+            code='test_role',
+            is_active=True
+        )
 
         # Create permissions
         self.parent_perm = Permission.objects.create(
-            code='purchase:order', name='采购订单', type='menu', is_active=True
+            code='purchase:order',
+            name='采购订单',
+            type='menu',
+            is_active=True
         )
         self.child_perm = Permission.objects.create(
             code='purchase:order:create',
@@ -141,7 +173,7 @@ class HasPermissionTest(TestCase):
             type='operation',
             resource='purchase_order',
             parent=self.parent_perm,
-            is_active=True,
+            is_active=True
         )
 
         # Assign parent permission to role
@@ -149,7 +181,10 @@ class HasPermissionTest(TestCase):
 
         # Create user
         self.user = User.objects.create_user(
-            username='testuser', employee_id='EMP001', password='testpass123', role=self.role
+            username='testuser',
+            employee_id='EMP001',
+            password='testpass123',
+            role=self.role
         )
 
     def tearDown(self):
@@ -174,7 +209,11 @@ class HasPermissionTest(TestCase):
 
     def test_has_permission_superuser_always_true(self):
         """Test superuser always has permission"""
-        superuser = User.objects.create_superuser(username='admin', employee_id='ADMIN001', password='admin123')
+        superuser = User.objects.create_superuser(
+            username='admin',
+            employee_id='ADMIN001',
+            password='admin123'
+        )
 
         self.assertTrue(has_permission(superuser, 'any:permission'))
         self.assertTrue(has_permission(superuser, 'any:permission:action'))
@@ -188,18 +227,35 @@ class CacheInvalidationTest(TestCase):
         cache.clear()
 
         # Create role
-        self.role = Role.objects.create(name='测试角色', code='test_role', is_active=True)
+        self.role = Role.objects.create(
+            name='测试角色',
+            code='test_role',
+            is_active=True
+        )
 
         # Create permissions
-        self.perm1 = Permission.objects.create(code='purchase:order', name='采购订单', type='menu', is_active=True)
-        self.perm2 = Permission.objects.create(code='sales:order', name='销售订单', type='menu', is_active=True)
+        self.perm1 = Permission.objects.create(
+            code='purchase:order',
+            name='采购订单',
+            type='menu',
+            is_active=True
+        )
+        self.perm2 = Permission.objects.create(
+            code='sales:order',
+            name='销售订单',
+            type='menu',
+            is_active=True
+        )
 
         # Assign permission to role
         RolePermission.objects.create(role=self.role, permission=self.perm1)
 
         # Create user
         self.user = User.objects.create_user(
-            username='testuser', employee_id='EMP001', password='testpass123', role=self.role
+            username='testuser',
+            employee_id='EMP001',
+            password='testpass123',
+            role=self.role
         )
 
     def tearDown(self):
@@ -242,7 +298,11 @@ class CacheInvalidationTest(TestCase):
         self.assertIsNotNone(cache.get(cache_key))
 
         # Create new role with different permissions
-        new_role = Role.objects.create(name='新角色', code='new_role', is_active=True)
+        new_role = Role.objects.create(
+            name='新角色',
+            code='new_role',
+            is_active=True
+        )
         RolePermission.objects.create(role=new_role, permission=self.perm2)
 
         # Change user's role
@@ -260,11 +320,42 @@ class CacheInvalidationTest(TestCase):
         self.assertNotIn('purchase:order', permissions2)
         self.assertIn('sales:order', permissions2)
 
+    def test_user_save_signal_clears_permission_cache(self):
+        """Test user save automatically clears permission cache via signals."""
+        get_user_permissions(self.user)
 
-import unittest
+        cache_key = f'user_permissions:{self.user.id}'
+        self.assertIsNotNone(cache.get(cache_key))
+
+        self.user.first_name = '已更新'
+        self.user.save()
+
+        self.assertIsNone(cache.get(cache_key))
+
+    def test_user_roles_m2m_signal_clears_permission_cache(self):
+        """Test multi-role changes clear permission cache via signals."""
+        get_user_permissions(self.user)
+
+        cache_key = f'user_permissions:{self.user.id}'
+        self.assertIsNotNone(cache.get(cache_key))
+
+        self.user.roles.add(self.role)
+
+        self.assertIsNone(cache.get(cache_key))
+
+    def test_role_save_signal_clears_all_related_user_caches(self):
+        """Test role updates automatically clear cache for related users."""
+        get_user_permissions(self.user)
+
+        cache_key = f'user_permissions:{self.user.id}'
+        self.assertIsNotNone(cache.get(cache_key))
+
+        self.role.is_active = False
+        self.role.save()
+
+        self.assertIsNone(cache.get(cache_key))
 
 
-@unittest.skip('legacy, broken in CI baseline 2026-05-20; tracked separately')
 class ResolveDataScopeTest(TestCase):
     """Test resolve_data_scope function"""
 
@@ -273,14 +364,38 @@ class ResolveDataScopeTest(TestCase):
         cache.clear()
 
         # Create departments
-        self.dept_root = Department.objects.create(name='总部', code='ROOT', parent=None)
-        self.dept_sales = Department.objects.create(name='销售部', code='SALES', parent=self.dept_root)
-        self.dept_purchase = Department.objects.create(name='采购部', code='PURCHASE', parent=self.dept_root)
-        self.dept_sales_team1 = Department.objects.create(name='销售一组', code='SALES_TEAM1', parent=self.dept_sales)
+        self.dept_root = Department.objects.create(
+            name='总部',
+            code='ROOT',
+            parent=None
+        )
+        self.dept_sales = Department.objects.create(
+            name='销售部',
+            code='SALES',
+            parent=self.dept_root
+        )
+        self.dept_purchase = Department.objects.create(
+            name='采购部',
+            code='PURCHASE',
+            parent=self.dept_root
+        )
+        self.dept_sales_team1 = Department.objects.create(
+            name='销售一组',
+            code='SALES_TEAM1',
+            parent=self.dept_sales
+        )
 
         # Create roles
-        self.role_admin = Role.objects.create(name='管理员', code='admin', is_active=True)
-        self.role_manager = Role.objects.create(name='经理', code='manager', is_active=True)
+        self.role_admin = Role.objects.create(
+            name='管理员',
+            code='admin',
+            is_active=True
+        )
+        self.role_manager = Role.objects.create(
+            name='经理',
+            code='manager',
+            is_active=True
+        )
 
         # Create users
         self.user = User.objects.create_user(
@@ -288,7 +403,7 @@ class ResolveDataScopeTest(TestCase):
             employee_id='EMP001',
             password='testpass123',
             role=self.role_manager,
-            department=self.dept_sales,
+            department=self.dept_sales
         )
 
     def tearDown(self):
@@ -298,7 +413,11 @@ class ResolveDataScopeTest(TestCase):
     def test_global_default_scope(self):
         """Test that global scope is returned when no module-specific scope exists"""
         # Create global data scope
-        DataScope.objects.create(role=self.role_manager, module='__default__', scope_type='all')
+        DataScope.objects.create(
+            role=self.role_manager,
+            module='__default__',
+            scope_type='all'
+        )
 
         scope_type, custom_dept_ids = resolve_data_scope(self.user, 'projects')
 
@@ -308,9 +427,17 @@ class ResolveDataScopeTest(TestCase):
     def test_module_override(self):
         """Test that module-specific scope overrides default scope"""
         # Create default scope
-        DataScope.objects.create(role=self.role_manager, module='__default__', scope_type='self')
+        DataScope.objects.create(
+            role=self.role_manager,
+            module='__default__',
+            scope_type='self'
+        )
         # Create module-specific scope
-        DataScope.objects.create(role=self.role_manager, module='projects', scope_type='dept_tree')
+        DataScope.objects.create(
+            role=self.role_manager,
+            module='projects',
+            scope_type='dept_tree'
+        )
 
         scope_type, custom_dept_ids = resolve_data_scope(self.user, 'projects')
 
@@ -324,7 +451,11 @@ class ResolveDataScopeTest(TestCase):
         # For now, we test with a single role having the widest scope
 
         # Create data scope for the user's role
-        DataScope.objects.create(role=self.role_manager, module='projects', scope_type='all')
+        DataScope.objects.create(
+            role=self.role_manager,
+            module='projects',
+            scope_type='all'
+        )
 
         scope_type, custom_dept_ids = resolve_data_scope(self.user, 'projects')
 
@@ -335,7 +466,11 @@ class ResolveDataScopeTest(TestCase):
     def test_custom_scope_collects_departments(self):
         """Test that custom scope returns list of department IDs"""
         # Create custom data scope
-        data_scope = DataScope.objects.create(role=self.role_manager, module='projects', scope_type='custom')
+        data_scope = DataScope.objects.create(
+            role=self.role_manager,
+            module='projects',
+            scope_type='custom'
+        )
         data_scope.custom_departments.add(self.dept_sales, self.dept_purchase)
 
         scope_type, custom_dept_ids = resolve_data_scope(self.user, 'projects')
@@ -359,11 +494,31 @@ class GetDepartmentTreeIdsTest(TestCase):
     def setUp(self):
         """Set up test data"""
         # Create department tree
-        self.dept_root = Department.objects.create(name='总部', code='ROOT', parent=None)
-        self.dept_sales = Department.objects.create(name='销售部', code='SALES', parent=self.dept_root)
-        self.dept_purchase = Department.objects.create(name='采购部', code='PURCHASE', parent=self.dept_root)
-        self.dept_sales_team1 = Department.objects.create(name='销售一组', code='SALES_TEAM1', parent=self.dept_sales)
-        self.dept_sales_team2 = Department.objects.create(name='销售二组', code='SALES_TEAM2', parent=self.dept_sales)
+        self.dept_root = Department.objects.create(
+            name='总部',
+            code='ROOT',
+            parent=None
+        )
+        self.dept_sales = Department.objects.create(
+            name='销售部',
+            code='SALES',
+            parent=self.dept_root
+        )
+        self.dept_purchase = Department.objects.create(
+            name='采购部',
+            code='PURCHASE',
+            parent=self.dept_root
+        )
+        self.dept_sales_team1 = Department.objects.create(
+            name='销售一组',
+            code='SALES_TEAM1',
+            parent=self.dept_sales
+        )
+        self.dept_sales_team2 = Department.objects.create(
+            name='销售二组',
+            code='SALES_TEAM2',
+            parent=self.dept_sales
+        )
 
     def test_returns_self_and_children(self):
         """Test that function returns department and all its children"""
@@ -382,3 +537,4 @@ class GetDepartmentTreeIdsTest(TestCase):
         dept_ids = get_department_tree_ids(self.dept_sales_team1.id)
 
         self.assertEqual(dept_ids, [self.dept_sales_team1.id])
+

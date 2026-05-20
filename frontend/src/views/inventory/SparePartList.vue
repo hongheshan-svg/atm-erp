@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>备件管理</span>
-          <el-button type="primary" @click="handleCreate">新增备件</el-button>
+          <el-button type="primary" v-permission="'inventory:stock:create'" @click="handleCreate">新增备件</el-button>
         </div>
       </template>
       
@@ -34,9 +34,9 @@
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
+            <el-button link type="primary" v-permission="'inventory:stock:edit'" @click="handleEdit(row)">编辑</el-button>
             <el-button link type="primary" @click="handleConsume(row)">消耗</el-button>
-            <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button link type="danger" v-permission="'inventory:stock:delete'" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -94,7 +94,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import request from '@/utils/request'
+import { getSpareParts, getSparePartCategories, updateSparePart, createSparePart, consumeSparePart, deleteSparePart } from '@/api/inventory'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -120,7 +120,7 @@ const loadData = async () => {
   loading.value = true
   try {
     const params = { page: page.value, page_size: pageSize.value, ...filters.value }
-    const res = await request.get('/inventory/spare-parts/', { params })
+    const res = await getSpareParts(params)
     tableData.value = res.data?.results || res.results || []
     total.value = res.data?.count || res.count || 0
   } catch (error) {
@@ -132,9 +132,11 @@ const loadData = async () => {
 
 const loadCategories = async () => {
   try {
-    const res = await request.get('/inventory/spare-part-categories/')
+    const res = await getSparePartCategories()
     categories.value = res.data?.results || res.results || []
-  } catch {}
+  } catch (error) {
+    console.error('SparePartList getSparePartCategories error:', error)
+  }
 }
 
 const handleCreate = () => {
@@ -155,10 +157,10 @@ const handleSave = async () => {
     await formRef.value?.validate()
     saving.value = true
     if (isEdit.value) {
-      await request.put(`/inventory/spare-parts/${form.id}/`, form)
+      await updateSparePart(form.id, form)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/inventory/spare-parts/', form)
+      await createSparePart(form)
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false
@@ -181,7 +183,7 @@ const handleConsumeSubmit = async () => {
   try {
     await consumeFormRef.value?.validate()
     saving.value = true
-    await request.post(`/inventory/spare-parts/${currentRow.value.id}/consume/`, consumeForm)
+    await consumeSparePart(currentRow.value.id, consumeForm)
     ElMessage.success('消耗记录已保存')
     consumeDialogVisible.value = false
     loadData()
@@ -195,7 +197,7 @@ const handleConsumeSubmit = async () => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除该备件吗？', '提示', { type: 'warning' })
-    await request.delete(`/inventory/spare-parts/${row.id}/`)
+    await deleteSparePart(row.id)
     ElMessage.success('删除成功')
     loadData()
   } catch (error) {

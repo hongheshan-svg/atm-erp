@@ -76,7 +76,7 @@
       </el-row>
       
       <!-- 数据表格 -->
-      <el-table :data="tableData" border stripe v-loading="loading" class="data-table">
+      <el-table :data="tableData" border stripe v-loading="loading" class="data-table" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="50" />
         <el-table-column prop="item_code" label="物料编码" width="120" />
         <el-table-column prop="item_name" label="物料名称" min-width="180" />
@@ -182,15 +182,17 @@
 
 <script setup>
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { getSlowMovingItems } from '@/api/analytics'
+import { getStockValuation, getStockMoveList, createStockAdjustment, createStockTransfer } from '@/api/inventory'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { DataAnalysis, Download } from '@element-plus/icons-vue'
-import request from '@/utils/request'
 import * as echarts from 'echarts'
 
 const loading = ref(false)
 const daysThreshold = ref(90)
 const tableData = ref([])
 const selectedItems = ref([])
+const handleSelectionChange = (rows) => { selectedItems.value = rows }
 const detailVisible = ref(false)
 const currentItem = ref(null)
 const moveHistory = ref([])
@@ -241,13 +243,11 @@ const getSuggestion = (days) => {
 const fetchData = async () => {
   loading.value = true
   try {
-    const res = await request.get('/analytics/slow-moving/', {
-      params: {
+    const res = await getSlowMovingItems({
         days: daysThreshold.value,
         page: pagination.page,
         page_size: pagination.pageSize
-      }
-    })
+      })
     tableData.value = res.data?.results || res.results || res.data || []
     pagination.total = res.data?.count || res.count || 0
     
@@ -269,7 +269,7 @@ const calculateStats = async () => {
   
   // 计算呆滞库存占总库存的百分比
   try {
-    const res = await request.get('/inventory/stocks/valuation/')
+    const res = await getStockValuation()
     const totalInventoryValue = res.total_value || 0
     stats.percentage = totalInventoryValue > 0 
       ? ((stats.totalValue / totalInventoryValue) * 100).toFixed(2)
@@ -438,14 +438,12 @@ const handleViewDetail = async (row) => {
   currentItem.value = row
   // 加载真实的移动历史
   try {
-    const res = await request.get('/inventory/stock-moves/', {
-      params: {
+    const res = await getStockMoveList({
         item: row.item_id,
         warehouse: row.warehouse_id,
         page_size: 20,
         ordering: '-move_date'
-      }
-    })
+      })
     const moves = res.data?.results || res.results || res.data || []
     moveHistory.value = moves.map(m => ({
       id: m.id,
@@ -462,14 +460,14 @@ const handleViewDetail = async (row) => {
 }
 
 const handleBatchDisposal = async () => {
-  if (!selectedRows.value.length) {
+  if (!selectedItems.value.length) {
     ElMessage.warning('请先选择要报废的物料')
     return
   }
   
   try {
     await ElMessageBox.confirm(
-      `确定要对选中的 ${selectedRows.value.length} 种物料进行报废处理吗？报废后将生成库存调整单。`,
+      `确定要对选中的 ${selectedItems.value.length} 种物料进行报废处理吗？报废后将生成库存调整单。`,
       '批量报废',
       {
         type: 'warning',
@@ -482,9 +480,9 @@ const handleBatchDisposal = async () => {
     let successCount = 0
     let failCount = 0
     
-    for (const row of selectedRows.value) {
+    for (const row of selectedItems.value) {
       try {
-        await request.post('/inventory/stock-adjustments/', {
+        await createStockAdjustment({
           warehouse: row.warehouse_id,
           adjustment_date: new Date().toISOString().split('T')[0],
           reason: '呆滞物料报废处理',
@@ -507,7 +505,7 @@ const handleBatchDisposal = async () => {
     if (successCount > 0) {
       ElMessage.success(`成功报废 ${successCount} 种物料${failCount > 0 ? `，${failCount} 种失败` : ''}`)
       fetchData() // 刷新数据
-      selectedRows.value = []
+      selectedItems.value = []
     } else {
       ElMessage.error('报废操作失败')
     }
@@ -519,14 +517,14 @@ const handleBatchDisposal = async () => {
 }
 
 const handleBatchTransfer = async () => {
-  if (!selectedRows.value.length) {
+  if (!selectedItems.value.length) {
     ElMessage.warning('请先选择要调拨的物料')
     return
   }
   
   try {
     const { value: targetWarehouse } = await ElMessageBox.prompt(
-      `选中 ${selectedRows.value.length} 种物料，请输入目标仓库ID`,
+      `选中 ${selectedItems.value.length} 种物料，请输入目标仓库ID`,
       '批量调拨',
       {
         confirmButtonText: '确认调拨',
@@ -539,9 +537,9 @@ const handleBatchTransfer = async () => {
     let successCount = 0
     let failCount = 0
     
-    for (const row of selectedRows.value) {
+    for (const row of selectedItems.value) {
       try {
-        await request.post('/inventory/stock-moves/create_transfer/', {
+        await createStockTransfer({
           item: row.item_id,
           warehouse_from: row.warehouse_id,
           warehouse_to: parseInt(targetWarehouse),
@@ -560,7 +558,7 @@ const handleBatchTransfer = async () => {
     if (successCount > 0) {
       ElMessage.success(`成功调拨 ${successCount} 种物料${failCount > 0 ? `，${failCount} 种失败` : ''}`)
       fetchData()
-      selectedRows.value = []
+      selectedItems.value = []
     } else {
       ElMessage.error('调拨操作失败')
     }
@@ -572,14 +570,14 @@ const handleBatchTransfer = async () => {
 }
 
 const handleBatchPromotion = async () => {
-  if (!selectedRows.value.length) {
+  if (!selectedItems.value.length) {
     ElMessage.warning('请先选择要促销的物料')
     return
   }
   
   try {
     const { value: discountPercent } = await ElMessageBox.prompt(
-      `选中 ${selectedRows.value.length} 种物料，请输入折扣比例（例如：30表示3折）`,
+      `选中 ${selectedItems.value.length} 种物料，请输入折扣比例（例如：30表示3折）`,
       '批量促销',
       {
         confirmButtonText: '确认',
@@ -597,7 +595,7 @@ const handleBatchPromotion = async () => {
     
     // 为选中的物料应用促销标记（可以在物料主数据中添加促销标记字段）
     // 这里先显示促销信息提示
-    const promotionInfo = selectedRows.value.map(row => {
+    const promotionInfo = selectedItems.value.map(row => {
       const originalPrice = row.unit_cost
       const promotionPrice = (originalPrice * discount).toFixed(2)
       return `${row.item_code} - ${row.item_name}: ¥${originalPrice} → ¥${promotionPrice} (${discountPercent}折)`

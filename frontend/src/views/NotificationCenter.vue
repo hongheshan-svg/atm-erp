@@ -96,7 +96,7 @@ import {
   Refresh, Check, InfoFilled, WarningFilled, 
   CircleCheckFilled, CircleCloseFilled 
 } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getNotifications, getUnreadCount, markNotificationRead, markAllNotificationsRead } from '@/api/core'
 import { ElMessage, ElNotification } from 'element-plus'
 
 const loading = ref(false)
@@ -183,7 +183,7 @@ const loadNotifications = async () => {
       params.is_read = true
     }
 
-    const response = await request.get('/core/notifications/', { params })
+    const response = await getNotifications(params)
     notifications.value = response.results || response || []
     pagination.total = response.count || notifications.value.length
     
@@ -199,7 +199,7 @@ const loadNotifications = async () => {
 
 const loadUnreadCount = async () => {
   try {
-    const response = await request.get('/core/notifications/unread_count/')
+    const response = await getUnreadCount()
     unreadCount.value = response.count
   } catch (error) {
     console.error('获取未读数量失败', error)
@@ -208,7 +208,7 @@ const loadUnreadCount = async () => {
 
 const markAsRead = async (id) => {
   try {
-    await request.post(`/core/notifications/${id}/mark_read/`)
+    await markNotificationRead(id)
     ElMessage.success('已标记为已读')
     loadNotifications()
   } catch (error) {
@@ -219,7 +219,7 @@ const markAsRead = async (id) => {
 
 const markAllRead = async () => {
   try {
-    await request.post('/core/notifications/mark_all_read/')
+    await markAllNotificationsRead()
     ElMessage.success('已全部标记为已读')
     loadNotifications()
   } catch (error) {

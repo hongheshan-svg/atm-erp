@@ -88,13 +88,13 @@
       </template>
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'projects:project:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" v-permission="'projects:project:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <el-table :data="tableData" stripe v-loading="loading" @row-click="handleRowClick" @selection-change="handleSelectionChange">
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'projects:project:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="equipment_no" label="设备编号" width="140" />
         <el-table-column prop="name" label="设备名称" min-width="180" show-overflow-tooltip />
         <el-table-column prop="model" label="规格型号" width="120" show-overflow-tooltip />
@@ -263,8 +263,11 @@ import {
   Search, Refresh, Plus, ArrowDown, Tools, OfficeBuilding, CircleCheck, Warning
 } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { getEquipmentList, getEquipmentStatistics, createEquipment, updateEquipment } from '@/api/equipment'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { getCustomerList } from '@/api/masterdata'
+import { getProjectList } from '@/api/projects/project'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -332,7 +335,7 @@ const fetchData = async () => {
       page_size: pagination.pageSize,
       ...filters
     }
-    const res = await request.get('/projects/equipment/', { params })
+    const res = await getEquipmentList(params)
     tableData.value = res.results || res || []
     pagination.total = res.count || tableData.value.length
   } catch (error) {
@@ -344,7 +347,7 @@ const fetchData = async () => {
 
 const fetchStats = async () => {
   try {
-    const res = await request.get('/projects/equipment/statistics/')
+    const res = await getEquipmentStatistics()
     stats.value = res || {}
   } catch (error) {
     console.error('获取统计失败', error)
@@ -353,7 +356,7 @@ const fetchStats = async () => {
 
 const fetchCustomers = async () => {
   try {
-    const res = await request.get('/masterdata/customers/')
+    const res = await getCustomerList()
     customers.value = res.results || res || []
   } catch (error) {
     console.error('获取客户失败', error)
@@ -362,7 +365,7 @@ const fetchCustomers = async () => {
 
 const fetchProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/')
+    const res = await getProjectList()
     projects.value = res.results || res || []
   } catch (error) {
     console.error('获取项目失败', error)
@@ -403,10 +406,10 @@ const submitForm = async () => {
     submitting.value = true
     
     if (dialogMode.value === 'add') {
-      await request.post('/projects/equipment/', formData)
+      await createEquipment(formData)
       ElMessage.success('新增成功')
     } else {
-      await request.put(`/projects/equipment/${formData.id}/`, formData)
+      await updateEquipment(formData.id, formData)
       ElMessage.success('更新成功')
     }
     
@@ -432,7 +435,7 @@ const handleActionSave = async () => {
     await request.post(`/projects/equipment-archives/${actionRow.value.id}/${actionEndpoints[actionType.value]}/`, actionForm)
     ElMessage.success('操作成功')
     actionDialogVisible.value = false
-    loadData()
+    fetchData()
   } catch (error) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
     else ElMessage.error('操作失败')

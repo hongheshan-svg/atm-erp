@@ -3,7 +3,7 @@
     <!-- 顶部工具栏 -->
     <div class="toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd(null)">
+        <el-button type="primary" v-permission="'accounts:department:create'" @click="handleAdd(null)">
           <el-icon><Plus /></el-icon>
           新建部门
         </el-button>
@@ -49,7 +49,7 @@
             @node-click="handleNodeClick"
             class="dept-tree"
           >
-            <template #default="{ node, data }">
+            <template #default="{ node: _node, data }">
               <div class="tree-node">
                 <div class="node-content">
                   <el-icon class="dept-icon" :class="{ 'has-children': data.children?.length }">
@@ -76,7 +76,7 @@
           </el-tree>
           
           <el-empty v-if="!loading && treeData.length === 0" description="暂无部门数据">
-            <el-button type="primary" @click="handleAdd(null)">创建第一个部门</el-button>
+            <el-button type="primary" v-permission="'accounts:department:create'" @click="handleAdd(null)">创建第一个部门</el-button>
           </el-empty>
         </div>
       </div>
@@ -100,8 +100,8 @@
               </div>
             </div>
             <div class="header-actions">
-              <el-button @click="handleEdit(selectedDept)">编辑</el-button>
-              <el-button type="danger" @click="handleDelete(selectedDept)">删除</el-button>
+              <el-button v-permission="'accounts:department:edit'" @click="handleEdit(selectedDept)">编辑</el-button>
+              <el-button type="danger" v-permission="'accounts:department:delete'" @click="handleDelete(selectedDept)">删除</el-button>
             </div>
           </div>
 
@@ -203,7 +203,7 @@
         <!-- 未选择部门 -->
         <div v-else class="no-selection">
           <el-empty description="请从左侧选择一个部门查看详情">
-            <el-button type="primary" @click="handleAdd(null)">或创建新部门</el-button>
+            <el-button type="primary" v-permission="'accounts:department:create'" @click="handleAdd(null)">或创建新部门</el-button>
           </el-empty>
         </div>
       </div>
@@ -256,7 +256,7 @@ import {
   Plus, Refresh, Search, OfficeBuilding, Folder, Document, Edit, Delete,
   User, UserFilled, Avatar, InfoFilled, ArrowRight, Expand, Fold
 } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getDepartments, getUsers, createDepartment, updateDepartment, deleteDepartment } from '@/api/auth'
 
 // 状态
 const loading = ref(false)
@@ -386,7 +386,7 @@ const collapseAll = () => {
 const loadDepartments = async () => {
   loading.value = true
   try {
-    const response = await request.get('/auth/departments/')
+    const response = await getDepartments()
     departments.value = response.results || response || []
   } catch (error) {
     ElMessage.error('加载部门失败')
@@ -397,7 +397,7 @@ const loadDepartments = async () => {
 
 const loadUsers = async () => {
   try {
-    const response = await request.get('/auth/users/')
+    const response = await getUsers()
     users.value = response.results || response || []
   } catch (error) {
     console.error('加载用户失败:', error)
@@ -407,7 +407,7 @@ const loadUsers = async () => {
 const loadDeptMembers = async (deptId) => {
   membersLoading.value = true
   try {
-    const response = await request.get('/auth/users/', { params: { department: deptId } })
+    const response = await getUsers({ department: deptId })
     deptMembers.value = response.results || response || []
   } catch (error) {
     deptMembers.value = []
@@ -461,7 +461,7 @@ const handleDelete = async (dept) => {
   }
   try {
     await ElMessageBox.confirm(`确定要删除部门"${dept.name}"吗？`, '删除确认', { type: 'warning' })
-    await request.delete(`/auth/departments/${dept.id}/`)
+    await deleteDepartment(dept.id)
     ElMessage.success('删除成功')
     if (selectedDept.value?.id === dept.id) {
       selectedDept.value = null
@@ -479,10 +479,10 @@ const handleSubmit = async () => {
     await formRef.value.validate()
     submitting.value = true
     if (isEdit.value) {
-      await request.put(`/auth/departments/${form.id}/`, form)
+      await updateDepartment(form.id, form)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/auth/departments/', form)
+      await createDepartment(form)
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false

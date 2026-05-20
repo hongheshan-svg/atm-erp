@@ -99,7 +99,7 @@
                 />
               </div>
               <div class="wc-hours">
-                {{ (wc.scheduled_hours || 0).toFixed(1) }}h / {{ (wc.capacity || 0).toFixed(1) }}h
+                {{ toFixedSafe(wc.scheduled_hours, 1, '0.0') }}h / {{ toFixedSafe(wc.capacity, 1, '0.0') }}h
               </div>
             </div>
           </div>
@@ -161,7 +161,8 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { Calendar, VideoPlay, CircleCheck, WarningFilled } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getKanbanData } from '@/api/mes'
+import { toFixedSafe } from '@/utils/number'
 
 const loading = ref(false)
 const autoRefresh = ref(true)
@@ -181,7 +182,7 @@ const todaySchedules = ref([])
 const refreshData = async () => {
   loading.value = true
   try {
-    const data = await request.get('/production/kanban/')
+    const data = await getKanbanData()
     production.value = data.production || {}
     projects.value = data.projects || []
     workCenters.value = data.work_centers || []

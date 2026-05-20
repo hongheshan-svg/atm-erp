@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>装配指导</span>
-          <el-button type="primary" @click="handleCreate">新建指导</el-button>
+          <el-button type="primary" v-permission="'production:process:create'" @click="handleCreate">新建指导</el-button>
         </div>
       </template>
       
@@ -22,7 +22,7 @@
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="handleView(row)">查看</el-button>
-            <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
+            <el-button link type="primary" v-permission="'production:process:edit'" @click="handleEdit(row)">编辑</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -57,7 +57,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getAssemblyGuides, createAssemblyGuide, updateAssemblyGuide } from '@/api/production'
 
 const router = useRouter()
 const loading = ref(false)
@@ -77,7 +77,7 @@ const getStatusType = (s) => ({ 'DRAFT': 'info', 'APPROVED': 'success', 'OBSOLET
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await request.get('/production/assembly-guides/', { params: { page: page.value, page_size: pageSize.value } })
+    const res = await getAssemblyGuides({ page: page.value, page_size: pageSize.value })
     tableData.value = res.data?.results || res.results || []
     total.value = res.data?.count || res.count || 0
   } catch (error) {
@@ -107,10 +107,10 @@ const handleSave = async () => {
     await formRef.value?.validate()
     saving.value = true
     if (isEdit.value) {
-      await request.put(`/production/assembly-guides/${form.id}/`, form)
+      await updateAssemblyGuide(form.id, form)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/production/assembly-guides/', form)
+      await createAssemblyGuide(form)
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false

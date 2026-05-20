@@ -9,7 +9,7 @@
               <el-icon><Setting /></el-icon>
               初始化默认规则
             </el-button>
-            <el-button type="success" @click="handleAdd">
+            <el-button type="success" v-permission="'accounts:user:create'" @click="handleAdd">
               <el-icon><Plus /></el-icon>
               添加规则
             </el-button>
@@ -35,14 +35,14 @@
       </el-form>
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'accounts:user:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" v-permission="'accounts:user:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <!-- 数据表格 -->
       <el-table :data="rules" v-loading="loading" stripe border @selection-change="handleSelectionChange">
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'accounts:user:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="rule_type_display" label="规则类型" width="140" />
         <el-table-column prop="rule_name" label="规则名称" width="150" />
         <el-table-column label="编码格式" min-width="200">
@@ -70,7 +70,7 @@
         </el-table-column>
         <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" v-permission="'accounts:user:edit'" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" type="warning" @click="handleResetSeq(row)">重置序号</el-button>
             <el-button size="small" type="info" @click="handleViewHistory(row)">历史</el-button>
             <el-button v-if="canDelete" size="small" type="danger" @click="deleteRow(row)" :loading="deleteLoading">删除</el-button>
@@ -217,7 +217,7 @@
 import { ref, reactive, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Setting } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getCodeRuleList, createCodeRule, updateCodeRule, resetCodeRuleSequence, getCodeRuleHistory, initDefaultCodeRules } from '@/api/system'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 
@@ -294,7 +294,7 @@ const fetchRules = async () => {
     if (searchForm.rule_type) params.rule_type = searchForm.rule_type
     if (searchForm.is_active !== null) params.is_active = searchForm.is_active
     
-    const res = await request.get('/core/code-rules/', { params })
+    const res = await getCodeRuleList(params)
     rules.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     ElMessage.error('加载编码规则失败')
@@ -349,10 +349,10 @@ const handleSubmit = async () => {
     const data = { ...form }
     
     if (form.id) {
-      await request.put(`/core/code-rules/${form.id}/`, data)
+      await updateCodeRule(form.id, data)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/core/code-rules/', data)
+      await createCodeRule(data)
       ElMessage.success('添加成功')
     }
     
@@ -375,7 +375,7 @@ const handleResetSeq = async (row) => {
       { type: 'warning' }
     )
     
-    await request.post(`/core/code-rules/${row.id}/reset_sequence/`)
+    await resetCodeRuleSequence(row.id)
     ElMessage.success('序列号已重置')
     fetchRules()
   } catch (error) {
@@ -389,7 +389,7 @@ const handleViewHistory = async (row) => {
   historyVisible.value = true
   historyLoading.value = true
   try {
-    const res = await request.get(`/core/code-rules/${row.id}/history/`)
+    const res = await getCodeRuleHistory(row.id)
     historyList.value = res.data || res || []
   } catch (error) {
     ElMessage.error('加载历史记录失败')
@@ -409,7 +409,7 @@ const handleInitDefault = async () => {
     )
     
     initializing.value = true
-    const res = await request.post('/core/code-rules/init_default_rules/')
+    const res = await initDefaultCodeRules()
     ElMessage.success(res.message || '初始化成功')
     fetchRules()
   } catch (error) {

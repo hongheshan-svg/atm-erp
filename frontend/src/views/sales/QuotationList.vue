@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>销售报价管理</span>
-          <el-button type="primary" @click="handleCreate">
+          <el-button type="primary" v-permission="'sales:quotation:create'" @click="handleCreate">
             <el-icon><Plus /></el-icon>
             新增报价
           </el-button>
@@ -44,7 +44,7 @@
       </el-form>
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'sales:quotation:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
         <el-button 
           type="danger" 
@@ -58,7 +58,7 @@
 
       <!-- 报价列表 -->
       <el-table :data="quotations" v-loading="loading" border stripe @selection-change="handleSelectionChange">
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'sales:quotation:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="quote_no" label="报价编号" width="150" />
         <el-table-column prop="customer_name" label="客户" width="200" />
         <el-table-column prop="project_name" label="关联项目" width="150" show-overflow-tooltip />
@@ -90,10 +90,10 @@
         <el-table-column label="操作" :width="canDelete ? 460 : 400" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
-            <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
+            <el-button size="small" v-permission="'sales:quotation:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button size="small" type="warning" @click="handleSubmitApproval(row)" v-if="row.status === 'DRAFT' || row.status === 'REJECTED'">提交审批</el-button>
             <el-button size="small" type="info" @click="showWorkflowProgress(row)" v-if="row.status === 'PENDING'">审批进度</el-button>
-            <el-button size="small" type="success" @click="handleCreateVersion(row)">
+            <el-button size="small" type="success" v-permission="'sales:quotation:create'" @click="handleCreateVersion(row)">
               新版本
             </el-button>
             <el-button
@@ -213,7 +213,8 @@ import { usePermission } from '@/composables/usePermission'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
-import request from '@/utils/request'
+import { getQuotations, getQuotation, submitQuotation, createQuotationVersion, convertQuotationToOrder } from '@/api/sales'
+import { getCustomerList } from '@/api/masterdata'
 
 const router = useRouter()
 
@@ -229,7 +230,7 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
     confirmMessage: '此操作将永久删除选中的报价单，是否继续？',
     successMessage: '删除成功',
     errorMessage: '删除失败',
-    onSuccess: () => fetchData()
+    onSuccess: () => loadQuotations()
   }
 )
 
@@ -305,7 +306,7 @@ const loadQuotations = async () => {
       }
     })
 
-    const response = await request.get('/sales/quotations/', { params })
+    const response = await getQuotations(params)
     quotations.value = response.results || []
     pagination.total = response.count || 0
   } catch (error) {
@@ -318,7 +319,7 @@ const loadQuotations = async () => {
 
 const loadCustomers = async () => {
   try {
-    const response = await request.get('/masterdata/customers/', {
+    const response = await getCustomerList({
       params: { page_size: 100 }
     })
     customers.value = response.results || response || []
@@ -341,7 +342,7 @@ const handleCreate = () => {
 
 const handleView = async (row) => {
   try {
-    const response = await request.get(`/sales/quotations/${row.id}/`)
+    const response = await getQuotation(row.id)
     const data = response.data || response
     currentQuotation.value = data
     dialogTitle.value = `报价详情 - ${data.quote_no}`
@@ -359,7 +360,7 @@ const handleEdit = (row) => {
 const handleSubmitApproval = async (row) => {
   try {
     await ElMessageBox.confirm('确定要提交该报价单进行审批吗？', '提交审批', { type: 'warning' })
-    const response = await request.post(`/sales/quotations/${row.id}/submit/`)
+    const response = await submitQuotation(row.id)
     const data = response.data || response
     if (data.workflow_started) {
       ElMessage.success(data.message || '已提交审批')
@@ -383,7 +384,7 @@ const handleCreateVersion = async (row) => {
       type: 'info'
     })
 
-    await request.post(`/sales/quotations/${row.id}/create_new_version/`)
+    await createQuotationVersion(row.id)
     ElMessage.success('新版本创建成功')
     loadQuotations()
   } catch (error) {
@@ -402,7 +403,7 @@ const handleConvertToOrder = async (row) => {
       type: 'info'
     })
 
-    const response = await request.post(`/sales/quotations/${row.id}/convert_to_order/`)
+    const response = await convertQuotationToOrder(row.id)
     const data = response.data || response
     ElMessage.success('转换成功')
     router.push(`/sales/orders/${data.id}`)

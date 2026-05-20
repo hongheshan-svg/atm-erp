@@ -9,7 +9,7 @@
               <el-icon><Check /></el-icon>
               全部已读
             </el-button>
-            <el-button v-if="isAdmin" type="primary" @click="handleCreate">
+            <el-button v-if="isAdmin" type="primary" v-permission="'oa:archive:create'" @click="handleCreate">
               <el-icon><Plus /></el-icon>
               发布公告
             </el-button>
@@ -144,7 +144,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, Check, View } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getPublishedAnnouncements, createAnnouncement, updateAnnouncement, publishAnnouncement, readAnnouncement, markAllAnnouncementsRead } from '@/api/oa'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
@@ -222,7 +222,7 @@ const loadData = async () => {
       page_size: pagination.pageSize,
       ...searchForm
     }
-    const res = await request.get('/oa/announcements/published/', { params })
+    const res = await getPublishedAnnouncements(params)
     // res 已经是 response.data
     if (Array.isArray(res)) {
       list.value = res
@@ -248,7 +248,7 @@ const handleView = async (item) => {
   // 标记为已读
   if (!item.is_read) {
     try {
-      await request.post(`/oa/announcements/${item.id}/read/`)
+      await readAnnouncement(item.id)
       item.is_read = true
       item.view_count++
     } catch (error) {
@@ -260,7 +260,7 @@ const handleView = async (item) => {
 const markAllRead = async () => {
   markingRead.value = true
   try {
-    await request.post('/oa/announcements/mark_all_read/')
+    await markAllAnnouncementsRead()
     ElMessage.success('已全部标记为已读')
     loadData()
   } catch (error) {
@@ -294,9 +294,9 @@ const handleSave = async (status = 'DRAFT') => {
     const data = { ...form, status }
     
     if (isEdit.value) {
-      await request.put(`/oa/announcements/${form.id}/`, data)
+      await updateAnnouncement(form.id, data)
     } else {
-      await request.post('/oa/announcements/', data)
+      await createAnnouncement(data)
     }
     
     ElMessage.success(status === 'DRAFT' ? '保存成功' : '发布成功')
@@ -321,17 +321,17 @@ const handleSaveAndPublish = async () => {
     let announcement
     
     if (isEdit.value) {
-      const res = await request.put(`/oa/announcements/${form.id}/`, data)
+      const res = await updateAnnouncement(form.id, data)
       // res 已经是 response.data
       announcement = res
     } else {
-      const res = await request.post('/oa/announcements/', data)
+      const res = await createAnnouncement(data)
       // res 已经是 response.data
       announcement = res
     }
     
     // 再发布
-    await request.post(`/oa/announcements/${announcement.id}/publish/`)
+    await publishAnnouncement(announcement.id)
     
     ElMessage.success('发布成功')
     dialogVisible.value = false

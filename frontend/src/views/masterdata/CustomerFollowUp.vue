@@ -3,7 +3,7 @@
     <div class="page-header">
       <h2>客户跟进记录</h2>
       <div class="header-actions">
-        <el-button type="primary" @click="handleAdd">
+        <el-button type="primary" v-permission="'masterdata:customer:create'" @click="handleAdd">
           <el-icon><Plus /></el-icon> 新增跟进
         </el-button>
       </div>
@@ -96,8 +96,8 @@
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleView(row)">查看</el-button>
-            <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button type="primary" link size="small" v-permission="'masterdata:customer:edit'" @click="handleEdit(row)">编辑</el-button>
+            <el-button type="danger" link size="small" v-permission="'masterdata:customer:delete'" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -207,7 +207,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getCustomerList, getCustomerFollowUpList, createCustomerFollowUp, updateCustomerFollowUp, deleteCustomerFollowUp, getFollowTypes, getFollowUpStatistics } from '@/api/masterdata'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -255,7 +255,7 @@ const rules = {
 const fetchData = async () => {
   loading.value = true
   try {
-    const data = await request.get('/masterdata/customer-followups/', { params: queryParams })
+    const data = await getCustomerFollowUpList(queryParams)
     tableData.value = data.results || data
     total.value = data.count || data.length
   } catch (e) {
@@ -267,7 +267,7 @@ const fetchData = async () => {
 
 const fetchCustomers = async () => {
   try {
-    const data = await request.get('/masterdata/customers/', { params: { page_size: 1000 } })
+    const data = await getCustomerList({ page_size: 1000 })
     customers.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -276,7 +276,7 @@ const fetchCustomers = async () => {
 
 const fetchFollowTypes = async () => {
   try {
-    const data = await request.get('/masterdata/customer-followups/follow_types/')
+    const data = await getFollowTypes()
     followTypes.value = data
   } catch (e) {
     followTypes.value = [
@@ -292,7 +292,7 @@ const fetchFollowTypes = async () => {
 
 const fetchStats = async () => {
   try {
-    const data = await request.get('/masterdata/customer-followups/statistics/')
+    const data = await getFollowUpStatistics()
     stats.value = data
   } catch (e) {
     console.error(e)
@@ -344,10 +344,10 @@ const handleSubmit = async () => {
   submitLoading.value = true
   try {
     if (isEdit.value) {
-      await request.put(`/masterdata/customer-followups/${form.id}/`, form)
+      await updateCustomerFollowUp(form.id, form)
       ElMessage.success('修改成功')
     } else {
-      await request.post('/masterdata/customer-followups/', form)
+      await createCustomerFollowUp(form)
       ElMessage.success('新增成功')
     }
     dialogVisible.value = false
@@ -366,7 +366,7 @@ const handleDelete = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      await request.delete(`/masterdata/customer-followups/${row.id}/`)
+      await deleteCustomerFollowUp(row.id)
       ElMessage.success('删除成功')
       fetchData()
       fetchStats()

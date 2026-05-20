@@ -318,9 +318,11 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { getCreoBOMImportList, getCreoBOMImport, uploadCreoBOM, createCreoBOMItems, importCreoBOM, importCreoBOMHierarchy, manualMatchCreoBOM } from '@/api/plm/creo'
+import { getProjectList } from '@/api/projects/project'
+import { getItemList } from '@/api/masterdata'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Plus, Download, DocumentAdd, Connection } from '@element-plus/icons-vue'
-import request from '@/utils/request'
 
 const loading = ref(false)
 const uploading = ref(false)
@@ -426,7 +428,7 @@ const formatDate = (date) => {
 const loadSessions = async () => {
   loading.value = true
   try {
-    const res = await request.get('/projects/creo-bom-imports/')
+    const res = await getCreoBOMImportList()
     sessions.value = res.results || res || []
   } catch (e) {
     console.error('加载失败', e)
@@ -437,7 +439,7 @@ const loadSessions = async () => {
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/')
+    const res = await getProjectList()
     projects.value = res.results || res || []
   } catch (e) {
     console.error('加载项目失败', e)
@@ -473,7 +475,7 @@ const doUpload = async () => {
     if (uploadForm.value.project_id) formData.append('project_id', uploadForm.value.project_id)
     formData.append('options', JSON.stringify(uploadForm.value.options))
     
-    const res = await request.post('/projects/creo-bom-imports/upload/', formData, {
+    const res = await uploadCreoBOM(formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     
@@ -495,7 +497,7 @@ const doUpload = async () => {
 
 const viewSession = async (session) => {
   try {
-    const res = await request.get(`/projects/creo-bom-imports/${session.id}/`)
+    const res = await getCreoBOMImport(session.id)
     currentSession.value = res
     showDetail.value = true
   } catch (e) {
@@ -510,7 +512,7 @@ const createItems = async (session) => {
       '创建物料'
     )
     
-    const res = await request.post(`/projects/creo-bom-imports/${session.id}/create_items/`, {
+    const res = await createCreoBOMItems(session.id, {
       options: { sku_prefix: 'CREO-' }
     })
     
@@ -539,7 +541,7 @@ const importBOM = async (session) => {
   }
   
   try {
-    const res = await request.post(`/projects/creo-bom-imports/${session.id}/import_bom/`, {
+    const res = await importCreoBOM(session.id, {
       project_id: session.project_id
     })
     
@@ -566,7 +568,7 @@ const importHierarchicalBOM = async (session) => {
   }
   
   try {
-    const res = await request.post(`/projects/creo-bom-imports/${session.id}/import_hierarchy/`, {
+    const res = await importCreoBOMHierarchy(session.id, {
       project_id: session.project_id
     })
     
@@ -601,9 +603,7 @@ const showCandidates = (item) => {
 const searchMaterials = async (query) => {
   if (query.length < 2) return
   try {
-    const res = await request.get('/masterdata/items/', {
-      params: { search: query, page_size: 20 }
-    })
+    const res = await getItemList({ search: query, page_size: 20 })
     materialSearchResults.value = res.results || res || []
   } catch (e) {
     console.error('搜索物料失败', e)
@@ -617,7 +617,7 @@ const doManualMatch = async () => {
   }
   
   try {
-    await request.post(`/projects/creo-bom-imports/${currentSession.value.id}/manual_match/`, {
+    await manualMatchCreoBOM(currentSession.value.id, {
       item_id: matchingItem.value.id,
       matched_material_id: selectedMaterialId.value
     })

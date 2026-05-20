@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>项目归档管理</span>
-          <el-button type="primary" @click="handleCreate"><el-icon><Plus /></el-icon> 新建归档</el-button>
+          <el-button type="primary" v-permission="'projects:project:create'" @click="handleCreate"><el-icon><Plus /></el-icon> 新建归档</el-button>
         </div>
       </template>
       
@@ -115,7 +115,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
 import { getProjectArchiveList, getProjectArchive, createProjectArchive, generateKnowledgeFromArchive } from '@/api/projects/knowledge'
-import request from '@/utils/request'
+import { getProjectList } from '@/api/projects/project'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -150,9 +150,11 @@ const fetchData = async () => {
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    const res = await getProjectList({ page_size: 1000 })
     projectList.value = res.data?.results || res.results || []
-  } catch {}
+  } catch (error) {
+    console.error('ArchiveList getProjectList error:', error)
+  }
 }
 
 const handleCreate = () => {
@@ -166,7 +168,8 @@ const handleView = async (row) => {
     const res = await getProjectArchive(row.id)
     viewDetail.value = res.data || res
     viewDialogVisible.value = true
-  } catch {
+  } catch (error) {
+    console.error(error)
     viewDetail.value = row
     viewDialogVisible.value = true
   }

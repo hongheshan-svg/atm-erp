@@ -24,7 +24,7 @@
               <el-icon><Download /></el-icon>
               导出
             </el-button>
-            <el-button type="primary" @click="handleAdd">
+            <el-button type="primary" v-permission="'sales:order:create'" @click="handleAdd">
               <el-icon><Plus /></el-icon>
               创建订单
             </el-button>
@@ -90,14 +90,14 @@
         <el-table-column label="操作" width="400" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
-            <el-button size="small" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
+            <el-button size="small" v-permission="'sales:order:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button size="small" type="warning" @click="handleSubmitApproval(row)" v-if="row.status === 'DRAFT' || row.status === 'REJECTED'">提交审批</el-button>
             <el-button size="small" type="info" @click="showWorkflowProgress(row)" v-if="row.status === 'PENDING'">审批进度</el-button>
             <el-button size="small" type="warning" @click="handleConfirm(row)" v-if="row.status === 'APPROVED'">确认</el-button>
             <el-button size="small" type="warning" @click="handleViewAttachments(row)">附件</el-button>
             <el-button size="small" type="success" @click="createDelivery(row)" v-if="row.status === 'CONFIRMED' || row.status === 'PARTIAL'">发货</el-button>
             <el-button size="small" type="danger" @click="handleCancel(row)" v-if="row.status === 'DRAFT' || row.status === 'CONFIRMED'">取消</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button size="small" type="danger" v-permission="'sales:order:delete'" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -222,7 +222,7 @@
         
         <el-table :data="form.lines" border size="small">
           <el-table-column label="产品名称 *" min-width="180">
-            <template #default="{ row, $index }">
+            <template #default="{ row, $index: _$index }">
               <el-input 
                 v-model="row.custom_name" 
                 placeholder="输入产品名称" 
@@ -351,9 +351,11 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete, Download, Upload } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getSalesOrders, getSalesOrder, createSalesOrder, updateSalesOrder, deleteSalesOrder, submitSalesOrder, confirmSalesOrder, cancelSalesOrder, downloadOrderTemplate, importSalesOrders, exportSalesOrders, bulkDeleteSalesOrders } from '@/api/sales'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
 import { usePermissionStore } from '@/stores/permission'
+import { getCustomerList } from '@/api/masterdata'
+import { getProjectList } from '@/api/projects/project'
 
 const router = useRouter()
 const permissionStore = usePermissionStore()
@@ -451,7 +453,7 @@ const loadOrders = async () => {
     if (searchForm.customer) params.customer = searchForm.customer
     if (searchForm.status) params.status = searchForm.status
     
-    const res = await request.get('/sales/orders/', { params })
+    const res = await getSalesOrders(params)
     orders.value = res.data?.results || res.results || res.data || []
     pagination.total = res.data?.count || res.count || 0
   } catch (error) {
@@ -463,7 +465,7 @@ const loadOrders = async () => {
 
 const loadCustomers = async () => {
   try {
-    const res = await request.get('/masterdata/customers/')
+    const res = await getCustomerList()
     customers.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('加载客户失败:', error)
@@ -476,7 +478,7 @@ const loadProjects = async () => {
   }
 
   try {
-    const res = await request.get('/projects/projects/')
+    const res = await getProjectList()
     projects.value = res.data?.results || res.results || res.data || []
     projectsLoaded.value = true
     return true
@@ -532,7 +534,7 @@ const handleEdit = async (row) => {
   await ensureProjectsLoaded()
   
   try {
-    const res = await request.get(`/sales/orders/${row.id}/`)
+    const res = await getSalesOrder(row.id)
     const data = res.data || res
     
     Object.assign(form, {
@@ -637,10 +639,10 @@ const handleSave = async () => {
     }
     
     if (isEdit.value) {
-      await request.put(`/sales/orders/${form.id}/`, payload)
+      await updateSalesOrder(form.id, payload)
       ElMessage.success('更新销售订单成功')
     } else {
-      await request.post('/sales/orders/', payload)
+      await createSalesOrder(payload)
       ElMessage.success('创建销售订单成功')
     }
     
@@ -659,7 +661,7 @@ const handleSave = async () => {
 const handleSubmitApproval = async (row) => {
   try {
     await ElMessageBox.confirm('确定要提交该销售订单进行审批吗？', '提交审批', { type: 'warning' })
-    const response = await request.post(`/sales/orders/${row.id}/submit/`)
+    const response = await submitSalesOrder(row.id)
     const data = response.data || response
     if (data.workflow_started) {
       ElMessage.success(data.message || '已提交审批')
@@ -678,7 +680,7 @@ const handleSubmitApproval = async (row) => {
 const handleConfirm = async (row) => {
   try {
     await ElMessageBox.confirm('确定要确认该销售订单吗？确认后将无法修改。', '确认订单', { type: 'warning' })
-    await request.post(`/sales/orders/${row.id}/confirm/`)
+    await confirmSalesOrder(row.id)
     ElMessage.success('订单已确认')
     loadOrders()
   } catch (error) {
@@ -691,7 +693,7 @@ const handleConfirm = async (row) => {
 const handleCancel = async (row) => {
   try {
     await ElMessageBox.confirm('确定要取消该销售订单吗？', '取消订单', { type: 'warning' })
-    await request.post(`/sales/orders/${row.id}/cancel/`)
+    await cancelSalesOrder(row.id)
     ElMessage.success('订单已取消')
     loadOrders()
   } catch (error) {
@@ -718,7 +720,7 @@ const handleDelete = async (row) => {
       '删除订单', 
       { type: 'warning' }
     )
-    await request.delete(`/sales/orders/${row.id}/`)
+    await deleteSalesOrder(row.id)
     ElMessage.success('订单已删除')
     loadOrders()
   } catch (error) {
@@ -731,9 +733,7 @@ const handleDelete = async (row) => {
 // 下载模板
 const downloadTemplate = async () => {
   try {
-    const response = await request.get('/sales/orders/download-template/', {
-      responseType: 'blob'
-    })
+    const response = await downloadOrderTemplate()
     const url = window.URL.createObjectURL(response.data)
     const link = document.createElement('a')
     link.href = url
@@ -760,9 +760,7 @@ const handleImport = async (file) => {
   formData.append('file', file)
   
   try {
-    const res = await request.post('/sales/orders/import/', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
+    const res = await importSalesOrders(formData)
     
     ElMessage.success(res.message || `导入完成！新增 ${res.success_count} 条，更新 ${res.update_count} 条`)
     loadOrders()
@@ -788,10 +786,7 @@ const handleExport = async () => {
       status: searchForm.status
     }
     
-    const response = await request.get('/sales/orders/export/', {
-      params,
-      responseType: 'blob'
-    })
+    const response = await exportSalesOrders(params)
     
     const url = window.URL.createObjectURL(response.data)
     const link = document.createElement('a')
@@ -831,7 +826,7 @@ const handleBulkDelete = async () => {
     )
     
     const ids = selectedOrders.value.map(order => order.id)
-    const res = await request.post('/sales/orders/bulk-delete/', { ids })
+    const res = await bulkDeleteSalesOrders({ ids })
     
     ElMessage.success(res.message || '批量删除成功')
     selectedOrders.value = []

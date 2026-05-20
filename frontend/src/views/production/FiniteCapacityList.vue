@@ -208,7 +208,9 @@ const runSchedule = async (row) => {
     await runFiniteCapacitySchedule(row.id)
     ElMessage.success('排程已开始运行')
     loadList()
-  } catch {}
+  } catch (error) {
+    console.error('FiniteCapacityList loadList error:', error)
+  }
 }
 
 const publishSchedule = async (row) => {
@@ -217,7 +219,9 @@ const publishSchedule = async (row) => {
     await publishFiniteCapacitySchedule(row.id)
     ElMessage.success('排程已发布')
     loadList()
-  } catch {}
+  } catch (error) {
+    console.error('FiniteCapacityList loadList error:', error)
+  }
 }
 
 const handleDelete = async (row) => {
@@ -226,7 +230,9 @@ const handleDelete = async (row) => {
     await deleteFiniteCapacityPlan(row.id)
     ElMessage.success('删除成功')
     loadList()
-  } catch {}
+  } catch (error) {
+    console.error('FiniteCapacityList loadList error:', error)
+  }
 }
 
 onMounted(() => { loadList() })

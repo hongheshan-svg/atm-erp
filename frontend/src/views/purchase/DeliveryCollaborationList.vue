@@ -72,7 +72,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getDeliveryCollaborations, getDeliveryCollaboration, confirmDeliveryCollaboration } from '@/api/purchase'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -91,7 +91,7 @@ const getStatusType = (s) => ({ 'PENDING': 'warning', 'CONFIRMED': 'primary', 'D
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await request.get('/purchase/delivery-collaborations/', { params: { page: page.value, page_size: pageSize.value } })
+    const res = await getDeliveryCollaborations({ page: page.value, page_size: pageSize.value })
     tableData.value = res.data?.results || res.results || []
     total.value = res.data?.count || res.count || 0
   } catch (error) {
@@ -103,10 +103,11 @@ const loadData = async () => {
 
 const handleView = async (row) => {
   try {
-    const res = await request.get(`/purchase/delivery-collaborations/${row.id}/`)
+    const res = await getDeliveryCollaboration(row.id)
     viewDetail.value = res.data || res
     viewDialogVisible.value = true
-  } catch {
+  } catch (error) {
+    console.error(error)
     viewDetail.value = row
     viewDialogVisible.value = true
   }
@@ -122,7 +123,7 @@ const handleConfirm = (row) => {
 const saveConfirm = async () => {
   try {
     saving.value = true
-    await request.post(`/purchase/delivery-collaborations/${currentRow.value.id}/confirm/`, confirmForm)
+    await confirmDeliveryCollaboration(currentRow.value.id, confirmForm)
     ElMessage.success('确认收货成功')
     confirmDialogVisible.value = false
     loadData()

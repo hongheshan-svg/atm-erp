@@ -296,9 +296,12 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { getRequirementList, getRequirement, createRequirement, patchRequirement, getRequirementStatistics, submitRequirement, approveRequirement, decomposeRequirement } from '@/api/plm/requirement'
+import { getCustomerList } from '@/api/masterdata'
+import { getProjectList } from '@/api/projects/project'
+import { getUsers } from '@/api/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Document } from '@element-plus/icons-vue'
-import request from '@/utils/request'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -369,7 +372,7 @@ const fetchList = async () => {
       page_size: pagination.size,
       ...queryParams
     }
-    const data = await request.get('/projects/requirements/', { params })
+    const data = await getRequirementList(params)
     requirementList.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {
@@ -381,7 +384,7 @@ const fetchList = async () => {
 
 const fetchStats = async () => {
   try {
-    const data = await request.get('/projects/requirements/statistics/')
+    const data = await getRequirementStatistics()
     stats.value = data
     
     // 计算待处理和实施中数量
@@ -398,7 +401,7 @@ const fetchStats = async () => {
 // 加载客户列表
 const fetchCustomers = async () => {
   try {
-    const data = await request.get('/masterdata/customers/', { params: { page_size: 1000 } })
+    const data = await getCustomerList({ page_size: 1000 })
     customers.value = data.results || data
   } catch (e) {
     console.error('加载客户失败', e)
@@ -408,7 +411,7 @@ const fetchCustomers = async () => {
 // 加载项目列表
 const fetchProjects = async () => {
   try {
-    const data = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    const data = await getProjectList({ page_size: 1000 })
     projects.value = data.results || data
   } catch (e) {
     console.error('加载项目失败', e)
@@ -418,7 +421,7 @@ const fetchProjects = async () => {
 // 加载用户列表
 const fetchUsers = async () => {
   try {
-    const data = await request.get('/auth/users/', { params: { page_size: 1000 } })
+    const data = await getUsers({ page_size: 1000 })
     const userList = data.results || data
     users.value = userList.map(u => ({
       id: u.id,
@@ -494,9 +497,9 @@ const submitForm = async () => {
   submitLoading.value = true
   try {
     if (isEdit.value) {
-      await request.patch(`/projects/requirements/${currentReq.value.id}/`, formData)
+      await patchRequirement(currentReq.value.id, formData)
     } else {
-      await request.post('/projects/requirements/', formData)
+      await createRequirement(formData)
     }
     ElMessage.success('保存成功')
     dialogVisible.value = false
@@ -511,7 +514,7 @@ const submitForm = async () => {
 
 const handleView = async (row) => {
   try {
-    const data = await request.get(`/projects/requirements/${row.id}/`)
+    const data = await getRequirement(row.id)
     currentReq.value = data
     detailDialogVisible.value = true
   } catch (e) {
@@ -521,7 +524,7 @@ const handleView = async (row) => {
 
 const handleSubmit = async (row) => {
   try {
-    await request.post(`/projects/requirements/${row.id}/submit/`)
+    await submitRequirement(row.id)
     ElMessage.success('已提交')
     fetchList()
     fetchStats()
@@ -532,7 +535,7 @@ const handleSubmit = async (row) => {
 
 const handleApprove = async (row) => {
   try {
-    await request.post(`/projects/requirements/${row.id}/approve/`)
+    await approveRequirement(row.id)
     ElMessage.success('已批准')
     fetchList()
     fetchStats()
@@ -550,11 +553,11 @@ const handleDecompose = async (row) => {
     if (!value) return
     
     const children = value.split(',').map(t => ({ title: t.trim(), description: '' }))
-    await request.post(`/projects/requirements/${row.id}/decompose/`, { children })
+    await decomposeRequirement(row.id, { children })
     ElMessage.success('分解成功')
     fetchList()
   } catch (e) {
-    // 取消
+    console.error('RequirementList fetchList error:', e)
   }
 }
 

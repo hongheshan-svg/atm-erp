@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>资源类型管理</span>
-          <el-button type="primary" @click="showCreateDialog = true">
+          <el-button type="primary" v-permission="'production:process:create'" @click="showCreateDialog = true">
             <el-icon><Plus /></el-icon>新建类型
           </el-button>
         </div>
@@ -58,7 +58,7 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showCreateDialog = false">取消</el-button>
+        <el-button v-permission="'production:process:create'" @click="showCreateDialog = false">取消</el-button>
         <el-button type="primary" @click="saveType" :loading="submitting">保存</el-button>
       </template>
     </el-dialog>
@@ -69,7 +69,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getResourceTypes, createResourceType, updateResourceType, patchResourceType } from '@/api/production'
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -109,7 +109,7 @@ const getCategoryType = (category) => {
 const loadResourceTypes = async () => {
   loading.value = true
   try {
-    const res = await request.get('/production/resource-types/')
+    const res = await getResourceTypes()
     resourceTypes.value = res.results || res
   } catch (e) {
     ElMessage.error('加载资源类型失败')
@@ -149,10 +149,10 @@ const saveType = async () => {
     submitting.value = true
     
     if (isEdit.value) {
-      await request.put(`/production/resource-types/${editingId.value}/`, typeForm)
+      await updateResourceType(editingId.value, typeForm)
       ElMessage.success('资源类型已更新')
     } else {
-      await request.post('/production/resource-types/', typeForm)
+      await createResourceType(typeForm)
       ElMessage.success('资源类型已创建')
     }
     
@@ -167,7 +167,7 @@ const saveType = async () => {
 
 const toggleActive = async (row) => {
   try {
-    await request.patch(`/production/resource-types/${row.id}/`, { is_active: !row.is_active })
+    await patchResourceType(row.id, { is_active: !row.is_active })
     ElMessage.success('状态已更新')
     loadResourceTypes()
   } catch (e) {

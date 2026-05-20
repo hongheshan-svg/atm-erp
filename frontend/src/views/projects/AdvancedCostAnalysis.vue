@@ -212,9 +212,10 @@
 <script setup>
 import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { Check, Close } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
-import request from '@/utils/request'
+import { getProjectList, getProjectCostAnalysis, getCostDetails, createCostRecord } from '@/api/projects/project'
 
 const router = useRouter()
 
@@ -286,10 +287,8 @@ const getPercentage = (value) => {
 }
 
 const loadProjects = async () => {
-  const res = await request.get('/projects/projects/', {
-    params: { page_size: 500 }
-  })
-  projects.value = res.data.results || res.data
+  const res = await getProjectList({ page_size: 500 })
+  projects.value = res.data?.results || res.results || res.data || res
 }
 
 const loadProjectCost = async () => {
@@ -300,7 +299,7 @@ const loadProjectCost = async () => {
   
   loading.value = true
   try {
-    const res = await request.get(`/projects/cost/analysis/${selectedProject.value}/`)
+    const res = await getProjectCostAnalysis(selectedProject.value)
     summary.value = res.data.summary
     analysisData.value = res.data.analysis
     trendData.value = res.data.trend || []
@@ -327,7 +326,7 @@ const loadDetails = async () => {
       page_size: detailPageSize.value,
       cost_element: elementFilter.value || undefined
     }
-    const res = await request.get('/projects/cost-details/', { params })
+    const res = await getCostDetails(params)
     costDetails.value = res.data.results || res.data
     detailTotal.value = res.data.count || costDetails.value.length
   } catch (e) {
@@ -423,7 +422,7 @@ const showAddDialog = () => {
 const handleAddCostSave = async () => {
   addCostSaving.value = true
   try {
-    await request.post('/projects/project-cost-records/', { ...costForm, project: selectedProject.value })
+    await createCostRecord({ ...costForm, project: selectedProject.value })
     ElMessage.success('成本记录已添加')
     addCostDialogVisible.value = false
     loadProjectCost()

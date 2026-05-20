@@ -70,7 +70,7 @@
         <el-table-column label="利润率" width="100" align="center">
           <template #default="{ row }">
             <span :class="getProfitClass(row.profit_margin)">
-              {{ row.profit_margin?.toFixed(1) }}%
+              {{ toFixedSafe(row.profit_margin, 1, '0.0') }}%
             </span>
           </template>
         </el-table-column>
@@ -196,7 +196,7 @@
 
         <el-form-item label="参照项目">
           <el-select v-model="quoteForm.reference_project" filterable clearable placeholder="选择参照项目" 
-                     style="width: 100%" @change="estimateFromReference">
+                     style="width: 100%" @change="handleEstimateFromReference">
             <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
@@ -247,7 +247,7 @@
           </el-descriptions-item>
           <el-descriptions-item label="利润率">
             <span :class="getProfitClass(currentQuote.profit_margin)">
-              {{ currentQuote.profit_margin?.toFixed(1) }}%
+              {{ toFixedSafe(currentQuote.profit_margin, 1, '0.0') }}%
             </span>
           </el-descriptions-item>
           <el-descriptions-item label="预计工期">{{ currentQuote.estimated_days }}天</el-descriptions-item>
@@ -302,7 +302,7 @@
           <template #default="{ row }">¥{{ formatMoney(row.actual_cost) }}</template>
         </el-table-column>
         <el-table-column prop="profit_margin" label="利润率" width="80" align="center">
-          <template #default="{ row }">{{ row.profit_margin?.toFixed(1) }}%</template>
+          <template #default="{ row }">{{ toFixedSafe(row.profit_margin, 1, '0.0') }}%</template>
         </el-table-column>
         <el-table-column prop="actual_days" label="工期" width="80" align="center">
           <template #default="{ row }">{{ row.actual_days }}天</template>
@@ -321,7 +321,10 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { toFixedSafe } from '@/utils/number'
+import { getQuoteVersions, getQuoteVersion, createQuoteVersion, createNewQuoteVersion, getQuoteVersionProfitPrediction, estimateFromReference, findSimilarQuotes } from '@/api/sales'
+import { getCustomerList } from '@/api/masterdata'
+import { getProjectList } from '@/api/projects/project'
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -401,7 +404,7 @@ const loadQuotes = async () => {
     if (filters.customer) params.customer = filters.customer
     if (filters.status) params.status = filters.status
 
-    const res = await request.get('/sales/quote-versions/', { params })
+    const res = await getQuoteVersions(params)
     quotes.value = res.results || res
     pagination.total = res.count || quotes.value.length
   } catch (e) {
@@ -413,7 +416,7 @@ const loadQuotes = async () => {
 
 const loadCustomers = async () => {
   try {
-    const res = await request.get('/masterdata/customers/', { params: { page_size: 1000 } })
+    const res = await getCustomerList({ page_size: 1000 })
     customers.value = res.results || res
   } catch (e) {
     console.error('加载客户列表失败')
@@ -422,7 +425,7 @@ const loadCustomers = async () => {
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 1000, status: 'COMPLETED' } })
+    const res = await getProjectList({ page_size: 1000, status: 'COMPLETED' })
     projects.value = res.results || res
   } catch (e) {
     console.error('加载项目列表失败')
@@ -439,7 +442,7 @@ const createQuote = async () => {
   try {
     await quoteFormRef.value.validate()
     submitting.value = true
-    await request.post('/sales/quote-versions/', quoteForm)
+    await createQuoteVersion(quoteForm)
     ElMessage.success('报价创建成功')
     showCreateDialog.value = false
     loadQuotes()
@@ -452,7 +455,7 @@ const createQuote = async () => {
 
 const viewQuote = async (row) => {
   try {
-    const res = await request.get(`/sales/quote-versions/${row.id}/`)
+    const res = await getQuoteVersion(row.id)
     currentQuote.value = res
     showDetailDrawer.value = true
   } catch (e) {
@@ -462,7 +465,7 @@ const viewQuote = async (row) => {
 
 const createNewVersion = async (row) => {
   try {
-    const res = await request.post(`/sales/quote-versions/${row.id}/create_new_version/`)
+    const res = await createNewQuoteVersion(row.id)
     ElMessage.success(`新版本 V${res.version} 已创建`)
     loadQuotes()
   } catch (e) {
@@ -472,7 +475,7 @@ const createNewVersion = async (row) => {
 
 const predictProfit = async (row) => {
   try {
-    const res = await request.get(`/sales/quote-versions/${row.id}/profit_prediction/`)
+    const res = await getQuoteVersionProfitPrediction(row.id)
     const riskColors = { LOW: '#67C23A', MEDIUM: '#E6A23C', HIGH: '#F56C6C' }
     ElMessage({
       message: `预期利润: ¥${formatMoney(res.expected_profit)}, 利润率: ${res.profit_margin}%, 风险: ${res.risk_level}`,
@@ -483,10 +486,10 @@ const predictProfit = async (row) => {
   }
 }
 
-const estimateFromReference = async (projectId) => {
+const handleEstimateFromReference = async (projectId) => {
   if (!projectId) return
   try {
-    const res = await request.post(`/sales/quote-versions/${currentQuote.value?.id || 0}/estimate_from_reference/`, {
+    const res = await estimateFromReference(currentQuote.value?.id || 0, {
       reference_project_id: projectId,
       adjustment_factor: 1.0
     })
@@ -508,7 +511,7 @@ const estimateFromReference = async (projectId) => {
 const findSimilar = async () => {
   searchingSimilar.value = true
   try {
-    const res = await request.post('/sales/quote-versions/find_similar/', {
+    const res = await findSimilarQuotes({
       keywords: similarKeywords.value,
       industry: similarIndustry.value
     })

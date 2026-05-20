@@ -7,7 +7,7 @@
         <span class="subtitle">项目级别的生产排程和进度跟踪</span>
       </div>
       <div class="header-right">
-        <el-button type="primary" @click="handleAdd">
+        <el-button type="primary" v-permission="'production:plan:create'" @click="handleAdd">
           <el-icon><Plus /></el-icon>
           新建计划
         </el-button>
@@ -67,9 +67,9 @@
     <!-- 计划列表 -->
     <el-card class="table-card" shadow="never">
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'production:plan:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" v-permission="'production:plan:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <el-table
@@ -81,7 +81,7 @@
         @row-click="handleRowClick"
         @selection-change="handleSelectionChange"
       >
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'production:plan:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="plan_no" label="计划编号" width="140" />
         <el-table-column prop="title" label="计划名称" min-width="180" />
         <el-table-column prop="project_code" label="项目编号" width="130" />
@@ -209,7 +209,7 @@
         <div class="detail-section">
           <div class="section-header">
             <h4>计划工序</h4>
-            <el-button type="primary" size="small" @click="handleAddProcess">
+            <el-button type="primary" size="small" v-permission="'production:plan:create'" @click="handleAddProcess">
               <el-icon><Plus /></el-icon>
               添加工序
             </el-button>
@@ -408,7 +408,7 @@
       </el-checkbox-group>
       <template #footer>
         <el-button @click="processDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="handleAddProcessConfirm">
+        <el-button type="primary" :loading="saving" v-permission="'production:plan:create'" @click="handleAddProcessConfirm">
           添加
         </el-button>
       </template>
@@ -442,9 +442,15 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, Refresh } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import {
+  getPlans, getPlan, createPlan, updatePlan,
+  confirmPlan, startPlan, completePlan, addPlanProcesses,
+  getProcesses, startPlanProcess, completePlanProcess, updatePlanProcessProgress
+} from '@/api/production'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { getUsers } from '@/api/auth'
+import { getProjectList } from '@/api/projects/project'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -544,7 +550,7 @@ const loadData = async () => {
       page_size: pagination.pageSize,
       ...filters
     }
-    const res = await request.get('/production/plans/', { params })
+    const res = await getPlans(params)
     planList.value = res.results || res || []
     pagination.total = res.count || (Array.isArray(planList.value) ? planList.value.length : 0)
   } catch (error) {
@@ -557,7 +563,7 @@ const loadData = async () => {
 // 加载项目列表
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res || []
   } catch (error) {
     console.error('加载项目列表失败:', error)
@@ -567,7 +573,7 @@ const loadProjects = async () => {
 // 加载用户列表
 const loadUsers = async () => {
   try {
-    const res = await request.get('/auth/users/', { params: { page_size: 1000 } })
+    const res = await getUsers({ page_size: 1000 })
     users.value = res.results || res || []
   } catch (error) {
     console.error('加载用户列表失败:', error)
@@ -604,7 +610,7 @@ const handlePageChange = (page) => {
 // 点击行查看详情
 const handleRowClick = async (row) => {
   try {
-    const res = await request.get(`/production/plans/${row.id}/`)
+    const res = await getPlan(row.id)
     currentPlan.value = res
     detailVisible.value = true
   } catch (error) {
@@ -650,7 +656,7 @@ const handleEdit = (row) => {
 // 确认计划
 const handleConfirm = async (row) => {
   try {
-    await request.post(`/production/plans/${row.id}/confirm/`)
+    await confirmPlan(row.id)
     ElMessage.success('计划已确认')
     loadData()
   } catch (error) {
@@ -661,7 +667,7 @@ const handleConfirm = async (row) => {
 // 开始生产
 const handleStart = async (row) => {
   try {
-    await request.post(`/production/plans/${row.id}/start/`)
+    await startPlan(row.id)
     ElMessage.success('生产已开始')
     loadData()
   } catch (error) {
@@ -673,7 +679,7 @@ const handleStart = async (row) => {
 const handleComplete = async (row) => {
   try {
     await ElMessageBox.confirm('确定要完成该生产计划吗？', '确认完成')
-    await request.post(`/production/plans/${row.id}/complete/`)
+    await completePlan(row.id)
     ElMessage.success('生产已完成')
     loadData()
   } catch (error) {
@@ -693,10 +699,10 @@ const handleSave = async () => {
     
     const data = { ...formData }
     if (data.id) {
-      await request.put(`/production/plans/${data.id}/`, data)
+      await updatePlan(data.id, data)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/production/plans/', data)
+      await createPlan(data)
       ElMessage.success('创建成功')
     }
     
@@ -716,9 +722,7 @@ const handleAddProcess = async () => {
   if (!currentPlan.value?.project) return
   
   try {
-    const res = await request.get('/production/processes/', {
-      params: { project: currentPlan.value.project, page_size: 1000 }
-    })
+    const res = await getProcesses({ project: currentPlan.value.project, page_size: 1000 })
     projectProcesses.value = res.results || res || []
     selectedProcessIds.value = []
     processDialogVisible.value = true
@@ -736,14 +740,14 @@ const handleAddProcessConfirm = async () => {
   
   try {
     saving.value = true
-    await request.post(`/production/plans/${currentPlan.value.id}/add_processes/`, {
+    await addPlanProcesses(currentPlan.value.id, {
       process_ids: selectedProcessIds.value
     })
     ElMessage.success('工序已添加')
     processDialogVisible.value = false
     
     // 刷新详情
-    const res = await request.get(`/production/plans/${currentPlan.value.id}/`)
+    const res = await getPlan(currentPlan.value.id)
     currentPlan.value = res
     loadData()
   } catch (error) {
@@ -756,11 +760,11 @@ const handleAddProcessConfirm = async () => {
 // 开始工序
 const handleStartProcess = async (row) => {
   try {
-    await request.post(`/production/plan-processes/${row.id}/start/`)
+    await startPlanProcess(row.id)
     ElMessage.success('工序已开始')
     
     // 刷新详情
-    const res = await request.get(`/production/plans/${currentPlan.value.id}/`)
+    const res = await getPlan(currentPlan.value.id)
     currentPlan.value = res
     loadData()
   } catch (error) {
@@ -771,11 +775,11 @@ const handleStartProcess = async (row) => {
 // 完成工序
 const handleCompleteProcess = async (row) => {
   try {
-    await request.post(`/production/plan-processes/${row.id}/complete/`)
+    await completePlanProcess(row.id)
     ElMessage.success('工序已完成')
     
     // 刷新详情
-    const res = await request.get(`/production/plans/${currentPlan.value.id}/`)
+    const res = await getPlan(currentPlan.value.id)
     currentPlan.value = res
     loadData()
   } catch (error) {
@@ -795,7 +799,7 @@ const handleUpdateProcessProgress = (row) => {
 const handleProgressConfirm = async () => {
   try {
     saving.value = true
-    await request.post(`/production/plan-processes/${currentProcessRow.value.id}/update_progress/`, {
+    await updatePlanProcessProgress(currentProcessRow.value.id, {
       progress_percent: progressFormData.progress_percent,
       actual_hours: progressFormData.actual_hours
     })
@@ -803,7 +807,7 @@ const handleProgressConfirm = async () => {
     progressDialogVisible.value = false
     
     // 刷新详情
-    const res = await request.get(`/production/plans/${currentPlan.value.id}/`)
+    const res = await getPlan(currentPlan.value.id)
     currentPlan.value = res
     loadData()
   } catch (error) {

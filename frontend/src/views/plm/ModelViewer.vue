@@ -140,12 +140,12 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { getDrawingList } from '@/api/projects/drawing'
 import { ElMessage } from 'element-plus'
 import { 
   Upload, Folder, Document, RefreshRight, Grid, FullScreen, 
   Download, View, Loading 
 } from '@element-plus/icons-vue'
-import request from '@/utils/request'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader'
@@ -211,12 +211,10 @@ const getFileColor = (type) => {
 const fetchModels = async () => {
   loading.value = true
   try {
-    const data = await request.get('/projects/drawings/', {
-      params: { 
+    const data = await getDrawingList({ 
         drawing_type: '3D',
         search: searchKeyword.value 
-      }
-    })
+      })
     
     // 按项目分组
     const grouped = {}

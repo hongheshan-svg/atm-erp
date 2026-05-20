@@ -16,7 +16,7 @@
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
-            <el-button type="primary" @click="handleCreate">
+            <el-button type="primary" v-permission="'purchase:rfq:create'" @click="handleCreate">
               <el-icon><Plus /></el-icon>
               新建询价单
             </el-button>
@@ -73,14 +73,14 @@
       </el-form>
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'purchase:rfq:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" v-permission="'purchase:rfq:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <!-- 数据表格 -->
       <el-table :data="tableData" v-loading="loading" stripe border @selection-change="handleSelectionChange">
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'purchase:rfq:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="rfq_no" label="询价单号" width="150" />
         <el-table-column prop="project_name" label="项目" min-width="120">
           <template #default="{ row }">
@@ -431,7 +431,7 @@
 
       <template #footer>
         <el-button @click="bomRFQDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleCreateFromBOM" :disabled="selectedBOMItems.length === 0">
+        <el-button type="primary" v-permission="'purchase:rfq:create'" @click="handleCreateFromBOM" :disabled="selectedBOMItems.length === 0">
           创建询价单 ({{ selectedBOMItems.length }})
         </el-button>
       </template>
@@ -463,7 +463,7 @@
       </el-form>
       <template #footer>
         <el-button @click="templateRFQDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleCreateFromTemplate" :disabled="!templateRFQForm.template_id">
+        <el-button type="primary" v-permission="'purchase:rfq:create'" @click="handleCreateFromTemplate" :disabled="!templateRFQForm.template_id">
           创建询价单
         </el-button>
       </template>
@@ -537,9 +537,15 @@ import { ref, reactive, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, ArrowDown, Download, Upload, UploadFilled, ShoppingCart, Document, List } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import {
+  getRFQs, getRFQ, createRFQ, createRFQFromBOM, createRFQFromTemplate,
+  getRFQTemplates, matchRFQSuppliers, sendRFQToSuppliers, createRFQLine
+} from '@/api/purchase'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { getItemList, getSupplierList } from '@/api/masterdata'
+import { exportQuoteBOM, generateBOMPurchaseRequest, getBOMList, getBOMPendingQuoteCount, getBOMPurchasableItems, importQuoteBOM } from '@/api/projects/bom'
+import { getProjectList } from '@/api/projects/project'
 
 const router = useRouter()
 
@@ -671,7 +677,7 @@ const loadData = async () => {
       search: searchForm.rfq_no,
       status: searchForm.status
     }
-    const res = await request.get('/purchase/rfqs/', { params })
+    const res = await getRFQs(params)
     tableData.value = res.results || res || []
     pagination.total = res.count || 0
   } catch (error) {
@@ -685,7 +691,7 @@ const loadData = async () => {
 // 加载项目
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 200 } })
+    const res = await getProjectList({ page_size: 200 })
     projects.value = res.results || res || []
   } catch (error) {
     console.error('加载项目失败:', error)
@@ -695,7 +701,7 @@ const loadProjects = async () => {
 // 加载供应商
 const loadSuppliers = async () => {
   try {
-    const res = await request.get('/masterdata/suppliers/', { params: { page_size: 200 } })
+    const res = await getSupplierList({ page_size: 200 })
     suppliers.value = res.results || res || []
   } catch (error) {
     console.error('加载供应商失败:', error)
@@ -711,7 +717,7 @@ const fetchPendingQuoteCount = async () => {
     return
   }
   try {
-    const res = await request.get('/projects/bom/pending_quote_count/', {
+    const res = await getBOMPendingQuoteCount({
       params: { project: selectedProject.value }
     })
     pendingQuoteCount.value = res.data?.count || res.count || 0
@@ -737,7 +743,7 @@ const fetchPendingQuoteItems = async () => {
   
   pendingQuoteLoading.value = true
   try {
-    const res = await request.get('/projects/bom/', {
+    const res = await getBOMList({
       params: { 
         project: selectedProject.value,
         quote_status: 'NOT_QUOTED',
@@ -772,7 +778,7 @@ const fetchPurchasableItems = async () => {
   
   purchasableLoading.value = true
   try {
-    const res = await request.get('/projects/bom/purchasable_items/', {
+    const res = await getBOMPurchasableItems({
       params: { project: selectedProject.value }
     })
     purchasableItems.value = res.data?.items || res.items || []
@@ -815,7 +821,7 @@ const handleGeneratePR = async () => {
     
     const itemIds = selectedPurchasableItems.value.map(item => item.item_id)
     
-    const res = await request.post('/projects/bom/generate_purchase_request/', {
+    const res = await generateBOMPurchaseRequest({
       project: selectedProject.value,
       item_ids: itemIds
     })
@@ -851,7 +857,7 @@ const handleExportQuoteBOM = async () => {
   }
   
   try {
-    const response = await request.get('/projects/bom/export_quote_bom/', {
+    const response = await exportQuoteBOM({
       params: { project: selectedProject.value },
       responseType: 'blob'
     })
@@ -921,7 +927,7 @@ const handleConfirmQuoteImport = async () => {
     formData.append('file', quoteImportFile.value)
     formData.append('project', String(selectedProject.value))
     
-    const response = await request.post('/projects/bom/import_quote_bom/', formData, {
+    const response = await importQuoteBOM(formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     
@@ -948,7 +954,7 @@ const handleConfirmQuoteImport = async () => {
 const searchItems = async (query) => {
   if (!query) return
   try {
-    const res = await request.get('/masterdata/items/', { params: { search: query, page_size: 50 } })
+    const res = await getItemList({ search: query, page_size: 50 })
     items.value = res.results || res || []
   } catch (error) {
     console.error('搜索物料失败:', error)
@@ -1023,7 +1029,7 @@ const loadProjectBOM = async () => {
   
   bomLoading.value = true
   try {
-    const res = await request.get('/projects/bom/', {
+    const res = await getBOMList({
       params: { 
         project: bomRFQForm.project_id, 
         is_deleted: false,
@@ -1061,7 +1067,7 @@ const handleCreateFromBOM = async () => {
   try {
     const bomItemIds = selectedBOMItems.value.map(item => item.id)
     
-    const res = await request.post('/purchase/rfqs/create-from-bom/', {
+    const res = await createRFQFromBOM({
       project_id: bomRFQForm.project_id,
       bom_item_ids: bomItemIds,
       rfq_type: bomRFQForm.rfq_type,
@@ -1082,7 +1088,7 @@ const handleCreateFromBOM = async () => {
 // 加载询价模板
 const loadRFQTemplates = async () => {
   try {
-    const res = await request.get('/purchase/rfq-templates/', { params: { page_size: 100 } })
+    const res = await getRFQTemplates({ page_size: 100 })
     rfqTemplates.value = res.results || res || []
   } catch (error) {
     console.error('加载询价模板失败:', error)
@@ -1097,7 +1103,7 @@ const handleCreateFromTemplate = async () => {
   }
   
   try {
-    const res = await request.post('/purchase/rfqs/create-from-template/', {
+    const res = await createRFQFromTemplate({
       template_id: templateRFQForm.template_id,
       project_id: templateRFQForm.project_id
     })
@@ -1118,7 +1124,7 @@ const openSupplierMatch = async (rfq) => {
   supplierMatchDialogVisible.value = true
   
   try {
-    const res = await request.get(`/purchase/rfqs/${rfq.id}/match-suppliers/`)
+    const res = await matchRFQSuppliers(rfq.id)
     matchedSuppliers.value = res.recommended_suppliers || []
   } catch (error) {
     console.error('匹配供应商失败:', error)
@@ -1177,11 +1183,11 @@ const handleSave = async () => {
       notes: form.notes
     }
     
-    const rfqRes = await request.post('/purchase/rfqs/', data)
+    const rfqRes = await createRFQ(data)
     
     // 添加明细
     for (const line of validLines) {
-      await request.post('/purchase/rfq-lines/', {
+      await createRFQLine({
         rfq: rfqRes.id,
         item: line.item,
         qty: line.qty,
@@ -1201,9 +1207,10 @@ const handleSave = async () => {
 // 查看
 const handleView = async (row) => {
   try {
-    const res = await request.get(`/purchase/rfqs/${row.id}/`)
+    const res = await getRFQ(row.id)
     rfqDetail.value = res.data || res
-  } catch {
+  } catch (error) {
+    console.error(error)
     rfqDetail.value = row
   }
   rfqViewVisible.value = true
@@ -1219,7 +1226,7 @@ const handleSendToSuppliers = async (row) => {
 
 const confirmSendToSuppliers = async () => {
   try {
-    await request.post(`/purchase/rfqs/${currentRFQ.value.id}/send_to_suppliers/`, {
+    await sendRFQToSuppliers(currentRFQ.value.id, {
       supplier_ids: selectedSuppliers.value
     })
     ElMessage.success(`已发送给 ${selectedSuppliers.value.length} 个供应商`)

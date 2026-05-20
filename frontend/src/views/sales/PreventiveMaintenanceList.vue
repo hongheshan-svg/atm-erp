@@ -41,7 +41,7 @@
               <el-option label="已完成" value="COMPLETED" />
               <el-option label="已跳过" value="SKIPPED" />
             </el-select>
-            <el-button type="primary" @click="showCreateDialog = true">
+            <el-button type="primary" v-permission="'sales:order:create'" @click="showCreateDialog = true">
               <el-icon><Plus /></el-icon>创建计划
             </el-button>
           </div>
@@ -160,7 +160,7 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showCreateDialog = false">取消</el-button>
+        <el-button v-permission="'sales:order:create'" @click="showCreateDialog = false">取消</el-button>
         <el-button type="primary" @click="createMaintenance" :loading="submitting">创建</el-button>
       </template>
     </el-dialog>
@@ -206,7 +206,8 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getPreventiveMaintenances, getPreventiveMaintenance, createPreventiveMaintenance, getUpcomingMaintenance, getOverdueMaintenance, startPreventiveMaintenance, completePreventiveMaintenance, getServiceContracts } from '@/api/sales'
+import { getUsers } from '@/api/auth'
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -283,7 +284,7 @@ const loadMaintenances = async () => {
     }
     if (statusFilter.value) params.status = statusFilter.value
 
-    const res = await request.get('/sales/preventive-maintenance/', { params })
+    const res = await getPreventiveMaintenances(params)
     maintenances.value = res.results || res
     pagination.total = res.count || maintenances.value.length
   } catch (e) {
@@ -296,9 +297,9 @@ const loadMaintenances = async () => {
 const loadStats = async () => {
   try {
     const [scheduledRes, upcomingRes, overdueRes] = await Promise.all([
-      request.get('/sales/preventive-maintenance/', { params: { status: 'SCHEDULED', page_size: 1 } }),
-      request.get('/sales/preventive-maintenance/upcoming/', { params: { days: 7 } }),
-      request.get('/sales/preventive-maintenance/overdue/')
+      getPreventiveMaintenances({ status: 'SCHEDULED', page_size: 1 }),
+      getUpcomingMaintenance({ days: 7 }),
+      getOverdueMaintenance()
     ])
     stats.value.scheduled = scheduledRes.count || 0
     stats.value.dueThisWeek = upcomingRes?.length || 0
@@ -310,7 +311,7 @@ const loadStats = async () => {
 
 const loadContracts = async () => {
   try {
-    const res = await request.get('/sales/service-contracts/', { params: { status: 'ACTIVE', page_size: 1000 } })
+    const res = await getServiceContracts({ status: 'ACTIVE', page_size: 1000 })
     contracts.value = res.results || res
   } catch (e) {
     console.error('加载合同列表失败')
@@ -319,7 +320,7 @@ const loadContracts = async () => {
 
 const loadUsers = async () => {
   try {
-    const res = await request.get('/auth/users/', { params: { page_size: 1000 } })
+    const res = await getUsers({ page_size: 1000 })
     users.value = res.results || res
   } catch (e) {
     console.error('加载用户列表失败')
@@ -334,7 +335,7 @@ const createMaintenance = async () => {
     if (data.checklist) {
       data.checklist = data.checklist.split('\n').filter(s => s.trim())
     }
-    await request.post('/sales/preventive-maintenance/', data)
+    await createPreventiveMaintenance(data)
     ElMessage.success('预防维护计划创建成功')
     showCreateDialog.value = false
     loadMaintenances()
@@ -348,7 +349,7 @@ const createMaintenance = async () => {
 
 const viewMaintenance = async (row) => {
   try {
-    const res = await request.get(`/sales/preventive-maintenance/${row.id}/`)
+    const res = await getPreventiveMaintenance(row.id)
     currentMaintenance.value = res
     showDetailDrawer.value = true
   } catch (e) {
@@ -358,7 +359,7 @@ const viewMaintenance = async (row) => {
 
 const startMaintenance = async (row) => {
   try {
-    await request.post(`/sales/preventive-maintenance/${row.id}/start/`)
+    await startPreventiveMaintenance(row.id)
     ElMessage.success('维护已开始')
     loadMaintenances()
   } catch (e) {
@@ -368,7 +369,7 @@ const startMaintenance = async (row) => {
 
 const completeMaintenance = async (row) => {
   ElMessageBox.prompt('请输入完成备注', '完成维护').then(async ({ value }) => {
-    await request.post(`/sales/preventive-maintenance/${row.id}/complete/`, { 
+    await completePreventiveMaintenance(row.id, { 
       notes: value,
       actual_duration: row.estimated_duration
     })

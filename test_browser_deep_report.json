@@ -1,0 +1,361 @@
+{
+  "console_errors": [],
+  "network_errors": [],
+  "page_results": {
+    "/dashboard": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/system/users": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/system/roles": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/system/departments": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/system/code-rules": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/system/notification-settings": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/system/dict": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/system/audit-logs": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/system/workflows": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/system/permissions": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/system/data-scopes": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/system/custom-fields": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/masterdata/items": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/masterdata/customers": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/masterdata/suppliers": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/masterdata/warehouses": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/masterdata/locations": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/masterdata/item-categories": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/projects/list": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/projects/tasks": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/projects/bom": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/projects/drawings": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/projects/gantt": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/equipment/list": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/knowledge/articles": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/projects/tech-documents": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/sales/quotations": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/sales/orders": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/sales/contracts": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/sales/deliveries": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/sales/crm/leads": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/sales/crm/opportunities": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/sales/crm/dashboard": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/purchase/requests": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/purchase/rfq": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/purchase/orders": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/purchase/receipts": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/purchase/suppliers/evaluation": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/purchase/outsource": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/production/plans": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/production/orders": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/production/process-routes": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/production/kanban": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/production/mes": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/production/work-centers": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/production/capacity": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/inventory/stock": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/inventory/moves": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/inventory/adjustments": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/inventory/mrp": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/inventory/spare-parts": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/inventory/alerts": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/finance/invoices": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/finance/payments": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/finance/expenses": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/finance/receivables": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/finance/payables": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/finance/assets": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/finance/reconciliation": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/finance/collection": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/finance/budgets": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/oa/announcements": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/oa/vehicles": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/oa/meetings": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/oa/documents": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/oa/schedules": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/reports/dashboard": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/reports/templates": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/analytics/dashboard": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/settings/profile": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    },
+    "/settings/security": {
+      "status": "ok",
+      "console_errors": 0,
+      "network_errors": 0
+    }
+  }
+}

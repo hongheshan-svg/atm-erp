@@ -167,7 +167,11 @@
 import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getSupplierList } from '@/api/masterdata'
+import {
+  getSupplierPortalDashboard, getSupplierAccounts, createSupplierAccount,
+  resetSupplierAccountPassword, toggleSupplierAccountActive, getSupplierOrderViews
+} from '@/api/purchase'
 
 const loading = ref(false)
 const orderLoading = ref(false)
@@ -228,7 +232,7 @@ const getProgressStatus = (row) => {
 
 const loadDashboard = async () => {
   try {
-    const res = await request.get('/purchase/supplier-portal/dashboard/')
+    const res = await getSupplierPortalDashboard()
     stats.value = {
       pendingConfirmation: res.pending_confirmation || 0,
       inProgress: res.in_progress || 0,
@@ -245,7 +249,7 @@ const loadDashboard = async () => {
 const loadAccounts = async () => {
   loading.value = true
   try {
-    const res = await request.get('/purchase/supplier-accounts/')
+    const res = await getSupplierAccounts()
     accounts.value = res.results || res
   } catch (e) {
     ElMessage.error('加载账户列表失败')
@@ -259,7 +263,7 @@ const loadOrderViews = async () => {
   try {
     const params = {}
     if (orderFilter.status) params.status = orderFilter.status
-    const res = await request.get('/purchase/supplier-order-views/', { params })
+    const res = await getSupplierOrderViews(params)
     orderViews.value = res.results || res
   } catch (e) {
     ElMessage.error('加载订单视图失败')
@@ -270,7 +274,7 @@ const loadOrderViews = async () => {
 
 const loadSuppliers = async () => {
   try {
-    const res = await request.get('/masterdata/suppliers/', { params: { page_size: 1000 } })
+    const res = await getSupplierList({ page_size: 1000 })
     suppliers.value = res.results || res
   } catch (e) {
     console.error('加载供应商列表失败')
@@ -281,7 +285,7 @@ const createAccount = async () => {
   try {
     await accountFormRef.value.validate()
     submitting.value = true
-    await request.post('/purchase/supplier-accounts/', accountForm)
+    await createSupplierAccount(accountForm)
     ElMessage.success('账户创建成功')
     showCreateDialog.value = false
     loadAccounts()
@@ -295,7 +299,7 @@ const createAccount = async () => {
 const resetPassword = async (row) => {
   try {
     await ElMessageBox.confirm('确定要重置该账户的密码吗？', '确认')
-    const res = await request.post(`/purchase/supplier-accounts/${row.id}/reset_password/`)
+    const res = await resetSupplierAccountPassword(row.id)
     ElMessage.success(`密码已重置为: ${res.new_password}`)
   } catch (e) {
     if (e !== 'cancel') ElMessage.error('重置失败')
@@ -304,7 +308,7 @@ const resetPassword = async (row) => {
 
 const toggleActive = async (row) => {
   try {
-    await request.post(`/purchase/supplier-accounts/${row.id}/toggle_active/`)
+    await toggleSupplierAccountActive(row.id)
     ElMessage.success('状态已更新')
     loadAccounts()
   } catch (e) {

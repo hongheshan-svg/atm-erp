@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>客户联系人管理</span>
-          <el-button type="primary" @click="handleAdd">
+          <el-button type="primary" v-permission="'masterdata:customer:create'" @click="handleAdd">
             <el-icon><Plus /></el-icon> 新增联系人
           </el-button>
         </div>
@@ -59,9 +59,9 @@
         <el-table-column prop="birthday" label="生日" width="100" />
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" link type="primary" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" link type="primary" v-permission="'masterdata:customer:edit'" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" link type="success" @click="handleFollowUp(row)">跟进</el-button>
-            <el-button size="small" link type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button size="small" link type="danger" v-permission="'masterdata:customer:delete'" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -177,7 +177,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getCustomerList, getCustomerContactList, createCustomerContact, updateCustomerContact, deleteCustomerContact } from '@/api/masterdata'
 
 const router = useRouter()
 const loading = ref(false)
@@ -231,7 +231,7 @@ const getRoleType = (role) => {
 
 const loadCustomers = async () => {
   try {
-    const res = await request.get('/masterdata/customers/', { params: { page_size: 1000, status: 'ACTIVE' } })
+    const res = await getCustomerList({ page_size: 1000, status: 'ACTIVE' })
     customers.value = res.results || res || []
   } catch (error) {
     console.error('Load customers failed:', error)
@@ -247,7 +247,7 @@ const loadContacts = async () => {
       ...searchForm
     }
     Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
-    const res = await request.get('/masterdata/customer-contacts/', { params })
+    const res = await getCustomerContactList(params)
     contacts.value = res.results || res || []
     pagination.total = res.count || 0
   } catch (error) {
@@ -286,7 +286,7 @@ const handleEdit = (row) => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm(`确定要删除联系人 ${row.name} 吗？`, '删除确认', { type: 'warning' })
-    await request.delete(`/masterdata/customer-contacts/${row.id}/`)
+    await deleteCustomerContact(row.id)
     ElMessage.success('删除成功')
     loadContacts()
   } catch (error) {
@@ -305,10 +305,10 @@ const handleSubmit = async () => {
     await formRef.value.validate()
     submitting.value = true
     if (isEdit.value) {
-      await request.put(`/masterdata/customer-contacts/${form.id}/`, form)
+      await updateCustomerContact(form.id, form)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/masterdata/customer-contacts/', form)
+      await createCustomerContact(form)
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false

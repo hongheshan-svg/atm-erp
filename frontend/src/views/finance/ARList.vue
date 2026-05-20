@@ -162,7 +162,7 @@
           </el-form>
 
           <div class="batch-actions" v-if="selectedBankStatements.length > 0">
-            <el-button type="danger" size="small" @click="handleBatchDelete">
+            <el-button type="danger" size="small" v-permission="'finance:receivable:delete'" @click="handleBatchDelete">
               批量删除 ({{ selectedBankStatements.length }})
             </el-button>
           </div>
@@ -365,8 +365,12 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Download, Connection } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getReceivables, getBankStatements, recordReceivablePayment, bulkDeleteBankStatements, ignoreBankStatement, matchBankStatement, autoMatchAllBankStatements } from '@/api/finance'
 import { usePermissionStore } from '@/stores/permission'
+import { exportARReport } from '@/api/core'
+import { getCustomerList } from '@/api/masterdata'
+import { getOrders } from '@/api/sales'
+import { getProjectList } from '@/api/projects/project'
 
 const loading = ref(false)
 const bankLoading = ref(false)
@@ -436,7 +440,7 @@ const loadData = async () => {
   try {
     const params = { page: pagination.page, page_size: pagination.pageSize, ...searchForm }
     Object.keys(params).forEach(k => { if (params[k] === null) delete params[k] })
-    const res = await request.get('/finance/receivables/', { params })
+    const res = await getReceivables(params)
     dataList.value = res.results || []
     pagination.total = res.count || 0
     // 计算汇总
@@ -456,7 +460,7 @@ const loadBankStatements = async () => {
   try {
     const params = { page: bankPagination.page, page_size: bankPagination.pageSize, transaction_type: 'CREDIT', ...bankSearchForm }
     Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
-    const res = await request.get('/finance/bank-statements/', { params })
+    const res = await getBankStatements(params)
     bankStatements.value = res.results || []
     bankPagination.total = res.count || 0
   } catch (error) {
@@ -468,9 +472,11 @@ const loadBankStatements = async () => {
 
 const loadCustomers = async () => {
   try {
-    const res = await request.get('/masterdata/customers/', { params: { page_size: 500 } })
+    const res = await getCustomerList({ page_size: 500 })
     customers.value = res.results || res || []
-  } catch (error) { console.error('加载客户失败') }
+  } catch (error) {
+    console.error('ARList getCustomerList error:', error)
+  }
 }
 
 const loadProjects = async () => {
@@ -479,7 +485,7 @@ const loadProjects = async () => {
   }
 
   try {
-    const res = await request.get('/projects/', { params: { page_size: 500 } })
+    const res = await getProjectList({ page_size: 500 })
     projects.value = res.results || res || []
     projectsLoaded.value = true
     return true
@@ -497,7 +503,7 @@ const loadSalesOrders = async () => {
   }
 
   try {
-    const res = await request.get('/sales/orders/', { params: { page_size: 500 } })
+    const res = await getOrders({ page_size: 500 })
     salesOrders.value = res.results || res || []
     salesOrdersLoaded.value = true
     return true
@@ -546,7 +552,7 @@ const submitPayment = async () => {
   if (!paymentForm.amount || paymentForm.amount <= 0) return ElMessage.warning('请输入收款金额')
   submitting.value = true
   try {
-    await request.post(`/finance/receivables/${currentRow.value.id}/record_payment/`, paymentForm)
+    await recordReceivablePayment(currentRow.value.id, paymentForm)
     ElMessage.success('收款登记成功')
     paymentVisible.value = false
     loadData()
@@ -559,7 +565,7 @@ const submitPayment = async () => {
 
 const exportData = async () => {
   try {
-    const res = await request.get('/core/export/ar/', { responseType: 'blob' })
+    const res = await exportARReport({ responseType: 'blob' })
     const url = window.URL.createObjectURL(res.data)
     const link = document.createElement('a')
     link.href = url
@@ -594,11 +600,16 @@ const handleBatchDelete = async () => {
   try {
     await ElMessageBox.confirm(`确定要删除选中的 ${selectedBankStatements.value.length} 条记录吗？`, '批量删除', { type: 'warning' })
     const ids = selectedBankStatements.value.map(item => item.id)
-    await request.post('/finance/bank-statements/bulk_delete/', { ids })
+    await bulkDeleteBankStatements({ ids })
     ElMessage.success('删除成功')
     selectedBankStatements.value = []
     loadBankStatements()
-  } catch (error) { if (error !== 'cancel') ElMessage.error('删除失败') }
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败')
+      console.error('ARList handleBatchDelete error:', error)
+    }
+  }
 }
 
 const handleViewBank = (row) => { currentBankStatement.value = row; bankDetailVisible.value = true }
@@ -621,17 +632,22 @@ const handleMatchBank = async (row) => {
 const handleIgnoreBank = async (row) => {
   try {
     await ElMessageBox.confirm('确定要忽略此银行流水记录吗？', '确认忽略', { type: 'warning' })
-    await request.post(`/finance/bank-statements/${row.id}/ignore/`, { notes: '手动忽略' })
+    await ignoreBankStatement(row.id, { notes: '手动忽略' })
     ElMessage.success('已忽略')
     loadBankStatements()
-  } catch (error) { if (error !== 'cancel') ElMessage.error('操作失败') }
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('操作失败')
+      console.error('ARList handleIgnoreBank error:', error)
+    }
+  }
 }
 
 const submitBankMatch = async () => {
   if (!bankMatchForm.customer_id) return ElMessage.warning('请选择客户')
   matching.value = true
   try {
-    await request.post(`/finance/bank-statements/${currentBankStatement.value.id}/match/`, {
+    await matchBankStatement(currentBankStatement.value.id, {
       match_type: 'AR',
       ...bankMatchForm
     })
@@ -649,7 +665,7 @@ const submitBankMatch = async () => {
 const autoMatchAll = async () => {
   autoMatching.value = true
   try {
-    const response = await request.post('/finance/bank-statements/auto_match_all/')
+    const response = await autoMatchAllBankStatements()
     ElMessage.success(`成功自动匹配 ${response.matched_count} 条记录`)
     loadBankStatements()
     loadData()

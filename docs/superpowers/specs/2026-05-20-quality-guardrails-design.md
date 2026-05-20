@@ -488,7 +488,7 @@ backend/tests/
 | File | Covers |
 |---|---|
 | `test_bank_statement_import.py` | Header detection at row 1 / 3 / unrecognized; internal-fee skipping; duplicate skipping; auto-match supplier/customer at confidence ≥ 70 |
-| `test_sales_order_to_project.py` | Posting `SalesOrder` to the DRF API without `project` returns 4xx; creating SO from accepted Quotation; project BOM creation hook |
+| `test_sales_order_to_project.py` | Quotation 状态推进到 ACCEPTED 后转 SO（SO 可选关联 project，不强制）；当 SO 关联 project 时，project 的 `sales_orders` 反向关联包含此 SO；SO 状态机：DRAFT → PENDING → CONFIRMED |
 | `test_stock_move_costing.py` | Two inbound moves at different prices yield correct weighted unit_cost; outbound consumes weighted price not last price |
 | `test_rbac_data_scope.py` | Three roles (`scope=all/dept/own`) hitting `/api/masterdata/customers/` return correctly filtered counts |
 | `test_workflow_lifecycle.py` | Submit → reject returns to DRAFT; submit → approve advances to APPROVED and triggers downstream state change |
@@ -561,7 +561,9 @@ This spec ships as **two consecutive PRs**, both against `main`:
 - No behavioural code changes
 - Must merge before PR-2
 
-### PR-2: feat(ci): quality guardrailsAll other files listed in §4 plus:
+### PR-2: feat(ci): quality guardrails
+
+All other files listed in §4 plus:
 
 - `.pre-commit-config.yaml`
 - `.workflow/{frontend,backend,integration}.yml`

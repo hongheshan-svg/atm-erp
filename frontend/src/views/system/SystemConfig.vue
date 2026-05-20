@@ -157,7 +157,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Check, OfficeBuilding, Money, Setting } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getSystemConfig, saveSystemConfig } from '@/api/system'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -183,7 +183,7 @@ const form = reactive({
 const loadConfig = async () => {
   loading.value = true
   try {
-    const response = await request.get('/core/system-config/')
+    const response = await getSystemConfig()
     Object.assign(form, response)
   } catch (error) {
     console.error('Failed to load system config:', error)
@@ -201,7 +201,7 @@ const handleSave = async () => {
   
   saving.value = true
   try {
-    await request.post('/core/system-config/', form)
+    await saveSystemConfig(form)
     ElMessage.success('配置保存成功')
     loadConfig() // 重新加载以获取更新时间
   } catch (error) {

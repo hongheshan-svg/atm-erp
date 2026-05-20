@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>车辆管理</span>
-          <el-button type="primary" @click="handleCreate">
+          <el-button type="primary" v-permission="'oa:vehicle:create'" @click="handleCreate">
             <el-icon><Plus /></el-icon>
             添加车辆
           </el-button>
@@ -52,9 +52,9 @@
         <el-table-column prop="next_inspection_date" label="年检到期" width="110" />
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" v-permission="'oa:vehicle:edit'" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" type="primary" @click="handleMaintenance(row)">维护记录</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button size="small" type="danger" v-permission="'oa:vehicle:delete'" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -193,7 +193,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getVehicles, createVehicle, updateVehicle, deleteVehicle, getVehicleMaintenanceRecords } from '@/api/oa'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -259,7 +259,7 @@ const loadData = async () => {
       page_size: pagination.pageSize,
       ...searchForm
     }
-    const res = await request.get('/oa/vehicles/', { params })
+    const res = await getVehicles(params)
     // res 已经是 response.data
     if (Array.isArray(res)) {
       list.value = res
@@ -311,10 +311,10 @@ const handleSave = async () => {
     saving.value = true
     
     if (isEdit.value) {
-      await request.put(`/oa/vehicles/${form.id}/`, form)
+      await updateVehicle(form.id, form)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/oa/vehicles/', form)
+      await createVehicle(form)
       ElMessage.success('添加成功')
     }
     
@@ -334,9 +334,10 @@ const handleMaintenance = async (row) => {
   maintDialogVisible.value = true
   maintLoading.value = true
   try {
-    const res = await request.get(`/oa/vehicles/${row.id}/maintenance-records/`)
+    const res = await getVehicleMaintenanceRecords(row.id)
     maintRecords.value = res.data?.results || res.results || []
-  } catch {
+  } catch (error) {
+    console.error(error)
     maintRecords.value = []
   } finally {
     maintLoading.value = false
@@ -346,7 +347,7 @@ const handleMaintenance = async (row) => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除这辆车吗？', '提示', { type: 'warning' })
-    await request.delete(`/oa/vehicles/${row.id}/`)
+    await deleteVehicle(row.id)
     ElMessage.success('删除成功')
     loadData()
   } catch (error) {

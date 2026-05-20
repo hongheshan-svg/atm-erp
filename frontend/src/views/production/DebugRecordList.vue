@@ -7,7 +7,7 @@
         <span class="subtitle">非标自动化设备的调试过程记录</span>
       </div>
       <div class="header-right">
-        <el-button type="primary" @click="handleAdd">
+        <el-button type="primary" v-permission="'production:debug_check_item:create'" @click="handleAdd">
           <el-icon><Plus /></el-icon>
           新建调试记录
         </el-button>
@@ -83,9 +83,9 @@
     <!-- 调试记录列表 -->
     <el-card class="table-card" shadow="never">
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'production:debug_check_item:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" v-permission="'production:debug_check_item:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <el-table
@@ -97,7 +97,7 @@
         @row-click="handleRowClick"
         @selection-change="handleSelectionChange"
       >
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'production:debug_check_item:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="record_no" label="调试单号" width="160" />
         <el-table-column prop="title" label="调试项目" min-width="180" show-overflow-tooltip />
         <el-table-column prop="project_code" label="项目编号" width="130" />
@@ -244,7 +244,7 @@
         <div class="detail-section">
           <div class="section-header">
             <h4>检查项 ({{ currentRecord.pass_items }}/{{ currentRecord.fail_items }}/{{ currentRecord.total_items }})</h4>
-            <el-button type="primary" size="small" @click="handleAddCheckItems">
+            <el-button type="primary" size="small" v-permission="'production:debug_check_item:create'" @click="handleAddCheckItems">
               <el-icon><Plus /></el-icon>
               添加检查项
             </el-button>
@@ -519,9 +519,14 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, Refresh } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import {
+  getDebugRecords, getDebugRecord, createDebugRecord, updateDebugRecord,
+  startDebug, completeDebug, addDebugCheckItems
+} from '@/api/production'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { getUsers } from '@/api/auth'
+import { getProjectList } from '@/api/projects/project'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -658,7 +663,7 @@ const loadData = async () => {
       page_size: pagination.pageSize,
       ...filters
     }
-    const res = await request.get('/production/debug-records/', { params })
+    const res = await getDebugRecords(params)
     recordList.value = res.results || res || []
     pagination.total = res.count || (Array.isArray(recordList.value) ? recordList.value.length : 0)
   } catch (error) {
@@ -671,7 +676,7 @@ const loadData = async () => {
 // 加载项目列表
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res || []
   } catch (error) {
     console.error('加载项目列表失败:', error)
@@ -681,7 +686,7 @@ const loadProjects = async () => {
 // 加载用户列表
 const loadUsers = async () => {
   try {
-    const res = await request.get('/auth/users/', { params: { page_size: 1000 } })
+    const res = await getUsers({ page_size: 1000 })
     users.value = res.results || res || []
   } catch (error) {
     console.error('加载用户列表失败:', error)
@@ -719,7 +724,7 @@ const handlePageChange = (page) => {
 // 点击行查看详情
 const handleRowClick = async (row) => {
   try {
-    const res = await request.get(`/production/debug-records/${row.id}/`)
+    const res = await getDebugRecord(row.id)
     currentRecord.value = res
     detailVisible.value = true
   } catch (error) {
@@ -769,7 +774,7 @@ const handleEdit = (row) => {
 // 开始调试
 const handleStartDebug = async (row) => {
   try {
-    await request.post(`/production/debug-records/${row.id}/start_debug/`)
+    await startDebug(row.id)
     ElMessage.success('调试已开始')
     loadData()
   } catch (error) {
@@ -799,7 +804,7 @@ const handleCompleteConfirm = async () => {
   
   try {
     saving.value = true
-    await request.post(`/production/debug-records/${currentRecord.value.id}/complete_debug/`, completeFormData)
+    await completeDebug(currentRecord.value.id, completeFormData)
     ElMessage.success('调试已完成')
     completeDialogVisible.value = false
     loadData()
@@ -820,10 +825,10 @@ const handleSave = async () => {
     
     const data = { ...formData }
     if (data.id) {
-      await request.put(`/production/debug-records/${data.id}/`, data)
+      await updateDebugRecord(data.id, data)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/production/debug-records/', data)
+      await createDebugRecord(data)
       ElMessage.success('创建成功')
     }
     
@@ -872,14 +877,14 @@ const handleCheckItemsConfirm = async () => {
   
   try {
     saving.value = true
-    await request.post(`/production/debug-records/${currentRecord.value.id}/add_check_items/`, {
+    await addDebugCheckItems(currentRecord.value.id, {
       items: newCheckItems.value
     })
     ElMessage.success('检查项已添加')
     checkItemDialogVisible.value = false
     
     // 刷新详情
-    const res = await request.get(`/production/debug-records/${currentRecord.value.id}/`)
+    const res = await getDebugRecord(currentRecord.value.id)
     currentRecord.value = res
   } catch (error) {
     console.error('添加检查项失败:', error)

@@ -50,7 +50,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getEquipmentAlarmList, acknowledgeEquipmentAlarm } from '@/api/projects/equipment-monitoring'
 
 const loading = ref(false)
 const tableData = ref([])
@@ -66,7 +66,7 @@ const loadData = async () => {
   loading.value = true
   try {
     const params = { page: page.value, page_size: pageSize.value, ...filters.value }
-    const res = await request.get('/projects/equipment-alarms/', { params })
+    const res = await getEquipmentAlarmList(params)
     tableData.value = res.data?.results || res.results || []
     total.value = res.data?.count || res.count || 0
   } catch (error) {
@@ -78,7 +78,7 @@ const loadData = async () => {
 
 const handleAck = async (row) => {
   try {
-    await request.post(`/projects/equipment-alarms/${row.id}/acknowledge/`)
+    await acknowledgeEquipmentAlarm(row.id)
     ElMessage.success('已确认')
     loadData()
   } catch (error) {

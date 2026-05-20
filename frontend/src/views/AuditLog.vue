@@ -151,7 +151,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getAuditLogs } from '@/api/core'
 import { ElMessage } from 'element-plus'
 
 const loading = ref(false)
@@ -221,7 +221,7 @@ const loadAuditLogs = async () => {
       params.end_date = new Date(filters.end_date).toISOString()
     }
 
-    const response = await request.get('/core/audit-logs/', { params })
+    const response = await getAuditLogs(params)
     auditLogs.value = response.results || response || []
     pagination.total = response.count || auditLogs.value.length
   } catch (error) {

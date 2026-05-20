@@ -39,8 +39,8 @@
 
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
+import { getProjectProfitabilityReport, exportProjectProfitabilityReport } from '@/api/reports'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
 import * as echarts from 'echarts'
 
 const loading = ref(false)
@@ -58,7 +58,7 @@ const loadData = async () => {
       params.start_date = dateRange.value[0]
       params.end_date = dateRange.value[1]
     }
-    const res = await request.get('/reports/industry/project-profitability/', { params })
+    const res = await getProjectProfitabilityReport(params)
     tableData.value = res.data?.projects || res.projects || []
     await nextTick()
     renderChart()
@@ -87,9 +87,7 @@ const renderChart = () => {
 
 const handleExport = async () => {
   try {
-    const res = await request.get('/reports/project-profitability/export/', {
-      responseType: 'blob'
-    })
+    const res = await exportProjectProfitabilityReport()
     const url = window.URL.createObjectURL(new Blob([res.data || res]))
     const link = document.createElement('a')
     link.href = url

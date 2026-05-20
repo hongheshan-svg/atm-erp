@@ -2,7 +2,7 @@
   <div class="schedule-container">
     <div class="page-header">
       <h2>日程管理</h2>
-      <el-button type="primary" @click="handleAdd">新建日程</el-button>
+      <el-button type="primary" v-permission="'oa:archive:create'" @click="handleAdd">新建日程</el-button>
     </div>
     
     <el-row :gutter="16">
@@ -179,7 +179,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getCalendarSchedules, getTodaySchedules, getUpcomingSchedules, getCoreSchedule, updateCoreSchedule, createCoreSchedule } from '@/api/oa'
 
 const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 const currentDate = ref(new Date())
@@ -287,7 +287,7 @@ const fetchCalendar = async () => {
   const end = new Date(year, month + 2, 0).toISOString().slice(0, 10)
   
   try {
-    const data = await request.get('/core/schedules/calendar/', {
+    const data = await getCalendarSchedules({
       params: { start, end }
     })
     events.value = data || []
@@ -298,7 +298,7 @@ const fetchCalendar = async () => {
 
 const fetchToday = async () => {
   try {
-    const data = await request.get('/core/schedules/today/')
+    const data = await getTodaySchedules()
     todaySchedules.value = data || []
   } catch (e) {
     console.error(e)
@@ -307,7 +307,7 @@ const fetchToday = async () => {
 
 const fetchUpcoming = async () => {
   try {
-    const data = await request.get('/core/schedules/upcoming/')
+    const data = await getUpcomingSchedules()
     upcomingSchedules.value = data || []
   } catch (e) {
     console.error(e)
@@ -350,7 +350,7 @@ const handleAdd = () => {
 
 const handleView = async (item) => {
   try {
-    const data = await request.get(`/core/schedules/${item.id}/`)
+    const data = await getCoreSchedule(item.id)
     Object.assign(formData, data)
     isEdit.value = true
     dialogVisible.value = true
@@ -367,9 +367,9 @@ const submitForm = async () => {
   submitLoading.value = true
   try {
     if (isEdit.value) {
-      await request.patch(`/core/schedules/${formData.id}/`, formData)
+      await updateCoreSchedule(formData.id, formData)
     } else {
-      await request.post('/core/schedules/', formData)
+      await createCoreSchedule(formData)
     }
     ElMessage.success('保存成功')
     dialogVisible.value = false

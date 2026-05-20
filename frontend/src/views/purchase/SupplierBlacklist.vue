@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>供应商黑名单</span>
-          <el-button type="danger" @click="handleCreate">
+          <el-button type="danger" v-permission="'purchase:supplier_blacklist:create'" @click="handleCreate">
             <el-icon><Plus /></el-icon> 添加黑名单
           </el-button>
         </div>

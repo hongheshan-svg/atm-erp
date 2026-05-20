@@ -7,7 +7,7 @@
         <span class="subtitle">定义项目的生产工序流程</span>
       </div>
       <div class="header-right">
-        <el-button type="primary" @click="handleAdd">
+        <el-button type="primary" v-permission="'production:process:create'" @click="handleAdd">
           <el-icon><Plus /></el-icon>
           新增工序
         </el-button>
@@ -71,9 +71,9 @@
     <!-- 工序列表 -->
     <el-card class="table-card" shadow="never">
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'production:process:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" v-permission="'production:process:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <el-table
@@ -84,7 +84,7 @@
         style="width: 100%"
         @selection-change="handleSelectionChange"
       >
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'production:process:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column type="index" label="#" width="50" />
         <el-table-column prop="project_code" label="项目编号" width="130" />
         <el-table-column prop="process_no" label="工序编号" width="120" />
@@ -106,7 +106,7 @@
         <el-table-column prop="assignee_name" label="负责人" width="100" />
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small" link @click="handleEdit(row)">
+            <el-button type="primary" size="small" link v-permission="'production:process:edit'" @click="handleEdit(row)">
               <el-icon><Edit /></el-icon>
               编辑
             </el-button>
@@ -272,9 +272,11 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, Refresh, Edit, Delete } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getProcesses, createProcess, updateProcess } from '@/api/production'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { getUsers } from '@/api/auth'
+import { getProjectList } from '@/api/projects/project'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -359,7 +361,7 @@ const loadData = async () => {
       page_size: pagination.pageSize,
       ...filters
     }
-    const res = await request.get('/production/processes/', { params })
+    const res = await getProcesses(params)
     processList.value = res.results || res || []
     pagination.total = res.count || (Array.isArray(processList.value) ? processList.value.length : 0)
   } catch (error) {
@@ -372,7 +374,7 @@ const loadData = async () => {
 // 加载项目列表
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res || []
   } catch (error) {
     console.error('加载项目列表失败:', error)
@@ -382,7 +384,7 @@ const loadProjects = async () => {
 // 加载用户列表
 const loadUsers = async () => {
   try {
-    const res = await request.get('/auth/users/', { params: { page_size: 1000 } })
+    const res = await getUsers({ page_size: 1000 })
     users.value = res.results || res || []
   } catch (error) {
     console.error('加载用户列表失败:', error)
@@ -468,10 +470,10 @@ const handleSave = async () => {
     
     const data = { ...formData }
     if (data.id) {
-      await request.put(`/production/processes/${data.id}/`, data)
+      await updateProcess(data.id, data)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/production/processes/', data)
+      await createProcess(data)
       ElMessage.success('创建成功')
     }
     

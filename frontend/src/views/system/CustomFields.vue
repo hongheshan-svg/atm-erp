@@ -213,7 +213,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete, Check, Rank } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getCustomFieldList, createCustomField, updateCustomField, deleteCustomField, getSupportedModels, getFieldTypes, toggleFieldVisible, batchSortFields } from '@/api/system'
 
 const fields = ref([])
 const loading = ref(false)
@@ -270,7 +270,7 @@ const isTextType = computed(() => {
 
 const loadSupportedModels = async () => {
   try {
-    const res = await request.get('/core/custom-field-definitions/supported_models/')
+    const res = await getSupportedModels()
     supportedModels.value = res || []
     if (supportedModels.value.length) {
       selectedModel.value = supportedModels.value[0].value
@@ -283,7 +283,7 @@ const loadSupportedModels = async () => {
 
 const loadFieldTypes = async () => {
   try {
-    const res = await request.get('/core/custom-field-definitions/field_types/')
+    const res = await getFieldTypes()
     fieldTypes.value = res || []
   } catch (e) {
     console.error('加载字段类型失败:', e)
@@ -294,7 +294,7 @@ const loadFields = async () => {
   if (!selectedModel.value) return
   loading.value = true
   try {
-    const res = await request.get('/core/custom-field-definitions/', {
+    const res = await getCustomFieldList({
       params: { model_name: selectedModel.value }
     })
     fields.value = res.results || res || []
@@ -335,10 +335,10 @@ const saveField = async () => {
   try {
     const data = { ...form.value, model_name: selectedModel.value }
     if (editing.value) {
-      await request.put(`/core/custom-field-definitions/${editing.value.id}/`, data)
+      await updateCustomField(editing.value.id, data)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/core/custom-field-definitions/', data)
+      await createCustomField(data)
       ElMessage.success('创建成功')
     }
     showDialog.value = false
@@ -374,7 +374,7 @@ const resetForm = () => {
 
 const toggleVisible = async (field) => {
   try {
-    await request.post(`/core/custom-field-definitions/${field.id}/toggle_visible/`)
+    await toggleFieldVisible(field.id)
     ElMessage.success('操作成功')
   } catch (e) {
     field.is_visible = !field.is_visible
@@ -385,7 +385,7 @@ const toggleVisible = async (field) => {
 const deleteField = async (field) => {
   await ElMessageBox.confirm('确定要删除该字段吗？删除后该字段的所有数据将丢失', '确认删除', { type: 'warning' })
   try {
-    await request.delete(`/core/custom-field-definitions/${field.id}/`)
+    await deleteCustomField(field.id)
     ElMessage.success('删除成功')
     loadFields()
   } catch (e) {
@@ -417,7 +417,7 @@ const saveSortOrder = async () => {
       id: f.id,
       sort_order: idx
     }))
-    await request.post('/core/custom-field-definitions/batch_sort/', { items })
+    await batchSortFields({ items })
     ElMessage.success('排序保存成功')
     showSortDialog.value = false
     loadFields()

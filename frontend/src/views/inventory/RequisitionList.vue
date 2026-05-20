@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>生产领料管理</span>
-          <el-button type="primary" @click="handleAdd">
+          <el-button type="primary" v-permission="'inventory:material_requisition:create'" @click="handleAdd">
             <el-icon><Plus /></el-icon> 新建领料单
           </el-button>
         </div>
@@ -43,14 +43,14 @@
       </el-form>
 
       <!-- 批量操作工具栏 -->
-      <div class="batch-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="batch-toolbar" v-permission="'inventory:material_requisition:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" v-permission="'inventory:material_requisition:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <!-- 列表 -->
       <el-table :data="list" v-loading="loading" stripe border @selection-change="handleSelectionChange">
-        <el-table-column v-if="canDelete" type="selection" width="45" />
+        <el-table-column v-permission="'inventory:material_requisition:delete'" v-if="canDelete" type="selection" width="45" />
         <el-table-column prop="requisition_no" label="领料单号" width="160" />
         <el-table-column prop="requisition_type_display" label="类型" width="100" />
         <el-table-column label="关联单据" min-width="150">
@@ -73,7 +73,7 @@
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <!-- 草稿状态 -->
-            <el-button size="small" type="primary" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
+            <el-button size="small" type="primary" v-permission="'inventory:material_requisition:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button size="small" type="success" @click="handleSubmit(row)" v-if="row.status === 'DRAFT'">提交申请</el-button>
             <!-- 审批阶段 -->
             <el-button size="small" type="success" @click="handleApprove(row)" v-if="row.status === 'SUBMITTED'">批准</el-button>
@@ -265,9 +265,13 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getRequisitions, getRequisition, createRequisition, updateRequisition, submitRequisition, approveRequisition, rejectRequisition, startPreparingRequisition, readyRequisition, issueRequisition, getStocks } from '@/api/inventory'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { getAfterSalesOrderList } from '@/api/aftersales'
+import { getWarehouseList } from '@/api/masterdata'
+import { getBOMList } from '@/api/projects/bom'
+import { getProjectList } from '@/api/projects/project'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -363,7 +367,7 @@ const loadList = async () => {
       page_size: pagination.pageSize,
       ...searchForm
     }
-    const response = await request.get('/inventory/requisitions/', { params })
+    const response = await getRequisitions(params)
     list.value = response.results || response || []
     pagination.total = response.count || list.value.length
   } catch (error) {
@@ -375,7 +379,7 @@ const loadList = async () => {
 
 const loadProjects = async () => {
   try {
-    const response = await request.get('/projects/projects/')
+    const response = await getProjectList()
     projects.value = response.results || response || []
   } catch (error) {
     console.error('加载项目失败:', error)
@@ -384,7 +388,7 @@ const loadProjects = async () => {
 
 const loadWarehouses = async () => {
   try {
-    const response = await request.get('/masterdata/warehouses/')
+    const response = await getWarehouseList()
     warehouses.value = response.results || response || []
   } catch (error) {
     console.error('加载仓库失败:', error)
@@ -393,7 +397,7 @@ const loadWarehouses = async () => {
 
 const loadAftersalesOrders = async () => {
   try {
-    const response = await request.get('/projects/aftersales/')
+    const response = await getAfterSalesOrderList()
     aftersalesOrders.value = response.results || response || []
   } catch (error) {
     console.error('加载售后工单失败:', error)
@@ -406,7 +410,7 @@ const loadProjectItems = async () => {
     return
   }
   try {
-    const response = await request.get('/projects/bom/', { params: { project: form.project } })
+    const response = await getBOMList({ project: form.project })
     projectItems.value = (response.results || response || []).map(item => ({
       item: item.item,
       item_sku: item.item_sku,
@@ -428,7 +432,7 @@ const loadStockItems = async () => {
     if (stockSearch.value) {
       params.item_name = stockSearch.value
     }
-    const response = await request.get('/inventory/stocks/', { params })
+    const response = await getStocks(params)
     stockItems.value = (response.results || response || []).map(item => ({
       item: item.item,
       item_sku: item.item_sku,
@@ -504,7 +508,7 @@ const handleEdit = async (row) => {
   isEdit.value = true
   
   try {
-    const response = await request.get(`/inventory/requisitions/${row.id}/`)
+    const response = await getRequisition(row.id)
     Object.assign(form, {
       id: response.id,
       requisition_type: response.requisition_type,
@@ -533,7 +537,7 @@ const handleEdit = async (row) => {
 
 const handleView = async (row) => {
   try {
-    const response = await request.get(`/inventory/requisitions/${row.id}/`)
+    const response = await getRequisition(row.id)
     currentItem.value = response
     viewDialogVisible.value = true
   } catch (error) {
@@ -544,7 +548,8 @@ const handleView = async (row) => {
 const handleSave = async () => {
   try {
     await formRef.value.validate()
-  } catch {
+  } catch (error) {
+    console.error(error)
     return
   }
   
@@ -570,10 +575,10 @@ const handleSave = async () => {
     }
     
     if (isEdit.value) {
-      await request.put(`/inventory/requisitions/${form.id}/`, data)
+      await updateRequisition(form.id, data)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/inventory/requisitions/', data)
+      await createRequisition(data)
       ElMessage.success('创建成功')
     }
     
@@ -589,7 +594,7 @@ const handleSave = async () => {
 const handleSubmit = async (row) => {
   try {
     await ElMessageBox.confirm('确定提交该领料申请？提交后将进入审批流程。', '提交申请')
-    await request.post(`/inventory/requisitions/${row.id}/submit/`)
+    await submitRequisition(row.id)
     ElMessage.success('申请已提交，等待审批')
     loadList()
   } catch (error) {
@@ -602,7 +607,7 @@ const handleSubmit = async (row) => {
 const handleApprove = async (row) => {
   try {
     await ElMessageBox.confirm('确定批准该领料申请？批准后仓库将开始备料。', '批准申请')
-    await request.post(`/inventory/requisitions/${row.id}/approve/`)
+    await approveRequisition(row.id)
     ElMessage.success('申请已批准，等待仓库备料')
     loadList()
   } catch (error) {
@@ -615,7 +620,7 @@ const handleApprove = async (row) => {
 const handleReject = async (row) => {
   try {
     await ElMessageBox.confirm('确定拒绝该领料申请？', '拒绝申请', { type: 'warning' })
-    await request.post(`/inventory/requisitions/${row.id}/reject/`)
+    await rejectRequisition(row.id)
     ElMessage.success('申请已拒绝')
     loadList()
   } catch (error) {
@@ -627,7 +632,7 @@ const handleReject = async (row) => {
 
 const handlePrepare = async (row) => {
   try {
-    await request.post(`/inventory/requisitions/${row.id}/start_preparing/`)
+    await startPreparingRequisition(row.id)
     ElMessage.success('开始备料')
     loadList()
   } catch (error) {
@@ -637,7 +642,7 @@ const handlePrepare = async (row) => {
 
 const handleReady = async (row) => {
   try {
-    await request.post(`/inventory/requisitions/${row.id}/ready/`)
+    await readyRequisition(row.id)
     ElMessage.success('备料完成，等待出库')
     loadList()
   } catch (error) {
@@ -647,7 +652,7 @@ const handleReady = async (row) => {
 
 const handleIssue = async (row) => {
   try {
-    const response = await request.get(`/inventory/requisitions/${row.id}/`)
+    const response = await getRequisition(row.id)
     currentRequisitionId.value = row.id
     issueLines.value = (response.lines || []).filter(l => l.qty > l.issued_qty).map(l => ({
       id: l.id,
@@ -677,7 +682,7 @@ const confirmIssue = async () => {
   
   issuing.value = true
   try {
-    await request.post(`/inventory/requisitions/${currentRequisitionId.value}/issue/`, { lines })
+    await issueRequisition(currentRequisitionId.value, { lines })
     ElMessage.success('出库成功')
     issueDialogVisible.value = false
     loadList()

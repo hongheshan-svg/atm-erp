@@ -146,7 +146,8 @@ const handleView = async (row) => {
     const res = await getStandardComponent(row.id)
     viewDetail.value = res.data || res
     viewDialogVisible.value = true
-  } catch {
+  } catch (error) {
+    console.error(error)
     viewDetail.value = row
     viewDialogVisible.value = true
   }

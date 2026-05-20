@@ -195,7 +195,8 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Back, Plus, Delete } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getQuotation, createQuotation, updateQuotation } from '@/api/sales'
+import { getCustomerList } from '@/api/masterdata'
 
 const router = useRouter()
 const route = useRoute()
@@ -261,7 +262,7 @@ const removeLine = (index) => {
 // 加载数据
 const loadCustomers = async () => {
   try {
-    const res = await request.get('/masterdata/customers/', { params: { page_size: 200 } })
+    const res = await getCustomerList({ page_size: 200 })
     customers.value = res.data?.results || res.results || res.data || []
   } catch (error) {
     console.error('加载客户失败:', error)
@@ -273,7 +274,7 @@ const loadQuotation = async () => {
   
   loading.value = true
   try {
-    const res = await request.get(`/sales/quotations/${route.params.id}/`)
+    const res = await getQuotation(route.params.id)
     const data = res.data || res
     
     form.customer = data.customer
@@ -333,10 +334,10 @@ const handleSave = async () => {
     }
     
     if (isEdit.value) {
-      await request.put(`/sales/quotations/${route.params.id}/`, payload)
+      await updateQuotation(route.params.id, payload)
       ElMessage.success('报价单更新成功')
     } else {
-      await request.post('/sales/quotations/', payload)
+      await createQuotation(payload)
       ElMessage.success('报价单创建成功')
     }
     
@@ -388,7 +389,7 @@ const handleSaveAndSend = async () => {
       }))
     }
     
-    await request.post('/sales/quotations/', payload)
+    await createQuotation(payload)
     ElMessage.success('报价单已创建并发送')
     router.push('/sales/quotations')
   } catch (error) {

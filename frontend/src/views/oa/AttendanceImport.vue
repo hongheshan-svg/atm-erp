@@ -249,7 +249,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, UploadFilled, View, Check, Download, Calendar, List } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { batchImportAttendance, recalculateMonthAttendance, exportAttendanceReport, getAttendanceMonthStats, getAttendanceImportHistory } from '@/api/oa'
 import * as XLSX from 'xlsx'
 
 // 数据
@@ -832,13 +832,14 @@ const handleImport = async () => {
       '确认导入',
       { type: 'warning' }
     )
-  } catch {
+  } catch (error) {
+    console.error(error)
     return
   }
 
   importing.value = true
   try {
-    const res = await request.post('/oa/attendance-records/batch_import/', {
+    const res = await batchImportAttendance({
       month: importForm.month,
       source: importForm.source,
       overwrite: importForm.overwrite,
@@ -913,7 +914,7 @@ const handleCalculateMonth = async () => {
   try {
     await ElMessageBox.confirm('将根据已导入的打卡记录重新计算本月考勤统计，是否继续？', '确认', { type: 'warning' })
     
-    const res = await request.post('/oa/attendance-records/recalculate_month/', {
+    const res = await recalculateMonthAttendance({
       month: importForm.month
     })
     
@@ -929,10 +930,7 @@ const handleCalculateMonth = async () => {
 
 const handleExportReport = async () => {
   try {
-    const res = await request.get('/oa/attendance-records/export_report/', {
-      params: { month: importForm.month },
-      responseType: 'blob'
-    })
+    const res = await exportAttendanceReport({ month: importForm.month }, { responseType: 'blob' })
     
     // 下载文件
     const url = window.URL.createObjectURL(new Blob([res]))
@@ -950,7 +948,7 @@ const handleExportReport = async () => {
 
 const loadMonthStats = async () => {
   try {
-    const res = await request.get('/oa/attendance-records/month_stats/', {
+    const res = await getAttendanceMonthStats({
       params: { month: importForm.month }
     })
     monthStats.value = res || monthStats.value
@@ -961,7 +959,7 @@ const loadMonthStats = async () => {
 
 const loadImportHistory = async () => {
   try {
-    const res = await request.get('/oa/attendance-records/import_history/')
+    const res = await getAttendanceImportHistory()
     importHistory.value = res.results || res || []
   } catch (error) {
     console.error('加载历史失败:', error)

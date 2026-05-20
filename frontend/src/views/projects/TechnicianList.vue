@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>技术员管理</span>
-          <el-button type="primary" @click="handleCreate">添加技术员</el-button>
+          <el-button type="primary" v-permission="'projects:project:create'" @click="handleCreate">添加技术员</el-button>
         </div>
       </template>
       
@@ -21,9 +21,9 @@
         <el-table-column prop="skills_display" label="技能" />
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
+            <el-button link type="primary" v-permission="'projects:project:edit'" @click="handleEdit(row)">编辑</el-button>
             <el-button link type="primary" @click="handleSchedule(row)">排班</el-button>
-            <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button link type="danger" v-permission="'projects:project:delete'" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -99,7 +99,9 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import request from '@/utils/request'
+import { getTechnicianProfileList, createTechnicianProfile, updateTechnicianProfile, deleteTechnicianProfile, scheduleTechnician } from '@/api/projects/technician'
+import { getProjectList } from '@/api/projects/project'
+import { getUsers } from '@/api/auth'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -126,7 +128,7 @@ const rules = {
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await request.get('/projects/technician-profiles/', { params: { page: page.value, page_size: pageSize.value } })
+    const res = await getTechnicianProfileList({ page: page.value, page_size: pageSize.value })
     tableData.value = res.data?.results || res.results || []
     total.value = res.data?.count || res.count || 0
   } catch (error) {
@@ -138,16 +140,20 @@ const loadData = async () => {
 
 const loadUsers = async () => {
   try {
-    const res = await request.get('/auth/users/', { params: { page_size: 1000 } })
+    const res = await getUsers({ page_size: 1000 })
     users.value = res.data?.results || res.results || []
-  } catch {}
+  } catch (error) {
+    console.error('TechnicianList getUsers error:', error)
+  }
 }
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    const res = await getProjectList({ page_size: 1000 })
     projectList.value = res.data?.results || res.results || []
-  } catch {}
+  } catch (error) {
+    console.error('TechnicianList getProjectList error:', error)
+  }
 }
 
 const handleCreate = () => {
@@ -168,10 +174,10 @@ const handleSave = async () => {
     await formRef.value?.validate()
     saving.value = true
     if (isEdit.value) {
-      await request.put(`/projects/technician-profiles/${form.id}/`, form)
+      await updateTechnicianProfile(form.id, form)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/projects/technician-profiles/', form)
+      await createTechnicianProfile(form)
       ElMessage.success('添加成功')
     }
     dialogVisible.value = false
@@ -194,7 +200,7 @@ const handleSchedule = (row) => {
 const saveSchedule = async () => {
   try {
     saving.value = true
-    await request.post(`/projects/technician-profiles/${currentRow.value.id}/schedule/`, scheduleForm)
+    await scheduleTechnician(currentRow.value.id, scheduleForm)
     ElMessage.success('排班成功')
     scheduleDialogVisible.value = false
   } catch (error) {
@@ -207,7 +213,7 @@ const saveSchedule = async () => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除此技术员吗？', '提示', { type: 'warning' })
-    await request.delete(`/projects/technician-profiles/${row.id}/`)
+    await deleteTechnicianProfile(row.id)
     ElMessage.success('删除成功')
     loadData()
   } catch (error) {

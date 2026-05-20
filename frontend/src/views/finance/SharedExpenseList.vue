@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>公共费用分摊</span>
-          <el-button type="primary" :icon="Plus" @click="handleAdd">新增公共费用</el-button>
+          <el-button type="primary" :icon="Plus" v-permission="'finance:shared_expense:create'" @click="handleAdd">新增公共费用</el-button>
         </div>
       </template>
 
@@ -36,14 +36,14 @@
       </el-form>
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'finance:shared_expense:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" v-permission="'finance:shared_expense:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <!-- Data Table -->
       <el-table :data="expenses" border v-loading="loading" @selection-change="handleSelectionChange">
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'finance:shared_expense:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="expense_no" label="费用编号" width="140" />
         <el-table-column prop="name" label="费用名称" min-width="150" />
         <el-table-column prop="category_display" label="类别" width="100" />
@@ -235,10 +235,11 @@
 import { ref, reactive, onMounted, watch } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import request from '@/utils/request'
+import { getSharedExpenses, getSharedExpense, createSharedExpense, patchSharedExpense, calculateSharedExpenseAllocation, allocateSharedExpense, cancelSharedExpenseAllocation } from '@/api/finance'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 import { usePermissionStore } from '@/stores/permission'
+import { getProjectList } from '@/api/projects/project'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -317,7 +318,7 @@ const loadData = async () => {
       page_size: pagination.pageSize,
       ...searchForm
     }
-    const response = await request.get('/finance/shared-expenses/', { params })
+    const response = await getSharedExpenses(params)
     expenses.value = response.results || []
     pagination.total = response.count || 0
   } catch (error) {
@@ -333,7 +334,7 @@ const loadProjects = async () => {
   }
 
   try {
-    const response = await request.get('/projects/projects/', { params: { is_deleted: false, page_size: 100 } })
+    const response = await getProjectList({ is_deleted: false, page_size: 100 })
     projects.value = response.results || response || [] || []
     projectsLoaded.value = true
     return true
@@ -394,10 +395,10 @@ const handleSubmit = async () => {
     }
     
     if (isEdit.value) {
-      await request.patch(`/finance/shared-expenses/${form.id}/`, payload)
+      await patchSharedExpense(form.id, payload)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/finance/shared-expenses/', payload)
+      await createSharedExpense(payload)
       ElMessage.success('创建成功')
     }
     
@@ -413,7 +414,7 @@ const handleSubmit = async () => {
 
 const handleView = async (expense) => {
   try {
-    const response = await request.get(`/finance/shared-expenses/${expense.id}/`)
+    const response = await getSharedExpense(expense.id)
     currentExpense.value = response
     detailDialogVisible.value = true
   } catch (error) {
@@ -450,10 +451,7 @@ const handlePreviewAllocation = async () => {
       payload.custom_ratios = customRatios.value
     }
     
-    const response = await request.post(
-      `/finance/shared-expenses/${currentExpense.value.id}/calculate_allocation/`,
-      payload
-    )
+    const response = await calculateSharedExpenseAllocation(currentExpense.value.id, payload)
     allocationPreview.value = response.allocations || []
   } catch (error) {
     console.error('计算分摊失败:', error)
@@ -472,10 +470,7 @@ const handleConfirmAllocation = async () => {
       payload.custom_ratios = customRatios.value
     }
     
-    await request.post(
-      `/finance/shared-expenses/${currentExpense.value.id}/allocate/`,
-      payload
-    )
+    await allocateSharedExpense(currentExpense.value.id, payload)
     
     ElMessage.success('分摊成功')
     allocateDialogVisible.value = false
@@ -492,7 +487,7 @@ const handleCancelAllocation = async (expense) => {
   try {
     await ElMessageBox.confirm('确定要撤销该费用的分摊吗？', '确认撤销', { type: 'warning' })
     
-    await request.post(`/finance/shared-expenses/${expense.id}/cancel_allocation/`)
+    await cancelSharedExpenseAllocation(expense.id)
     ElMessage.success('撤销成功')
     loadData()
   } catch (error) {

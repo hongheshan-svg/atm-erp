@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>请假申请</span>
-          <el-button type="primary" @click="handleCreate">
+          <el-button type="primary" v-permission="'oa:archive:create'" @click="handleCreate">
             <el-icon><Plus /></el-icon>
             新建请假
           </el-button>
@@ -53,7 +53,7 @@
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button v-if="row.status === 'DRAFT'" size="small" type="primary" @click="handleSubmit(row)">提交</el-button>
-            <el-button v-if="row.status === 'DRAFT'" size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="row.status === 'DRAFT'" size="small" type="danger" v-permission="'oa:archive:delete'" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -121,7 +121,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getLeaveTypes, getLeaveRequests, updateLeaveRequest, createLeaveRequest, submitLeaveRequest, deleteLeaveRequest } from '@/api/oa'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -173,7 +173,7 @@ const getStatusType = (status) => {
 
 const loadLeaveTypes = async () => {
   try {
-    const res = await request.get('/oa/leave-requests/leave_types/')
+    const res = await getLeaveTypes()
     // res 已经是 response.data，因为响应拦截器返回的是 response.data
     leaveTypes.value = Array.isArray(res) ? res : (res.data || res)
   } catch (error) {
@@ -189,7 +189,7 @@ const loadData = async () => {
       page_size: pagination.pageSize,
       ...searchForm
     }
-    const res = await request.get('/oa/leave-requests/', { params })
+    const res = await getLeaveRequests(params)
     // res 已经是 response.data，因为响应拦截器返回的是 response.data
     if (Array.isArray(res)) {
       list.value = res
@@ -239,10 +239,10 @@ const handleSave = async () => {
     saving.value = true
     
     if (isEdit.value) {
-      await request.put(`/oa/leave-requests/${form.id}/`, form)
+      await updateLeaveRequest(form.id, form)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/oa/leave-requests/', form)
+      await createLeaveRequest(form)
       ElMessage.success('创建成功')
     }
     
@@ -260,7 +260,7 @@ const handleSave = async () => {
 const handleSubmit = async (row) => {
   try {
     await ElMessageBox.confirm('确定要提交这个请假申请吗？', '提示', { type: 'warning' })
-    await request.post(`/oa/leave-requests/${row.id}/submit/`)
+    await submitLeaveRequest(row.id)
     ElMessage.success('提交成功')
     loadData()
   } catch (error) {
@@ -273,7 +273,7 @@ const handleSubmit = async (row) => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除这个请假申请吗？', '提示', { type: 'warning' })
-    await request.delete(`/oa/leave-requests/${row.id}/`)
+    await deleteLeaveRequest(row.id)
     ElMessage.success('删除成功')
     loadData()
   } catch (error) {

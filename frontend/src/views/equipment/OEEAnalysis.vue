@@ -135,7 +135,9 @@
 import { ref, onMounted, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import {
+  getEquipmentList, getOEESummary, getOEERanking, getOEETrend, getOEEDowntime
+} from '@/api/equipment'
 
 const dateRange = ref([])
 const selectedEquipment = ref(null)
@@ -173,16 +175,16 @@ const buildParams = () => {
 
 const loadEquipments = async () => {
   try {
-    const res = await request.get('/projects/equipment/', { params: { page_size: 1000 } })
+    const res = await getEquipmentList({ page_size: 1000 })
     equipments.value = res.data?.results || res.results || res || []
   } catch (error) {
-    // silent
+    console.error('OEEAnalysis getEquipmentList error:', error)
   }
 }
 
 const loadOEESummary = async () => {
   try {
-    const res = await request.get('/projects/oee-records/summary/', { params: buildParams() })
+    const res = await getOEESummary(buildParams())
     const d = res.data || res
     oeeData.value = {
       oee: d.oee || 0,
@@ -196,34 +198,38 @@ const loadOEESummary = async () => {
       total_output: d.total_output || 0,
       good_output: d.good_output || 0
     }
-  } catch {
+  } catch (error) {
+    console.error(error)
     // If API not available, keep zeros
   }
 }
 
 const loadRanking = async () => {
   try {
-    const res = await request.get('/projects/oee-records/ranking/', { params: buildParams() })
+    const res = await getOEERanking(buildParams())
     equipmentRanking.value = res.data?.results || res.results || res.data || res || []
-  } catch {
+  } catch (error) {
+    console.error(error)
     equipmentRanking.value = []
   }
 }
 
 const loadTrendData = async () => {
   try {
-    const res = await request.get('/projects/oee-records/trend/', { params: buildParams() })
+    const res = await getOEETrend(buildParams())
     trendData.value = res.data || res || []
-  } catch {
+  } catch (error) {
+    console.error(error)
     trendData.value = []
   }
 }
 
 const loadDowntimeData = async () => {
   try {
-    const res = await request.get('/projects/oee-records/downtime/', { params: buildParams() })
+    const res = await getOEEDowntime(buildParams())
     downtimeData.value = res.data || res || []
-  } catch {
+  } catch (error) {
+    console.error(error)
     downtimeData.value = []
   }
 }

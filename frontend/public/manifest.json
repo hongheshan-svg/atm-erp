@@ -1,28 +1,26 @@
 {
-  "name": "Python ERP System",
+  "name": "奥特迈ERP管理系统",
   "short_name": "ERP",
-  "description": "Enterprise Resource Planning System",
+  "description": "非标自动化企业资源管理系统",
   "theme_color": "#409EFF",
   "background_color": "#ffffff",
   "display": "standalone",
-  "scope": "/",
-  "start_url": "/",
+  "scope": "/erp/",
+  "start_url": "/erp/",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/icon-192x192.png",
+      "src": "icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icon-512x512.png",
+      "src": "icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }
   ],
-  "categories": ["business", "productivity"],
-  "screenshots": []
+  "categories": ["business", "productivity"]
 }
-

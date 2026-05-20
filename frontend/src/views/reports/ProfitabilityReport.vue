@@ -72,7 +72,7 @@
         <el-table-column prop="margin_percent" label="利润率%" width="100" align="right">
           <template #default="{ row }">
             <span :class="(row.margin_percent || 0) < 0 ? 'text-danger' : 'text-success'">
-              {{ (row.margin_percent || 0).toFixed(2) }}%
+              {{ toFixedSafe(row.margin_percent) }}%
             </span>
           </template>
         </el-table-column>
@@ -83,9 +83,11 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { getProfitabilityReport } from '@/api/reports'
+import { getProjectList } from '@/api/projects/project'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
 import { usePermissionStore } from '@/stores/permission'
+import { toFixedSafe } from '@/utils/number'
 
 const loading = ref(false)
 const reportData = ref([])
@@ -153,7 +155,7 @@ const loadReport = async () => {
         delete params[key]
       }
     })
-    const res = await request.get('/reports/profitability/', { params })
+    const res = await getProfitabilityReport(params)
     // 后端可能返回数组或 {results: [...]}
     reportData.value = res.results || res || []
   } catch (error) {
@@ -171,7 +173,7 @@ const loadProjects = async () => {
   }
 
   try {
-    const response = await request.get('/projects/projects/')
+    const response = await getProjectList()
     projects.value = response.results || response || []
     projectsLoaded.value = true
     return true
@@ -200,7 +202,7 @@ const exportExcel = () => {
       { field: 'expense_cost', title: '费用', formatter: formatMoney },
       { field: 'total_cost', title: '总成本', formatter: formatMoney },
       { field: 'profit', title: '利润', formatter: formatMoney },
-      { field: 'margin_percent', title: '利润率(%)', formatter: v => (v || 0).toFixed(2) }
+      { field: 'margin_percent', title: '利润率(%)', formatter: v => toFixedSafe(v) }
     ]
     doExport(reportData.value, columns, '项目利润分析')
     ElMessage.success('导出成功')

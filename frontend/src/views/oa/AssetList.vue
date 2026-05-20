@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>资产管理</span>
-          <el-button type="primary" @click="handleCreate">
+          <el-button type="primary" v-permission="'oa:asset:create'" @click="handleCreate">
             <el-icon><Plus /></el-icon>
             添加资产
           </el-button>
@@ -84,11 +84,11 @@
         </el-table-column>
         <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" v-permission="'oa:asset:edit'" @click="handleEdit(row)">编辑</el-button>
             <el-button v-if="row.status === 'IDLE'" size="small" type="primary" @click="handleAssign(row)">分配</el-button>
             <el-button v-if="row.status === 'IN_USE'" size="small" type="warning" @click="handleReclaim(row)">回收</el-button>
             <el-button size="small" type="info" @click="handleBorrow(row)">借用</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button size="small" type="danger" v-permission="'oa:asset:delete'" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -235,7 +235,8 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getAssetCategories, getAssets, createAsset, updateAsset, deleteAsset, getAssetStatistics, assignAsset, reclaimAsset, createAssetBorrow, submitAssetBorrow } from '@/api/oa'
+import { getUsers } from '@/api/auth'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -304,7 +305,7 @@ const formatNumber = (num) => {
 
 const loadCategories = async () => {
   try {
-    const res = await request.get('/oa/asset-categories/')
+    const res = await getAssetCategories()
     // res 已经是 response.data
     if (Array.isArray(res)) {
       categories.value = res
@@ -320,7 +321,7 @@ const loadCategories = async () => {
 
 const loadUsers = async () => {
   try {
-    const res = await request.get('/auth/users/', { params: { page_size: 1000 } })
+    const res = await getUsers({ page_size: 1000 })
     // res 已经是 response.data
     const userData = Array.isArray(res) ? res : (res.results || [])
     users.value = userData.map(u => ({
@@ -334,7 +335,7 @@ const loadUsers = async () => {
 
 const loadStats = async () => {
   try {
-    const res = await request.get('/oa/assets/statistics/')
+    const res = await getAssetStatistics()
     // res 已经是 response.data
     stats.value = res || {}
   } catch (error) {
@@ -350,7 +351,7 @@ const loadData = async () => {
       page_size: pagination.pageSize,
       ...searchForm
     }
-    const res = await request.get('/oa/assets/', { params })
+    const res = await getAssets(params)
     // res 已经是 response.data
     if (Array.isArray(res)) {
       list.value = res
@@ -401,10 +402,10 @@ const handleSave = async () => {
     saving.value = true
     
     if (isEdit.value) {
-      await request.put(`/oa/assets/${form.id}/`, form)
+      await updateAsset(form.id, form)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/oa/assets/', form)
+      await createAsset(form)
       ElMessage.success('添加成功')
     }
     
@@ -434,7 +435,7 @@ const confirmAssign = async () => {
   }
   saving.value = true
   try {
-    await request.post(`/oa/assets/${currentItem.value.id}/assign/`, {
+    await assignAsset(currentItem.value.id, {
       user_id: assignUserId.value
     })
     ElMessage.success('分配成功')
@@ -450,7 +451,7 @@ const confirmAssign = async () => {
 const handleReclaim = async (row) => {
   try {
     await ElMessageBox.confirm('确定要回收这个资产吗？', '提示', { type: 'warning' })
-    await request.post(`/oa/assets/${row.id}/reclaim/`)
+    await reclaimAsset(row.id)
     ElMessage.success('回收成功')
     loadData()
   } catch (error) {
@@ -469,7 +470,7 @@ const handleBorrow = (row) => {
 const handleBorrowSave = async () => {
   borrowSaving.value = true
   try {
-    const res = await request.post('/oa/asset-borrows/', {
+    const res = await createAssetBorrow({
       asset: borrowRow.value.id,
       ...borrowForm
     })
@@ -477,14 +478,14 @@ const handleBorrowSave = async () => {
     const borrowId = (res.data || res).id
     if (borrowId) {
       try {
-        await request.post(`/oa/asset-borrows/${borrowId}/submit/`)
+        await submitAssetBorrow(borrowId)
       } catch (e) {
-        // 审批提交失败不影响借用记录创建
+        console.error('AssetList submitAssetBorrow error:', e)
       }
     }
     ElMessage.success('借用成功')
     borrowDialogVisible.value = false
-    loadList()
+    loadData()
   } catch (error) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
     else ElMessage.error('操作失败')
@@ -496,7 +497,7 @@ const handleBorrowSave = async () => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除这个资产吗？', '提示', { type: 'warning' })
-    await request.delete(`/oa/assets/${row.id}/`)
+    await deleteAsset(row.id)
     ElMessage.success('删除成功')
     loadData()
     loadStats()

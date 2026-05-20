@@ -179,7 +179,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Plus, User, Clock, View, Star, Check, Close } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getKnowledgeArticles, getKnowledgeArticle, getPopularArticles, getKnowledgeTags, createKnowledgeArticle, viewKnowledgeArticle, feedbackKnowledgeArticle } from '@/api/sales'
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -260,7 +260,7 @@ const loadArticles = async () => {
     if (searchKeyword.value) params.search = searchKeyword.value
     if (categoryFilter.value) params.category = categoryFilter.value
 
-    const res = await request.get('/sales/knowledge-base/', { params })
+    const res = await getKnowledgeArticles(params)
     articles.value = res.results || res
     pagination.total = res.count || articles.value.length
   } catch (e) {
@@ -272,7 +272,7 @@ const loadArticles = async () => {
 
 const loadPopularArticles = async () => {
   try {
-    const res = await request.get('/sales/knowledge-base/popular/')
+    const res = await getPopularArticles()
     popularArticles.value = res || []
   } catch (e) {
     console.error('加载热门文章失败')
@@ -281,7 +281,7 @@ const loadPopularArticles = async () => {
 
 const loadPopularTags = async () => {
   try {
-    const res = await request.get('/sales/knowledge-base/tags/')
+    const res = await getKnowledgeTags()
     popularTags.value = res || []
   } catch (e) {
     console.error('加载热门标签失败')
@@ -290,11 +290,11 @@ const loadPopularTags = async () => {
 
 const viewArticle = async (article) => {
   try {
-    const res = await request.get(`/sales/knowledge-base/${article.id}/`)
+    const res = await getKnowledgeArticle(article.id)
     currentArticle.value = res
     showDetailDrawer.value = true
     // 增加查看次数
-    request.post(`/sales/knowledge-base/${article.id}/view/`)
+    viewKnowledgeArticle(article.id)
   } catch (e) {
     ElMessage.error('加载文章详情失败')
   }
@@ -309,7 +309,7 @@ const saveDraft = async () => {
   try {
     await articleFormRef.value.validate()
     submitting.value = true
-    await request.post('/sales/knowledge-base/', { ...articleForm, status: 'DRAFT' })
+    await createKnowledgeArticle({ ...articleForm, status: 'DRAFT' })
     ElMessage.success('草稿已保存')
     showCreateDialog.value = false
     loadArticles()
@@ -324,7 +324,7 @@ const publishArticle = async () => {
   try {
     await articleFormRef.value.validate()
     submitting.value = true
-    await request.post('/sales/knowledge-base/', { ...articleForm, status: 'PUBLISHED' })
+    await createKnowledgeArticle({ ...articleForm, status: 'PUBLISHED' })
     ElMessage.success('文章已发布')
     showCreateDialog.value = false
     loadArticles()
@@ -337,10 +337,10 @@ const publishArticle = async () => {
 
 const markHelpful = async (helpful) => {
   try {
-    await request.post(`/sales/knowledge-base/${currentArticle.value.id}/feedback/`, { helpful })
+    await feedbackKnowledgeArticle(currentArticle.value.id, { helpful })
     ElMessage.success('感谢您的反馈')
     // 刷新文章
-    const res = await request.get(`/sales/knowledge-base/${currentArticle.value.id}/`)
+    const res = await getKnowledgeArticle(currentArticle.value.id)
     currentArticle.value = res
   } catch (e) {
     ElMessage.error('反馈失败')

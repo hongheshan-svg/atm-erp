@@ -71,7 +71,8 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getStocks, getStockMoves } from '@/api/inventory'
+import { getWarehouseList } from '@/api/masterdata'
 
 const router = useRouter()
 const loading = ref(false)
@@ -91,7 +92,7 @@ const loadStock = async () => {
   loading.value = true
   try {
     const params = { ...searchForm }
-    const response = await request.get('/inventory/stocks/', { params })
+    const response = await getStocks(params)
     stocks.value = response.results || response || []
   } catch (error) {
     ElMessage.error('加载库存失败')
@@ -102,7 +103,7 @@ const loadStock = async () => {
 
 const loadWarehouses = async () => {
   try {
-    const response = await request.get('/masterdata/warehouses/')
+    const response = await getWarehouseList()
     warehouses.value = response.results || response || []
   } catch (error) {
     console.error('加载仓库失败:', error)
@@ -118,9 +119,10 @@ const viewHistory = async (row) => {
   historyVisible.value = true
   historyLoading.value = true
   try {
-    const res = await request.get('/inventory/stock-moves/', { params: { item: row.item, warehouse: row.warehouse, page_size: 50 } })
+    const res = await getStockMoves({ item: row.item, warehouse: row.warehouse, page_size: 50 })
     historyList.value = res.data?.results || res.results || []
-  } catch {
+  } catch (error) {
+    console.error(error)
     historyList.value = []
   } finally {
     historyLoading.value = false

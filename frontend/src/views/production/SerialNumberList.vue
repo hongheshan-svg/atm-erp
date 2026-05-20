@@ -275,7 +275,12 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Collection, Search } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getItemList } from '@/api/masterdata'
+import { getProjectList } from '@/api/projects/project'
+import {
+  getSerialNumbers, getSerialNumberStatistics, searchSerialNumbers,
+  generateSerialNumberBatch, getSerialNumberFullTrace, addSerialNumberTrace, getSnRules
+} from '@/api/production'
 
 const loading = ref(false)
 const tableData = ref([])
@@ -385,7 +390,7 @@ const loadData = async () => {
       page_size: pagination.pageSize,
       ...searchForm
     }
-    const res = await request.get('/production/serial-numbers/', { params })
+    const res = await getSerialNumbers(params)
     tableData.value = res.results || res
     pagination.total = res.count || tableData.value.length
   } catch (error) {
@@ -397,7 +402,7 @@ const loadData = async () => {
 
 const loadStats = async () => {
   try {
-    const res = await request.get('/production/serial-numbers/statistics/')
+    const res = await getSerialNumberStatistics()
     stats.total = res.total || 0
     stats.generated = res.by_status?.GENERATED?.count || 0
     stats.in_production = res.by_status?.IN_PRODUCTION?.count || 0
@@ -411,7 +416,7 @@ const loadStats = async () => {
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res
   } catch (error) {
     console.error('加载项目失败:', error)
@@ -420,7 +425,7 @@ const loadProjects = async () => {
 
 const loadItems = async () => {
   try {
-    const res = await request.get('/masterdata/items/', { params: { page_size: 1000 } })
+    const res = await getItemList({ page_size: 1000 })
     items.value = res.results || res
   } catch (error) {
     console.error('加载物料失败:', error)
@@ -429,7 +434,7 @@ const loadItems = async () => {
 
 const loadSNRules = async () => {
   try {
-    const res = await request.get('/production/sn-rules/', { params: { is_active: true, page_size: 100 } })
+    const res = await getSnRules({ is_active: true, page_size: 100 })
     snRules.value = res.results || res
   } catch (error) {
     console.error('加载规则失败:', error)
@@ -450,7 +455,7 @@ const handleQuickSearch = async () => {
     return
   }
   try {
-    const res = await request.get('/production/serial-numbers/search/', { params: { q: quickSearch.value } })
+    const res = await searchSerialNumbers({ q: quickSearch.value })
     tableData.value = res
     pagination.total = res.length
   } catch (error) {
@@ -474,7 +479,7 @@ const handleBatchGenerate = () => {
 const handleGenerate = async () => {
   try {
     await generateFormRef.value.validate()
-    const res = await request.post('/production/serial-numbers/generate_batch/', generateForm)
+    const res = await generateSerialNumberBatch(generateForm)
     ElMessage.success(res.message || '生成成功')
     generateDialogVisible.value = false
     loadData()
@@ -486,7 +491,7 @@ const handleGenerate = async () => {
 
 const handleTrace = async (row) => {
   try {
-    const res = await request.get(`/production/serial-numbers/${row.id}/full_trace/`)
+    const res = await getSerialNumberFullTrace(row.id)
     traceData.value = res
     traceDialogVisible.value = true
   } catch (error) {
@@ -507,7 +512,7 @@ const handleAddTrace = (row) => {
 const handleSubmitTrace = async () => {
   try {
     await traceFormRef.value.validate()
-    await request.post(`/production/serial-numbers/${currentSN.value.id}/add_trace/`, traceForm)
+    await addSerialNumberTrace(currentSN.value.id, traceForm)
     ElMessage.success('记录添加成功')
     addTraceDialogVisible.value = false
     loadData()

@@ -4,19 +4,19 @@
     <el-row :gutter="16" class="stat-cards">
       <el-col :span="6">
         <el-card shadow="hover" class="stat-card">
-          <div class="stat-value">{{ statistics.today_hours?.toFixed(1) || 0 }}</div>
+          <div class="stat-value">{{ toFixedSafe(statistics.today_hours, 1, '0.0') }}</div>
           <div class="stat-label">今日工时</div>
         </el-card>
       </el-col>
       <el-col :span="6">
         <el-card shadow="hover" class="stat-card">
-          <div class="stat-value">{{ statistics.week_hours?.toFixed(1) || 0 }}</div>
+          <div class="stat-value">{{ toFixedSafe(statistics.week_hours, 1, '0.0') }}</div>
           <div class="stat-label">本周工时</div>
         </el-card>
       </el-col>
       <el-col :span="6">
         <el-card shadow="hover" class="stat-card">
-          <div class="stat-value">{{ statistics.month_hours?.toFixed(1) || 0 }}</div>
+          <div class="stat-value">{{ toFixedSafe(statistics.month_hours, 1, '0.0') }}</div>
           <div class="stat-label">本月工时</div>
         </el-card>
       </el-col>
@@ -69,7 +69,7 @@
                          min-width="150" />
         <el-table-column prop="total_hours" label="总工时" width="120" align="right">
           <template #default="{ row }">
-            {{ row.total_hours?.toFixed(1) }} h
+            {{ toFixedSafe(row.total_hours, 1, '0.0') }} h
           </template>
         </el-table-column>
         <el-table-column prop="work_days" label="工作天数" width="100" v-if="groupBy === 'user'" />
@@ -102,12 +102,12 @@
           <el-table :data="overtimeData" stripe size="small">
             <el-table-column prop="username" label="用户" />
             <el-table-column prop="total_hours" label="总工时" width="100">
-              <template #default="{ row }">{{ row.total_hours?.toFixed(1) }} h</template>
+              <template #default="{ row }">{{ toFixedSafe(row.total_hours, 1, '0.0') }} h</template>
             </el-table-column>
             <el-table-column prop="overtime_hours" label="加班工时" width="100">
               <template #default="{ row }">
                 <span :class="{ 'overtime-highlight': row.overtime_hours > 20 }">
-                  {{ row.overtime_hours?.toFixed(1) }} h
+                  {{ toFixedSafe(row.overtime_hours, 1, '0.0') }} h
                 </span>
               </template>
             </el-table-column>
@@ -121,10 +121,12 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
+import request from '@/utils/request'
+import { exportTimelogReport } from '@/api/reports'
 import { ElMessage } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
-import request from '@/utils/request'
+import { toFixedSafe } from '@/utils/number'
 
 const loading = ref(false)
 const statistics = ref({})
@@ -250,10 +252,12 @@ const renderPieChart = () => {
 
 const exportReport = async () => {
   try {
-    const res = await request.get('/reports/timelog-report/export/', {
-      params: { ...queryParams },
-      responseType: 'blob'
-    })
+    const params = {}
+    if (dateRange.value && dateRange.value.length === 2) {
+      params.start_date = dateRange.value[0]
+      params.end_date = dateRange.value[1]
+    }
+    const res = await exportTimelogReport(params)
     const url = window.URL.createObjectURL(new Blob([res.data || res]))
     const link = document.createElement('a')
     link.href = url

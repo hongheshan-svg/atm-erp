@@ -94,7 +94,8 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getStocks, getMoves, createTransfer } from '@/api/inventory'
+import { getWarehouseList } from '@/api/masterdata'
 
 const formRef = ref(null)
 const submitting = ref(false)
@@ -119,7 +120,7 @@ const rules = {
 
 const loadWarehouses = async () => {
   try {
-    const response = await request.get('/masterdata/warehouses/', { params: { page_size: 100 } })
+    const response = await getWarehouseList({ page_size: 100 })
     warehouses.value = response.results || response || []
   } catch (error) {
     console.error('加载仓库失败:', error)
@@ -129,9 +130,7 @@ const loadWarehouses = async () => {
 const loadFromStock = async () => {
   if (!form.from_warehouse) return
   try {
-    const response = await request.get('/inventory/stocks/', {
-      params: { warehouse: form.from_warehouse, page_size: 500 }
-    })
+    const response = await getStocks({ warehouse: form.from_warehouse, page_size: 500 })
     fromStock.value = (response.results || response || []).filter(s => (s.qty_available || 0) > 0)
   } catch (error) {
     ElMessage.error('加载库存失败')
@@ -141,9 +140,7 @@ const loadFromStock = async () => {
 const loadHistory = async () => {
   loadingHistory.value = true
   try {
-    const response = await request.get('/inventory/moves/', {
-      params: { move_type: 'TRANSFER', page_size: 50 }
-    })
+    const response = await getMoves({ move_type: 'TRANSFER', page_size: 50 })
     history.value = response.results || []
   } catch (error) {
     console.error('加载调拨历史失败:', error)
@@ -179,7 +176,7 @@ const handleSubmit = async () => {
     
     submitting.value = true
     try {
-      await request.post('/inventory/moves/transfer/', form)
+      await createTransfer(form)
       ElMessage.success('调拨成功')
       resetForm()
       loadHistory()

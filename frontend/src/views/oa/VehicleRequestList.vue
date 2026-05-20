@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>用车申请</span>
-          <el-button type="primary" @click="handleCreate">
+          <el-button type="primary" v-permission="'oa:vehicle_request:create'" @click="handleCreate">
             <el-icon><Plus /></el-icon>
             新建申请
           </el-button>
@@ -59,7 +59,7 @@
             <el-button v-if="row.status === 'DRAFT'" size="small" type="primary" @click="handleSubmit(row)">提交</el-button>
             <el-button v-if="row.status === 'APPROVED'" size="small" type="success" @click="handlePickup(row)">取车</el-button>
             <el-button v-if="row.status === 'IN_USE'" size="small" type="warning" @click="handleReturn(row)">还车</el-button>
-            <el-button v-if="row.status === 'DRAFT'" size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="row.status === 'DRAFT'" size="small" type="danger" v-permission="'oa:vehicle_request:delete'" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -194,7 +194,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getAvailableVehicles, getVehicleRequests, getVehicleRequest, createVehicleRequest, submitVehicleRequest, pickupVehicle, returnVehicle, deleteVehicleRequest } from '@/api/oa'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -270,7 +270,7 @@ const formatDateTime = (datetime) => {
 
 const loadVehicles = async () => {
   try {
-    const res = await request.get('/oa/vehicles/available/')
+    const res = await getAvailableVehicles()
     // res 已经是 response.data
     availableVehicles.value = Array.isArray(res) ? res : (res.results || [])
   } catch (error) {
@@ -286,7 +286,7 @@ const loadData = async () => {
       page_size: pagination.pageSize,
       ...searchForm
     }
-    const res = await request.get('/oa/vehicle-requests/', { params })
+    const res = await getVehicleRequests(params)
     // res 已经是 response.data
     if (Array.isArray(res)) {
       list.value = res
@@ -322,9 +322,10 @@ const handleCreate = () => {
 
 const handleView = async (row) => {
   try {
-    const res = await request.get(`/oa/vehicle-requests/${row.id}/`)
+    const res = await getVehicleRequest(row.id)
     viewDetail.value = res.data || res
-  } catch {
+  } catch (error) {
+    console.error(error)
     viewDetail.value = row
   }
   viewDialogVisible.value = true
@@ -335,7 +336,7 @@ const handleSave = async () => {
     await formRef.value?.validate()
     saving.value = true
     
-    await request.post('/oa/vehicle-requests/', form)
+    await createVehicleRequest(form)
     ElMessage.success('申请已保存')
     
     dialogVisible.value = false
@@ -352,7 +353,7 @@ const handleSave = async () => {
 const handleSubmit = async (row) => {
   try {
     await ElMessageBox.confirm('确定要提交这个用车申请吗？', '提示', { type: 'warning' })
-    await request.post(`/oa/vehicle-requests/${row.id}/submit/`)
+    await submitVehicleRequest(row.id)
     ElMessage.success('提交成功')
     loadData()
   } catch (error) {
@@ -365,7 +366,7 @@ const handleSubmit = async (row) => {
 const handlePickup = async (row) => {
   try {
     await ElMessageBox.confirm('确认取车？', '提示', { type: 'info' })
-    await request.post(`/oa/vehicle-requests/${row.id}/pickup/`)
+    await pickupVehicle(row.id)
     ElMessage.success('取车成功')
     loadData()
   } catch (error) {
@@ -389,7 +390,7 @@ const handleReturn = (row) => {
 const confirmReturn = async () => {
   saving.value = true
   try {
-    await request.post(`/oa/vehicle-requests/${currentItem.value.id}/return_vehicle/`, returnForm)
+    await returnVehicle(currentItem.value.id, returnForm)
     ElMessage.success('还车成功')
     returnDialogVisible.value = false
     loadData()
@@ -403,7 +404,7 @@ const confirmReturn = async () => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除这个用车申请吗？', '提示', { type: 'warning' })
-    await request.delete(`/oa/vehicle-requests/${row.id}/`)
+    await deleteVehicleRequest(row.id)
     ElMessage.success('删除成功')
     loadData()
   } catch (error) {

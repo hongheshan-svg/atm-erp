@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>库存盘点</span>
-          <el-button type="primary" @click="handleCreate">
+          <el-button type="primary" v-permission="'inventory:stock_adjustment:create'" @click="handleCreate">
             <el-icon><Plus /></el-icon>
             新增盘点
           </el-button>
@@ -12,7 +12,7 @@
       </template>
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'inventory:stock_adjustment:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
         <el-button 
           type="danger" 
@@ -25,7 +25,7 @@
       </div>
 
       <el-table :data="adjustments" v-loading="loading" border stripe @selection-change="handleSelectionChange">
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'inventory:stock_adjustment:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="adjustment_no" label="盘点单号" width="150" />
         <el-table-column prop="warehouse_name" label="仓库" width="150" />
         <el-table-column prop="adjustment_date" label="盘点日期" width="120" />
@@ -33,7 +33,7 @@
         <el-table-column prop="cost_impact" label="成本影响" width="130" align="right">
           <template #default="{ row }">
             <span :style="{ color: (row.cost_impact || 0) < 0 ? '#F56C6C' : '#67C23A' }">
-              ¥{{ (row.cost_impact || 0).toFixed(2) }}
+              ¥{{ toFixedSafe(row.cost_impact) }}
             </span>
           </template>
         </el-table-column>
@@ -157,9 +157,11 @@ import WorkflowProgress from '@/components/WorkflowProgress.vue'
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getAdjustments, getAdjustment, createAdjustment, submitAdjustment as apiSubmitAdjustment, confirmAdjustment, getStocks } from '@/api/inventory'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { getWarehouseList } from '@/api/masterdata'
+import { toFixedSafe } from '@/utils/number'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -232,9 +234,7 @@ const getStatusLabel = (status) => {
 const loadAdjustments = async () => {
   loading.value = true
   try {
-    const response = await request.get('/inventory/adjustments/', {
-      params: { page: pagination.page, page_size: pagination.pageSize }
-    })
+    const response = await getAdjustments({ page: pagination.page, page_size: pagination.pageSize })
     adjustments.value = response.results || []
     pagination.total = response.count || 0
   } catch (error) {
@@ -246,7 +246,7 @@ const loadAdjustments = async () => {
 
 const loadWarehouses = async () => {
   try {
-    const response = await request.get('/masterdata/warehouses/', { params: { page_size: 100 } })
+    const response = await getWarehouseList({ page_size: 100 })
     warehouses.value = response.results || response || []
   } catch (error) {
     console.error('加载仓库失败:', error)
@@ -256,9 +256,7 @@ const loadWarehouses = async () => {
 const loadStockForAdjustment = async () => {
   if (!adjustmentForm.warehouse) return
   try {
-    const response = await request.get('/inventory/stocks/', {
-      params: { warehouse: adjustmentForm.warehouse, page_size: 500 }
-    })
+    const response = await getStocks({ warehouse: adjustmentForm.warehouse, page_size: 500 })
     adjustmentForm.lines = (response.results || response || []).map(s => ({
       item: s.item,
       item_sku: s.item_sku,
@@ -287,7 +285,7 @@ const handleCreate = () => {
 
 const handleView = async (row) => {
   try {
-    const response = await request.get(`/inventory/adjustments/${row.id}/`)
+    const response = await getAdjustment(row.id)
     viewDetail.value = response.data || response
     viewDialogVisible.value = true
   } catch (error) {
@@ -299,7 +297,7 @@ const handleView = async (row) => {
 const handleSubmitApproval = async (row) => {
   try {
     await ElMessageBox.confirm('确定要提交该盘点单进行审批吗？', '提交审批', { type: 'warning' })
-    const response = await request.post(`/inventory/adjustments/${row.id}/submit/`)
+    const response = await apiSubmitAdjustment(row.id)
     const data = response.data || response
     if (data.workflow_started) {
       ElMessage.success(data.message || '已提交审批')
@@ -318,7 +316,7 @@ const handleSubmitApproval = async (row) => {
 const handleConfirm = async (row) => {
   try {
     await ElMessageBox.confirm('确定要确认此盘点吗？确认后将调整库存。', '提示', { type: 'warning' })
-    await request.post(`/inventory/adjustments/${row.id}/confirm/`)
+    await confirmAdjustment(row.id)
     ElMessage.success('盘点确认成功')
     loadAdjustments()
   } catch (error) {
@@ -332,7 +330,7 @@ const submitAdjustment = async () => {
   if (adjustmentForm.lines.length === 0) return ElMessage.warning('请先加载库存数据')
   
   try {
-    await request.post('/inventory/adjustments/', adjustmentForm)
+    await createAdjustment(adjustmentForm)
     ElMessage.success('盘点单创建成功')
     dialogVisible.value = false
     loadAdjustments()
@@ -379,4 +377,3 @@ onMounted(() => {
 }
 .table-toolbar span { font-size: 14px; color: #606266; }
 </style>
-

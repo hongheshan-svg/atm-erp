@@ -5,8 +5,8 @@ from .models import Stock, StockAdjustment, StockAdjustmentLine, StockMove
 
 @admin.register(Stock)
 class StockAdmin(admin.ModelAdmin):
-    list_display = ['warehouse', 'item', 'qty_on_hand', 'qty_reserved', 'weighted_avg_cost', 'last_updated']
-    list_filter = ['warehouse', 'last_updated']
+    list_display = ['warehouse', 'item', 'qty_on_hand', 'qty_reserved', 'weighted_avg_cost', 'updated_at']
+    list_filter = ['warehouse', 'updated_at']
     search_fields = ['item__sku', 'item__name']
     ordering = ['warehouse', 'item']
 

@@ -415,7 +415,7 @@ class SalesForecastViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         return Response({'message': f'{year}年{month}月预测已更新'})
 
 
-class CRMDashboardView(viewsets.ViewSet):
+class CRMDashboardView(PermissionMixin, viewsets.ViewSet):
     """CRM仪表盘数据"""
 
     @action(detail=False, methods=['get'])

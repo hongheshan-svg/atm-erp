@@ -42,8 +42,8 @@
 
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
+import { getCustomerValueReport } from '@/api/reports'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
 import * as echarts from 'echarts'
 
 const loading = ref(false)
@@ -57,7 +57,7 @@ const getGradeType = (g) => ({ 'A': 'success', 'B': 'primary', 'C': 'warning', '
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await request.get('/reports/industry/customer-value/', { params: { period: period.value } })
+    const res = await getCustomerValueReport({ period: period.value })
     tableData.value = res.data?.customers || res.customers || []
     await nextTick()
     renderChart()

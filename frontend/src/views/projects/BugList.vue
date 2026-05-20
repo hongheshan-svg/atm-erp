@@ -5,7 +5,7 @@
         <div class="card-header">
           <span>Bug跟踪</span>
           <div class="header-actions">
-            <el-button type="primary" @click="handleAdd">
+            <el-button type="primary" v-permission="'projects:project:create'" @click="handleAdd">
               <el-icon><Plus /></el-icon> 新建Bug
             </el-button>
           </div>
@@ -96,14 +96,14 @@
       </div>
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'projects:project:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" v-permission="'projects:project:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <!-- Bug列表 -->
       <el-table :data="bugs" v-loading="loading" stripe border @row-click="handleRowClick" @selection-change="handleSelectionChange" class="bug-table">
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'projects:project:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="bug_number" label="编号" width="140" fixed="left">
           <template #default="{ row }">
             <el-link type="primary" @click.stop="handleView(row)">{{ row.bug_number }}</el-link>
@@ -336,9 +336,11 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, ArrowDown } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getBugList, createBug, updateBug, getBugStatistics, assignBug, changeBugStatus } from '@/api/projects/bug'
+import { getProjectList } from '@/api/projects/project'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { getUsers } from '@/api/auth'
 
 const router = useRouter()
 
@@ -528,7 +530,7 @@ const loadBugs = async () => {
       }
     })
     
-    const response = await request.get('/projects/bugs/', { params })
+    const response = await getBugList( { params })
     bugs.value = response.results || response || []
     pagination.total = response.count || 0
   } catch (error) {
@@ -541,7 +543,7 @@ const loadBugs = async () => {
 const loadStats = async () => {
   try {
     const params = searchForm.project ? { project: searchForm.project } : {}
-    const response = await request.get('/projects/bugs/statistics/', { params })
+    const response = await getBugStatistics( { params })
     stats.value = response
   } catch (error) {
     console.error('加载统计失败:', error)
@@ -550,7 +552,7 @@ const loadStats = async () => {
 
 const loadProjects = async () => {
   try {
-    const response = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    const response = await getProjectList( { params: { page_size: 1000 } })
     projects.value = response.results || response || []
   } catch (error) {
     console.error('加载项目失败:', error)
@@ -559,7 +561,7 @@ const loadProjects = async () => {
 
 const loadUsers = async () => {
   try {
-    const response = await request.get('/auth/users/', { params: { is_active: true, page_size: 1000 } })
+    const response = await getUsers({ is_active: true, page_size: 1000 })
     const data = response.results || response || []
     users.value = data.map(u => ({
       id: u.id,
@@ -669,10 +671,10 @@ const handleSubmit = async () => {
     const data = { ...form }
     
     if (isEdit.value) {
-      await request.put(`/projects/bugs/${currentBug.value.id}/`, data)
+      await updateBug(currentBug.value.id, data)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/projects/bugs/', data)
+      await createBug( data)
       ElMessage.success('创建成功')
     }
     
@@ -715,7 +717,7 @@ const handleAssignSubmit = async () => {
   
   assigning.value = true
   try {
-    await request.post(`/projects/bugs/${currentBug.value.id}/assign/`, {
+    await assignBug(currentBug.value.id, {
       assignee: assignForm.assignee
     })
     ElMessage.success('分配成功')
@@ -736,7 +738,7 @@ const handleStatusSubmit = async () => {
   
   changingStatus.value = true
   try {
-    await request.post(`/projects/bugs/${currentBug.value.id}/change_status/`, statusForm)
+    await changeBugStatus(currentBug.value.id, statusForm)
     ElMessage.success('状态变更成功')
     statusDialogVisible.value = false
     loadBugs()

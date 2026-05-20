@@ -2,7 +2,7 @@
   <div class="routing-template">
     <el-card class="filter-card">
       <div class="filter-header">
-        <el-button type="primary" @click="handleCreate">
+        <el-button type="primary" v-permission="'production:process:create'" @click="handleCreate">
           <el-icon><Plus /></el-icon> 新建工艺模板
         </el-button>
         <div class="filter-right">
@@ -46,7 +46,7 @@
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="handleView(row)">查看</el-button>
-            <el-button type="primary" link @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
+            <el-button type="primary" link v-permission="'production:process:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-dropdown trigger="click" @command="cmd => handleCommand(cmd, row)">
               <el-button type="primary" link>更多</el-button>
               <template #dropdown>
@@ -139,7 +139,13 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
-import request from '@/utils/request'
+import { getItemCategoryTree } from '@/api/core'
+import { getItemList } from '@/api/masterdata'
+import { getProjectList } from '@/api/projects/project'
+import {
+  getRoutingTemplates, createRoutingTemplate, updateRoutingTemplate,
+  approveRoutingTemplate, createRoutingTemplateVersion, applyRoutingTemplateToProject
+} from '@/api/production'
 
 const router = useRouter()
 
@@ -194,7 +200,7 @@ const loadData = async () => {
       search: searchText.value || undefined,
       status: statusFilter.value || undefined
     }
-    const res = await request.get('/production/routing-templates/', { params })
+    const res = await getRoutingTemplates(params)
     tableData.value = res.data.results || res.data
     total.value = res.data.count || tableData.value.length
   } catch (e) {
@@ -205,17 +211,17 @@ const loadData = async () => {
 }
 
 const loadCategories = async () => {
-  const res = await request.get('/masterdata/item-categories/', { params: { page_size: 500 } })
+  const res = await getItemCategoryTree({ page_size: 500 })
   categories.value = res.data.results || res.data
 }
 
 const loadItems = async () => {
-  const res = await request.get('/masterdata/items/', { params: { page_size: 1000, item_type: 'PRODUCT' } })
+  const res = await getItemList({ page_size: 1000, item_type: 'PRODUCT' })
   items.value = res.data.results || res.data
 }
 
 const loadProjects = async () => {
-  const res = await request.get('/projects/projects/', { params: { page_size: 500, status: 'IN_PROGRESS' } })
+  const res = await getProjectList({ page_size: 500, status: 'IN_PROGRESS' })
   projects.value = res.data.results || res.data
 }
 
@@ -258,10 +264,10 @@ const handleSubmit = async () => {
   submitting.value = true
   try {
     if (form.id) {
-      await request.patch(`/production/routing-templates/${form.id}/`, form)
+      await updateRoutingTemplate(form.id, form)
       ElMessage.success('保存成功')
     } else {
-      const res = await request.post('/production/routing-templates/', form)
+      const res = await createRoutingTemplate(form)
       ElMessage.success('创建成功')
       router.push(`/production/routing-template/${res.data.id}`)
     }
@@ -280,15 +286,16 @@ const handleCommand = async (cmd, row) => {
     switch (cmd) {
       case 'approve':
         await ElMessageBox.confirm('确定审批通过此工艺模板?', '提示')
-        await request.post(`/production/routing-templates/${row.id}/approve/`)
+        await approveRoutingTemplate(row.id)
         ElMessage.success('审批通过')
         loadData()
         break
-      case 'new_version':
+      case 'new_version': {
         await ElMessageBox.confirm('确定创建新版本?', '提示')
-        const res = await request.post(`/production/routing-templates/${row.id}/create_version/`)
+        const res = await createRoutingTemplateVersion(row.id)
         ElMessage.success('新版本创建成功')
         router.push(`/production/routing-template/${res.data.id}`)
+        }
         break
       case 'apply':
         currentTemplate.value = row
@@ -296,12 +303,13 @@ const handleCommand = async (cmd, row) => {
         applyForm.project_id = null
         applyDialogVisible.value = true
         break
-      case 'copy':
+      case 'copy': {
         // 复制模板
         const copyData = { ...row, code: `${row.code}_COPY`, id: null }
-        await request.post('/production/routing-templates/', copyData)
+        await createRoutingTemplate(copyData)
         ElMessage.success('复制成功')
         loadData()
+        }
         break
     }
   } catch (e) {
@@ -320,7 +328,7 @@ const handleApplyToProject = async () => {
   
   submitting.value = true
   try {
-    await request.post(`/production/routing-templates/${currentTemplate.value.id}/apply_to_project/`, applyForm)
+    await applyRoutingTemplateToProject(currentTemplate.value.id, applyForm)
     ElMessage.success('工艺已应用到项目')
     applyDialogVisible.value = false
   } catch (e) {

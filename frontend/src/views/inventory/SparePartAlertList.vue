@@ -33,7 +33,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getSparePartAlerts, resolveSparePartAlert } from '@/api/inventory'
 
 const loading = ref(false)
 const tableData = ref([])
@@ -46,7 +46,7 @@ const getAlertType = (t) => ({ 'LOW_STOCK': 'warning', 'OUT_OF_STOCK': 'danger',
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await request.get('/inventory/spare-part-alerts/', { params: { page: page.value, page_size: pageSize.value } })
+    const res = await getSparePartAlerts({ page: page.value, page_size: pageSize.value })
     tableData.value = res.data?.results || res.results || []
     total.value = res.data?.count || res.count || 0
   } catch (error) {
@@ -58,7 +58,7 @@ const loadData = async () => {
 
 const handleResolve = async (row) => {
   try {
-    await request.post(`/inventory/spare-part-alerts/${row.id}/resolve/`)
+    await resolveSparePartAlert(row.id)
     ElMessage.success('已处理')
     loadData()
   } catch (error) {

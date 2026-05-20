@@ -5,7 +5,7 @@
         <div class="card-header">
           <span>销售对账管理</span>
           <div class="header-actions">
-            <el-button type="primary" @click="handleCreate">
+            <el-button type="primary" v-permission="'finance:sales_reconciliation:create'" @click="handleCreate">
               <el-icon><Plus /></el-icon> 新建对账单
             </el-button>
           </div>
@@ -102,7 +102,7 @@
             <el-button size="small" link type="success" @click="handlePrint(row)">打印</el-button>
             <el-button v-if="row.status === 'DRAFT'" size="small" link type="warning" @click="handleSubmit(row)">提交</el-button>
             <el-button v-if="row.status === 'PENDING'" size="small" link type="success" @click="handleConfirm(row)">确认</el-button>
-            <el-button v-if="row.status === 'DRAFT'" size="small" link type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="row.status === 'DRAFT'" size="small" link type="danger" v-permission="'finance:sales_reconciliation:delete'" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -336,7 +336,8 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getSalesReconciliations, getSalesReconciliation, createSalesReconciliation, deleteSalesReconciliation, getSalesReconciliationCustomerSummary, getSalesReconciliationOpeningBalance, generateSalesReconciliationLines, submitSalesReconciliation, confirmSalesReconciliation, confirmSalesReconciliationDelivery } from '@/api/finance'
+import { getCustomerList } from '@/api/masterdata'
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -421,7 +422,7 @@ const getMatchText = (row) => {
 
 const loadCustomers = async () => {
   try {
-    const res = await request.get('/masterdata/customers/', { params: { page_size: 1000, status: 'ACTIVE' } })
+    const res = await getCustomerList({ page_size: 1000, status: 'ACTIVE' })
     customers.value = res.results || res || []
   } catch (error) {
     console.error('Load customers failed:', error)
@@ -443,7 +444,7 @@ const loadReconciliations = async () => {
     delete params.period
     Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
     
-    const res = await request.get('/finance/sales-reconciliations/', { params })
+    const res = await getSalesReconciliations(params)
     reconciliations.value = res.results || res || []
     pagination.total = res.count || 0
     
@@ -458,7 +459,7 @@ const loadReconciliations = async () => {
 
 const loadSummary = async () => {
   try {
-    const res = await request.get('/finance/sales-reconciliations/customer_summary/')
+    const res = await getSalesReconciliationCustomerSummary()
     if (res) {
       summary.total_sales = res.total_order_amount || 0
       summary.total_invoiced = res.total_invoice_amount || 0
@@ -490,7 +491,7 @@ const fetchOpeningBalance = async (customerId) => {
     return
   }
   try {
-    const res = await request.get('/finance/sales-reconciliations/get_opening_balance/', {
+    const res = await getSalesReconciliationOpeningBalance({
       params: { customer: customerId }
     })
     createForm.opening_balance = res.opening_balance || 0
@@ -517,10 +518,10 @@ const submitCreate = async () => {
       notes: createForm.notes
     }
     
-    const res = await request.post('/finance/sales-reconciliations/', data)
+    const res = await createSalesReconciliation(data)
     
     // 自动生成明细
-    await request.post(`/finance/sales-reconciliations/${res.id}/generate_lines/`)
+    await generateSalesReconciliationLines(res.id)
     
     ElMessage.success('对账单创建成功')
     createDialogVisible.value = false
@@ -537,7 +538,7 @@ const submitCreate = async () => {
 
 const handleDetail = async (row) => {
   try {
-    const res = await request.get(`/finance/sales-reconciliations/${row.id}/`)
+    const res = await getSalesReconciliation(row.id)
     currentReconciliation.value = res
     reconciliationLines.value = res.lines || []
     detailTab.value = 'order'
@@ -550,7 +551,7 @@ const handleDetail = async (row) => {
 const handleSubmit = async (row) => {
   try {
     await ElMessageBox.confirm('确定提交此对账单吗？提交后将发送给客户确认。', '提交确认')
-    await request.post(`/finance/sales-reconciliations/${row.id}/submit/`)
+    await submitSalesReconciliation(row.id)
     ElMessage.success('提交成功')
     loadReconciliations()
   } catch (error) {
@@ -563,7 +564,7 @@ const handleSubmit = async (row) => {
 const handleConfirm = async (row) => {
   try {
     await ElMessageBox.confirm('确定确认此对账单吗？确认后将完成对账。', '确认对账')
-    await request.post(`/finance/sales-reconciliations/${row.id}/confirm/`)
+    await confirmSalesReconciliation(row.id)
     ElMessage.success('确认成功')
     loadReconciliations()
     if (detailDialogVisible.value) {
@@ -579,7 +580,7 @@ const handleConfirm = async (row) => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm('确定删除此对账单吗？', '删除确认', { type: 'warning' })
-    await request.delete(`/finance/sales-reconciliations/${row.id}/`)
+    await deleteSalesReconciliation(row.id)
     ElMessage.success('删除成功')
     loadReconciliations()
   } catch (error) {
@@ -591,7 +592,7 @@ const handleDelete = async (row) => {
 
 const confirmDelivery = async (line) => {
   try {
-    await request.post(`/finance/sales-reconciliations/${currentReconciliation.value.id}/confirm_delivery/${line.id}/`)
+    await confirmSalesReconciliationDelivery(currentReconciliation.value.id, line.id)
     ElMessage.success('确认收货成功')
     handleDetail(currentReconciliation.value)
   } catch (error) {

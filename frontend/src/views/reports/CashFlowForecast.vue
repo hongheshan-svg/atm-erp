@@ -155,9 +155,10 @@
 
 <script setup>
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { getCashFlowForecast, getAnalyticsDashboard } from '@/api/analytics'
+import { getReceivableList, getPayableList } from '@/api/finance'
 import { ElMessage } from 'element-plus'
 import { Download, Wallet, Top, Bottom, TrendCharts, Warning } from '@element-plus/icons-vue'
-import request from '@/utils/request'
 import * as echarts from 'echarts'
 
 const forecastPeriod = ref('30')
@@ -203,7 +204,7 @@ const getOverdueLabel = (dueDate) => {
 const fetchData = async () => {
   try {
     // 获取现金流预测汇总数据
-    const forecastRes = await request.get('/analytics/cash-flow-forecast/')
+    const forecastRes = await getCashFlowForecast()
     const forecastData = forecastRes.data || forecastRes
     
     // 设置概览数据
@@ -212,20 +213,16 @@ const fetchData = async () => {
     overview.netFlow = forecastData.net_cash_flow || 0
     
     // 获取应收账款明细
-    const arRes = await request.get('/finance/receivables/', {
-      params: { status: 'PENDING', page_size: 100 }
-    })
+    const arRes = await getReceivableList({ status: 'PENDING', page_size: 100 })
     arList.value = arRes.data?.results || arRes.results || arRes.data || []
     
     // 获取应付账款明细
-    const apRes = await request.get('/finance/payables/', {
-      params: { status: 'PENDING', page_size: 100 }
-    })
+    const apRes = await getPayableList({ status: 'PENDING', page_size: 100 })
     apList.value = apRes.data?.results || apRes.results || apRes.data || []
     
     // 尝试获取当前现金余额（从财务汇总）
     try {
-      const dashboardRes = await request.get('/analytics/dashboard/')
+      const dashboardRes = await getAnalyticsDashboard()
       const dashboardData = dashboardRes.data || dashboardRes
       // 使用应收 - 应付作为近似现金状况
       const receivables = dashboardData.financial?.receivables || 0
@@ -244,14 +241,10 @@ const fetchData = async () => {
     console.error('获取数据失败:', error)
     // 获取数据失败时尝试单独获取应收应付
     try {
-      const arRes = await request.get('/finance/receivables/', {
-        params: { status: 'PENDING', page_size: 100 }
-      })
+      const arRes = await getReceivableList({ status: 'PENDING', page_size: 100 })
       arList.value = arRes.data?.results || arRes.results || arRes.data || []
       
-      const apRes = await request.get('/finance/payables/', {
-        params: { status: 'PENDING', page_size: 100 }
-      })
+      const apRes = await getPayableList({ status: 'PENDING', page_size: 100 })
       apList.value = apRes.data?.results || apRes.results || apRes.data || []
       
   calculateOverview()

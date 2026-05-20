@@ -135,7 +135,7 @@
 <script setup>
 import { ref, reactive, onMounted, nextTick, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getAnalysisFunnel, getAnalysisTrend, getAnalysisRanking, getCustomerRFMSegmentSummary, getTopCustomers, analyzeCustomerRFM } from '@/api/sales'
 import * as echarts from 'echarts'
 
 const activeTab = ref('funnel')
@@ -167,7 +167,7 @@ const fetchFunnel = async () => {
       params.start_date = dateRange.value[0]
       params.end_date = dateRange.value[1]
     }
-    const data = await request.get('/sales/analysis/funnel/', { params })
+    const data = await getAnalysisFunnel(params)
     funnelData.value = data.funnel || []
     funnelSummary.value = {
       total_leads: data.total_leads,
@@ -182,10 +182,10 @@ const fetchFunnel = async () => {
 
 const fetchCustomerAnalysis = async () => {
   try {
-    const segData = await request.get('/sales/customer-rfm/segment_summary/')
+    const segData = await getCustomerRFMSegmentSummary()
     customerSegments.value = segData?.segments || []
     
-    const topData = await request.get('/sales/customer-rfm/top_customers/')
+    const topData = await getTopCustomers()
     topCustomers.value = topData?.customers || topData || []
   } catch (e) {
     console.error(e)
@@ -195,7 +195,7 @@ const fetchCustomerAnalysis = async () => {
 const handleRFMAnalyze = async () => {
   try {
     ElMessage.info('正在执行RFM分析...')
-    const data = await request.post('/sales/customer-rfm/analyze/')
+    const data = await analyzeCustomerRFM()
     ElMessage.success(`分析完成，共分析 ${data.analyzed_count} 个客户`)
     fetchCustomerAnalysis()
   } catch (e) {
@@ -205,9 +205,7 @@ const handleRFMAnalyze = async () => {
 
 const fetchTrend = async () => {
   try {
-    const data = await request.get('/sales/analysis/trend/', {
-      params: { period: 'month', months: 12 }
-    })
+    const data = await getAnalysisTrend({ period: 'month', months: 12 })
     trendData.value = data.trend || []
     renderTrendChart()
   } catch (e) {
@@ -266,7 +264,7 @@ const fetchRanking = async () => {
       params.start_date = dateRange.value[0]
       params.end_date = dateRange.value[1]
     }
-    const data = await request.get('/sales/analysis/ranking/', { params })
+    const data = await getAnalysisRanking(params)
     ranking.value = data.ranking || []
   } catch (e) {
     console.error(e)

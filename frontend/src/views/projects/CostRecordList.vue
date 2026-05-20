@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>成本记录</span>
-          <el-button type="primary" @click="handleCreate">新增记录</el-button>
+          <el-button type="primary" v-permission="'projects:project:create'" @click="handleCreate">新增记录</el-button>
         </div>
       </template>
       
@@ -39,7 +39,7 @@
         </el-table-column>
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
-            <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button link type="danger" v-permission="'projects:project:delete'" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -83,7 +83,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import request from '@/utils/request'
+import { getProjectList, getCostRecordList, createCostRecord, deleteCostRecord } from '@/api/projects/project'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -113,7 +113,7 @@ const loadData = async () => {
   loading.value = true
   try {
     const params = { page: page.value, page_size: pageSize.value, ...filters.value }
-    const res = await request.get('/projects/project-cost-records/', { params })
+    const res = await getCostRecordList(params)
     tableData.value = res.data?.results || res.results || []
     total.value = res.data?.count || res.count || 0
   } catch (error) {
@@ -125,9 +125,11 @@ const loadData = async () => {
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    const res = await getProjectList({ page_size: 1000 })
     projects.value = res.data?.results || res.results || []
-  } catch {}
+  } catch (error) {
+    console.error('CostRecordList getProjectList error:', error)
+  }
 }
 
 const handleCreate = () => {
@@ -140,7 +142,7 @@ const handleSave = async () => {
   try {
     await formRef.value?.validate()
     saving.value = true
-    await request.post('/projects/project-cost-records/', form)
+    await createCostRecord(form)
     ElMessage.success('创建成功')
     dialogVisible.value = false
     loadData()
@@ -154,7 +156,7 @@ const handleSave = async () => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除此记录吗？', '提示', { type: 'warning' })
-    await request.delete(`/projects/project-cost-records/${row.id}/`)
+    await deleteCostRecord(row.id)
     ElMessage.success('删除成功')
     loadData()
   } catch (error) {

@@ -19,7 +19,7 @@
             <el-select v-model="queryParams.status" placeholder="全部状态" clearable style="width: 130px; margin-right: 12px" @change="loadList">
               <el-option v-for="s in statusOptions" :key="s.value" :label="s.label" :value="s.value" />
             </el-select>
-            <el-button type="primary" @click="showCreateDialog = true">
+            <el-button type="primary" v-permission="'projects:project:create'" @click="showCreateDialog = true">
               <el-icon><Plus /></el-icon>新建任务
             </el-button>
           </div>
@@ -86,8 +86,8 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showCreateDialog = false">取消</el-button>
-        <el-button type="primary" @click="handleCreate" :loading="submitLoading">创建</el-button>
+        <el-button v-permission="'projects:project:create'" @click="showCreateDialog = false">取消</el-button>
+        <el-button type="primary" v-permission="'projects:project:create'" @click="handleCreate" :loading="submitLoading">创建</el-button>
       </template>
     </el-dialog>
   </div>
@@ -154,7 +154,9 @@ const loadSummary = async () => {
   try {
     const res = await getInstallationTaskSummary()
     summary.value = res.data || res || {}
-  } catch {}
+  } catch (error) {
+    console.error('InstallationTaskList getInstallationTaskSummary error:', error)
+  }
 }
 
 const goDetail = (row) => {

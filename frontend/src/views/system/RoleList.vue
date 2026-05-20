@@ -4,18 +4,18 @@
       <template #header>
         <div class="card-header">
           <span>角色管理</span>
-          <el-button type="primary" @click="handleAdd">新增角色</el-button>
+          <el-button type="primary" v-permission="'accounts:role:create'" @click="handleAdd">新增角色</el-button>
         </div>
       </template>
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'accounts:role:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" v-permission="'accounts:role:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <el-table :data="roles" v-loading="loading" stripe border @selection-change="handleSelectionChange">
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'accounts:role:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="id" label="编号" width="80" />
         <el-table-column prop="name" label="角色名称" width="150" />
         <el-table-column prop="code" label="角色编码" width="150" />
@@ -32,7 +32,7 @@
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" v-permission="'accounts:role:edit'" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" type="primary" @click="handlePermission(row)">权限配置</el-button>
             <el-button v-if="canDelete" size="small" type="danger" @click="deleteRow(row)" :loading="deleteLoading">删除</el-button>
           </template>
@@ -97,32 +97,9 @@
         </div>
         
         <el-divider content-position="left">数据权限</el-divider>
-        <el-form label-width="100px">
-          <el-form-item label="数据范围">
-            <el-radio-group v-model="permForm.data_scope">
-              <el-radio-button value="all">
-                <el-icon><Grid /></el-icon> 全部数据
-              </el-radio-button>
-              <el-radio-button value="dept_tree">
-                <el-icon><OfficeBuilding /></el-icon> 本部门及下级部门
-              </el-radio-button>
-              <el-radio-button value="dept">
-                <el-icon><Briefcase /></el-icon> 仅本部门
-              </el-radio-button>
-              <el-radio-button value="self">
-                <el-icon><User /></el-icon> 仅本人数据
-              </el-radio-button>
-            </el-radio-group>
-          </el-form-item>
-          <el-form-item>
-            <el-text type="info" size="small">
-              <template v-if="permForm.data_scope === 'all'">👑 可查看系统中所有数据（适用于：总经理、财务经理）</template>
-              <template v-else-if="permForm.data_scope === 'dept_tree'">🏢 可查看本部门及下级部门的数据（适用于：部门主管、项目经理）</template>
-              <template v-else-if="permForm.data_scope === 'dept'">🏬 仅可查看本部门的数据（适用于：职能主管）</template>
-              <template v-else>👤 仅可查看自己创建或负责的数据（适用于：普通员工）</template>
-            </el-text>
-          </el-form-item>
-        </el-form>
+        <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px;">
+          <template #title>当前策略：数据权限不做限制，所有角色可查看所有数据。权限控制仅通过下方菜单权限实现。</template>
+        </el-alert>
         
         <el-divider content-position="left">菜单权限（按业务流程分组）</el-divider>
         
@@ -172,7 +149,8 @@
 import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { QuestionFilled, Briefcase, Grid, OfficeBuilding, User } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getRoles, createRole, updateRole } from '@/api/auth'
+import { getPermissionTree } from '@/api/system'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 
@@ -208,11 +186,11 @@ const form = reactive({
   name: '',
   code: '',
   description: '',
-  data_scope: 'dept_tree'
+  data_scope: 'all'
 })
 
 const permForm = reactive({
-  data_scope: 'dept_tree'
+  data_scope: 'all'
 })
 
 const rules = {
@@ -257,7 +235,7 @@ const presetRoles = ref([
     name: '销售人员',
     code: 'salesperson',
     type: 'success',
-    data_scope: 'dept_tree',
+    data_scope: 'all',
     menu_ids: ['dashboard', 'crm', 'masterdata:customers', 'masterdata:customer-contacts', 'masterdata:customer-followups', 'sales', 'sales:leads', 'sales:opportunities', 'sales:quotations', 'sales:orders', 'sales:contracts', 'sales:delivery-orders', 'sales:quote-estimation', 'sales:quote', 'finance:sales-reconciliation', 'aftersales', 'aftersales:orders', 'projects', 'projects:list', 'masterdata', 'masterdata:items', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'accounts:attendance']
   },
   {
@@ -306,7 +284,7 @@ const presetRoles = ref([
     name: '普通员工',
     code: 'employee',
     type: '',
-    data_scope: 'self',
+    data_scope: 'all',
     menu_ids: ['dashboard', 'projects', 'projects:list', 'projects:tasks', 'projects:time-logs', 'workflow', 'workflow:tasks', 'workflow:my-submissions', 'oa', 'oa:schedule', 'oa:leave', 'oa:meeting', 'oa:announcement', 'oa:vehicle-request', 'accounts:attendance']
   }
 ])
@@ -325,7 +303,7 @@ const applyPreset = (preset) => {
       )
     }
     ElMessage.success(`已应用"${preset.name}"的权限配置`)
-  }).catch(() => {})
+  }).catch(error => { console.error(error) })
 }
 
 // 展开/收起树节点
@@ -411,7 +389,7 @@ const indexPermissionTree = (nodes) => {
 }
 
 const loadPermissionCatalog = async () => {
-  const response = await request.get('/core/permissions/tree/')
+  const response = await getPermissionTree()
   const tree = Array.isArray(response) ? response : (response.results || [])
   permissionTreeNodes.value = formatPermissionTree(tree)
   indexPermissionTree(tree)
@@ -454,7 +432,7 @@ const getDataScopeLabel = (scope) => {
 const loadRoles = async () => {
   loading.value = true
   try {
-    const response = await request.get('/auth/roles/')
+    const response = await getRoles()
     roles.value = response.results || response || []
   } catch (error) {
     ElMessage.error('加载角色失败')
@@ -466,7 +444,7 @@ const loadRoles = async () => {
 const handleAdd = () => {
   dialogTitle.value = '新增角色'
   isEdit.value = false
-  Object.assign(form, { id: null, name: '', code: '', description: '', data_scope: 'dept_tree' })
+  Object.assign(form, { id: null, name: '', code: '', description: '', data_scope: 'all' })
   dialogVisible.value = true
 }
 
@@ -528,10 +506,10 @@ const handleSubmit = async () => {
     }
     
     if (isEdit.value) {
-      await request.put(`/auth/roles/${form.id}/`, data)
+      await updateRole(form.id, data)
       ElMessage.success('更新角色成功')
     } else {
-      await request.post('/auth/roles/', data)
+      await createRole(data)
       ElMessage.success('创建角色成功')
     }
     dialogVisible.value = false
@@ -592,7 +570,7 @@ const savePermissions = async () => {
       ]
     }
     
-    await request.put(`/auth/roles/${currentRole.value.id}/`, data)
+    await updateRole(currentRole.value.id, data)
     ElMessage.success('权限配置保存成功')
     permDialogVisible.value = false
     loadRoles()

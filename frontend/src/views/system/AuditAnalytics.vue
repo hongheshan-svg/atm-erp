@@ -124,9 +124,10 @@
 
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
+import request from '@/utils/request'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
-import request from '@/utils/request'
+
 
 const stats = ref({})
 const security = ref({})

@@ -3,7 +3,7 @@
     <div class="page-header">
       <h2>合同模板管理</h2>
       <div class="header-actions">
-        <el-button type="primary" @click="handleAddTemplate">
+        <el-button type="primary" v-permission="'sales:contract:create'" @click="handleAddTemplate">
           <el-icon><Plus /></el-icon> 新增模板
         </el-button>
         <el-button @click="handleGenerateContract">生成合同</el-button>
@@ -36,9 +36,9 @@
             <el-table-column label="操作" width="200" fixed="right">
               <template #default="{ row }">
                 <el-button type="primary" link size="small" @click="handlePreview(row)">预览</el-button>
-                <el-button type="primary" link size="small" @click="handleEditTemplate(row)">编辑</el-button>
+                <el-button type="primary" link size="small" v-permission="'sales:contract:edit'" @click="handleEditTemplate(row)">编辑</el-button>
                 <el-button type="success" link size="small" @click="handleSetDefault(row)" v-if="!row.is_default">设为默认</el-button>
-                <el-button type="danger" link size="small" @click="handleDeleteTemplate(row)">删除</el-button>
+                <el-button type="danger" link size="small" v-permission="'sales:contract:delete'" @click="handleDeleteTemplate(row)">删除</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -51,7 +51,7 @@
           <template #header>
             <div class="card-header">
               <span>条款管理</span>
-              <el-button type="primary" size="small" @click="handleAddClause">新增条款</el-button>
+              <el-button type="primary" size="small" v-permission="'sales:contract:create'" @click="handleAddClause">新增条款</el-button>
             </div>
           </template>
           <el-table :data="clauses" v-loading="clauseLoading" border stripe>
@@ -67,8 +67,8 @@
             </el-table-column>
             <el-table-column label="操作" width="150" fixed="right">
               <template #default="{ row }">
-                <el-button type="primary" link size="small" @click="handleEditClause(row)">编辑</el-button>
-                <el-button type="danger" link size="small" @click="handleDeleteClause(row)">删除</el-button>
+                <el-button type="primary" link size="small" v-permission="'sales:contract:edit'" @click="handleEditClause(row)">编辑</el-button>
+                <el-button type="danger" link size="small" v-permission="'sales:contract:delete'" @click="handleDeleteClause(row)">删除</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -287,7 +287,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getContractTemplates, getContractClauses, getGeneratedContracts, getContractTypes, previewContractTemplate, setDefaultContractTemplate, deleteContractTemplate, updateContractTemplate, createContractTemplate, updateContractClause, createContractClause, deleteContractClause, generateContract, getGeneratedContract } from '@/api/sales'
 
 const activeTab = ref('templates')
 const loading = ref(false)
@@ -295,6 +295,8 @@ const clauseLoading = ref(false)
 const clauseDialogVisible = ref(false)
 const clauseIsEdit = ref(false)
 const clauseSaving = ref(false)
+// TODO: bind via UI when "管理条款 by template" is implemented; left as null for now
+const currentTemplateId = ref(null)
 const clauseForm = reactive({ id: null, title: '', content: '', sort_order: 0, is_required: true })
 const generatedLoading = ref(false)
 const submitLoading = ref(false)
@@ -356,7 +358,7 @@ const contractRules = {
 const fetchTemplates = async () => {
   loading.value = true
   try {
-    const data = await request.get('/sales/contract-templates/')
+    const data = await getContractTemplates()
     templates.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -368,7 +370,7 @@ const fetchTemplates = async () => {
 const fetchClauses = async () => {
   clauseLoading.value = true
   try {
-    const data = await request.get('/sales/contract-clauses/')
+    const data = await getContractClauses()
     clauses.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -380,7 +382,7 @@ const fetchClauses = async () => {
 const fetchGeneratedContracts = async () => {
   generatedLoading.value = true
   try {
-    const data = await request.get('/sales/generated-contracts/')
+    const data = await getGeneratedContracts()
     generatedContracts.value = data.results || data
   } catch (e) {
     console.error(e)
@@ -391,7 +393,7 @@ const fetchGeneratedContracts = async () => {
 
 const fetchContractTypes = async () => {
   try {
-    const data = await request.get('/sales/contract-templates/contract_types/')
+    const data = await getContractTypes()
     contractTypes.value = data
   } catch (e) {
     contractTypes.value = [
@@ -438,7 +440,7 @@ const handleEditTemplate = (row) => {
 
 const handlePreview = async (row) => {
   try {
-    const data = await request.post(`/sales/contract-templates/${row.id}/preview/`)
+    const data = await previewContractTemplate(row.id)
     previewContent.value = data.html_content
     previewDialogVisible.value = true
   } catch (e) {
@@ -448,7 +450,7 @@ const handlePreview = async (row) => {
 
 const handleSetDefault = async (row) => {
   try {
-    await request.post(`/sales/contract-templates/${row.id}/set_default/`)
+    await setDefaultContractTemplate(row.id)
     ElMessage.success('设置成功')
     fetchTemplates()
   } catch (e) {
@@ -459,7 +461,7 @@ const handleSetDefault = async (row) => {
 const handleDeleteTemplate = (row) => {
   ElMessageBox.confirm('确定要删除此模板吗？', '提示', { type: 'warning' })
     .then(async () => {
-      await request.delete(`/sales/contract-templates/${row.id}/`)
+      await deleteContractTemplate(row.id)
       ElMessage.success('删除成功')
       fetchTemplates()
     })
@@ -472,10 +474,10 @@ const handleSubmitTemplate = async () => {
   submitLoading.value = true
   try {
     if (templateForm.id) {
-      await request.put(`/sales/contract-templates/${templateForm.id}/`, templateForm)
+      await updateContractTemplate(templateForm.id, templateForm)
       ElMessage.success('修改成功')
     } else {
-      await request.post('/sales/contract-templates/', templateForm)
+      await createContractTemplate(templateForm)
       ElMessage.success('创建成功')
     }
     templateDialogVisible.value = false
@@ -512,14 +514,14 @@ const handleClauseSave = async () => {
   clauseSaving.value = true
   try {
     if (clauseIsEdit.value) {
-      await request.put(`/sales/contract-clauses/${clauseForm.id}/`, clauseForm)
+      await updateContractClause(clauseForm.id, clauseForm)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/sales/contract-clauses/', { ...clauseForm, template: currentTemplateId.value })
+      await createContractClause({ ...clauseForm, template: currentTemplateId.value })
       ElMessage.success('创建成功')
     }
     clauseDialogVisible.value = false
-    loadClauses(currentTemplateId.value)
+    fetchClauses()
   } catch (error) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
     else ElMessage.error('操作失败')
@@ -531,9 +533,9 @@ const handleClauseSave = async () => {
 const handleDeleteClause = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除该条款吗？', '提示', { type: 'warning' })
-    await request.delete(`/sales/contract-clauses/${row.id}/`)
+    await deleteContractClause(row.id)
     ElMessage.success('删除成功')
-    loadClauses(currentTemplateId.value)
+    fetchClauses()
   } catch (error) {
     if (error !== 'cancel') ElMessage.error('删除失败')
   }
@@ -563,7 +565,7 @@ const handleSubmitContract = async () => {
   
   generateLoading.value = true
   try {
-    const data = await request.post('/sales/contract-templates/generate/', contractForm)
+    const data = await generateContract(contractForm)
     ElMessage.success('合同生成成功')
     generateDialogVisible.value = false
     
@@ -582,7 +584,7 @@ const handleSubmitContract = async () => {
 
 const handleViewContract = async (row) => {
   try {
-    const data = await request.get(`/sales/generated-contracts/${row.id}/`)
+    const data = await getGeneratedContract(row.id)
     previewContent.value = data.contract_content
     previewDialogVisible.value = true
   } catch (e) {

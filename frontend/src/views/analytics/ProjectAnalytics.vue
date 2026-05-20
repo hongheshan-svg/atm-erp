@@ -120,7 +120,7 @@
             <el-table-column prop="profit_margin" label="利润率" width="100">
               <template #default="{ row }">
                 <el-tag :type="getMarginType(row.profit_margin)">
-                  {{ (row.profit_margin || 0).toFixed(2) }}%
+                  {{ toFixedSafe(row.profit_margin) }}%
                 </el-tag>
               </template>
             </el-table-column>
@@ -135,8 +135,9 @@
 import { ref, reactive, onMounted } from 'vue'
 import { Management, Money, TrendCharts } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
-import request from '@/utils/request'
+import { getProjectProfitability } from '@/api/analytics'
 import { ElMessage } from 'element-plus'
+import { toFixedSafe } from '@/utils/number'
 
 const summary = reactive({
   total_projects: 0,
@@ -193,7 +194,7 @@ const getMarginType = (margin) => {
 
 const loadProjectPerformance = async () => {
   try {
-    const res = await request.get('/reports/profitability/')
+    const res = await getProjectProfitability()
     // 后端返回的是数组或者 {data: [...]} 格式
     let data = []
     if (Array.isArray(res)) {
@@ -455,4 +456,3 @@ onMounted(() => {
   align-items: center;
 }
 </style>
-

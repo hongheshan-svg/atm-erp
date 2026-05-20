@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>设备档案管理</span>
-          <el-button type="primary" @click="handleAdd">
+          <el-button type="primary" v-permission="'projects:project:create'" @click="handleAdd">
             <el-icon><Plus /></el-icon> 新增设备档案
           </el-button>
         </div>
@@ -89,7 +89,7 @@
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleView(row)">详情</el-button>
-            <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button type="primary" link size="small" v-permission="'projects:project:edit'" @click="handleEdit(row)">编辑</el-button>
             <el-button type="success" link size="small" @click="handleNameplate(row)">铭牌</el-button>
             <el-button type="warning" link size="small" @click="handleMaintenance(row)">维保</el-button>
           </template>
@@ -334,7 +334,9 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getEquipmentArchiveList, createEquipmentArchive, updateEquipmentArchive, getEquipmentArchiveStatistics, getEquipmentArchiveNameplate, getEquipmentArchiveMaintenanceRecords } from '@/api/projects/equipment-monitoring'
+import { getProjectList } from '@/api/projects/project'
+import { getCustomerList } from '@/api/masterdata'
 
 const loading = ref(false)
 const maintDialogVisible = ref(false)
@@ -435,7 +437,7 @@ const loadData = async () => {
       page_size: pagination.pageSize,
       ...searchForm
     }
-    const res = await request.get('/projects/equipment-archives/', { params })
+    const res = await getEquipmentArchiveList(params)
     tableData.value = res.results || res
     pagination.total = res.count || tableData.value.length
   } catch (error) {
@@ -447,7 +449,7 @@ const loadData = async () => {
 
 const loadStats = async () => {
   try {
-    const res = await request.get('/projects/equipment-archives/statistics/')
+    const res = await getEquipmentArchiveStatistics()
     stats.total = res.total || 0
     stats.manufacturing = res.by_status?.MANUFACTURING?.count || 0
     stats.running = res.by_status?.RUNNING?.count || 0
@@ -461,7 +463,7 @@ const loadStats = async () => {
 
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res
   } catch (error) {
     console.error('加载项目失败:', error)
@@ -470,7 +472,7 @@ const loadProjects = async () => {
 
 const loadCustomers = async () => {
   try {
-    const res = await request.get('/masterdata/customers/', { params: { page_size: 1000 } })
+    const res = await getCustomerList({ page_size: 1000 })
     customers.value = res.results || res
   } catch (error) {
     console.error('加载客户失败:', error)
@@ -518,7 +520,7 @@ const handleView = (row) => {
 
 const handleNameplate = async (row) => {
   try {
-    const res = await request.get(`/projects/equipment-archives/${row.id}/nameplate/`)
+    const res = await getEquipmentArchiveNameplate(row.id)
     currentEquipment.value = { ...row, ...res }
     nameplateVisible.value = true
   } catch (error) {
@@ -532,9 +534,10 @@ const handleMaintenance = async (row) => {
   maintDialogVisible.value = true
   maintLoading.value = true
   try {
-    const res = await request.get(`/projects/equipment-archives/${row.id}/maintenance-records/`)
+    const res = await getEquipmentArchiveMaintenanceRecords(row.id)
     maintRecords.value = res.data?.results || res.results || res.data || []
-  } catch {
+  } catch (error) {
+    console.error(error)
     maintRecords.value = []
   } finally {
     maintLoading.value = false
@@ -549,10 +552,10 @@ const handleSubmit = async () => {
   try {
     await formRef.value.validate()
     if (formData.id) {
-      await request.put(`/projects/equipment-archives/${formData.id}/`, formData)
+      await updateEquipmentArchive(formData.id, formData)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/projects/equipment-archives/', formData)
+      await createEquipmentArchive(formData)
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false

@@ -482,7 +482,11 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, ArrowDown, Trophy, Money, Clock, Check, Warning, CircleCheck } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import {
+  getComparison, getComparisonReport, applyComparisonTemplate,
+  autoScoreComparison, updateComparisonScore, updateComparisonWeights,
+  completeComparison, approveComparison, convertComparisonToPO
+} from '@/api/purchase'
 
 const route = useRoute()
 const router = useRouter()
@@ -559,11 +563,11 @@ const getReliabilityColor = (score) => {
 // 应用权重模板
 const applyWeightTemplate = async (template) => {
   try {
-    await request.post(`/purchase/comparisons/${route.params.id}/apply_template/`, {
+    await applyComparisonTemplate(route.params.id, {
       template: template
     })
     ElMessage.success('已应用权重模板')
-    loadComparison()
+    loadData()
   } catch (error) {
     ElMessage.error('应用模板失败')
   }
@@ -623,8 +627,8 @@ const loadData = async () => {
   try {
     const id = route.params.id
     const [compRes, reportRes] = await Promise.all([
-      request.get(`/purchase/comparisons/${id}/`),
-      request.get(`/purchase/comparisons/${id}/report/`)
+      getComparison(id),
+      getComparisonReport(id)
     ])
     comparison.value = compRes
     report.value = reportRes
@@ -650,7 +654,7 @@ const goBack = () => {
 // 自动评分
 const handleAutoScore = async () => {
   try {
-    await request.post(`/purchase/comparisons/${route.params.id}/auto-score/`)
+    await autoScoreComparison(route.params.id)
     ElMessage.success('自动评分完成')
     loadData()
   } catch (error) {
@@ -668,7 +672,7 @@ const updateScore = async (row, field, value) => {
       data.score_service = value
     }
     
-    await request.post(`/purchase/comparisons/${route.params.id}/update-score/${row.id}/`, data)
+    await updateComparisonScore(route.params.id, row.id, data)
     loadData()
   } catch (error) {
     ElMessage.error('更新评分失败')
@@ -678,7 +682,7 @@ const updateScore = async (row, field, value) => {
 // 保存权重
 const saveWeights = async () => {
   try {
-    await request.post(`/purchase/comparisons/${route.params.id}/update-weights/`, weightForm)
+    await updateComparisonWeights(route.params.id, weightForm)
     ElMessage.success('权重更新成功')
     showWeightDialog.value = false
     loadData()
@@ -691,7 +695,7 @@ const saveWeights = async () => {
 const handleComplete = async () => {
   try {
     await ElMessageBox.confirm('确定完成此比价分析？', '确认')
-    await request.post(`/purchase/comparisons/${route.params.id}/complete/`)
+    await completeComparison(route.params.id)
     ElMessage.success('比价分析已完成')
     loadData()
   } catch (error) {
@@ -705,7 +709,7 @@ const handleComplete = async () => {
 const handleApprove = async () => {
   try {
     await ElMessageBox.confirm('确定审批通过此比价分析？', '确认审批')
-    await request.post(`/purchase/comparisons/${route.params.id}/approve/`)
+    await approveComparison(route.params.id)
     ElMessage.success('审批通过')
     loadData()
   } catch (error) {
@@ -719,7 +723,7 @@ const handleApprove = async () => {
 const handleConvertToPO = async () => {
   try {
     await ElMessageBox.confirm('确定将推荐报价转换为采购订单？', '确认转换')
-    const res = await request.post(`/purchase/comparisons/${route.params.id}/convert-to-po/`)
+    const res = await convertComparisonToPO(route.params.id)
     ElMessage.success(`采购订单 ${res.order_no} 创建成功`)
     router.push(`/purchase/orders/${res.id}`)
   } catch (error) {

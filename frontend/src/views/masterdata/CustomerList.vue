@@ -25,7 +25,7 @@
             <el-button @click="handleExport">
               <el-icon><Download /></el-icon> 导出
             </el-button>
-            <el-button type="primary" @click="handleAdd">
+            <el-button type="primary" v-permission="'masterdata:customer:create'" @click="handleAdd">
               <el-icon><Plus /></el-icon> 新增客户
             </el-button>
           </div>
@@ -50,7 +50,7 @@
       </el-form>
 
       <!-- 批量操作工具栏 - 仅管理员可见 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'masterdata:customer:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
         <el-button 
           type="danger" 
@@ -64,7 +64,7 @@
       
       <el-table :data="customers" v-loading="loading" stripe border @selection-change="handleSelectionChange">
         <!-- 仅管理员显示选择列 -->
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'masterdata:customer:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="code" label="编码" width="120" />
         <el-table-column prop="name" label="客户名称" min-width="180" show-overflow-tooltip />
         <el-table-column prop="contact_person" label="联系人" width="100" />
@@ -79,7 +79,7 @@
         </el-table-column>
         <el-table-column label="操作" :width="canDelete ? 280 : 200" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" v-permission="'masterdata:customer:edit'" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" type="success" @click="handleViewAttachments(row)">附件</el-button>
             <!-- 仅管理员显示删除按钮 -->
             <el-button 
@@ -252,7 +252,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Upload, Download, Document } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getCustomerList, createCustomer, updateCustomer, exportCustomers, downloadCustomerTemplate } from '@/api/masterdata'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
@@ -334,7 +334,7 @@ const loadCustomers = async () => {
       ...searchForm
     }
     Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
-    const response = await request.get('/masterdata/customers/', { params })
+    const response = await getCustomerList(params)
     customers.value = response.results || response || []
     pagination.total = response.count || 0
   } catch (error) {
@@ -379,10 +379,10 @@ const handleSubmit = async () => {
     await formRef.value.validate()
     submitting.value = true
     if (isEdit.value) {
-      await request.put(`/masterdata/customers/${form.id}/`, form)
+      await updateCustomer(form.id, form)
       ElMessage.success('更新客户成功')
     } else {
-      await request.post('/masterdata/customers/', form)
+      await createCustomer(form)
       ElMessage.success('创建客户成功')
     }
     dialogVisible.value = false
@@ -424,10 +424,7 @@ const handleExport = async () => {
     const params = { ...searchForm }
     Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
     
-    const response = await request.get('/masterdata/customers/export_excel/', {
-      params,
-      responseType: 'blob'
-    })
+    const response = await exportCustomers(params)
     
     const filename = `客户列表_${new Date().toISOString().split('T')[0]}.xlsx`
     const blob = response.data
@@ -453,9 +450,7 @@ const handleExport = async () => {
 
 const downloadTemplate = async () => {
   try {
-    const response = await request.get('/masterdata/customers/download_template/', {
-      responseType: 'blob'
-    })
+    const response = await downloadCustomerTemplate()
     
     // 检查响应是否存在
     if (!response || !response.data) {

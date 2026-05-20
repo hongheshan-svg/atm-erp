@@ -3,15 +3,12 @@ Permission service functions for checking user permissions.
 
 Provides caching and wildcard support for permission checks.
 """
-
-from typing import List, Set, Tuple
-
-from django.contrib.auth import get_user_model
+from typing import Set, Tuple, List
 from django.core.cache import cache
-from django.db.models import Q, QuerySet
-
+from django.contrib.auth import get_user_model
+from django.db.models import QuerySet, Q
+from apps.core.permission_models_new import Permission, RolePermission, DataScope
 from apps.accounts.models import Department
-from apps.core.permission_models_new import DataScope, Permission
 
 User = get_user_model()
 
@@ -104,14 +101,21 @@ def get_user_permissions(user) -> Set[str]:
 
     if user.is_superuser:
         # Superuser gets all active permissions
-        permissions = set(Permission.objects.filter(is_active=True, is_deleted=False).values_list('code', flat=True))
+        permissions = set(
+            Permission.objects.filter(
+                is_active=True,
+                is_deleted=False
+            ).values_list('code', flat=True)
+        )
     else:
         # Get permissions from all user's roles (兼容旧 role FK 和新 roles M2M)
         user_roles = get_active_user_roles(user)
         if user_roles.exists():
             permissions = set(
                 Permission.objects.filter(
-                    role_permissions__role__in=user_roles, is_active=True, is_deleted=False
+                    role_permissions__role__in=user_roles,
+                    is_active=True,
+                    is_deleted=False
                 ).values_list('code', flat=True)
             )
 
@@ -202,7 +206,7 @@ def resolve_data_scope(user, module: str) -> Tuple[str, List[int]]:
     """
     Resolve data scope for a user in a specific module.
 
-    Returns the widest scope type and custom department IDs if applicable.
+    默认所有角色拥有全部数据权限('all')，权限控制通过菜单权限实现。
 
     Args:
         user: User instance
@@ -210,60 +214,20 @@ def resolve_data_scope(user, module: str) -> Tuple[str, List[int]]:
 
     Returns:
         Tuple of (scope_type, custom_dept_ids)
-        - scope_type: One of 'all', 'dept_tree', 'dept', 'self', 'custom'
-        - custom_dept_ids: List of department IDs (only for 'custom' scope)
+        - scope_type: 'all' (默认所有认证用户都能访问全部数据)
+        - custom_dept_ids: 空列表
 
     Notes:
-        - Checks module-specific scope first, then falls back to default scope
-        - If user has multiple roles, takes the widest scope
-        - If no scope configured, defaults to 'self'
-        - Custom scope collects all department IDs from all roles
+        - 所有认证用户默认拥有全部数据权限
+        - 权限控制通过菜单权限和功能权限实现
+        - 未认证用户返回 'self' 范围
     """
     # Handle None/unauthenticated user
     if user is None or not user.is_authenticated:
         return ('self', [])
 
-    # Superuser gets all scope
-    if user.is_superuser:
-        return ('all', [])
-
-    # Get user's roles (兼容旧 role FK 和新 roles M2M)
-    user_roles = get_active_user_roles(user)
-    if not user_roles.exists():
-        return ('self', [])
-
-    # Collect scopes from all roles
-    widest_scope = 'self'
-    widest_priority = SCOPE_PRIORITY.get('self', 0)
-    custom_dept_ids = []
-
-    for role in user_roles:
-        # Try module-specific scope first
-        data_scope = DataScope.objects.filter(role=role, module=module).first()
-
-        # Fall back to default scope
-        if not data_scope:
-            data_scope = DataScope.objects.filter(role=role, module__in=['', '__default__']).order_by('module').first()
-
-        if data_scope:
-            scope_type = normalize_scope_type(data_scope.scope_type)
-            priority = SCOPE_PRIORITY.get(scope_type, 0)
-
-            # Update widest scope if this one is wider
-            if priority > widest_priority:
-                widest_scope = scope_type
-                widest_priority = priority
-                custom_dept_ids = []
-
-            # Collect custom department IDs
-            if scope_type == 'custom':
-                dept_ids = list(data_scope.custom_departments.filter(is_deleted=False).values_list('id', flat=True))
-                custom_dept_ids.extend(dept_ids)
-
-    # Remove duplicates from custom_dept_ids
-    custom_dept_ids = list(set(custom_dept_ids))
-
-    return (widest_scope, custom_dept_ids)
+    # 所有认证用户默认拥有全部数据权限
+    return ('all', [])
 
 
 def get_department_tree_ids(dept_id: int) -> List[int]:
@@ -289,7 +253,10 @@ def get_department_tree_ids(dept_id: int) -> List[int]:
     dept_ids = [dept_id]
 
     # Get all children recursively
-    children = Department.objects.filter(parent_id=dept_id, is_deleted=False)
+    children = Department.objects.filter(
+        parent_id=dept_id,
+        is_deleted=False
+    )
 
     for child in children:
         # Recursively get child's tree
@@ -392,12 +359,21 @@ def get_hidden_fields(user, module: str, resource: str) -> List[str]:
         return []
 
     # Get all field permissions for this resource
-    field_permissions = Permission.objects.filter(type='field', resource=resource, is_active=True, is_deleted=False)
+    field_permissions = Permission.objects.filter(
+        type='field',
+        resource=resource,
+        is_active=True,
+        is_deleted=False
+    )
 
     # Get user's field permissions from all roles
     user_field_permissions = set(
         Permission.objects.filter(
-            role_permissions__role__in=user_roles, type='field', resource=resource, is_active=True, is_deleted=False
+            role_permissions__role__in=user_roles,
+            type='field',
+            resource=resource,
+            is_active=True,
+            is_deleted=False
         ).values_list('field_name', flat=True)
     )
 
@@ -408,3 +384,4 @@ def get_hidden_fields(user, module: str, resource: str) -> List[str]:
             hidden_fields.append(perm.field_name)
 
     return hidden_fields
+

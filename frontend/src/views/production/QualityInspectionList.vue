@@ -7,7 +7,7 @@
         <span class="subtitle">生产过程中的质量检验记录</span>
       </div>
       <div class="header-right">
-        <el-button type="primary" @click="handleAdd">
+        <el-button type="primary" v-permission="'production:inspection_item:create'" @click="handleAdd">
           <el-icon><Plus /></el-icon>
           新建检验单
         </el-button>
@@ -128,9 +128,9 @@
     <!-- 检验单列表 -->
     <el-card class="table-card" shadow="never">
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-permission="'production:inspection_item:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" v-permission="'production:inspection_item:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <el-table
@@ -142,7 +142,7 @@
         @row-click="handleRowClick"
         @selection-change="handleSelectionChange"
       >
-        <el-table-column v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'production:inspection_item:delete'" v-if="canDelete" type="selection" width="55" fixed />
         <el-table-column prop="inspection_no" label="检验单号" width="160" />
         <el-table-column prop="title" label="检验名称" min-width="160" show-overflow-tooltip />
         <el-table-column prop="project_code" label="项目编号" width="130" />
@@ -286,7 +286,7 @@
         <div class="detail-section">
           <div class="section-header">
             <h4>检验项目</h4>
-            <el-button type="primary" size="small" @click="handleAddItems">
+            <el-button type="primary" size="small" v-permission="'production:inspection_item:create'" @click="handleAddItems">
               <el-icon><Plus /></el-icon>
               添加检验项
             </el-button>
@@ -546,7 +546,7 @@
           </el-table-column>
         </el-table>
         <div style="margin-top: 12px; text-align: center">
-          <el-button type="primary" @click="addItemToList">
+          <el-button type="primary" v-permission="'production:inspection_item:create'" @click="addItemToList">
             <el-icon><Plus /></el-icon>
             添加到列表
           </el-button>
@@ -566,9 +566,14 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, Refresh, Clock, Loading, CircleCheck, CircleClose } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import {
+  getInspections, getInspection, createInspection, updateInspection,
+  startInspection, completeInspection, addInspectionItems
+} from '@/api/production'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { getUsers } from '@/api/auth'
+import { getProjectList } from '@/api/projects/project'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -705,7 +710,7 @@ const loadData = async () => {
       page_size: pagination.pageSize,
       ...filters
     }
-    const res = await request.get('/production/inspections/', { params })
+    const res = await getInspections(params)
     inspectionList.value = res.results || res || []
     pagination.total = res.count || (Array.isArray(inspectionList.value) ? inspectionList.value.length : 0)
   } catch (error) {
@@ -718,7 +723,7 @@ const loadData = async () => {
 // 加载项目列表
 const loadProjects = async () => {
   try {
-    const res = await request.get('/projects/projects/', { params: { page_size: 1000 } })
+    const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res || []
   } catch (error) {
     console.error('加载项目列表失败:', error)
@@ -728,7 +733,7 @@ const loadProjects = async () => {
 // 加载用户列表
 const loadUsers = async () => {
   try {
-    const res = await request.get('/auth/users/', { params: { page_size: 1000 } })
+    const res = await getUsers({ page_size: 1000 })
     users.value = res.results || res || []
   } catch (error) {
     console.error('加载用户列表失败:', error)
@@ -766,7 +771,7 @@ const handlePageChange = (page) => {
 // 点击行查看详情
 const handleRowClick = async (row) => {
   try {
-    const res = await request.get(`/production/inspections/${row.id}/`)
+    const res = await getInspection(row.id)
     currentInspection.value = res
     detailVisible.value = true
   } catch (error) {
@@ -816,7 +821,7 @@ const handleEdit = (row) => {
 // 开始检验
 const handleStartInspection = async (row) => {
   try {
-    await request.post(`/production/inspections/${row.id}/start_inspection/`)
+    await startInspection(row.id)
     ElMessage.success('检验已开始')
     loadData()
   } catch (error) {
@@ -844,7 +849,7 @@ const handleCompleteConfirm = async () => {
   
   try {
     saving.value = true
-    await request.post(`/production/inspections/${currentInspection.value.id}/complete_inspection/`, completeFormData)
+    await completeInspection(currentInspection.value.id, completeFormData)
     ElMessage.success('检验已完成')
     completeDialogVisible.value = false
     loadData()
@@ -865,10 +870,10 @@ const handleSave = async () => {
     
     const data = { ...formData }
     if (data.id) {
-      await request.put(`/production/inspections/${data.id}/`, data)
+      await updateInspection(data.id, data)
       ElMessage.success('更新成功')
     } else {
-      await request.post('/production/inspections/', data)
+      await createInspection(data)
       ElMessage.success('创建成功')
     }
     
@@ -923,14 +928,14 @@ const handleItemsConfirm = async () => {
   
   try {
     saving.value = true
-    await request.post(`/production/inspections/${currentInspection.value.id}/add_items/`, {
+    await addInspectionItems(currentInspection.value.id, {
       items: newItems.value
     })
     ElMessage.success('检验项已添加')
     itemDialogVisible.value = false
     
     // 刷新详情
-    const res = await request.get(`/production/inspections/${currentInspection.value.id}/`)
+    const res = await getInspection(currentInspection.value.id)
     currentInspection.value = res
   } catch (error) {
     console.error('添加检验项失败:', error)

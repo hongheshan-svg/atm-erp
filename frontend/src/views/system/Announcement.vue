@@ -2,7 +2,7 @@
   <div class="announcement-container">
     <div class="page-header">
       <h2>系统公告</h2>
-      <el-button type="primary" @click="handleAdd">发布公告</el-button>
+      <el-button type="primary" v-permission="'accounts:user:create'" @click="handleAdd">发布公告</el-button>
     </div>
     
     <el-card shadow="never">
@@ -62,10 +62,10 @@
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button type="primary" link size="small" v-permission="'accounts:user:edit'" @click="handleEdit(row)">编辑</el-button>
             <el-button type="success" link size="small" @click="handlePublish(row)" v-if="row.status === 'DRAFT'">发布</el-button>
             <el-button type="warning" link size="small" @click="handleWithdraw(row)" v-if="row.status === 'PUBLISHED'">撤回</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button type="danger" link size="small" v-permission="'accounts:user:delete'" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -160,7 +160,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Top } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getAnnouncementList, createAnnouncement, updateAnnouncement, deleteAnnouncement, publishAnnouncement, withdrawAnnouncement } from '@/api/system'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -210,7 +210,7 @@ const fetchList = async () => {
       page_size: pagination.size,
       ...queryParams
     }
-    const data = await request.get('/core/announcements/', { params })
+    const data = await getAnnouncementList(params)
     announcements.value = data.results || data
     pagination.total = data.count || data.length
   } catch (e) {
@@ -245,7 +245,7 @@ const handleEdit = (row) => {
 
 const handlePublish = async (row) => {
   try {
-    await request.post(`/core/announcements/${row.id}/publish/`)
+    await publishAnnouncement(row.id)
     ElMessage.success('发布成功')
     fetchList()
   } catch (e) {
@@ -256,7 +256,7 @@ const handlePublish = async (row) => {
 const handleWithdraw = async (row) => {
   try {
     await ElMessageBox.confirm('确定要撤回此公告吗？', '提示', { type: 'warning' })
-    await request.post(`/core/announcements/${row.id}/withdraw/`)
+    await withdrawAnnouncement(row.id)
     ElMessage.success('撤回成功')
     fetchList()
   } catch (e) {
@@ -269,7 +269,7 @@ const handleWithdraw = async (row) => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除此公告吗？', '提示', { type: 'warning' })
-    await request.delete(`/core/announcements/${row.id}/`)
+    await deleteAnnouncement(row.id)
     ElMessage.success('删除成功')
     fetchList()
   } catch (e) {
@@ -287,13 +287,13 @@ const submitForm = async (action) => {
   try {
     let result
     if (isEdit.value) {
-      result = await request.put(`/core/announcements/${formData.id}/`, formData)
+      result = await updateAnnouncement(formData.id, formData)
     } else {
-      result = await request.post('/core/announcements/', formData)
+      result = await createAnnouncement(formData)
     }
     
     if (action === 'PUBLISH' && result.data.status === 'DRAFT') {
-      await request.post(`/core/announcements/${result.data.id}/publish/`)
+      await publishAnnouncement(result.data.id)
     }
     
     ElMessage.success(action === 'PUBLISH' ? '发布成功' : '保存成功')

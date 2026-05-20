@@ -169,7 +169,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Clock, CircleCheck, Document, Timer, Van, Box } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getAttendanceToday, getAttendanceRecords, getAttendanceMonthlySummary, checkIn, checkOut } from '@/api/oa'
 
 const loading = ref(false)
 const checking = ref(false)
@@ -209,7 +209,7 @@ const getStatusType = (status) => {
 
 const loadTodayStatus = async () => {
   try {
-    const res = await request.get('/oa/attendance-records/today/')
+    const res = await getAttendanceToday()
     // res 已经是 response.data
     todayRecord.value = res
   } catch (error) {
@@ -222,7 +222,7 @@ const loadTodayStatus = async () => {
 const loadRecords = async () => {
   loading.value = true
   try {
-    const res = await request.get('/oa/attendance-records/', {
+    const res = await getAttendanceRecords({
       params: { month: selectedMonth.value }
     })
     // res 已经是 response.data
@@ -243,7 +243,7 @@ const loadRecords = async () => {
 
 const loadMonthlySummary = async () => {
   try {
-    const res = await request.get('/oa/attendance-records/monthly_summary/', {
+    const res = await getAttendanceMonthlySummary({
       params: { month: selectedMonth.value }
     })
     // res 已经是 response.data
@@ -263,7 +263,7 @@ const loadMonthlySummary = async () => {
 const handleCheckIn = async () => {
   checking.value = true
   try {
-    const res = await request.post('/oa/attendance-records/check_in/', {
+    const res = await checkIn({
       location: '办公室'
     })
     // res 已经是 response.data
@@ -280,7 +280,7 @@ const handleCheckIn = async () => {
 const handleCheckOut = async () => {
   checking.value = true
   try {
-    const res = await request.post('/oa/attendance-records/check_out/', {
+    const res = await checkOut({
       location: '办公室'
     })
     // res 已经是 response.data

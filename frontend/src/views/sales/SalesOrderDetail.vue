@@ -259,7 +259,8 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Van, Edit, Check, Close, RefreshLeft } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { getOrder, getDeliveryOrders, confirmOrder, returnOrderToDraft, cancelOrder, createDeliveryOrder, submitDeliveryOrder } from '@/api/sales'
+import { getWarehouseList } from '@/api/masterdata'
 
 const route = useRoute()
 const router = useRouter()
@@ -330,13 +331,11 @@ const formatMoney = (val) => parseFloat(val || 0).toFixed(2)
 const loadOrderDetail = async () => {
   loading.value = true
   try {
-    const response = await request.get(`/sales/orders/${route.params.id}/`)
+    const response = await getOrder(route.params.id)
     order.value = response.data || response
     
     // 加载关联的发货单
-    const deliveryRes = await request.get(`/sales/deliveries/`, {
-      params: { so: route.params.id }
-    })
+    const deliveryRes = await getDeliveryOrders({ so: route.params.id })
     deliveryOrders.value = deliveryRes.data?.results || deliveryRes.results || deliveryRes.data || []
   } catch (error) {
     console.error('加载订单详情失败:', error)
@@ -348,7 +347,7 @@ const loadOrderDetail = async () => {
 
 const loadWarehouses = async () => {
   try {
-    const response = await request.get('/masterdata/warehouses/', {
+    const response = await getWarehouseList({
       params: { page_size: 100 }
     })
     warehouses.value = response.results || response || []
@@ -373,7 +372,7 @@ const handleConfirm = async () => {
       type: 'warning'
     })
 
-    await request.post(`/sales/orders/${route.params.id}/confirm/`)
+    await confirmOrder(route.params.id)
     ElMessage.success('订单确认成功')
     loadOrderDetail()
   } catch (error) {
@@ -396,7 +395,7 @@ const handleReturnToDraft = async () => {
       }
     )
 
-    await request.post(`/sales/orders/${route.params.id}/return_to_draft/`)
+    await returnOrderToDraft(route.params.id)
     ElMessage.success('订单已退回草稿状态，请点击"编辑订单"补充明细')
     loadOrderDetail()
   } catch (error) {
@@ -415,7 +414,7 @@ const handleCancel = async () => {
       type: 'warning'
     })
 
-    await request.post(`/sales/orders/${route.params.id}/cancel/`)
+    await cancelOrder(route.params.id)
     ElMessage.success('订单取消成功')
     loadOrderDetail()
   } catch (error) {
@@ -502,7 +501,7 @@ const submitDelivery = async () => {
       return
     }
 
-    const response = await request.post('/sales/deliveries/', payload)
+    const response = await createDeliveryOrder(payload)
     const newDelivery = response.data || response
     
     deliveryDialogVisible.value = false
@@ -521,13 +520,14 @@ const submitDelivery = async () => {
       
       // 用户选择立即提交
       try {
-        await request.post(`/sales/deliveries/${newDelivery.id}/submit/`)
+        await submitDeliveryOrder(newDelivery.id)
         ElMessage.success('发货单已提交审批')
       } catch (submitError) {
         console.error('提交审批失败:', submitError)
         ElMessage.warning('发货单已创建，但提交审批失败，请稍后在发货单列表中重新提交')
       }
-    } catch {
+    } catch (error) {
+    console.error(error)
       // 用户选择稍后提交
       ElMessage.success('发货单已创建，可在发货单列表中提交审批')
     }

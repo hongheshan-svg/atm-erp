@@ -65,7 +65,7 @@
             <el-button 
               type="primary" 
               size="small" 
-              @click="testDingTalk" 
+              @click="handleTestDingTalk" 
               :loading="testing.dingtalk"
               :disabled="!channelStatus.dingtalk?.configured"
             >
@@ -100,7 +100,7 @@
             <el-button 
               type="primary" 
               size="small" 
-              @click="testWeChatWork" 
+              @click="handleTestWeChatWork" 
               :loading="testing.wechat_work"
               :disabled="!channelStatus.wechat_work?.configured"
             >
@@ -211,7 +211,7 @@ WECHAT_WORK_AGENT_ID=xxx</pre>
 import { ref, reactive, onMounted } from 'vue'
 import { Message, ChatDotRound, ChatLineSquare } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { getNotificationChannelStatus, testDingTalk, testWeChatWork, broadcastNotification } from '@/api/core'
 
 const loading = ref(false)
 const channelStatus = ref({})
@@ -231,7 +231,7 @@ const broadcastForm = reactive({
 const refreshStatus = async () => {
   loading.value = true
   try {
-    const response = await request.get('/core/notification-channels/status/')
+    const response = await getNotificationChannelStatus()
     channelStatus.value = response.channels || {}
     enabledChannels.value = response.enabled || []
   } catch (error) {
@@ -241,10 +241,10 @@ const refreshStatus = async () => {
   }
 }
 
-const testDingTalk = async () => {
+const handleTestDingTalk = async () => {
   testing.dingtalk = true
   try {
-    const response = await request.post('/core/notification-channels/test_dingtalk/', {
+    const response = await testDingTalk( {
       title: 'ERP系统测试',
       content: '这是一条钉钉测试消息，用于验证通知配置是否正确。\n\n发送时间: ' + new Date().toLocaleString()
     })
@@ -256,10 +256,10 @@ const testDingTalk = async () => {
   }
 }
 
-const testWeChatWork = async () => {
+const handleTestWeChatWork = async () => {
   testing.wechat_work = true
   try {
-    const response = await request.post('/core/notification-channels/test_wechat_work/', {
+    const response = await testWeChatWork( {
       title: 'ERP系统测试',
       content: '这是一条企业微信测试消息，用于验证通知配置是否正确。\n\n发送时间: ' + new Date().toLocaleString()
     })
@@ -279,7 +279,7 @@ const sendBroadcast = async () => {
   
   testing.broadcast = true
   try {
-    const response = await request.post('/core/notification-channels/broadcast/', {
+    const response = await broadcastNotification( {
       title: broadcastForm.title,
       content: broadcastForm.content
     })

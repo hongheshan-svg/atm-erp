@@ -101,7 +101,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import { GGanttChart, GGanttRow } from 'vue-ganttastic'
-import request from '@/utils/request'
+import { getProjectList, getProject, getTaskList } from '@/api/projects/project'
 import { ElMessage } from 'element-plus'
 
 const loading = ref(false)
@@ -192,9 +192,7 @@ const getProgress状态 = (percent) => {
 
 const loadProjects = async () => {
   try {
-    const response = await request.get('/projects/projects/', {
-      params: { status: 'ACTIVE' }
-    })
+    const response = await getProjectList({ status: 'ACTIVE' })
     projects.value = response.results || response || []
   } catch (error) {
     ElMessage.error('加载项目列表失败')
@@ -208,13 +206,11 @@ const loadProjectTasks = async () => {
   loading.value = true
   try {
     // Load project details
-    const projectRes = await request.get(`/projects/projects/${selectedProject.value}/`)
+    const projectRes = await getProject(selectedProject.value)
     currentProject.value = projectRes.data || projectRes
     
     // Load tasks
-    const tasksRes = await request.get('/projects/tasks/', {
-      params: { project: selectedProject.value }
-    })
+    const tasksRes = await getTaskList({ project: selectedProject.value })
     taskList.value = tasksRes.results || tasksRes.data || tasksRes || []
     
     // Ensure tasks have dates
