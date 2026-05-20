@@ -18,6 +18,7 @@ from rest_framework.views import APIView
 
 from apps.core.models import BaseModel
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.workflow.mixins import WorkflowEnforcementMixin
 
 User = settings.AUTH_USER_MODEL
 
@@ -584,7 +585,8 @@ class PreventiveMaintenanceViewSet(PermissionMixin, viewsets.ModelViewSet):
         return Response(PreventiveMaintenanceSerializer(pms, many=True).data)
 
 
-class ServiceRequestViewSet(PermissionMixin, viewsets.ModelViewSet):
+class ServiceRequestViewSet(WorkflowEnforcementMixin, PermissionMixin, viewsets.ModelViewSet):
+    workflow_business_type = 'SERVICE_REQUEST'
     """服务请求管理"""
 
     queryset = ServiceRequest.objects.filter(is_deleted=False)

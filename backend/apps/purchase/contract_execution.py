@@ -18,6 +18,7 @@ from rest_framework.response import Response
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.workflow.mixins import WorkflowEnforcementMixin
 
 
 class ContractExecution(BaseModel):
@@ -379,7 +380,9 @@ class ContractExecutionListSerializer(serializers.ModelSerializer):
 # =====================
 
 
-class ContractExecutionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ContractExecutionViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+    workflow_business_type = 'CONTRACT_EXECUTION'
+    workflow_amount_field = 'contract_amount'
     """合同执行管理"""
 
     queryset = ContractExecution.objects.filter(is_deleted=False)
@@ -581,7 +584,9 @@ class DeliveryRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
         return Response(self.get_serializer(delivery).data)
 
 
-class PaymentRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class PaymentRecordViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+    workflow_business_type = 'PAYMENT_RECORD'
+    workflow_amount_field = 'amount'
     """付款记录管理"""
 
     queryset = PaymentRecord.objects.filter(is_deleted=False)

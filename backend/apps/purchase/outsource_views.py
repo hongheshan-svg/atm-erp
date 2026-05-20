@@ -9,6 +9,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.workflow.mixins import WorkflowEnforcementMixin
 
 from .outsource_models import (
     OutsourceMaterialIssue,
@@ -109,7 +110,8 @@ class OutsourceOrderLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
     search_fields = ['item__sku', 'item__name', 'drawing_no']
 
 
-class OutsourceMaterialIssueViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class OutsourceMaterialIssueViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+    workflow_business_type = 'OUTSOURCE_MATERIAL_ISSUE'
     """
     外协发料单管理
     """
@@ -172,7 +174,8 @@ class OutsourceMaterialIssueLineViewSet(PermissionMixin, SoftDeleteMixin, UserTr
     filterset_fields = ['issue', 'item', 'is_deleted']
 
 
-class OutsourceReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class OutsourceReceiptViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+    workflow_business_type = 'OUTSOURCE_RECEIPT'
     """
     外协收货单管理
     """
