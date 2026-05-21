@@ -224,6 +224,8 @@ class EquipmentOEERecordListSerializer(serializers.ModelSerializer):
 class EquipmentShiftViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """班次管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'equipment_shift'
     queryset = EquipmentShift.objects.filter(is_deleted=False)
     serializer_class = EquipmentShiftSerializer
     permission_classes = [IsAuthenticated]
@@ -258,6 +260,8 @@ class EquipmentShiftViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 class DowntimeReasonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """停机原因管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'downtime_reason'
     queryset = DowntimeReason.objects.filter(is_deleted=False)
     serializer_class = DowntimeReasonSerializer
     permission_classes = [IsAuthenticated]
@@ -295,6 +299,8 @@ class DowntimeReasonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 class EquipmentOEERecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """OEE记录管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'equipment_oee_record'
     queryset = EquipmentOEERecord.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['equipment', 'shift', 'record_date']

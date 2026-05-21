@@ -221,6 +221,8 @@ class ReportFavoriteSerializer(serializers.ModelSerializer):
 
 
 class ReportTemplateViewSet(PermissionMixin, viewsets.ModelViewSet):
+    permission_module = 'reports'
+    permission_resource = 'report_template'
     serializer_class = ReportTemplateSerializer
     permission_classes = [IsAuthenticated]
 
@@ -278,6 +280,8 @@ class ReportTemplateViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 
 class ReportExecutionViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
+    permission_module = 'reports'
+    permission_resource = 'report_execution'
     serializer_class = ReportExecutionSerializer
     permission_classes = [IsAuthenticated]
 

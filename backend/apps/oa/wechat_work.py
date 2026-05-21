@@ -622,6 +622,8 @@ class WechatSyncLogSerializer(serializers.ModelSerializer):
 
 class WechatWorkConfigViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """企业微信配置管理"""
+    permission_module = 'oa'
+    permission_resource = 'wechat_work_config'
     queryset = WechatWorkConfig.objects.filter(is_deleted=False)
     serializer_class = WechatWorkConfigSerializer
     
@@ -753,6 +755,8 @@ class WechatWorkConfigViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 
 class WechatUserMappingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """企业微信用户映射管理"""
+    permission_module = 'oa'
+    permission_resource = 'wechat_user_mapping'
     queryset = WechatUserMapping.objects.filter(is_deleted=False)
     serializer_class = WechatUserMappingSerializer
     filterset_fields = ['config', 'employee']
@@ -761,6 +765,8 @@ class WechatUserMappingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
 
 class WechatCheckinRecordViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """企业微信打卡记录（只读）"""
+    permission_module = 'oa'
+    permission_resource = 'wechat_checkin_record'
     queryset = WechatCheckinRecord.objects.filter(is_deleted=False)
     serializer_class = WechatCheckinRecordSerializer
     filterset_fields = ['config', 'employee', 'checkin_type', 'is_processed']
@@ -783,6 +789,8 @@ class WechatCheckinRecordViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet)
 
 class WechatSyncLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """企业微信同步日志（只读）"""
+    permission_module = 'oa'
+    permission_resource = 'wechat_sync_log'
     queryset = WechatSyncLog.objects.all()
     serializer_class = WechatSyncLogSerializer
     filterset_fields = ['config', 'status']

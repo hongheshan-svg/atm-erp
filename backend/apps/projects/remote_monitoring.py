@@ -526,6 +526,8 @@ class PredictiveMaintenanceResultSerializer(serializers.ModelSerializer):
 class EquipmentDataPointViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备数据点管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'equipment_data_point'
     queryset = EquipmentDataPoint.objects.filter(is_deleted=False)
     serializer_class = EquipmentDataPointSerializer
     permission_classes = [IsAuthenticated]
@@ -536,6 +538,8 @@ class EquipmentDataPointViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
 class EquipmentConnectionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备连接管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'equipment_connection'
     queryset = EquipmentConnection.objects.filter(is_deleted=False)
     serializer_class = EquipmentConnectionSerializer
     permission_classes = [IsAuthenticated]
@@ -562,6 +566,8 @@ class EquipmentConnectionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
 class EquipmentDataRecordViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """设备数据记录（只读）"""
 
+    permission_module = 'projects'
+    permission_resource = 'equipment_data_record'
     queryset = EquipmentDataRecord.objects.all()
     serializer_class = EquipmentDataRecordSerializer
     permission_classes = [IsAuthenticated]
@@ -642,6 +648,8 @@ class EquipmentDataRecordViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet)
 class EquipmentAlarmViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备报警管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'equipment_alarm'
     queryset = EquipmentAlarm.objects.filter(is_deleted=False)
     serializer_class = EquipmentAlarmSerializer
     permission_classes = [IsAuthenticated]
@@ -708,6 +716,8 @@ class EquipmentAlarmViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 class DiagnosticSessionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """远程诊断会话管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'diagnostic_session'
     queryset = DiagnosticSession.objects.filter(is_deleted=False)
     serializer_class = DiagnosticSessionSerializer
     permission_classes = [IsAuthenticated]
@@ -765,6 +775,8 @@ class DiagnosticSessionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
 class PredictiveMaintenanceResultViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """预测性维护结果"""
 
+    permission_module = 'projects'
+    permission_resource = 'predictive_maintenance_result'
     queryset = PredictiveMaintenanceResult.objects.filter(is_deleted=False)
     serializer_class = PredictiveMaintenanceResultSerializer
     permission_classes = [IsAuthenticated]

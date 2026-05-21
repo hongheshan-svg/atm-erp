@@ -81,7 +81,8 @@ service.interceptors.response.use(
         const refreshToken = localStorage.getItem('refresh_token')
 
         if (!refreshToken) {
-          localStorage.clear()
+          localStorage.removeItem('access_token')
+          localStorage.removeItem('refresh_token')
           router.push('/login')
           ElMessage.error('请先登录')
           return Promise.reject(error)
@@ -114,7 +115,8 @@ service.interceptors.response.use(
           return service.request(originalRequest)
         } catch (refreshError) {
           processQueue(refreshError, null)
-          localStorage.clear()
+          localStorage.removeItem('access_token')
+          localStorage.removeItem('refresh_token')
           router.push('/login')
           ElMessage.error('登录已过期，请重新登录')
           return Promise.reject(refreshError)

@@ -121,6 +121,8 @@ class DictTypeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, views
     字典类型管理
     """
 
+    permission_module = 'system'
+    permission_resource = 'dict_type'
     queryset = DictType.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['code', 'is_system']
@@ -297,6 +299,8 @@ class DictItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, views
     字典项管理
     """
 
+    permission_module = 'system'
+    permission_resource = 'dict_item'
     queryset = DictItem.objects.filter(is_deleted=False)
     serializer_class = DictItemSerializer
     permission_classes = [IsAuthenticated]

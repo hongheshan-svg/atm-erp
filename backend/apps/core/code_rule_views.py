@@ -20,6 +20,8 @@ class CodeRuleViewSet(PermissionMixin, viewsets.ModelViewSet):
     只有管理员可以操作
     """
 
+    permission_module = 'system'
+    permission_resource = 'code_rule'
     queryset = CodeRule.objects.all()
     serializer_class = CodeRuleSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
@@ -165,6 +167,8 @@ class CodeHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     只读接口
     """
 
+    permission_module = 'system'
+    permission_resource = 'code_history'
     queryset = CodeHistory.objects.all()
     serializer_class = CodeHistorySerializer
     permission_classes = [IsAuthenticated]

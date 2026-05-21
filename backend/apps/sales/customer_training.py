@@ -520,6 +520,8 @@ class TrainingPlanListSerializer(serializers.ModelSerializer):
 
 class TrainingCourseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """培训课程管理"""
+    permission_module = 'sales'
+    permission_resource = 'training_course'
 
     queryset = TrainingCourse.objects.filter(is_deleted=False)
     serializer_class = TrainingCourseSerializer
@@ -531,6 +533,8 @@ class TrainingCourseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 
 class TrainingMaterialViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """培训资料管理"""
+    permission_module = 'sales'
+    permission_resource = 'training_material'
 
     queryset = TrainingMaterial.objects.filter(is_deleted=False)
     serializer_class = TrainingMaterialSerializer
@@ -541,6 +545,8 @@ class TrainingMaterialViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 
 class TrainingPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """培训计划管理"""
+    permission_module = 'sales'
+    permission_resource = 'training_plan'
 
     queryset = TrainingPlan.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
@@ -697,6 +703,8 @@ class TrainingPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
 
 class TraineeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """学员管理"""
+    permission_module = 'sales'
+    permission_resource = 'trainee'
 
     queryset = Trainee.objects.filter(is_deleted=False)
     serializer_class = TraineeSerializer
@@ -716,6 +724,8 @@ class TraineeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
 
 class TrainingExamViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """培训考核管理"""
+    permission_module = 'sales'
+    permission_resource = 'training_exam'
 
     queryset = TrainingExam.objects.filter(is_deleted=False)
     serializer_class = TrainingExamSerializer
@@ -767,6 +777,8 @@ class TrainingExamViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
 
 class TrainingFeedbackViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """培训反馈管理"""
+    permission_module = 'sales'
+    permission_resource = 'training_feedback'
 
     queryset = TrainingFeedback.objects.filter(is_deleted=False)
     serializer_class = TrainingFeedbackSerializer

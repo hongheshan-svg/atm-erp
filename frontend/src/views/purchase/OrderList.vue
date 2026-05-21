@@ -106,7 +106,7 @@
             <el-button size="small" type="warning" @click="handleViewAttachments(row)">附件</el-button>
             <el-button size="small" type="success" @click="receiveGoods(row)" v-if="row.status === 'CONFIRMED' || row.status === 'PARTIAL'">收货</el-button>
             <el-button size="small" type="danger" @click="handleCancel(row)" v-if="row.status === 'DRAFT' || row.status === 'CONFIRMED'">取消</el-button>
-            <el-button size="small" type="danger" v-permission="'purchase:purchase_order:delete'" @click="handleDelete(row)">删除</el-button>
+            <el-button size="small" type="danger" v-permission="'purchase:purchase_order:delete'" @click="handleDelete(row)" v-if="['DRAFT', 'CANCELLED', 'REJECTED'].includes(row.status)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -273,7 +273,6 @@
         title="采购订单附件（合同、发票等）"
       />
     </el-dialog>
-  </div>
 
     <!-- 审批进度弹窗 -->
     <WorkflowProgress
@@ -281,7 +280,8 @@
       :business-type="workflowBusinessType"
       :business-id="workflowBusinessId"
     />
-  </template>
+  </div>
+</template>
 
 <script setup lang="ts">
 import WorkflowProgress from '@/components/WorkflowProgress.vue'

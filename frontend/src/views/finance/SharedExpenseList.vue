@@ -18,6 +18,7 @@
             <el-option label="IT服务" value="IT" />
             <el-option label="行政费用" value="ADMIN" />
             <el-option label="保险费" value="INSURANCE" />
+            <el-option label="折旧" value="DEPRECIATION" />
             <el-option label="其他" value="OTHER" />
           </el-select>
         </el-form-item>

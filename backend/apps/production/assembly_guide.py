@@ -410,6 +410,8 @@ class AssemblySessionSerializer(serializers.ModelSerializer):
 class AssemblyGuideViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """装配指导书管理"""
 
+    permission_module = 'production'
+    permission_resource = 'assembly_guide'
     queryset = AssemblyGuide.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['product', 'status', 'difficulty_level', 'is_current']
@@ -496,6 +498,8 @@ class AssemblyGuideViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 class AssemblyStepViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """装配步骤管理"""
 
+    permission_module = 'production'
+    permission_resource = 'assembly_step'
     queryset = AssemblyStep.objects.filter(is_deleted=False)
     serializer_class = AssemblyStepSerializer
     permission_classes = [IsAuthenticated]
@@ -513,6 +517,8 @@ class AssemblyStepViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
 class AssemblySessionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """装配作业管理"""
 
+    permission_module = 'production'
+    permission_resource = 'assembly_session'
     queryset = AssemblySession.objects.filter(is_deleted=False)
     serializer_class = AssemblySessionSerializer
     permission_classes = [IsAuthenticated]

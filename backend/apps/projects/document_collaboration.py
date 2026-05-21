@@ -359,6 +359,8 @@ class TechnicalDocumentDetailSerializer(TechnicalDocumentSerializer):
 
 class TechDocumentCategoryViewSet(PermissionMixin, viewsets.ModelViewSet):
     """技术文档分类管理"""
+    permission_module = 'projects'
+    permission_resource = 'tech_document_category'
 
     queryset = TechDocumentCategory.objects.filter(is_deleted=False)
     serializer_class = TechDocumentCategorySerializer
@@ -373,6 +375,8 @@ class TechDocumentCategoryViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class TechnicalDocumentViewSet(PermissionMixin, viewsets.ModelViewSet):
     """技术文档管理"""
+    permission_module = 'projects'
+    permission_resource = 'technical_document'
 
     queryset = TechnicalDocument.objects.filter(is_deleted=False)
     serializer_class = TechnicalDocumentSerializer
@@ -549,6 +553,8 @@ class TechnicalDocumentViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class DocumentAnnotationViewSet(PermissionMixin, viewsets.ModelViewSet):
     """文档批注管理"""
+    permission_module = 'projects'
+    permission_resource = 'document_annotation'
 
     queryset = DocumentAnnotation.objects.filter(is_deleted=False)
     serializer_class = DocumentAnnotationSerializer
@@ -576,6 +582,8 @@ class DocumentAnnotationViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class DocumentReviewViewSet(PermissionMixin, viewsets.ModelViewSet):
     """文档评审管理"""
+    permission_module = 'projects'
+    permission_resource = 'document_review'
 
     queryset = DocumentReview.objects.filter(is_deleted=False)
     serializer_class = serializers.ModelSerializer

@@ -261,7 +261,7 @@ export function downloadInvoiceTemplate() {
   return request({ url: '/finance/invoices/download_template/', method: 'get', responseType: 'blob' })
 }
 export function exportInvoices(params?: Record<string, any>, config = {}) {
-  return request({ url: '/finance/invoices/export/', method: 'get', params, ...config })
+  return request({ url: '/finance/invoices/export_excel/', method: 'get', params, ...config })
 }
 export function bulkDeleteInvoices(data: any) {
   return request({ url: '/finance/invoices/bulk_delete/', method: 'post', data })
@@ -291,8 +291,8 @@ export function getSharedExpenses(params?: Record<string, any>) {
 export function patchSharedExpense(id: number, data: any) {
   return request({ url: `/finance/shared-expenses/${id}/`, method: 'patch', data })
 }
-export function calculateSharedExpenseAllocation(id: number) {
-  return request({ url: `/finance/shared-expenses/${id}/calculate/`, method: 'post' })
+export function calculateSharedExpenseAllocation(id: number, data?: any) {
+  return request({ url: `/finance/shared-expenses/${id}/calculate_allocation/`, method: 'post', data })
 }
 export function cancelSharedExpenseAllocation(id: number) {
   return request({ url: `/finance/shared-expenses/${id}/cancel_allocation/`, method: 'post' })
@@ -346,6 +346,12 @@ export function generateInvoiceReconciliationLines(id: number) {
 // ========== 银行流水 ==========
 export function getBankStatements(params?: Record<string, any>) {
   return request({ url: '/finance/bank-statements/', method: 'get', params })
+}
+export function getBankNames() {
+  return request({ url: '/finance/bank-statements/bank_names/', method: 'get' })
+}
+export function importBankStatements(data: FormData) {
+  return request({ url: '/finance/bank-statements/import_excel/', method: 'post', data })
 }
 export function matchBankStatement(id: number, data: any) {
   return request({ url: `/finance/bank-statements/${id}/match/`, method: 'post', data })

@@ -20,9 +20,8 @@ python manage.py makemigrations
 python manage.py migrate
 
 # 首次启动需要的 bootstrap 命令（顺序敏感）
-python manage.py init_permissions
-python manage.py init_roles --force
-python manage.py init_industry_roles --force
+python manage.py init_permissions     # 权限树种子数据
+python manage.py init_roles --force   # 角色+权限分配+数据范围
 python manage.py seed_data            # 可选：示例数据
 python manage.py init_dashboard_widgets
 
@@ -36,6 +35,23 @@ python manage.py collectstatic --noinput
 python manage.py shell_plus  # 需要 django-extensions
 ```
 
+### Linting
+
+```bash
+# 后端 — Ruff (lint + format)，在 backend/ 目录下
+cd /home/administrator/erp/backend
+ruff check . --fix          # lint with auto-fix
+ruff format .               # format (single quotes, line-length=120)
+
+# 前端 — ESLint，在 frontend/ 目录下
+cd /home/administrator/erp/frontend
+npm run lint                # check
+npm run lint:fix            # auto-fix
+npm run typecheck           # vue-tsc --noEmit
+```
+
+Ruff 配置在 `backend/pyproject.toml`，规则含 pycodestyle/pyflakes/isort/bugbear/django-specific，line-length 120，排除 migrations。ESLint flat config 在 `frontend/eslint.config.js`。
+
 ### Tests
 
 ```bash
@@ -44,6 +60,11 @@ python manage.py test                                   # 全量
 python manage.py test apps.core                         # 单个 app
 python manage.py test apps.core.tests.test_permission_service  # 单个文件
 python manage.py test apps.core.tests.test_permission_service.PermissionServiceTest.test_xxx  # 单个用例
+
+# 前端 Vitest（在 frontend/ 目录下）
+npm run test                # vitest run (单次)
+npm run test:ui             # vitest --ui (交互)
+npm run test:coverage       # vitest run --coverage
 
 # 集成 / 浏览器测试（仓库根目录，依赖 Docker 已启动）
 python run_all_tests.py                                  # 自动 migrate + init_roles + 跑全套测试
@@ -57,7 +78,7 @@ python test_comprehensive_permissions.py
 python test_frontend_permissions.py
 ```
 
-### Frontend (Vue 3 + Vite)
+### Frontend (Vue 3 + Vite + TypeScript)
 
 ```bash
 # 安装依赖（在 frontend/ 目录下）
@@ -100,6 +121,8 @@ pre-commit install
 # 手动运行所有 hooks
 pre-commit run --all-files
 ```
+
+Hooks 内容：Ruff (lint+format) on `backend/`、ESLint on `frontend/src/`、禁止直接提交到 main 分支、trailing-whitespace/end-of-file-fixer/check-yaml/check-added-large-files(500KB)。
 
 ### Integration Tests (pytest)
 
@@ -146,25 +169,27 @@ celery -A config beat -l info
 
 ### Frontend (`frontend/`)
 
-- **Framework**: Vue 3 (Composition API) + Vite 5
+- **Framework**: Vue 3 (Composition API) + TypeScript + Vite 5
 - **UI**: Element Plus, ECharts, vue-ganttastic
-- **State**: Pinia (`stores/` 下 user、websocket、config)
-- **HTTP**: Axios，封装在 `src/utils/request.js`，自动刷新 JWT
-- **路由**: `src/router/index.js` (懒加载)，权限通过 `hasMenuAccess()` 控制
+- **State**: Pinia (`stores/` 下 user、permission、websocket、companyConfig)
+- **HTTP**: Axios，封装在 `src/utils/request.ts`，自动刷新 JWT、401 排队重试
+- **路由**: `src/router/index.js` (懒加载)，权限通过 `usePermissionStore().hasPermission()` 控制
 - **路径别名**: `@` → `frontend/src/`
 
-视图按业务模块组织在 `src/views/` 下，API 调用封装在 `src/api/` 下。
+视图按业务模块组织在 `src/views/` 下，API 调用封装在 `src/api/` 下（已部分迁移到 TypeScript）。
 
 ### Key Patterns
 
 - **BaseModel**: 所有业务模型继承自 `apps.core.models.BaseModel`，自带 `created_at`/`updated_at`/`created_by`/`updated_by` 时间戳和 `is_deleted`/`deleted_at` 软删除
-- **软删除**: 查询时需过滤 `is_deleted=False`，删除调用 `soft_delete()` 方法
+- **软删除**: `objects` 管理器默认过滤 `is_deleted=False`，绕过用 `all_objects`。删除调用 `instance.soft_delete()`
 - **审计日志**: `AuditLogMiddleware` 自动记录所有变更
 - **附件**: 通用 `Attachment` 模型，通过 `related_model` + `related_id` 关联任意业务对象
-- **工作流**: 可配置审批流，`WorkflowEnforcementMixin` 用于 ViewSet 级别的审批控制
-- **数据权限**: `DataPermissionMixin` 按角色数据范围过滤查询集
+- **工作流**: 可配置审批流，`WorkflowEnforcementMixin`（在 `apps.core.workflow.mixins`）用于 ViewSet 级别的审批控制，需设置 `workflow_business_type`/`workflow_amount_field`/`workflow_no_field`
+- **统一权限 Mixin**: `apps.core.permission_mixin.PermissionMixin` 是最新的权限方案（替代旧的 DataPermissionMixin/FinanceDataMixin/OperationPermissionMixin/SensitiveFieldMixin），配置 `permission_module`/`permission_resource`/`context_role_fields` 三个类属性即可
+- **ViewSet 标准 Mixins**: 新 ViewSet 应组合 `UserTrackingMixin`（自动设 created_by/updated_by）、`SoftDeleteMixin`（perform_destroy 走软删除）、`DataScopeMixin`（按角色数据范围过滤）——均在 `apps.core.mixins`
 - **分页**: `StandardPagination` 默认 20 条/页
 - **编码规则**: `CodeRule` 模型支持自动生成业务编号
+- **前端权限三件套**: 路由 `meta.permission` 控制页面访问、`usePermissionStore().hasPermission()` 用于逻辑判断、`v-permission` 指令控制元素可见性——三者权限标识必须一致
 
 ### Infrastructure
 
@@ -184,8 +209,10 @@ celery -A config beat -l info
 
 ## Conventions Worth Knowing
 
-- 新业务模型继承 `apps.core.models.BaseModel`，删除调用 `instance.soft_delete()`，查询过滤 `is_deleted=False`（管理器 `objects` 默认已过滤，绕过需用 `all_objects`）。
-- ViewSet 修改时保留 RBAC、`DataPermissionMixin` 数据范围、`WorkflowEnforcementMixin` 审批联动与审计日志中间件的预期，不要手写一套替代逻辑。
-- 前端网络调用统一走 `frontend/src/utils/request.js`（封装 JWT 刷新、错误码、消息提示），新接口在 `frontend/src/api/<module>.js` 中按模块组织，**不要在视图组件里直接 `import axios`**。
-- 前端权限：路由 `meta.permission`、`hasMenuAccess()` 与 `v-permission` 指令三者保持一致；后端 API 契约变化要同步前端 API 封装与权限测试。
+- 新业务模型继承 `apps.core.models.BaseModel`，删除调用 `instance.soft_delete()`，查询走默认 `objects` 管理器（已过滤软删除），绕过用 `all_objects`。
+- ViewSet 修改时保留权限 Mixin（优先用 `PermissionMixin`，旧代码可能还用 `DataPermissionMixin`）、`WorkflowEnforcementMixin` 审批联动与审计日志中间件的预期，不要手写一套替代逻辑。
+- 前端网络调用统一走 `frontend/src/utils/request.ts`（封装 JWT 刷新、401 排队重试、错误码提示），新接口在 `frontend/src/api/<module>.ts` 中按模块组织，**不要在视图组件里直接 `import axios`**。
+- 前端权限：路由 `meta.permission`、`usePermissionStore().hasPermission()` 与 `v-permission` 指令三者权限标识保持一致；后端 API 契约变化要同步前端 API 封装与权限测试。
 - 业务编号通过 `CodeRule` 模型动态生成，不要硬编码前缀/序号格式。
+- 前端已迁移至 TypeScript，新文件用 `.ts`/`.vue`（script lang="ts"），遵循已有类型定义。
+- Git 工作流：pre-commit 禁止直接提交 main，使用 feature branch。

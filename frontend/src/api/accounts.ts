@@ -23,7 +23,7 @@ export function getUserProfile() {
   return request({ url: '/auth/users/profile/', method: 'get' })
 }
 export function updateUserProfile(data: any) {
-  return request({ url: '/auth/users/update_profile/', method: 'post', data })
+  return request({ url: '/auth/users/update_profile/', method: 'put', data })
 }
 export function changePassword(data: any) {
   return request({ url: '/auth/users/change_password/', method: 'post', data })

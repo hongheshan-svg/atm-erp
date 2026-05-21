@@ -380,6 +380,8 @@ class AcceptanceListSerializer(serializers.ModelSerializer):
 
 class AcceptanceTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """验收模板管理"""
+    permission_module = 'projects'
+    permission_resource = 'acceptance_template'
     queryset = AcceptanceTemplate.objects.all()
     serializer_class = AcceptanceTemplateSerializer
     filterset_fields = ['acceptance_type', 'is_active', 'is_deleted']
@@ -399,6 +401,8 @@ class AcceptanceTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
 
 class AcceptanceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """验收单管理"""
+    permission_module = 'projects'
+    permission_resource = 'acceptance'
     queryset = Acceptance.objects.all()
     filterset_fields = ['project', 'customer', 'equipment', 'acceptance_type', 'status', 'result', 'is_deleted']
     search_fields = ['acceptance_no', 'name', 'location']
@@ -587,6 +591,8 @@ class AcceptanceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
 
 class AcceptanceCheckItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """验收检查项管理"""
+    permission_module = 'projects'
+    permission_resource = 'acceptance_check_item'
     queryset = AcceptanceCheckItem.objects.all()
     serializer_class = AcceptanceCheckItemSerializer
     filterset_fields = ['acceptance', 'category', 'result', 'is_deleted']
@@ -622,6 +628,8 @@ class AcceptanceCheckItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
 
 class AcceptanceIssueViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """验收问题管理"""
+    permission_module = 'projects'
+    permission_resource = 'acceptance_issue'
     queryset = AcceptanceIssue.objects.all()
     serializer_class = AcceptanceIssueSerializer
     filterset_fields = ['acceptance', 'severity', 'status', 'responsible_person', 'is_deleted']

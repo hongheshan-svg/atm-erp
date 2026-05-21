@@ -1079,6 +1079,8 @@ class CreoBOMUploadSerializer(serializers.Serializer):
 
 # ViewSet
 class CreoBOMImportViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+    permission_module = 'projects'
+    permission_resource = 'creo_bom_import_session'
     queryset = CreoBOMImportSession.objects.filter(is_deleted=False)
     serializer_class = CreoBOMImportSessionSerializer
     permission_classes = [IsAuthenticated]

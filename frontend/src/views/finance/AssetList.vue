@@ -586,9 +586,9 @@ const handleActivate = async (row) => {
 const handleTransfer = (row) => {
   transferForm.assetId = row.id
   transferForm.assetName = `${row.asset_no} - ${row.name}`
-  transferForm.to_department = row.department
-  transferForm.to_custodian = row.custodian
-  transferForm.to_location = row.location
+  transferForm.to_department = null
+  transferForm.to_custodian = null
+  transferForm.to_location = null
   transferForm.reason = ''
   transferDialogVisible.value = true
 }

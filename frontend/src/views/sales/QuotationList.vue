@@ -194,7 +194,6 @@
         <el-button type="primary" @click="handlePrint">打印报价单</el-button>
       </template>
     </el-dialog>
-  </div>
 
     <!-- 审批进度弹窗 -->
     <WorkflowProgress
@@ -202,7 +201,8 @@
       :business-type="workflowBusinessType"
       :business-id="workflowBusinessId"
     />
-  </template>
+  </div>
+</template>
 
 <script setup lang="ts">
 import WorkflowProgress from '@/components/WorkflowProgress.vue'
@@ -320,7 +320,7 @@ const loadQuotations = async () => {
 const loadCustomers = async () => {
   try {
     const response = await getCustomerList({
-      params: { page_size: 100 }
+      page_size: 100
     })
     customers.value = response.results || response || []
   } catch (error) {

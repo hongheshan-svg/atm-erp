@@ -384,6 +384,8 @@ class ScheduledExportSerializer(serializers.ModelSerializer):
 class ExportTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """导出模板管理"""
 
+    permission_module = 'reports'
+    permission_resource = 'export_template'
     queryset = ExportTemplate.objects.filter(is_deleted=False)
     serializer_class = ExportTemplateSerializer
     permission_classes = [IsAuthenticated]
@@ -514,6 +516,8 @@ class ExportTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 class ExportHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """导出历史"""
 
+    permission_module = 'reports'
+    permission_resource = 'export_history'
     queryset = ExportHistory.objects.filter(is_deleted=False)
     serializer_class = ExportHistorySerializer
     permission_classes = [IsAuthenticated]
@@ -529,6 +533,8 @@ class ExportHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
 class ScheduledExportViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """定时导出管理"""
 
+    permission_module = 'reports'
+    permission_resource = 'scheduled_export'
     queryset = ScheduledExport.objects.filter(is_deleted=False)
     serializer_class = ScheduledExportSerializer
     permission_classes = [IsAuthenticated]

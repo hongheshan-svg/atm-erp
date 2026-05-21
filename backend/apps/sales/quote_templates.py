@@ -502,6 +502,8 @@ class QuoteTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
     """
     报价单模板管理
     """
+    permission_module = 'sales'
+    permission_resource = 'quote_template'
 
     queryset = QuoteTemplate.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
@@ -685,6 +687,8 @@ class QuoteHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """
     报价单历史（只读）
     """
+    permission_module = 'sales'
+    permission_resource = 'quote_history'
 
     queryset = QuoteHistory.objects.all()
     serializer_class = QuoteHistorySerializer

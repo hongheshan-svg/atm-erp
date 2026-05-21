@@ -330,6 +330,8 @@ class RequirementListSerializer(serializers.ModelSerializer):
 class RequirementCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """需求分类管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'requirement_category'
     queryset = RequirementCategory.objects.filter(is_deleted=False)
     serializer_class = RequirementCategorySerializer
     permission_classes = [IsAuthenticated]
@@ -354,6 +356,8 @@ class RequirementCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
 class RequirementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """需求管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'requirement'
     queryset = Requirement.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'priority', 'req_type', 'customer', 'project', 'owner', 'category']
@@ -480,6 +484,8 @@ class RequirementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
 class RequirementChangeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """需求变更管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'requirement_change'
     queryset = RequirementChange.objects.filter(is_deleted=False)
     serializer_class = RequirementChangeSerializer
     permission_classes = [IsAuthenticated]

@@ -137,7 +137,7 @@
       
       </div>
       
-      <el-table v-else :data="records" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+      <el-table :data="records" v-loading="loading" stripe border @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="attendance_date" label="日期" width="120" />
         <el-table-column label="签到时间" width="100">

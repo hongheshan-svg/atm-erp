@@ -190,6 +190,8 @@ class OpportunityCloseRecordCreateSerializer(serializers.ModelSerializer):
 
 class WinLossReasonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """赢单/丢单原因管理"""
+    permission_module = 'sales'
+    permission_resource = 'win_loss_reason'
 
     queryset = WinLossReason.objects.filter(is_deleted=False)
     serializer_class = WinLossReasonSerializer
@@ -200,6 +202,8 @@ class WinLossReasonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 
 class OpportunityCloseRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """商机关闭记录管理"""
+    permission_module = 'sales'
+    permission_resource = 'opportunity_close_record'
 
     queryset = OpportunityCloseRecord.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]

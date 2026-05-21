@@ -97,9 +97,9 @@
             <el-button size="small" type="info" @click="showWorkflowProgress(row)" v-if="row.status === 'PENDING'">审批进度</el-button>
             <el-button size="small" type="warning" @click="handleConfirm(row)" v-if="row.status === 'APPROVED'">确认</el-button>
             <el-button size="small" type="warning" @click="handleViewAttachments(row)">附件</el-button>
-            <el-button size="small" type="success" @click="createDelivery(row)" v-if="row.status === 'CONFIRMED' || row.status === 'PARTIAL'">发货</el-button>
+            <el-button size="small" type="success" @click="createDelivery(row)" v-if="row.status === 'APPROVED' || row.status === 'PARTIAL_DELIVERY'">发货</el-button>
             <el-button size="small" type="danger" @click="handleCancel(row)" v-if="row.status === 'DRAFT' || row.status === 'CONFIRMED'">取消</el-button>
-            <el-button size="small" type="danger" v-permission="'sales:order:delete'" @click="handleDelete(row)">删除</el-button>
+            <el-button size="small" type="danger" v-permission="'sales:order:delete'" @click="handleDelete(row)" v-if="['DRAFT', 'CANCELLED', 'REJECTED'].includes(row.status)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -336,15 +336,14 @@
       </template>
     </el-dialog>
 
-  </div>
-
     <!-- 审批进度弹窗 -->
     <WorkflowProgress
       v-model="workflowDialogVisible"
       :business-type="workflowBusinessType"
       :business-id="workflowBusinessId"
     />
-  </template>
+  </div>
+</template>
 
 <script setup lang="ts">
 import WorkflowProgress from '@/components/WorkflowProgress.vue'

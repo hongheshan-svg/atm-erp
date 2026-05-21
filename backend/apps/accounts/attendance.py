@@ -325,6 +325,8 @@ class OvertimeRequestSerializer(serializers.ModelSerializer):
 class AttendanceConfigViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """考勤配置管理"""
 
+    permission_module = 'accounts'
+    permission_resource = 'attendance_config'
     queryset = AttendanceConfig.objects.filter(is_deleted=False)
     serializer_class = AttendanceConfigSerializer
     permission_classes = [IsAuthenticated]
@@ -341,6 +343,8 @@ class AttendanceConfigViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 class AttendanceRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """考勤记录管理"""
 
+    permission_module = 'accounts'
+    permission_resource = 'attendance_record'
     queryset = AttendanceRecord.objects.filter(is_deleted=False)
     serializer_class = AttendanceRecordSerializer
     permission_classes = [IsAuthenticated]
@@ -928,6 +932,8 @@ class LeaveRequestViewSet(
 ):
     """请假申请管理"""
 
+    permission_module = 'accounts'
+    permission_resource = 'leave_request'
     queryset = LeaveRequest.objects.filter(is_deleted=False)
     serializer_class = LeaveRequestSerializer
     permission_classes = [IsAuthenticated]
@@ -1114,6 +1120,8 @@ class OvertimeRequestViewSet(
 ):
     """加班申请管理"""
 
+    permission_module = 'accounts'
+    permission_resource = 'overtime_request'
     queryset = OvertimeRequest.objects.filter(is_deleted=False)
     serializer_class = OvertimeRequestSerializer
     permission_classes = [IsAuthenticated]

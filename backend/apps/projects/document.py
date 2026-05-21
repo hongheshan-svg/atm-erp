@@ -329,6 +329,8 @@ class DocumentShareSerializer(serializers.ModelSerializer):
 
 class DocumentCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """文档分类管理"""
+    permission_module = 'projects'
+    permission_resource = 'document_category'
 
     queryset = DocumentCategory.objects.filter(is_deleted=False)
     serializer_class = DocumentCategorySerializer
@@ -369,6 +371,8 @@ class DocumentCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 
 class ProjectDocumentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目文档管理"""
+    permission_module = 'projects'
+    permission_resource = 'project_document'
 
     queryset = ProjectDocument.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
@@ -556,6 +560,8 @@ class ProjectDocumentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
 
 class DocumentShareViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """文档分享管理"""
+    permission_module = 'projects'
+    permission_resource = 'document_share'
 
     queryset = DocumentShare.objects.filter(is_deleted=False)
     serializer_class = DocumentShareSerializer

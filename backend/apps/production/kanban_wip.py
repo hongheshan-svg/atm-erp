@@ -4,6 +4,7 @@ Kanban WIP Limits Management
 
 from django.db import models
 from rest_framework import serializers, viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -135,6 +136,8 @@ class KanbanWIPAlertSerializer(serializers.ModelSerializer):
 
 
 class KanbanWIPRuleViewSet(PermissionMixin, viewsets.ModelViewSet):
+    permission_module = 'production'
+    permission_resource = 'kanban_wip_rule'
     serializer_class = KanbanWIPRuleSerializer
     permission_classes = [IsAuthenticated]
 
@@ -146,6 +149,8 @@ class KanbanWIPRuleViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 
 class KanbanWIPAlertViewSet(PermissionMixin, viewsets.ModelViewSet):
+    permission_module = 'production'
+    permission_resource = 'kanban_wip_alert'
     serializer_class = KanbanWIPAlertSerializer
     permission_classes = [IsAuthenticated]
 
@@ -158,6 +163,13 @@ class KanbanWIPAlertViewSet(PermissionMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def resolve(self, request, pk=None):
+        """标记告警已解决"""
+        alert = self.get_object()
+        alert.soft_delete()
+        return Response({'success': True})
 
 
 # ─── APIView ────────────────────────────────────────────────────

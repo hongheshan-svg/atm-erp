@@ -274,6 +274,8 @@ class MilestoneListSerializer(serializers.ModelSerializer):
 
 class MilestoneViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目里程碑管理"""
+    permission_module = 'projects'
+    permission_resource = 'milestone'
 
     queryset = Milestone.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
@@ -482,6 +484,8 @@ class MilestoneViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
 
 class MilestoneChecklistViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """里程碑检查项管理"""
+    permission_module = 'projects'
+    permission_resource = 'milestone_checklist'
 
     queryset = MilestoneChecklist.objects.filter(is_deleted=False)
     serializer_class = MilestoneChecklistSerializer

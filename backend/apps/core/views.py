@@ -46,6 +46,8 @@ class NotificationSerializer(serializers.ModelSerializer):
 class AuditLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """Audit log viewing (read-only)"""
 
+    permission_module = 'system'
+    permission_resource = 'audit_log'
     queryset = AuditLog.objects.all()
     serializer_class = AuditLogSerializer
     permission_classes = [IsAuthenticated]
@@ -83,6 +85,8 @@ class AuditLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
 class NotificationViewSet(PermissionMixin, viewsets.ModelViewSet):
     """User notification management"""
 
+    permission_module = 'system'
+    permission_resource = 'system_notification'
     queryset = SystemNotification.objects.all()
     serializer_class = NotificationSerializer
     permission_classes = [IsAuthenticated]
@@ -119,6 +123,8 @@ class AttachmentViewSet(PermissionMixin, viewsets.ModelViewSet):
     支持上传、下载、删除附件
     """
 
+    permission_module = 'system'
+    permission_resource = 'attachment'
     queryset = Attachment.objects.all()
     serializer_class = AttachmentSerializer
     permission_classes = [IsAuthenticated]

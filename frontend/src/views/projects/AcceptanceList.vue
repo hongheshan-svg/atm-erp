@@ -448,7 +448,11 @@ const handleReport = async (row) => {
 }
 
 const applyTemplate = async () => {
-  if (!selectedTemplate.value || !formData.id) return
+  if (!selectedTemplate.value) return
+  if (!formData.id) {
+    ElMessage.warning('请先保存验收单后再应用模板')
+    return
+  }
   try {
     const res = await applyAcceptanceTemplate(formData.id, {
       template_id: selectedTemplate.value

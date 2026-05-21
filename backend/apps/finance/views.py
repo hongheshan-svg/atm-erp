@@ -11,7 +11,6 @@ from django.db import transaction
 from django.db.models import Q, Sum, F, Count
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.permission_mixin import PermissionMixin
-from apps.core.data_permission import FinanceDataMixin, require_finance_permission
 from apps.core.workflow.mixins import WorkflowEnforcementMixin
 from apps.projects.models import Project
 
@@ -88,7 +87,7 @@ class CurrencyViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, views
         return Response(serializer.data)
 
 
-class PaymentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, viewsets.ModelViewSet):
+class PaymentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     permission_module = 'finance'
     permission_resource = 'payment'
     """
@@ -227,7 +226,7 @@ class ExpenseViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin,
         return Response(ExpenseSerializer(expense).data)
 
 
-class AccountReceivableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, viewsets.ModelViewSet):
+class AccountReceivableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     permission_module = 'finance'
     permission_resource = 'receivable'
     """
@@ -243,36 +242,32 @@ class AccountReceivableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
     @action(detail=True, methods=['post'])
     def record_payment(self, request, pk=None):
         """Record a payment."""
-        ar = self.get_object()
         payment_amount = request.data.get('amount')
-        
+
         if not payment_amount or payment_amount <= 0:
             return Response(
                 {'error': '请提供有效的付款金额'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         from decimal import Decimal as D
         payment_amount = D(str(payment_amount))
 
-        if ar.amount_paid + payment_amount > ar.amount_due:
-            return Response(
-                {'error': '付款金额超过应收金额'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        from django.db.models import F
         from django.db import transaction
         with transaction.atomic():
-            AccountReceivable.objects.filter(pk=ar.pk).update(
-                amount_paid=F('amount_paid') + payment_amount
-            )
-            ar.refresh_from_db()
+            ar = AccountReceivable.objects.select_for_update().get(pk=pk)
+            if ar.amount_paid + payment_amount > ar.amount_due:
+                return Response(
+                    {'error': '付款金额超过应收金额'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            ar.amount_paid += payment_amount
             if ar.amount_paid >= ar.amount_due:
                 ar.status = 'PAID'
             elif ar.amount_paid > 0:
                 ar.status = 'PARTIAL'
-            ar.save(update_fields=['status'])
+            ar.save(update_fields=['amount_paid', 'status'])
 
         return Response(AccountReceivableSerializer(ar).data)
     
@@ -319,7 +314,7 @@ class AccountReceivableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
         return Response(aging_data)
 
 
-class AccountPayableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, viewsets.ModelViewSet):
+class AccountPayableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     permission_module = 'finance'
     permission_resource = 'payable'
     """
@@ -335,36 +330,32 @@ class AccountPayableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
     @action(detail=True, methods=['post'])
     def record_payment(self, request, pk=None):
         """Record a payment."""
-        ap = self.get_object()
         payment_amount = request.data.get('amount')
-        
+
         if not payment_amount or payment_amount <= 0:
             return Response(
                 {'error': '请提供有效的付款金额'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         from decimal import Decimal as D
         payment_amount = D(str(payment_amount))
 
-        if ap.amount_paid + payment_amount > ap.amount_due:
-            return Response(
-                {'error': '付款金额超过应付金额'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        from django.db.models import F
         from django.db import transaction
         with transaction.atomic():
-            AccountPayable.objects.filter(pk=ap.pk).update(
-                amount_paid=F('amount_paid') + payment_amount
-            )
-            ap.refresh_from_db()
+            ap = AccountPayable.objects.select_for_update().get(pk=pk)
+            if ap.amount_paid + payment_amount > ap.amount_due:
+                return Response(
+                    {'error': '付款金额超过应付金额'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            ap.amount_paid += payment_amount
             if ap.amount_paid >= ap.amount_due:
                 ap.status = 'PAID'
             elif ap.amount_paid > 0:
                 ap.status = 'PARTIAL'
-            ap.save(update_fields=['status'])
+            ap.save(update_fields=['amount_paid', 'status'])
 
         return Response(AccountPayableSerializer(ap).data)
     
@@ -380,7 +371,7 @@ class AccountPayableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
         return Response(serializer.data)
 
 
-class InvoiceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, FinanceDataMixin, viewsets.ModelViewSet):
+class InvoiceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     permission_module = 'finance'
     permission_resource = 'invoice'
     """

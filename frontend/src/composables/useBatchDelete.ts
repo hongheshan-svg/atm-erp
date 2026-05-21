@@ -13,6 +13,7 @@ interface BatchDeleteOptions {
 }
 
 export function useBatchDelete(apiEndpoint: string, options: BatchDeleteOptions = {}) {
+  const normalizedEndpoint = apiEndpoint.startsWith('/api/') ? apiEndpoint.slice(4) : apiEndpoint
   const selectedRows = ref<any[]>([])
   const loading = ref(false)
 
@@ -51,7 +52,7 @@ export function useBatchDelete(apiEndpoint: string, options: BatchDeleteOptions 
       const ids = selectedRows.value.map(row => row[config.idField])
 
       const deletePromises = ids.map(id =>
-        request.delete(`${apiEndpoint}${id}/`)
+        request.delete(`${normalizedEndpoint}${id}/`)
       )
 
       await Promise.all(deletePromises)
@@ -83,7 +84,7 @@ export function useBatchDelete(apiEndpoint: string, options: BatchDeleteOptions 
       )
 
       loading.value = true
-      await request.delete(`${apiEndpoint}${row[config.idField]}/`)
+      await request.delete(`${normalizedEndpoint}${row[config.idField]}/`)
 
       ElMessage.success(config.successMessage)
       config.onSuccess()

@@ -498,6 +498,8 @@ class GeneratedContractListSerializer(serializers.ModelSerializer):
 
 class ContractTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """合同模板管理"""
+    permission_module = 'sales'
+    permission_resource = 'contract_template'
 
     queryset = ContractTemplate.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
@@ -629,6 +631,8 @@ class ContractTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 
 class ContractClauseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """合同条款管理"""
+    permission_module = 'sales'
+    permission_resource = 'contract_clause'
 
     queryset = ContractClause.objects.filter(is_deleted=False)
     serializer_class = ContractClauseSerializer
@@ -658,6 +662,8 @@ class ContractClauseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 
 class GeneratedContractViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """生成的合同管理"""
+    permission_module = 'sales'
+    permission_resource = 'generated_contract'
 
     queryset = GeneratedContract.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]

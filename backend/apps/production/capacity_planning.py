@@ -412,6 +412,8 @@ class CapacityResourceConflictSerializer(serializers.ModelSerializer):
 class ResourceTypeViewSet(PermissionMixin, viewsets.ModelViewSet):
     """资源类型管理"""
 
+    permission_module = 'production'
+    permission_resource = 'resource_type'
     queryset = ResourceType.objects.filter(is_deleted=False)
     serializer_class = ResourceTypeSerializer
     permission_classes = [IsAuthenticated]
@@ -420,6 +422,8 @@ class ResourceTypeViewSet(PermissionMixin, viewsets.ModelViewSet):
 class ResourceViewSet(PermissionMixin, viewsets.ModelViewSet):
     """资源管理"""
 
+    permission_module = 'production'
+    permission_resource = 'resource'
     queryset = Resource.objects.filter(is_deleted=False)
     serializer_class = ResourceSerializer
     permission_classes = [IsAuthenticated]
@@ -485,6 +489,8 @@ class ResourceViewSet(PermissionMixin, viewsets.ModelViewSet):
 class ResourceAllocationViewSet(PermissionMixin, viewsets.ModelViewSet):
     """资源分配管理"""
 
+    permission_module = 'production'
+    permission_resource = 'resource_allocation'
     queryset = ResourceAllocation.objects.filter(is_deleted=False)
     serializer_class = ResourceAllocationSerializer
     permission_classes = [IsAuthenticated]
@@ -632,6 +638,8 @@ class CapacityDashboardView(APIView):
 class CapacityResourceConflictViewSet(PermissionMixin, viewsets.ModelViewSet):
     """产能资源冲突管理"""
 
+    permission_module = 'production'
+    permission_resource = 'capacity_resource_conflict'
     queryset = CapacityResourceConflict.objects.filter(is_deleted=False)
     serializer_class = CapacityResourceConflictSerializer
     permission_classes = [IsAuthenticated]

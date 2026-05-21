@@ -27,6 +27,8 @@ from .crm_serializers import (
 
 class LeadSourceViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """线索来源管理"""
+    permission_module = 'sales'
+    permission_resource = 'lead_source'
 
     queryset = LeadSource.objects.all()
     serializer_class = LeadSourceSerializer
@@ -36,6 +38,8 @@ class LeadSourceViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet)
 
 class LeadViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售线索管理"""
+    permission_module = 'sales'
+    permission_resource = 'lead'
 
     queryset = Lead.objects.select_related('source', 'owner', 'converted_customer')
     serializer_class = LeadSerializer
@@ -157,6 +161,8 @@ class LeadViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
 
 class OpportunityViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售商机管理"""
+    permission_module = 'sales'
+    permission_resource = 'opportunity'
 
     queryset = Opportunity.objects.select_related('customer', 'owner')
     serializer_class = OpportunitySerializer
@@ -332,6 +338,8 @@ class OpportunityViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
 
 class OpportunityActivityViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """商机活动管理"""
+    permission_module = 'sales'
+    permission_resource = 'opportunity_activity'
 
     queryset = OpportunityActivity.objects.select_related('opportunity', 'recorded_by')
     serializer_class = OpportunityActivitySerializer
@@ -340,6 +348,8 @@ class OpportunityActivityViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
 
 class SalesForecastViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售预测管理"""
+    permission_module = 'sales'
+    permission_resource = 'sales_forecast'
 
     queryset = SalesForecast.objects.select_related('owner')
     serializer_class = SalesForecastSerializer
@@ -419,6 +429,8 @@ class SalesForecastViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 
 class CRMDashboardView(PermissionMixin, viewsets.ViewSet):
     """CRM仪表盘数据"""
+    permission_module = 'sales'
+    permission_resource = 'crm_dashboard'
 
     @action(detail=False, methods=['get'])
     def stats(self, request):

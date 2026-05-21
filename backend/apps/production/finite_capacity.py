@@ -144,6 +144,8 @@ class FiniteCapacityPlanSerializer(serializers.ModelSerializer):
 
 
 class FiniteCapacityPlanViewSet(PermissionMixin, viewsets.ModelViewSet):
+    permission_module = 'production'
+    permission_resource = 'finite_capacity_plan'
     serializer_class = FiniteCapacityPlanSerializer
     permission_classes = [IsAuthenticated]
 
@@ -172,8 +174,31 @@ class FiniteCapacityPlanViewSet(PermissionMixin, viewsets.ModelViewSet):
         plan.save(update_fields=['status'])
         return Response(FiniteCapacityPlanSerializer(plan).data)
 
+    @action(detail=True, methods=['get'])
+    def gantt_data(self, request, pk=None):
+        """获取排程甘特图数据"""
+        plan = self.get_object()
+        tasks = plan.tasks.filter(is_deleted=False).order_by('start_time')
+        gantt_items = []
+        for task in tasks:
+            gantt_items.append({
+                'id': task.id,
+                'name': task.work_order,
+                'start': task.start_time.isoformat() if task.start_time else None,
+                'end': task.end_time.isoformat() if task.end_time else None,
+                'resource': task.resource,
+                'status': task.status,
+                'sequence': task.sequence,
+            })
+        return Response({
+            'plan': FiniteCapacityPlanSerializer(plan).data,
+            'gantt_items': gantt_items,
+        })
+
 
 class ScheduledTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
+    permission_module = 'production'
+    permission_resource = 'scheduled_task'
     serializer_class = ScheduledTaskSerializer
     permission_classes = [IsAuthenticated]
 

@@ -396,6 +396,8 @@ class CustomFieldDefinitionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackin
     自定义字段定义管理
     """
 
+    permission_module = 'system'
+    permission_resource = 'custom_field_definition'
     queryset = CustomFieldDefinition.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['model_name', 'field_type', 'is_required', 'is_visible']
@@ -464,6 +466,8 @@ class CustomFieldValueViewSet(PermissionMixin, viewsets.ModelViewSet):
     自定义字段值管理
     """
 
+    permission_module = 'system'
+    permission_resource = 'custom_field_value'
     queryset = CustomFieldValue.objects.all()
     serializer_class = CustomFieldValueSerializer
     permission_classes = [IsAuthenticated]

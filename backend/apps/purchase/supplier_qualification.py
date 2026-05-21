@@ -257,6 +257,8 @@ class QualificationReminderSerializer(serializers.ModelSerializer):
 class QualificationTypeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """资质类型管理"""
 
+    permission_module = 'purchase'
+    permission_resource = 'qualification_type'
     queryset = QualificationType.objects.filter(is_deleted=False)
     serializer_class = QualificationTypeSerializer
     permission_classes = [IsAuthenticated]
@@ -313,6 +315,8 @@ class QualificationTypeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
 class SupplierQualificationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """供应商资质管理"""
 
+    permission_module = 'purchase'
+    permission_resource = 'supplier_qualification'
     queryset = SupplierQualification.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['supplier', 'qualification_type', 'status']
@@ -429,6 +433,8 @@ class SupplierQualificationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackin
 class QualificationReminderViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """资质提醒记录"""
 
+    permission_module = 'purchase'
+    permission_resource = 'qualification_reminder'
     queryset = QualificationReminder.objects.filter(is_deleted=False)
     serializer_class = QualificationReminderSerializer
     permission_classes = [IsAuthenticated]

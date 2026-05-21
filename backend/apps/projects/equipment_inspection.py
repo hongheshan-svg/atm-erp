@@ -365,6 +365,8 @@ class InspectionRecordListSerializer(serializers.ModelSerializer):
 class InspectionTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """点检模板管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'inspection_template'
     queryset = InspectionTemplate.objects.filter(is_deleted=False)
     serializer_class = InspectionTemplateSerializer
     permission_classes = [IsAuthenticated]
@@ -424,6 +426,8 @@ class InspectionTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
 class InspectionItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """点检项管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'inspection_item'
     queryset = InspectionItem.objects.filter(is_deleted=False)
     serializer_class = InspectionItemSerializer
     permission_classes = [IsAuthenticated]
@@ -433,6 +437,8 @@ class InspectionItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 class InspectionRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """点检记录管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'inspection_record'
     queryset = InspectionRecord.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['equipment', 'template', 'status', 'inspector', 'inspection_date']
@@ -545,6 +551,8 @@ class InspectionRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 class InspectionResultViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """点检结果管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'inspection_result'
     queryset = InspectionResult.objects.filter(is_deleted=False)
     serializer_class = InspectionResultSerializer
     permission_classes = [IsAuthenticated]

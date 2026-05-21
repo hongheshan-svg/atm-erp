@@ -338,6 +338,8 @@ class DataAlarmSerializer(serializers.ModelSerializer):
 class DataSourceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """数据源管理"""
 
+    permission_module = 'production'
+    permission_resource = 'data_source'
     queryset = DataSource.objects.filter(is_deleted=False)
     serializer_class = DataSourceSerializer
     permission_classes = [IsAuthenticated]
@@ -372,6 +374,8 @@ class DataSourceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
 class DataPointViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """数据点管理"""
 
+    permission_module = 'production'
+    permission_resource = 'data_point'
     queryset = DataPoint.objects.filter(is_deleted=False)
     serializer_class = DataPointSerializer
     permission_classes = [IsAuthenticated]
@@ -460,6 +464,8 @@ class DataPointViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
 class DataRecordViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """数据记录查询"""
 
+    permission_module = 'production'
+    permission_resource = 'data_record'
     queryset = DataRecord.objects.all()
     serializer_class = DataRecordSerializer
     permission_classes = [IsAuthenticated]
@@ -483,6 +489,8 @@ class DataRecordViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
 class DataAlarmViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """数据告警管理"""
 
+    permission_module = 'production'
+    permission_resource = 'data_alarm'
     queryset = DataAlarm.objects.filter(is_deleted=False)
     serializer_class = DataAlarmSerializer
     permission_classes = [IsAuthenticated]

@@ -7,7 +7,7 @@ from typing import Set, Tuple, List
 from django.core.cache import cache
 from django.contrib.auth import get_user_model
 from django.db.models import QuerySet, Q
-from apps.core.permission_models_new import Permission, RolePermission, DataScope
+from apps.core.permission_models_new import DataScope, Permission
 from apps.accounts.models import Department
 
 User = get_user_model()
@@ -170,43 +170,39 @@ def has_permission(user, permission_code: str) -> bool:
     return False
 
 
-def on_role_permission_change(role):
-    """
-    Invalidate permission cache when role permissions change.
-
-    Call this function after adding/removing permissions from a role.
-
-    Args:
-        role: Role instance whose permissions changed
-    """
-    # Get all users with this role (兼容旧 role FK 和新 roles M2M)
+def _get_role_user_ids(role) -> set:
+    """Get all user IDs associated with a role (兼容旧 role FK 和新 roles M2M)."""
     user_ids = set(role.users.filter(is_deleted=False).values_list('id', flat=True))
     user_ids.update(role.users_m2m.filter(is_deleted=False).values_list('id', flat=True))
+    return user_ids
 
-    # Clear cache for all affected users
+
+def on_role_permission_change(role):
+    """
+    Invalidate permission and data scope caches when role permissions change.
+
+    Call this function after adding/removing permissions from a role.
+    """
+    user_ids = _get_role_user_ids(role)
     for user_id in user_ids:
-        cache_key = f'user_permissions:{user_id}'
-        cache.delete(cache_key)
+        cache.delete(f'user_permissions:{user_id}')
+        cache.delete_pattern(f'user_data_scope:{user_id}:*')
 
 
 def on_user_role_change(user):
     """
-    Invalidate permission cache when user's role changes.
-
-    Call this function after changing a user's role.
-
-    Args:
-        user: User instance whose role changed
+    Invalidate permission and data scope caches when user's role changes.
     """
-    cache_key = f'user_permissions:{user.id}'
-    cache.delete(cache_key)
+    cache.delete(f'user_permissions:{user.id}')
+    cache.delete_pattern(f'user_data_scope:{user.id}:*')
 
 
 def resolve_data_scope(user, module: str) -> Tuple[str, List[int]]:
     """
     Resolve data scope for a user in a specific module.
 
-    默认所有角色拥有全部数据权限('all')，权限控制通过菜单权限实现。
+    查询 DataScope 表获取用户所有角色中最宽的数据范围。
+    无 DataScope 配置时默认返回 'all'（信息透明，促进协作）。
 
     Args:
         user: User instance
@@ -214,20 +210,42 @@ def resolve_data_scope(user, module: str) -> Tuple[str, List[int]]:
 
     Returns:
         Tuple of (scope_type, custom_dept_ids)
-        - scope_type: 'all' (默认所有认证用户都能访问全部数据)
-        - custom_dept_ids: 空列表
-
-    Notes:
-        - 所有认证用户默认拥有全部数据权限
-        - 权限控制通过菜单权限和功能权限实现
-        - 未认证用户返回 'self' 范围
     """
-    # Handle None/unauthenticated user
     if user is None or not user.is_authenticated:
         return ('self', [])
 
-    # 所有认证用户默认拥有全部数据权限
-    return ('all', [])
+    if user.is_superuser:
+        return ('all', [])
+
+    cache_key = f'user_data_scope:{user.id}:{module}'
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    user_roles = get_active_user_roles(user)
+    if not user_roles.exists():
+        result = ('all', [])
+        cache.set(cache_key, result, PERMISSION_CACHE_TIMEOUT)
+        return result
+
+    scopes = DataScope.objects.filter(
+        role__in=user_roles,
+        module__in=[module, '']
+    )
+
+    if not scopes.exists():
+        result = ('all', [])
+        cache.set(cache_key, result, PERMISSION_CACHE_TIMEOUT)
+        return result
+
+    best_scope = max(scopes, key=lambda s: SCOPE_PRIORITY.get(s.scope_type, 0))
+    custom_dept_ids = []
+    if best_scope.scope_type == 'custom':
+        custom_dept_ids = list(best_scope.custom_departments.values_list('id', flat=True))
+
+    result = (best_scope.scope_type, custom_dept_ids)
+    cache.set(cache_key, result, PERMISSION_CACHE_TIMEOUT)
+    return result
 
 
 def get_department_tree_ids(dept_id: int) -> List[int]:
@@ -326,6 +344,52 @@ def apply_scope_filter(queryset: QuerySet, user, scope_result: Tuple[str, List[i
 
     # Unknown scope type - return empty queryset
     return queryset.none()
+
+
+def collect_permission_ids(selected_codes: List[str]) -> List[int]:
+    """
+    Collect permission IDs for a list of codes, including all descendants and ancestors.
+
+    For each code, finds the permission and collects:
+    - The node itself
+    - All descendant nodes (so granting 'purchase' also grants 'purchase:orders:view' etc.)
+    - All ancestor nodes (so the menu tree path is navigable)
+
+    Special case: ['*'] returns all active permission IDs.
+
+    Args:
+        selected_codes: List of permission codes (e.g., ['purchase:orders', 'finance'])
+
+    Returns:
+        List of permission IDs (deduplicated)
+    """
+    if not selected_codes:
+        return []
+
+    if selected_codes == ['*']:
+        return list(Permission.objects.filter(is_active=True, is_deleted=False).values_list('id', flat=True))
+
+    permissions = list(Permission.objects.filter(is_active=True, is_deleted=False).select_related('parent'))
+    permissions_by_code = {p.code: p for p in permissions}
+    permissions_by_id = {p.id: p for p in permissions}
+    children_by_parent = {}
+
+    for p in permissions:
+        children_by_parent.setdefault(p.parent_id, []).append(p)
+
+    collected_ids = set()
+    stack = [permissions_by_code[code] for code in selected_codes if code in permissions_by_code]
+
+    while stack:
+        perm = stack.pop()
+        if perm.id in collected_ids:
+            continue
+        collected_ids.add(perm.id)
+        if perm.parent_id and perm.parent_id in permissions_by_id:
+            stack.append(permissions_by_id[perm.parent_id])
+        stack.extend(children_by_parent.get(perm.id, []))
+
+    return list(collected_ids)
 
 
 def get_hidden_fields(user, module: str, resource: str) -> List[str]:

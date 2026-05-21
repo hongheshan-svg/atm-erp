@@ -91,6 +91,8 @@ class DrawingVersionSerializer(serializers.ModelSerializer):
 
 
 class DrawingVersionViewSet(PermissionMixin, viewsets.ModelViewSet):
+    permission_module = 'projects'
+    permission_resource = 'drawing_version'
     serializer_class = DrawingVersionSerializer
     permission_classes = [IsAuthenticated]
 
@@ -164,6 +166,8 @@ class DrawingVersionViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 
 class DrawingAffectedPartViewSet(PermissionMixin, viewsets.ModelViewSet):
+    permission_module = 'projects'
+    permission_resource = 'drawing_affected_part'
     serializer_class = DrawingAffectedPartSerializer
     permission_classes = [IsAuthenticated]
 

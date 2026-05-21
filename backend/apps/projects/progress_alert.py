@@ -349,6 +349,8 @@ class ProjectAlertListSerializer(serializers.ModelSerializer):
 class ProjectAlertRuleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """预警规则管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'project_alert_rule'
     queryset = ProjectAlertRule.objects.filter(is_deleted=False)
     serializer_class = ProjectAlertRuleSerializer
     permission_classes = [IsAuthenticated]
@@ -385,6 +387,8 @@ class ProjectAlertRuleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 class ProjectAlertViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目预警管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'project_alert'
     queryset = ProjectAlert.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['project', 'alert_type', 'severity', 'status']

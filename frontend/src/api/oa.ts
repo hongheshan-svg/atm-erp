@@ -176,7 +176,7 @@ export function reclaimAsset(id: number) {
 }
 
 // ========== 资产借用 = =========
-export function createAssetBorrow(data) {
+export function createAssetBorrow(data: any) {
   return request({ url: '/oa/asset-borrows/', method: 'post', data })
 }
 export function submitAssetBorrow(id: number) {
@@ -247,7 +247,7 @@ export function createConversation(data: any) {
   return request({ url: '/core/conversations/', method: 'post', data })
 }
 export function markConversationRead(id: number) {
-  return request({ url: `/core/conversations/${id}/mark_as_read/`, method: 'post' })
+  return request({ url: '/core/messages/mark_read/', method: 'post', data: { conversation_id: id } })
 }
 export function getIMMessages(params?: Record<string, any>) {
   return request({ url: '/core/messages/', method: 'get', params })

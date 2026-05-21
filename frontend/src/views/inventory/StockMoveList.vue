@@ -146,7 +146,7 @@
         </el-table-column>
         <el-table-column label="金额" width="120" align="right">
           <template #default="{ row }">
-            ¥{{ formatNumber(row.qty * row.unit_cost) }}
+            ¥{{ formatNumber(Math.abs(row.qty) * (row.unit_cost || 0)) }}
           </template>
         </el-table-column>
         <el-table-column prop="project_name" label="关联项目" width="150">

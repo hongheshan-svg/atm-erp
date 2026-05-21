@@ -35,7 +35,8 @@ export const useUserStore = defineStore('user', () => {
   function logout(): void {
     userInfo.value = null
     profileReady.value = false
-    localStorage.clear()
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('refresh_token')
 
     const permissionStore = usePermissionStore()
     permissionStore.clear()

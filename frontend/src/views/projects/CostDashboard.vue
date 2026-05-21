@@ -168,7 +168,7 @@
               </el-table-column>
               <el-table-column label="占比" width="80" align="center">
                 <template #default="{ row }">
-                  {{ ((row.total / projectData.actual_total) * 100).toFixed(1) }}%
+                  {{ projectData.actual_total ? ((row.total / projectData.actual_total) * 100).toFixed(1) : '0.0' }}%
                 </template>
               </el-table-column>
             </el-table>
@@ -311,7 +311,7 @@ const getPhaseLabel = (phase) => {
 
 const loadProjects = async () => {
   const res = await getProjectList({ page_size: 500, status__in: 'IN_PROGRESS,DEBUGGING,INSTALLATION' })
-  projects.value = res.data.results || res.data
+  projects.value = res.results || res || []
 }
 
 const loadProjectCost = async () => {
@@ -323,7 +323,7 @@ const loadProjectCost = async () => {
   loading.value = true
   try {
     const res = await getProjectCostDashboard(selectedProject.value)
-    projectData.value = res.data
+    projectData.value = res
     await nextTick()
     renderCharts()
   } catch (e) {

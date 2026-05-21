@@ -43,6 +43,8 @@ def _get_step_approver_label(step):
 class WorkflowDefinitionViewSet(PermissionMixin, viewsets.ModelViewSet):
     """ViewSet for workflow definitions."""
 
+    permission_module = 'system'
+    permission_resource = 'workflow_definition'
     queryset = WorkflowDefinition.objects.filter(is_deleted=False)
     serializer_class = WorkflowDefinitionSerializer
     filterset_fields = ['business_type', 'is_active']
@@ -52,6 +54,8 @@ class WorkflowDefinitionViewSet(PermissionMixin, viewsets.ModelViewSet):
 class WorkflowStepViewSet(PermissionMixin, viewsets.ModelViewSet):
     """ViewSet for workflow steps."""
 
+    permission_module = 'system'
+    permission_resource = 'workflow_step'
     queryset = WorkflowStep.objects.filter(is_deleted=False)
     serializer_class = WorkflowStepSerializer
     filterset_fields = ['workflow', 'approver_type']
@@ -60,6 +64,8 @@ class WorkflowStepViewSet(PermissionMixin, viewsets.ModelViewSet):
 class WorkflowInstanceViewSet(PermissionMixin, viewsets.ModelViewSet):
     """ViewSet for workflow instances."""
 
+    permission_module = 'system'
+    permission_resource = 'workflow_instance'
     queryset = WorkflowInstance.objects.filter(is_deleted=False)
     serializer_class = WorkflowInstanceSerializer
     filterset_fields = ['business_type', 'status', 'submitter']
@@ -221,6 +227,8 @@ class WorkflowInstanceViewSet(PermissionMixin, viewsets.ModelViewSet):
 class WorkflowTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
     """ViewSet for workflow tasks."""
 
+    permission_module = 'system'
+    permission_resource = 'workflow_task'
     queryset = WorkflowTask.objects.filter(is_deleted=False)
     serializer_class = WorkflowTaskSerializer
     filterset_fields = ['instance', 'assignee', 'status']

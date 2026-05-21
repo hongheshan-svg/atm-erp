@@ -295,6 +295,8 @@ class CustomerContactSerializer(serializers.ModelSerializer):
 class CustomerFollowUpViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """客户跟进记录管理"""
 
+    permission_module = 'masterdata'
+    permission_resource = 'customer_follow_up'
     queryset = CustomerFollowUp.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['customer', 'follow_type', 'result', 'follower', 'priority']
@@ -402,6 +404,8 @@ class CustomerFollowUpViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 class CustomerReminderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """客户提醒管理"""
 
+    permission_module = 'masterdata'
+    permission_resource = 'customer_reminder'
     queryset = CustomerReminder.objects.filter(is_deleted=False)
     serializer_class = CustomerReminderSerializer
     permission_classes = [IsAuthenticated]
@@ -441,6 +445,8 @@ class CustomerReminderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 class CustomerContactViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """客户联系人管理"""
 
+    permission_module = 'masterdata'
+    permission_resource = 'customer_contact'
     queryset = CustomerContact.objects.filter(is_deleted=False)
     serializer_class = CustomerContactSerializer
     permission_classes = [IsAuthenticated]

@@ -332,13 +332,12 @@ const buildTree = (list, parentId = null) => {
 }
 
 const filterSelfAndChildren = (tree, excludeId) => {
-  return tree.filter(node => {
-    if (node.id === excludeId) return false
-    if (node.children?.length) {
-      node.children = filterSelfAndChildren(node.children, excludeId)
-    }
-    return true
-  })
+  return tree
+    .filter(node => node.id !== excludeId)
+    .map(node => ({
+      ...node,
+      children: node.children?.length ? filterSelfAndChildren(node.children, excludeId) : []
+    }))
 }
 
 const getDeptPath = (deptId, list) => {

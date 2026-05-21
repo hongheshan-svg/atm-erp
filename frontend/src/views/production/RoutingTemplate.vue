@@ -212,8 +212,8 @@ const loadData = async () => {
       status: statusFilter.value || undefined
     }
     const res = await getRoutingTemplates(params)
-    tableData.value = res.data.results || res.data
-    total.value = res.data.count || tableData.value.length
+    tableData.value = res.results || res || []
+    total.value = res.count || tableData.value.length
   } catch (e) {
     console.error(e)
   } finally {
@@ -223,17 +223,17 @@ const loadData = async () => {
 
 const loadCategories = async () => {
   const res = await getItemCategoryTree({ page_size: 500 })
-  categories.value = res.data.results || res.data
+  categories.value = res.results || res || []
 }
 
 const loadItems = async () => {
   const res = await getItemList({ page_size: 1000, item_type: 'PRODUCT' })
-  items.value = res.data.results || res.data
+  items.value = res.results || res || []
 }
 
 const loadProjects = async () => {
   const res = await getProjectList({ page_size: 500, status: 'IN_PROGRESS' })
-  projects.value = res.data.results || res.data
+  projects.value = res.results || res || []
 }
 
 const handleCreate = () => {

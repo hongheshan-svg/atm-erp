@@ -203,6 +203,8 @@ class AnnouncementReadSerializer(serializers.ModelSerializer):
 class AnnouncementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """系统公告管理"""
 
+    permission_module = 'system'
+    permission_resource = 'announcement'
     queryset = Announcement.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['announcement_type', 'status', 'priority', 'is_top']

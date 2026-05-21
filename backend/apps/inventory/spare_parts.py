@@ -508,6 +508,8 @@ class SparePartAlertSerializer(serializers.ModelSerializer):
 
 class SparePartCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """备件类别管理"""
+    permission_module = 'inventory'
+    permission_resource = 'spare_part_category'
 
     queryset = SparePartCategory.objects.filter(is_deleted=False)
 
@@ -521,6 +523,8 @@ class SparePartCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
 
 class SparePartViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """备件管理"""
+    permission_module = 'inventory'
+    permission_resource = 'spare_part'
 
     queryset = SparePart.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
@@ -597,6 +601,8 @@ class SparePartViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
 
 class SparePartEquipmentRelationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备备件关联管理"""
+    permission_module = 'inventory'
+    permission_resource = 'spare_part_equipment_relation'
 
     queryset = SparePartEquipmentRelation.objects.filter(is_deleted=False)
     serializer_class = SparePartEquipmentRelationSerializer
@@ -641,6 +647,8 @@ class SparePartEquipmentRelationViewSet(PermissionMixin, SoftDeleteMixin, UserTr
 
 class SparePartConsumptionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """备件消耗记录"""
+    permission_module = 'inventory'
+    permission_resource = 'spare_part_consumption'
 
     queryset = SparePartConsumption.objects.filter(is_deleted=False)
     serializer_class = SparePartConsumptionSerializer
@@ -692,6 +700,8 @@ class SparePartConsumptionViewSet(PermissionMixin, SoftDeleteMixin, UserTracking
 
 class SparePartAlertViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """备件预警管理"""
+    permission_module = 'inventory'
+    permission_resource = 'spare_part_alert'
 
     queryset = SparePartAlert.objects.filter(is_deleted=False)
     serializer_class = SparePartAlertSerializer

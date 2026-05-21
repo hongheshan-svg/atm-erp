@@ -606,6 +606,8 @@ class ProjectCostHistorySerializer(serializers.ModelSerializer):
 
 class CostCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """成本类别管理"""
+    permission_module = 'sales'
+    permission_resource = 'cost_category'
 
     queryset = CostCategory.objects.none()
     serializer_class = CostCategorySerializer
@@ -619,6 +621,8 @@ class CostCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
 
 class LaborRateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """人工费率管理"""
+    permission_module = 'sales'
+    permission_resource = 'labor_rate'
 
     queryset = LaborRate.objects.none()
     serializer_class = LaborRateSerializer
@@ -632,6 +636,8 @@ class LaborRateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
 
 class QuoteEstimationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """报价估算管理"""
+    permission_module = 'sales'
+    permission_resource = 'quote_estimation'
 
     queryset = QuoteEstimation.objects.none()
     permission_classes = [IsAuthenticated]
@@ -826,6 +832,8 @@ class QuoteEstimationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
 
 class EstimationMaterialItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """估算材料明细"""
+    permission_module = 'sales'
+    permission_resource = 'estimation_material_item'
 
     queryset = EstimationMaterialItem.objects.none()
     serializer_class = EstimationMaterialItemSerializer
@@ -852,6 +860,8 @@ class EstimationMaterialItemViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
 
 class EstimationLaborItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """估算人工明细"""
+    permission_module = 'sales'
+    permission_resource = 'estimation_labor_item'
 
     queryset = EstimationLaborItem.objects.none()
     serializer_class = EstimationLaborItemSerializer
@@ -873,6 +883,8 @@ class EstimationLaborItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
 
 class EstimationOutsourceItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """估算外协明细"""
+    permission_module = 'sales'
+    permission_resource = 'estimation_outsource_item'
 
     queryset = EstimationOutsourceItem.objects.none()
     serializer_class = EstimationOutsourceItemSerializer
@@ -886,6 +898,8 @@ class EstimationOutsourceItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrack
 
 class ProjectCostHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """项目成本历史（只读）"""
+    permission_module = 'sales'
+    permission_resource = 'project_cost_history'
 
     queryset = ProjectCostHistory.objects.select_related('project')
     serializer_class = ProjectCostHistorySerializer

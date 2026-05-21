@@ -372,6 +372,8 @@ class TechnicalProposalListSerializer(serializers.ModelSerializer):
 class ProposalCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """方案分类管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'proposal_category'
     queryset = ProposalCategory.objects.filter(is_deleted=False)
     serializer_class = ProposalCategorySerializer
     permission_classes = [IsAuthenticated]
@@ -396,6 +398,8 @@ class ProposalCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 class TechnicalProposalViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术方案管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'technical_proposal'
     queryset = TechnicalProposal.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'proposal_type', 'customer', 'project', 'author', 'category']
@@ -540,6 +544,8 @@ class TechnicalProposalViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
 class ProposalReviewViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """方案评审管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'proposal_review'
     queryset = ProposalReview.objects.filter(is_deleted=False)
     serializer_class = ProposalReviewSerializer
     permission_classes = [IsAuthenticated]
@@ -591,6 +597,8 @@ class ProposalReviewViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 class ProposalDocumentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """方案文档管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'proposal_document'
     queryset = ProposalDocument.objects.filter(is_deleted=False)
     serializer_class = ProposalDocumentSerializer
     permission_classes = [IsAuthenticated]

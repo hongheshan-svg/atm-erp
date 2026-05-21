@@ -442,6 +442,8 @@ class KnowledgeBaseArticleSerializer(serializers.ModelSerializer):
 
 class ServiceContractViewSet(PermissionMixin, viewsets.ModelViewSet):
     """服务合同管理"""
+    permission_module = 'sales'
+    permission_resource = 'service_contract'
 
     queryset = ServiceContract.objects.filter(is_deleted=False)
     serializer_class = ServiceContractSerializer
@@ -505,6 +507,8 @@ class ServiceContractViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class PreventiveMaintenanceViewSet(PermissionMixin, viewsets.ModelViewSet):
     """预防性维护管理"""
+    permission_module = 'sales'
+    permission_resource = 'preventive_maintenance'
 
     queryset = PreventiveMaintenance.objects.filter(is_deleted=False)
     serializer_class = PreventiveMaintenanceSerializer
@@ -589,6 +593,8 @@ class ServiceRequestViewSet(WorkflowEnforcementMixin, PermissionMixin, viewsets.
     workflow_business_type = 'SERVICE_REQUEST'
     workflow_no_field = 'request_no'
     """服务请求管理"""
+    permission_module = 'sales'
+    permission_resource = 'service_request'
 
     queryset = ServiceRequest.objects.filter(is_deleted=False)
     serializer_class = ServiceRequestSerializer
@@ -721,6 +727,8 @@ class ServiceRequestViewSet(WorkflowEnforcementMixin, PermissionMixin, viewsets.
 
 class KnowledgeBaseArticleViewSet(PermissionMixin, viewsets.ModelViewSet):
     """知识库文章管理"""
+    permission_module = 'sales'
+    permission_resource = 'knowledge_base_article'
 
     queryset = KnowledgeBaseArticle.objects.filter(is_deleted=False)
     serializer_class = KnowledgeBaseArticleSerializer

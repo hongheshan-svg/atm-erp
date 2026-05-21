@@ -28,6 +28,8 @@ from .knowledge_serializers import (
 class KnowledgeCategoryViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """知识分类管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'knowledge_category'
     queryset = KnowledgeCategory.objects.all()
     serializer_class = KnowledgeCategorySerializer
     filterset_fields = ['parent']
@@ -46,6 +48,8 @@ class KnowledgeCategoryViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelV
 class KnowledgeArticleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """知识文章管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'knowledge_article'
     queryset = KnowledgeArticle.objects.select_related('category', 'project', 'author')
     serializer_class = KnowledgeArticleSerializer
     filterset_fields = ['category', 'article_type', 'status', 'author', 'project']
@@ -151,6 +155,8 @@ class KnowledgeArticleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 class ProjectArchiveViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目归档报告管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'project_archive'
     queryset = ProjectArchive.objects.select_related('project', 'reviewer')
     serializer_class = ProjectArchiveSerializer
     filterset_fields = ['status', 'project']
@@ -233,6 +239,8 @@ class ProjectArchiveViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 class TechnicalIssueViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术问题记录管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'technical_issue'
     queryset = TechnicalIssue.objects.select_related('project', 'category', 'reported_by', 'resolved_by')
     serializer_class = TechnicalIssueSerializer
     filterset_fields = ['project', 'category', 'severity', 'status']
@@ -301,6 +309,8 @@ class TechnicalIssueViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 class StandardComponentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """标准部件管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'standard_component'
     queryset = StandardComponent.objects.select_related('category', 'maintainer')
     serializer_class = StandardComponentSerializer
     filterset_fields = ['category', 'status']

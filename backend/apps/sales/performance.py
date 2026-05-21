@@ -353,6 +353,8 @@ class SalesCommissionSerializer(serializers.ModelSerializer):
 
 class SalesTargetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售目标管理"""
+    permission_module = 'sales'
+    permission_resource = 'sales_target'
 
     queryset = SalesTarget.objects.none()
     serializer_class = SalesTargetSerializer
@@ -439,6 +441,8 @@ class SalesTargetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
 
 class SalesCommissionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售提成管理"""
+    permission_module = 'sales'
+    permission_resource = 'sales_commission'
 
     queryset = SalesCommission.objects.none()
     serializer_class = SalesCommissionSerializer

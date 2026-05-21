@@ -265,6 +265,8 @@ class InstallationTaskSerializer(serializers.ModelSerializer):
 
 
 class InstallationTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
+    permission_module = 'projects'
+    permission_resource = 'installation_task'
     serializer_class = InstallationTaskSerializer
     permission_classes = [IsAuthenticated]
 
@@ -327,6 +329,8 @@ class InstallationTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 
 class SiteLogViewSet(PermissionMixin, viewsets.ModelViewSet):
+    permission_module = 'projects'
+    permission_resource = 'site_log'
     serializer_class = SiteLogSerializer
     permission_classes = [IsAuthenticated]
 
@@ -342,6 +346,8 @@ class SiteLogViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 
 class CommissioningRecordViewSet(PermissionMixin, viewsets.ModelViewSet):
+    permission_module = 'projects'
+    permission_resource = 'commissioning_record'
     serializer_class = CommissioningRecordSerializer
     permission_classes = [IsAuthenticated]
 
@@ -357,6 +363,8 @@ class CommissioningRecordViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 
 class SiteIssueViewSet(PermissionMixin, viewsets.ModelViewSet):
+    permission_module = 'projects'
+    permission_resource = 'site_issue'
     serializer_class = SiteIssueSerializer
     permission_classes = [IsAuthenticated]
 
@@ -382,6 +390,8 @@ class SiteIssueViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 
 class CustomerAcceptanceViewSet(PermissionMixin, viewsets.ModelViewSet):
+    permission_module = 'projects'
+    permission_resource = 'customer_acceptance'
     serializer_class = CustomerAcceptanceSerializer
     permission_classes = [IsAuthenticated]
 

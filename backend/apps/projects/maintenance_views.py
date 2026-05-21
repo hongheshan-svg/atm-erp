@@ -19,6 +19,8 @@ from apps.core.permission_mixin import PermissionMixin
 class MaintenanceScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """维保计划管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'maintenance_schedule'
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):

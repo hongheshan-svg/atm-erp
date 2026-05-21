@@ -337,7 +337,7 @@ class SalesOrderLine(BaseModel):
     def display_spec(self):
         """返回产品规格"""
         if self.item:
-            return self.item.spec or ''
+            return self.item.specification or ''
         return self.custom_spec or ''
     
     class Meta:
@@ -538,7 +538,7 @@ class SalesContract(BaseModel):
     contract_no = models.CharField(max_length=50, unique=True, verbose_name='合同编号')
     so = models.ForeignKey(
         SalesOrder,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name='contracts',
         verbose_name='销售订单'
     )

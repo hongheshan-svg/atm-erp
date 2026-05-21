@@ -170,7 +170,7 @@ const wipCardClass = (ws) => ws.utilization > 100 ? 'over-limit' : ws.utilizatio
 const loadWIPStatus = async () => {
   try {
     const res = await getKanbanWIPStatus()
-    wipStatus.value = res.data || res || []
+    wipStatus.value = res.statuses || res || []
   } catch (error) {
     console.error('KanbanWIPManagement getKanbanWIPStatus error:', error)
   }

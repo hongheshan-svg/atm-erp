@@ -692,6 +692,8 @@ class TechnicianScheduleSerializer(serializers.ModelSerializer):
 class SkillCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技能类别管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'skill_category'
     queryset = SkillCategory.objects.filter(is_deleted=False)
     serializer_class = SkillCategorySerializer
     permission_classes = [IsAuthenticated]
@@ -701,6 +703,8 @@ class SkillCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 class SkillViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技能管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'skill'
     queryset = Skill.objects.filter(is_deleted=False)
     serializer_class = SkillSerializer
     permission_classes = [IsAuthenticated]
@@ -711,6 +715,8 @@ class SkillViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets
 class TechnicianProfileViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术人员档案管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'technician_profile'
     queryset = TechnicianProfile.objects.filter(is_deleted=False)
     serializer_class = TechnicianProfileSerializer
     permission_classes = [IsAuthenticated]
@@ -767,6 +773,8 @@ class TechnicianProfileViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
 class TechnicianSkillViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术人员技能管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'technician_skill'
     queryset = TechnicianSkill.objects.filter(is_deleted=False)
     serializer_class = TechnicianSkillSerializer
     permission_classes = [IsAuthenticated]
@@ -776,6 +784,8 @@ class TechnicianSkillViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
 class ServiceOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """现场服务单管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'service_order'
     queryset = ServiceOrder.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'service_type', 'customer', 'priority']
@@ -897,6 +907,8 @@ class ServiceOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
 class ServiceDispatchViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """服务派工管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'service_dispatch'
     queryset = ServiceDispatch.objects.filter(is_deleted=False)
     serializer_class = ServiceDispatchSerializer
     permission_classes = [IsAuthenticated]
@@ -941,6 +953,8 @@ class ServiceDispatchViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
 class ServiceCheckInViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """现场打卡管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'service_check_in'
     queryset = ServiceCheckIn.objects.filter(is_deleted=False)
     serializer_class = ServiceCheckInSerializer
     permission_classes = [IsAuthenticated]
@@ -963,6 +977,8 @@ class ServiceCheckInViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 class ServiceLogViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """服务日志管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'service_log'
     queryset = ServiceLog.objects.filter(is_deleted=False)
     serializer_class = ServiceLogSerializer
     permission_classes = [IsAuthenticated]
@@ -972,6 +988,8 @@ class ServiceLogViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
 class ServiceExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """服务费用管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'service_expense'
     queryset = ServiceExpense.objects.filter(is_deleted=False)
     serializer_class = ServiceExpenseSerializer
     permission_classes = [IsAuthenticated]
@@ -1010,6 +1028,8 @@ class ServiceExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 class TechnicianScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术人员日程管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'technician_schedule'
     queryset = TechnicianSchedule.objects.filter(is_deleted=False)
     serializer_class = TechnicianScheduleSerializer
     permission_classes = [IsAuthenticated]

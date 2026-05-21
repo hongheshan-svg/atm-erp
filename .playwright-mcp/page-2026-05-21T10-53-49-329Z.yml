@@ -1,0 +1,14 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - heading "登录" [level=2] [ref=e6]
+    - paragraph [ref=e7]: 欢迎回来，请输入您的账号信息
+    - generic [ref=e8]:
+      - generic [ref=e12]:
+        - img [ref=e15]
+        - textbox "用户名" [ref=e17]
+      - generic [ref=e21]:
+        - img [ref=e24]
+        - textbox "密码" [ref=e27]
+      - button "登 录" [ref=e30] [cursor=pointer]:
+        - generic [ref=e31]: 登 录
+  - generic [ref=e32]: © 2026 深圳市奥特迈智能装备有限公司 v1.0.74

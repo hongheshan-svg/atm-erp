@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from django.http import HttpResponse
 import pandas as pd
 from io import BytesIO
-from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin, DataScopeMixin
+from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.permission_mixin import PermissionMixin
 from .models import ItemCategory, Item, Customer, Supplier, Warehouse, WarehouseLocation
 from .serializers import (

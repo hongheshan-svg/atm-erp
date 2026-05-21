@@ -2,6 +2,13 @@ from django.conf import settings
 from django.db import models
 
 
+class SoftDeleteManager(models.Manager):
+    """Manager that filters out soft-deleted records by default."""
+
+    def get_queryset(self):
+        return super().get_queryset().filter(is_deleted=False)
+
+
 class TimeStampedModel(models.Model):
     """
     Abstract base model with created_at and updated_at timestamps
@@ -55,6 +62,9 @@ class BaseModel(TimeStampedModel, SoftDeleteModel):
         related_name='%(class)s_updated',
         verbose_name='更新人',
     )
+
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
 
     class Meta:
         abstract = True

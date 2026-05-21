@@ -381,6 +381,8 @@ class ContractExecutionListSerializer(serializers.ModelSerializer):
 
 
 class ContractExecutionViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+    permission_module = 'purchase'
+    permission_resource = 'contract_execution'
     workflow_business_type = 'CONTRACT_EXECUTION'
     workflow_amount_field = 'contract_amount'
     """合同执行管理"""
@@ -557,6 +559,8 @@ class ContractExecutionViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDe
 class DeliveryRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """交货记录管理"""
 
+    permission_module = 'purchase'
+    permission_resource = 'delivery_record'
     queryset = DeliveryRecord.objects.filter(is_deleted=False)
     serializer_class = DeliveryRecordSerializer
     permission_classes = [IsAuthenticated]
@@ -608,6 +612,8 @@ class DeliveryRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 
 
 class PaymentRecordViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+    permission_module = 'purchase'
+    permission_resource = 'payment_record'
     workflow_business_type = 'PAYMENT_RECORD'
     workflow_amount_field = 'amount'
     """付款记录管理"""
@@ -678,6 +684,8 @@ class PaymentRecordViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDelete
 class ContractIssueViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """合同问题管理"""
 
+    permission_module = 'purchase'
+    permission_resource = 'contract_issue'
     queryset = ContractIssue.objects.filter(is_deleted=False)
     serializer_class = ContractIssueSerializer
     permission_classes = [IsAuthenticated]

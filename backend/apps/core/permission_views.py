@@ -17,6 +17,8 @@ from apps.core.permission_serializers import DataScopeSerializer, PermissionSeri
 class PermissionViewSet(PermissionMixin, viewsets.ModelViewSet):
     """权限节点管理（仅超级管理员）"""
 
+    permission_module = 'system'
+    permission_resource = 'permission'
     queryset = Permission.active.all()
     serializer_class = PermissionSerializer
     permission_classes = [IsAdminUser]
@@ -88,6 +90,8 @@ class PermissionViewSet(PermissionMixin, viewsets.ModelViewSet):
 class DataScopeViewSet(PermissionMixin, viewsets.ModelViewSet):
     """数据权限管理"""
 
+    permission_module = 'system'
+    permission_resource = 'data_scope'
     queryset = DataScope.objects.all()
     serializer_class = DataScopeSerializer
     permission_classes = [IsAdminUser]

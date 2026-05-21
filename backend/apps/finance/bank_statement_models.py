@@ -39,6 +39,10 @@ class BankStatement(BaseModel):
     import_date = models.DateTimeField(default=timezone.now, verbose_name='导入时间')
     source_file = models.CharField(max_length=255, blank=True, verbose_name='源文件名')
 
+    # 银行信息标签
+    bank_name = models.CharField(max_length=100, blank=True, default='', verbose_name='银行名称', db_index=True)
+    bank_account = models.CharField(max_length=50, blank=True, default='', verbose_name='银行账号')
+
     # 银行流水原始信息
     voucher_no = models.CharField(max_length=100, blank=True, verbose_name='凭证号')
     counterparty_account = models.CharField(max_length=100, blank=True, verbose_name='对方账号')
@@ -263,6 +267,8 @@ class BankStatementImportLog(BaseModel):
     batch_no = models.CharField(max_length=50, unique=True, verbose_name='批次号')
     file_name = models.CharField(max_length=255, verbose_name='文件名')
     import_time = models.DateTimeField(default=timezone.now, verbose_name='导入时间')
+    bank_name = models.CharField(max_length=100, blank=True, default='', verbose_name='银行名称')
+    bank_account = models.CharField(max_length=50, blank=True, default='', verbose_name='银行账号')
 
     total_count = models.IntegerField(default=0, verbose_name='总记录数')
     success_count = models.IntegerField(default=0, verbose_name='成功导入数')

@@ -423,6 +423,8 @@ class ProductionScheduleListSerializer(serializers.ModelSerializer):
 class WorkCenterViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """工作中心管理"""
 
+    permission_module = 'production'
+    permission_resource = 'work_center'
     queryset = WorkCenter.objects.filter(is_deleted=False)
     serializer_class = WorkCenterSerializer
     permission_classes = [IsAuthenticated]
@@ -468,6 +470,8 @@ class WorkCenterViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
 class ProductionScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """生产排程管理"""
 
+    permission_module = 'production'
+    permission_resource = 'production_schedule'
     queryset = ProductionSchedule.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'work_center', 'project', 'assignee']
@@ -530,6 +534,8 @@ class ProductionScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
 class ScheduleTaskViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """排程任务管理"""
 
+    permission_module = 'production'
+    permission_resource = 'schedule_task'
     queryset = ScheduleTask.objects.filter(is_deleted=False)
     serializer_class = ScheduleTaskSerializer
     permission_classes = [IsAuthenticated]

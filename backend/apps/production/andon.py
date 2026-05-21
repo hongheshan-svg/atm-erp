@@ -413,6 +413,8 @@ class AndonCallListSerializer(serializers.ModelSerializer):
 class AndonTypeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """安灯类型管理"""
 
+    permission_module = 'production'
+    permission_resource = 'andon_type'
     queryset = AndonType.objects.filter(is_deleted=False)
     serializer_class = AndonTypeSerializer
     permission_classes = [IsAuthenticated]
@@ -423,6 +425,8 @@ class AndonTypeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
 class AndonStationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """安灯工位管理"""
 
+    permission_module = 'production'
+    permission_resource = 'andon_station'
     queryset = AndonStation.objects.filter(is_deleted=False)
     serializer_class = AndonStationSerializer
     permission_classes = [IsAuthenticated]
@@ -460,6 +464,8 @@ class AndonStationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
 class AndonCallViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """安灯呼叫管理"""
 
+    permission_module = 'production'
+    permission_resource = 'andon_call'
     queryset = AndonCall.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'priority', 'station', 'andon_type', 'caller']
@@ -628,6 +634,8 @@ class AndonCallViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
 class AndonActionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """安灯操作管理"""
 
+    permission_module = 'production'
+    permission_resource = 'andon_action'
     queryset = AndonAction.objects.filter(is_deleted=False)
     serializer_class = AndonActionSerializer
     permission_classes = [IsAuthenticated]

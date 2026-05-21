@@ -35,8 +35,8 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
     queryset = BankStatement.objects.all()
     serializer_class = BankStatementSerializer
     parser_classes = [MultiPartParser, FormParser, JSONParser]
-    filterset_fields = ['status', 'transaction_type', 'match_type', 'supplier', 'customer', 'import_batch']
-    search_fields = ['counterparty_name', 'summary', 'purpose', 'postscript']
+    filterset_fields = ['status', 'transaction_type', 'match_type', 'supplier', 'customer', 'import_batch', 'bank_name']
+    search_fields = ['counterparty_name', 'summary', 'purpose', 'postscript', 'bank_name']
     ordering_fields = ['transaction_time', 'debit_amount', 'credit_amount', 'created_at']
     
     def _parse_amount(self, value):
@@ -130,6 +130,9 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        bank_name = request.data.get('bank_name', '')
+        bank_account = request.data.get('bank_account', '')
+
         try:
             import openpyxl
 
@@ -458,6 +461,8 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                         statement = BankStatement(
                             import_batch=batch_no,
                             source_file=file_name,
+                            bank_name=bank_name,
+                            bank_account=bank_account,
                             voucher_no=voucher_no,
                             counterparty_account=str(get_cell('对方账号') or ''),
                             transaction_time=parsed_time,
@@ -500,6 +505,8 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                 import_log = BankStatementImportLog.objects.create(
                     batch_no=batch_no,
                     file_name=file_name,
+                    bank_name=bank_name,
+                    bank_account=bank_account,
                     total_count=success_count + skipped_count + duplicate_count + len(errors),
                     success_count=success_count,
                     error_count=len(errors),
@@ -531,6 +538,18 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
+    @action(detail=False, methods=['get'])
+    def bank_names(self, request):
+        """返回所有已导入的银行名称列表（用于筛选下拉）"""
+        names = (
+            BankStatement.objects.filter(is_deleted=False)
+            .exclude(bank_name='')
+            .values_list('bank_name', flat=True)
+            .distinct()
+            .order_by('bank_name')
+        )
+        return Response(list(names))
+
     @action(detail=False, methods=['get'])
     def export_excel(self, request):
         """

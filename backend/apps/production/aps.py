@@ -392,6 +392,8 @@ class ScheduleOrderListSerializer(serializers.ModelSerializer):
 class ScheduleOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """排程工单管理"""
 
+    permission_module = 'production'
+    permission_resource = 'schedule_order'
     queryset = ScheduleOrder.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'priority', 'work_center', 'project']
@@ -465,6 +467,8 @@ class ScheduleOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 class APSScheduleTaskViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """APS排程任务管理"""
 
+    permission_module = 'production'
+    permission_resource = 'aps_schedule_task'
     queryset = APSScheduleTask.objects.filter(is_deleted=False)
     serializer_class = APSScheduleTaskSerializer
     permission_classes = [IsAuthenticated]

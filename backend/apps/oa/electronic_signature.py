@@ -403,6 +403,8 @@ class SignatureDocumentSerializer(serializers.ModelSerializer):
 
 class SignatureSealViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """电子印章管理"""
+    permission_module = 'oa'
+    permission_resource = 'signature_seal'
     queryset = SignatureSeal.objects.filter(is_deleted=False)
     serializer_class = SignatureSealSerializer
     permission_classes = [IsAuthenticated]
@@ -436,6 +438,8 @@ class SignatureSealViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 
 class SignatureDocumentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """签署文档管理"""
+    permission_module = 'oa'
+    permission_resource = 'signature_document'
     queryset = SignatureDocument.objects.filter(is_deleted=False)
     serializer_class = SignatureDocumentSerializer
     permission_classes = [IsAuthenticated]
@@ -644,6 +648,8 @@ class SignatureDocumentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
 
 class SignatureLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """签署日志查看"""
+    permission_module = 'oa'
+    permission_resource = 'signature_log'
     queryset = SignatureLog.objects.all()
     serializer_class = SignatureLogSerializer
     permission_classes = [IsAuthenticated]

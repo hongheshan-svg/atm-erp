@@ -338,7 +338,7 @@ const formRules = {
 }
 
 const formatNumber = (num) => {
-  return num ? Number(num).toLocaleString() : '0'
+  return num ? Number(num).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'
 }
 
 const getStatusType = (status) => {
@@ -358,11 +358,12 @@ const fetchData = async () => {
     let res
     if (activeTab.value === 'overdue') {
       res = await getOverdueCollections()
-      // 需要转换数据格式
-      plans.value = []
+      plans.value = res.results || res || []
+      total.value = res.count || plans.value.length
     } else if (activeTab.value === 'upcoming') {
       res = await getUpcomingCollections()
-      plans.value = []
+      plans.value = res.results || res || []
+      total.value = res.count || plans.value.length
     } else {
       res = await getCollectionPlanList(queryParams)
       plans.value = res.results || res || []

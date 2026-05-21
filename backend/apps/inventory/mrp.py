@@ -430,6 +430,8 @@ class MRPPlanListSerializer(serializers.ModelSerializer):
 
 class MRPPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """MRP计划管理"""
+    permission_module = 'inventory'
+    permission_resource = 'mrp_plan'
 
     queryset = MRPPlan.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
@@ -529,6 +531,8 @@ class MRPPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
 
 class MRPLineViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """MRP明细"""
+    permission_module = 'inventory'
+    permission_resource = 'mrp_line'
 
     queryset = MRPLine.objects.filter(is_deleted=False)
     serializer_class = MRPLineSerializer

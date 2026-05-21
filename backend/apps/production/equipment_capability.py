@@ -104,6 +104,8 @@ class EquipmentCapabilitySerializer(serializers.ModelSerializer):
 
 
 class EquipmentCapabilityViewSet(PermissionMixin, viewsets.ModelViewSet):
+    permission_module = 'production'
+    permission_resource = 'equipment_capability'
     serializer_class = EquipmentCapabilitySerializer
     permission_classes = [IsAuthenticated]
 

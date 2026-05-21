@@ -294,6 +294,8 @@ class WorkOrderListSerializer(serializers.ModelSerializer):
 class WorkOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """工单管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'work_order'
     queryset = WorkOrder.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['order_type', 'status', 'priority', 'project']
@@ -454,6 +456,8 @@ class WorkOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
 class WorkDispatchViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """派工管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'work_dispatch'
     queryset = WorkDispatch.objects.filter(is_deleted=False)
     serializer_class = WorkDispatchSerializer
     permission_classes = [IsAuthenticated]
@@ -583,6 +587,8 @@ class WorkDispatchViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
 class WorkLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """工单日志"""
 
+    permission_module = 'projects'
+    permission_resource = 'work_log'
     queryset = WorkLog.objects.filter(is_deleted=False)
     serializer_class = WorkLogSerializer
     permission_classes = [IsAuthenticated]

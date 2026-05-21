@@ -115,11 +115,16 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['quote_no', 'quote_date', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
+        read_only_fields = ['quote_no', 'quote_date', 'tax_amount', 'total_with_tax', 'status', 'created_at', 'updated_at']
 
     def create(self, validated_data):
         """Create quotation with lines."""
         lines_data = self.initial_data.get('lines', [])
+        for line_data in lines_data:
+            if not line_data.get('qty') or float(line_data.get('qty', 0)) <= 0:
+                raise serializers.ValidationError({'lines': '数量必须大于0'})
+            if float(line_data.get('unit_price', 0)) < 0:
+                raise serializers.ValidationError({'lines': '单价不能为负数'})
 
         with transaction.atomic():
             quotation = SalesQuotation.objects.create(**validated_data)
@@ -326,7 +331,7 @@ class SalesOrderSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['order_date', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
+        read_only_fields = ['order_date', 'tax_amount', 'total_with_tax', 'status', 'created_at', 'updated_at']
         extra_kwargs = {
             # 创建时可填写，留空则后端自动生成；更新时不提交也不报错
             'order_no': {'required': False, 'allow_blank': True},
@@ -337,6 +342,11 @@ class SalesOrderSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         """Create SO with lines."""
         lines_data = self.initial_data.get('lines', [])
+        for line_data in lines_data:
+            if not line_data.get('qty') or float(line_data.get('qty', 0)) <= 0:
+                raise serializers.ValidationError({'lines': '数量必须大于0'})
+            if float(line_data.get('unit_price', 0)) < 0:
+                raise serializers.ValidationError({'lines': '单价不能为负数'})
 
         with transaction.atomic():
             so = SalesOrder.objects.create(**validated_data)
@@ -528,7 +538,7 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
             'updated_at',
             'created_by',
         ]
-        read_only_fields = ['delivery_no', 'created_at', 'updated_at', 'total_amount']
+        read_only_fields = ['delivery_no', 'created_at', 'updated_at', 'total_amount', 'status']
 
     def create(self, validated_data):
         """Create delivery order with lines."""
@@ -620,7 +630,7 @@ class SalesContractSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['contract_no', 'created_at', 'updated_at']
+        read_only_fields = ['contract_no', 'created_at', 'updated_at', 'status']
 
     def create(self, validated_data):
         """Create contract and auto-fill from SO."""

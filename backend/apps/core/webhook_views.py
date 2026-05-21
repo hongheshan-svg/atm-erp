@@ -78,6 +78,8 @@ class WebhookDeliverySerializer(serializers.ModelSerializer):
 class WebhookEndpointViewSet(PermissionMixin, viewsets.ModelViewSet):
     """ViewSet for webhook endpoints."""
 
+    permission_module = 'system'
+    permission_resource = 'webhook_endpoint'
     serializer_class = WebhookEndpointSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
     queryset = WebhookEndpoint.objects.all()
@@ -134,6 +136,8 @@ class WebhookEndpointViewSet(PermissionMixin, viewsets.ModelViewSet):
 class WebhookDeliveryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """ViewSet for webhook deliveries."""
 
+    permission_module = 'system'
+    permission_resource = 'webhook_delivery'
     serializer_class = WebhookDeliverySerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
     queryset = WebhookDelivery.objects.all()

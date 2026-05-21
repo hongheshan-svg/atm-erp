@@ -351,6 +351,8 @@ class EquipmentArchiveListSerializer(serializers.ModelSerializer):
 
 class EquipmentArchiveViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备档案管理"""
+    permission_module = 'projects'
+    permission_resource = 'equipment_archive'
     queryset = EquipmentArchive.objects.all()
     filterset_fields = ['project', 'customer', 'equipment_type', 'status', 'is_deleted']
     search_fields = ['equipment_no', 'serial_number', 'name', 'model']
@@ -449,6 +451,8 @@ class EquipmentArchiveViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 
 class EquipmentMaintenancePlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备保养计划管理"""
+    permission_module = 'projects'
+    permission_resource = 'equipment_maintenance_plan'
     queryset = EquipmentMaintenancePlan.objects.all()
     serializer_class = EquipmentMaintenancePlanSerializer
     filterset_fields = ['equipment', 'frequency', 'is_active', 'is_deleted']
@@ -458,6 +462,8 @@ class EquipmentMaintenancePlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrac
 
 class EquipmentMaintenanceRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备维护记录管理"""
+    permission_module = 'projects'
+    permission_resource = 'equipment_maintenance_record'
     queryset = EquipmentMaintenanceRecord.objects.all()
     serializer_class = EquipmentMaintenanceRecordSerializer
     filterset_fields = ['equipment', 'maintenance_type', 'status', 'technician', 'is_deleted']
@@ -512,6 +518,8 @@ class EquipmentMaintenanceRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTr
 
 class EquipmentSparePartViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备备件管理"""
+    permission_module = 'projects'
+    permission_resource = 'equipment_spare_part'
     queryset = EquipmentSparePart.objects.all()
     serializer_class = EquipmentSparePartSerializer
     filterset_fields = ['equipment', 'criticality', 'is_deleted']

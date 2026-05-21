@@ -169,6 +169,8 @@ class BOMCostSnapshotSerializer(serializers.ModelSerializer):
 
 
 class BOMCostSnapshotViewSet(PermissionMixin, viewsets.ModelViewSet):
+    permission_module = 'projects'
+    permission_resource = 'bom_cost_snapshot'
     serializer_class = BOMCostSnapshotSerializer
     permission_classes = [IsAuthenticated]
 
@@ -197,6 +199,8 @@ class BOMCostSnapshotViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 
 class BOMCostDetailViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
+    permission_module = 'projects'
+    permission_resource = 'bom_cost_detail'
     serializer_class = BOMCostDetailSerializer
     permission_classes = [IsAuthenticated]
 

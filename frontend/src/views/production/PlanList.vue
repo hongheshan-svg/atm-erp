@@ -123,7 +123,7 @@
               确认
             </el-button>
             <el-button
-              v-if="row.status === 'CONFIRMED' || row.status === 'DRAFT'"
+              v-if="row.status === 'CONFIRMED'"
               type="warning"
               size="small"
               link

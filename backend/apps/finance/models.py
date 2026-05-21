@@ -412,6 +412,7 @@ class Payment(BaseModel):
         return self.payment_no
     
     def save(self, *args, **kwargs):
+        is_new = self._state.adding
         # Auto-generate payment_no
         if not self.payment_no:
             from django.utils import timezone
@@ -423,19 +424,19 @@ class Payment(BaseModel):
             else:
                 new_seq = 1
             self.payment_no = f'PAY{date_str}{new_seq:04d}'
-        
+
         super().save(*args, **kwargs)
 
-        # Update AR/AP amount_paid using F() to avoid race conditions
-        from django.db.models import F
-        if self.ar_id:
-            AccountReceivable.objects.filter(pk=self.ar_id).update(
-                amount_paid=F('amount_paid') + self.amount
-            )
-        elif self.ap_id:
-            AccountPayable.objects.filter(pk=self.ap_id).update(
-                amount_paid=F('amount_paid') + self.amount
-            )
+        if is_new:
+            from django.db.models import F
+            if self.ar_id:
+                AccountReceivable.objects.filter(pk=self.ar_id).update(
+                    amount_paid=F('amount_paid') + self.amount
+                )
+            elif self.ap_id:
+                AccountPayable.objects.filter(pk=self.ap_id).update(
+                    amount_paid=F('amount_paid') + self.amount
+                )
 
 
 class PaymentSchedule(BaseModel):

@@ -26,12 +26,14 @@ export const usePermissionStore = defineStore('permission', {
   state: () => ({
     permissions: new Set<string>(),
     menus: [] as string[],
-    dataScopes: {} as Record<string, string>
+    dataScopes: {} as Record<string, string>,
+    _version: 0
   }),
 
   actions: {
     setPermissions(perms: string[]) {
       this.permissions = new Set(perms)
+      this._version++
     },
 
     setMenus(menus: string[]) {
@@ -45,6 +47,7 @@ export const usePermissionStore = defineStore('permission', {
     },
 
     hasPermission(code: string): boolean {
+      void this._version
       if (this.permissions.has('*')) return true
       if (this.permissions.has(code)) return true
 

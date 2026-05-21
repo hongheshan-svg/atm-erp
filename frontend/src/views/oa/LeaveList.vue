@@ -46,7 +46,7 @@
       
       </div>
       
-      <el-table v-else :data="list" v-loading="loading" stripe border @selection-change="handleSelectionChange">
+      <el-table :data="list" v-loading="loading" stripe border @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="leave_type_display" label="请假类型" width="100" />
         <el-table-column prop="start_date" label="开始日期" width="110" />

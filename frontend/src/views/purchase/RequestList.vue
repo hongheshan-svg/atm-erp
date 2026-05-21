@@ -599,7 +599,6 @@
         </el-button>
       </template>
     </el-dialog>
-  </div>
 
     <!-- 审批进度弹窗 -->
     <WorkflowProgress
@@ -607,7 +606,8 @@
       :business-type="workflowBusinessType"
       :business-id="workflowBusinessId"
     />
-  </template>
+  </div>
+</template>
 
 <script setup lang="ts">
 import WorkflowProgress from '@/components/WorkflowProgress.vue'

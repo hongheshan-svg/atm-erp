@@ -1088,7 +1088,7 @@ const handleGeneratePRFromSelected = () => {
 const handleGeneratePR = () => {
   // 筛选出需要采购的物料（剩余需求 > 0）
   const itemsToOrder = bomItems.value.filter(item => {
-    const remaining = (item.planned_qty || 0) - (item.actual_qty || 0)
+    const remaining = (item.planned_qty || 0) - (item.issued_qty || 0)
     return remaining > 0
   })
   
@@ -1127,7 +1127,7 @@ const generatePurchaseRequest = (itemsToOrder) => {
         item: item.item,
         item_sku: item.item_sku,
         item_name: item.item_name,
-        qty: Math.max(1, (item.planned_qty || 0) - (item.actual_qty || 0)),
+        qty: Math.max(1, (item.planned_qty || 0) - (item.issued_qty || 0)),
         estimated_price: item.estimated_cost || 0
       }))
     }

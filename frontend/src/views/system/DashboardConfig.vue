@@ -265,9 +265,12 @@ const resetToDefault = () => {
 }
 
 const moveWidget = (index, direction) => {
+  if (userConfig.value.widget_order.length === 0) {
+    userConfig.value.widget_order = [...userConfig.value.enabled_widgets]
+  }
   const newIndex = index + direction
   if (newIndex < 0 || newIndex >= userConfig.value.widget_order.length) return
-  
+
   const order = [...userConfig.value.widget_order]
   const [item] = order.splice(index, 1)
   order.splice(newIndex, 0, item)

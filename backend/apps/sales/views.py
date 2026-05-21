@@ -1318,7 +1318,7 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # 创建出库记录
+        # 创建出库记录并更新状态（同一事务保证一致性）
         with transaction.atomic():
             from django.db.models import F
             from django.utils import timezone
@@ -1346,9 +1346,9 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                 SalesOrderLine.objects.filter(pk=line.so_line_id).update(
                     delivered_qty=F('delivered_qty') + line.qty
                 )
-        
-        delivery.status = 'LOGISTICS_BOOKING'
-        delivery.save()
+
+            delivery.status = 'LOGISTICS_BOOKING'
+            delivery.save()
         
         return Response({
             **DeliveryOrderSerializer(delivery).data,

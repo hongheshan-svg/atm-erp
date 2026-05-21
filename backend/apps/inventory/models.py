@@ -14,13 +14,13 @@ class Stock(BaseModel):
     """
     warehouse = models.ForeignKey(
         'masterdata.Warehouse',
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name='stocks',
         verbose_name='仓库'
     )
     item = models.ForeignKey(
         'masterdata.Item',
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name='stocks',
         verbose_name='物料'
     )
@@ -55,8 +55,18 @@ class Stock(BaseModel):
         db_table = 'stock'
         verbose_name = '库存'
         verbose_name_plural = verbose_name
-        unique_together = ['warehouse', 'item']
         ordering = ['warehouse', 'item']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['warehouse', 'item'],
+                condition=models.Q(is_deleted=False),
+                name='stock_unique_active'
+            ),
+            models.CheckConstraint(
+                check=models.Q(qty_on_hand__gte=0),
+                name='stock_qty_non_negative'
+            ),
+        ]
     
     def __str__(self):
         return f"{self.warehouse.code} - {self.item.sku}: {self.qty_on_hand}"
@@ -209,6 +219,10 @@ class StockMove(BaseModel):
         with transaction.atomic():
             try:
                 stock = Stock.objects.select_for_update().get(warehouse=warehouse, item=self.item)
+                if stock.qty_on_hand < qty:
+                    raise ValueError(
+                        f'库存不足: {stock.item} 在 {stock.warehouse} 当前库存 {stock.qty_on_hand}, 需要 {qty}'
+                    )
                 stock.qty_on_hand -= qty
                 stock.save(update_fields=['qty_on_hand'])
             except Stock.DoesNotExist:

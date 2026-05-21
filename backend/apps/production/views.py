@@ -283,10 +283,13 @@ class ProductionLogViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         )
 
 
-class DebugRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class DebugRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     调试记录管理 ViewSet
     """
+    permission_module = 'production'
+    permission_resource = 'debug_record'
+
     queryset = DebugRecord.objects.all()
     serializer_class = DebugRecordSerializer
     permission_classes = [IsAuthenticated]
@@ -401,10 +404,13 @@ class DebugCheckItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
     ordering = ['debug_record', 'sequence']
 
 
-class QualityInspectionViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class QualityInspectionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     质量检验管理 ViewSet
     """
+    permission_module = 'production'
+    permission_resource = 'quality_inspection'
+
     queryset = QualityInspection.objects.all()
     serializer_class = QualityInspectionSerializer
     permission_classes = [IsAuthenticated]

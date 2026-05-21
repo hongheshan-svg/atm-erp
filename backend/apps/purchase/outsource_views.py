@@ -112,6 +112,8 @@ class OutsourceOrderLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
 
 
 class OutsourceMaterialIssueViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+    permission_module = 'purchase'
+    permission_resource = 'outsource_material_issue'
     workflow_business_type = 'OUTSOURCE_MATERIAL_ISSUE'
     workflow_no_field = 'issue_no'
     """
@@ -193,12 +195,16 @@ class OutsourceMaterialIssueLineViewSet(PermissionMixin, SoftDeleteMixin, UserTr
     外协发料单明细管理
     """
 
+    permission_module = 'purchase'
+    permission_resource = 'outsource_material_issue_line'
     queryset = OutsourceMaterialIssueLine.objects.all()
     serializer_class = OutsourceMaterialIssueLineSerializer
     filterset_fields = ['issue', 'item', 'is_deleted']
 
 
 class OutsourceReceiptViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+    permission_module = 'purchase'
+    permission_resource = 'outsource_receipt'
     workflow_business_type = 'OUTSOURCE_RECEIPT'
     workflow_no_field = 'receipt_no'
     """
@@ -315,6 +321,8 @@ class OutsourceReceiptLineViewSet(PermissionMixin, SoftDeleteMixin, UserTracking
     外协收货单明细管理
     """
 
+    permission_module = 'purchase'
+    permission_resource = 'outsource_receipt_line'
     queryset = OutsourceReceiptLine.objects.all()
     serializer_class = OutsourceReceiptLineSerializer
     filterset_fields = ['receipt', 'item', 'quality_status', 'is_deleted']

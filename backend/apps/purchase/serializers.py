@@ -136,6 +136,7 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
             'request_date',
             'tax_amount',
             'total_with_tax',
+            'status',
             'created_at',
             'updated_at',
         ]
@@ -379,11 +380,16 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             'lines_count',
             'total_qty',
         ]
-        read_only_fields = ['order_no', 'order_date', 'tax_amount', 'total_with_tax', 'created_at', 'updated_at']
+        read_only_fields = ['order_no', 'order_date', 'tax_amount', 'total_with_tax', 'status', 'created_at', 'updated_at']
 
     def create(self, validated_data):
         """Create PO with lines."""
         lines_data = self.initial_data.get('lines', [])
+        for line_data in lines_data:
+            if not line_data.get('qty') or float(line_data.get('qty', 0)) <= 0:
+                raise serializers.ValidationError({'lines': '数量必须大于0'})
+            if float(line_data.get('unit_price', 0)) < 0:
+                raise serializers.ValidationError({'lines': '单价不能为负数'})
 
         with transaction.atomic():
             po = PurchaseOrder.objects.create(**validated_data)

@@ -659,6 +659,8 @@ class ReconciliationItemSerializer(serializers.ModelSerializer):
 
 class DataValidationRuleViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """数据校验规则"""
+    permission_module = 'inventory'
+    permission_resource = 'data_validation_rule'
 
     queryset = DataValidationRule.objects.filter(is_deleted=False)
     serializer_class = DataValidationRuleSerializer
@@ -714,6 +716,8 @@ class DataValidationRuleViewSet(PermissionMixin, SoftDeleteMixin, viewsets.Model
 
 class DataValidationResultViewSet(PermissionMixin, viewsets.ModelViewSet):
     """数据校验结果"""
+    permission_module = 'inventory'
+    permission_resource = 'data_validation_result'
 
     queryset = DataValidationResult.objects.filter(is_deleted=False)
     serializer_class = DataValidationResultSerializer
@@ -777,6 +781,8 @@ class DataValidationResultViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class ReconciliationSessionViewSet(PermissionMixin, viewsets.ModelViewSet):
     """对账会话"""
+    permission_module = 'inventory'
+    permission_resource = 'reconciliation_session'
 
     queryset = ReconciliationSession.objects.filter(is_deleted=False)
     serializer_class = ReconciliationSessionSerializer

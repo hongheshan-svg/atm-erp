@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>销售线索管理</span>
-          <el-button type="primary" v-permission="'sales:quotation:create'" @click="handleCreate"><el-icon><Plus /></el-icon> 新建线索</el-button>
+          <el-button type="primary" v-permission="'sales:lead:create'" @click="handleCreate"><el-icon><Plus /></el-icon> 新建线索</el-button>
         </div>
       </template>
 
@@ -86,7 +86,7 @@
         </el-table-column>
         <el-table-column label="操作" :width="canDelete ? 250 : 180" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" v-permission="'sales:quotation:edit'" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" v-permission="'sales:lead:edit'" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" type="success" @click="handleConvert(row)" v-if="row.status !== 'CONVERTED' && row.status !== 'DISQUALIFIED'">转化</el-button>
             <!-- 仅管理员显示删除按钮 -->
             <el-button 

@@ -50,7 +50,7 @@
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" type="warning" @click="handleSubmitApproval(row)" v-if="row.status === 'DRAFT' || row.status === 'REJECTED'">提交审批</el-button>
             <el-button size="small" type="info" @click="showWorkflowProgress(row)" v-if="row.status === 'PENDING'">审批进度</el-button>
-            <el-button size="small" type="success" @click="handleConfirm(row)" v-if="row.status === 'DRAFT' || row.status === 'APPROVED'">确认盘点</el-button>
+            <el-button size="small" type="success" @click="handleConfirm(row)" v-if="row.status === 'APPROVED'">确认盘点</el-button>
             <el-button 
               v-if="canDelete"
               size="small" 
@@ -141,7 +141,6 @@
         <el-button @click="viewDialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
-  </div>
 
     <!-- 审批进度弹窗 -->
     <WorkflowProgress
@@ -149,7 +148,8 @@
       :business-type="workflowBusinessType"
       :business-id="workflowBusinessId"
     />
-  </template>
+  </div>
+</template>
 
 <script setup lang="ts">
 import WorkflowProgress from '@/components/WorkflowProgress.vue'

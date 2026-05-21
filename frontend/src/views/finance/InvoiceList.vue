@@ -650,7 +650,7 @@ const loadReconciliationList = async () => {
   reconciliationLoading.value = true
   try {
     const res = await getInvoiceReconciliations({
-      params: { invoice_type: invoiceType.value }
+      invoice_type: invoiceType.value
     })
     reconciliationList.value = res.results || res || []
   } catch (error) {

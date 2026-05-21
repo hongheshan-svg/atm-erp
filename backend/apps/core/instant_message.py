@@ -315,6 +315,8 @@ class ConversationListSerializer(serializers.ModelSerializer):
 class ConversationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """会话管理"""
 
+    permission_module = 'system'
+    permission_resource = 'conversation'
     queryset = Conversation.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['conversation_type', 'project', 'department']
@@ -435,6 +437,8 @@ class ConversationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
 class MessageViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """消息管理"""
 
+    permission_module = 'system'
+    permission_resource = 'message'
     queryset = Message.objects.filter(is_deleted=False)
     serializer_class = MessageSerializer
     permission_classes = [IsAuthenticated]
@@ -500,6 +504,8 @@ class MessageViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
 class ConversationMemberViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """会话成员管理"""
 
+    permission_module = 'system'
+    permission_resource = 'conversation_member'
     queryset = ConversationMember.objects.filter(is_deleted=False)
     serializer_class = ConversationMemberSerializer
     permission_classes = [IsAuthenticated]

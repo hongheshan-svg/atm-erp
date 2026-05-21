@@ -61,6 +61,8 @@ class SensitiveOperationLogSerializer(serializers.ModelSerializer):
 class LoginLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """ViewSet for login logs."""
 
+    permission_module = 'system'
+    permission_resource = 'login_log'
     serializer_class = LoginLogSerializer
     permission_classes = [IsAuthenticated]
 
@@ -129,6 +131,8 @@ class LoginLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
 class SensitiveOperationLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """ViewSet for sensitive operation logs."""
 
+    permission_module = 'system'
+    permission_resource = 'sensitive_operation_log'
     serializer_class = SensitiveOperationLogSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
     queryset = SensitiveOperationLog.objects.all()

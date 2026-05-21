@@ -568,6 +568,8 @@ class SupplierNotificationSerializer(serializers.ModelSerializer):
 class SupplierPortalUserViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """供应商门户用户管理"""
 
+    permission_module = 'purchase'
+    permission_resource = 'supplier_portal_user'
     queryset = SupplierPortalUser.objects.filter(is_deleted=False)
     serializer_class = SupplierPortalUserSerializer
     permission_classes = [IsAuthenticated]
@@ -578,6 +580,8 @@ class SupplierPortalUserViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
 class RFQCollaborationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """询报价协同管理"""
 
+    permission_module = 'purchase'
+    permission_resource = 'rfq_collaboration'
     queryset = RFQCollaboration.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'buyer', 'project']
@@ -679,6 +683,8 @@ class RFQCollaborationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 class DeliveryCollaborationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """交期协同管理"""
 
+    permission_module = 'purchase'
+    permission_resource = 'delivery_collaboration'
     queryset = DeliveryCollaboration.objects.filter(is_deleted=False)
     serializer_class = DeliveryCollaborationSerializer
     permission_classes = [IsAuthenticated]
@@ -746,6 +752,8 @@ class DeliveryCollaborationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackin
 class QualityCollaborationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """质量协同管理"""
 
+    permission_module = 'purchase'
+    permission_resource = 'quality_collaboration'
     queryset = QualityCollaboration.objects.filter(is_deleted=False)
     serializer_class = QualityCollaborationSerializer
     permission_classes = [IsAuthenticated]
@@ -785,6 +793,8 @@ class QualityCollaborationViewSet(PermissionMixin, SoftDeleteMixin, UserTracking
 class ReconciliationCollaborationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """对账协同管理"""
 
+    permission_module = 'purchase'
+    permission_resource = 'reconciliation_collaboration'
     queryset = ReconciliationCollaboration.objects.filter(is_deleted=False)
     serializer_class = ReconciliationCollaborationSerializer
     permission_classes = [IsAuthenticated]
@@ -845,6 +855,8 @@ class ReconciliationCollaborationViewSet(PermissionMixin, SoftDeleteMixin, UserT
 class SupplierNotificationViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """供应商通知管理"""
 
+    permission_module = 'purchase'
+    permission_resource = 'supplier_notification'
     queryset = SupplierNotification.objects.filter(is_deleted=False)
     serializer_class = SupplierNotificationSerializer
     permission_classes = [IsAuthenticated]

@@ -527,6 +527,8 @@ class BOMCompareViewSet(viewsets.ViewSet):
 
 class BOMSnapshotViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """BOM快照管理"""
+    permission_module = 'projects'
+    permission_resource = 'bom_snapshot'
 
     queryset = BOMSnapshot.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]

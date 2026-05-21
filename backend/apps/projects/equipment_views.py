@@ -38,6 +38,8 @@ class EquipmentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
     """
     设备台账管理
     """
+    permission_module = 'projects'
+    permission_resource = 'equipment'
     queryset = Equipment.objects.select_related('project', 'customer', 'sales_order')
     serializer_class = EquipmentSerializer
     filterset_fields = ['status', 'project', 'customer']
@@ -152,6 +154,8 @@ class EquipmentShipmentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
     """
     设备发货记录管理
     """
+    permission_module = 'projects'
+    permission_resource = 'equipment_shipment'
     queryset = EquipmentShipment.objects.select_related('equipment')
     serializer_class = EquipmentShipmentSerializer
     filterset_fields = ['status', 'equipment']
@@ -178,6 +182,8 @@ class EquipmentInstallationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackin
     """
     现场安装记录管理
     """
+    permission_module = 'projects'
+    permission_resource = 'equipment_installation'
     queryset = EquipmentInstallation.objects.select_related('equipment', 'team_leader')
     serializer_class = EquipmentInstallationSerializer
     filterset_fields = ['status', 'equipment', 'team_leader']
@@ -235,6 +241,8 @@ class InstallationLogViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelVie
     """
     安装日志管理
     """
+    permission_module = 'projects'
+    permission_resource = 'installation_log'
     queryset = InstallationLog.objects.select_related('installation', 'recorded_by')
     serializer_class = InstallationLogSerializer
     filterset_fields = ['installation']
@@ -244,6 +252,8 @@ class EquipmentAcceptanceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
     """
     设备验收记录管理
     """
+    permission_module = 'projects'
+    permission_resource = 'equipment_acceptance'
     queryset = EquipmentAcceptance.objects.select_related('equipment', 'our_representative')
     serializer_class = EquipmentAcceptanceSerializer
     filterset_fields = ['status', 'equipment']
@@ -282,6 +292,8 @@ class MaintenanceScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
     """
     设备保养计划管理
     """
+    permission_module = 'projects'
+    permission_resource = 'maintenance_schedule'
     queryset = MaintenanceSchedule.objects.select_related('equipment')
     serializer_class = MaintenanceScheduleSerializer
     filterset_fields = ['status', 'maintenance_type', 'equipment']
@@ -316,6 +328,8 @@ class TrainingRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
     """
     客户培训记录管理
     """
+    permission_module = 'projects'
+    permission_resource = 'training_record'
     queryset = TrainingRecord.objects.select_related('equipment', 'trainer')
     serializer_class = TrainingRecordSerializer
     filterset_fields = ['training_type', 'equipment', 'trainer']
@@ -330,6 +344,8 @@ class FixtureCategoryViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelVie
     """
     工装分类管理
     """
+    permission_module = 'projects'
+    permission_resource = 'fixture_category'
     queryset = FixtureCategory.objects.all()
     serializer_class = FixtureCategorySerializer
     filterset_fields = ['parent']
@@ -350,6 +366,8 @@ class FixtureViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
     """
     工装夹具管理
     """
+    permission_module = 'projects'
+    permission_resource = 'fixture'
     queryset = Fixture.objects.select_related(
         'category', 'project', 'equipment', 'custodian', 'warehouse', 'supplier'
     )
@@ -480,6 +498,8 @@ class FixtureUsageRecordViewSet(PermissionMixin, SoftDeleteMixin, viewsets.Model
     """
     工装使用记录管理
     """
+    permission_module = 'projects'
+    permission_resource = 'fixture_usage_record'
     queryset = FixtureUsageRecord.objects.select_related('fixture', 'project', 'used_by')
     serializer_class = FixtureUsageRecordSerializer
     filterset_fields = ['fixture', 'project', 'used_by']
@@ -489,6 +509,8 @@ class FixtureCalibrationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
     """
     工装校验记录管理
     """
+    permission_module = 'projects'
+    permission_resource = 'fixture_calibration'
     queryset = FixtureCalibration.objects.select_related('fixture')
     serializer_class = FixtureCalibrationSerializer
     filterset_fields = ['fixture', 'result']
@@ -498,6 +520,8 @@ class FixtureMaintenanceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
     """
     工装维护记录管理
     """
+    permission_module = 'projects'
+    permission_resource = 'fixture_maintenance'
     queryset = FixtureMaintenance.objects.select_related('fixture', 'performed_by')
     serializer_class = FixtureMaintenanceSerializer
     filterset_fields = ['fixture', 'maintenance_type', 'performed_by']

@@ -64,6 +64,13 @@ export function getDataSources() {
   })
 }
 
+export function getAvailableWidgets() {
+  return request({
+    url: '/core/dashboard-widgets/available/',
+    method: 'get'
+  })
+}
+
 // User Dashboard
 export function getUserDashboard() {
   return request({
@@ -72,11 +79,18 @@ export function getUserDashboard() {
   })
 }
 
-export function updateDashboardLayout(layout: any, theme: any) {
+export function updateDashboardLayout(layout: any, theme?: any) {
   return request({
-    url: '/core/user-dashboard/update_layout/',
-    method: 'put',
+    url: '/core/user-dashboard/save_layout/',
+    method: 'post',
     data: { layout, theme }
+  })
+}
+
+export function getMyDashboard() {
+  return request({
+    url: '/core/user-dashboard/my_dashboard/',
+    method: 'get'
   })
 }
 
@@ -84,13 +98,5 @@ export function resetDashboard() {
   return request({
     url: '/core/user-dashboard/reset/',
     method: 'post'
-  })
-}
-
-export function getAllDashboardData(params?: Record<string, any>) {
-  return request({
-    url: '/core/user-dashboard/all_data/',
-    method: 'get',
-    params
   })
 }

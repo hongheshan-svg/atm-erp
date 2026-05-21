@@ -6,7 +6,7 @@
 import request from '@/utils/request'
 
 // ========== MRP增强 = =========
-export function runMRPExplosion(data) {
+export function runMRPExplosion(data: any) {
   return request({ url: '/inventory/mrp/explosion/', method: 'post', data })
 }
 
@@ -45,7 +45,7 @@ export function createStockAdjustment(data: any) {
 }
 
 export function createStockTransfer(data: any) {
-  return request({ url: '/inventory/stock-moves/create_transfer/', method: 'post', data })
+  return request({ url: '/inventory/stock-moves/transfer/', method: 'post', data })
 }
 
 // ========== 库存 ==========
@@ -288,5 +288,5 @@ export function createAndRunReconciliation(data: any) {
   return request({ url: '/inventory/reconciliation-sessions/create_and_run/', method: 'post', data })
 }
 export function getAccuracyReport(params?: Record<string, any>) {
-  return request({ url: '/inventory/accuracy-report/', method: 'get', params })
+  return request({ url: '/inventory/reports/accuracy/', method: 'get', params })
 }

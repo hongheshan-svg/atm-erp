@@ -370,6 +370,8 @@ class CommissioningPlanSerializer(serializers.ModelSerializer):
 
 class CommissioningPlanViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试计划视图集"""
+    permission_module = 'projects'
+    permission_resource = 'commissioning_plan'
 
     queryset = CommissioningPlan.objects.filter(is_deleted=False)
     serializer_class = CommissioningPlanSerializer
@@ -519,6 +521,8 @@ class CommissioningPlanViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class CommissioningTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试任务视图集"""
+    permission_module = 'projects'
+    permission_resource = 'commissioning_task'
 
     queryset = CommissioningTask.objects.filter(is_deleted=False)
     serializer_class = CommissioningTaskSerializer
@@ -563,6 +567,8 @@ class CommissioningTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class CommissioningIssueViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试问题视图集"""
+    permission_module = 'projects'
+    permission_resource = 'commissioning_issue'
 
     queryset = CommissioningIssue.objects.filter(is_deleted=False)
     serializer_class = CommissioningIssueSerializer
@@ -623,6 +629,8 @@ class CommissioningIssueViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class CommissioningParameterViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试参数视图集"""
+    permission_module = 'projects'
+    permission_resource = 'commissioning_parameter'
 
     queryset = CommissioningParameter.objects.filter(is_deleted=False)
     serializer_class = CommissioningParameterSerializer
@@ -656,6 +664,8 @@ class CommissioningParameterViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class CommissioningReportViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试报告视图集"""
+    permission_module = 'projects'
+    permission_resource = 'commissioning_report'
 
     queryset = CommissioningReport.objects.filter(is_deleted=False)
     serializer_class = CommissioningReportSerializer

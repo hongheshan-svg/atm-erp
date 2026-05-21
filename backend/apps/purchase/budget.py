@@ -430,6 +430,8 @@ class BudgetUsageRecordSerializer(serializers.ModelSerializer):
 class PurchaseBudgetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """采购预算管理"""
 
+    permission_module = 'purchase'
+    permission_resource = 'purchase_budget'
     queryset = PurchaseBudget.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['budget_type', 'status', 'year', 'department', 'project']
@@ -563,6 +565,8 @@ class PurchaseBudgetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 class BudgetLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """预算明细管理"""
 
+    permission_module = 'purchase'
+    permission_resource = 'budget_line'
     queryset = BudgetLine.objects.filter(is_deleted=False)
     serializer_class = BudgetLineSerializer
     permission_classes = [IsAuthenticated]

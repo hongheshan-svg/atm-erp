@@ -1,8 +1,10 @@
 import { computed } from 'vue'
 import { useUserStore } from '@/stores/user'
+import { usePermissionStore } from '@/stores/permission'
 
 export function usePermission() {
   const userStore = useUserStore()
+  const permissionStore = usePermissionStore()
 
   const isAdmin = computed(() => {
     return userStore.userInfo?.is_superuser === true
@@ -18,38 +20,37 @@ export function usePermission() {
 
   const canDelete = computed(() => {
     if (isAdmin.value) return true
-
-    if (isAuthenticated.value) {
-      const permissions = (userStore.userInfo as any)?.permissions || []
-      if (permissions.includes('*:*:*')) return true
-      if (permissions.length > 0) {
-        return permissions.some((p: string) => p.includes(':delete') || p.includes(':*'))
-      }
-      return true
+    if (!isAuthenticated.value) return false
+    for (const perm of permissionStore.permissions) {
+      if (perm.endsWith(':delete') || perm === '*') return true
     }
-
     return false
   })
 
   const canEdit = computed(() => {
-    return isAuthenticated.value
+    if (isAdmin.value) return true
+    if (!isAuthenticated.value) return false
+    for (const perm of permissionStore.permissions) {
+      if (perm.endsWith(':edit') || perm === '*') return true
+    }
+    return false
   })
 
   const canCreate = computed(() => {
-    return isAuthenticated.value
+    if (isAdmin.value) return true
+    if (!isAuthenticated.value) return false
+    for (const perm of permissionStore.permissions) {
+      if (perm.endsWith(':create') || perm === '*') return true
+    }
+    return false
   })
 
-  const canView = computed(() => {
-    return isAuthenticated.value
-  })
+  const canView = computed(() => isAuthenticated.value)
 
   const hasPermission = (permission: string): boolean => {
     if (isAdmin.value) return true
     if (!permission) return true
-
-    const permissions = (userStore.userInfo as any)?.permissions || []
-    if (permissions.includes('*:*:*')) return true
-    return permissions.includes(permission)
+    return permissionStore.hasPermission(permission)
   }
 
   return {

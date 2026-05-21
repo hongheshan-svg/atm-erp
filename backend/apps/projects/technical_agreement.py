@@ -268,6 +268,8 @@ class TechnicalAgreementListSerializer(serializers.ModelSerializer):
 
 class TechnicalAgreementTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术协议模板管理"""
+    permission_module = 'projects'
+    permission_resource = 'technical_agreement_template'
     queryset = TechnicalAgreementTemplate.objects.all()
     serializer_class = TechnicalAgreementTemplateSerializer
     filterset_fields = ['category', 'is_active', 'is_deleted']
@@ -284,6 +286,8 @@ class TechnicalAgreementTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTr
 
 class TechnicalAgreementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术协议管理"""
+    permission_module = 'projects'
+    permission_resource = 'technical_agreement'
     queryset = TechnicalAgreement.objects.all()
     filterset_fields = ['project', 'customer', 'status', 'is_deleted']
     search_fields = ['agreement_no', 'name']
@@ -380,6 +384,8 @@ class TechnicalAgreementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
 
 class TechnicalAgreementChangeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """技术协议变更管理"""
+    permission_module = 'projects'
+    permission_resource = 'technical_agreement_change'
     queryset = TechnicalAgreementChange.objects.all()
     serializer_class = TechnicalAgreementChangeSerializer
     filterset_fields = ['agreement', 'change_type', 'status', 'is_deleted']

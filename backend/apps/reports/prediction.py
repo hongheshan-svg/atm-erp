@@ -217,6 +217,8 @@ class RiskAlertSerializer(serializers.ModelSerializer):
 
 
 class PredictionModelViewSet(PermissionMixin, viewsets.ModelViewSet):
+    permission_module = 'reports'
+    permission_resource = 'prediction_model'
     serializer_class = PredictionModelSerializer
     permission_classes = [IsAuthenticated]
 
@@ -228,6 +230,8 @@ class PredictionModelViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 
 class PredictionResultViewSet(PermissionMixin, viewsets.ModelViewSet):
+    permission_module = 'reports'
+    permission_resource = 'prediction_result'
     serializer_class = PredictionResultSerializer
     permission_classes = [IsAuthenticated]
 
@@ -243,6 +247,8 @@ class PredictionResultViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 
 class RiskAlertViewSet(PermissionMixin, viewsets.ModelViewSet):
+    permission_module = 'reports'
+    permission_resource = 'risk_alert'
     serializer_class = RiskAlertSerializer
     permission_classes = [IsAuthenticated]
 

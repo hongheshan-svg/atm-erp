@@ -945,7 +945,7 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
         with transaction.atomic():
             po.status = 'CONFIRMED'
             po.save()
-        
+
             # 更新BOM状态：PR_APPROVED -> ORDERED（订单确认时才真正"已下单"）
             from apps.projects.models import ProjectBOM
             if po.project:
@@ -961,29 +961,29 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                         bom.order_status = 'ORDERED'
                         bom.ordered_qty = (bom.ordered_qty or 0) + po_line.qty
                         bom.save(update_fields=['order_status', 'ordered_qty'])
-            
-        # Auto-create AP - 使用含税金额（避免重复创建）
-        from apps.finance.models import AccountPayable, PurchasePaymentSchedule
-        
-        # 检查是否已存在该PO的应付账款
-        existing_ap = AccountPayable.objects.filter(po=po, is_deleted=False).first()
-        if not existing_ap:
-            AccountPayable.objects.create(
-                supplier=po.supplier,
-                po=po,
-                project=po.project,
-                invoice_date=po.order_date,
-                amount_due=po.total_with_tax or po.total_amount,  # 优先使用含税金额
-                due_date=request.data.get('due_date', po.delivery_date),
-                created_by=request.user
-            )
-        
-        # 自动生成付款计划（避免重复创建）
-        existing_schedules = PurchasePaymentSchedule.objects.filter(purchase_order=po, is_deleted=False).exists()
-        if existing_schedules:
-            schedules = []
-        else:
-            schedules = PurchasePaymentSchedule.generate_from_purchase_order(po)
+
+            # Auto-create AP - 使用含税金额（避免重复创建）
+            from apps.finance.models import AccountPayable, PurchasePaymentSchedule
+
+            # 检查是否已存在该PO的应付账款
+            existing_ap = AccountPayable.objects.filter(po=po, is_deleted=False).first()
+            if not existing_ap:
+                AccountPayable.objects.create(
+                    supplier=po.supplier,
+                    po=po,
+                    project=po.project,
+                    invoice_date=po.order_date,
+                    amount_due=po.total_with_tax or po.total_amount,  # 优先使用含税金额
+                    due_date=request.data.get('due_date', po.delivery_date),
+                    created_by=request.user
+                )
+
+            # 自动生成付款计划（避免重复创建）
+            existing_schedules = PurchasePaymentSchedule.objects.filter(purchase_order=po, is_deleted=False).exists()
+            if existing_schedules:
+                schedules = []
+            else:
+                schedules = PurchasePaymentSchedule.generate_from_purchase_order(po)
         
         response_data = PurchaseOrderSerializer(po).data
         response_data['payment_schedules_count'] = len(schedules)
@@ -1310,10 +1310,13 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
         })
 
 
-class GoodsReceiptLineViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class GoodsReceiptLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for GoodsReceiptLine management.
     """
+    permission_module = 'purchase'
+    permission_resource = 'goods_receipt_line'
+
     queryset = GoodsReceiptLine.objects.all()
     serializer_class = GoodsReceiptLineSerializer
     filterset_fields = ['receipt', 'item', 'quality_status', 'is_deleted']

@@ -30,6 +30,8 @@ class BugViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """
     Bug管理视图集
     """
+    permission_module = 'projects'
+    permission_resource = 'bug'
 
     queryset = Bug.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
@@ -264,6 +266,8 @@ class BugCommentViewSet(PermissionMixin, viewsets.ModelViewSet):
     """
     Bug评论视图集
     """
+    permission_module = 'projects'
+    permission_resource = 'bug_comment'
 
     queryset = BugComment.objects.all()
     serializer_class = BugCommentSerializer
@@ -286,6 +290,8 @@ class BugAttachmentViewSet(PermissionMixin, viewsets.ModelViewSet):
     """
     Bug附件视图集
     """
+    permission_module = 'projects'
+    permission_resource = 'bug_attachment'
 
     queryset = BugAttachment.objects.all()
     serializer_class = BugAttachmentSerializer

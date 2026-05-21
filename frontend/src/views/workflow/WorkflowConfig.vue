@@ -539,6 +539,10 @@ const loadWorkflows = async () => {
   try {
     const res = await getWorkflowDefinitions()
     workflows.value = res.results || res || []
+    if (selectedWorkflow.value) {
+      const updated = workflows.value.find(w => w.id === selectedWorkflow.value.id)
+      selectedWorkflow.value = updated || null
+    }
   } catch (error) {
     workflows.value = []
   } finally {

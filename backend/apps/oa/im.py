@@ -326,6 +326,8 @@ class IMConversationDetailSerializer(IMConversationSerializer):
 
 class IMConversationViewSet(PermissionMixin, viewsets.ModelViewSet):
     """IM会话管理"""
+    permission_module = 'oa'
+    permission_resource = 'im_conversation'
     serializer_class = IMConversationSerializer
     permission_classes = [IsAuthenticated]
     
@@ -518,6 +520,8 @@ class IMConversationViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class IMMessageViewSet(PermissionMixin, viewsets.ModelViewSet):
     """IM消息管理"""
+    permission_module = 'oa'
+    permission_resource = 'im_message'
     serializer_class = IMMessageSerializer
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]

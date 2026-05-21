@@ -1,14 +1,4 @@
-await patchSalesContract(form.id, {
-      title: form.title,
-      contract_date: form.contract_date,
-      effective_date: form.effective_date || null,
-      expiry_date: form.expiry_date || null,
-      payment_terms: form.payment_terms,
-      delivery_terms: form.delivery_terms,
-      quality_terms: form.quality_terms,
-      warranty_terms: form.warranty_terms,
-      notes: form.notes
-    })<template>
+<template>
   <div class="sales-contract-list">
     <el-card>
       <template #header>
@@ -271,8 +261,6 @@ await patchSalesContract(form.id, {
         <el-button type="primary" @click="handleSignSubmit" :loading="signing">确认签署</el-button>
       </template>
     </el-dialog>
-    
-  </div>
 
     <!-- 审批进度弹窗 -->
     <WorkflowProgress
@@ -280,7 +268,8 @@ await patchSalesContract(form.id, {
       :business-type="workflowBusinessType"
       :business-id="workflowBusinessId"
     />
-  </template>
+  </div>
+</template>
 
 <script setup lang="ts">
 import WorkflowProgress from '@/components/WorkflowProgress.vue'

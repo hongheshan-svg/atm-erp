@@ -3,7 +3,7 @@
     <div class="page-header">
       <h2>数据字典管理</h2>
       <div class="header-actions">
-        <el-button type="primary" @click="showTypeDialog = true">
+        <el-button type="primary" @click="editingType = null; Object.assign(typeForm, { code: '', name: '', sort_order: 0, description: '' }); showTypeDialog = true">
           <el-icon><Plus /></el-icon>
           新增字典类型
         </el-button>
@@ -52,7 +52,7 @@
               <span class="code-badge">{{ selectedType.code }}</span>
             </div>
             <div class="panel-actions">
-              <el-button type="primary" size="small" @click="showItemDialog = true">
+              <el-button type="primary" size="small" @click="editingItem = null; Object.assign(itemForm, { value: '', label: '', color: '', sort_order: 0, is_default: false, description: '' }); showItemDialog = true">
                 <el-icon><Plus /></el-icon>
                 新增字典项
               </el-button>
@@ -251,7 +251,7 @@ const selectType = async (type) => {
   selectedType.value = type
   try {
     const res = await getDictItemList({
-      params: { dict_type: type.id }
+      dict_type: type.id
     })
     dictItems.value = res.results || res || []
   } catch (e) {

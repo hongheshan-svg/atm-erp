@@ -730,6 +730,8 @@ class CADPropertyMappingSerializer(serializers.ModelSerializer):
 
 class CADSoftwareViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """CAD软件管理"""
+    permission_module = 'projects'
+    permission_resource = 'cad_software'
 
     queryset = CADSoftware.objects.filter(is_deleted=False)
     serializer_class = CADSoftwareSerializer
@@ -786,6 +788,8 @@ class CADSoftwareViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
 
 class CADSessionViewSet(PermissionMixin, viewsets.ModelViewSet):
     """CAD会话管理"""
+    permission_module = 'projects'
+    permission_resource = 'cad_session'
 
     queryset = CADSession.objects.filter(is_deleted=False)
     serializer_class = CADSessionSerializer
@@ -829,6 +833,8 @@ class CADSessionViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class CADFileViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """CAD文件管理"""
+    permission_module = 'projects'
+    permission_resource = 'cad_file'
 
     queryset = CADFile.objects.filter(is_deleted=False)
     serializer_class = CADFileSerializer
@@ -889,6 +895,8 @@ class CADFileViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
 
 class CADBOMImportViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """CAD BOM导入管理"""
+    permission_module = 'projects'
+    permission_resource = 'cad_bom_import'
 
     queryset = CADBOMImport.objects.filter(is_deleted=False)
     serializer_class = CADBOMImportSerializer
@@ -971,6 +979,8 @@ class CADBOMImportViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
 
 class CADPropertyMappingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """CAD属性映射管理"""
+    permission_module = 'projects'
+    permission_resource = 'cad_property_mapping'
 
     queryset = CADPropertyMapping.objects.filter(is_deleted=False)
     serializer_class = CADPropertyMappingSerializer

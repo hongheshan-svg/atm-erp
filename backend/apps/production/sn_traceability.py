@@ -407,6 +407,8 @@ class SNRuleSerializer(serializers.ModelSerializer):
 
 class SNRuleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """序列号规则管理"""
+    permission_module = 'production'
+    permission_resource = 'sn_rule'
     queryset = SNRule.objects.all()
     serializer_class = SNRuleSerializer
     filterset_fields = ['item_category', 'is_active', 'is_deleted']
@@ -416,6 +418,8 @@ class SNRuleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewset
 
 class SerialNumberViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """序列号管理"""
+    permission_module = 'production'
+    permission_resource = 'serial_number'
     queryset = SerialNumber.objects.all()
     filterset_fields = ['item', 'project', 'customer', 'status', 'is_deleted']
     search_fields = ['serial_number', 'batch_no']
@@ -623,6 +627,8 @@ class SerialNumberViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
 
 class SNTraceRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """序列号追溯记录管理"""
+    permission_module = 'production'
+    permission_resource = 'sn_trace_record'
     queryset = SNTraceRecord.objects.all()
     serializer_class = SNTraceRecordSerializer
     filterset_fields = ['serial_number', 'operation', 'operator', 'is_deleted']
@@ -632,6 +638,8 @@ class SNTraceRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 
 class ComponentBindingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """组件绑定管理"""
+    permission_module = 'production'
+    permission_resource = 'component_binding'
     queryset = ComponentBinding.objects.all()
     serializer_class = ComponentBindingSerializer
     filterset_fields = ['parent_sn', 'child_sn', 'is_active', 'is_deleted']

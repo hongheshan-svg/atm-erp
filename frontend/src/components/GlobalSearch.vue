@@ -183,11 +183,11 @@ const performSearch = async () => {
 }
 
 const viewDetails = (item, type) => {
-  // Navigate to detail page based on type
+  // Navigate to list page based on type (detail routes don't exist for masterdata)
   const routes = {
-    'item': `/items/${item.id}`,
-    'customer': `/customers/${item.id}`,
-    'supplier': `/suppliers/${item.id}`,
+    'item': '/masterdata/items',
+    'customer': '/masterdata/customers',
+    'supplier': '/masterdata/suppliers',
     'project': `/projects/${item.id}`
   }
 

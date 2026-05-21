@@ -113,6 +113,16 @@ class UserDashboard(models.Model):
     def __str__(self):
         return f"{self.user.username}'s Dashboard"
 
+    def reset_to_default(self):
+        """重置为默认布局"""
+        default_widgets = DashboardWidget.objects.filter(is_active=True, is_system=True)
+        self.layout = [
+            {'widget': w.code, 'x': 0, 'y': i, 'w': w.default_width, 'h': 1}
+            for i, w in enumerate(default_widgets[:6])
+        ]
+        self.theme = 'light'
+        self.save()
+
 
 class DashboardDataService:
     """

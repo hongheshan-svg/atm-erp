@@ -345,6 +345,8 @@ class BOMComparisonSerializer(serializers.ModelSerializer):
 
 class BOMSubstituteViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """BOM替代料管理"""
+    permission_module = 'projects'
+    permission_resource = 'bom_substitute'
 
     queryset = BOMSubstitute.objects.filter(is_deleted=False)
     serializer_class = BOMSubstituteSerializer
@@ -397,6 +399,8 @@ class BOMSubstituteViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 
 class BOMVersionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """BOM版本管理"""
+    permission_module = 'projects'
+    permission_resource = 'bom_version'
 
     queryset = BOMVersion.objects.filter(is_deleted=False)
     serializer_class = BOMVersionSerializer
@@ -453,6 +457,8 @@ class BOMVersionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
 
 class BOMComparisonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """BOM对比管理"""
+    permission_module = 'projects'
+    permission_resource = 'bom_comparison'
 
     queryset = BOMComparison.objects.filter(is_deleted=False)
     serializer_class = BOMComparisonSerializer

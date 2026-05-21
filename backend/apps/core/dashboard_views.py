@@ -32,6 +32,8 @@ class UserDashboardSerializer(serializers.ModelSerializer):
 
 class DashboardWidgetViewSet(PermissionMixin, viewsets.ModelViewSet):
     """仪表盘组件管理"""
+    permission_module = 'system'
+    permission_resource = 'dashboard_widget'
     queryset = DashboardWidget.objects.all()
     serializer_class = DashboardWidgetSerializer
     filterset_fields = ['widget_type', 'data_source', 'is_active']
@@ -57,9 +59,27 @@ class DashboardWidgetViewSet(PermissionMixin, viewsets.ModelViewSet):
         widgets = self.get_queryset().filter(is_active=True)
         return Response(DashboardWidgetSerializer(widgets, many=True).data)
 
+    @action(detail=False, methods=['get'])
+    def widget_types(self, request):
+        """获取组件类型选项"""
+        return Response([
+            {'value': choice[0], 'label': choice[1]}
+            for choice in DashboardWidget.WIDGET_TYPES
+        ])
+
+    @action(detail=False, methods=['get'])
+    def data_sources(self, request):
+        """获取数据源选项"""
+        return Response([
+            {'value': choice[0], 'label': choice[1]}
+            for choice in DashboardWidget.DATA_SOURCES
+        ])
+
 
 class UserDashboardViewSet(PermissionMixin, viewsets.ModelViewSet):
     """用户仪表盘配置"""
+    permission_module = 'system'
+    permission_resource = 'user_dashboard'
     queryset = UserDashboard.objects.all()
     serializer_class = UserDashboardSerializer
     

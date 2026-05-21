@@ -345,6 +345,8 @@ class MobileNotificationSerializer(serializers.ModelSerializer):
 class MobileTimeEntryViewSet(PermissionMixin, viewsets.ModelViewSet):
     """移动工时填报"""
 
+    permission_module = 'system'
+    permission_resource = 'mobile_time_entry'
     queryset = MobileTimeEntry.objects.filter(is_deleted=False)
     serializer_class = MobileTimeEntrySerializer
     permission_classes = [IsAuthenticated]
@@ -427,6 +429,8 @@ class MobileTimeEntryViewSet(PermissionMixin, viewsets.ModelViewSet):
 class MobilePhotoViewSet(PermissionMixin, viewsets.ModelViewSet):
     """移动端照片管理"""
 
+    permission_module = 'system'
+    permission_resource = 'mobile_photo'
     queryset = MobilePhoto.objects.filter(is_deleted=False)
     serializer_class = MobilePhotoSerializer
     permission_classes = [IsAuthenticated]
@@ -476,6 +480,8 @@ class MobilePhotoViewSet(PermissionMixin, viewsets.ModelViewSet):
 class MobileScanRecordViewSet(PermissionMixin, viewsets.ModelViewSet):
     """扫码记录管理"""
 
+    permission_module = 'system'
+    permission_resource = 'mobile_scan_record'
     queryset = MobileScanRecord.objects.filter(is_deleted=False)
     serializer_class = MobileScanRecordSerializer
     permission_classes = [IsAuthenticated]
@@ -596,6 +602,8 @@ class MobileScanRecordViewSet(PermissionMixin, viewsets.ModelViewSet):
 class MobileApprovalViewSet(PermissionMixin, viewsets.ModelViewSet):
     """移动审批管理"""
 
+    permission_module = 'system'
+    permission_resource = 'mobile_approval'
     queryset = MobileApproval.objects.filter(is_deleted=False)
     serializer_class = MobileApprovalSerializer
     permission_classes = [IsAuthenticated]
@@ -734,6 +742,8 @@ class MobileApprovalViewSet(PermissionMixin, viewsets.ModelViewSet):
 class MobileNotificationViewSet(PermissionMixin, viewsets.ModelViewSet):
     """移动通知管理"""
 
+    permission_module = 'system'
+    permission_resource = 'mobile_notification'
     queryset = MobileNotification.objects.filter(is_deleted=False)
     serializer_class = MobileNotificationSerializer
     permission_classes = [IsAuthenticated]

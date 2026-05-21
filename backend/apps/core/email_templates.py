@@ -299,6 +299,8 @@ class EmailTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
     邮件模板管理
     """
 
+    permission_module = 'system'
+    permission_resource = 'email_template'
     queryset = EmailTemplate.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['template_type', 'is_enabled', 'is_system']
@@ -521,6 +523,8 @@ class EmailLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     邮件日志（只读）
     """
 
+    permission_module = 'system'
+    permission_resource = 'email_log'
     queryset = EmailLog.objects.all()
     serializer_class = EmailLogSerializer
     permission_classes = [IsAuthenticated]

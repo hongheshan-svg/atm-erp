@@ -130,7 +130,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import request from '@/utils/request'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
@@ -279,6 +279,12 @@ const renderHourlyChart = () => {
 onMounted(() => {
   fetchStats()
   fetchSecurityData()
+})
+
+onUnmounted(() => {
+  trendChartInstance?.dispose()
+  pieChartInstance?.dispose()
+  hourlyChartInstance?.dispose()
 })
 </script>
 

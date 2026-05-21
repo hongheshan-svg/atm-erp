@@ -309,6 +309,8 @@ class CreditAdjustmentSerializer(serializers.ModelSerializer):
 class CreditLevelViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """信用等级管理"""
 
+    permission_module = 'masterdata'
+    permission_resource = 'credit_level'
     queryset = CreditLevel.objects.filter(is_deleted=False)
     serializer_class = CreditLevelSerializer
     permission_classes = [IsAuthenticated]
@@ -348,6 +350,8 @@ class CreditLevelViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
 class CustomerCreditViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """客户信用管理"""
 
+    permission_module = 'masterdata'
+    permission_resource = 'customer_credit'
     queryset = CustomerCredit.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['credit_level', 'status']
@@ -501,6 +505,8 @@ class CustomerCreditViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 class CreditAdjustmentViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """信用调整记录"""
 
+    permission_module = 'masterdata'
+    permission_resource = 'credit_adjustment'
     queryset = CreditAdjustment.objects.filter(is_deleted=False)
     serializer_class = CreditAdjustmentSerializer
     permission_classes = [IsAuthenticated]

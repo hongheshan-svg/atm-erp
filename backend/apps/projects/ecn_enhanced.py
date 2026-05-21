@@ -294,6 +294,8 @@ class ECNChangeRequestSerializer(serializers.ModelSerializer):
 class ECNChangeRequestViewSet(PermissionMixin, viewsets.ModelViewSet):
     """设计变更申请管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'ecn_change_request'
     queryset = ECNChangeRequest.objects.filter(is_deleted=False)
     serializer_class = ECNChangeRequestSerializer
     permission_classes = [IsAuthenticated]
@@ -499,6 +501,8 @@ class ECNChangeRequestViewSet(PermissionMixin, viewsets.ModelViewSet):
 class ECNAffectedItemViewSet(PermissionMixin, viewsets.ModelViewSet):
     """变更影响物料管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'ecn_affected_item'
     queryset = ECNAffectedItem.objects.filter(is_deleted=False)
     serializer_class = ECNAffectedItemSerializer
     permission_classes = [IsAuthenticated]
@@ -514,6 +518,8 @@ class ECNAffectedItemViewSet(PermissionMixin, viewsets.ModelViewSet):
 class ECNReviewRecordViewSet(PermissionMixin, viewsets.ModelViewSet):
     """变更评审记录管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'ecn_review_record'
     queryset = ECNReviewRecord.objects.filter(is_deleted=False)
     serializer_class = ECNReviewRecordSerializer
     permission_classes = [IsAuthenticated]
@@ -543,6 +549,8 @@ class ECNReviewRecordViewSet(PermissionMixin, viewsets.ModelViewSet):
 class ECNImplementationViewSet(PermissionMixin, viewsets.ModelViewSet):
     """变更实施记录管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'ecn_implementation'
     queryset = ECNImplementation.objects.filter(is_deleted=False)
     serializer_class = ECNImplementationSerializer
     permission_classes = [IsAuthenticated]

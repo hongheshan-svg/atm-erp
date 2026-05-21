@@ -337,6 +337,8 @@ class MeetingListSerializer(serializers.ModelSerializer):
 class ScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """日程管理"""
 
+    permission_module = 'system'
+    permission_resource = 'schedule'
     queryset = Schedule.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['schedule_type', 'owner', 'project', 'customer']
@@ -409,6 +411,8 @@ class ScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, views
 class MeetingRoomViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """会议室管理"""
 
+    permission_module = 'system'
+    permission_resource = 'meeting_room'
     queryset = MeetingRoom.objects.filter(is_deleted=False)
     serializer_class = MeetingRoomSerializer
     permission_classes = [IsAuthenticated]
@@ -438,6 +442,8 @@ class MeetingRoomViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
 class MeetingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """会议管理"""
 
+    permission_module = 'system'
+    permission_resource = 'meeting'
     queryset = Meeting.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'organizer', 'project', 'meeting_room']

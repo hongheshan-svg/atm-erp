@@ -36,6 +36,8 @@ class SupplierEvaluationTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTr
     评价模板管理
     """
 
+    permission_module = 'purchase'
+    permission_resource = 'supplier_evaluation_template'
     queryset = SupplierEvaluationTemplate.objects.all()
     serializer_class = SupplierEvaluationTemplateSerializer
     permission_classes = [IsAuthenticated]
@@ -101,6 +103,8 @@ class EvaluationCriteriaViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
     评价指标管理
     """
 
+    permission_module = 'purchase'
+    permission_resource = 'evaluation_criteria'
     queryset = EvaluationCriteria.objects.all()
     serializer_class = EvaluationCriteriaSerializer
     permission_classes = [IsAuthenticated]
@@ -268,6 +272,8 @@ class EvaluationScoreItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
     评价得分明细管理
     """
 
+    permission_module = 'purchase'
+    permission_resource = 'evaluation_score_item'
     queryset = EvaluationScoreItem.objects.all()
     serializer_class = EvaluationScoreItemSerializer
     permission_classes = [IsAuthenticated]
@@ -279,6 +285,8 @@ class SupplierGradeHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet
     供应商等级变更历史（只读）
     """
 
+    permission_module = 'purchase'
+    permission_resource = 'supplier_grade_history'
     queryset = SupplierGradeHistory.objects.all()
     serializer_class = SupplierGradeHistorySerializer
     permission_classes = [IsAuthenticated]

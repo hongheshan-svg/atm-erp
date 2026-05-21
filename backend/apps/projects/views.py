@@ -99,18 +99,37 @@ class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewse
     @action(detail=True, methods=['post'])
     def change_status(self, request, pk=None):
         """Change project status."""
+        ALLOWED_TRANSITIONS = {
+            'DRAFT': ['PLANNING', 'CANCELLED'],
+            'PLANNING': ['IN_PROGRESS', 'DRAFT', 'CANCELLED'],
+            'IN_PROGRESS': ['DEBUGGING', 'ON_HOLD', 'CANCELLED'],
+            'DEBUGGING': ['INSTALLATION', 'IN_PROGRESS', 'ON_HOLD'],
+            'INSTALLATION': ['ACCEPTANCE', 'DEBUGGING', 'ON_HOLD'],
+            'ACCEPTANCE': ['COMPLETED', 'INSTALLATION'],
+            'ON_HOLD': ['IN_PROGRESS', 'DEBUGGING', 'INSTALLATION', 'CANCELLED'],
+            'COMPLETED': ['WARRANTY'],
+            'WARRANTY': ['CLOSED'],
+        }
+
         project = self.get_object()
         new_status = request.data.get('status')
-        
+
         if new_status not in dict(Project.STATUS_CHOICES):
             return Response(
                 {'error': '无效的状态'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
+        allowed = ALLOWED_TRANSITIONS.get(project.status, [])
+        if new_status not in allowed:
+            return Response(
+                {'error': f'不允许从 {project.status} 转换到 {new_status}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         project.status = new_status
         project.save()
-        
+
         return Response(ProjectSerializer(project).data)
     
     @action(detail=True, methods=['get'])
@@ -151,10 +170,13 @@ class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewse
         })
 
 
-class ProjectMemberViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProjectMemberViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for ProjectMember management.
     """
+    permission_module = 'projects'
+    permission_resource = 'project_member'
+
     queryset = ProjectMember.objects.all()
     serializer_class = ProjectMemberSerializer
     filterset_fields = ['project', 'user', 'is_active', 'is_deleted']
@@ -179,10 +201,13 @@ class ProjectMemberViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         return Response(ProjectMemberSerializer(member).data)
 
 
-class ProjectTaskViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProjectTaskViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for ProjectTask management.
     """
+    permission_module = 'projects'
+    permission_resource = 'project_task'
+
     queryset = ProjectTask.objects.all()
     serializer_class = ProjectTaskSerializer
     filterset_fields = ['project', 'assignee', 'status', 'parent', 'is_deleted']
@@ -286,10 +311,13 @@ class ProjectTaskViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
         })
 
 
-class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for ProjectBOM management.
     """
+    permission_module = 'projects'
+    permission_resource = 'project_bom'
+
     queryset = ProjectBOM.objects.all()
     serializer_class = ProjectBOMSerializer
     filterset_fields = ['project', 'item', 'is_deleted', 'quote_status', 'order_status', 'has_drawing']
@@ -2341,10 +2369,13 @@ class ProjectBOMViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSe
         })
 
 
-class TimeLogViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class TimeLogViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for TimeLog management.
     """
+    permission_module = 'projects'
+    permission_resource = 'time_log'
+
     queryset = TimeLog.objects.all()
     serializer_class = TimeLogSerializer
     filterset_fields = ['project', 'task', 'user', 'status', 'is_deleted']
@@ -2767,10 +2798,13 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
             )
 
 
-class ECNItemViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ECNItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for ECN Item management.
     """
+    permission_module = 'projects'
+    permission_resource = 'ecn_item'
+
     queryset = ECNItem.objects.all()
     serializer_class = ECNItemSerializer
     filterset_fields = ['ecn', 'change_type', 'item']
@@ -2965,10 +2999,13 @@ class AfterSalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin
         })
 
 
-class ServiceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class ServiceRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     服务记录管理视图
     """
+    permission_module = 'projects'
+    permission_resource = 'service_record'
+
     queryset = ServiceRecord.objects.all()
     serializer_class = ServiceRecordSerializer
     filterset_fields = ['aftersales_order', 'service_type', 'technician', 'service_date']
@@ -2993,10 +3030,13 @@ class ServiceRecordViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVie
         order.save()
 
 
-class SparePartUsageViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SparePartUsageViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     备件使用记录管理视图
     """
+    permission_module = 'projects'
+    permission_resource = 'spare_part_usage'
+
     queryset = SparePartUsage.objects.all()
     serializer_class = SparePartUsageSerializer
     filterset_fields = ['aftersales_order', 'service_record', 'item', 'is_warranty']
@@ -3019,10 +3059,13 @@ class SparePartUsageViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelVi
         order.save()
 
 
-class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class DrawingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     图纸管理视图
     """
+    permission_module = 'projects'
+    permission_resource = 'drawing'
+
     queryset = Drawing.objects.all()
     serializer_class = DrawingSerializer
     parser_classes = [JSONParser, MultiPartParser, FormParser]
@@ -3427,10 +3470,13 @@ class DrawingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
             pass  # 邮件发送失败不影响主流程
 
 
-class DrawingChangeNoticeViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class DrawingChangeNoticeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     图纸变更通知视图
     """
+    permission_module = 'projects'
+    permission_resource = 'drawing_change_notice'
+
     queryset = DrawingChangeNotice.objects.all()
     serializer_class = DrawingChangeNoticeSerializer
     filterset_fields = ['drawing', 'change_type', 'email_sent']

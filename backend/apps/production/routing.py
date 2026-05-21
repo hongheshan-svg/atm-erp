@@ -520,6 +520,8 @@ class ProjectRoutingSerializer(serializers.ModelSerializer):
 class WorkStationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """工位管理"""
 
+    permission_module = 'production'
+    permission_resource = 'work_station'
     queryset = WorkStation.objects.filter(is_deleted=False)
     serializer_class = WorkStationSerializer
     permission_classes = [IsAuthenticated]
@@ -542,6 +544,8 @@ class WorkStationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
 class RoutingTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """工艺路线模板管理"""
 
+    permission_module = 'production'
+    permission_resource = 'routing_template'
     queryset = RoutingTemplate.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'product_category', 'is_active', 'is_current']
@@ -673,6 +677,8 @@ class RoutingTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
 class RoutingOperationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """工艺工序管理"""
 
+    permission_module = 'production'
+    permission_resource = 'routing_operation'
     queryset = RoutingOperation.objects.filter(is_deleted=False)
     serializer_class = RoutingOperationSerializer
     permission_classes = [IsAuthenticated]
@@ -690,6 +696,8 @@ class RoutingOperationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 class ProjectRoutingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目工艺路线管理"""
 
+    permission_module = 'production'
+    permission_resource = 'project_routing'
     queryset = ProjectRouting.objects.filter(is_deleted=False)
     serializer_class = ProjectRoutingSerializer
     permission_classes = [IsAuthenticated]
@@ -728,6 +736,8 @@ class ProjectRoutingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 class ProjectRoutingOperationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目工艺工序管理"""
 
+    permission_module = 'production'
+    permission_resource = 'project_routing_operation'
     queryset = ProjectRoutingOperation.objects.filter(is_deleted=False)
     serializer_class = ProjectRoutingOperationSerializer
     permission_classes = [IsAuthenticated]

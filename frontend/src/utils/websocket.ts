@@ -5,6 +5,7 @@ class WebSocketService {
   private reconnectAttempts = 0
   private maxReconnectAttempts = 5
   private reconnectDelay = 3000
+  private intentionalClose = false
   private pingInterval: ReturnType<typeof setInterval> | null = null
   private listeners: Record<string, EventCallback[]> = {
     notification: [],
@@ -23,7 +24,7 @@ class WebSocketService {
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = window.location.host || 'localhost:8000'
-    const wsUrl = `${protocol}//${host}/ws/${endpoint}/`
+    const wsUrl = `${protocol}//${host}/ws/${endpoint}/?token=${token}`
 
     try {
       this.ws = new WebSocket(wsUrl)
@@ -50,6 +51,10 @@ class WebSocketService {
 
       this.ws.onclose = () => {
         this.emit('connection', { status: 'disconnected', endpoint })
+        if (this.intentionalClose) {
+          this.intentionalClose = false
+          return
+        }
         this.attemptReconnect(endpoint)
       }
     } catch (error) {
@@ -138,6 +143,7 @@ class WebSocketService {
     }
 
     if (this.ws) {
+      this.intentionalClose = true
       this.ws.close()
       this.ws = null
     }

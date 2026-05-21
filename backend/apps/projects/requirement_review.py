@@ -379,6 +379,8 @@ class RequirementReviewListSerializer(serializers.ModelSerializer):
 class ReviewTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """评审模板管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'review_template'
     queryset = ReviewTemplate.objects.filter(is_deleted=False)
     serializer_class = ReviewTemplateSerializer
     permission_classes = [IsAuthenticated]
@@ -406,6 +408,8 @@ class ReviewTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 class RequirementReviewViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """需求评审管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'requirement_review'
     queryset = RequirementReview.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['requirement', 'status', 'result', 'organizer', 'template']
@@ -547,6 +551,8 @@ class RequirementReviewViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
 class ReviewActionItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """评审行动项管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'review_action_item'
     queryset = ReviewActionItem.objects.filter(is_deleted=False)
     serializer_class = ReviewActionItemSerializer
     permission_classes = [IsAuthenticated]

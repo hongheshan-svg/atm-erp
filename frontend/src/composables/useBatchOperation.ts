@@ -13,6 +13,7 @@ interface BatchOperationOptions {
 }
 
 export function useBatchOperation(apiEndpoint: string, options: BatchOperationOptions = {}) {
+  const normalizedEndpoint = apiEndpoint.startsWith('/api/') ? apiEndpoint.slice(4) : apiEndpoint
   const selectedRows = ref<any[]>([])
   const loading = ref(false)
 
@@ -53,7 +54,7 @@ export function useBatchOperation(apiEndpoint: string, options: BatchOperationOp
       )
       loading.value = true
       const ids = getSelectedIds()
-      await Promise.all(ids.map(id => request.delete(`${apiEndpoint}${id}/`)))
+      await Promise.all(ids.map(id => request.delete(`${normalizedEndpoint}${id}/`)))
       ElMessage.success(`${config.successMessage}（共 ${ids.length} 条）`)
       selectedRows.value = []
       config.onSuccess()
@@ -74,7 +75,7 @@ export function useBatchOperation(apiEndpoint: string, options: BatchOperationOp
         confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning',
       })
       loading.value = true
-      await request.delete(`${apiEndpoint}${row[config.idField]}/`)
+      await request.delete(`${normalizedEndpoint}${row[config.idField]}/`)
       ElMessage.success(config.successMessage)
       config.onSuccess()
     } catch (error) {
@@ -126,7 +127,7 @@ export function useBatchOperation(apiEndpoint: string, options: BatchOperationOp
       loading.value = true
       const ids = getSelectedIds()
       await Promise.all(ids.map(id =>
-        request.patch(`${apiEndpoint}${id}/`, { [statusField]: newStatus })
+        request.patch(`${normalizedEndpoint}${id}/`, { [statusField]: newStatus })
       ))
       ElMessage.success(`已更新 ${ids.length} 条记录`)
       selectedRows.value = []

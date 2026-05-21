@@ -290,10 +290,14 @@ const rules = {
 }
 
 // 日期限制：任务开始/结束不可选过去日期；工时填报仅限当天
-const today = new Date()
-today.setHours(0, 0, 0, 0)
-const disablePastDates = (date) => date.getTime() < today.getTime()
+const disablePastDates = (date) => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return date.getTime() < today.getTime()
+}
 const disableNotToday = (date) => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
   const d = new Date(date)
   d.setHours(0, 0, 0, 0)
   return d.getTime() !== today.getTime()

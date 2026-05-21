@@ -368,7 +368,7 @@ class PurchaseContract(BaseModel):
     ]
 
     contract_no = models.CharField(max_length=50, unique=True, verbose_name='合同编号')
-    po = models.ForeignKey(PurchaseOrder, on_delete=models.CASCADE, related_name='contracts', verbose_name='采购订单')
+    po = models.ForeignKey(PurchaseOrder, on_delete=models.PROTECT, related_name='contracts', verbose_name='采购订单')
     supplier = models.ForeignKey(
         'masterdata.Supplier', on_delete=models.PROTECT, related_name='purchase_contracts', verbose_name='供应商'
     )

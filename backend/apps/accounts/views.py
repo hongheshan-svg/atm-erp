@@ -12,6 +12,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import update_session_auth_hash
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.permission_service import has_permission
 from .models import User, Role, Department
 from .serializers import (
     UserSerializer, UserCreateSerializer, UserUpdateSerializer,
@@ -192,7 +193,7 @@ class UserViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
     @action(detail=True, methods=['post'])
     def reset_password(self, request, pk=None):
         """Reset user password (admin only)."""
-        if not request.user.is_staff:
+        if not has_permission(request.user, 'accounts:user:admin'):
             return Response(
                 {'detail': '无权限执行此操作'},
                 status=status.HTTP_403_FORBIDDEN
@@ -230,7 +231,7 @@ class UserViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
         Set user's WeChat Work ID for personal notifications.
         Admin only.
         """
-        if not request.user.is_staff:
+        if not has_permission(request.user, 'accounts:user:admin'):
             return Response(
                 {'detail': '无权限执行此操作'},
                 status=status.HTTP_403_FORBIDDEN
@@ -254,7 +255,7 @@ class UserViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
         Can be used to match with ERP users.
         Admin only.
         """
-        if not request.user.is_staff:
+        if not has_permission(request.user, 'accounts:user:admin'):
             return Response(
                 {'detail': '无权限执行此操作'},
                 status=status.HTTP_403_FORBIDDEN
@@ -377,7 +378,7 @@ class UserViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
             ]
         }
         """
-        if not request.user.is_staff:
+        if not has_permission(request.user, 'accounts:user:admin'):
             return Response(
                 {'detail': '无权限执行此操作'},
                 status=status.HTTP_403_FORBIDDEN
@@ -422,7 +423,7 @@ class UserViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
         Send a test personal notification to the specified user.
         Admin only.
         """
-        if not request.user.is_staff:
+        if not has_permission(request.user, 'accounts:user:admin'):
             return Response(
                 {'detail': '无权限执行此操作'},
                 status=status.HTTP_403_FORBIDDEN
