@@ -283,8 +283,8 @@ class InstallationTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
-    @action(detail=True, methods=['post'])
-    def dispatch(self, request, pk=None):
+    @action(detail=True, methods=['post'], url_path='dispatch-task')
+    def dispatch_task(self, request, pk=None):
         task = self.get_object()
         if task.status != 'pending':
             return Response({'error': '只有待安排的任务才能派遣'}, status=status.HTTP_400_BAD_REQUEST)

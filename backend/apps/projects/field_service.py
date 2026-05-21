@@ -797,8 +797,8 @@ class ServiceOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
             return ServiceOrderListSerializer
         return ServiceOrderSerializer
 
-    @action(detail=True, methods=['post'])
-    def dispatch(self, request, pk=None):
+    @action(detail=True, methods=['post'], url_path='dispatch-order')
+    def dispatch_order(self, request, pk=None):
         """派工"""
         order = self.get_object()
         technician_id = request.data.get('technician_id')

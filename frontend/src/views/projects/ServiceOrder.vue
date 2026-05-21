@@ -324,8 +324,8 @@ const loadData = async () => {
       service_type: typeFilter.value || undefined
     }
     const res = await getServiceOrderList(params)
-    tableData.value = res.data.results || res.data
-    total.value = res.data.count || tableData.value.length
+    tableData.value = res.results || res || []
+    total.value = res.count || tableData.value.length
   } catch (e) {
     console.error(e)
   } finally {
@@ -336,12 +336,12 @@ const loadData = async () => {
 const loadStats = async () => {
   try {
     const res = await getServiceOrderDashboard()
-    const statusStats = res.data.status_stats || []
+    const statusStats = res.status_stats || []
     stats.value = {
       pending: statusStats.find(s => s.status === 'PENDING')?.count || 0,
       on_site: statusStats.find(s => s.status === 'ON_SITE')?.count || 0,
-      completed: res.data.month_completed || 0,
-      urgent: res.data.urgent_count || 0
+      completed: res.month_completed || 0,
+      urgent: res.urgent_count || 0
     }
   } catch (e) {
     console.error(e)
@@ -350,12 +350,12 @@ const loadStats = async () => {
 
 const loadCustomers = async () => {
   const res = await getCustomerList({ page_size: 1000 })
-  customers.value = res.data.results || res.data
+  customers.value = res.results || res || []
 }
 
 const loadTechnicians = async () => {
   const res = await getTechnicianProfileList({ page_size: 1000 })
-  technicians.value = res.data.results || res.data
+  technicians.value = res.results || res || []
 }
 
 const handleCustomerChange = async (customerId) => {
@@ -367,7 +367,7 @@ const handleCustomerChange = async (customerId) => {
       form.contact_phone = customer.phone || ''
     }
     const res = await getProjectEquipmentList({ customer: customerId, page_size: 1000 })
-    equipments.value = res.data.results || res.data
+    equipments.value = res.results || res || []
   }
 }
 
