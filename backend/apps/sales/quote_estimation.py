@@ -591,7 +591,7 @@ class QuoteEstimationListSerializer(serializers.ModelSerializer):
 
 class ProjectCostHistorySerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(source='project.name', read_only=True)
-    project_no = serializers.CharField(source='project.project_no', read_only=True)
+    project_no = serializers.CharField(source='project.code', read_only=True)
     customer_name = serializers.CharField(source='project.customer.name', read_only=True)
 
     class Meta:

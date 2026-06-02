@@ -24,7 +24,7 @@ class EquipmentSerializer(serializers.ModelSerializer):
     """设备台账序列化器"""
 
     project_name = serializers.CharField(source='project.name', read_only=True)
-    project_no = serializers.CharField(source='project.project_no', read_only=True)
+    project_no = serializers.CharField(source='project.code', read_only=True)
     customer_name = serializers.CharField(source='customer.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     is_in_warranty = serializers.BooleanField(read_only=True)

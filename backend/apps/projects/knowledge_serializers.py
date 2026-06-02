@@ -80,7 +80,7 @@ class ProjectArchiveSerializer(serializers.ModelSerializer):
     """项目归档报告序列化器"""
 
     project_name = serializers.CharField(source='project.name', read_only=True)
-    project_no = serializers.CharField(source='project.project_no', read_only=True)
+    project_no = serializers.CharField(source='project.code', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     reviewer_name = serializers.CharField(source='reviewer.name', read_only=True)
     cost_variance_amount = serializers.SerializerMethodField()

@@ -356,7 +356,7 @@ class ProjectRouting(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f'{self.project.project_no} - {self.name}'
+        return f'{self.project.code} - {self.name}'
 
 
 class ProjectRoutingOperation(BaseModel):
@@ -502,7 +502,7 @@ class ProjectRoutingOperationSerializer(serializers.ModelSerializer):
 
 class ProjectRoutingSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    project_no = serializers.CharField(source='project.project_no', read_only=True)
+    project_no = serializers.CharField(source='project.code', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     template_name = serializers.CharField(source='template.name', read_only=True)
     operations = ProjectRoutingOperationSerializer(many=True, read_only=True)

@@ -266,7 +266,7 @@ class ProjectCostDetail(BaseModel):
         ]
 
     def __str__(self):
-        return f'{self.project.project_no} - {self.description}'
+        return f'{self.project.code} - {self.description}'
 
     def save(self, *args, **kwargs):
         # 自动计算差异
@@ -452,7 +452,7 @@ class LaborRateStandardSerializer(serializers.ModelSerializer):
 
 
 class ProjectCostDetailSerializer(serializers.ModelSerializer):
-    project_no = serializers.CharField(source='project.project_no', read_only=True)
+    project_no = serializers.CharField(source='project.code', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     cost_element_display = serializers.CharField(source='get_cost_element_display', read_only=True)
     source_type_display = serializers.CharField(source='get_source_type_display', read_only=True)
@@ -467,7 +467,7 @@ class ProjectCostDetailSerializer(serializers.ModelSerializer):
 
 
 class ProjectCostSummarySerializer(serializers.ModelSerializer):
-    project_no = serializers.CharField(source='project.project_no', read_only=True)
+    project_no = serializers.CharField(source='project.code', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     project_status = serializers.CharField(source='project.status', read_only=True)
 
@@ -477,7 +477,7 @@ class ProjectCostSummarySerializer(serializers.ModelSerializer):
 
 
 class CostVarianceAnalysisSerializer(serializers.ModelSerializer):
-    project_no = serializers.CharField(source='project.project_no', read_only=True)
+    project_no = serializers.CharField(source='project.code', read_only=True)
     analysis_period_display = serializers.CharField(source='get_analysis_period_display', read_only=True)
 
     class Meta:
@@ -691,7 +691,7 @@ class ProjectCostAnalysisDashboardView(APIView):
             {
                 'project': {
                     'id': project.id,
-                    'project_no': project.project_no,
+                    'project_no': project.code,
                     'name': project.name,
                     'status': project.status,
                 },
@@ -731,7 +731,7 @@ class CostComparisonReportView(APIView):
             comparison.append(
                 {
                     'project_id': s.project.id,
-                    'project_no': s.project.project_no,
+                    'project_no': s.project.code,
                     'project_name': s.project.name,
                     'contract_amount': float(s.contract_amount),
                     'estimated_cost': float(s.estimated_cost),

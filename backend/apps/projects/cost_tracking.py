@@ -74,7 +74,7 @@ class ProjectBudget(BaseModel):
         verbose_name_plural = verbose_name
 
     def __str__(self):
-        return f'{self.project.project_no} - 预算'
+        return f'{self.project.code} - 预算'
 
     def save(self, *args, **kwargs):
         # 计算总预算
@@ -177,7 +177,7 @@ class ProjectCostRecord(BaseModel):
         ]
 
     def __str__(self):
-        return f'{self.project.project_no} - {self.get_cost_type_display()} - ¥{self.amount}'
+        return f'{self.project.code} - {self.get_cost_type_display()} - ¥{self.amount}'
 
 
 class ProjectCostSnapshot(BaseModel):
@@ -281,7 +281,7 @@ class CostAlert(BaseModel):
 
 
 class ProjectBudgetSerializer(serializers.ModelSerializer):
-    project_no = serializers.CharField(source='project.project_no', read_only=True)
+    project_no = serializers.CharField(source='project.code', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     approved_by_name = serializers.CharField(source='approved_by.get_full_name', read_only=True)
 
@@ -292,7 +292,7 @@ class ProjectBudgetSerializer(serializers.ModelSerializer):
 
 
 class ProjectCostRecordSerializer(serializers.ModelSerializer):
-    project_no = serializers.CharField(source='project.project_no', read_only=True)
+    project_no = serializers.CharField(source='project.code', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     cost_type_display = serializers.CharField(source='get_cost_type_display', read_only=True)
     source_type_display = serializers.CharField(source='get_source_type_display', read_only=True)
@@ -305,7 +305,7 @@ class ProjectCostRecordSerializer(serializers.ModelSerializer):
 
 
 class ProjectCostSnapshotSerializer(serializers.ModelSerializer):
-    project_no = serializers.CharField(source='project.project_no', read_only=True)
+    project_no = serializers.CharField(source='project.code', read_only=True)
 
     class Meta:
         model = ProjectCostSnapshot
@@ -313,7 +313,7 @@ class ProjectCostSnapshotSerializer(serializers.ModelSerializer):
 
 
 class CostAlertSerializer(serializers.ModelSerializer):
-    project_no = serializers.CharField(source='project.project_no', read_only=True)
+    project_no = serializers.CharField(source='project.code', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     alert_type_display = serializers.CharField(source='get_alert_type_display', read_only=True)
     resolved_by_name = serializers.CharField(source='resolved_by.get_full_name', read_only=True)
@@ -578,7 +578,7 @@ class ProjectCostDashboardView(APIView):
             {
                 'project': {
                     'id': project.id,
-                    'project_no': project.project_no,
+                    'project_no': project.code,
                     'name': project.name,
                     'customer_name': project.customer.name if project.customer else None,
                     'status': project.status,
@@ -652,7 +652,7 @@ class CostOverviewDashboardView(APIView):
             project_summaries.append(
                 {
                     'project_id': project.id,
-                    'project_no': project.project_no,
+                    'project_no': project.code,
                     'project_name': project.name,
                     'total_cost': float(total_cost),
                     'budget_total': budget_total,
@@ -800,7 +800,7 @@ def check_cost_alerts(project_id):
                 'budget_amount': budget.total_budget,
                 'actual_amount': total_actual,
                 'variance_rate': usage_rate - 100,
-                'message': f'项目 [{project.project_no}] 预算已超支！预算: ¥{budget.total_budget}，实际: ¥{total_actual}',
+                'message': f'项目 [{project.code}] 预算已超支！预算: ¥{budget.total_budget}，实际: ¥{total_actual}',
             },
         )
         if created:
@@ -815,7 +815,7 @@ def check_cost_alerts(project_id):
                 'budget_amount': budget.total_budget,
                 'actual_amount': total_actual,
                 'variance_rate': usage_rate,
-                'message': f'项目 [{project.project_no}] 预算使用率已达 {usage_rate:.1f}%，接近超支！',
+                'message': f'项目 [{project.code}] 预算使用率已达 {usage_rate:.1f}%，接近超支！',
             },
         )
         if created:
@@ -830,7 +830,7 @@ def check_cost_alerts(project_id):
                 'budget_amount': budget.total_budget,
                 'actual_amount': total_actual,
                 'variance_rate': usage_rate,
-                'message': f'项目 [{project.project_no}] 预算使用率已达 {usage_rate:.1f}%，请注意控制成本。',
+                'message': f'项目 [{project.code}] 预算使用率已达 {usage_rate:.1f}%，请注意控制成本。',
             },
         )
         if created:
