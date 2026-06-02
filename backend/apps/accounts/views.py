@@ -18,7 +18,7 @@ from .models import User, Role, Department
 from .serializers import (
     UserSerializer, UserCreateSerializer, UserUpdateSerializer,
     RoleSerializer, DepartmentSerializer, ChangePasswordSerializer,
-    UserProfileSerializer
+    UserProfileSerializer, ProfileSelfUpdateSerializer
 )
 
 
@@ -160,8 +160,12 @@ class UserViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
     
     @action(detail=False, methods=['put'])
     def update_profile(self, request):
-        """Update current user profile."""
-        serializer = UserUpdateSerializer(request.user, data=request.data, partial=True)
+        """Update current user profile.
+
+        自助资料更新只允许编辑本人非权限字段(ProfileSelfUpdateSerializer);
+        role/is_staff/is_active/department 等管理字段不可经此 SELF_ACTION 修改,防止越权提权。
+        """
+        serializer = ProfileSelfUpdateSerializer(request.user, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(UserProfileSerializer(request.user).data)

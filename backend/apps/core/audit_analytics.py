@@ -12,13 +12,16 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.permissions import IsSystemAdmin
+
 
 class AuditLogAnalyticsView(APIView):
     """
     操作日志分析统计
     """
 
-    permission_classes = [IsAuthenticated]
+    # 全系统级审计情报：仅系统管理员可见（与 AuditLogViewSet 的 C1 加固一致）
+    permission_classes = [IsAuthenticated, IsSystemAdmin]
 
     def get(self, request):
         from apps.core.models import AuditLog
@@ -88,7 +91,8 @@ class AuditLogSecurityView(APIView):
     安全相关日志分析
     """
 
-    permission_classes = [IsAuthenticated]
+    # 全系统级安全情报（登录失败/锁定、跨用户敏感操作含用户名/IP）：仅系统管理员可见
+    permission_classes = [IsAuthenticated, IsSystemAdmin]
 
     def get(self, request):
         from apps.core.models import AuditLog

@@ -232,6 +232,33 @@ class UserSerializer(serializers.ModelSerializer):
         extra_kwargs = {'password': {'write_only': True}}
 
 
+def _guard_privileged_role_assignment(request, role):
+    """非系统管理员不得为用户分配「特权角色」(授予 system 模块权限的角色)。
+
+    防止持 accounts:user(system:user)的 HR 通过建/改用户把自己或他人的 role 设为 admin 提权。
+    （审计 C1 补强 —— 提交后对抗式复核发现的提权路径）
+    """
+    if role is None:
+        return
+    from apps.core.permissions import _is_system_admin
+
+    user = getattr(request, 'user', None) if request is not None else None
+    if _is_system_admin(user):
+        return
+
+    from django.db.models import Q
+
+    from apps.core.permission_models_new import RolePermission
+
+    is_privileged = RolePermission.objects.filter(
+        Q(permission__code='system') | Q(permission__code__startswith='system:'),
+        role=role,
+        permission__is_active=True,
+    ).exists()
+    if is_privileged:
+        raise serializers.ValidationError({'role': '无权分配该角色:仅系统管理员可分配具有系统管理权限的角色'})
+
+
 class UserCreateSerializer(serializers.ModelSerializer):
     """User serializer for creation."""
 
@@ -269,6 +296,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if attrs['password'] != attrs['password_confirm']:
             raise serializers.ValidationError({'password_confirm': '两次密码不一致'})
+        _guard_privileged_role_assignment(self.context.get('request'), attrs.get('role'))
         return attrs
 
     def create(self, validated_data):
@@ -285,7 +313,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):
-    """User serializer for update."""
+    """User serializer for update（管理端：HR/管理员经 UserViewSet 改用户）。"""
 
     class Meta:
         model = User
@@ -303,6 +331,32 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             'hire_date',
             'is_active',
             'is_staff',
+        ]
+
+    def validate(self, attrs):
+        _guard_privileged_role_assignment(self.context.get('request'), attrs.get('role'))
+        return attrs
+
+
+class ProfileSelfUpdateSerializer(serializers.ModelSerializer):
+    """用户自助更新个人资料 —— 仅本人可编辑的非权限字段。
+
+    刻意不含 role/is_staff/is_active/department/position/hire_date 等管理字段:
+    update_profile 是 SELF_ACTION(仅需登录),若用含 role/is_staff 的 UserUpdateSerializer,
+    任意登录用户即可 PUT /users/update_profile/ 自赋 admin 角色或 is_staff 提权。
+    （审计 C1 补强 —— 提交后对抗式复核发现的提权路径）
+    """
+
+    class Meta:
+        model = User
+        fields = [
+            'email',
+            'first_name',
+            'last_name',
+            'phone',
+            'avatar',
+            'gender',
+            'birth_date',
         ]
 
 
