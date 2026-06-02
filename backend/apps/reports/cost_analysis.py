@@ -245,13 +245,16 @@ class CostTrendView(APIView):
         )
 
         # 人工成本趋势
-        labor_trend = (
-            TimeLog.objects.filter(log_date__gte=start_date, is_deleted=False)
-            .annotate(month=TruncMonth('log_date'))
+        labor_trend = list(
+            TimeLog.objects.filter(date__gte=start_date, is_deleted=False)
+            .annotate(month=TruncMonth('date'))
             .values('month')
-            .annotate(hours=Sum('hours'), cost=Sum('hours') * 100)
+            .annotate(hours=Sum('hours'))
             .order_by('month')
         )
+        # cost = hours * 100（不能在同一 annotate 内用 Sum('hours') 同时作别名与再聚合）
+        for _row in labor_trend:
+            _row['cost'] = float(_row['hours'] or 0) * 100
 
         return Response(
             {

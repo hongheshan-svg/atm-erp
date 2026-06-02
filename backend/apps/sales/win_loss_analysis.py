@@ -381,28 +381,28 @@ class WinLossComparisonView(APIView):
         won = closed_opps.filter(stage='CLOSED_WON')
         lost = closed_opps.filter(stage='CLOSED_LOST')
 
-        # 平均金额对比
-        avg_won_amount = won.aggregate(avg=Avg('amount'))['avg'] or 0
-        avg_lost_amount = lost.aggregate(avg=Avg('amount'))['avg'] or 0
+        # 平均金额对比（Opportunity 金额字段为 estimated_amount）
+        avg_won_amount = won.aggregate(avg=Avg('estimated_amount'))['avg'] or 0
+        avg_lost_amount = lost.aggregate(avg=Avg('estimated_amount'))['avg'] or 0
 
         # 按客户规模分析
         def analyze_by_customer_type(queryset):
-            return queryset.values('customer__customer_type').annotate(count=Count('id')).order_by('-count')
+            # Customer 无客户类型/规模字段，改按客户状态分组（原 customer_type 字段不存在）
+            return queryset.values('customer__status').annotate(count=Count('id')).order_by('-count')
 
         won_by_type = list(analyze_by_customer_type(won))
         lost_by_type = list(analyze_by_customer_type(lost))
 
-        # 按产品类型分析 (如果有)
-        # 按销售人员分析
+        # 按销售人员分析（Opportunity 负责人为 owner，金额为 estimated_amount）
         won_by_sales = (
-            won.values('salesperson__username')
-            .annotate(count=Count('id'), amount=Sum('amount'))
+            won.values('owner__username')
+            .annotate(count=Count('id'), amount=Sum('estimated_amount'))
             .order_by('-count')[:10]
         )
 
         lost_by_sales = (
-            lost.values('salesperson__username')
-            .annotate(count=Count('id'), amount=Sum('amount'))
+            lost.values('owner__username')
+            .annotate(count=Count('id'), amount=Sum('estimated_amount'))
             .order_by('-count')[:10]
         )
 

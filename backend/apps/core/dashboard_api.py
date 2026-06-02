@@ -70,13 +70,14 @@ class ExecutiveDashboardView(APIView):
         from apps.projects.models import Project
 
         today = timezone.now().date()
-        completed = Project.objects.filter(status='COMPLETED', is_deleted=False).exclude(actual_end_date__isnull=True)
+        # Project 无独立的实际完工字段：以 end_date 为计划交期，updated_at(完工后最近更新)近似实际完工时间
+        completed = Project.objects.filter(status='COMPLETED', is_deleted=False).exclude(end_date__isnull=True)
 
         total = completed.count()
         if total == 0:
             return 100
 
-        on_time = completed.filter(actual_end_date__lte=F('planned_end_date')).count()
+        on_time = completed.filter(updated_at__date__lte=F('end_date')).count()
         return round(on_time / total * 100, 1)
 
     def _get_project_overview(self):
@@ -124,7 +125,7 @@ class ExecutiveDashboardView(APIView):
             'in_progress': plans.filter(status='IN_PROGRESS').count(),
             'pending': plans.filter(status__in=['DRAFT', 'CONFIRMED']).count(),
             'completed_this_month': plans.filter(
-                status='COMPLETED', actual_end_date__month=timezone.now().month
+                status='COMPLETED', actual_end__month=timezone.now().month
             ).count(),
         }
 
@@ -160,7 +161,7 @@ class ExecutiveDashboardView(APIView):
         from apps.projects.models import Project
 
         overdue_projects = Project.objects.filter(
-            status__in=['IN_PROGRESS', 'TESTING'], planned_end_date__lt=today, is_deleted=False
+            status__in=['IN_PROGRESS', 'TESTING'], end_date__lt=today, is_deleted=False
         ).count()
         if overdue_projects > 0:
             alerts.append({'type': 'warning', 'message': f'{overdue_projects}个项目已逾期', 'module': 'projects'})
@@ -175,9 +176,9 @@ class ExecutiveDashboardView(APIView):
             alerts.append({'type': 'error', 'message': f'{overdue_collections}笔回款已逾期', 'module': 'finance'})
 
         # 库存预警
-        from apps.inventory.models import StockAlert
+        from apps.inventory.stock_alert import StockAlert
 
-        stock_alerts = StockAlert.objects.filter(is_active=True, is_deleted=False).count()
+        stock_alerts = StockAlert.objects.filter(is_deleted=False).exclude(status='RESOLVED').count()
         if stock_alerts > 0:
             alerts.append({'type': 'warning', 'message': f'{stock_alerts}项库存预警', 'module': 'inventory'})
 
@@ -206,15 +207,19 @@ class ProjectManagerDashboardView(APIView):
         # 我的任务
         my_tasks = ProjectTask.objects.filter(assignee=user, is_deleted=False)
 
-        # 即将到期的任务
-        upcoming_tasks = my_tasks.filter(
-            status__in=['TODO', 'IN_PROGRESS'], due_date__lte=today + timedelta(days=7)
-        ).order_by('due_date')[:10]
+        # 即将到期的任务（ProjectTask 用 end_date；annotate due_date 别名保留前端字段名）
+        upcoming_tasks = (
+            my_tasks.filter(status__in=['TODO', 'IN_PROGRESS'], end_date__lte=today + timedelta(days=7))
+            .annotate(due_date=F('end_date'))
+            .order_by('end_date')[:10]
+        )
 
-        # 项目进度
-        project_progress = my_projects.filter(status__in=['IN_PROGRESS', 'TESTING']).values(
-            'id', 'name', 'project_no', 'progress', 'planned_end_date'
-        )[:10]
+        # 项目进度（project_no/planned_end_date 为 code/end_date 的别名，保留前端字段名）
+        project_progress = (
+            my_projects.filter(status__in=['IN_PROGRESS', 'TESTING'])
+            .annotate(project_no=F('code'), planned_end_date=F('end_date'))
+            .values('id', 'name', 'project_no', 'planned_end_date')[:10]
+        )
 
         data = {
             'my_projects_count': my_projects.count(),
@@ -224,9 +229,9 @@ class ProjectManagerDashboardView(APIView):
                 'total': my_tasks.count(),
                 'todo': my_tasks.filter(status='TODO').count(),
                 'in_progress': my_tasks.filter(status='IN_PROGRESS').count(),
-                'overdue': my_tasks.filter(status__in=['TODO', 'IN_PROGRESS'], due_date__lt=today).count(),
+                'overdue': my_tasks.filter(status__in=['TODO', 'IN_PROGRESS'], end_date__lt=today).count(),
             },
-            'upcoming_tasks': list(upcoming_tasks.values('id', 'name', 'due_date', 'priority', 'status')),
+            'upcoming_tasks': list(upcoming_tasks.values('id', 'name', 'due_date', 'status')),
             'project_progress': list(project_progress),
         }
 
@@ -326,7 +331,7 @@ class ProductionDashboardView(APIView):
 
         # 今日工序
         today_processes = ProductionPlanProcess.objects.filter(
-            plan__status='IN_PROGRESS', planned_start_date__lte=today, planned_end_date__gte=today, is_deleted=False
+            plan__status='IN_PROGRESS', planned_start__lte=today, planned_end__gte=today, is_deleted=False
         )
 
         # 调试记录
@@ -347,7 +352,11 @@ class ProductionDashboardView(APIView):
 
         data = {
             'plan_status': {item['status']: item['count'] for item in plan_status},
-            'active_plans': list(active_plans.values('id', 'plan_no', 'project__name', 'progress', 'planned_end_date')),
+            'active_plans': list(
+                active_plans.values(
+                    'id', 'plan_no', 'project__name', progress=F('progress_percent'), planned_end_date=F('planned_end')
+                )
+            ),
             'today_processes': {
                 'total': today_processes.count(),
                 'in_progress': today_processes.filter(status='IN_PROGRESS').count(),
@@ -410,11 +419,11 @@ class FinanceDashboardView(APIView):
 
         # 应收应付
         ar_stats = AccountReceivable.objects.filter(is_deleted=False).aggregate(
-            total=Sum('amount'), overdue=Sum('amount', filter=Q(status='OVERDUE'))
+            total=Sum('amount_due'), overdue=Sum('amount_due', filter=Q(status='OVERDUE'))
         )
 
         ap_stats = AccountPayable.objects.filter(is_deleted=False).aggregate(
-            total=Sum('amount'), overdue=Sum('amount', filter=Q(status='OVERDUE'))
+            total=Sum('amount_due'), overdue=Sum('amount_due', filter=Q(status='OVERDUE'))
         )
 
         data = {

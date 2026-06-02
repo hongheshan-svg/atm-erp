@@ -522,7 +522,7 @@ class AssemblySessionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
     queryset = AssemblySession.objects.filter(is_deleted=False)
     serializer_class = AssemblySessionSerializer
     permission_classes = [IsAuthenticated]
-    filterset_fields = ['guide', 'operator', 'status', 'production_order']
+    filterset_fields = ['guide', 'operator', 'status']
     ordering_fields = ['started_at', 'actual_time_minutes']
 
     @action(detail=True, methods=['post'])

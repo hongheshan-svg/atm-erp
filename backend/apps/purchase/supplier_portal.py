@@ -546,16 +546,14 @@ class SupplierPortalQualityView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, supplier_id):
-        records = (
-            SupplierQualityRecord.objects.filter(supplier_id=supplier_id, is_deleted=False)
-            .select_related('purchase_order', 'purchase_line__item')
-            .order_by('-inspection_date')[:50]
-        )
+        base = SupplierQualityRecord.objects.filter(supplier_id=supplier_id, is_deleted=False)
 
-        # 统计
-        total = records.count()
-        passed = records.filter(result='PASS').count()
+        # 统计基于全部记录（切片仅用于列表展示，不能在切片后再 filter）
+        total = base.count()
+        passed = base.filter(result='PASS').count()
         pass_rate = round(passed / total * 100, 1) if total > 0 else 100
+
+        records = base.select_related('purchase_order', 'purchase_line__item').order_by('-inspection_date')[:50]
 
         return Response(
             {
@@ -590,11 +588,9 @@ class SupplierPortalMessagesView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, supplier_id):
-        messages = SupplierMessage.objects.filter(supplier_id=supplier_id, is_deleted=False).order_by('-created_at')[
-            :50
-        ]
-
-        unread_count = messages.filter(is_read=False, from_supplier=False).count()
+        base = SupplierMessage.objects.filter(supplier_id=supplier_id, is_deleted=False)
+        unread_count = base.filter(is_read=False, from_supplier=False).count()
+        messages = base.order_by('-created_at')[:50]
 
         return Response({'unread_count': unread_count, 'messages': SupplierMessageSerializer(messages, many=True).data})
 

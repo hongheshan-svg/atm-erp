@@ -130,25 +130,25 @@ class MaintenanceCalendarView(APIView):
         dates = []
 
         # 获取基准日期
-        if hasattr(schedule, 'next_date') and schedule.next_date:
-            next_date = schedule.next_date
+        if hasattr(schedule, 'scheduled_date') and schedule.scheduled_date:
+            scheduled_date = schedule.scheduled_date
         elif hasattr(schedule, 'last_date') and schedule.last_date:
-            next_date = schedule.last_date + timedelta(days=schedule.interval_days or 30)
+            scheduled_date = schedule.last_date + timedelta(days=schedule.interval_days or 30)
         else:
-            next_date = start_date
+            scheduled_date = start_date
 
         interval = schedule.interval_days if hasattr(schedule, 'interval_days') else 30
         if not interval or interval <= 0:
             interval = 30
 
         # 找到第一个在范围内的日期
-        while next_date < start_date:
-            next_date += timedelta(days=interval)
+        while scheduled_date < start_date:
+            scheduled_date += timedelta(days=interval)
 
         # 生成日期范围内的所有计划日期
-        while next_date <= end_date:
-            dates.append(next_date)
-            next_date += timedelta(days=interval)
+        while scheduled_date <= end_date:
+            dates.append(scheduled_date)
+            scheduled_date += timedelta(days=interval)
 
         return dates
 
@@ -168,16 +168,16 @@ class MaintenanceStatisticsView(APIView):
 
         # 逾期维护
         overdue_count = MaintenanceSchedule.objects.filter(
-            next_date__lt=today, status__in=['PENDING', 'IN_PROGRESS'], is_deleted=False
+            scheduled_date__lt=today, status__in=['PENDING', 'IN_PROGRESS'], is_deleted=False
         ).count()
 
         # 今日维护
-        today_count = MaintenanceSchedule.objects.filter(next_date=today, is_deleted=False).count()
+        today_count = MaintenanceSchedule.objects.filter(scheduled_date=today, is_deleted=False).count()
 
         # 本周维护
         week_end = today + timedelta(days=7)
         week_count = MaintenanceSchedule.objects.filter(
-            next_date__gte=today, next_date__lte=week_end, is_deleted=False
+            scheduled_date__gte=today, scheduled_date__lte=week_end, is_deleted=False
         ).count()
 
         # 本月完成
@@ -188,7 +188,7 @@ class MaintenanceStatisticsView(APIView):
 
         # 保修即将到期
         warranty_warning = Equipment.objects.filter(
-            warranty_end__gte=today, warranty_end__lte=today + timedelta(days=30), is_deleted=False
+            warranty_end_date__gte=today, warranty_end_date__lte=today + timedelta(days=30), is_deleted=False
         ).count()
 
         # 按维护类型统计
@@ -228,7 +228,7 @@ class EquipmentMaintenanceHistoryView(APIView):
                     'id': s.id,
                     'maintenance_type': s.maintenance_type,
                     'status': s.status,
-                    'planned_date': s.next_date.isoformat() if hasattr(s, 'next_date') and s.next_date else None,
+                    'planned_date': s.scheduled_date.isoformat() if hasattr(s, 'scheduled_date') and s.scheduled_date else None,
                     'completed_date': s.completed_date.isoformat()
                     if hasattr(s, 'completed_date') and s.completed_date
                     else None,

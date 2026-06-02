@@ -18,7 +18,7 @@ from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.db import models, transaction
-from django.db.models import Avg, Case, Count, Q, Sum, Value, When
+from django.db.models import Avg, Case, Count, DecimalField, Q, Sum, Value, When
 from django.db.models.functions import TruncMonth
 from django.utils import timezone
 from rest_framework import serializers, viewsets
@@ -678,8 +678,14 @@ class ProjectCostAnalysisDashboardView(APIView):
             .values('month')
             .annotate(
                 total=Sum('actual_amount'),
-                material=Sum(Case(When(cost_element='DIRECT_MATERIAL', then='actual_amount'), default=Value(0))),
-                labor=Sum(Case(When(cost_element='DIRECT_LABOR', then='actual_amount'), default=Value(0))),
+                material=Sum(
+                    Case(When(cost_element='DIRECT_MATERIAL', then='actual_amount'), default=Value(Decimal('0'))),
+                    output_field=DecimalField(),
+                ),
+                labor=Sum(
+                    Case(When(cost_element='DIRECT_LABOR', then='actual_amount'), default=Value(Decimal('0'))),
+                    output_field=DecimalField(),
+                ),
             )
             .order_by('month')
         )

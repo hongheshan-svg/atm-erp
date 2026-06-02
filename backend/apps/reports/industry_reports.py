@@ -11,7 +11,7 @@ Industry-specific Reports for Non-standard Automation
 
 from datetime import date, timedelta
 
-from django.db.models import Avg, Count, Q, Sum
+from django.db.models import Avg, Count, F, Q, Sum
 from django.db.models.functions import TruncMonth
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -509,16 +509,17 @@ class OutsourceAnalysisReportView(APIView):
         )
 
         # 按工艺类型统计
+        # 工艺类型在明细行(OutsourceOrderLine.process_type)上，按行工艺分组
         by_process = (
-            orders.values('process_type')
-            .annotate(order_count=Count('id'), total_amount=Sum('total_amount'))
+            orders.values(process_type=F('lines__process_type'))
+            .annotate(order_count=Count('id', distinct=True), total_amount=Sum('total_amount'))
             .order_by('-total_amount')
         )
 
         # 质量统计
-        inspections = OutsourceInspection.objects.filter(order__order_date__year=year, is_deleted=False)
-        total_inspected = inspections.aggregate(total=Sum('inspected_quantity'))['total'] or 0
-        total_qualified = inspections.aggregate(total=Sum('qualified_quantity'))['total'] or 0
+        inspections = OutsourceInspection.objects.filter(outsource_order__order_date__year=year, is_deleted=False)
+        total_inspected = inspections.aggregate(total=Sum('inspected_qty'))['total'] or 0
+        total_qualified = inspections.aggregate(total=Sum('qualified_qty'))['total'] or 0
         pass_rate = (float(total_qualified) / float(total_inspected) * 100) if total_inspected else 0
 
         # 供应商能力分布

@@ -328,12 +328,12 @@ class BOMCostRollupView(APIView):
             # 计算实际采购成本
             actual_purchases = PurchaseOrderLine.objects.filter(
                 item=bom.item,
-                order__project=project,
-                order__status__in=['RECEIVED', 'COMPLETED'],
-                order__is_deleted=False,
+                po__project=project,
+                po__status__in=['RECEIVED', 'COMPLETED'],
+                po__is_deleted=False,
             ).aggregate(
-                total_qty=Coalesce(Sum('quantity'), Value(Decimal('0')), output_field=DecimalField()),
-                total_amount=Coalesce(Sum('amount'), Value(Decimal('0')), output_field=DecimalField()),
+                total_qty=Coalesce(Sum('qty'), Value(Decimal('0')), output_field=DecimalField()),
+                total_amount=Coalesce(Sum('line_amount'), Value(Decimal('0')), output_field=DecimalField()),
             )
 
             actual_cost = float(actual_purchases['total_amount'])
@@ -472,7 +472,7 @@ class ProcurementTrackingView(APIView):
             'approved': po_queryset.filter(status='APPROVED').count(),
             'shipped': po_queryset.filter(status='SHIPPED').count(),
             'received': po_queryset.filter(status='RECEIVED').count(),
-            'overdue': po_queryset.filter(expected_date__lt=today, status__in=['APPROVED', 'SHIPPED']).count(),
+            'overdue': po_queryset.filter(delivery_date__lt=today, status__in=['APPROVED', 'SHIPPED']).count(),
             'total_amount': float(
                 po_queryset.aggregate(
                     total=Coalesce(Sum('total_amount'), Value(Decimal('0')), output_field=DecimalField())
@@ -484,11 +484,12 @@ class ProcurementTrackingView(APIView):
         # 待收货订单
         pending_receipt = list(
             po_queryset.filter(status__in=['APPROVED', 'SHIPPED'])
-            .values('id', 'order_no', 'supplier__name', 'project__name', 'total_amount', 'expected_date', 'status')
-            .order_by('expected_date')[:20]
+            .values('id', 'order_no', 'supplier__name', 'project__name', 'total_amount', 'delivery_date', 'status')
+            .order_by('delivery_date')[:20]
         )
 
         for order in pending_receipt:
+            order['expected_date'] = order.pop('delivery_date')  # PurchaseOrder 字段为 delivery_date，保留前端键名
             if order['expected_date'] and order['expected_date'] < today:
                 order['overdue_days'] = (today - order['expected_date']).days
             else:
@@ -527,35 +528,22 @@ class ProductionProgressView(APIView):
             'pending': plan_queryset.filter(status='PENDING').count(),
             'in_progress': plan_queryset.filter(status='IN_PROGRESS').count(),
             'completed': plan_queryset.filter(status='COMPLETED').count(),
-            'overdue': plan_queryset.filter(planned_end_date__lt=today, status__in=['PENDING', 'IN_PROGRESS']).count(),
+            'overdue': plan_queryset.filter(planned_end__lt=today, status__in=['PENDING', 'IN_PROGRESS']).count(),
         }
 
         # 进行中的生产计划
+        # ProductionPlan 无 item/数量字段，用真实字段；planned_start/end 在循环里重映射为前端键
         active_plans = list(
             plan_queryset.filter(status='IN_PROGRESS')
-            .values(
-                'id',
-                'plan_no',
-                'project__name',
-                'item__name',
-                'planned_qty',
-                'completed_qty',
-                'planned_start_date',
-                'planned_end_date',
-            )
-            .order_by('planned_end_date')[:20]
+            .values('id', 'plan_no', 'title', 'project__name', 'progress_percent', 'planned_start', 'planned_end')
+            .order_by('planned_end')[:20]
         )
 
         for plan in active_plans:
-            if plan['planned_qty'] > 0:
-                plan['progress_percent'] = round(plan['completed_qty'] / plan['planned_qty'] * 100, 1)
-            else:
-                plan['progress_percent'] = 0
-
-            if plan['planned_end_date'] and plan['planned_end_date'] < today:
-                plan['overdue_days'] = (today - plan['planned_end_date']).days
-            else:
-                plan['overdue_days'] = 0
+            plan['planned_start_date'] = plan.pop('planned_start')
+            plan['planned_end_date'] = plan.pop('planned_end')
+            ped = plan['planned_end_date']
+            plan['overdue_days'] = (today - ped).days if ped and ped < today else 0
 
         return Response(
             {

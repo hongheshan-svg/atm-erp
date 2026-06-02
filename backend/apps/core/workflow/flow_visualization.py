@@ -33,7 +33,7 @@ class WorkflowVisualizationView(APIView):
             return Response({'error': '工作流不存在'}, status=404)
 
         # 获取所有步骤
-        steps = WorkflowStep.objects.filter(instance=instance).order_by('step_order')
+        steps = list(instance.tasks.select_related('step', 'assignee').order_by('step__step_order'))
 
         # 构建流程图数据
         nodes = []
@@ -61,11 +61,11 @@ class WorkflowVisualizationView(APIView):
                 {
                     'id': node_id,
                     'type': 'approval',
-                    'label': step.step_name or f'审批步骤 {step.step_order}',
+                    'label': step.step.name or f'审批步骤 {step.step.step_order}',
                     'status': status,
-                    'approver': step.approver.username if step.approver else None,
-                    'approved_at': step.approved_at.isoformat() if step.approved_at else None,
-                    'comments': step.comments,
+                    'approver': step.assignee.username if step.assignee else None,
+                    'approved_at': step.action_time.isoformat() if step.action_time else None,
+                    'comments': step.comment,
                 }
             )
 
@@ -88,11 +88,11 @@ class WorkflowVisualizationView(APIView):
             {
                 'workflow': {
                     'id': instance.id,
-                    'workflow_type': instance.workflow_type,
+                    'workflow_type': instance.business_type,
                     'status': instance.status,
                     'created_at': instance.created_at.isoformat(),
                     'completed_at': instance.completed_at.isoformat() if instance.completed_at else None,
-                    'initiator': instance.initiator.username if instance.initiator else None,
+                    'initiator': instance.submitter.username if instance.submitter else None,
                 },
                 'graph': {'nodes': nodes, 'edges': edges},
             }
@@ -109,7 +109,7 @@ class WorkflowVisualizationView(APIView):
         status_stats = WorkflowInstance.objects.values('status').annotate(count=Count('id'))
 
         # 类型统计
-        type_stats = WorkflowInstance.objects.values('workflow_type').annotate(count=Count('id'))
+        type_stats = WorkflowInstance.objects.values(workflow_type=F('business_type')).annotate(count=Count('id'))
 
         # 本月趋势
         from django.db.models.functions import TruncDate
@@ -158,29 +158,29 @@ class WorkflowStepStatisticsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from apps.core.workflow.models import WorkflowStep
+        from apps.core.workflow.models import WorkflowTask
 
         user = request.user
 
-        # 我的待审批
-        my_pending = WorkflowStep.objects.filter(approver=user, status='PENDING').count()
+        # 我的待审批（运行时审批任务以 assignee 为处理人）
+        my_pending = WorkflowTask.objects.filter(assignee=user, status='PENDING').count()
 
         # 我已审批
-        my_approved = WorkflowStep.objects.filter(approver=user, status__in=['APPROVED', 'REJECTED']).count()
+        my_approved = WorkflowTask.objects.filter(assignee=user, status__in=['APPROVED', 'REJECTED']).count()
 
         # 本月审批量
         today = timezone.now().date()
         this_month_start = today.replace(day=1)
 
-        monthly_approved = WorkflowStep.objects.filter(
-            approver=user, status__in=['APPROVED', 'REJECTED'], approved_at__gte=this_month_start
+        monthly_approved = WorkflowTask.objects.filter(
+            assignee=user, status__in=['APPROVED', 'REJECTED'], action_time__gte=this_month_start
         ).count()
 
         # 审批效率（平均处理时间）
         from django.db.models import DurationField, ExpressionWrapper
 
-        my_steps = WorkflowStep.objects.filter(approver=user, approved_at__isnull=False).annotate(
-            processing_time=ExpressionWrapper(F('approved_at') - F('created_at'), output_field=DurationField())
+        my_steps = WorkflowTask.objects.filter(assignee=user, action_time__isnull=False).annotate(
+            processing_time=ExpressionWrapper(F('action_time') - F('created_at'), output_field=DurationField())
         )
 
         avg_time = my_steps.aggregate(avg=Avg('processing_time'))
@@ -221,34 +221,34 @@ class WorkflowTimelineView(APIView):
                 'time': instance.created_at.isoformat(),
                 'type': 'create',
                 'title': '提交申请',
-                'description': f'{instance.initiator.username if instance.initiator else "系统"} 发起了审批申请',
+                'description': f'{instance.submitter.username if instance.submitter else "系统"} 发起了审批申请',
                 'status': 'completed',
             }
         )
 
         # 审批步骤事件
-        steps = WorkflowStep.objects.filter(instance=instance).order_by('step_order')
+        steps = list(instance.tasks.select_related('step', 'assignee').order_by('step__step_order'))
 
         for step in steps:
             if step.status == 'APPROVED':
                 timeline.append(
                     {
-                        'time': step.approved_at.isoformat() if step.approved_at else None,
+                        'time': step.action_time.isoformat() if step.action_time else None,
                         'type': 'approve',
-                        'title': f'{step.step_name or "审批"} - 通过',
-                        'description': f'{step.approver.username if step.approver else "系统"} 审批通过',
-                        'comments': step.comments,
+                        'title': f'{step.step.name or "审批"} - 通过',
+                        'description': f'{step.assignee.username if step.assignee else "系统"} 审批通过',
+                        'comments': step.comment,
                         'status': 'completed',
                     }
                 )
             elif step.status == 'REJECTED':
                 timeline.append(
                     {
-                        'time': step.approved_at.isoformat() if step.approved_at else None,
+                        'time': step.action_time.isoformat() if step.action_time else None,
                         'type': 'reject',
-                        'title': f'{step.step_name or "审批"} - 驳回',
-                        'description': f'{step.approver.username if step.approver else "系统"} 驳回了申请',
-                        'comments': step.comments,
+                        'title': f'{step.step.name or "审批"} - 驳回',
+                        'description': f'{step.assignee.username if step.assignee else "系统"} 驳回了申请',
+                        'comments': step.comment,
                         'status': 'rejected',
                     }
                 )
@@ -257,8 +257,8 @@ class WorkflowTimelineView(APIView):
                     {
                         'time': step.created_at.isoformat() if hasattr(step, 'created_at') else None,
                         'type': 'pending',
-                        'title': f'{step.step_name or "审批"} - 待处理',
-                        'description': f'等待 {step.approver.username if step.approver else "审批人"} 审批',
+                        'title': f'{step.step.name or "审批"} - 待处理',
+                        'description': f'等待 {step.assignee.username if step.assignee else "审批人"} 审批',
                         'status': 'pending',
                     }
                 )
