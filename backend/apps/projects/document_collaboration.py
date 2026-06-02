@@ -294,6 +294,16 @@ class DocumentReview(BaseModel):
 # ==================== Serializers ====================
 
 
+class DocumentReviewSerializer(serializers.ModelSerializer):
+    reviewer_name = serializers.CharField(source='reviewer.get_full_name', read_only=True)
+    decision_display = serializers.CharField(source='get_decision_display', read_only=True)
+
+    class Meta:
+        model = DocumentReview
+        fields = '__all__'
+        read_only_fields = ['created_by', 'updated_by']
+
+
 class TechDocumentCategorySerializer(serializers.ModelSerializer):
     children = serializers.SerializerMethodField()
 
@@ -586,12 +596,8 @@ class DocumentReviewViewSet(PermissionMixin, viewsets.ModelViewSet):
     permission_resource = 'document_review'
 
     queryset = DocumentReview.objects.filter(is_deleted=False)
-    serializer_class = serializers.ModelSerializer
+    serializer_class = DocumentReviewSerializer
     permission_classes = [IsAuthenticated]
-
-    class Meta:
-        model = DocumentReview
-        fields = '__all__'
 
     @action(detail=True, methods=['post'])
     def submit_review(self, request, pk=None):
