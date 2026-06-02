@@ -139,3 +139,24 @@ class AttachmentAccessControlTest(TestCase):
 
     def test_get_object_allows_admin(self):
         self.assertEqual(self._viewset(self.root).get_object().pk, self.proj_att.pk)
+
+    def _delete_req(self, user, ids):
+        request = factory.delete('/x/')
+        request.user = user
+        request.data = {'ids': ids}
+        return request
+
+    def test_batch_delete_skips_unauthorized(self):
+        resp = AttachmentViewSet().batch_delete(self._delete_req(self.outsider, [self.proj_att.id]))
+        self.assertEqual(resp.data.get('deleted'), 0)
+        self.assertEqual(resp.data.get('denied'), 1)
+        self.assertTrue(Attachment.objects.filter(id=self.proj_att.id).exists())  # 越权未删成
+
+    def test_batch_delete_allows_authorized(self):
+        resp = AttachmentViewSet().batch_delete(self._delete_req(self.proj_user, [self.proj_att.id]))
+        self.assertEqual(resp.data.get('deleted'), 1)
+        self.assertFalse(Attachment.objects.filter(id=self.proj_att.id).exists())
+
+    def test_batch_delete_admin_deletes_all(self):
+        resp = AttachmentViewSet().batch_delete(self._delete_req(self.root, [self.proj_att.id]))
+        self.assertEqual(resp.data.get('deleted'), 1)

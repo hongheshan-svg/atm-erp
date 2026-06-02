@@ -308,18 +308,32 @@ class AttachmentViewSet(PermissionMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['delete'])
     def batch_delete(self, request):
-        """批量删除附件"""
+        """批量删除附件。
+
+        按 id 批量删除，非系统管理员仅能删除「有权访问其父对象模块」的附件（与 get_object 同口径），
+        无权的静默跳过并在 denied 计数中回报，防止任意登录用户按 id 删除他人附件（审计越权收紧）。
+        """
         ids = request.data.get('ids', [])
         if not ids:
             return Response({'error': '请指定要删除的附件ID'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 删除文件和数据库记录
-        attachments = Attachment.objects.filter(id__in=ids)
-        for attachment in attachments:
-            attachment.file.delete(save=False)
-        deleted_count = attachments.delete()[0]
+        from apps.core.permissions import _is_system_admin
 
-        return Response({'deleted': deleted_count})
+        attachments = list(Attachment.objects.filter(id__in=ids))
+        is_admin = _is_system_admin(request.user)
+        allowed = [a for a in attachments if is_admin or _user_can_access_attachment(request.user, a)]
+        denied_count = len(attachments) - len(allowed)
+
+        # 删除文件和数据库记录（仅限有权访问的）
+        for attachment in allowed:
+            attachment.file.delete(save=False)
+        allowed_ids = [a.id for a in allowed]
+        deleted_count = Attachment.objects.filter(id__in=allowed_ids).delete()[0] if allowed_ids else 0
+
+        result = {'deleted': deleted_count}
+        if denied_count:
+            result['denied'] = denied_count
+        return Response(result)
 
 
 class NotificationChannelViewSet(viewsets.ViewSet):
