@@ -334,9 +334,20 @@ class MRPService:
         if not lines.exists():
             return None
 
-        # 创建采购申请
+        # 创建采购申请。PurchaseRequest.requestor 为 PROTECT 非空字段：plan.created_by 可能为空
+        # (系统/种子生成的计划),直接传入会抛 IntegrityError。回退到首个可用超管;仍无则明确报错。
+        requestor = plan.created_by
+        if requestor is None:
+            from django.contrib.auth import get_user_model
+
+            requestor = get_user_model().objects.filter(is_superuser=True, is_active=True).order_by('id').first()
+        if requestor is None:
+            from rest_framework.exceptions import ValidationError
+
+            raise ValidationError('无法生成采购申请:MRP 计划无创建人,且系统无可用管理员账号可作为申请人')
+
         pr = PurchaseRequest.objects.create(
-            requestor=plan.created_by,
+            requestor=requestor,
             required_date=plan.end_date,
             status='DRAFT',
             notes=f'MRP自动生成-{plan.plan_no}',

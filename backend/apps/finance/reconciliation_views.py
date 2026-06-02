@@ -331,6 +331,10 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
         1. 如果有上期已确认对账单，以上期期末余额为基础
         2. 减去上期对账单期末日期之后的所有付款金额
         3. 如果没有历史对账单，则计算应付账款余额（应付-已付）
+
+        口径说明：期初/结转一律以 AccountPayable.amount_due（应付净额）为基础，而非税务 Invoice.total_amount
+        （Invoice 无供应商 FK，无法按供应商汇总，旧实现据此查询是坏的）。amount_due 才是按供应商做账龄结转的
+        正确口径；若财务要求改用发票毛额口径，请同步调整此处与对账明细的取数。
         """
         supplier_id = request.query_params.get('supplier')
         if not supplier_id:

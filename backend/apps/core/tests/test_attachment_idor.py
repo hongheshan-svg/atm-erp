@@ -15,8 +15,10 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from rest_framework.test import APIRequestFactory
 
+from apps.accounts.models import Role
 from apps.core.models import Attachment
-from apps.core.views import AttachmentViewSet
+from apps.core.permission_models_new import Permission, RolePermission
+from apps.core.views import AttachmentViewSet, _user_can_access_attachment
 
 User = get_user_model()
 factory = APIRequestFactory()
@@ -60,3 +62,80 @@ class AttachmentIDORTest(TestCase):
     def test_admin_can_list_all(self):
         # 系统管理员（超管/持顶层 system）可列全部
         self.assertEqual(self._list_qs(self.root, {}).count(), 2)
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class AttachmentAccessControlTest(TestCase):
+    """retrieve/download/update/destroy 经 get_object 的模块级访问校验（审计越权收紧 #38）。"""
+
+    def setUp(self):
+        cache.clear()
+        self.proj_perm = Permission.objects.create(
+            code='projects:list', name='项目列表', type='menu', is_active=True
+        )
+        self.proj_role = Role.objects.create(name='项目角色', code='proj', is_active=True)
+        RolePermission.objects.create(role=self.proj_role, permission=self.proj_perm)
+
+        self.proj_user = User.objects.create_user(username='pu', password='x', employee_id='pu', role=self.proj_role)
+        self.outsider = User.objects.create_user(username='out', password='x', employee_id='out')
+        self.uploader = User.objects.create_user(username='up', password='x', employee_id='up')
+        self.root = User.objects.create_superuser(username='r3', password='x', employee_id='r3')
+
+        # Project 属 app 'projects'（强制校验模块）
+        self.proj_att = Attachment.objects.create(
+            related_model='Project',
+            related_id=1,
+            file=SimpleUploadedFile('p.txt', b'x'),
+            original_name='p.txt',
+            uploaded_by=self.uploader,
+        )
+
+    def test_module_user_can_access(self):
+        self.assertTrue(_user_can_access_attachment(self.proj_user, self.proj_att))
+
+    def test_outsider_denied_on_enforced_module(self):
+        self.assertFalse(_user_can_access_attachment(self.outsider, self.proj_att))
+
+    def test_uploader_always_allowed(self):
+        self.assertTrue(_user_can_access_attachment(self.uploader, self.proj_att))
+
+    def test_unknown_related_model_failopen(self):
+        att = Attachment.objects.create(
+            related_model='NoSuchModelXYZ',
+            related_id=1,
+            file=SimpleUploadedFile('u.txt', b'x'),
+            original_name='u.txt',
+        )
+        self.assertTrue(_user_can_access_attachment(self.outsider, att))
+
+    def test_non_enforced_module_failopen(self):
+        # Customer 属 masterdata（未纳入强制模块）/ 或无此模型 → 一律放行
+        att = Attachment.objects.create(
+            related_model='Customer',
+            related_id=1,
+            file=SimpleUploadedFile('c.txt', b'x'),
+            original_name='c.txt',
+        )
+        self.assertTrue(_user_can_access_attachment(self.outsider, att))
+
+    def _viewset(self, user):
+        request = factory.get('/x/')
+        request.user = user
+        request.query_params = request.GET
+        request.authenticators = []
+        request.successful_authenticator = None
+        vs = AttachmentViewSet()
+        vs.request = request
+        vs.action = 'retrieve'
+        vs.kwargs = {'pk': str(self.proj_att.pk)}
+        vs.format_kwarg = None
+        return vs
+
+    def test_get_object_denies_outsider(self):
+        from rest_framework.exceptions import PermissionDenied
+
+        with self.assertRaises(PermissionDenied):
+            self._viewset(self.outsider).get_object()
+
+    def test_get_object_allows_admin(self):
+        self.assertEqual(self._viewset(self.root).get_object().pk, self.proj_att.pk)

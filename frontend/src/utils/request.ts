@@ -167,3 +167,12 @@ export default client
 export function request<T = any>(config: AxiosRequestConfig): Promise<T> {
   return service(config) as unknown as Promise<T>
 }
+
+/**
+ * blob 下载专用：响应拦截器对 responseType==='blob' 返回完整 AxiosResponse（含 .data/.headers），
+ * 故此处如实声明为 Promise<AxiosResponse<Blob>>，避免被 RequestClient 的「解包」统一签名误描述
+ * （调用点应取 response.data/response.headers，而非把它当解包后的业务数据）。
+ */
+export function requestBlob(config: AxiosRequestConfig): Promise<AxiosResponse<Blob>> {
+  return service({ ...config, responseType: 'blob' }) as unknown as Promise<AxiosResponse<Blob>>
+}

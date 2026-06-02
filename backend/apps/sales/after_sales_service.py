@@ -7,7 +7,7 @@ import secrets
 from datetime import timedelta
 
 from django.conf import settings
-from django.db import models
+from django.db import OperationalError, ProgrammingError, models
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import serializers, viewsets
@@ -795,8 +795,8 @@ class KnowledgeBaseArticleViewSet(PermissionMixin, viewsets.ModelViewSet):
                 articles.values('id', 'title', 'category', 'view_count', 'helpful_count', 'created_at')
             )
             return Response(data)
-        except Exception:
-            # 数据表 schema 与模型存在历史差异时降级返回空集
+        except (ProgrammingError, OperationalError):
+            # 仅容忍数据表 schema 与模型的历史差异(缺表/缺列);其它异常照常抛出以暴露真实错误
             return Response([])
 
     @action(detail=False, methods=['get'])

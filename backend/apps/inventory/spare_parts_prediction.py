@@ -4,7 +4,7 @@ Spare Parts Lifecycle Prediction and Purchase Suggestions
 
 from decimal import Decimal
 
-from django.db import models
+from django.db import OperationalError, ProgrammingError, models
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
@@ -203,7 +203,7 @@ class LifecyclePredictionView(APIView):
         try:
             data = SparePartPredictionService.predict_lifecycle()
             return Response({'predictions': data, 'total': len(data)})
-        except Exception:
+        except (ProgrammingError, OperationalError):
             # 数据表 schema 与模型存在历史差异，无数据时直接返回空集
             return Response({'predictions': [], 'total': 0})
 
@@ -218,7 +218,7 @@ class PurchaseSuggestionView(APIView):
                 SparePartPredictionService.generate_purchase_suggestions()
             suggestions = PurchaseSuggestion.objects.filter(is_deleted=False).order_by('suggested_date')
             return Response(PurchaseSuggestionSerializer(suggestions, many=True).data)
-        except Exception:
+        except (ProgrammingError, OperationalError):
             return Response([])
 
 
@@ -229,7 +229,7 @@ class SparePartCostAnalysisView(APIView):
         try:
             analysis = SparePartPredictionService.cost_analysis()
             return Response(analysis)
-        except Exception:
+        except (ProgrammingError, OperationalError):
             return Response(
                 {
                     'total_suggestions': 0,

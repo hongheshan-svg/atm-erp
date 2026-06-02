@@ -118,6 +118,45 @@ class NotificationViewSet(PermissionMixin, viewsets.ModelViewSet):
         return Response({'count': count})
 
 
+# 附件父对象所属、且「权限模块名与 Django app_label 对齐」的业务模块。仅对这些模块做模块级访问校验，
+# 其它（core/accounts/masterdata 等无法可靠映射菜单模块的）一律放行，避免误伤合法下载。
+_ATTACHMENT_ENFORCED_MODULES = {'sales', 'purchase', 'inventory', 'finance', 'projects', 'production'}
+
+
+def _user_can_access_attachment(user, attachment):
+    """判断非系统管理员能否访问某附件（retrieve/download/update/destroy）。
+
+    附件按 related_model+related_id 挂在业务对象上、自身无归属。为消除「猜 PK 下载任意附件」的越权，
+    在保持系统「菜单级粒度」前提下做模块级校验：上传者本人放行；否则要求用户在父对象所属业务模块
+    持有任一菜单权限。无法可靠解析模块时一律放行（fail-open），避免误伤合法跨用户下载。
+
+    注：这是模块级而非对象级授权（与全系统 RBAC 粒度一致）；真正的对象级授权需引入通用「父对象权限」
+    模型（更大改造）。batch_delete 走 Attachment.objects.filter(id__in=) 不经此校验，另有越权面，未在此覆盖。
+    """
+    uploaded_by_id = getattr(attachment, 'uploaded_by_id', None)
+    if uploaded_by_id and uploaded_by_id == getattr(user, 'id', None):
+        return True
+
+    related_model = (getattr(attachment, 'related_model', '') or '').strip()
+    if not related_model:
+        return True
+
+    from django.apps import apps as django_apps
+
+    model = next((m for m in django_apps.get_models() if m.__name__ == related_model), None)
+    if model is None:
+        return True
+
+    module = model._meta.app_label
+    if module not in _ATTACHMENT_ENFORCED_MODULES:
+        return True
+
+    from apps.core.permission_service import get_user_permissions
+
+    perms = get_user_permissions(user)
+    return any(code == module or code.startswith(module + ':') for code in perms)
+
+
 class AttachmentViewSet(PermissionMixin, viewsets.ModelViewSet):
     """
     附件管理视图集
@@ -158,6 +197,18 @@ class AttachmentViewSet(PermissionMixin, viewsets.ModelViewSet):
             queryset = queryset.filter(category=category)
 
         return queryset
+
+    def get_object(self):
+        # retrieve/download/update/destroy 经此取对象：非管理员需能访问父对象所属模块，
+        # 否则任意登录用户可猜 PK 下载/读取任意附件（审计越权收紧）。
+        obj = super().get_object()
+        from apps.core.permissions import _is_system_admin
+
+        if not _is_system_admin(self.request.user) and not _user_can_access_attachment(self.request.user, obj):
+            from rest_framework.exceptions import PermissionDenied
+
+            raise PermissionDenied('无权访问该附件')
+        return obj
 
     def get_serializer_class(self):
         if self.action == 'create':
