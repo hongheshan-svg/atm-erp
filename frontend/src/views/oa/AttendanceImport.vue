@@ -271,10 +271,10 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 // 数据
 const uploadRef = ref(null)
-const fileList = ref([])
+const fileList = ref<any[]>([])
 const previewing = ref(false)
 const importing = ref(false)
-const previewData = ref([])
+const previewData = ref<any[]>([])
 const showResult = ref(false)
 
 const importForm = reactive({
@@ -297,7 +297,7 @@ const monthStats = ref({
   abnormal_count: 0
 })
 
-const importHistory = ref([])
+const importHistory = ref<any[]>([])
 
 // 计算预览统计
 const previewStats = computed(() => {

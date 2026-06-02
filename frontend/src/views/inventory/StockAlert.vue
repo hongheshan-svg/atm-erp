@@ -176,9 +176,9 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const activeTab = ref('alerts')
-const alertList = ref([])
-const rules = ref([])
-const summaryData = ref({})
+const alertList = ref<any[]>([])
+const rules = ref<any[]>([])
+const summaryData = ref<Record<string, any>>({})
 
 const queryParams = reactive({
   search: '',

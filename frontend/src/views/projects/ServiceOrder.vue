@@ -254,22 +254,22 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 const router = useRouter()
 
 const loading = ref(false)
-const tableData = ref([])
+const tableData = ref<any[]>([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const searchText = ref('')
 const statusFilter = ref('')
 const typeFilter = ref('')
-const stats = ref({})
+const stats = ref<Record<string, any>>({})
 
 const createDialogVisible = ref(false)
 const dispatchDialogVisible = ref(false)
 const submitting = ref(false)
 const formRef = ref(null)
-const customers = ref([])
-const equipments = ref([])
-const technicians = ref([])
+const customers = ref<any[]>([])
+const equipments = ref<any[]>([])
+const technicians = ref<any[]>([])
 const currentOrder = ref(null)
 
 const form = reactive({

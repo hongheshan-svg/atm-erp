@@ -48,7 +48,7 @@ import { getAssemblyGuide } from '@/api/production'
 const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
-const guide = ref({})
+const guide = ref<Record<string, any>>({})
 
 const pageTitle = computed(() => guide.value.name ? `装配指导 - ${guide.value.name}` : '装配指导详情')
 
@@ -56,7 +56,7 @@ const loadData = async () => {
   loading.value = true
   try {
     const res = await getAssemblyGuide(route.params.id)
-    guide.value = res.data || res
+    guide.value = res
   } catch (error) {
     ElMessage.error('加载数据失败')
   } finally {

@@ -272,11 +272,11 @@ const userStore = useUserStore()
 
 // 状态
 const loading = ref(false)
-const tableData = ref([])
+const tableData = ref<any[]>([])
 const createDialogVisible = ref(false)
-const availableRFQs = ref([])
+const availableRFQs = ref<any[]>([])
 const createFormRef = ref(null)
-const selectedRows = ref([])
+const selectedRows = ref<any[]>([])
 
 // 检查是否管理员
 const isAdmin = computed(() => userStore.userInfo?.is_superuser || userStore.userInfo?.is_staff)

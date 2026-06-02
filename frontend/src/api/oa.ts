@@ -239,26 +239,6 @@ export function syncAttendanceDevice(id: number) {
   return request({ url: `/oa/attendance-devices/${id}/sync/`, method: 'post' })
 }
 
-// ========== 即时通讯 (core) ==========
-export function getConversations() {
-  return request({ url: '/core/conversations/', method: 'get' })
-}
-export function createConversation(data: any) {
-  return request({ url: '/core/conversations/', method: 'post', data })
-}
-export function markConversationRead(id: number) {
-  return request({ url: '/core/messages/mark_read/', method: 'post', data: { conversation_id: id } })
-}
-export function getIMMessages(params?: Record<string, any>) {
-  return request({ url: '/core/messages/', method: 'get', params })
-}
-export function sendIMMessage(data: any) {
-  return request({ url: '/core/messages/', method: 'post', data })
-}
-export function uploadIMFile(data: any, config: any) {
-  return request({ url: '/core/messages/', method: 'post', data, ...config })
-}
-
 // ========== 会议管理 (core) ==========
 export function getCoreMeetings(params?: Record<string, any>) {
   return request({ url: '/core/meetings/', method: 'get', params })

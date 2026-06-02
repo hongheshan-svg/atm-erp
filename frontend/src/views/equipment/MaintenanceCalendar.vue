@@ -112,8 +112,8 @@ import { ref, computed, onMounted } from 'vue'
 import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 import { getMaintenanceCalendar } from '@/api/equipment'
 
-const maintenances = ref([])
-const statistics = ref({})
+const maintenances = ref<any[]>([])
+const statistics = ref<Record<string, any>>({})
 const currentDate = ref(new Date())
 const selectedDate = ref(null)
 const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']

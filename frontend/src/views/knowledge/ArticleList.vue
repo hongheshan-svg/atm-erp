@@ -215,9 +215,9 @@ const dialogVisible = ref(false)
 const detailVisible = ref(false)
 const dialogTitle = ref('新建文章')
 const searchKeyword = ref('')
-const articles = ref([])
+const articles = ref<any[]>([])
 const total = ref(0)
-const categoryTree = ref([])
+const categoryTree = ref<any[]>([])
 const currentArticle = ref(null)
 
 const statistics = reactive({
@@ -261,7 +261,7 @@ const flatCategories = computed(() => {
     })
     return result
   }
-  return flatten(categoryTree.value)
+  return flatten(categoryTree.value || [])
 })
 
 const getTypeTagType = (type) => {
@@ -306,7 +306,7 @@ const fetchData = async () => {
 const fetchCategories = async () => {
   try {
     const res = await getKnowledgeCategoryTree()
-    categoryTree.value = res.data
+    categoryTree.value = res
   } catch (error) {
     console.error('获取分类失败', error)
   }
@@ -315,7 +315,7 @@ const fetchCategories = async () => {
 const fetchStatistics = async () => {
   try {
     const res = await getKnowledgeArticleStatistics()
-    Object.assign(statistics, res.data)
+    Object.assign(statistics, res)
   } catch (error) {
     console.error('获取统计失败', error)
   }
@@ -325,7 +325,7 @@ const handleSearch = async () => {
   if (searchKeyword.value) {
     try {
       const res = await searchKnowledgeArticles(searchKeyword.value)
-      articles.value = res.data
+      articles.value = res
       total.value = articles.value.length
     } catch (error) {
       console.error('搜索失败', error)
@@ -370,7 +370,7 @@ const handleEdit = (article) => {
 const handleView = async (article) => {
   try {
     const res = await getKnowledgeArticle(article.id)
-    currentArticle.value = res.data
+    currentArticle.value = res
     detailVisible.value = true
   } catch (error) {
     ElMessage.error('获取详情失败')
@@ -412,7 +412,7 @@ const handlePublish = async () => {
       await publishKnowledgeArticle(formData.id)
     } else {
       const res = await createKnowledgeArticle(formData)
-      await publishKnowledgeArticle(res.data.id)
+      await publishKnowledgeArticle(res.id)
     }
     ElMessage.success('发布成功')
     dialogVisible.value = false
@@ -430,7 +430,7 @@ const handleLike = async () => {
   liking.value = true
   try {
     const res = await likeKnowledgeArticle(currentArticle.value.id)
-    currentArticle.value.like_count = res.data.like_count
+    currentArticle.value.like_count = res.like_count
     ElMessage.success('点赞成功')
   } catch (error) {
     ElMessage.error('点赞失败')

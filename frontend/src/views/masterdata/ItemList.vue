@@ -422,9 +422,9 @@ const { selectedRows, loading, handleSelectionChange, batchDelete, deleteRow } =
 
 const attachmentRef = ref(null)
 const tempUploadRef = ref(null)
-const tempFiles = ref([])
+const tempFiles = ref<any[]>([])
 
-const items = ref([])
+const items = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增物料')
 const isEdit = ref(false)
@@ -638,7 +638,7 @@ const handleImport = () => {
     
     try {
       const res = await importItems(formData)
-      const data = res.data || res
+      const data = res
       // 构建导入结果提示
       let successMsg = `导入完成：新增 ${data.created || 0} 条`
       if (data.matched_count > 0) {

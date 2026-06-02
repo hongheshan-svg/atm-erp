@@ -242,13 +242,13 @@ import { getCreditLevelList, getCustomerCreditList, getCustomerCredit, getCredit
 const activeTab = ref('list')
 const loading = ref(false)
 const creditDetailVisible = ref(false)
-const creditDetail = ref({})
+const creditDetail = ref<Record<string, any>>({})
 const submitLoading = ref(false)
 
-const creditList = ref([])
-const creditLevels = ref([])
-const warningList = ref([])
-const statsData = ref({})
+const creditList = ref<any[]>([])
+const creditLevels = ref<any[]>([])
+const warningList = ref<any[]>([])
+const statsData = ref<Record<string, any>>({})
 
 const queryParams = reactive({
   search: '',
@@ -364,7 +364,7 @@ const handleChangeStatus = (row) => {
 const handleViewDetail = async (row) => {
   try {
     const res = await getCustomerCredit(row.id)
-    creditDetail.value = res.data || res
+    creditDetail.value = res
   } catch (error) {
     console.error(error)
     creditDetail.value = row

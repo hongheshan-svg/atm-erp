@@ -169,8 +169,8 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const calcLoading = ref(false)
-const snapshots = ref([])
-const costDetails = ref([])
+const snapshots = ref<any[]>([])
+const costDetails = ref<any[]>([])
 const total = ref(0)
 const detailVisible = ref(false)
 const selectedSnapshot = ref(null)
@@ -189,8 +189,8 @@ const loadList = async () => {
   loading.value = true
   try {
     const res = await getBOMCostSnapshots(queryParams)
-    snapshots.value = res.data?.results || res.results || []
-    total.value = res.data?.count || res.count || 0
+    snapshots.value = res.results || res.results || []
+    total.value = res.count || res.count || 0
     stats.totalSnapshots = total.value
     if (snapshots.value.length) {
       stats.avgMaterialCost = (snapshots.value.reduce((s, r) => s + Number(r.total_material_cost || 0), 0) / snapshots.value.length).toFixed(2)
@@ -204,7 +204,7 @@ const viewDetail = async (row) => {
   selectedSnapshot.value = row
   try {
     const res = await getBOMCostDetails({ snapshot: row.id })
-    costDetails.value = res.data?.results || res.results || []
+    costDetails.value = res.results || res.results || []
     detailVisible.value = true
   } catch (error) {
     console.error('BOMCostRollup getBOMCostDetails error:', error)

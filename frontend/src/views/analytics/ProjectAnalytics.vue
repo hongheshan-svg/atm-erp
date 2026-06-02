@@ -160,7 +160,7 @@ const summary = reactive({
   total_profit: 0
 })
 
-const topProjects = ref([])
+const topProjects = ref<any[]>([])
 const sortBy = ref('margin')
 
 const statusChart = ref(null)
@@ -214,8 +214,8 @@ const loadProjectPerformance = async () => {
     let data = []
     if (Array.isArray(res)) {
       data = res
-    } else if (res.data) {
-      data = Array.isArray(res.data) ? res.data : (res.data.results || [])
+    } else if (res) {
+      data = Array.isArray(res) ? res : (res.results || [])
     } else if (res.results) {
       data = res.results
     }

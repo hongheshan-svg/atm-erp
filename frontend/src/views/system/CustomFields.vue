@@ -232,16 +232,16 @@ import { useBatchOperation } from '@/composables/useBatchOperation'
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/system/')
 
 
-const fields = ref([])
+const fields = ref<any[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const showDialog = ref(false)
 const showSortDialog = ref(false)
 const editing = ref(null)
 const selectedModel = ref('')
-const supportedModels = ref([])
-const fieldTypes = ref([])
-const sortableFields = ref([])
+const supportedModels = ref<any[]>([])
+const fieldTypes = ref<any[]>([])
+const sortableFields = ref<any[]>([])
 const dragIndex = ref(null)
 
 const form = ref({

@@ -290,17 +290,17 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 const loading = ref(false)
 const saving = ref(false)
 const issuing = ref(false)
-const list = ref([])
-const projects = ref([])
-const warehouses = ref([])
-const aftersalesOrders = ref([])
-const projectItems = ref([])
-const stockItems = ref([])
+const list = ref<any[]>([])
+const projects = ref<any[]>([])
+const warehouses = ref<any[]>([])
+const aftersalesOrders = ref<any[]>([])
+const projectItems = ref<any[]>([])
+const stockItems = ref<any[]>([])
 const stockSearch = ref('')
 const materialTab = ref('project')
 
-const selectedProjectItems = ref([])
-const selectedStockItems = ref([])
+const selectedProjectItems = ref<any[]>([])
+const selectedStockItems = ref<any[]>([])
 
 const searchForm = reactive({
   requisition_type: '',
@@ -337,7 +337,7 @@ const formRules = {
 const formRef = ref(null)
 
 const issueDialogVisible = ref(false)
-const issueLines = ref([])
+const issueLines = ref<any[]>([])
 const currentRequisitionId = ref(null)
 
 const viewDialogVisible = ref(false)

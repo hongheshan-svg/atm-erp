@@ -322,12 +322,12 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const submitLoading = ref(false)
-const requirementList = ref([])
-const stats = ref({})
-const customers = ref([])
-const projects = ref([])
-const users = ref([])
-const fileList = ref([])
+const requirementList = ref<any[]>([])
+const stats = ref<Record<string, any>>({})
+const customers = ref<any[]>([])
+const projects = ref<any[]>([])
+const users = ref<any[]>([])
+const fileList = ref<any[]>([])
 
 // 常用标签
 const commonTags = ['技术规格', '功能需求', '性能要求', '接口规范', '安全要求', '客户提供', '内部文档']

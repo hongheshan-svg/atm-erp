@@ -140,8 +140,8 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 
 
-const stats = ref({})
-const security = ref({})
+const stats = ref<Record<string, any>>({})
+const security = ref<Record<string, any>>({})
 
 const trendChart = ref(null)
 const actionPieChart = ref(null)

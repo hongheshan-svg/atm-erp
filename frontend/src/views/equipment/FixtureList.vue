@@ -384,11 +384,11 @@ const detailVisible = ref(false)
 const dialogMode = ref('add')
 const formRef = ref(null)
 
-const stats = ref({})
-const tableData = ref([])
-const categoryTree = ref([])
-const flatCategories = ref([])
-const users = ref([])
+const stats = ref<Record<string, any>>({})
+const tableData = ref<any[]>([])
+const categoryTree = ref<any[]>([])
+const flatCategories = ref<any[]>([])
+const users = ref<any[]>([])
 const currentFixture = ref(null)
 
 const filters = reactive({

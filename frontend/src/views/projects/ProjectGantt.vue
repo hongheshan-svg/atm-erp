@@ -116,10 +116,10 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 
 const loading = ref(false)
-const projects = ref([])
+const projects = ref<any[]>([])
 const selectedProject = ref(null)
 const currentProject = ref(null)
-const taskList = ref([])
+const taskList = ref<any[]>([])
 const ganttContainer = ref(null)
 
 const chartStart = computed(() => {
@@ -218,11 +218,11 @@ const loadProjectTasks = async () => {
   try {
     // Load project details
     const projectRes = await getProject(selectedProject.value)
-    currentProject.value = projectRes.data || projectRes
+    currentProject.value = projectRes
     
     // Load tasks
     const tasksRes = await getTaskList({ project: selectedProject.value })
-    taskList.value = tasksRes.results || tasksRes.data || tasksRes || []
+    taskList.value = tasksRes.results || tasksRes || tasksRes || []
     
     // Ensure tasks have dates
     taskList.value = taskList.value.map(task => ({

@@ -142,8 +142,8 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const saving = ref(false)
-const list = ref([])
-const leaveTypes = ref([])
+const list = ref<any[]>([])
+const leaveTypes = ref<any[]>([])
 const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
 const isEdit = ref(false)
@@ -192,7 +192,7 @@ const loadLeaveTypes = async () => {
   try {
     const res = await getLeaveTypes()
     // res 已经是 response.data，因为响应拦截器返回的是 response.data
-    leaveTypes.value = Array.isArray(res) ? res : (res.data || res)
+    leaveTypes.value = Array.isArray(res) ? res : (res || res)
   } catch (error) {
     console.error('加载请假类型失败', error)
   }

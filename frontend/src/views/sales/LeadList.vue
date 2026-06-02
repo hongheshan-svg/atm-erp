@@ -240,9 +240,9 @@ const converting = ref(false)
 const dialogVisible = ref(false)
 const convertDialogVisible = ref(false)
 const dialogTitle = ref('新建线索')
-const leads = ref([])
+const leads = ref<any[]>([])
 const total = ref(0)
-const sourceOptions = ref([])
+const sourceOptions = ref<any[]>([])
 const statistics = reactive({
   total: 0,
   by_status: {},

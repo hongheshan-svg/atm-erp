@@ -231,12 +231,12 @@ const submitting = ref(false)
 const showCreateDialog = ref(false)
 const showDetailDrawer = ref(false)
 
-const maintenances = ref([])
-const contracts = ref([])
-const users = ref([])
+const maintenances = ref<any[]>([])
+const contracts = ref<any[]>([])
+const users = ref<any[]>([])
 const currentMaintenance = ref(null)
 
-const dateRange = ref([])
+const dateRange = ref<any[]>([])
 const statusFilter = ref('')
 
 const stats = ref({

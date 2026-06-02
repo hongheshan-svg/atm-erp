@@ -59,8 +59,8 @@ const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('
 
 
 const loading = ref(false)
-const tableData = ref([])
-const dateRange = ref([])
+const tableData = ref<any[]>([])
+const dateRange = ref<any[]>([])
 const chartRef = ref(null)
 
 const formatMoney = (v) => v ? parseFloat(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
@@ -74,7 +74,7 @@ const loadData = async () => {
       params.end_date = dateRange.value[1]
     }
     const res = await getProjectProfitabilityReport(params)
-    tableData.value = res.data?.projects || res.projects || []
+    tableData.value = res.projects || res.projects || []
     await nextTick()
     renderChart()
   } catch (error) {
@@ -103,7 +103,7 @@ const renderChart = () => {
 const handleExport = async () => {
   try {
     const res = await exportProjectProfitabilityReport()
-    const url = window.URL.createObjectURL(new Blob([res.data || res]))
+    const url = window.URL.createObjectURL(new Blob([res || res]))
     const link = document.createElement('a')
     link.href = url
     link.setAttribute('download', '项目利润率报表.xlsx')

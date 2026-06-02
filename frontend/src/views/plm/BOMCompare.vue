@@ -242,9 +242,9 @@ import { useBatchOperation } from '@/composables/useBatchOperation'
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_project/')
 
 
-const projects = ref([])
-const snapshots = ref([])
-const cadSessions = ref([])
+const projects = ref<any[]>([])
+const snapshots = ref<any[]>([])
+const cadSessions = ref<any[]>([])
 const comparing = ref(false)
 const exporting = ref(false)
 const creatingSnapshot = ref(false)

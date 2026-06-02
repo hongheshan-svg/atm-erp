@@ -153,7 +153,7 @@ const isAdmin = computed(() => userStore.userInfo?.is_superuser || userStore.use
 const loading = ref(false)
 const saving = ref(false)
 const markingRead = ref(false)
-const list = ref([])
+const list = ref<any[]>([])
 const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
 const isEdit = ref(false)

@@ -337,15 +337,15 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const uploading = ref(false)
-const sessions = ref([])
-const projects = ref([])
+const sessions = ref<any[]>([])
+const projects = ref<any[]>([])
 const showUploadDialog = ref(false)
 const showDetail = ref(false)
 const showManualMatch = ref(false)
 const currentSession = ref(null)
 const matchingItem = ref(null)
 const selectedMaterialId = ref(null)
-const materialSearchResults = ref([])
+const materialSearchResults = ref<any[]>([])
 const uploadRef = ref(null)
 const uploadFile = ref(null)
 

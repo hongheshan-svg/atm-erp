@@ -213,15 +213,15 @@ const getCategoryType = (category) => {
 const fetchConfig = async () => {
   try {
     const res = await request({ url: '/core/user-dashboard/my_dashboard/', method: 'get' })
-    if (res.data) {
-      if (res.data.enabled_widgets) {
-        userConfig.value.enabled_widgets = res.data.enabled_widgets
+    if (res) {
+      if (res.enabled_widgets) {
+        userConfig.value.enabled_widgets = res.enabled_widgets
       }
-      if (res.data.widget_order) {
-        userConfig.value.widget_order = res.data.widget_order
+      if (res.widget_order) {
+        userConfig.value.widget_order = res.widget_order
       }
-      if (res.data.layout) {
-        Object.assign(layoutConfig.value, res.data.layout)
+      if (res.layout) {
+        Object.assign(layoutConfig.value, res.layout)
       }
     }
   } catch (error) {

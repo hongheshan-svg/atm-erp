@@ -293,9 +293,9 @@ const generateForm = reactive({
   month: currentMonth
 })
 
-const valuation = ref({})
-const records = ref([])
-const configs = ref([])
+const valuation = ref<Record<string, any>>({})
+const records = ref<any[]>([])
+const configs = ref<any[]>([])
 const recordLoading = ref(false)
 const generateDialogVisible = ref(false)
 const generating = ref(false)

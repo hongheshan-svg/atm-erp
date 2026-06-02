@@ -282,15 +282,15 @@ import { useBatchOperation } from '@/composables/useBatchOperation'
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase_evaluation/')
 
 const loading = ref(false)
-const evaluations = ref([])
+const evaluations = ref<any[]>([])
 const total = ref(0)
-const statistics = ref({})
-const ranking = ref([])
+const statistics = ref<Record<string, any>>({})
+const ranking = ref<any[]>([])
 const showRanking = ref(false)
-const templates = ref([])
-const suppliers = ref([])
-const criteriaList = ref([])
-const scoreItems = ref([])
+const templates = ref<any[]>([])
+const suppliers = ref<any[]>([])
+const criteriaList = ref<any[]>([])
+const scoreItems = ref<any[]>([])
 
 const dialogVisible = ref(false)
 const dialogTitle = ref('新建评价')
@@ -417,12 +417,12 @@ const handleCreate = () => {
 }
 
 const viewDialogVisible = ref(false)
-const viewDetail = ref({})
+const viewDetail = ref<Record<string, any>>({})
 
 const handleView = async (row) => {
   try {
     const res = await getEvaluation(row.id)
-    viewDetail.value = res.data || res
+    viewDetail.value = res
     viewDialogVisible.value = true
   } catch (error) {
     ElMessage.error('加载详情失败')

@@ -275,7 +275,7 @@ import { useBatchOperation } from '@/composables/useBatchOperation'
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/sales/')
 
 
-const templates = ref([])
+const templates = ref<any[]>([])
 const selectedTemplate = ref(null)
 const showTemplateDialog = ref(false)
 const showGenerateDialog = ref(false)

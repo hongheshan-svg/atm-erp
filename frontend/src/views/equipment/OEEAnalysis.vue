@@ -150,18 +150,18 @@ import { useBatchOperation } from '@/composables/useBatchOperation'
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/equipment/')
 
 
-const dateRange = ref([])
+const dateRange = ref<any[]>([])
 const selectedEquipment = ref(null)
-const equipments = ref([])
+const equipments = ref<any[]>([])
 const oeeData = ref({
   oee: 0, availability: 0, performance: 0, quality: 0,
   planned_time: 0, actual_running_time: 0,
   ideal_output: 0, actual_output: 0,
   total_output: 0, good_output: 0
 })
-const equipmentRanking = ref([])
-const trendData = ref([])
-const downtimeData = ref([])
+const equipmentRanking = ref<any[]>([])
+const trendData = ref<any[]>([])
+const downtimeData = ref<any[]>([])
 
 const trendChart = ref(null)
 const downtimeChart = ref(null)
@@ -187,7 +187,7 @@ const buildParams = () => {
 const loadEquipments = async () => {
   try {
     const res = await getEquipmentList({ page_size: 1000 })
-    equipments.value = res.data?.results || res.results || res || []
+    equipments.value = res.results || res.results || res || []
   } catch (error) {
     console.error('OEEAnalysis getEquipmentList error:', error)
   }
@@ -196,7 +196,7 @@ const loadEquipments = async () => {
 const loadOEESummary = async () => {
   try {
     const res = await getOEESummary(buildParams())
-    const d = res.data || res
+    const d = res
     oeeData.value = {
       oee: d.oee || 0,
       availability: d.availability || 0,
@@ -218,7 +218,7 @@ const loadOEESummary = async () => {
 const loadRanking = async () => {
   try {
     const res = await getOEERanking(buildParams())
-    equipmentRanking.value = res.data?.results || res.results || res.data || res || []
+    equipmentRanking.value = res.ranking || res.results || (Array.isArray(res) ? res : [])
   } catch (error) {
     console.error(error)
     equipmentRanking.value = []
@@ -228,7 +228,7 @@ const loadRanking = async () => {
 const loadTrendData = async () => {
   try {
     const res = await getOEETrend(buildParams())
-    trendData.value = res.data || res || []
+    trendData.value = res.trend || (Array.isArray(res) ? res : [])
   } catch (error) {
     console.error(error)
     trendData.value = []
@@ -238,7 +238,7 @@ const loadTrendData = async () => {
 const loadDowntimeData = async () => {
   try {
     const res = await getOEEDowntime(buildParams())
-    downtimeData.value = res.data || res || []
+    downtimeData.value = res.reasons || (Array.isArray(res) ? res : [])
   } catch (error) {
     console.error(error)
     downtimeData.value = []

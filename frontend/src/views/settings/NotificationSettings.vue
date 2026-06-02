@@ -214,8 +214,8 @@ import { ElMessage } from 'element-plus'
 import { getNotificationChannelStatus, testDingTalk, testWeChatWork, broadcastNotification } from '@/api/core'
 
 const loading = ref(false)
-const channelStatus = ref({})
-const enabledChannels = ref([])
+const channelStatus = ref<Record<string, any>>({})
+const enabledChannels = ref<any[]>([])
 
 const testing = reactive({
   dingtalk: false,

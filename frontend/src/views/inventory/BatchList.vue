@@ -273,9 +273,9 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 
 const loading = ref(false)
-const batches = ref([])
-const items = ref([])
-const warehouses = ref([])
+const batches = ref<any[]>([])
+const items = ref<any[]>([])
+const warehouses = ref<any[]>([])
 const viewMode = ref('all')
 
 const searchForm = reactive({
@@ -306,7 +306,7 @@ const submitting = ref(false)
 const formRef = ref(null)
 const adjustFormRef = ref(null)
 const currentBatch = ref(null)
-const batchMoves = ref([])
+const batchMoves = ref<any[]>([])
 const newStatus = ref('')
 
 const form = reactive({

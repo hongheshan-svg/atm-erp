@@ -213,13 +213,13 @@ const queryMonth = ref(null)
 
 const yearOptions = Array.from({ length: 3 }, (_, i) => currentYear - i)
 
-const myPerformance = ref({})
-const teamRanking = ref([])
-const monthlyTrend = ref([])
+const myPerformance = ref<Record<string, any>>({})
+const teamRanking = ref<any[]>([])
+const monthlyTrend = ref<any[]>([])
 const customerAnalysis = ref({ top_customers: [], new_customers_trend: [] })
 const pipelineAnalysis = ref({ stages: [] })
-const myTargets = ref([])
-const myCommissions = ref([])
+const myTargets = ref<any[]>([])
+const myCommissions = ref<any[]>([])
 
 const totalCommission = computed(() => {
   return myCommissions.value

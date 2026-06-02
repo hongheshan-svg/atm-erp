@@ -150,8 +150,8 @@ const props = defineProps({
 const emit = defineEmits(['refresh'])
 
 const loading = ref(false)
-const tasks = ref([])
-const projectMembers = ref([])
+const tasks = ref<any[]>([])
+const projectMembers = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const formRef = ref(null)

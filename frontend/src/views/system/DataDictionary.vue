@@ -202,8 +202,8 @@ import { useBatchOperation } from '@/composables/useBatchOperation'
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/system/')
 
 
-const dictTypes = ref([])
-const dictItems = ref([])
+const dictTypes = ref<any[]>([])
+const dictItems = ref<any[]>([])
 const selectedType = ref(null)
 const typeSearch = ref('')
 const showTypeDialog = ref(false)

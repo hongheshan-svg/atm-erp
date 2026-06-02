@@ -305,9 +305,9 @@ const saving = ref(false)
 const creating = ref(false)
 const signing = ref(false)
 const searchingOrders = ref(false)
-const contracts = ref([])
-const customers = ref([])
-const salesOrders = ref([])
+const contracts = ref<any[]>([])
+const customers = ref<any[]>([])
+const salesOrders = ref<any[]>([])
 const currentContract = ref(null)
 
 const createDialogVisible = ref(false)
@@ -403,8 +403,8 @@ const loadContracts = async () => {
     if (searchForm.status) params.status = searchForm.status
     
     const res = await getSalesContracts(params)
-    contracts.value = res.data?.results || res.results || res.data || []
-    pagination.total = res.data?.count || res.count || 0
+    contracts.value = res.results || res.results || res || []
+    pagination.total = res.count || res.count || 0
   } catch (error) {
     ElMessage.error('加载销售合同失败')
   } finally {
@@ -415,7 +415,7 @@ const loadContracts = async () => {
 const loadCustomers = async () => {
   try {
     const res = await getCustomerList()
-    customers.value = res.data?.results || res.results || res.data || []
+    customers.value = res.results || res.results || res || []
   } catch (error) {
     console.error('加载客户失败:', error)
   }
@@ -426,7 +426,7 @@ const searchOrders = async (query) => {
     searchingOrders.value = true
     try {
       const res = await getOrdersForLinking({ search: query })
-      salesOrders.value = res.data || res || []
+      salesOrders.value = res || []
     } catch (error) {
       console.error('搜索订单失败:', error)
     } finally {
@@ -462,7 +462,7 @@ const handleCreateFromSO = async () => {
     loadContracts()
     
     // 打开编辑对话框
-    const contract = res.data || res
+    const contract = res
     handleEdit(contract)
   } catch (error) {
     if (error !== 'cancel') {
@@ -476,7 +476,7 @@ const handleCreateFromSO = async () => {
 const handleView = async (row) => {
   try {
     const res = await getSalesContract(row.id)
-    currentContract.value = res.data || res
+    currentContract.value = res
     viewDialogVisible.value = true
   } catch (error) {
     ElMessage.error('获取合同详情失败')
@@ -488,7 +488,7 @@ const handleEdit = async (row) => {
   
   try {
     const res = await getSalesContract(row.id)
-    const data = res.data || res
+    const data = res
     
     Object.assign(form, {
       id: data.id,
@@ -602,7 +602,7 @@ const handleSignSubmit = async () => {
 const handlePrint = async (row) => {
   try {
     const res = await printPreviewContract(row.id)
-    const data = res.data || res
+    const data = res
     
     // 创建打印窗口
     const printWindow = window.open('', '_blank')

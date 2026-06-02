@@ -45,7 +45,7 @@ import { getReconciliationSession } from '@/api/inventory'
 const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
-const session = ref({})
+const session = ref<Record<string, any>>({})
 
 const pageTitle = computed(() => session.value.session_no ? `对账详情 - ${session.value.session_no}` : '对账详情')
 const formatMoney = (v) => v ? parseFloat(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
@@ -54,7 +54,7 @@ const loadData = async () => {
   loading.value = true
   try {
     const res = await getReconciliationSession(route.params.id)
-    session.value = res.data || res
+    session.value = res
   } catch (error) {
     ElMessage.error('加载数据失败')
   } finally {

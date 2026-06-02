@@ -225,13 +225,13 @@ import { useBatchOperation } from '@/composables/useBatchOperation'
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_drawing/')
 
 
-const projects = ref([])
+const projects = ref<any[]>([])
 const projectId = ref(null)
-const bomTree = ref([])
-const drawings = ref([])
+const bomTree = ref<any[]>([])
+const drawings = ref<any[]>([])
 const linking = ref(false)
 const showLinkResult = ref(false)
-const linkResult = ref({})
+const linkResult = ref<Record<string, any>>({})
 
 const bomSearch = ref('')
 const drawingSearch = ref('')

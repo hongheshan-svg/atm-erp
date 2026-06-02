@@ -244,11 +244,11 @@ const showWorkflowProgress = (row) => {
 }
 
 const loading = ref(false)
-const quotations = ref([])
-const customers = ref([])
+const quotations = ref<any[]>([])
+const customers = ref<any[]>([])
 const detailVisible = ref(false)
 const dialogTitle = ref('')
-const currentQuotation = ref({})
+const currentQuotation = ref<Record<string, any>>({})
 
 const searchForm = reactive({
   quote_no: '',

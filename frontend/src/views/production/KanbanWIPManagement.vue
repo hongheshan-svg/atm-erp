@@ -149,9 +149,9 @@ import { useBatchOperation } from '@/composables/useBatchOperation'
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/')
 
 
-const wipStatus = ref([])
-const rules = ref([])
-const alerts = ref([])
+const wipStatus = ref<any[]>([])
+const rules = ref<any[]>([])
+const alerts = ref<any[]>([])
 const ruleLoading = ref(false)
 const alertLoading = ref(false)
 const showRuleDialog = ref(false)
@@ -180,7 +180,7 @@ const loadRules = async () => {
   ruleLoading.value = true
   try {
     const res = await getKanbanWIPRules()
-    rules.value = res.data?.results || res.results || []
+    rules.value = res.results || res.results || []
   } finally { ruleLoading.value = false }
 }
 
@@ -190,7 +190,7 @@ const loadAlerts = async () => {
     const params = {}
     if (alertFilter.value) params.alert_type = alertFilter.value
     const res = await getKanbanWIPAlerts(params)
-    alerts.value = res.data?.results || res.results || []
+    alerts.value = res.results || res.results || []
   } finally { alertLoading.value = false }
 }
 

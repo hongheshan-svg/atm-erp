@@ -328,10 +328,10 @@ const showWorkflowProgress = (row) => {
 
 const loading = ref(false)
 const saving = ref(false)
-const orders = ref([])
-const suppliers = ref([])
-const projects = ref([])
-const items = ref([])
+const orders = ref<any[]>([])
+const suppliers = ref<any[]>([])
+const projects = ref<any[]>([])
+const items = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('创建采购订单')
 const isEdit = ref(false)
@@ -412,8 +412,8 @@ const loadOrders = async () => {
     if (searchForm.status) params.status = searchForm.status
     
     const res = await getPurchaseOrders(params)
-    orders.value = res.data?.results || res.results || res.data || []
-    pagination.total = res.data?.count || res.count || 0
+    orders.value = res.results || res.results || res || []
+    pagination.total = res.count || res.count || 0
   } catch (error) {
     ElMessage.error('加载采购订单失败')
   } finally {
@@ -424,7 +424,7 @@ const loadOrders = async () => {
 const loadSuppliers = async () => {
   try {
     const res = await getSupplierList()
-    suppliers.value = res.data?.results || res.results || res.data || []
+    suppliers.value = res.results || res.results || res || []
   } catch (error) {
     console.error('加载供应商失败:', error)
   }
@@ -433,7 +433,7 @@ const loadSuppliers = async () => {
 const loadProjects = async () => {
   try {
     const res = await getProjectList()
-    projects.value = res.data?.results || res.results || res.data || []
+    projects.value = res.results || res.results || res || []
   } catch (error) {
     console.error('加载项目失败:', error)
   }
@@ -442,7 +442,7 @@ const loadProjects = async () => {
 const loadItems = async () => {
   try {
     const res = await getItemList()
-    items.value = res.data?.results || res.results || res.data || []
+    items.value = res.results || res.results || res || []
   } catch (error) {
     console.error('加载物料失败:', error)
   }
@@ -479,7 +479,7 @@ const handleEdit = async (row) => {
   
   try {
     const res = await getPurchaseOrder(row.id)
-    const data = res.data || res
+    const data = res
     
     Object.assign(form, {
       id: data.id,

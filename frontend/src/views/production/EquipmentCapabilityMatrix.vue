@@ -159,7 +159,7 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const submitLoading = ref(false)
-const capabilityList = ref([])
+const capabilityList = ref<any[]>([])
 const total = ref(0)
 const dialogVisible = ref(false)
 const editId = ref(null)
@@ -201,8 +201,8 @@ const loadList = async () => {
     if (selectedProcess.value) params.process_type = selectedProcess.value
     if (selectedGrade.value) params.precision_grade = selectedGrade.value
     const res = await getEquipmentCapabilities(params)
-    capabilityList.value = res.data?.results || res.results || []
-    total.value = res.data?.count || res.count || 0
+    capabilityList.value = res.results || res.results || []
+    total.value = res.count || res.count || 0
     stats.calibrated = total.value
   } finally {
     loading.value = false

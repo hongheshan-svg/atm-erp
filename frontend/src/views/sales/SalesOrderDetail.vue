@@ -266,9 +266,9 @@ const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
-const order = ref({})
-const deliveryOrders = ref([])
-const warehouses = ref([])
+const order = ref<Record<string, any>>({})
+const deliveryOrders = ref<any[]>([])
+const warehouses = ref<any[]>([])
 const deliveryDialogVisible = ref(false)
 const deliveryActiveTab = ref('basic')
 const deliveryForm = ref({
@@ -336,7 +336,7 @@ const loadOrderDetail = async () => {
     
     // 加载关联的发货单
     const deliveryRes = await getDeliveryOrders({ so: route.params.id })
-    deliveryOrders.value = deliveryRes.data?.results || deliveryRes.results || deliveryRes.data || []
+    deliveryOrders.value = deliveryRes.results || deliveryRes.results || deliveryRes || []
   } catch (error) {
     console.error('加载订单详情失败:', error)
     ElMessage.error('加载订单详情失败')

@@ -264,12 +264,12 @@ const dashboard = ref({
   conflictsCount: 0
 })
 
-const resources = ref([])
-const allocations = ref([])
-const resourceTypes = ref([])
-const projects = ref([])
+const resources = ref<any[]>([])
+const allocations = ref<any[]>([])
+const resourceTypes = ref<any[]>([])
+const projects = ref<any[]>([])
 
-const dateRange = ref([])
+const dateRange = ref<any[]>([])
 
 const resourceFilter = reactive({
   type: null

@@ -218,7 +218,7 @@ import { getProjectList, getProjectCostDashboard } from '@/api/projects/project'
 const router = useRouter()
 
 const loading = ref(false)
-const projects = ref([])
+const projects = ref<any[]>([])
 const selectedProject = ref(null)
 const projectData = ref(null)
 

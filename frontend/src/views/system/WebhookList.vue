@@ -102,8 +102,8 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 const loading = ref(false)
 const submitting = ref(false)
 const showForm = ref(false)
-const webhooks = ref([])
-const eventTypes = ref([])
+const webhooks = ref<any[]>([])
+const eventTypes = ref<any[]>([])
 const editingId = ref(null)
 const formRef = ref(null)
 

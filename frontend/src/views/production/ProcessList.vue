@@ -290,9 +290,9 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 // 状态
 const loading = ref(false)
 const saving = ref(false)
-const processList = ref([])
-const projects = ref([])
-const users = ref([])
+const processList = ref<any[]>([])
+const projects = ref<any[]>([])
+const users = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增工序')
 const formRef = ref(null)

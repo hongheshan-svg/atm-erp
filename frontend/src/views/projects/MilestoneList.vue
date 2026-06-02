@@ -295,11 +295,11 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const viewDialogVisible = ref(false)
-const viewDetail = ref({})
+const viewDetail = ref<Record<string, any>>({})
 const submitLoading = ref(false)
 const progressLoading = ref(false)
 const initLoading = ref(false)
-const tableData = ref([])
+const tableData = ref<any[]>([])
 const total = ref(0)
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增里程碑')
@@ -309,9 +309,9 @@ const isEdit = ref(false)
 const formRef = ref(null)
 const currentMilestone = ref(null)
 
-const projects = ref([])
-const users = ref([])
-const milestoneTypes = ref([])
+const projects = ref<any[]>([])
+const users = ref<any[]>([])
+const milestoneTypes = ref<any[]>([])
 const usersLoaded = ref(false)
 const permissionStore = usePermissionStore()
 
@@ -484,7 +484,7 @@ const handleEdit = async (row) => {
 const handleView = async (row) => {
   try {
     const res = await getMilestone(row.id)
-    viewDetail.value = res.data || res
+    viewDetail.value = res
   } catch (error) {
     console.error(error)
     viewDetail.value = row

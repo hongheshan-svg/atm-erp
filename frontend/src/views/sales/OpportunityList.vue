@@ -182,8 +182,8 @@ const loading = ref(false)
 const submitting = ref(false)
 const dialogVisible = ref(false)
 const dialogTitle = ref('新建商机')
-const opportunities = ref([])
-const customerOptions = ref([])
+const opportunities = ref<any[]>([])
+const customerOptions = ref<any[]>([])
 const statistics = reactive({
   total: 0,
   total_amount: 0,

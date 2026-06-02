@@ -93,8 +93,8 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const saving = ref(false)
-const tableData = ref([])
-const workCenters = ref([])
+const tableData = ref<any[]>([])
+const workCenters = ref<any[]>([])
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
@@ -109,8 +109,8 @@ const loadData = async () => {
   loading.value = true
   try {
     const res = await getWorkStations({ page: page.value, page_size: pageSize.value })
-    tableData.value = res.data?.results || res.results || []
-    total.value = res.data?.count || res.count || 0
+    tableData.value = res.results || res.results || []
+    total.value = res.count || res.count || 0
   } catch (error) {
     ElMessage.error('加载数据失败')
   } finally {
@@ -121,7 +121,7 @@ const loadData = async () => {
 const loadWorkCenters = async () => {
   try {
     const res = await getWorkCenters({ page_size: 1000 })
-    workCenters.value = res.data?.results || res.results || []
+    workCenters.value = res.results || res.results || []
   } catch (error) {
     console.error('WorkStationList getWorkCenters error:', error)
   }

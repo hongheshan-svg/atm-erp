@@ -161,11 +161,11 @@ import { getCustomerFollowUpList } from '@/api/masterdata'
 
 const router = useRouter()
 
-const stats = ref({})
-const pipelineStages = ref([])
-const recentLeads = ref([])
-const recentFollowups = ref([])
-const salesRanking = ref([])
+const stats = ref<Record<string, any>>({})
+const pipelineStages = ref<any[]>([])
+const recentLeads = ref<any[]>([])
+const recentFollowups = ref<any[]>([])
+const salesRanking = ref<any[]>([])
 
 const maxStageAmount = ref(1)
 

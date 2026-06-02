@@ -158,7 +158,7 @@ const props = defineProps({
 const emit = defineEmits(['refresh'])
 
 const loading = ref(false)
-const memberList = ref([])
+const memberList = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const formRef = ref(null)
@@ -166,7 +166,7 @@ const submitting = ref(false)
 const isEdit = ref(false)
 const currentMemberId = ref(null)
 
-const userOptions = ref([])
+const userOptions = ref<any[]>([])
 
 const formData = ref({
   user: null,

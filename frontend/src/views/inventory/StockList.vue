@@ -95,10 +95,10 @@ const router = useRouter()
 const loading = ref(false)
 const historyVisible = ref(false)
 const historyLoading = ref(false)
-const historyList = ref([])
+const historyList = ref<any[]>([])
 const historyItem = ref(null)
-const stocks = ref([])
-const warehouses = ref([])
+const stocks = ref<any[]>([])
+const warehouses = ref<any[]>([])
 
 const searchForm = reactive({
   warehouse: null,
@@ -137,7 +137,7 @@ const viewHistory = async (row) => {
   historyLoading.value = true
   try {
     const res = await getStockMoves({ item: row.item, warehouse: row.warehouse, page_size: 50 })
-    historyList.value = res.data?.results || res.results || []
+    historyList.value = res.results || res.results || []
   } catch (error) {
     console.error(error)
     historyList.value = []

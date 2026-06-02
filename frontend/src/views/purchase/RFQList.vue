@@ -560,14 +560,14 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 
 // 状态
 const loading = ref(false)
-const tableData = ref([])
+const tableData = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新建询价')
 const sendDialogVisible = ref(false)
-const projects = ref([])
-const items = ref([])
-const suppliers = ref([])
-const selectedSuppliers = ref([])
+const projects = ref<any[]>([])
+const items = ref<any[]>([])
+const suppliers = ref<any[]>([])
+const selectedSuppliers = ref<any[]>([])
 const currentRFQ = ref(null)
 const formRef = ref(null)
 
@@ -578,18 +578,18 @@ const quoteImportDialogVisible = ref(false)
 const quoteImportFile = ref(null)
 const quoteImporting = ref(false)
 const rfqViewVisible = ref(false)
-const rfqDetail = ref({})
+const rfqDetail = ref<Record<string, any>>({})
 const quoteUploadRef = ref(null)
 
 // 待询价物料相关
 const activeCollapse = ref(['pending', 'purchasable'])
-const pendingQuoteItems = ref([])
+const pendingQuoteItems = ref<any[]>([])
 const pendingQuoteLoading = ref(false)
 
 // 待采购申请物料相关
-const purchasableItems = ref([])
+const purchasableItems = ref<any[]>([])
 const purchasableLoading = ref(false)
-const selectedPurchasableItems = ref([])
+const selectedPurchasableItems = ref<any[]>([])
 const selectAllPurchasable = ref(false)
 
 // 搜索
@@ -608,8 +608,8 @@ const bomRFQForm = reactive({
   deadline_days: '',
   auto_match_suppliers: true
 })
-const projectBOMItems = ref([])
-const selectedBOMItems = ref([])
+const projectBOMItems = ref<any[]>([])
+const selectedBOMItems = ref<any[]>([])
 const bomLoading = ref(false)
 
 // 从模板创建询价
@@ -618,11 +618,11 @@ const templateRFQForm = reactive({
   template_id: null,
   project_id: null
 })
-const rfqTemplates = ref([])
+const rfqTemplates = ref<any[]>([])
 
 // 供应商匹配
 const supplierMatchDialogVisible = ref(false)
-const matchedSuppliers = ref([])
+const matchedSuppliers = ref<any[]>([])
 const matchLoading = ref(false)
 
 // 分页

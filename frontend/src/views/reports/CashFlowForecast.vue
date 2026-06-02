@@ -182,9 +182,9 @@ const overview = reactive({
   netFlow: 0
 })
 
-const arList = ref([])
-const apList = ref([])
-const alerts = ref([])
+const arList = ref<any[]>([])
+const apList = ref<any[]>([])
+const alerts = ref<any[]>([])
 
 const formatNumber = (num) => {
   if (!num) return '0.00'
@@ -215,7 +215,7 @@ const fetchData = async () => {
   try {
     // 获取现金流预测汇总数据
     const forecastRes = await getCashFlowForecast()
-    const forecastData = forecastRes.data || forecastRes
+    const forecastData = forecastRes
     
     // 设置概览数据
     overview.expectedInflow = forecastData.expected_inflows || 0
@@ -224,16 +224,16 @@ const fetchData = async () => {
     
     // 获取应收账款明细
     const arRes = await getReceivableList({ status: 'PENDING', page_size: 100 })
-    arList.value = arRes.data?.results || arRes.results || arRes.data || []
+    arList.value = arRes.results || arRes.results || arRes || []
     
     // 获取应付账款明细
     const apRes = await getPayableList({ status: 'PENDING', page_size: 100 })
-    apList.value = apRes.data?.results || apRes.results || apRes.data || []
+    apList.value = apRes.results || apRes.results || apRes || []
     
     // 尝试获取当前现金余额（从财务汇总）
     try {
       const dashboardRes = await getAnalyticsDashboard()
-      const dashboardData = dashboardRes.data || dashboardRes
+      const dashboardData = dashboardRes
       // 使用应收 - 应付作为近似现金状况
       const receivables = dashboardData.financial?.receivables || 0
       const payables = dashboardData.financial?.payables || 0
@@ -252,10 +252,10 @@ const fetchData = async () => {
     // 获取数据失败时尝试单独获取应收应付
     try {
       const arRes = await getReceivableList({ status: 'PENDING', page_size: 100 })
-      arList.value = arRes.data?.results || arRes.results || arRes.data || []
+      arList.value = arRes.results || arRes.results || arRes || []
       
       const apRes = await getPayableList({ status: 'PENDING', page_size: 100 })
-      apList.value = apRes.data?.results || apRes.results || apRes.data || []
+      apList.value = apRes.results || apRes.results || apRes || []
       
   calculateOverview()
   initTrendChart()

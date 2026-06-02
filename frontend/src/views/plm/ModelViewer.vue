@@ -156,7 +156,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader'
 const loading = ref(false)
 const loadingModel = ref(false)
 const searchKeyword = ref('')
-const modelTree = ref([])
+const modelTree = ref<any[]>([])
 const currentModel = ref(null)
 const wireframe = ref(false)
 const modelColor = ref('#4a90d9')

@@ -216,9 +216,9 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 const loading = ref(false)
 const saving = ref(false)
 const viewDialogVisible = ref(false)
-const viewDetail = ref({})
-const list = ref([])
-const availableVehicles = ref([])
+const viewDetail = ref<Record<string, any>>({})
+const list = ref<any[]>([])
+const availableVehicles = ref<any[]>([])
 const dialogVisible = ref(false)
 const returnDialogVisible = ref(false)
 const currentItem = ref(null)
@@ -340,7 +340,7 @@ const handleCreate = () => {
 const handleView = async (row) => {
   try {
     const res = await getVehicleRequest(row.id)
-    viewDetail.value = res.data || res
+    viewDetail.value = res
   } catch (error) {
     console.error(error)
     viewDetail.value = row

@@ -253,16 +253,16 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const submitLoading = ref(false)
-const tableData = ref([])
+const tableData = ref<any[]>([])
 const total = ref(0)
 const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
 const dialogTitle = ref('新增预算')
 const isEdit = ref(false)
 const currentBudget = ref(null)
-const usageRecords = ref([])
+const usageRecords = ref<any[]>([])
 const formRef = ref(null)
-const stats = ref({})
+const stats = ref<Record<string, any>>({})
 
 const budgetTypes = ref([
   { value: 'ANNUAL', label: '年度预算' },
@@ -369,7 +369,7 @@ const handleView = async (row) => {
     currentBudget.value = data
     
     const usageRes = await getPurchaseBudgetUsageRecords(row.id)
-    usageRecords.value = usageRes.data
+    usageRecords.value = usageRes
     
     viewDialogVisible.value = true
   } catch (e) {

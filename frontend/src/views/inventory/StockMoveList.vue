@@ -193,10 +193,10 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 
 const loading = ref(false)
-const tableData = ref([])
-const items = ref([])
-const warehouses = ref([])
-const projects = ref([])
+const tableData = ref<any[]>([])
+const items = ref<any[]>([])
+const warehouses = ref<any[]>([])
+const projects = ref<any[]>([])
 
 const searchForm = reactive({
   item: '',
@@ -270,8 +270,8 @@ const fetchData = async () => {
     }
     
     const res = await getMoves(params)
-    tableData.value = res.data?.results || res.results || res.data || []
-    pagination.total = res.data?.count || res.count || 0
+    tableData.value = res.results || res.results || res || []
+    pagination.total = res.count || res.count || 0
     
     // 计算统计数据
     calculateStats()
@@ -306,7 +306,7 @@ const calculateStats = () => {
 const fetchItems = async () => {
   try {
     const res = await getItemList()
-    items.value = res.data?.results || res.results || res.data || []
+    items.value = res.results || res.results || res || []
   } catch (error) {
     console.error('获取物料列表失败:', error)
   }
@@ -315,7 +315,7 @@ const fetchItems = async () => {
 const fetchWarehouses = async () => {
   try {
     const res = await getWarehouseList()
-    warehouses.value = res.data?.results || res.results || res.data || []
+    warehouses.value = res.results || res.results || res || []
   } catch (error) {
     console.error('获取仓库列表失败:', error)
   }
@@ -324,7 +324,7 @@ const fetchWarehouses = async () => {
 const fetchProjects = async () => {
   try {
     const res = await getProjectList()
-    projects.value = res.data?.results || res.results || res.data || []
+    projects.value = res.results || res.results || res || []
   } catch (error) {
     console.error('获取项目列表失败:', error)
   }

@@ -325,9 +325,9 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 
 const loading = ref(false)
 const saving = ref(false)
-const drawings = ref([])
-const projects = ref([])
-const items = ref([])
+const drawings = ref<any[]>([])
+const projects = ref<any[]>([])
+const items = ref<any[]>([])
 const selectedProject = ref(null)
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增图纸')
@@ -367,7 +367,7 @@ const revisionForm = reactive({
 // 导入导出相关
 const importDialogVisible = ref(false)
 const viewDialogVisible = ref(false)
-const viewDetail = ref({})
+const viewDetail = ref<Record<string, any>>({})
 const importFile = ref(null)
 const importing = ref(false)
 const importResult = ref(null)

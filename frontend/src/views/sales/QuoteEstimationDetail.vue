@@ -156,7 +156,7 @@ const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
-const estimation = ref({})
+const estimation = ref<Record<string, any>>({})
 const activeTab = ref('material')
 
 const pageTitle = computed(() => {
@@ -198,7 +198,7 @@ const loadEstimation = async () => {
   loading.value = true
   try {
     const res = await getQuoteEstimation(route.params.id)
-    estimation.value = res.data || res
+    estimation.value = res
   } catch (error) {
     ElMessage.error('加载估算详情失败')
   } finally {

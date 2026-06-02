@@ -172,9 +172,9 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 )
 
 const loading = ref(false)
-const projects = ref([])
-const projectTasks = ref([])
-const timeLogs = ref([])
+const projects = ref<any[]>([])
+const projectTasks = ref<any[]>([])
+const timeLogs = ref<any[]>([])
 const dialogVisible = ref(false)
 const formRef = ref(null)
 
@@ -235,7 +235,7 @@ const getStatusLabel = (status) => {
 const fetchProjects = async () => {
   try {
     const res = await getProjectList()
-    projects.value = res.data?.results || res.results || res.data || []
+    projects.value = res.results || res.results || res || []
   } catch (error) {
     console.error('获取项目列表失败:', error)
   }
@@ -255,8 +255,8 @@ const fetchData = async () => {
     }
     
     const res = await getTimeLogList(params)
-    timeLogs.value = res.data?.results || res.results || res.data || []
-    pagination.total = res.data?.count || res.count || 0
+    timeLogs.value = res.results || res.results || res || []
+    pagination.total = res.count || res.count || 0
     
     calculateStats()
   } catch (error) {
@@ -297,7 +297,7 @@ const fetchProjectTasks = async (projectId) => {
   try {
     // 使用查询参数过滤项目任务
     const res = await getTaskList({ project: projectId })
-    projectTasks.value = res.data?.results || res.results || res.data || []
+    projectTasks.value = res.results || res.results || res || []
   } catch (error) {
     projectTasks.value = [
       { id: 1, name: '需求分析' },

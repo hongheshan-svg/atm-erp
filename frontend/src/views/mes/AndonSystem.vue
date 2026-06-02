@@ -311,12 +311,12 @@ const loading = ref(false)
 const submitLoading = ref(false)
 const callFilter = ref('pending')
 
-const callList = ref([])
-const stationList = ref([])
-const stations = ref([])
-const andonTypes = ref([])
-const callStats = ref({})
-const stationSummary = ref({})
+const callList = ref<any[]>([])
+const stationList = ref<any[]>([])
+const stations = ref<any[]>([])
+const andonTypes = ref<any[]>([])
+const callStats = ref<Record<string, any>>({})
+const stationSummary = ref<Record<string, any>>({})
 const avgResponseTime = ref(0)
 
 const pagination = reactive({

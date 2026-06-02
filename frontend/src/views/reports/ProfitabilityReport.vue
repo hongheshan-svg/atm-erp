@@ -105,8 +105,8 @@ const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('
 
 
 const loading = ref(false)
-const reportData = ref([])
-const projects = ref([])
+const reportData = ref<any[]>([])
+const projects = ref<any[]>([])
 const projectsLoaded = ref(false)
 const permissionStore = usePermissionStore()
 

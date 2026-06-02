@@ -204,10 +204,10 @@ const router = useRouter()
 
 const loading = ref(false)
 const submitting = ref(false)
-const stats = ref({})
-const activeAlarms = ref([])
-const pendingPM = ref([])
-const connections = ref([])
+const stats = ref<Record<string, any>>({})
+const activeAlarms = ref<any[]>([])
+const pendingPM = ref<any[]>([])
+const connections = ref<any[]>([])
 const diagnosisDialogVisible = ref(false)
 const currentEquipment = ref(null)
 let refreshInterval = null
@@ -249,9 +249,9 @@ const loadDashboard = async () => {
   loading.value = true
   try {
     const res = await getMonitoringDashboard()
-    stats.value = res.data.equipment_stats || {}
-    activeAlarms.value = res.data.active_alarms || []
-    pendingPM.value = res.data.pending_pm || []
+    stats.value = res.equipment_stats || {}
+    activeAlarms.value = res.active_alarms || []
+    pendingPM.value = res.pending_pm || []
   } catch (e) {
     console.error(e)
   } finally {
@@ -262,7 +262,7 @@ const loadDashboard = async () => {
 const loadConnections = async () => {
   try {
     const res = await getEquipmentConnectionList({ page_size: 100 })
-    connections.value = res.data.results || res.data
+    connections.value = res.results || res
   } catch (e) {
     console.error(e)
   }
@@ -312,8 +312,8 @@ const toggleCollection = async (conn) => {
 const testConnection = async (conn) => {
   try {
     const res = await testEquipmentConnection(conn.id)
-    if (res.data.success) {
-      ElMessage.success(`连接正常，延迟: ${res.data.latency_ms}ms`)
+    if (res.success) {
+      ElMessage.success(`连接正常，延迟: ${res.latency_ms}ms`)
     } else {
       ElMessage.error('连接失败')
     }
@@ -343,7 +343,7 @@ const handleStartDiagnosis = async () => {
     })
     ElMessage.success('诊断会话已创建')
     diagnosisDialogVisible.value = false
-    router.push(`/projects/diagnostic-session/${res.data.id}`)
+    router.push(`/projects/diagnostic-session/${res.id}`)
   } catch (e) {
     ElMessage.error('创建失败')
   } finally {

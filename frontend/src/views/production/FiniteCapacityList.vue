@@ -148,7 +148,7 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const submitLoading = ref(false)
-const planList = ref([])
+const planList = ref<any[]>([])
 const total = ref(0)
 const dialogVisible = ref(false)
 const isEdit = ref(false)
@@ -177,8 +177,8 @@ const loadList = async () => {
     const params = { ...queryParams }
     if (params.status === '') delete params.status
     const res = await getFiniteCapacityPlans(params)
-    planList.value = res.data?.results || res.results || []
-    total.value = res.data?.count || res.count || 0
+    planList.value = res.results || res.results || []
+    total.value = res.count || res.count || 0
     stats.totalPlans = total.value
   } finally {
     loading.value = false

@@ -152,11 +152,11 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 
 const loading = ref(false)
-const systemHealth = ref({})
-const systemStatus = ref({})
-const securityStatus = ref({})
-const dataStats = ref({})
-const recentLogs = ref([])
+const systemHealth = ref<Record<string, any>>({})
+const systemStatus = ref<Record<string, any>>({})
+const securityStatus = ref<Record<string, any>>({})
+const dataStats = ref<Record<string, any>>({})
+const recentLogs = ref<any[]>([])
 
 const services = ref([
   { name: 'Web服务 (Django)', status: 'running', port: '8000', memory: '-', cpu: '-', last_check: '-' },

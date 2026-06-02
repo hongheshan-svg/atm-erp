@@ -38,7 +38,7 @@ import { getRoutingTemplate } from '@/api/production'
 const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
-const template = ref({})
+const template = ref<Record<string, any>>({})
 
 const pageTitle = computed(() => template.value.name ? `工艺模板 - ${template.value.name}` : '工艺模板详情')
 
@@ -46,7 +46,7 @@ const loadData = async () => {
   loading.value = true
   try {
     const res = await getRoutingTemplate(route.params.id)
-    template.value = res.data || res
+    template.value = res
   } catch (error) {
     ElMessage.error('加载数据失败')
   } finally {

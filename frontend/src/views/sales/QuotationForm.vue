@@ -206,7 +206,7 @@ const loading = ref(false)
 const saving = ref(false)
 const isEdit = computed(() => !!route.params.id)
 
-const customers = ref([])
+const customers = ref<any[]>([])
 
 const form = reactive({
   customer: null,
@@ -263,7 +263,7 @@ const removeLine = (index) => {
 const loadCustomers = async () => {
   try {
     const res = await getCustomerList({ page_size: 200 })
-    customers.value = res.data?.results || res.results || res.data || []
+    customers.value = res.results || res.results || res || []
   } catch (error) {
     console.error('加载客户失败:', error)
   }
@@ -275,7 +275,7 @@ const loadQuotation = async () => {
   loading.value = true
   try {
     const res = await getQuotation(route.params.id)
-    const data = res.data || res
+    const data = res
     
     form.customer = data.customer
     form.valid_until = data.valid_until

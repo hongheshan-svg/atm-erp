@@ -116,9 +116,9 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const formRef = ref(null)
 const submitting = ref(false)
-const warehouses = ref([])
-const fromStock = ref([])
-const history = ref([])
+const warehouses = ref<any[]>([])
+const fromStock = ref<any[]>([])
+const history = ref<any[]>([])
 const loadingHistory = ref(false)
 
 const form = reactive({

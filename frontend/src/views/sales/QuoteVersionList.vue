@@ -350,14 +350,14 @@ const showCreateDialog = ref(false)
 const showDetailDrawer = ref(false)
 const showSimilarDialog = ref(false)
 
-const quotes = ref([])
-const customers = ref([])
-const opportunities = ref([])
-const projects = ref([])
+const quotes = ref<any[]>([])
+const customers = ref<any[]>([])
+const opportunities = ref<any[]>([])
+const projects = ref<any[]>([])
 const currentQuote = ref(null)
-const similarProjects = ref([])
+const similarProjects = ref<any[]>([])
 
-const similarKeywords = ref([])
+const similarKeywords = ref<any[]>([])
 const similarIndustry = ref('')
 
 const filters = reactive({

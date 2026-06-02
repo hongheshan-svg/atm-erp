@@ -467,10 +467,10 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 
 const loading = ref(false)
 const submitting = ref(false)
-const orders = ref([])
-const projects = ref([])
-const customers = ref([])
-const users = ref([])
+const orders = ref<any[]>([])
+const projects = ref<any[]>([])
+const customers = ref<any[]>([])
+const users = ref<any[]>([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -483,7 +483,7 @@ const currentOrder = ref(null)
 const formRef = ref(null)
 
 // 附件相关
-const attachmentList = ref([])
+const attachmentList = ref<any[]>([])
 const attachmentLoading = ref(false)
 const currentAttachmentOrderId = ref(null)
 
@@ -597,8 +597,8 @@ const loadOrders = async () => {
     })
     
     const res = await getAfterSalesOrderList(params)
-    orders.value = res.data?.results || res.results || []
-    total.value = res.data?.count || res.count || 0
+    orders.value = res.results || res.results || []
+    total.value = res.count || res.count || 0
   } catch (error) {
     console.error('加载工单列表失败:', error)
     ElMessage.error('加载工单列表失败')
@@ -610,7 +610,7 @@ const loadOrders = async () => {
 const loadStatistics = async () => {
   try {
     const res = await getAfterSalesStatistics()
-    const data = res.data || res
+    const data = res
     
     stats.monthlyCount = data.monthly_count || 0
     stats.avgSatisfaction = data.satisfaction_avg || 0
@@ -634,7 +634,7 @@ const loadStatistics = async () => {
 const loadProjects = async () => {
   try {
     const res = await getProjectList()
-    projects.value = res.data?.results || res.results || []
+    projects.value = res.results || res.results || []
   } catch (error) {
     console.error('加载项目列表失败:', error)
   }
@@ -643,7 +643,7 @@ const loadProjects = async () => {
 const loadCustomers = async () => {
   try {
     const res = await getCustomerList()
-    customers.value = res.data?.results || res.results || []
+    customers.value = res.results || res.results || []
   } catch (error) {
     console.error('加载客户列表失败:', error)
   }
@@ -652,7 +652,7 @@ const loadCustomers = async () => {
 const loadUsers = async () => {
   try {
     const res = await getUsers()
-    users.value = res.data?.results || res.results || []
+    users.value = res.results || res.results || []
   } catch (error) {
     console.error('加载用户列表失败:', error)
   }
@@ -749,7 +749,7 @@ const handleSubmit = async () => {
 const handleView = async (row) => {
   try {
     const res = await getAfterSalesOrder(row.id)
-    currentOrder.value = res.data || res
+    currentOrder.value = res
     viewDialogVisible.value = true
   } catch (error) {
     ElMessage.error('加载工单详情失败')
@@ -810,7 +810,7 @@ const loadAttachments = async () => {
         related_id: currentAttachmentOrderId.value
       }
     })
-    attachmentList.value = res.data?.results || res.results || []
+    attachmentList.value = res.results || res.results || []
   } catch (error) {
     console.error('加载附件失败:', error)
   } finally {

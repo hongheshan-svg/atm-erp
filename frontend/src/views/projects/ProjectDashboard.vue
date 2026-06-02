@@ -271,11 +271,11 @@ import { getProjectList, getProjectDashboard, getProjectBOMItems } from '@/api/p
 import { toFixedSafe } from '@/utils/number'
 
 const loading = ref(false)
-const projects = ref([])
+const projects = ref<any[]>([])
 const selectedProjectId = ref(null)
 const dashboard = ref(null)
 const bomDialogVisible = ref(false)
-const bomItems = ref([])
+const bomItems = ref<any[]>([])
 const bomLoading = ref(false)
 
 const statusMap = {
@@ -346,7 +346,7 @@ const loadBOMCost = async () => {
   bomLoading.value = true
   try {
     const res = await getProjectBOMItems(selectedProjectId.value)
-    bomItems.value = res.data?.results || res.results || res.data || []
+    bomItems.value = res.results || res.results || res || []
   } catch (error) {
     console.error(error)
     bomItems.value = []

@@ -118,7 +118,7 @@ const searchQuery = ref('')
 const resultsVisible = ref(false)
 const loading = ref(false)
 const activeTab = ref('all')
-const results = ref({})
+const results = ref<Record<string, any>>({})
 
 const totalHits = computed(() => {
   return Object.values(results.value).reduce((sum, r) => sum + (r.total || 0), 0)

@@ -195,7 +195,7 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const submitLoading = ref(false)
-const planList = ref([])
+const planList = ref<any[]>([])
 
 const queryParams = reactive({
   search: '',

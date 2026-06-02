@@ -253,8 +253,8 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 )
 
 const loading = ref(false)
-const expenses = ref([])
-const projects = ref([])
+const expenses = ref<any[]>([])
+const projects = ref<any[]>([])
 const projectsLoaded = ref(false)
 
 const searchForm = reactive({
@@ -276,9 +276,9 @@ const submitting = ref(false)
 const formRef = ref(null)
 const isEdit = ref(false)
 const currentExpense = ref(null)
-const selectedProjectIds = ref([])
-const customRatios = ref({})
-const allocationPreview = ref([])
+const selectedProjectIds = ref<any[]>([])
+const customRatios = ref<Record<string, any>>({})
+const allocationPreview = ref<any[]>([])
 
 const form = reactive({
   id: null,

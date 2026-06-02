@@ -492,8 +492,8 @@ const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
-const comparison = ref({})
-const report = ref({})
+const comparison = ref<Record<string, any>>({})
+const report = ref<Record<string, any>>({})
 const showWeightDialog = ref(false)
 
 const weightForm = reactive({

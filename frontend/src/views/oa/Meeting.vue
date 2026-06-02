@@ -265,10 +265,10 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const submitLoading = ref(false)
-const meetingList = ref([])
-const todayMeetings = ref([])
-const meetingRooms = ref([])
-const userList = ref([])
+const meetingList = ref<any[]>([])
+const todayMeetings = ref<any[]>([])
+const meetingRooms = ref<any[]>([])
+const userList = ref<any[]>([])
 const userListLoaded = ref(false)
 const permissionStore = usePermissionStore()
 

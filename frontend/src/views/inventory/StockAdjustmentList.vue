@@ -187,9 +187,9 @@ const showWorkflowProgress = (row) => {
 
 const loading = ref(false)
 const viewDialogVisible = ref(false)
-const viewDetail = ref({})
-const adjustments = ref([])
-const warehouses = ref([])
+const viewDetail = ref<Record<string, any>>({})
+const adjustments = ref<any[]>([])
+const warehouses = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const pagination = reactive({ page: 1, pageSize: 20, total: 0 })

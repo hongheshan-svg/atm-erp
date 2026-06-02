@@ -183,7 +183,7 @@ const metrics = reactive({
   low_stock_items: 0
 })
 
-const slowMovingItems = ref([])
+const slowMovingItems = ref<any[]>([])
 const warehouseChart = ref(null)
 const turnoverChart = ref(null)
 const abcChart = ref(null)

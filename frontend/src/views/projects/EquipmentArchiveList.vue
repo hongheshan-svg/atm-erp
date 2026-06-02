@@ -351,12 +351,12 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const maintDialogVisible = ref(false)
-const maintRecords = ref([])
+const maintRecords = ref<any[]>([])
 const maintLoading = ref(false)
 const currentEquipment = ref(null)
-const tableData = ref([])
-const projects = ref([])
-const customers = ref([])
+const tableData = ref<any[]>([])
+const projects = ref<any[]>([])
+const customers = ref<any[]>([])
 const dialogVisible = ref(false)
 const nameplateVisible = ref(false)
 const dialogTitle = ref('新增设备档案')
@@ -546,7 +546,7 @@ const handleMaintenance = async (row) => {
   maintLoading.value = true
   try {
     const res = await getEquipmentArchiveMaintenanceRecords(row.id)
-    maintRecords.value = res.data?.results || res.results || res.data || []
+    maintRecords.value = res.results || res.results || res || []
   } catch (error) {
     console.error(error)
     maintRecords.value = []

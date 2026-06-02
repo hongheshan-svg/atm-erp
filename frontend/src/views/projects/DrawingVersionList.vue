@@ -126,10 +126,10 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const submitLoading = ref(false)
-const drawingList = ref([])
+const drawingList = ref<any[]>([])
 const total = ref(0)
 const timelineVisible = ref(false)
-const timeline = ref([])
+const timeline = ref<any[]>([])
 const showUploadDialog = ref(false)
 const uploadFormRef = ref(null)
 
@@ -146,14 +146,14 @@ const loadList = async () => {
     if (!params.search) delete params.search
     if (!params.status) delete params.status
     const res = await getDrawingVersions(params)
-    drawingList.value = res.data?.results || res.results || []
-    total.value = res.data?.count || res.count || 0
+    drawingList.value = res.results || res.results || []
+    total.value = res.count || res.count || 0
   } finally { loading.value = false }
 }
 
 const viewTimeline = async (row) => {
   const res = await getDrawingTimeline(row.drawing_number)
-  timeline.value = res.data || res || []
+  timeline.value = res || []
   timelineVisible.value = true
 }
 

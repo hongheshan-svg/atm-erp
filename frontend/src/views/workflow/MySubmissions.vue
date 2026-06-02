@@ -161,8 +161,8 @@ const isAdmin = computed(() => {
 
 const loading = ref(false)
 const deleting = ref(false)
-const workflows = ref([])
-const selectedWorkflows = ref([])
+const workflows = ref<any[]>([])
+const selectedWorkflows = ref<any[]>([])
 const detailDialogVisible = ref(false)
 const currentWorkflow = ref(null)
 
@@ -210,7 +210,7 @@ const loadData = async () => {
   loading.value = true
   try {
     const res = await getMySubmittedWorkflows()
-    workflows.value = res.results || res.data || res || []
+    workflows.value = res.results || res || res || []
   } catch (error) {
     console.error('Failed to load workflows:', error)
     workflows.value = []

@@ -190,9 +190,9 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const checking = ref(false)
-const records = ref([])
+const records = ref<any[]>([])
 const todayRecord = ref(null)
-const monthSummary = ref({})
+const monthSummary = ref<Record<string, any>>({})
 const selectedMonth = ref(new Date().toISOString().slice(0, 7))
 const currentTime = ref('')
 const currentDate = ref('')

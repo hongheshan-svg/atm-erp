@@ -161,18 +161,18 @@ import { useBatchOperation } from '@/composables/useBatchOperation'
 const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/reports/')
 
 
-const templates = ref([])
-const favorites = ref([])
-const executions = ref([])
+const templates = ref<any[]>([])
+const favorites = ref<any[]>([])
+const executions = ref<any[]>([])
 const selectedTemplate = ref(null)
-const reportData = ref([])
-const reportColumns = ref([])
+const reportData = ref<any[]>([])
+const reportColumns = ref<any[]>([])
 const executing = ref(false)
 const showTemplateDialog = ref(false)
 const templateFormRef = ref(null)
 const searchTemplate = ref('')
 const chartRef = ref(null)
-const filterValues = reactive({})
+const filterValues = reactive<Record<string, any>>({})
 
 const templateForm = reactive({ name: '', category: '', data_source: '', description: '' })
 
@@ -186,17 +186,17 @@ const filteredTemplates = computed(() => {
 
 const loadTemplates = async () => {
   const res = await getReportTemplates({ page_size: 100 })
-  templates.value = res.data?.results || res.results || []
+  templates.value = res.results || res.results || []
 }
 
 const loadFavorites = async () => {
   const res = await getMyFavoriteReports()
-  favorites.value = res.data || res || []
+  favorites.value = res || []
 }
 
 const loadExecutions = async () => {
   const res = await getReportExecutions({ page_size: 20 })
-  executions.value = res.data?.results || res.results || []
+  executions.value = res.results || res.results || []
 }
 
 const selectTemplate = (tpl) => {
@@ -210,7 +210,7 @@ const executeReport = async () => {
   executing.value = true
   try {
     const res = await executeReportTemplate(selectedTemplate.value.id, filterValues)
-    const data = res.data || res
+    const data = res
     reportData.value = data.results || data.data || []
     if (reportData.value.length) {
       reportColumns.value = Object.keys(reportData.value[0]).map(k => ({ prop: k, label: k }))

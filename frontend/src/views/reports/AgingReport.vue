@@ -176,9 +176,9 @@ const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('
 
 
 const loading = ref(false)
-const reportData = ref([])
-const customers = ref([])
-const suppliers = ref([])
+const reportData = ref<any[]>([])
+const customers = ref<any[]>([])
+const suppliers = ref<any[]>([])
 const activeTab = ref('ar')
 const chartRef = ref(null)
 const pieChartRef = ref(null)

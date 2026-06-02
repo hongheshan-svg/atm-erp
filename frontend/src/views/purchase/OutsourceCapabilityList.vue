@@ -104,8 +104,8 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const saving = ref(false)
-const tableData = ref([])
-const suppliers = ref([])
+const tableData = ref<any[]>([])
+const suppliers = ref<any[]>([])
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
@@ -127,8 +127,8 @@ const loadData = async () => {
   loading.value = true
   try {
     const res = await getOutsourceCapabilities({ page: page.value, page_size: pageSize.value })
-    tableData.value = res.data?.results || res.results || []
-    total.value = res.data?.count || res.count || 0
+    tableData.value = res.results || res.results || []
+    total.value = res.count || res.count || 0
   } catch (error) {
     ElMessage.error('加载数据失败')
   } finally {
@@ -139,7 +139,7 @@ const loadData = async () => {
 const loadSuppliers = async () => {
   try {
     const res = await getSupplierList({ page_size: 1000 })
-    suppliers.value = res.data?.results || res.results || []
+    suppliers.value = res.results || res.results || []
   } catch (error) {
     console.error('OutsourceCapabilityList getSupplierList error:', error)
   }

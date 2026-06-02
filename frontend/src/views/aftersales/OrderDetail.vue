@@ -410,12 +410,12 @@ const userStore = useUserStore()
 const loading = ref(false)
 const submitting = ref(false)
 const order = ref(null)
-const items = ref([])
+const items = ref<any[]>([])
 
 // 附件相关
-const attachments = ref([])
+const attachments = ref<any[]>([])
 const uploadRef = ref(null)
-const uploadingFiles = ref([])
+const uploadingFiles = ref<any[]>([])
 
 const resolveDialogVisible = ref(false)
 const closeDialogVisible = ref(false)
@@ -502,7 +502,7 @@ const loadOrder = async () => {
   loading.value = true
   try {
     const res = await getAfterSalesOrder(route.params.id)
-    order.value = res.data || res
+    order.value = res
   } catch (error) {
     ElMessage.error('加载工单失败')
     console.error(error)
@@ -514,7 +514,7 @@ const loadOrder = async () => {
 const loadItems = async () => {
   try {
     const res = await getItemList()
-    items.value = res.data?.results || res.results || []
+    items.value = res.results || res.results || []
   } catch (error) {
     console.error('加载物料失败:', error)
   }
@@ -744,7 +744,7 @@ const loadAttachments = async () => {
         related_id: route.params.id
       }
     })
-    attachments.value = res.data?.results || res.results || []
+    attachments.value = res.results || res.results || []
   } catch (error) {
     console.error('加载附件失败:', error)
   }

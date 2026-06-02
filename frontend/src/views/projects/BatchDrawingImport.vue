@@ -204,14 +204,14 @@ import { useBatchOperation } from '@/composables/useBatchOperation'
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_drawing/')
 
 
-const projects = ref([])
-const fileList = ref([])
-const zipFileList = ref([])
-const parsedFiles = ref([])
+const projects = ref<any[]>([])
+const fileList = ref<any[]>([])
+const zipFileList = ref<any[]>([])
+const parsedFiles = ref<any[]>([])
 const importing = ref(false)
 const importResult = ref(null)
 const formatsDialogVisible = ref(false)
-const supportedFormats = ref([])
+const supportedFormats = ref<any[]>([])
 
 const uploadRef = ref(null)
 const zipUploadRef = ref(null)

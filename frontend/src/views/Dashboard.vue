@@ -315,13 +315,13 @@ const kpis = ref({
   }
 })
 
-const overdueReceivables = ref([])
-const upcomingPayables = ref([])
-const activeProjects = ref([])
-const topCustomers = ref([])
-const topSuppliers = ref([])
+const overdueReceivables = ref<any[]>([])
+const upcomingPayables = ref<any[]>([])
+const activeProjects = ref<any[]>([])
+const topCustomers = ref<any[]>([])
+const topSuppliers = ref<any[]>([])
 const trendData = ref({ months: [], income: [], expense: [] })
-const agingData = ref([])
+const agingData = ref<any[]>([])
 
 const trendChart = ref(null)
 const agingChart = ref(null)
@@ -352,7 +352,7 @@ const getProgressColor = (progress) => {
 const loadDashboardData = async () => {
   try {
     const res = await getManagementDashboard()
-    const data = res.data || res
+    const data = res
     
     kpis.value = {
       financial: {

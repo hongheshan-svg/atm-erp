@@ -186,9 +186,9 @@ const submitting = ref(false)
 const showCreateDialog = ref(false)
 const showDetailDrawer = ref(false)
 
-const articles = ref([])
-const popularArticles = ref([])
-const popularTags = ref([])
+const articles = ref<any[]>([])
+const popularArticles = ref<any[]>([])
+const popularTags = ref<any[]>([])
 const currentArticle = ref(null)
 
 const searchKeyword = ref('')

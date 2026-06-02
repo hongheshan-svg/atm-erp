@@ -240,8 +240,8 @@ const dialogTitle = ref('添加编码规则')
 const isEdit = ref(false)
 const formRef = ref(null)
 
-const rules = ref([])
-const historyList = ref([])
+const rules = ref<any[]>([])
+const historyList = ref<any[]>([])
 
 const searchForm = reactive({
   rule_type: null,
@@ -295,7 +295,7 @@ const fetchRules = async () => {
     if (searchForm.is_active !== null) params.is_active = searchForm.is_active
     
     const res = await getCodeRuleList(params)
-    rules.value = res.data?.results || res.results || res.data || []
+    rules.value = res.results || res.results || res || []
   } catch (error) {
     ElMessage.error('加载编码规则失败')
   } finally {
@@ -390,7 +390,7 @@ const handleViewHistory = async (row) => {
   historyLoading.value = true
   try {
     const res = await getCodeRuleHistory(row.id)
-    historyList.value = res.data || res || []
+    historyList.value = res || []
   } catch (error) {
     ElMessage.error('加载历史记录失败')
   } finally {

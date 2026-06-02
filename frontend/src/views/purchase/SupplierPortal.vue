@@ -204,9 +204,9 @@ const stats = ref({
   unreadMessages: 0
 })
 
-const accounts = ref([])
-const orderViews = ref([])
-const suppliers = ref([])
+const accounts = ref<any[]>([])
+const orderViews = ref<any[]>([])
+const suppliers = ref<any[]>([])
 
 const orderFilter = reactive({
   status: ''

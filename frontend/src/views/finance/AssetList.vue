@@ -408,11 +408,11 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const submitLoading = ref(false)
-const assetList = ref([])
-const stats = ref({})
-const categoryTree = ref([])
-const departments = ref([])
-const users = ref([])
+const assetList = ref<any[]>([])
+const stats = ref<Record<string, any>>({})
+const categoryTree = ref<any[]>([])
+const departments = ref<any[]>([])
+const users = ref<any[]>([])
 
 const queryParams = reactive({
   search: '',
@@ -469,7 +469,7 @@ const transferForm = reactive({
 const depreciateDialogVisible = ref(false)
 const inventoryDialogVisible = ref(false)
 const inventoryLoading = ref(false)
-const inventoryResults = ref([])
+const inventoryResults = ref<any[]>([])
 const depreciateForm = reactive({
   year: new Date().getFullYear(),
   month: new Date().getMonth() + 1
@@ -670,7 +670,7 @@ const handleInventory = async () => {
   inventoryLoading.value = true
   try {
     const res = await getFixedAssets({ page_size: 200 })
-    const list = res.data?.results || res.results || []
+    const list = res.results || res.results || []
     inventoryResults.value = list.map(a => ({ ...a, checked: false, match: true, remark: '' }))
   } catch (error) {
     console.error(error)

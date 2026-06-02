@@ -352,12 +352,12 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const submitting = ref(false)
-const reconciliations = ref([])
-const customers = ref([])
+const reconciliations = ref<any[]>([])
+const customers = ref<any[]>([])
 const createDialogVisible = ref(false)
 const detailDialogVisible = ref(false)
 const currentReconciliation = ref(null)
-const reconciliationLines = ref([])
+const reconciliationLines = ref<any[]>([])
 const detailTab = ref('order')
 
 const pagination = reactive({ page: 1, pageSize: 20, total: 0 })

@@ -68,7 +68,7 @@ import MemberManagement from '@/components/project/MemberManagement.vue'
 const route = useRoute()
 const router = useRouter()
 const activeTab = ref('info')
-const project = ref({})
+const project = ref<Record<string, any>>({})
 const taskManagementRef = ref(null)
 const bomManagementRef = ref(null)
 const memberManagementRef = ref(null)

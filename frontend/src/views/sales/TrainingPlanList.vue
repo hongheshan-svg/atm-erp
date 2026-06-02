@@ -114,8 +114,8 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const saving = ref(false)
-const tableData = ref([])
-const customers = ref([])
+const tableData = ref<any[]>([])
+const customers = ref<any[]>([])
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
@@ -123,7 +123,7 @@ const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref(null)
-const viewDetail = ref({})
+const viewDetail = ref<Record<string, any>>({})
 
 const form = reactive({ id: null, name: '', customer: null, start_date: '', end_date: '', location: '', remarks: '' })
 const rules = { name: [{ required: true, message: '请输入计划名称', trigger: 'blur' }] }
@@ -133,8 +133,8 @@ const loadData = async () => {
   loading.value = true
   try {
     const res = await getTrainingPlans({ page: page.value, page_size: pageSize.value })
-    tableData.value = res.data?.results || res.results || []
-    total.value = res.data?.count || res.count || 0
+    tableData.value = res.results || res.results || []
+    total.value = res.count || res.count || 0
   } catch (error) {
     ElMessage.error('加载数据失败')
   } finally {
@@ -145,7 +145,7 @@ const loadData = async () => {
 const loadCustomers = async () => {
   try {
     const res = await getCustomerList({ page_size: 1000 })
-    customers.value = res.data?.results || res.results || []
+    customers.value = res.results || res.results || []
   } catch (error) {
     console.error('TrainingPlanList getCustomerList error:', error)
   }
@@ -154,7 +154,7 @@ const loadCustomers = async () => {
 const handleView = async (row) => {
   try {
     const res = await getTrainingPlan(row.id)
-    viewDetail.value = res.data || res
+    viewDetail.value = res
     viewDialogVisible.value = true
   } catch (error) {
     console.error(error)

@@ -263,9 +263,9 @@ const distributeForm = reactive({ recipients: [], remarks: '' })
 const distributeSaving = ref(false)
 const showAnnotationDialog = ref(false)
 
-const documents = ref([])
-const categoryTree = ref([])
-const projects = ref([])
+const documents = ref<any[]>([])
+const categoryTree = ref<any[]>([])
+const projects = ref<any[]>([])
 const currentDocument = ref(null)
 
 const filters = reactive({

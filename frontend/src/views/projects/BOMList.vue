@@ -705,11 +705,11 @@ const router = useRouter()
 
 const loading = ref(false)
 const selectedProject = ref(null)
-const projects = ref([])
-const bomItems = ref([])
-const items = ref([])
-const users = ref([])
-const suppliers = ref([])
+const projects = ref<any[]>([])
+const bomItems = ref<any[]>([])
+const items = ref<any[]>([])
+const users = ref<any[]>([])
+const suppliers = ref<any[]>([])
 const dialogVisible = ref(false)
 const formRef = ref(null)
 const tableRef = ref(null)
@@ -719,7 +719,7 @@ const searchKeyword = ref('')
 const filterHasDrawing = ref('')  // 有图/无图筛选
 const filterItemType = ref('')    // 物料类型筛选
 const filterBrand = ref('')       // 版本/品牌筛选
-const selectedRows = ref([])
+const selectedRows = ref<any[]>([])
 
 // 分页
 const pagination = reactive({

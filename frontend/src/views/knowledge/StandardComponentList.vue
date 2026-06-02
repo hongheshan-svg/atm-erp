@@ -127,11 +127,11 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const saving = ref(false)
-const components = ref([])
+const components = ref<any[]>([])
 const total = ref(0)
 const viewDialogVisible = ref(false)
 const createDialogVisible = ref(false)
-const viewDetail = ref({})
+const viewDetail = ref<Record<string, any>>({})
 const formRef = ref(null)
 
 const queryParams = reactive({ search: '', status: '', page: 1, page_size: 20 })
@@ -161,7 +161,7 @@ const handleCreate = () => {
 const handleView = async (row) => {
   try {
     const res = await getStandardComponent(row.id)
-    viewDetail.value = res.data || res
+    viewDetail.value = res
     viewDialogVisible.value = true
   } catch (error) {
     console.error(error)

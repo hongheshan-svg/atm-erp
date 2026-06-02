@@ -181,7 +181,7 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 const router = useRouter()
 
 const loading = ref(false)
-const tableData = ref([])
+const tableData = ref<any[]>([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -192,8 +192,8 @@ const dialogVisible = ref(false)
 const dialogTitle = ref('新建报价估算')
 const submitting = ref(false)
 const formRef = ref(null)
-const customers = ref([])
-const opportunities = ref([])
+const customers = ref<any[]>([])
+const opportunities = ref<any[]>([])
 
 const form = reactive({
   name: '',
@@ -239,8 +239,8 @@ const loadData = async () => {
       status: statusFilter.value || undefined
     }
     const res = await getQuoteEstimations(params)
-    tableData.value = res.data.results || res.data
-    total.value = res.data.count || tableData.value.length
+    tableData.value = res.results || res
+    total.value = res.count || tableData.value.length
   } catch (e) {
     console.error(e)
   } finally {
@@ -250,12 +250,12 @@ const loadData = async () => {
 
 const loadCustomers = async () => {
   const res = await getCustomerList({ page_size: 1000 })
-  customers.value = res.data.results || res.data
+  customers.value = res.results || res
 }
 
 const loadOpportunities = async () => {
   const res = await getOpportunities({ page_size: 1000 })
-  opportunities.value = res.data.results || res.data
+  opportunities.value = res.results || res
 }
 
 const handleCreate = () => {
@@ -297,7 +297,7 @@ const handleSubmit = async () => {
     } else {
       const res = await createQuoteEstimation(form)
       ElMessage.success('创建成功')
-      router.push(`/sales/quote-estimation/${res.data.id}`)
+      router.push(`/sales/quote-estimation/${res.id}`)
     }
     dialogVisible.value = false
     loadData()
@@ -332,7 +332,7 @@ const handleCommand = async (cmd, row) => {
       case 'create_quote': {
         await ElMessageBox.confirm('确定生成正式报价单?', '提示')
         const res = await createQuotationFromEstimation(row.id)
-        ElMessage.success(`报价单 ${res.data.quotation_no} 创建成功`)
+        ElMessage.success(`报价单 ${res.quotation_no} 创建成功`)
         loadData()
         }
         break

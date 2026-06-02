@@ -159,14 +159,14 @@ const activeTab = ref('funnel')
 const trendChartRef = ref(null)
 let trendChart = null
 
-const dateRange = ref([])
+const dateRange = ref<any[]>([])
 
-const funnelData = ref([])
-const funnelSummary = ref({})
-const customerSegments = ref([])
-const topCustomers = ref([])
-const trendData = ref([])
-const ranking = ref([])
+const funnelData = ref<any[]>([])
+const funnelSummary = ref<Record<string, any>>({})
+const customerSegments = ref<any[]>([])
+const topCustomers = ref<any[]>([])
+const trendData = ref<any[]>([])
+const ranking = ref<any[]>([])
 
 const maxAmount = computed(() => {
   if (!ranking.value.length) return 1

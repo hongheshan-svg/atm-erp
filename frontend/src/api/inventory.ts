@@ -5,15 +5,6 @@
  */
 import request from '@/utils/request'
 
-// ========== MRP增强 = =========
-export function runMRPExplosion(data: any) {
-  return request({ url: '/inventory/mrp/explosion/', method: 'post', data })
-}
-
-export function runMRPAutoGenerate(data: any) {
-  return request({ url: '/inventory/mrp/auto-generate/', method: 'post', data })
-}
-
 // ========== 备件智能预测 ==========
 export function getSparePartLifecyclePrediction(params?: Record<string, any>) {
   return request({ url: '/inventory/spare-parts/lifecycle-prediction/', method: 'get', params })

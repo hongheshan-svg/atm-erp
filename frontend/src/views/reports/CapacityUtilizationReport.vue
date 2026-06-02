@@ -54,8 +54,8 @@ const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('
 
 
 const loading = ref(false)
-const tableData = ref([])
-const dateRange = ref([])
+const tableData = ref<any[]>([])
+const dateRange = ref<any[]>([])
 const chartRef = ref(null)
 
 const loadData = async () => {
@@ -67,7 +67,7 @@ const loadData = async () => {
       params.end_date = dateRange.value[1]
     }
     const res = await getCapacityUtilizationReport(params)
-    tableData.value = res.data?.work_centers || res.work_centers || []
+    tableData.value = res.work_centers || res.work_centers || []
     await nextTick()
     renderChart()
   } catch (error) {

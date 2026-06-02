@@ -240,9 +240,9 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 const loading = ref(false)
 const recalculating = ref(false)
 const selectedProject = ref(null)
-const projects = ref([])
-const taskTree = ref([])
-const projectMembers = ref([])
+const projects = ref<any[]>([])
+const taskTree = ref<any[]>([])
+const projectMembers = ref<any[]>([])
 const projectMembersLoadedFor = ref(null)
 const dialogVisible = ref(false)
 const timeLogVisible = ref(false)
@@ -321,7 +321,7 @@ const flatTasks = computed(() => {
 })
 
 // 所有用户列表（用于负责人选择的备选）
-const allUsers = ref([])
+const allUsers = ref<any[]>([])
 
 // 将项目成员/用户列表转换为统一的下拉选项格式
 const assigneeOptions = computed(() => {
@@ -398,7 +398,7 @@ const getProgressStatus = (progress) => {
 const fetchProjects = async () => {
   try {
     const res = await getProjectList()
-    projects.value = res.data?.results || res.results || res.data || []
+    projects.value = res.results || res.results || res || []
   } catch (error) {
     console.error('获取项目列表失败:', error)
   }
@@ -419,7 +419,7 @@ const fetchTasks = async () => {
   try {
     // 使用查询参数过滤项目任务
     const res = await getTaskList({ project: selectedProject.value })
-    const tasks = res.data?.results || res.results || res.data || []
+    const tasks = res.results || res.results || res || []
     taskTree.value = buildTree(tasks)
     calculateStats(tasks)
   } catch (error) {
@@ -470,7 +470,7 @@ const fetchProjectMembers = async () => {
 
   try {
     const membersRes = await getMemberList({ project: selectedProject.value })
-    projectMembers.value = membersRes.data?.results || membersRes.results || membersRes.data || []
+    projectMembers.value = membersRes.results || membersRes.results || membersRes || []
     projectMembersLoadedFor.value = selectedProject.value
     return true
   } catch (error) {
@@ -495,7 +495,7 @@ const fetchAllUsers = async () => {
 
   try {
     const userRes = await getUsers()
-    allUsers.value = userRes.data?.results || userRes.results || userRes.data || []
+    allUsers.value = userRes.results || userRes.results || userRes || []
     allUsersLoaded.value = true
     return true
   } catch (error) {

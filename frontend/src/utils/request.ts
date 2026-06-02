@@ -140,7 +140,29 @@ service.interceptors.response.use(
   }
 )
 
-export default service
+/**
+ * 响应拦截器在上方 `return response.data` 处对响应做了解包，因此运行时 `request({...})` /
+ * `request.get(...)` 实际 resolve 的是「业务数据」而非 `AxiosResponse`。但 axios 实例的方法签名
+ * 返回的是 `Promise<AxiosResponse<T>>`，与运行时不符——这会让全站调用点把解包后的数据当作
+ * AxiosResponse 使用而触发大量 TS2339（属性不存在于 AxiosResponse）。这里用一个可调用接口把
+ * 默认导出重新声明为「返回解包后数据」的客户端，使类型与运行时一致。
+ * （blob 下载分支返回完整 response，调用点按需指定 T 或访问 .data。）
+ */
+export interface RequestClient {
+  <T = any>(config: AxiosRequestConfig): Promise<T>
+  request<T = any>(config: AxiosRequestConfig): Promise<T>
+  get<T = any>(url: string, config?: AxiosRequestConfig): Promise<T>
+  delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<T>
+  head<T = any>(url: string, config?: AxiosRequestConfig): Promise<T>
+  options<T = any>(url: string, config?: AxiosRequestConfig): Promise<T>
+  post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T>
+  put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T>
+  patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T>
+}
+
+const client = service as unknown as RequestClient
+
+export default client
 
 export function request<T = any>(config: AxiosRequestConfig): Promise<T> {
   return service(config) as unknown as Promise<T>

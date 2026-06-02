@@ -261,10 +261,10 @@ const borrowDialogVisible = ref(false)
 const borrowRow = ref(null)
 const borrowForm = reactive({ borrower: null, expected_return_date: '', purpose: '' })
 const borrowSaving = ref(false)
-const list = ref([])
-const categories = ref([])
-const users = ref([])
-const stats = ref({})
+const list = ref<any[]>([])
+const categories = ref<any[]>([])
+const users = ref<any[]>([])
+const stats = ref<Record<string, any>>({})
 const dialogVisible = ref(false)
 const assignDialogVisible = ref(false)
 const isEdit = ref(false)
@@ -492,7 +492,7 @@ const handleBorrowSave = async () => {
       ...borrowForm
     })
     // 自动提交审批
-    const borrowId = (res.data || res).id
+    const borrowId = (res || res).id
     if (borrowId) {
       try {
         await submitAssetBorrow(borrowId)

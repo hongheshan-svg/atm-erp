@@ -104,8 +104,8 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const saving = ref(false)
-const tableData = ref([])
-const projects = ref([])
+const tableData = ref<any[]>([])
+const projects = ref<any[]>([])
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
@@ -131,8 +131,8 @@ const loadData = async () => {
   try {
     const params = { page: page.value, page_size: pageSize.value, ...filters.value }
     const res = await getCostRecordList(params)
-    tableData.value = res.data?.results || res.results || []
-    total.value = res.data?.count || res.count || 0
+    tableData.value = res.results || res.results || []
+    total.value = res.count || res.count || 0
   } catch (error) {
     ElMessage.error('加载数据失败')
   } finally {
@@ -143,7 +143,7 @@ const loadData = async () => {
 const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
-    projects.value = res.data?.results || res.results || []
+    projects.value = res.results || res.results || []
   } catch (error) {
     console.error('CostRecordList getProjectList error:', error)
   }

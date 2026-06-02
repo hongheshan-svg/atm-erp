@@ -285,11 +285,11 @@ const queryMonth = ref(`${currentDate.getFullYear()}-${String(currentDate.getMon
 const summaryMonth = ref(queryMonth.value)
 
 const todayStatus = ref({ check_in_time: null, check_out_time: null, status: 'NOT_CHECKED' })
-const records = ref([])
-const leaveRequests = ref([])
-const overtimeRequests = ref([])
-const monthlySummary = ref([])
-const leaveTypes = ref([])
+const records = ref<any[]>([])
+const leaveRequests = ref<any[]>([])
+const overtimeRequests = ref<any[]>([])
+const monthlySummary = ref<any[]>([])
+const leaveTypes = ref<any[]>([])
 
 const leaveDialogVisible = ref(false)
 const overtimeDialogVisible = ref(false)

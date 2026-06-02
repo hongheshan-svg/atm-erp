@@ -176,7 +176,7 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 const loading = ref(false)
 const saving = ref(false)
 const savingPerm = ref(false)
-const roles = ref([])
+const roles = ref<any[]>([])
 const dialogVisible = ref(false)
 const permDialogVisible = ref(false)
 const dialogTitle = ref('新增角色')
@@ -184,12 +184,12 @@ const isEdit = ref(false)
 const formRef = ref(null)
 const menuTreeRef = ref(null)
 const currentRole = ref(null)
-const checkedMenuIds = ref([])
+const checkedMenuIds = ref<any[]>([])
 const checkAll = ref(false)
 const isIndeterminate = ref(false)
-const permissionTreeNodes = ref([])
-const permissionMetaByCode = ref({})
-const permissionMetaById = ref({})
+const permissionTreeNodes = ref<any[]>([])
+const permissionMetaByCode = ref<Record<string, any>>({})
+const permissionMetaById = ref<Record<string, any>>({})
 
 const form = reactive({
   id: null,
@@ -295,7 +295,7 @@ const presetRoles = ref([
     code: 'employee',
     type: '',
     data_scope: 'self',
-    menu_ids: ['dashboard', 'projects:list', 'projects:tasks', 'projects:time-logs', 'oa:announcement', 'oa:meeting', 'oa:schedule', 'oa:leave', 'oa:im', 'oa:vehicle-request', 'workflow:tasks', 'workflow:my-submissions', 'accounts:attendance']
+    menu_ids: ['dashboard', 'projects:list', 'projects:tasks', 'projects:time-logs', 'oa:announcement', 'oa:meeting', 'oa:schedule', 'oa:leave', 'oa:vehicle-request', 'workflow:tasks', 'workflow:my-submissions', 'accounts:attendance']
   }
 ])
 

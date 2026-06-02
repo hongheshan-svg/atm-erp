@@ -167,7 +167,7 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 
 const loading = ref(false)
-const auditLogs = ref([])
+const auditLogs = ref<any[]>([])
 const detailsVisible = ref(false)
 const currentLog = ref(null)
 

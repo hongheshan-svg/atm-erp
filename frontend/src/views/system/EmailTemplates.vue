@@ -228,7 +228,7 @@ import { useBatchOperation } from '@/composables/useBatchOperation'
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/system/')
 
 
-const templates = ref([])
+const templates = ref<any[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const sending = ref(false)
@@ -237,7 +237,7 @@ const showDialog = ref(false)
 const showPreview = ref(false)
 const showTestDialog = ref(false)
 const editing = ref(null)
-const templateTypes = ref([])
+const templateTypes = ref<any[]>([])
 
 const filters = ref({
   template_type: '',
@@ -286,7 +286,7 @@ const testingTemplate = ref(null)
 const loadTemplateTypes = async () => {
   try {
     const res = await getEmailTemplateTypes()
-    templateTypes.value = res.data
+    templateTypes.value = res
   } catch (e) {
     console.error('加载模板类型失败:', e)
   }
@@ -388,7 +388,7 @@ const previewTemplate = async (template) => {
         link: 'https://example.com/approval/1'
       }
     })
-    previewData.value = res.data
+    previewData.value = res
     showPreview.value = true
   } catch (e) {
     ElMessage.error('预览失败')
@@ -428,11 +428,11 @@ const doTestSend = async () => {
       email: testForm.value.email,
       context
     })
-    if (res.data.status === 'SENT') {
+    if (res.status === 'SENT') {
       ElMessage.success('测试邮件发送成功')
       showTestDialog.value = false
     } else {
-      ElMessage.error(res.data.message || '发送失败')
+      ElMessage.error(res.message || '发送失败')
     }
   } catch (e) {
     ElMessage.error('发送失败')
@@ -445,7 +445,7 @@ const initSystemTemplates = async () => {
   initLoading.value = true
   try {
     const res = await initSystemEmailTemplates()
-    ElMessage.success(res.data.message || '初始化成功')
+    ElMessage.success(res.message || '初始化成功')
     loadTemplates()
   } catch (e) {
     ElMessage.error('初始化失败')

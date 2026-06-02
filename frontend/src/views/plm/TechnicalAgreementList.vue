@@ -167,10 +167,10 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 
 const loading = ref(false)
-const tableData = ref([])
-const projects = ref([])
-const customers = ref([])
-const templates = ref([])
+const tableData = ref<any[]>([])
+const projects = ref<any[]>([])
+const customers = ref<any[]>([])
+const templates = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增技术协议')
 const formRef = ref(null)

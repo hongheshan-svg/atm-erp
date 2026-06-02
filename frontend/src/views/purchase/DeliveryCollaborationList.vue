@@ -93,13 +93,13 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const saving = ref(false)
-const tableData = ref([])
+const tableData = ref<any[]>([])
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
 const viewDialogVisible = ref(false)
 const confirmDialogVisible = ref(false)
-const viewDetail = ref({})
+const viewDetail = ref<Record<string, any>>({})
 const currentRow = ref(null)
 const confirmForm = reactive({ actual_delivery_date: '', remarks: '' })
 
@@ -109,8 +109,8 @@ const loadData = async () => {
   loading.value = true
   try {
     const res = await getDeliveryCollaborations({ page: page.value, page_size: pageSize.value })
-    tableData.value = res.data?.results || res.results || []
-    total.value = res.data?.count || res.count || 0
+    tableData.value = res.results || res.results || []
+    total.value = res.count || res.count || 0
   } catch (error) {
     ElMessage.error('加载数据失败')
   } finally {
@@ -121,7 +121,7 @@ const loadData = async () => {
 const handleView = async (row) => {
   try {
     const res = await getDeliveryCollaboration(row.id)
-    viewDetail.value = res.data || res
+    viewDetail.value = res
     viewDialogVisible.value = true
   } catch (error) {
     console.error(error)

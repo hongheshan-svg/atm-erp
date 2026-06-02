@@ -62,7 +62,7 @@ const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('
 
 
 const loading = ref(false)
-const tableData = ref([])
+const tableData = ref<any[]>([])
 const period = ref('1year')
 const chartRef = ref(null)
 
@@ -73,7 +73,7 @@ const loadData = async () => {
   loading.value = true
   try {
     const res = await getCustomerValueReport({ period: period.value })
-    tableData.value = res.data?.customers || res.customers || []
+    tableData.value = res.customers || res.customers || []
     await nextTick()
     renderChart()
   } catch (error) {

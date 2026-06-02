@@ -190,12 +190,12 @@ import * as echarts from 'echarts'
 
 const loading = ref(false)
 const daysThreshold = ref(90)
-const tableData = ref([])
-const selectedItems = ref([])
+const tableData = ref<any[]>([])
+const selectedItems = ref<any[]>([])
 const handleSelectionChange = (rows) => { selectedItems.value = rows }
 const detailVisible = ref(false)
 const currentItem = ref(null)
-const moveHistory = ref([])
+const moveHistory = ref<any[]>([])
 
 const categoryChartRef = ref(null)
 const ageChartRef = ref(null)
@@ -248,8 +248,8 @@ const fetchData = async () => {
         page: pagination.page,
         page_size: pagination.pageSize
       })
-    tableData.value = res.data?.results || res.results || res.data || []
-    pagination.total = res.data?.count || res.count || 0
+    tableData.value = res.results || res.results || res || []
+    pagination.total = res.count || res.count || 0
     
     calculateStats()
     initCharts()
@@ -444,7 +444,7 @@ const handleViewDetail = async (row) => {
         page_size: 20,
         ordering: '-move_date'
       })
-    const moves = res.data?.results || res.results || res.data || []
+    const moves = res.results || res.results || res || []
     moveHistory.value = moves.map(m => ({
       id: m.id,
       move_date: m.move_date,

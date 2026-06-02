@@ -158,8 +158,8 @@ const lifecycleLoading = ref(false)
 const purchaseLoading = ref(false)
 const costLoading = ref(false)
 
-const lifecycleData = ref([])
-const purchaseSuggestions = ref([])
+const lifecycleData = ref<any[]>([])
+const purchaseSuggestions = ref<any[]>([])
 const costAnalysis = ref(null)
 
 const formatMoney = (v) => v ? Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
@@ -170,7 +170,7 @@ const loadLifecycle = async () => {
   lifecycleLoading.value = true
   try {
     const res = await getSparePartLifecyclePrediction()
-    lifecycleData.value = res.data?.results || res.data || res || []
+    lifecycleData.value = res.predictions || res.results || (Array.isArray(res) ? res : [])
   } finally { lifecycleLoading.value = false }
 }
 
@@ -178,7 +178,7 @@ const loadPurchaseSuggestions = async () => {
   purchaseLoading.value = true
   try {
     const res = await getSparePartPurchaseSuggestions()
-    purchaseSuggestions.value = res.data?.results || res.data || res || []
+    purchaseSuggestions.value = res.results || (Array.isArray(res) ? res : [])
   } finally { purchaseLoading.value = false }
 }
 
@@ -186,7 +186,7 @@ const loadCostAnalysis = async () => {
   costLoading.value = true
   try {
     const res = await getSparePartCostAnalysis()
-    costAnalysis.value = res.data || res
+    costAnalysis.value = res
   } finally { costLoading.value = false }
 }
 

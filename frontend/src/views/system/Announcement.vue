@@ -181,7 +181,7 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const submitLoading = ref(false)
-const announcements = ref([])
+const announcements = ref<any[]>([])
 
 const queryParams = reactive({
   search: '',
@@ -309,8 +309,8 @@ const submitForm = async (action) => {
       result = await createAnnouncement(formData)
     }
     
-    if (action === 'PUBLISH' && result.data.status === 'DRAFT') {
-      await publishAnnouncement(result.data.id)
+    if (action === 'PUBLISH' && result.status === 'DRAFT') {
+      await publishAnnouncement(result.id)
     }
     
     ElMessage.success(action === 'PUBLISH' ? '发布成功' : '保存成功')

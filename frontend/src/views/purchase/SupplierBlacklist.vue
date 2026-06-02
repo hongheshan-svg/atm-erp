@@ -146,9 +146,9 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 
 const loading = ref(false)
-const blacklist = ref([])
+const blacklist = ref<any[]>([])
 const total = ref(0)
-const suppliers = ref([])
+const suppliers = ref<any[]>([])
 const dialogVisible = ref(false)
 const liftDialogVisible = ref(false)
 const currentRecord = ref(null)
@@ -203,7 +203,7 @@ const handleCreate = () => {
 }
 
 const viewDialogVisible = ref(false)
-const viewDetail = ref({})
+const viewDetail = ref<Record<string, any>>({})
 
 const handleView = async (row) => {
   viewDetail.value = row

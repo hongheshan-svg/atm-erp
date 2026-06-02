@@ -106,7 +106,7 @@ const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('
 
 
 const loading = ref(false)
-const alertList = ref([])
+const alertList = ref<any[]>([])
 const total = ref(0)
 
 const stats = reactive({ total: 0, critical: 0, high: 0, pending: 0, resolved: 0 })
@@ -129,8 +129,8 @@ const loadList = async () => {
     const params = { ...queryParams }
     Object.keys(params).forEach(k => { if (params[k] === '') delete params[k] })
     const res = await getRiskAlerts(params)
-    alertList.value = res.data?.results || res.results || []
-    total.value = res.data?.count || res.count || 0
+    alertList.value = res.results || res.results || []
+    total.value = res.count || res.count || 0
     stats.total = total.value
     stats.critical = alertList.value.filter(a => a.severity === 'critical').length
     stats.high = alertList.value.filter(a => a.severity === 'high').length

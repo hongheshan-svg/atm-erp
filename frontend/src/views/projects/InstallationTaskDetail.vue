@@ -195,11 +195,11 @@ import {
 
 const route = useRoute()
 const loading = ref(false)
-const task = ref({})
-const siteLogs = ref([])
-const commRecords = ref([])
-const siteIssues = ref([])
-const acceptances = ref([])
+const task = ref<Record<string, any>>({})
+const siteLogs = ref<any[]>([])
+const commRecords = ref<any[]>([])
+const siteIssues = ref<any[]>([])
+const acceptances = ref<any[]>([])
 const activeTab = ref('logs')
 const showStatusDialog = ref(false)
 const showLogDialog = ref(false)
@@ -230,28 +230,28 @@ const loadTask = async () => {
   loading.value = true
   try {
     const res = await getInstallationTask(taskId)
-    task.value = res.data || res
+    task.value = res
   } finally { loading.value = false }
 }
 
 const loadLogs = async () => {
   const res = await getSiteLogs({ task: taskId })
-  siteLogs.value = res.data?.results || res.results || []
+  siteLogs.value = res.results || res.results || []
 }
 
 const loadComm = async () => {
   const res = await getCommissioningRecords({ task: taskId })
-  commRecords.value = res.data?.results || res.results || []
+  commRecords.value = res.results || res.results || []
 }
 
 const loadIssues = async () => {
   const res = await getSiteIssues({ task: taskId })
-  siteIssues.value = res.data?.results || res.results || []
+  siteIssues.value = res.results || res.results || []
 }
 
 const loadAcceptances = async () => {
   const res = await getCustomerAcceptances({ task: taskId })
-  acceptances.value = res.data?.results || res.results || []
+  acceptances.value = res.results || res.results || []
 }
 
 const doUpdateStatus = async () => {

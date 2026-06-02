@@ -251,14 +251,14 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 
 const attachmentRef = ref(null)
 const tempUploadRef = ref(null)
-const tempFiles = ref([])
+const tempFiles = ref<any[]>([])
 
 const loading = ref(false)
 const saving = ref(false)
-const expenses = ref([])
-const projects = ref([])
+const expenses = ref<any[]>([])
+const projects = ref<any[]>([])
 const projectsLoaded = ref(false)
-const departments = ref([])
+const departments = ref<any[]>([])
 const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
 const attachmentDialogVisible = ref(false)
@@ -342,8 +342,8 @@ const loadExpenses = async () => {
     if (searchForm.status) params.status = searchForm.status
     
     const res = await getExpenses(params)
-    expenses.value = res.data?.results || res.results || res.data || []
-    pagination.total = res.data?.count || res.count || 0
+    expenses.value = res.results || res.results || res || []
+    pagination.total = res.count || res.count || 0
   } catch (error) {
     ElMessage.error('加载费用列表失败')
   } finally {
@@ -358,7 +358,7 @@ const loadProjects = async () => {
 
   try {
     const res = await getProjectList()
-    projects.value = res.data?.results || res.results || res.data || []
+    projects.value = res.results || res.results || res || []
     projectsLoaded.value = true
     return true
   } catch (error) {
@@ -382,7 +382,7 @@ const ensureProjectsLoaded = async () => {
 const loadDepartments = async () => {
   try {
     const res = await getDepartments()
-    departments.value = res.data?.results || res.results || res.data || []
+    departments.value = res.results || res.results || res || []
   } catch (error) {
     console.error('加载部门失败:', error)
   }

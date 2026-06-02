@@ -273,10 +273,10 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 const loading = ref(false)
 const submitting = ref(false)
 const membersLoading = ref(false)
-const departments = ref([])
-const users = ref([])
+const departments = ref<any[]>([])
+const users = ref<any[]>([])
 const selectedDept = ref(null)
-const deptMembers = ref([])
+const deptMembers = ref<any[]>([])
 const searchText = ref('')
 const treeRef = ref(null)
 

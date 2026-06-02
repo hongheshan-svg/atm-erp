@@ -263,10 +263,10 @@ const showWorkflowProgress = (row) => {
 }
 
 const loading = ref(false)
-const projects = ref([])
-const customers = ref([])
-const users = ref([])
-const salesOrders = ref([])
+const projects = ref<any[]>([])
+const customers = ref<any[]>([])
+const users = ref<any[]>([])
+const salesOrders = ref<any[]>([])
 const salesOrdersLoaded = ref(false)
 const dialogVisible = ref(false)
 const dialogTitle = ref('创建项目')

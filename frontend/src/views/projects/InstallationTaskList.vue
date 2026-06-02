@@ -123,7 +123,7 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 const router = useRouter()
 const loading = ref(false)
 const submitLoading = ref(false)
-const taskList = ref([])
+const taskList = ref<any[]>([])
 const total = ref(0)
 const showCreateDialog = ref(false)
 const formRef = ref(null)
@@ -145,7 +145,7 @@ const statusOptions = [
 const statusType = (s) => ({ pending: 'info', dispatched: '', in_transit: 'warning', on_site: 'warning', installing: '', commissioning: '', acceptance: 'warning', completed: 'success' }[s] || 'info')
 const statusLabel = (s) => statusOptions.find(o => o.value === s)?.label || s
 
-const summary = ref({})
+const summary = ref<Record<string, any>>({})
 const statusStats = computed(() => [
   { label: '待安排', value: summary.value.pending || 0, class: '' },
   { label: '已派工', value: summary.value.dispatched || 0, class: '' },
@@ -162,15 +162,15 @@ const loadList = async () => {
     if (!params.search) delete params.search
     if (!params.status) delete params.status
     const res = await getInstallationTasks(params)
-    taskList.value = res.data?.results || res.results || []
-    total.value = res.data?.count || res.count || 0
+    taskList.value = res.results || res.results || []
+    total.value = res.count || res.count || 0
   } finally { loading.value = false }
 }
 
 const loadSummary = async () => {
   try {
     const res = await getInstallationTaskSummary()
-    summary.value = res.data || res || {}
+    summary.value = res || {}
   } catch (error) {
     console.error('InstallationTaskList getInstallationTaskSummary error:', error)
   }

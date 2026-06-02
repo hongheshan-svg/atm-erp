@@ -243,15 +243,15 @@ const validating = ref(false)
 const submitting = ref(false)
 const activeTab = ref('issues')
 
-const stats = ref({})
-const pendingIssues = ref([])
+const stats = ref<Record<string, any>>({})
+const pendingIssues = ref<any[]>([])
 const issuePage = ref(1)
 const issueTotal = ref(0)
-const reconciliations = ref([])
-const validationRules = ref([])
-const warehouses = ref([])
-const accuracyTrend = ref([])
-const severityData = ref([])
+const reconciliations = ref<any[]>([])
+const validationRules = ref<any[]>([])
+const warehouses = ref<any[]>([])
+const accuracyTrend = ref<any[]>([])
+const severityData = ref<any[]>([])
 
 const reconcileDialogVisible = ref(false)
 const handleDialogVisible = ref(false)
@@ -292,13 +292,13 @@ const formatDateTime = (dt) => {
 const loadStats = async () => {
   try {
     const res = await getAccuracyReport()
-    accuracyTrend.value = res.data.accuracy_trend || []
-    severityData.value = res.data.issue_by_severity || []
+    accuracyTrend.value = res.accuracy_trend || []
+    severityData.value = res.issue_by_severity || []
     stats.value = {
       accuracy: accuracyTrend.value[0]?.accuracy || 100,
-      pendingIssues: res.data.current_status?.pending_issues || 0,
-      negativeStock: res.data.current_status?.negative_stock_items || 0,
-      itemsWithStock: res.data.current_status?.total_items_with_stock || 0
+      pendingIssues: res.current_status?.pending_issues || 0,
+      negativeStock: res.current_status?.negative_stock_items || 0,
+      itemsWithStock: res.current_status?.total_items_with_stock || 0
     }
     
     await nextTick()
@@ -312,8 +312,8 @@ const loadPendingIssues = async () => {
   loading.value = true
   try {
     const res = await getValidationResults({ status: 'PENDING', page: issuePage.value, page_size: 10 })
-    pendingIssues.value = res.data.results || res.data
-    issueTotal.value = res.data.count || pendingIssues.value.length
+    pendingIssues.value = res.results || res
+    issueTotal.value = res.count || pendingIssues.value.length
   } catch (e) {
     console.error(e)
   } finally {
@@ -324,7 +324,7 @@ const loadPendingIssues = async () => {
 const loadReconciliations = async () => {
   try {
     const res = await getReconciliationSessions({ page_size: 20 })
-    reconciliations.value = res.data.results || res.data
+    reconciliations.value = res.results || res
   } catch (e) {
     console.error(e)
   }
@@ -333,7 +333,7 @@ const loadReconciliations = async () => {
 const loadValidationRules = async () => {
   try {
     const res = await getValidationRules({ page_size: 100 })
-    validationRules.value = res.data.results || res.data
+    validationRules.value = res.results || res
   } catch (e) {
     console.error(e)
   }
@@ -341,7 +341,7 @@ const loadValidationRules = async () => {
 
 const loadWarehouses = async () => {
   const res = await getWarehouseList({ page_size: 100 })
-  warehouses.value = res.data.results || res.data
+  warehouses.value = res.results || res
 }
 
 const renderCharts = () => {
@@ -401,7 +401,7 @@ const runValidation = async () => {
   validating.value = true
   try {
     const res = await runValidationChecks()
-    ElMessage.success(`校验完成，发现 ${res.data.total_issues} 个问题`)
+    ElMessage.success(`校验完成，发现 ${res.total_issues} 个问题`)
     loadStats()
     loadPendingIssues()
   } catch (e) {
@@ -424,7 +424,7 @@ const createReconciliation = async () => {
   submitting.value = true
   try {
     const res = await createAndRunReconciliation(reconcileForm)
-    ElMessage.success(`对账完成，检查 ${res.data.total_items_checked} 个物料，发现 ${res.data.issues_found} 个问题`)
+    ElMessage.success(`对账完成，检查 ${res.total_items_checked} 个物料，发现 ${res.issues_found} 个问题`)
     reconcileDialogVisible.value = false
     loadReconciliations()
     loadStats()
@@ -478,7 +478,7 @@ const viewReconciliation = (session) => {
 const initDefaultRules = async () => {
   try {
     const res = await initDefaultValidationRules()
-    ElMessage.success(`初始化完成，创建 ${res.data.created_count} 条规则`)
+    ElMessage.success(`初始化完成，创建 ${res.created_count} 条规则`)
     loadValidationRules()
   } catch (e) {
     ElMessage.error('初始化失败')

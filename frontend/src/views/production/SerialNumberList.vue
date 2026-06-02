@@ -294,10 +294,10 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 
 const loading = ref(false)
-const tableData = ref([])
-const projects = ref([])
-const items = ref([])
-const snRules = ref([])
+const tableData = ref<any[]>([])
+const projects = ref<any[]>([])
+const items = ref<any[]>([])
+const snRules = ref<any[]>([])
 const quickSearch = ref('')
 const generateDialogVisible = ref(false)
 const traceDialogVisible = ref(false)

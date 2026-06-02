@@ -540,16 +540,16 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 // 状态
 const loading = ref(false)
 const saving = ref(false)
-const recordList = ref([])
-const projects = ref([])
-const users = ref([])
+const recordList = ref<any[]>([])
+const projects = ref<any[]>([])
+const users = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新建调试记录')
 const detailVisible = ref(false)
 const currentRecord = ref(null)
 const completeDialogVisible = ref(false)
 const checkItemDialogVisible = ref(false)
-const newCheckItems = ref([])
+const newCheckItems = ref<any[]>([])
 const formRef = ref(null)
 
 // 筛选条件

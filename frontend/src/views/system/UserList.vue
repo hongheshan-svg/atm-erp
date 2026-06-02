@@ -169,9 +169,9 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 )
 
 const loading = ref(false)
-const users = ref([])
-const departments = ref([])
-const roles = ref([])
+const users = ref<any[]>([])
+const departments = ref<any[]>([])
+const roles = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增用户')
 const isEdit = ref(false)

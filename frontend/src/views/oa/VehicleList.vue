@@ -215,10 +215,10 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 const loading = ref(false)
 const saving = ref(false)
 const maintDialogVisible = ref(false)
-const maintRecords = ref([])
+const maintRecords = ref<any[]>([])
 const maintLoading = ref(false)
 const currentVehicle = ref(null)
-const list = ref([])
+const list = ref<any[]>([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref(null)
@@ -352,7 +352,7 @@ const handleMaintenance = async (row) => {
   maintLoading.value = true
   try {
     const res = await getVehicleMaintenanceRecords(row.id)
-    maintRecords.value = res.data?.results || res.results || []
+    maintRecords.value = res.results || res.results || []
   } catch (error) {
     console.error(error)
     maintRecords.value = []

@@ -202,10 +202,10 @@ const loadingGantt = ref(false)
 const scheduling = ref(false)
 
 const capacityStartDate = ref(new Date())
-const capacityData = ref([])
-const orders = ref([])
-const ganttData = ref([])
-const ganttDateRange = ref([])
+const capacityData = ref<any[]>([])
+const orders = ref<any[]>([])
+const ganttData = ref<any[]>([])
+const ganttDateRange = ref<any[]>([])
 const orderFilter = ref('')
 
 const pagination = reactive({

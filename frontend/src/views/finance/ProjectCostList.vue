@@ -225,10 +225,10 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 
 const loading = ref(false)
-const tableData = ref([])
-const managers = ref([])
+const tableData = ref<any[]>([])
+const managers = ref<any[]>([])
 const detailVisible = ref(false)
-const currentProject = ref({})
+const currentProject = ref<Record<string, any>>({})
 const costChartRef = ref(null)
 let costChart = null
 
@@ -252,7 +252,7 @@ const pagination = reactive({
   total: 0
 })
 
-const budgetComparison = ref([])
+const budgetComparison = ref<any[]>([])
 
 const getStatusLabel = (status) => {
   const labels = {
@@ -303,9 +303,9 @@ const fetchData = async () => {
     if (searchForm.manager) params.manager = searchForm.manager
     
     const res = await getProjectCosts(params)
-    const data = res.data?.results || res.results || res.data || []
+    const data = res.results || res.results || res || []
     tableData.value = data
-    pagination.total = res.data?.count || res.count || data.length
+    pagination.total = res.count || res.count || data.length
     
     // 计算汇总
     calculateSummary(data)
@@ -329,7 +329,7 @@ const calculateSummary = (data) => {
 const fetchManagers = async () => {
   try {
     const res = await getUsers()
-    managers.value = res.data?.results || res.results || res.data || []
+    managers.value = res.results || res.results || res || []
   } catch (error) {
     console.error('获取用户列表失败:', error)
   }

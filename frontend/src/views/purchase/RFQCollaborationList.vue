@@ -136,7 +136,7 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const saving = ref(false)
-const tableData = ref([])
+const tableData = ref<any[]>([])
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
@@ -144,8 +144,8 @@ const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
 const compareDialogVisible = ref(false)
 const formRef = ref(null)
-const viewDetail = ref({})
-const compareData = ref([])
+const viewDetail = ref<Record<string, any>>({})
+const compareData = ref<any[]>([])
 const currentRFQId = ref(null)
 
 const form = reactive({ title: '', deadline: '', remarks: '' })
@@ -159,8 +159,8 @@ const loadData = async () => {
   loading.value = true
   try {
     const res = await getRFQCollaborations({ page: page.value, page_size: pageSize.value })
-    tableData.value = res.data?.results || res.results || []
-    total.value = res.data?.count || res.count || 0
+    tableData.value = res.results || res.results || []
+    total.value = res.count || res.count || 0
   } catch (error) {
     ElMessage.error('加载数据失败')
   } finally {
@@ -177,7 +177,7 @@ const handleCreate = () => {
 const handleView = async (row) => {
   try {
     const res = await getRFQCollaboration(row.id)
-    viewDetail.value = res.data || res
+    viewDetail.value = res
     viewDialogVisible.value = true
   } catch (error) {
     console.error(error)
@@ -189,7 +189,7 @@ const handleView = async (row) => {
 const handleCompare = async (row) => {
   try {
     const res = await compareRFQCollaboration(row.id)
-    compareData.value = res.data?.results || res.results || res.data || res || []
+    compareData.value = res.results || res.results || res || res || []
     currentRFQId.value = row.id
     compareDialogVisible.value = true
   } catch (error) {

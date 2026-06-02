@@ -240,14 +240,14 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 
 const loading = ref(false)
 const saving = ref(false)
-const receipts = ref([])
-const purchaseOrders = ref([])
-const warehouses = ref([])
+const receipts = ref<any[]>([])
+const purchaseOrders = ref<any[]>([])
+const warehouses = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('创建收货单')
 const isEdit = ref(false)
 const detailVisible = ref(false)
-const current = ref({})
+const current = ref<Record<string, any>>({})
 const formRef = ref(null)
 
 const searchForm = reactive({ 

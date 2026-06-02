@@ -171,11 +171,11 @@ import { useBatchOperation } from '@/composables/useBatchOperation'
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/masterdata/')
 
 
-const warehouses = ref([])
+const warehouses = ref<any[]>([])
 const selectedWarehouse = ref(null)
-const locationTree = ref([])
+const locationTree = ref<any[]>([])
 const selectedLocation = ref(null)
-const childLocations = ref([])
+const childLocations = ref<any[]>([])
 const filterText = ref('')
 const treeRef = ref(null)
 

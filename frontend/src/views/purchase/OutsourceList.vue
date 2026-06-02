@@ -391,11 +391,11 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const saving = ref(false)
-const orders = ref([])
-const suppliers = ref([])
-const projects = ref([])
-const items = ref([])
-const warehouses = ref([])
+const orders = ref<any[]>([])
+const suppliers = ref<any[]>([])
+const projects = ref<any[]>([])
+const items = ref<any[]>([])
+const warehouses = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新建外协单')
 const viewDialogVisible = ref(false)
@@ -551,7 +551,7 @@ const handleEdit = async (row) => {
   
   try {
     const res = await getOutsourceOrder(row.id)
-    const data = res.data || res
+    const data = res
     
     Object.assign(form, {
       id: data.id,
@@ -587,7 +587,7 @@ const handleEdit = async (row) => {
 const handleView = async (row) => {
   try {
     const res = await getOutsourceOrder(row.id)
-    currentOrder.value = res.data || res
+    currentOrder.value = res
     viewDialogVisible.value = true
   } catch (error) {
     ElMessage.error('获取外协单详情失败')
@@ -688,7 +688,7 @@ const handleCancel = async (row) => {
 const handleIssue = async (row) => {
   try {
     const res = await getOutsourceOrder(row.id)
-    const data = res.data || res
+    const data = res
     
     issueForm.outsource_order = data.id
     issueForm.warehouse = null
@@ -763,7 +763,7 @@ const submitIssue = async () => {
 const handleReceipt = async (row) => {
   try {
     const res = await getOutsourceOrder(row.id)
-    const data = res.data || res
+    const data = res
     
     receiptForm.outsource_order = data.id
     receiptForm.warehouse = null

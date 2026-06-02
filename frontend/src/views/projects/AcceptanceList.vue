@@ -235,17 +235,17 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 
 const loading = ref(false)
-const tableData = ref([])
-const projects = ref([])
-const customers = ref([])
-const equipments = ref([])
-const templates = ref([])
+const tableData = ref<any[]>([])
+const projects = ref<any[]>([])
+const customers = ref<any[]>([])
+const equipments = ref<any[]>([])
+const templates = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增验收')
 const formRef = ref(null)
 const selectedTemplate = ref(null)
 const viewDialogVisible = ref(false)
-const viewDetail = ref({})
+const viewDetail = ref<Record<string, any>>({})
 const reportLoading = ref(false)
 
 const stats = reactive({
@@ -373,7 +373,7 @@ const loadEquipments = async () => {
 const loadTemplates = async () => {
   try {
     const res = await getActiveAcceptanceTemplates()
-    templates.value = res
+    templates.value = res.results || res
   } catch (error) {
     console.error('加载模板失败:', error)
   }

@@ -37,7 +37,7 @@ import { getServiceOrder } from '@/api/projects/service-order'
 const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
-const order = ref({})
+const order = ref<Record<string, any>>({})
 
 const pageTitle = computed(() => order.value.order_no ? `服务工单 - ${order.value.order_no}` : '服务工单详情')
 
@@ -45,7 +45,7 @@ const loadData = async () => {
   loading.value = true
   try {
     const res = await getServiceOrder(route.params.id)
-    order.value = res.data || res
+    order.value = res
   } catch (error) {
     ElMessage.error('加载数据失败')
   } finally {

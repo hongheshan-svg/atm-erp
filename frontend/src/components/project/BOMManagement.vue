@@ -134,7 +134,7 @@ const props = defineProps({
 const emit = defineEmits(['refresh'])
 
 const loading = ref(false)
-const bomList = ref([])
+const bomList = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const formRef = ref(null)
@@ -142,7 +142,7 @@ const submitting = ref(false)
 const isEdit = ref(false)
 const currentBomId = ref(null)
 
-const itemOptions = ref([])
+const itemOptions = ref<any[]>([])
 const searchingItems = ref(false)
 
 const formData = ref({

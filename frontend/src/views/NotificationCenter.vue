@@ -100,7 +100,7 @@ import { getNotifications, getUnreadCount, markNotificationRead, markAllNotifica
 import { ElMessage, ElNotification } from 'element-plus'
 
 const loading = ref(false)
-const notifications = ref([])
+const notifications = ref<any[]>([])
 const activeTab = ref('all')
 const unreadCount = ref(0)
 const wsConnection = ref(null)

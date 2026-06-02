@@ -163,11 +163,11 @@ const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('
 
 const selectedProject = ref(null)
 const hourlyRate = ref(100)
-const projectOptions = ref([])
+const projectOptions = ref<any[]>([])
 const projectLoading = ref(false)
 const projectsLoaded = ref(false)
 const costData = ref(null)
-const comparisonData = ref([])
+const comparisonData = ref<any[]>([])
 const permissionStore = usePermissionStore()
 
 const pieChart = ref(null)

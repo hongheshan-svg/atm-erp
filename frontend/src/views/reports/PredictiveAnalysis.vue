@@ -114,9 +114,9 @@ const capacityLoading = ref(false)
 const costProjectId = ref('')
 const costResult = ref(null)
 const costChartRef = ref(null)
-const deliveryRisks = ref([])
+const deliveryRisks = ref<any[]>([])
 const capacityWeeks = ref(8)
-const capacityData = ref([])
+const capacityData = ref<any[]>([])
 const capacityChartRef = ref(null)
 
 const formatMoney = (v) => v ? Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
@@ -128,7 +128,7 @@ const loadCostTrend = async () => {
   costLoading.value = true
   try {
     const res = await getCostTrend({ project_id: costProjectId.value })
-    costResult.value = res.data || res
+    costResult.value = res
   } finally { costLoading.value = false }
 }
 
@@ -136,7 +136,7 @@ const loadDeliveryRisk = async () => {
   deliveryLoading.value = true
   try {
     const res = await getDeliveryRisk()
-    deliveryRisks.value = res.data?.results || res.data || res.results || res || []
+    deliveryRisks.value = res.risks || res.results || (Array.isArray(res) ? res : [])
   } finally { deliveryLoading.value = false }
 }
 
@@ -144,7 +144,7 @@ const loadCapacityLoad = async () => {
   capacityLoading.value = true
   try {
     const res = await getCapacityLoad({ weeks: capacityWeeks.value })
-    capacityData.value = res.data?.results || res.data || res || []
+    capacityData.value = res.capacity_load || res.results || (Array.isArray(res) ? res : [])
   } finally { capacityLoading.value = false }
 }
 

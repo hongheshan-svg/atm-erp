@@ -192,7 +192,7 @@ const routes = [
         path: 'projects/service-orders',
         name: 'ServiceOrderList',
         component: () => import('@/views/projects/ServiceOrder.vue'),
-        meta: { title: '售后服务', icon: 'Van', menuId: 'projects:service' }
+        meta: { title: '售后服务', icon: 'Headset', menuId: 'projects:service' }
       },
       {
         path: 'projects/service-order/:id',
@@ -1074,14 +1074,6 @@ const routes = [
         component: () => import('@/views/oa/AssetList.vue'),
         meta: { title: '资产管理', icon: 'Box', menuId: 'oa:asset' }
       },
-      // 即时通讯
-      {
-        path: 'oa/im',
-        name: 'InstantMessage',
-        component: () => import('@/views/oa/IMChat.vue'),
-        meta: { title: '即时通讯', icon: 'ChatDotRound', menuId: 'oa:im' }
-      },
-
       // ====== Group 9: System 系统管理 ======
       {
         path: 'system/users',

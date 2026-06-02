@@ -161,7 +161,7 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 const router = useRouter()
 
 const loading = ref(false)
-const tableData = ref([])
+const tableData = ref<any[]>([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -173,9 +173,9 @@ const dialogTitle = ref('新建工艺模板')
 const applyDialogVisible = ref(false)
 const submitting = ref(false)
 const formRef = ref(null)
-const categories = ref([])
-const items = ref([])
-const projects = ref([])
+const categories = ref<any[]>([])
+const items = ref<any[]>([])
+const projects = ref<any[]>([])
 const currentTemplate = ref(null)
 
 const form = reactive({
@@ -280,7 +280,7 @@ const handleSubmit = async () => {
     } else {
       const res = await createRoutingTemplate(form)
       ElMessage.success('创建成功')
-      router.push(`/production/routing-template/${res.data.id}`)
+      router.push(`/production/routing-template/${res.id}`)
     }
     dialogVisible.value = false
     loadData()
@@ -305,7 +305,7 @@ const handleCommand = async (cmd, row) => {
         await ElMessageBox.confirm('确定创建新版本?', '提示')
         const res = await createRoutingTemplateVersion(row.id)
         ElMessage.success('新版本创建成功')
-        router.push(`/production/routing-template/${res.data.id}`)
+        router.push(`/production/routing-template/${res.id}`)
         }
         break
       case 'apply':

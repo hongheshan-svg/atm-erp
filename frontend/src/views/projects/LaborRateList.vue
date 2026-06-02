@@ -91,7 +91,7 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const saving = ref(false)
-const tableData = ref([])
+const tableData = ref<any[]>([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref(null)
@@ -108,7 +108,7 @@ const loadData = async () => {
   loading.value = true
   try {
     const res = await getLaborRateList()
-    tableData.value = res.data?.results || res.results || res.data || []
+    tableData.value = res.results || res.results || res || []
   } catch (error) {
     ElMessage.error('加载数据失败')
   } finally {

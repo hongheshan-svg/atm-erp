@@ -274,7 +274,7 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 
 const loading = ref(false)
 const submitting = ref(false)
-const customers = ref([])
+const customers = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增客户')
 const isEdit = ref(false)

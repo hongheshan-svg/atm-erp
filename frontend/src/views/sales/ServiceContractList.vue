@@ -247,9 +247,9 @@ const submitting = ref(false)
 const showCreateDialog = ref(false)
 const showDetailDrawer = ref(false)
 
-const contracts = ref([])
-const customers = ref([])
-const projects = ref([])
+const contracts = ref<any[]>([])
+const customers = ref<any[]>([])
+const projects = ref<any[]>([])
 const currentContract = ref(null)
 
 const searchKeyword = ref('')

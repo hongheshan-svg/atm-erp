@@ -107,10 +107,10 @@ import { getLoginLogs, getLoginStatistics } from '@/api/security'
 import { DataAnalysis } from '@element-plus/icons-vue'
 
 const loading = ref(false)
-const logs = ref([])
+const logs = ref<any[]>([])
 const showStats = ref(false)
 const statistics = ref(null)
-const dateRange = ref([])
+const dateRange = ref<any[]>([])
 
 const filters = reactive({
   username: '',

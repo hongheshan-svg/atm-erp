@@ -61,7 +61,7 @@ const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('
 
 
 const loading = ref(false)
-const tableData = ref([])
+const tableData = ref<any[]>([])
 const filters = ref({ equipment_type: null })
 const stats = ref({ total_equipment: 0, running: 0, in_maintenance: 0, retired: 0 })
 
@@ -71,8 +71,8 @@ const loadData = async () => {
   loading.value = true
   try {
     const res = await getEquipmentLifecycleReport(filters.value)
-    tableData.value = res.data?.equipment || res.equipment || []
-    stats.value = res.data?.stats || res.stats || stats.value
+    tableData.value = res.equipment || res.equipment || []
+    stats.value = res.stats || res.stats || stats.value
   } catch (error) {
     ElMessage.error('加载数据失败')
   } finally {

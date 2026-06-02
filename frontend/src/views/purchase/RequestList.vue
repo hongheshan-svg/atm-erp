@@ -655,11 +655,11 @@ const showWorkflowProgress = (row) => {
 const loading = ref(false)
 const saving = ref(false)
 const converting = ref(false)
-const requests = ref([])
-const projects = ref([])
-const items = ref([])
-const projectItems = ref([])  // 项目中未申请的物料
-const suppliers = ref([])
+const requests = ref<any[]>([])
+const projects = ref<any[]>([])
+const items = ref<any[]>([])
+const projectItems = ref<any[]>([])  // 项目中未申请的物料
+const suppliers = ref<any[]>([])
 const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
 const convertDialogVisible = ref(false)
@@ -698,7 +698,7 @@ const convertForm = reactive({
 const importDialogVisible = ref(false)
 const importing = ref(false)
 const importFile = ref(null)
-const importFileList = ref([])
+const importFileList = ref<any[]>([])
 const importUploadRef = ref(null)
 const importResult = ref(null)
 const importProject = ref(null)  // 导入时选择的项目
@@ -706,10 +706,10 @@ const importError = ref(null)    // 项目号不匹配等错误
 
 // BOM物料筛选相关
 const bomProject = ref(null)
-const bomItems = ref([])
+const bomItems = ref<any[]>([])
 const bomLoading = ref(false)
 const bomTableRef = ref(null)
-const selectedBomRows = ref([])
+const selectedBomRows = ref<any[]>([])
 const bomFilter = reactive({
   hasDrawing: '',
   itemType: '',

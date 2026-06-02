@@ -232,13 +232,13 @@ const router = useRouter()
 
 const loading = ref(false)
 const detailLoading = ref(false)
-const projects = ref([])
+const projects = ref<any[]>([])
 const selectedProject = ref(null)
 const summary = ref(null)
 const analysisData = ref(null)
-const trendData = ref([])
-const topVariances = ref([])
-const costDetails = ref([])
+const trendData = ref<any[]>([])
+const topVariances = ref<any[]>([])
+const costDetails = ref<any[]>([])
 const detailPage = ref(1)
 const detailPageSize = ref(10)
 const addCostDialogVisible = ref(false)
@@ -299,7 +299,7 @@ const getPercentage = (value) => {
 
 const loadProjects = async () => {
   const res = await getProjectList({ page_size: 500 })
-  projects.value = res.data?.results || res.results || res.data || res
+  projects.value = res.results || res.results || res || res
 }
 
 const loadProjectCost = async () => {
@@ -311,10 +311,10 @@ const loadProjectCost = async () => {
   loading.value = true
   try {
     const res = await getProjectCostAnalysis(selectedProject.value)
-    summary.value = res.data.summary
-    analysisData.value = res.data.analysis
-    trendData.value = res.data.trend || []
-    topVariances.value = res.data.top_variances || []
+    summary.value = res.summary
+    analysisData.value = res.analysis
+    trendData.value = res.trend || []
+    topVariances.value = res.top_variances || []
     
     await nextTick()
     renderCharts()
@@ -338,8 +338,8 @@ const loadDetails = async () => {
       cost_element: elementFilter.value || undefined
     }
     const res = await getCostDetails(params)
-    costDetails.value = res.data.results || res.data
-    detailTotal.value = res.data.count || costDetails.value.length
+    costDetails.value = res.results || res
+    detailTotal.value = res.count || costDetails.value.length
   } catch (e) {
     console.error(e)
   } finally {

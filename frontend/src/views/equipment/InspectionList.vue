@@ -342,24 +342,24 @@ const activeTab = ref('records')
 const loading = ref(false)
 const createLoading = ref(false)
 const handleLoading = ref(false)
-const tableData = ref([])
+const tableData = ref<any[]>([])
 const total = ref(0)
-const templates = ref([])
+const templates = ref<any[]>([])
 const templateDialogVisible = ref(false)
 const templateIsEdit = ref(false)
 const templateSaving = ref(false)
 const templateForm = reactive({ id: null, code: '', name: '', equipment_type: '', frequency: 'DAILY', items_count: 0, description: '' })
-const templateDetail = ref({})
+const templateDetail = ref<Record<string, any>>({})
 const inspectionViewVisible = ref(false)
-const inspectionDetail = ref({})
+const inspectionDetail = ref<Record<string, any>>({})
 const doInspectionVisible = ref(false)
 const doInspectionRow = ref(null)
-const inspectionResults = reactive([])
+const inspectionResults = reactive<any[]>([])
 const doInspectionSaving = ref(false)
 const templateDetailVisible = ref(false)
-const equipments = ref([])
-const unhandledAbnormal = ref([])
-const todayStats = ref({})
+const equipments = ref<any[]>([])
+const unhandledAbnormal = ref<any[]>([])
+const todayStats = ref<Record<string, any>>({})
 
 const createDialogVisible = ref(false)
 const handleDialogVisible = ref(false)
@@ -470,7 +470,7 @@ const confirmCreate = async () => {
 const handleView = async (row) => {
   try {
     const res = await getInspectionRecord(row.id)
-    inspectionDetail.value = res.data || res
+    inspectionDetail.value = res
   } catch (error) {
     console.error(error)
     inspectionDetail.value = row
@@ -507,7 +507,7 @@ const handleAddTemplate = () => {
 const handleViewTemplate = async (row) => {
   try {
     const res = await getInspectionTemplate(row.id)
-    templateDetail.value = res.data || res
+    templateDetail.value = res
   } catch (error) {
     console.error(error)
     templateDetail.value = row

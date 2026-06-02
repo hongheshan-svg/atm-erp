@@ -371,11 +371,11 @@ const showWorkflowProgress = (row) => {
 
 const loading = ref(false)
 const saving = ref(false)
-const orders = ref([])
-const customers = ref([])
-const projects = ref([])
+const orders = ref<any[]>([])
+const customers = ref<any[]>([])
+const projects = ref<any[]>([])
 const projectsLoaded = ref(false)
-const selectedOrders = ref([])
+const selectedOrders = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('创建销售订单')
 const isEdit = ref(false)
@@ -459,8 +459,8 @@ const loadOrders = async () => {
     if (searchForm.status) params.status = searchForm.status
     
     const res = await getSalesOrders(params)
-    orders.value = res.data?.results || res.results || res.data || []
-    pagination.total = res.data?.count || res.count || 0
+    orders.value = res.results || res.results || res || []
+    pagination.total = res.count || res.count || 0
   } catch (error) {
     ElMessage.error('加载销售订单失败')
   } finally {
@@ -471,7 +471,7 @@ const loadOrders = async () => {
 const loadCustomers = async () => {
   try {
     const res = await getCustomerList()
-    customers.value = res.data?.results || res.results || res.data || []
+    customers.value = res.results || res.results || res || []
   } catch (error) {
     console.error('加载客户失败:', error)
   }
@@ -484,7 +484,7 @@ const loadProjects = async () => {
 
   try {
     const res = await getProjectList()
-    projects.value = res.data?.results || res.results || res.data || []
+    projects.value = res.results || res.results || res || []
     projectsLoaded.value = true
     return true
   } catch (error) {
@@ -540,7 +540,7 @@ const handleEdit = async (row) => {
   
   try {
     const res = await getSalesOrder(row.id)
-    const data = res.data || res
+    const data = res
     
     Object.assign(form, {
       id: data.id,
@@ -757,7 +757,7 @@ const downloadTemplate = async () => {
 
 // 导入错误对话框
 const importErrorDialogVisible = ref(false)
-const importErrors = ref([])
+const importErrors = ref<any[]>([])
 
 // 导入
 const handleImport = async (file) => {

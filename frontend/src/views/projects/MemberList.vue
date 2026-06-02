@@ -187,10 +187,10 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const selectedProject = ref(null)
-const projects = ref([])
-const members = ref([])
-const allUsers = ref([])
-const roles = ref([])
+const projects = ref<any[]>([])
+const members = ref<any[]>([])
+const allUsers = ref<any[]>([])
+const roles = ref<any[]>([])
 const dialogVisible = ref(false)
 const formRef = ref(null)
 
@@ -300,7 +300,7 @@ const getRoleLabel = (role) => {
 const fetchProjects = async () => {
   try {
     const res = await getProjectList()
-    projects.value = res.data?.results || res.results || res.data || []
+    projects.value = res.results || res.results || res || []
   } catch (error) {
     console.error('获取项目列表失败:', error)
   }
@@ -316,7 +316,7 @@ const fetchMembers = async () => {
   try {
     // 使用查询参数过滤项目成员
     const res = await getMemberList({ project: selectedProject.value })
-    members.value = res.data?.results || res.results || res.data || []
+    members.value = res.results || res.results || res || []
   } catch (error) {
     console.error('获取成员列表失败:', error)
     members.value = []
@@ -328,7 +328,7 @@ const fetchMembers = async () => {
 const fetchUsers = async () => {
   try {
     const res = await getUsers()
-    allUsers.value = res.data?.results || res.results || res.data || []
+    allUsers.value = res.results || res.results || res || []
   } catch (error) {
     console.error('获取用户列表失败:', error)
   }
@@ -337,7 +337,7 @@ const fetchUsers = async () => {
 const fetchRoles = async () => {
   try {
     const res = await getRoles()
-    roles.value = res.data?.results || res.results || res.data || []
+    roles.value = res.results || res.results || res || []
   } catch (error) {
     console.error('获取角色列表失败:', error)
     // 使用默认角色

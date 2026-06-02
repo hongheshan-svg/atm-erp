@@ -136,12 +136,12 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const saving = ref(false)
-const archives = ref([])
+const archives = ref<any[]>([])
 const total = ref(0)
 const viewDialogVisible = ref(false)
 const createDialogVisible = ref(false)
-const viewDetail = ref({})
-const projectList = ref([])
+const viewDetail = ref<Record<string, any>>({})
+const projectList = ref<any[]>([])
 const formRef = ref(null)
 
 const queryParams = reactive({ search: '', status: '', page: 1, page_size: 20 })
@@ -168,7 +168,7 @@ const fetchData = async () => {
 const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
-    projectList.value = res.data?.results || res.results || []
+    projectList.value = res.results || res.results || []
   } catch (error) {
     console.error('ArchiveList getProjectList error:', error)
   }
@@ -183,7 +183,7 @@ const handleCreate = () => {
 const handleView = async (row) => {
   try {
     const res = await getProjectArchive(row.id)
-    viewDetail.value = res.data || res
+    viewDetail.value = res
     viewDialogVisible.value = true
   } catch (error) {
     console.error(error)

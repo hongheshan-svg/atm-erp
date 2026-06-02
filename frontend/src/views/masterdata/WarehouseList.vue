@@ -84,7 +84,7 @@ import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 
 const loading = ref(false)
-const warehouses = ref([])
+const warehouses = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增仓库')
 const isEdit = ref(false)

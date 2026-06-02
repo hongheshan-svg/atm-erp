@@ -183,9 +183,9 @@ import { getCalendarSchedules, getTodaySchedules, getUpcomingSchedules, getCoreS
 
 const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 const currentDate = ref(new Date())
-const events = ref([])
-const todaySchedules = ref([])
-const upcomingSchedules = ref([])
+const events = ref<any[]>([])
+const todaySchedules = ref<any[]>([])
+const upcomingSchedules = ref<any[]>([])
 
 const dialogVisible = ref(false)
 const dayDialogVisible = ref(false)

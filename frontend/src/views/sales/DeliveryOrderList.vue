@@ -329,9 +329,9 @@ const showWorkflowProgress = (row) => {
 
 const loading = ref(false)
 const submitting = ref(false)
-const deliveryOrders = ref([])
+const deliveryOrders = ref<any[]>([])
 const detailVisible = ref(false)
-const currentDelivery = ref({})
+const currentDelivery = ref<Record<string, any>>({})
 const activeTab = ref('basic')
 
 // 对话框状态

@@ -146,9 +146,9 @@ const isAdmin = computed(() => {
 const loading = ref(false)
 const submitting = ref(false)
 const deleting = ref(false)
-const tasks = ref([])
+const tasks = ref<any[]>([])
 const pendingCount = ref(0)
-const selectedTasks = ref([])
+const selectedTasks = ref<any[]>([])
 
 const approveDialogVisible = ref(false)
 const rejectDialogVisible = ref(false)
@@ -180,8 +180,8 @@ const loadTasks = async () => {
       getPendingTaskCount()
     ])
     // Handle different response formats
-    tasks.value = tasksRes.results || tasksRes.data || tasksRes || []
-    pendingCount.value = countRes.count || countRes.data?.count || 0
+    tasks.value = tasksRes.results || tasksRes || tasksRes || []
+    pendingCount.value = countRes.count || countRes.count || 0
   } catch (error) {
     console.error('Failed to load tasks:', error)
     tasks.value = []

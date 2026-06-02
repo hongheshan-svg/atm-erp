@@ -587,16 +587,16 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 // 状态
 const loading = ref(false)
 const saving = ref(false)
-const inspectionList = ref([])
-const projects = ref([])
-const users = ref([])
+const inspectionList = ref<any[]>([])
+const projects = ref<any[]>([])
+const users = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新建检验单')
 const detailVisible = ref(false)
 const currentInspection = ref(null)
 const completeDialogVisible = ref(false)
 const itemDialogVisible = ref(false)
-const newItems = ref([])
+const newItems = ref<any[]>([])
 const formRef = ref(null)
 
 // 筛选条件

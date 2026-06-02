@@ -93,7 +93,7 @@ const submitting = ref(false)
 const showCreateDialog = ref(false)
 const isEdit = ref(false)
 
-const resourceTypes = ref([])
+const resourceTypes = ref<any[]>([])
 const editingId = ref(null)
 
 const typeForm = reactive({

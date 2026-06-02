@@ -59,9 +59,9 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 
 const loading = ref(false)
-const projects = ref([])
-const selectedProjects = ref([])
-const comparisonData = ref([])
+const projects = ref<any[]>([])
+const selectedProjects = ref<any[]>([])
+const comparisonData = ref<any[]>([])
 const chartRef = ref(null)
 
 const formatMoney = (v) => v ? parseFloat(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
@@ -69,7 +69,7 @@ const formatMoney = (v) => v ? parseFloat(v).toLocaleString('zh-CN', { minimumFr
 const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
-    projects.value = res.data?.results || res.results || []
+    projects.value = res.results || res.results || []
   } catch (error) {
     console.error('CostComparison getProjectList error:', error)
   }
@@ -83,7 +83,7 @@ const loadComparison = async () => {
   loading.value = true
   try {
     const res = await getProjectCostComparison({ project_ids: selectedProjects.value.join(',') })
-    comparisonData.value = res.data?.projects || res.projects || []
+    comparisonData.value = res.projects || res.projects || []
     renderChart()
   } catch (error) {
     ElMessage.error('加载对比数据失败')

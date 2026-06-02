@@ -290,10 +290,10 @@ const detailVisible = ref(false)
 const dialogMode = ref('add')
 const formRef = ref(null)
 
-const stats = ref({})
-const tableData = ref([])
-const customers = ref([])
-const projects = ref([])
+const stats = ref<Record<string, any>>({})
+const tableData = ref<any[]>([])
+const customers = ref<any[]>([])
+const projects = ref<any[]>([])
 const currentEquipment = ref(null)
 
 const filters = reactive({

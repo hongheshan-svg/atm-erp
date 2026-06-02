@@ -156,7 +156,7 @@ const props = defineProps({
 const emit = defineEmits(['uploaded', 'deleted'])
 
 const fileInput = ref(null)
-const attachments = ref([])
+const attachments = ref<any[]>([])
 const uploading = ref(false)
 const uploadProgress = ref(0)
 const previewVisible = ref(false)
@@ -164,7 +164,7 @@ const previewFile = ref(null)
 const categoryDialogVisible = ref(false)
 const uploadCategory = ref('OTHER')
 const uploadDescription = ref('')
-const pendingFiles = ref([])
+const pendingFiles = ref<any[]>([])
 
 const categoryOptions = [
   { value: 'DRAWING', label: '图纸' },

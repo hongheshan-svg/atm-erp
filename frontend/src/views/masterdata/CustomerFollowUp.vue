@@ -222,7 +222,7 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const submitLoading = ref(false)
-const tableData = ref([])
+const tableData = ref<any[]>([])
 const total = ref(0)
 const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
@@ -230,9 +230,9 @@ const dialogTitle = ref('新增跟进')
 const isEdit = ref(false)
 const currentRecord = ref(null)
 const formRef = ref(null)
-const customers = ref([])
-const followTypes = ref([])
-const stats = ref({})
+const customers = ref<any[]>([])
+const followTypes = ref<any[]>([])
+const stats = ref<Record<string, any>>({})
 
 const queryParams = reactive({
   page: 1,

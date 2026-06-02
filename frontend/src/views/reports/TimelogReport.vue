@@ -139,10 +139,10 @@ const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('
 
 
 const loading = ref(false)
-const statistics = ref({})
-const groupedData = ref([])
-const overtimeData = ref([])
-const dateRange = ref([])
+const statistics = ref<Record<string, any>>({})
+const groupedData = ref<any[]>([])
+const overtimeData = ref<any[]>([])
+const dateRange = ref<any[]>([])
 const groupBy = ref('user')
 
 let trendChartInstance = null
@@ -268,7 +268,7 @@ const exportReport = async () => {
       params.end_date = dateRange.value[1]
     }
     const res = await exportTimelogReport(params)
-    const url = window.URL.createObjectURL(new Blob([res.data || res]))
+    const url = window.URL.createObjectURL(new Blob([res || res]))
     const link = document.createElement('a')
     link.href = url
     link.setAttribute('download', '工时报表.xlsx')

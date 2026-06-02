@@ -184,11 +184,11 @@ const currentDate = ref('')
 let refreshTimer = null
 let clockTimer = null
 
-const production = ref({})
-const projects = ref([])
-const workCenters = ref([])
-const quality = ref({})
-const todaySchedules = ref([])
+const production = ref<Record<string, any>>({})
+const projects = ref<any[]>([])
+const workCenters = ref<any[]>([])
+const quality = ref<Record<string, any>>({})
+const todaySchedules = ref<any[]>([])
 
 const refreshData = async () => {
   loading.value = true

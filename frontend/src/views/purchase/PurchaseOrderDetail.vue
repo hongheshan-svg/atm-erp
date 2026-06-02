@@ -136,9 +136,9 @@ import {
 const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
-const order = ref({})
-const receipts = ref([])
-const warehouses = ref([])
+const order = ref<Record<string, any>>({})
+const receipts = ref<any[]>([])
+const warehouses = ref<any[]>([])
 const receiptDialogVisible = ref(false)
 const receiptForm = ref({ warehouse: null, receipt_date: new Date().toISOString().split('T')[0], lines: [] })
 
@@ -152,7 +152,7 @@ const loadOrderDetail = async () => {
     const response = await getPurchaseOrder(route.params.id)
     order.value = response.data || response
     const receiptRes = await getGoodsReceipts({ purchase_order: route.params.id })
-    receipts.value = receiptRes.data?.results || receiptRes.results || receiptRes.data || []
+    receipts.value = receiptRes.results || receiptRes.results || receiptRes || []
   } catch (error) {
     console.error('加载订单详情失败:', error)
     ElMessage.error('加载订单详情失败')
