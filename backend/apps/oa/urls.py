@@ -34,7 +34,6 @@ from .attendance_device import (
 )
 from .attendance_sync_service import ZKTECOWebhookHandler
 from .electronic_signature import SignatureDocumentViewSet, SignatureLogViewSet, SignatureSealViewSet
-from .im import IMConversationViewSet, IMMessageViewSet
 from .vehicle import VehicleMaintenanceViewSet, VehicleRequestViewSet, VehicleViewSet
 from .wechat_work import (
     WechatCheckinRecordViewSet,
@@ -44,8 +43,6 @@ from .wechat_work import (
 )
 
 router = DefaultRouter()
-router.register(r'conversations', IMConversationViewSet, basename='im-conversation')
-router.register(r'messages', IMMessageViewSet, basename='im-message')
 
 # 档案管理
 router.register(r'archive-categories', ArchiveCategoryViewSet, basename='archive-category')

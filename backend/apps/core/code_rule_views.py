@@ -5,10 +5,11 @@
 from django.db.models import Count
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.permissions import IsSystemAdmin
 
 from .code_rule_models import CodeHistory, CodeRule
 from .code_rule_serializers import CodeHistorySerializer, CodeRuleSerializer
@@ -24,7 +25,7 @@ class CodeRuleViewSet(PermissionMixin, viewsets.ModelViewSet):
     permission_resource = 'code_rule'
     queryset = CodeRule.objects.all()
     serializer_class = CodeRuleSerializer
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsSystemAdmin]
     filterset_fields = ['rule_type', 'is_active']
     search_fields = ['rule_name', 'prefix']
     ordering_fields = ['rule_type', 'created_at']
@@ -171,7 +172,7 @@ class CodeHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     permission_resource = 'code_history'
     queryset = CodeHistory.objects.all()
     serializer_class = CodeHistorySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsSystemAdmin]
     filterset_fields = ['rule', 'business_model']
     search_fields = ['generated_code']
     ordering_fields = ['generated_at']

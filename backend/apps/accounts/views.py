@@ -13,6 +13,7 @@ from django.contrib.auth import update_session_auth_hash
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.permission_mixin import PermissionMixin
 from apps.core.permission_service import has_permission
+from apps.core.permissions import IsSystemAdminOrReadOnly
 from .models import User, Role, Department
 from .serializers import (
     UserSerializer, UserCreateSerializer, UserUpdateSerializer,
@@ -45,6 +46,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 class DepartmentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     permission_module = 'accounts'
     permission_resource = 'department'
+    allow_authenticated_read = True
     """
     ViewSet for Department management.
     """
@@ -75,6 +77,8 @@ class DepartmentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
 class RoleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     permission_module = 'accounts'
     permission_resource = 'role'
+    allow_authenticated_read = True
+    permission_classes = [permissions.IsAuthenticated, IsSystemAdminOrReadOnly]
     """
     ViewSet for Role management.
     角色使用物理删除，以便删除后可以创建同名角色。
@@ -118,6 +122,7 @@ class RoleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
 class UserViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     permission_module = 'accounts'
     permission_resource = 'user'
+    allow_authenticated_read = True
     """
     ViewSet for User management.
     """

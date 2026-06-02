@@ -26,6 +26,7 @@ from .serializers import (
     PurchaseContractSerializer
 )
 from .services import BudgetValidationService
+from .evaluation_models import SupplierBlacklist
 
 logger = logging.getLogger(__name__)
 
@@ -385,6 +386,12 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
         if not supplier_id:
             return Response(
                 {'error': '请选择供应商'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if SupplierBlacklist.is_blacklisted(supplier_id):
+            return Response(
+                {'error': '该供应商已被列入黑名单，不能转换为采购订单'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -835,7 +842,15 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
     # Permission configuration
     permission_module = 'purchase'
     permission_resource = 'purchase_order'
-    
+
+    def perform_create(self, serializer):
+        # 黑名单供应商不允许下采购订单（审计 medium：黑名单原先无任何采购拦截）
+        supplier = serializer.validated_data.get('supplier')
+        if SupplierBlacklist.is_blacklisted(supplier):
+            from rest_framework import serializers as drf_serializers
+            raise drf_serializers.ValidationError({'supplier': '该供应商已被列入黑名单，不能创建采购订单'})
+        super().perform_create(serializer)
+
     @action(detail=False, methods=['get'])
     def for_linking(self, request):
         """获取可用于关联的采购订单（不受数据权限限制）"""

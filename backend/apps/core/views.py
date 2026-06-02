@@ -11,6 +11,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.permissions import IsSystemAdmin
 
 from .models import Attachment, AuditLog, SystemConfig, SystemNotification
 from .serializers import AttachmentSerializer, AttachmentUploadSerializer, SystemConfigSerializer
@@ -50,7 +51,7 @@ class AuditLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     permission_resource = 'audit_log'
     queryset = AuditLog.objects.all()
     serializer_class = AuditLogSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsSystemAdmin]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -125,6 +126,7 @@ class AttachmentViewSet(PermissionMixin, viewsets.ModelViewSet):
 
     permission_module = 'system'
     permission_resource = 'attachment'
+    skip_data_scope = True  # 附件可见性随父对象，而非 created_by；避免 self 范围误伤共享对象的他人附件
     queryset = Attachment.objects.all()
     serializer_class = AttachmentSerializer
     permission_classes = [IsAuthenticated]
@@ -136,6 +138,14 @@ class AttachmentViewSet(PermissionMixin, viewsets.ModelViewSet):
         # 按关联对象过滤
         related_model = self.request.query_params.get('related_model')
         related_id = self.request.query_params.get('related_id')
+
+        # 列表操作：非系统管理员必须按具体关联对象(related_model+related_id)查询，否则返回空，
+        # 防止越权批量枚举全部附件（审计 IDOR）。retrieve/download 按 id 不受此限。
+        if getattr(self, 'action', None) == 'list':
+            from apps.core.permissions import _is_system_admin
+
+            if not _is_system_admin(self.request.user) and not (related_model and related_id):
+                return queryset.none()
 
         if related_model:
             queryset = queryset.filter(related_model=related_model)

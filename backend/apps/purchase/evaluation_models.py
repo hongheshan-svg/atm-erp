@@ -288,3 +288,11 @@ class SupplierBlacklist(BaseModel):
 
     def __str__(self):
         return f'{self.supplier.name} - {self.get_status_display()}'
+
+    @classmethod
+    def is_blacklisted(cls, supplier):
+        """供应商当前是否在有效黑名单中（status=ACTIVE）。supplier 可为实例或 id。"""
+        if not supplier:
+            return False
+        supplier_id = getattr(supplier, 'pk', supplier)
+        return cls.objects.filter(supplier_id=supplier_id, status='ACTIVE', is_deleted=False).exists()

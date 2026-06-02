@@ -345,6 +345,8 @@ class AttendanceRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 
     permission_module = 'accounts'
     permission_resource = 'attendance_record'
+    allow_authenticated_read = True
+    data_scope_user_field = 'user'  # 考勤归属为 user（导入者是 created_by=管理员），self 范围按 user 过滤（审计 H14）
     queryset = AttendanceRecord.objects.filter(is_deleted=False)
     serializer_class = AttendanceRecordSerializer
     permission_classes = [IsAuthenticated]
@@ -934,6 +936,8 @@ class LeaveRequestViewSet(
 
     permission_module = 'accounts'
     permission_resource = 'leave_request'
+    allow_authenticated_read = True
+    data_scope_user_field = 'user'  # 请假归属为 user，self 范围按 user 过滤（审计 H14）
     queryset = LeaveRequest.objects.filter(is_deleted=False)
     serializer_class = LeaveRequestSerializer
     permission_classes = [IsAuthenticated]
@@ -1090,6 +1094,33 @@ class LeaveRequestViewSet(
 
         return Response(self.get_serializer(leave).data)
 
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        """撤回申请 - 申请人撤回本人处于草稿/待审批状态的请假"""
+        leave = self.get_object()
+        if leave.user != request.user and not request.user.is_superuser:
+            return Response({'error': '只能撤回本人的申请'}, status=403)
+        if leave.status not in ['DRAFT', 'PENDING']:
+            return Response({'error': '只能撤回草稿或待审批状态的申请'}, status=400)
+
+        # 若已进入审批流程，先撤回对应的工作流实例（尽力而为，失败不阻断撤回）
+        if leave.status == 'PENDING':
+            try:
+                from apps.core.workflow.models import WorkflowInstance
+                from apps.core.workflow.services import WorkflowService
+
+                instance = WorkflowInstance.objects.filter(
+                    business_type='LEAVE_REQUEST', business_id=leave.id, status='PENDING'
+                ).first()
+                if instance:
+                    WorkflowService.withdraw_workflow(instance, request.user)
+            except Exception as e:
+                logger.warning(f'撤回请假 LEAVE-{leave.id} 时撤回工作流失败: {e}')
+
+        leave.status = 'CANCELLED'
+        leave.save()
+        return Response(self.get_serializer(leave).data)
+
     @action(detail=False, methods=['get'])
     def balance(self, request):
         """假期余额"""
@@ -1122,6 +1153,8 @@ class OvertimeRequestViewSet(
 
     permission_module = 'accounts'
     permission_resource = 'overtime_request'
+    allow_authenticated_read = True
+    data_scope_user_field = 'user'  # 加班归属为 user，self 范围按 user 过滤（审计 H14）
     queryset = OvertimeRequest.objects.filter(is_deleted=False)
     serializer_class = OvertimeRequestSerializer
     permission_classes = [IsAuthenticated]
@@ -1141,6 +1174,8 @@ class OvertimeRequestViewSet(
 
         start_dt = datetime.combine(date.today(), start_time)
         end_dt = datetime.combine(date.today(), end_time)
+        if end_dt < start_dt:  # 跨午夜加班（如 22:00→次日 02:00），结束时间算次日，避免负工时（审计 medium）
+            end_dt += timedelta(days=1)
         hours = Decimal(str((end_dt - start_dt).total_seconds() / 3600))
 
         serializer.save(user=self.request.user, hours=hours, created_by=self.request.user)

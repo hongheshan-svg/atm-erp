@@ -76,7 +76,12 @@ class SalesQuotationViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
             new_quotation.save()
         
         return Response(SalesQuotationSerializer(new_quotation).data, status=status.HTTP_201_CREATED)
-    
+
+    @action(detail=True, methods=['post'], url_path='create_version')
+    def create_version(self, request, pk=None):
+        """create_new_version 的别名（前端使用 /quotations/<pk>/create_version/）"""
+        return self.create_new_version(request, pk)
+
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
         """提交报价单审批 - 审批步骤由流程配置决定"""
@@ -246,7 +251,7 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
                 lines.append({
                     'id': line.id,
                     'product_name': line.item.name if line.item else line.custom_name,
-                    'spec': line.item.spec if line.item else line.custom_spec,
+                    'spec': line.item.specification if line.item else line.custom_spec,
                     'qty': float(line.qty),
                     'unit_price': float(line.unit_price),
                     'line_amount': float(line.line_amount),
@@ -632,7 +637,7 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
                     line.item.sku if line.item else '',
                     line.item.name if line.item else '',
                     line.custom_name or '',
-                    line.custom_spec or (line.item.spec if line.item else ''),
+                    line.custom_spec or (line.item.specification if line.item else ''),
                     line.custom_unit or (line.item.unit if line.item else '件'),
                     float(line.qty),
                     float(line.unit_price),
@@ -1654,7 +1659,7 @@ class SalesContractViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
             lines.append({
                 'item_sku': line.item.sku if line.item else '',
                 'item_name': line.item.name if line.item else line.custom_name,
-                'specification': (line.item.spec if line.item else line.custom_spec) or '',
+                'specification': (line.item.specification if line.item else line.custom_spec) or '',
                 'unit': (line.item.get_unit_display() if line.item else line.custom_unit) or '件',
                 'qty': float(line.qty),
                 'unit_price': float(line.unit_price),
@@ -1674,7 +1679,7 @@ class SalesContractViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
             'customer': {
                 'name': contract.customer.name,
                 'address': contract.customer.address or '',
-                'contact': contract.customer.contact or '',
+                'contact': contract.customer.contact_person or '',
                 'phone': contract.customer.phone or '',
             },
             'lines': lines,

@@ -177,7 +177,7 @@ class MRPLine(BaseModel):
         ordering = ['required_date']
 
     def __str__(self):
-        return f'{self.item.code} - {self.net_requirement}'
+        return f'{self.item.sku} - {self.net_requirement}'
 
 
 class MRPService:
@@ -225,13 +225,13 @@ class MRPService:
                     'sources': [],
                 }
 
-            requirements[item_id]['gross_qty'] += bom.quantity or Decimal('0')
+            requirements[item_id]['gross_qty'] += bom.planned_qty or Decimal('0')
             requirements[item_id]['sources'].append(
                 {
                     'project_id': bom.project_id,
                     'project_name': bom.project.name if bom.project else '',
                     'bom_id': bom.id,
-                    'qty': bom.quantity,
+                    'qty': bom.planned_qty,
                 }
             )
 
@@ -248,7 +248,7 @@ class MRPService:
             item = req['item']
 
             # 获取在库数量
-            on_hand = Stock.objects.filter(item_id=item_id, is_deleted=False).aggregate(total=Sum('quantity'))[
+            on_hand = Stock.objects.filter(item_id=item_id, is_deleted=False).aggregate(total=Sum('qty_on_hand'))[
                 'total'
             ] or Decimal('0')
 
@@ -257,12 +257,12 @@ class MRPService:
 
             allocated = MaterialRequisitionLine.objects.filter(
                 item_id=item_id, requisition__status__in=['APPROVED', 'PARTIAL'], is_deleted=False
-            ).aggregate(total=Sum('quantity'))['total'] or Decimal('0')
+            ).aggregate(total=Sum('qty'))['total'] or Decimal('0')
 
             # 获取在途数量
             on_order = PurchaseOrderLine.objects.filter(
-                item_id=item_id, order__status__in=['APPROVED', 'PARTIAL'], is_deleted=False
-            ).aggregate(total=Sum(F('quantity') - F('received_qty')))['total'] or Decimal('0')
+                item_id=item_id, po__status__in=['APPROVED', 'PARTIAL'], is_deleted=False
+            ).aggregate(total=Sum(F('qty') - F('received_qty')))['total'] or Decimal('0')
 
             # 安全库存
             safety_stock = (item.safety_stock or Decimal('0')) * plan.safety_stock_factor
@@ -336,20 +336,22 @@ class MRPService:
 
         # 创建采购申请
         pr = PurchaseRequest.objects.create(
-            title=f'MRP自动生成-{plan.plan_no}',
-            source_type='MRP',
-            source_no=plan.plan_no,
+            requestor=plan.created_by,
+            required_date=plan.end_date,
             status='DRAFT',
+            notes=f'MRP自动生成-{plan.plan_no}',
             created_by=plan.created_by,
         )
 
         for line in lines:
             PurchaseRequestLine.objects.create(
-                request=pr,
+                pr=pr,
                 item=line.item,
-                quantity=line.suggested_qty,
+                qty=line.suggested_qty,
+                estimated_price=line.unit_price,
+                line_amount=line.total_amount,
                 required_date=line.suggested_date,
-                remarks=f'来自MRP计划: {plan.plan_no}',
+                notes=f'来自MRP计划: {plan.plan_no}',
             )
 
             # 标记已确认
@@ -366,7 +368,7 @@ class MRPService:
 
 
 class MRPLineSerializer(serializers.ModelSerializer):
-    item_code = serializers.CharField(source='item.code', read_only=True)
+    item_code = serializers.CharField(source='item.sku', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
     item_unit = serializers.CharField(source='item.unit', read_only=True)
     project_name = serializers.CharField(source='source_project.name', read_only=True)
@@ -538,7 +540,7 @@ class MRPLineViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     serializer_class = MRPLineSerializer
     permission_classes = [IsAuthenticated]
     filterset_fields = ['plan', 'suggested_action', 'is_confirmed']
-    search_fields = ['item__code', 'item__name']
+    search_fields = ['item__sku', 'item__name']
     ordering_fields = ['required_date', 'net_requirement', 'total_amount']
 
     @action(detail=True, methods=['post'])

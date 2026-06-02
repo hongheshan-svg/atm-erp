@@ -44,11 +44,11 @@ class DashboardKPIService:
         )
 
         # AR/AP metrics
-        ar_data = AccountReceivable.objects.filter(status__in=['PENDING', 'PARTIAL']).aggregate(
+        ar_data = AccountReceivable.objects.filter(status__in=['PENDING', 'PARTIAL', 'OVERDUE']).aggregate(
             total_receivable=Sum(F('amount_due') - F('amount_paid'))
         )
 
-        ap_data = AccountPayable.objects.filter(status__in=['PENDING', 'PARTIAL']).aggregate(
+        ap_data = AccountPayable.objects.filter(status__in=['PENDING', 'PARTIAL', 'OVERDUE']).aggregate(
             total_payable=Sum(F('amount_due') - F('amount_paid'))
         )
 
@@ -73,13 +73,13 @@ class DashboardKPIService:
     @staticmethod
     def get_project_kpis():
         """Calculate project-related KPIs"""
-        projects = Project.objects.filter(status='ACTIVE')
+        projects = Project.objects.filter(status__in=['IN_PROGRESS', 'ACTIVE'])
 
         total_budget = projects.aggregate(Sum('budget_total'))['budget_total__sum'] or 0
         project_count = projects.count()
 
         # Calculate completion rates
-        tasks = ProjectTask.objects.filter(project__status='ACTIVE')
+        tasks = ProjectTask.objects.filter(project__status__in=['IN_PROGRESS', 'ACTIVE'])
         task_completion = tasks.aggregate(total=Count('id'), completed=Count('id', filter=Q(status='COMPLETED')))
 
         completion_rate = 0

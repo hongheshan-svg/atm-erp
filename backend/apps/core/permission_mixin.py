@@ -18,6 +18,34 @@ from rest_framework.exceptions import PermissionDenied
 
 from apps.core.permission_service import apply_scope_filter, get_hidden_fields, has_permission, resolve_data_scope
 
+# 后端 permission_module 到前端菜单权限码的映射。
+# 当用户持有右侧任一菜单前缀（精确相等或 `prefix:` 开头）时，_has_module_menu_access
+# 即认为其有权访问左侧后端模块——这是“菜单级粒度”授权：本系统未种子化操作级权限
+# （审计 C2，详见 get_serializer 与 permission_service.get_hidden_fields 的说明），
+# 故同一菜单授权下的 view/create/edit/delete 不做区分。
+#
+# 安全注意（审计 C1）：'accounts' 故意只映射到具体的用户/角色/部门菜单码，而不是宽泛的
+# 'system'。否则任何持有 'system:report' 的角色（几乎所有 manager 都有）都会因前缀
+# 'system' 命中而获得增删用户/角色/部门的权限。同理，'system' 模块上挂着的敏感 RBAC/
+# 配置 ViewSet（Permission/DataScope/CodeRule/Webhook/EmailLog/AuditLog 等）已各自用
+# apps.core.permissions.IsSystemAdmin[OrReadOnly] 加了独立硬门槛，使得此处的菜单兜底
+# 无法再越权写入它们——'system' 仍保留 'oa' 仅为放行同模块下的 OA 协同类 ViewSet
+# （公告/日程/会议/会话），它们对 OA 用户本就应可读写。
+MODULE_MENU_MAP = {
+    'purchase': ['supply', 'purchase'],
+    'inventory': ['supply', 'inventory'],
+    'projects': ['projects', 'design', 'plm', 'knowledge'],
+    'sales': ['sales'],
+    'finance': ['finance'],
+    'production': ['manufacturing', 'production', 'mes', 'equipment'],
+    'accounts': ['system:user', 'system:role', 'system:department'],
+    'system': ['system', 'oa'],
+    'masterdata': ['supply', 'sales', 'masterdata'],
+    'oa': ['oa'],
+    'reports': ['system:report', 'reports', 'analytics'],
+    'core': ['system'],
+}
+
 
 class PermissionMixin:
     """
@@ -43,6 +71,21 @@ class PermissionMixin:
     permission_module = None
     permission_resource = None
     context_role_fields = {}  # e.g., {'owner': 'created_by', 'assignee': 'assignee'}
+
+    # Set to True on reference-data ViewSets (customers, users, suppliers, items, etc.)
+    # to allow any authenticated user to list/retrieve without module-level permission.
+    allow_authenticated_read = False
+
+    # Set True on ViewSets whose row visibility is governed by their own get_queryset
+    # 或 per-action 受众过滤（OA 协同：公告/日程/会议/会话）。通用的按用户数据范围过滤
+    # （尤其 'self' = created_by=user）会把公开/共享/被邀请的数据从常见角色视图中错误隐藏，
+    # 故在这些 ViewSet 上跳过它，让其自身可见性逻辑权威生效。（审计 H13）
+    skip_data_scope = False
+
+    # Model field identifying row ownership for the 'self' data scope (default
+    # 'created_by'). Set to 'user' on ViewSets whose rows belong to a user via a
+    # 不同字段 —— 如考勤/请假/加班：created_by 是导入它的管理员，而非本人。（审计 H14）
+    data_scope_user_field = 'created_by'
 
     # Action to permission action mapping
     ACTION_MAP = {
@@ -71,11 +114,40 @@ class PermissionMixin:
         if not self.permission_module:
             return queryset
 
+        # Skip the generic data-scope filter when the ViewSet manages its own row
+        # visibility（OA 协同：公告/日程/会议/会话）。否则 'self' 范围的 created_by=user
+        # 过滤会把公开/共享/被邀请的数据从常见角色视图中错误隐藏。（审计 H13）
+        if self.skip_data_scope:
+            return queryset
+
         # Resolve data scope for user
         scope_result = resolve_data_scope(self.request.user, self.permission_module)
 
         # Apply scope filter
-        return apply_scope_filter(queryset, self.request.user, scope_result)
+        return apply_scope_filter(
+            queryset, self.request.user, scope_result, user_field=self.data_scope_user_field
+        )
+
+    def _has_module_menu_access(self, request):
+        """
+        Check if the user has menu-level access to this ViewSet's module.
+
+        Bridges the gap between the menu permission tree (2-level codes like
+        'supply', 'supply:order') and ViewSet permission_codes (3-level like
+        'inventory:material_requisition:view'). When a user holds a menu code
+        that maps to this module, they are considered authorized for any
+        operation on its resources — operation-level granularity is not
+        modeled in the permission tree.
+        """
+        menu_prefixes = MODULE_MENU_MAP.get(self.permission_module, [])
+        if not menu_prefixes:
+            return False
+        from apps.core.permission_service import get_user_permissions
+        user_perms = get_user_permissions(request.user)
+        for prefix in menu_prefixes:
+            if any(p == prefix or p.startswith(prefix + ':') for p in user_perms):
+                return True
+        return False
 
     def check_permissions(self, request):
         """
@@ -99,12 +171,29 @@ class PermissionMixin:
         # Map DRF action to permission action
         permission_action = self.ACTION_MAP.get(action, action)
 
+        # Allow any authenticated user to read reference data
+        # For standard list/retrieve actions, permission_action is 'view'.
+        # For custom @action(methods=['get']), permission_action is the action name itself.
+        if self.allow_authenticated_read and request.user and request.user.is_authenticated:
+            if permission_action == 'view':
+                return
+            if request.method in ('GET', 'HEAD', 'OPTIONS'):
+                return
+
         # Build permission code: module:resource:action
         permission_code = f'{self.permission_module}:{self.permission_resource}:{permission_action}'
 
         # Check permission
-        if not has_permission(request.user, permission_code):
-            raise PermissionDenied(f'You do not have permission to {permission_action} {self.permission_resource}')
+        if has_permission(request.user, permission_code):
+            return
+
+        # Fallback: menu-level access to this module grants full access to its
+        # resources. Applied to ALL methods because the permission tree only has
+        # menu-level codes — there's no action-level granularity to check against.
+        if self._has_module_menu_access(request):
+            return
+
+        raise PermissionDenied(f'You do not have permission to {permission_action} {self.permission_resource}')
 
     def check_object_permissions(self, request, obj):
         """
@@ -141,6 +230,13 @@ class PermissionMixin:
         if has_permission(request.user, permission_code):
             return
 
+        # Mirror check_permissions: module menu access grants object access.
+        # Without this, list (no object check) succeeds via the menu fallback
+        # while retrieve/update (which call get_object) fails — a confusing
+        # gap that produces "I can see the list but not its rows" 403s.
+        if self._has_module_menu_access(request):
+            return
+
         # Check context role permissions
         # Try each configured context role
         for context_role, field_name in self.context_role_fields.items():
@@ -167,6 +263,13 @@ class PermissionMixin:
 
         Returns:
             Serializer instance with hidden fields removed
+
+        Note (审计 C2 — 字段级脱敏当前为 inert by design):
+            字段隐藏依赖 type='field' 的 Permission 记录，而 init_permissions 只种子化了
+            菜单节点、从不调用 field_perm()，因此 get_hidden_fields 恒返回空、本方法不剔除
+            任何字段。本系统采用“菜单级粒度”授权（见 MODULE_MENU_MAP），未启用字段级脱敏。
+            若将来需要真正屏蔽敏感字段（如薪资/成本/银行账号），需先在 init_permissions 中
+            为相应 resource 调用 field_perm() 种子化字段权限并分配给角色。
         """
         serializer = super().get_serializer(*args, **kwargs)
 

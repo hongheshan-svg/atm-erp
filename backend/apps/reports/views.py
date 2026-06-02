@@ -136,7 +136,7 @@ def dashboard_summary(request):
     # Project stats
     project_stats = Project.objects.filter(is_deleted=False).aggregate(
         total=Count('id'),
-        active=Count('id', filter=Q(status='ACTIVE')),
+        active=Count('id', filter=Q(status__in=['IN_PROGRESS', 'ACTIVE'])),
         completed=Count('id', filter=Q(status='COMPLETED')),
     )
 
@@ -206,7 +206,7 @@ def aging_report(request):
 
     if report_type == 'ar':
         customer_id = request.query_params.get('customer')
-        queryset = AccountReceivable.objects.filter(is_deleted=False, status__in=['PENDING', 'PARTIAL'])
+        queryset = AccountReceivable.objects.filter(is_deleted=False, status__in=['PENDING', 'PARTIAL', 'OVERDUE'])
         if customer_id:
             queryset = queryset.filter(customer_id=customer_id)
 
@@ -239,7 +239,7 @@ def aging_report(request):
             )
     else:
         supplier_id = request.query_params.get('supplier')
-        queryset = AccountPayable.objects.filter(is_deleted=False, status__in=['PENDING', 'PARTIAL'])
+        queryset = AccountPayable.objects.filter(is_deleted=False, status__in=['PENDING', 'PARTIAL', 'OVERDUE'])
         if supplier_id:
             queryset = queryset.filter(supplier_id=supplier_id)
 
@@ -290,29 +290,35 @@ class TimelogReportExportView(APIView):
     def get(self, request):
         from apps.projects.models import WorkLog
 
-        qs = WorkLog.objects.filter(is_deleted=False).select_related('project', 'task', 'user')
+        qs = WorkLog.objects.filter(is_deleted=False).select_related(
+            'dispatch__worker', 'dispatch__work_order__project', 'created_by'
+        )
 
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
         if start_date:
-            qs = qs.filter(work_date__gte=start_date)
+            qs = qs.filter(created_at__date__gte=start_date)
         if end_date:
-            qs = qs.filter(work_date__lte=end_date)
+            qs = qs.filter(created_at__date__lte=end_date)
 
         response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
         response['Content-Disposition'] = 'attachment; filename="timelog_report.csv"'
 
         writer = csv.writer(response)
-        writer.writerow(['日期', '项目', '任务', '人员', '工时(小时)', '描述'])
+        writer.writerow(['日期', '项目', '工单', '人员', '工时(小时)', '内容'])
         for log in qs[:5000]:
+            dispatch = log.dispatch
+            work_order = dispatch.work_order if dispatch else None
+            project = work_order.project if work_order else None
+            worker = dispatch.worker if dispatch else None
             writer.writerow(
                 [
-                    str(log.work_date) if hasattr(log, 'work_date') else '',
-                    str(log.project) if log.project else '',
-                    str(log.task) if hasattr(log, 'task') and log.task else '',
-                    str(log.user) if log.user else '',
-                    log.hours if hasattr(log, 'hours') else '',
-                    log.description if hasattr(log, 'description') else '',
+                    log.created_at.strftime('%Y-%m-%d') if log.created_at else '',
+                    str(project) if project else '',
+                    work_order.order_no if work_order else '',
+                    worker.get_full_name() if worker else (str(log.created_by) if log.created_by else ''),
+                    log.hours or '',
+                    log.content or '',
                 ]
             )
         return response

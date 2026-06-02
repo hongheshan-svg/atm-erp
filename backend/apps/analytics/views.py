@@ -206,7 +206,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
         
         # 应收账款
         receivables = AccountReceivable.objects.filter(
-            status__in=['UNPAID', 'PARTIAL'],
+            status__in=['PENDING', 'PARTIAL', 'OVERDUE'],
             is_deleted=False
         ).aggregate(
             total=Sum('amount_due') - Sum('amount_paid'),
@@ -214,14 +214,14 @@ class AnalyticsViewSet(viewsets.ViewSet):
         )
         
         overdue_ar = AccountReceivable.objects.filter(
-            status__in=['UNPAID', 'PARTIAL', 'OVERDUE'],
+            status__in=['PENDING', 'PARTIAL', 'OVERDUE'],
             due_date__lt=today,
             is_deleted=False
         ).count()
         
         # 应付账款
         payables = AccountPayable.objects.filter(
-            status__in=['UNPAID', 'PARTIAL'],
+            status__in=['PENDING', 'PARTIAL', 'OVERDUE'],
             is_deleted=False
         ).aggregate(
             total=Sum('amount_due') - Sum('amount_paid'),
@@ -229,7 +229,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
         )
         
         overdue_ap = AccountPayable.objects.filter(
-            status__in=['UNPAID', 'PARTIAL', 'OVERDUE'],
+            status__in=['PENDING', 'PARTIAL', 'OVERDUE'],
             due_date__lt=today,
             is_deleted=False
         ).count()
@@ -253,7 +253,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
         
         # 项目数据
         active_projects = Project.objects.filter(
-            status__in=['ACTIVE', 'PLANNING'],
+            status__in=['IN_PROGRESS', 'ACTIVE', 'PLANNING'],
             is_deleted=False
         ).aggregate(
             count=Count('id'),
@@ -295,7 +295,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
         
         # 逾期应收列表
         overdue_receivables_list = AccountReceivable.objects.filter(
-            status__in=['UNPAID', 'PARTIAL', 'OVERDUE'],
+            status__in=['PENDING', 'PARTIAL', 'OVERDUE'],
             due_date__lt=today,
             is_deleted=False
         ).select_related('customer').order_by('due_date')[:10]
@@ -310,7 +310,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
         
         # 即将到期应付列表
         upcoming_payables_list = AccountPayable.objects.filter(
-            status__in=['UNPAID', 'PARTIAL'],
+            status__in=['PENDING', 'PARTIAL', 'OVERDUE'],
             due_date__lte=today + timedelta(days=7),
             is_deleted=False
         ).select_related('supplier').order_by('due_date')[:10]
@@ -325,7 +325,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
         
         # 活跃项目列表
         active_projects_list = Project.objects.filter(
-            status__in=['ACTIVE', 'PLANNING'],
+            status__in=['IN_PROGRESS', 'ACTIVE', 'PLANNING'],
             is_deleted=False
         ).select_related('customer')[:10]
         
@@ -409,7 +409,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
         
         for label, min_days, max_days in aging_ranges:
             amount = AccountReceivable.objects.filter(
-                status__in=['UNPAID', 'PARTIAL', 'OVERDUE'],
+                status__in=['PENDING', 'PARTIAL', 'OVERDUE'],
                 due_date__lt=today - timedelta(days=min_days),
                 due_date__gte=today - timedelta(days=max_days),
                 is_deleted=False

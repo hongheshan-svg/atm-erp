@@ -1196,7 +1196,17 @@ class DrawingChangeNotice(BaseModel):
 
 
 # 导入设备和工装模型，使其成为 projects app 的一部分
-
+from .equipment_models import (  # noqa: E402, F401
+    Equipment, EquipmentShipment, EquipmentInstallation, EquipmentAcceptance,
+)
+from .equipment_archive import (  # noqa: E402, F401
+    EquipmentArchive, EquipmentMaintenancePlan, EquipmentMaintenanceRecord, EquipmentSparePart,
+)
+from .remote_monitoring import (  # noqa: E402, F401
+    EquipmentDataPoint, EquipmentConnection, EquipmentDataMapping,
+    EquipmentDataRecord, EquipmentAlarm,
+)
+from .equipment_oee import EquipmentShift, EquipmentOEERecord  # noqa: E402, F401
 
 # Import models from requirement_review
 
@@ -1240,3 +1250,6 @@ from .requirement import (  # noqa: E402, F401
 
 # Import requirement review models
 from .requirement_review import RequirementReview  # noqa: E402, F401
+
+# Import work dispatch models (WorkOrder, WorkDispatch, WorkLog)
+from .work_dispatch import WorkOrder, WorkDispatch, WorkLog  # noqa: E402, F401

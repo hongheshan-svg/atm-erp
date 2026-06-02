@@ -6,11 +6,12 @@ from copy import deepcopy
 
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.permission_mixin import PermissionMixin
 from apps.core.permission_models_new import DataScope, Permission
+from apps.core.permissions import IsSystemAdmin
 from apps.core.permission_serializers import DataScopeSerializer, PermissionSerializer
 
 
@@ -21,7 +22,7 @@ class PermissionViewSet(PermissionMixin, viewsets.ModelViewSet):
     permission_resource = 'permission'
     queryset = Permission.active.all()
     serializer_class = PermissionSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAuthenticated, IsSystemAdmin]
     filterset_fields = ['type', 'parent', 'is_active']
     search_fields = ['code', 'name']
     ordering_fields = ['sort_order', 'created_at']
@@ -94,5 +95,5 @@ class DataScopeViewSet(PermissionMixin, viewsets.ModelViewSet):
     permission_resource = 'data_scope'
     queryset = DataScope.objects.all()
     serializer_class = DataScopeSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAuthenticated, IsSystemAdmin]
     filterset_fields = ['role', 'module', 'scope_type']

@@ -82,3 +82,12 @@ coverage.xml
 *.xls
 *.xlsx
 frontend/coverage/
+
+# Test / session artifacts (审计期间产生的临时报告与工具输出)
+.playwright-mcp/
+backups/
+reports_per_role/
+/test_all_roles*.json
+/test_buttons_report.json
+/test_batch1.json
+/test_v4.json

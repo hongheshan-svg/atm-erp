@@ -222,12 +222,12 @@ def check_project_deadline_reminders():
 
     # Find overdue projects
     overdue_projects = Project.objects.filter(
-        end_date__lt=today, status__in=['ACTIVE', 'PLANNING'], is_deleted=False
+        end_date__lt=today, status__in=['IN_PROGRESS', 'ACTIVE', 'PLANNING'], is_deleted=False
     ).select_related('customer', 'manager')
 
     # Find projects ending within 7 days
     upcoming_projects = Project.objects.filter(
-        end_date__gte=today, end_date__lte=warning_date, status__in=['ACTIVE', 'PLANNING'], is_deleted=False
+        end_date__gte=today, end_date__lte=warning_date, status__in=['IN_PROGRESS', 'ACTIVE', 'PLANNING'], is_deleted=False
     ).select_related('customer', 'manager')
 
     if not overdue_projects.exists() and not upcoming_projects.exists():

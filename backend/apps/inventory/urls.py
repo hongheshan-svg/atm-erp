@@ -21,7 +21,6 @@ from .material_views import (
     MaterialReturnViewSet,
 )
 from .mrp import MRPLineViewSet, MRPPlanViewSet
-from .mrp_enhanced import MRPAutoGenerateView, MRPExplosionView
 from .spare_parts import (
     SparePartAlertViewSet,
     SparePartCategoryViewSet,
@@ -77,15 +76,14 @@ router.register(r'validation-results', DataValidationResultViewSet, basename='va
 router.register(r'reconciliation-sessions', ReconciliationSessionViewSet, basename='reconciliation-session')
 
 urlpatterns = [
-    path('', include(router.urls)),
-    # 数据准确性报表
-    path('reports/accuracy/', InventoryAccuracyReportView.as_view(), name='inventory-accuracy-report'),
-    path('reports/in-out-balance/', InOutBalanceReportView.as_view(), name='in-out-balance-report'),
-    # MRP增强（多层BOM展开）
-    path('mrp/explosion/', MRPExplosionView.as_view(), name='mrp-explosion'),
-    path('mrp/auto-generate/', MRPAutoGenerateView.as_view(), name='mrp-auto-generate'),
+    # NOTE: 这些具体路径必须在 router 之前，否则 router 的 spare-parts/<pk>/ 会先匹配，
+    # 把 lifecycle-prediction 之类的当成 pk 处理导致 404。
     # 备件智能预测
     path('spare-parts/lifecycle-prediction/', LifecyclePredictionView.as_view(), name='lifecycle-prediction'),
     path('spare-parts/purchase-suggestions/', PurchaseSuggestionView.as_view(), name='purchase-suggestions'),
     path('spare-parts/cost-analysis/', SparePartCostAnalysisView.as_view(), name='spare-part-cost-analysis'),
+    # 数据准确性报表
+    path('reports/accuracy/', InventoryAccuracyReportView.as_view(), name='inventory-accuracy-report'),
+    path('reports/in-out-balance/', InOutBalanceReportView.as_view(), name='in-out-balance-report'),
+    path('', include(router.urls)),
 ]

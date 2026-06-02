@@ -36,6 +36,7 @@ class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewse
     """
     permission_module = 'projects'
     permission_resource = 'project'
+    allow_authenticated_read = True
 
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
@@ -168,6 +169,14 @@ class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewse
                 'count': bom_count,
             },
         })
+
+    @action(detail=True, methods=['get'], url_path='bom-items')
+    def bom_items(self, request, pk=None):
+        """Return BOM items for this project (used by project detail page)."""
+        from .serializers import ProjectBOMSerializer
+        project = self.get_object()
+        bom_items = project.bom_items.filter(is_deleted=False)
+        return Response(ProjectBOMSerializer(bom_items, many=True).data)
 
 
 class ProjectMemberViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
@@ -321,7 +330,7 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
     queryset = ProjectBOM.objects.all()
     serializer_class = ProjectBOMSerializer
     filterset_fields = ['project', 'item', 'is_deleted', 'quote_status', 'order_status', 'has_drawing']
-    search_fields = ['item__sku', 'item__name', 'project__name', 'project__code', 'specification', 'version_brand']
+    search_fields = ['item__sku', 'item__name', 'project__name', 'project__code', 'item__specification', 'version_brand']
     ordering_fields = ['created_at', 'project', 'item', 'quote_status']
     ordering = ['-created_at']  # 默认按创建时间倒序
     parser_classes = [JSONParser, MultiPartParser, FormParser]

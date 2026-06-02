@@ -8,7 +8,7 @@ from datetime import date
 from decimal import Decimal
 
 from django.db import models
-from django.db.models import Count, Sum
+from django.db.models import Avg, Count, Sum
 from django.utils import timezone
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
@@ -142,7 +142,7 @@ class AlertService:
         for proj in projects:
             # 1. 进度预警：实际进度落后计划进度
             expected_progress = AlertService._calculate_expected_progress(proj)
-            actual_progress = proj.progress or 0
+            actual_progress = AlertService._calculate_actual_progress(proj)
             progress_gap = expected_progress - actual_progress
 
             if progress_gap > 10:  # 落后超过10%
@@ -221,7 +221,7 @@ class AlertService:
                     alerts_created.append(alert)
 
             # 4. 预算预警（如果有预算数据）
-            if hasattr(proj, 'budget') and proj.budget and proj.budget > 0:
+            if proj.budget_total and proj.budget_total > 0:
                 # 获取实际成本
                 actual_cost = Decimal('0')
 
@@ -236,7 +236,7 @@ class AlertService:
                     pass
 
                 if actual_cost > 0:
-                    budget_usage = float(actual_cost / proj.budget * 100)
+                    budget_usage = float(actual_cost / proj.budget_total * 100)
 
                     if budget_usage > 90:
                         alert = AlertService._create_alert(
@@ -244,9 +244,9 @@ class AlertService:
                             alert_type='BUDGET',
                             severity='CRITICAL' if budget_usage > 100 else 'WARNING',
                             title=f'预算使用率 {budget_usage:.1f}%',
-                            description=f'项目 {proj.name} 预算 {proj.budget}，已使用 {actual_cost}，使用率 {budget_usage:.1f}%',
+                            description=f'项目 {proj.name} 预算 {proj.budget_total}，已使用 {actual_cost}，使用率 {budget_usage:.1f}%',
                             alert_data={
-                                'budget': float(proj.budget),
+                                'budget': float(proj.budget_total),
                                 'actual': float(actual_cost),
                                 'usage_rate': budget_usage,
                             },
@@ -255,6 +255,15 @@ class AlertService:
                             alerts_created.append(alert)
 
         return alerts_created
+
+    @staticmethod
+    def _calculate_actual_progress(project):
+        """实际进度 = 项目下任务 progress_percent 的平均（无任务则 0）。
+        Project 本身无 progress 字段，原 getattr(proj,'progress',0) 恒为 0 导致进度/时间预警系统性误报（审计 medium）。"""
+        from apps.projects.models import ProjectTask
+
+        result = ProjectTask.objects.filter(project=project, is_deleted=False).aggregate(avg=Avg('progress_percent'))
+        return float(result['avg'] or 0)
 
     @staticmethod
     def _calculate_expected_progress(project):

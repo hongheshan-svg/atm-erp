@@ -297,6 +297,7 @@ class CustomerFollowUpViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 
     permission_module = 'masterdata'
     permission_resource = 'customer_follow_up'
+    allow_authenticated_read = True
     queryset = CustomerFollowUp.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['customer', 'follow_type', 'result', 'follower', 'priority']
@@ -447,6 +448,7 @@ class CustomerContactViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
 
     permission_module = 'masterdata'
     permission_resource = 'customer_contact'
+    allow_authenticated_read = True
     queryset = CustomerContact.objects.filter(is_deleted=False)
     serializer_class = CustomerContactSerializer
     permission_classes = [IsAuthenticated]

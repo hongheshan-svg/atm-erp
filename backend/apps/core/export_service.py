@@ -41,6 +41,12 @@ class ExcelExportService:
         # Create DataFrame
         df = pd.DataFrame(data)
 
+        # Strip timezone from datetime columns - xlsxwriter cannot serialize tz-aware datetimes
+        for col_name in df.columns:
+            col = df[col_name]
+            if hasattr(col, 'dt') and getattr(col.dt, 'tz', None) is not None:
+                df[col_name] = col.dt.tz_localize(None)
+
         # Rename columns to headers
         column_mapping = {col['field']: col['header'] for col in columns}
         df = df.rename(columns=column_mapping)

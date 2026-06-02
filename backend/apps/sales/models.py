@@ -633,3 +633,9 @@ from .performance import (
 from .crm_models import (  # noqa: E402, F401
     LeadSource, Lead, Opportunity, OpportunityActivity, SalesForecast
 )
+
+# Import customer training models
+from .customer_training import (  # noqa: E402, F401
+    TrainingCourse, TrainingPlan, TrainingPlanCourse,
+    TrainingExam, TrainingExamResult, TrainingFeedback, TrainingMaterial,
+)

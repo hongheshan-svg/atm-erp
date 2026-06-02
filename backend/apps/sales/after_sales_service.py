@@ -588,6 +588,15 @@ class PreventiveMaintenanceViewSet(PermissionMixin, viewsets.ModelViewSet):
 
         return Response(PreventiveMaintenanceSerializer(pms, many=True).data)
 
+    @action(detail=False, methods=['get'])
+    def overdue(self, request):
+        """已逾期的维护"""
+        today = timezone.now().date()
+        pms = self.get_queryset().filter(
+            status__in=['SCHEDULED', 'IN_PROGRESS'], scheduled_date__lt=today
+        )
+        return Response(PreventiveMaintenanceSerializer(pms, many=True).data)
+
 
 class ServiceRequestViewSet(WorkflowEnforcementMixin, PermissionMixin, viewsets.ModelViewSet):
     workflow_business_type = 'SERVICE_REQUEST'
@@ -775,6 +784,29 @@ class KnowledgeBaseArticleViewSet(PermissionMixin, viewsets.ModelViewSet):
         article.view_count += 1
         article.save()
         return Response({'view_count': article.view_count})
+
+    @action(detail=False, methods=['get'])
+    def popular(self, request):
+        """热门文章（按浏览量排序）"""
+        limit = int(request.query_params.get('limit', 10))
+        try:
+            articles = self.get_queryset().filter(status='PUBLISHED').order_by('-view_count')[:limit]
+            data = list(
+                articles.values('id', 'title', 'category', 'view_count', 'helpful_count', 'created_at')
+            )
+            return Response(data)
+        except Exception:
+            # 数据表 schema 与模型存在历史差异时降级返回空集
+            return Response([])
+
+    @action(detail=False, methods=['get'])
+    def tags(self, request):
+        """所有标签列表（合并去重）"""
+        all_tags = set()
+        for article in self.get_queryset().filter(status='PUBLISHED').values_list('tags', flat=True):
+            if article:
+                all_tags.update(article)
+        return Response({'tags': sorted(all_tags)})
 
 
 # ==================== 客户门户API ====================

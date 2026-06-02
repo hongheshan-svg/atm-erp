@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.permissions import IsSystemAdminOrReadOnly
 
 
 class DictType(BaseModel):
@@ -123,8 +124,9 @@ class DictTypeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, views
 
     permission_module = 'system'
     permission_resource = 'dict_type'
+    allow_authenticated_read = True
     queryset = DictType.objects.filter(is_deleted=False)
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsSystemAdminOrReadOnly]
     filterset_fields = ['code', 'is_system']
     search_fields = ['code', 'name', 'description']
     ordering_fields = ['sort_order', 'code', 'name']
@@ -301,9 +303,10 @@ class DictItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, views
 
     permission_module = 'system'
     permission_resource = 'dict_item'
+    allow_authenticated_read = True
     queryset = DictItem.objects.filter(is_deleted=False)
     serializer_class = DictItemSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsSystemAdminOrReadOnly]
     filterset_fields = ['dict_type', 'is_enabled', 'is_default']
     search_fields = ['value', 'label', 'description']
     ordering_fields = ['sort_order', 'value', 'label']

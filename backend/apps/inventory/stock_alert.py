@@ -210,7 +210,7 @@ class StockAlertService:
                 continue
 
             # 获取当前库存
-            current_qty = Stock.objects.filter(item=item, is_deleted=False).aggregate(total=Sum('quantity'))[
+            current_qty = Stock.objects.filter(item=item, is_deleted=False).aggregate(total=Sum('qty_on_hand'))[
                 'total'
             ] or Decimal('0')
 
@@ -222,7 +222,7 @@ class StockAlertService:
                     alert_type='LOW_STOCK',
                     severity='CRITICAL' if current_qty <= 0 else 'WARNING',
                     title=f'{item.name} 库存不足',
-                    description=f'物料 {item.code} {item.name} 当前库存 {current_qty}，低于安全库存 {threshold}',
+                    description=f'物料 {item.sku} {item.name} 当前库存 {current_qty}，低于安全库存 {threshold}',
                     current_qty=current_qty,
                     threshold_value=threshold,
                 )
@@ -246,7 +246,7 @@ class StockAlertService:
 
             max_stock = item.safety_stock * threshold_factor / 100
 
-            current_qty = Stock.objects.filter(item=item, is_deleted=False).aggregate(total=Sum('quantity'))[
+            current_qty = Stock.objects.filter(item=item, is_deleted=False).aggregate(total=Sum('qty_on_hand'))[
                 'total'
             ] or Decimal('0')
 
@@ -257,7 +257,7 @@ class StockAlertService:
                     alert_type='OVERSTOCK',
                     severity='WARNING',
                     title=f'{item.name} 库存积压',
-                    description=f'物料 {item.code} {item.name} 当前库存 {current_qty}，超过建议库存 {max_stock}',
+                    description=f'物料 {item.sku} {item.name} 当前库存 {current_qty}，超过建议库存 {max_stock}',
                     current_qty=current_qty,
                     threshold_value=max_stock,
                 )
@@ -281,7 +281,7 @@ class StockAlertService:
             if not reorder_point or reorder_point <= 0:
                 continue
 
-            current_qty = Stock.objects.filter(item=item, is_deleted=False).aggregate(total=Sum('quantity'))[
+            current_qty = Stock.objects.filter(item=item, is_deleted=False).aggregate(total=Sum('qty_on_hand'))[
                 'total'
             ] or Decimal('0')
 
@@ -292,7 +292,7 @@ class StockAlertService:
                     alert_type='REORDER',
                     severity='INFO',
                     title=f'{item.name} 达到补货点',
-                    description=f'物料 {item.code} {item.name} 当前库存 {current_qty}，已达补货点 {reorder_point}，建议补货',
+                    description=f'物料 {item.sku} {item.name} 当前库存 {current_qty}，已达补货点 {reorder_point}，建议补货',
                     current_qty=current_qty,
                     threshold_value=reorder_point,
                 )
@@ -313,16 +313,17 @@ class StockAlertService:
         cutoff_date = date.today() - timedelta(days=days)
 
         for item in items:
-            current_qty = Stock.objects.filter(item=item, is_deleted=False).aggregate(total=Sum('quantity'))[
+            current_qty = Stock.objects.filter(item=item, is_deleted=False).aggregate(total=Sum('qty_on_hand'))[
                 'total'
             ] or Decimal('0')
 
             if current_qty <= 0:
                 continue
 
-            # 检查最近出库记录
+            # 检查最近出库记录（出库消耗为销售出库/项目领料；'OUT' 非法枚举值，原先恒匹配不到导致
+            # 所有在库物料被误报呆滞 —— 审计 high）
             last_out = StockMove.objects.filter(
-                item=item, move_type='OUT', created_at__gte=cutoff_date, is_deleted=False
+                item=item, move_type__in=['OUT_SALES', 'OUT_PROJECT'], created_at__gte=cutoff_date, is_deleted=False
             ).exists()
 
             if not last_out:
@@ -332,7 +333,7 @@ class StockAlertService:
                     alert_type='SLOW_MOVING',
                     severity='INFO',
                     title=f'{item.name} 呆滞物料',
-                    description=f'物料 {item.code} {item.name} 库存 {current_qty}，超过 {days} 天无出库记录',
+                    description=f'物料 {item.sku} {item.name} 库存 {current_qty}，超过 {days} 天无出库记录',
                     current_qty=current_qty,
                     threshold_value=Decimal(days),
                 )
@@ -384,7 +385,7 @@ class StockAlertRuleSerializer(serializers.ModelSerializer):
 
 
 class StockAlertSerializer(serializers.ModelSerializer):
-    item_code = serializers.CharField(source='item.code', read_only=True)
+    item_code = serializers.CharField(source='item.sku', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
     rule_name = serializers.CharField(source='rule.name', read_only=True)
@@ -399,7 +400,7 @@ class StockAlertSerializer(serializers.ModelSerializer):
 
 
 class StockAlertListSerializer(serializers.ModelSerializer):
-    item_code = serializers.CharField(source='item.code', read_only=True)
+    item_code = serializers.CharField(source='item.sku', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     severity_display = serializers.CharField(source='get_severity_display', read_only=True)
@@ -476,7 +477,7 @@ class StockAlertViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
     queryset = StockAlert.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['alert_type', 'severity', 'status', 'item']
-    search_fields = ['title', 'item__code', 'item__name']
+    search_fields = ['title', 'item__sku', 'item__name']
     ordering_fields = ['created_at', 'severity']
 
     def get_serializer_class(self):

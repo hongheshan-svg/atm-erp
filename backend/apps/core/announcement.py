@@ -205,6 +205,8 @@ class AnnouncementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
 
     permission_module = 'system'
     permission_resource = 'announcement'
+    allow_authenticated_read = True
+    skip_data_scope = True  # 受众由 published/unread/popup 动作按 target_* 过滤（审计 H13）
     queryset = Announcement.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['announcement_type', 'status', 'priority', 'is_top']

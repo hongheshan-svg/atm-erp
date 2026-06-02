@@ -154,18 +154,24 @@ class StockMove(BaseModel):
         return f"{self.move_no} - {self.item.sku}"
     
     def save(self, *args, **kwargs):
+        from django.db import transaction
+
         if not self.move_no:
             self.move_no = generate_code('SM', rule_type='STOCK_MOVE')
-        
+
         is_new = self.pk is None
         was_completed = False
         if not is_new:
             was_completed = StockMove.objects.filter(pk=self.pk, status='COMPLETED').exists()
-        super().save(*args, **kwargs)
 
-        # Auto-update stock when transitioning to COMPLETED
-        if self.status == 'COMPLETED' and not was_completed:
-            self._update_stock()
+        # 本行写入与库存更新置于同一事务：否则出库不足时 _update_stock 抛错而本行已提交，
+        # 会残留 status=COMPLETED 的假移动记录、库存未扣减、账实不符（审计 high 数据一致性）。
+        # 内层 _update_stock_* 自带 atomic，此处作为外层事务/savepoint，嵌套安全。
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            # Auto-update stock when transitioning to COMPLETED
+            if self.status == 'COMPLETED' and not was_completed:
+                self._update_stock()
     
     def _update_stock(self):
         """Update stock levels based on move type."""

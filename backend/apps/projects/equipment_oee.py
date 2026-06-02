@@ -182,7 +182,7 @@ class DowntimeReasonSerializer(serializers.ModelSerializer):
 
 class EquipmentOEERecordSerializer(serializers.ModelSerializer):
     equipment_name = serializers.CharField(source='equipment.name', read_only=True)
-    equipment_code = serializers.CharField(source='equipment.code', read_only=True)
+    equipment_code = serializers.CharField(source='equipment.equipment_no', read_only=True)
     shift_name = serializers.CharField(source='shift.name', read_only=True)
     operator_name = serializers.CharField(source='operator.get_full_name', read_only=True)
 
@@ -351,7 +351,7 @@ class EquipmentOEERecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
 
         # 按设备汇总
         by_equipment = (
-            records.values('equipment__id', 'equipment__name', 'equipment__code')
+            records.values('equipment__id', 'equipment__name', 'equipment__equipment_no')
             .annotate(
                 avg_oee=Avg('oee'),
                 avg_availability=Avg('availability'),
@@ -412,6 +412,56 @@ class EquipmentOEERecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
             )
 
         return Response({'total_downtime': total_downtime, 'reasons': reasons_list})
+
+    @action(detail=False, methods=['get'])
+    def downtime(self, request):
+        """downtime_analysis 的别名（前端 api 调用 /oee-records/downtime/）"""
+        return self.downtime_analysis(request)
+
+    @action(detail=False, methods=['get'])
+    def ranking(self, request):
+        """设备 OEE 排行榜"""
+        start_date = request.query_params.get('start_date', (date.today() - timedelta(days=30)).isoformat())
+        end_date = request.query_params.get('end_date', date.today().isoformat())
+        limit = int(request.query_params.get('limit', 10))
+
+        records = self.get_queryset().filter(record_date__gte=start_date, record_date__lte=end_date)
+
+        ranking = list(
+            records.values('equipment__id', 'equipment__name', 'equipment__equipment_no')
+            .annotate(
+                avg_oee=Avg('oee'),
+                avg_availability=Avg('availability'),
+                avg_performance=Avg('performance'),
+                avg_quality=Avg('quality'),
+                record_count=Count('id'),
+            )
+            .order_by('-avg_oee')[:limit]
+        )
+        return Response({'ranking': ranking, 'period': {'start': start_date, 'end': end_date}})
+
+    @action(detail=False, methods=['get'])
+    def trend(self, request):
+        """OEE 趋势（按日）"""
+        start_date = request.query_params.get('start_date', (date.today() - timedelta(days=30)).isoformat())
+        end_date = request.query_params.get('end_date', date.today().isoformat())
+        equipment_id = request.query_params.get('equipment_id')
+
+        qs = self.get_queryset().filter(record_date__gte=start_date, record_date__lte=end_date)
+        if equipment_id:
+            qs = qs.filter(equipment_id=equipment_id)
+
+        trend = list(
+            qs.values('record_date')
+            .annotate(
+                avg_oee=Avg('oee'),
+                avg_availability=Avg('availability'),
+                avg_performance=Avg('performance'),
+                avg_quality=Avg('quality'),
+            )
+            .order_by('record_date')
+        )
+        return Response({'trend': trend, 'period': {'start': start_date, 'end': end_date}})
 
     @action(detail=False, methods=['get'])
     def benchmark(self, request):

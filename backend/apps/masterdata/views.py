@@ -63,6 +63,7 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
     # Permission configuration
     permission_module = 'masterdata'
     permission_resource = 'item'
+    allow_authenticated_read = True
     
     def perform_destroy(self, instance):
         """
@@ -814,6 +815,7 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
 class CustomerViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     permission_module = 'masterdata'
     permission_resource = 'customer'
+    allow_authenticated_read = True
     """
     ViewSet for Customer management.
     NOTE: 客户是主数据，所有用户都可以查看，不应用数据范围限制
@@ -1080,6 +1082,7 @@ class CustomerViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, views
 class SupplierViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     permission_module = 'masterdata'
     permission_resource = 'supplier'
+    allow_authenticated_read = True
     """
     ViewSet for Supplier management.
     NOTE: 供应商是主数据，所有用户都可以查看，不应用数据范围限制
@@ -1326,6 +1329,7 @@ class SupplierViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, views
 class WarehouseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     permission_module = 'masterdata'
     permission_resource = 'warehouse'
+    allow_authenticated_read = True
     """
     ViewSet for Warehouse management.
     """

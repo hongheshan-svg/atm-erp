@@ -4,10 +4,11 @@ Webhook views for managing webhook endpoints and deliveries.
 
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.permissions import IsSystemAdmin
 
 from .webhook import WebhookDelivery, WebhookEndpoint, WebhookService
 
@@ -81,7 +82,7 @@ class WebhookEndpointViewSet(PermissionMixin, viewsets.ModelViewSet):
     permission_module = 'system'
     permission_resource = 'webhook_endpoint'
     serializer_class = WebhookEndpointSerializer
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsSystemAdmin]
     queryset = WebhookEndpoint.objects.all()
 
     def get_queryset(self):
@@ -139,7 +140,7 @@ class WebhookDeliveryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     permission_module = 'system'
     permission_resource = 'webhook_delivery'
     serializer_class = WebhookDeliverySerializer
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsSystemAdmin]
     queryset = WebhookDelivery.objects.all()
 
     def get_queryset(self):

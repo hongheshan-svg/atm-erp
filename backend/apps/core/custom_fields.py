@@ -15,6 +15,7 @@ from rest_framework.response import Response
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.permissions import IsSystemAdminOrReadOnly
 
 
 class CustomFieldDefinition(BaseModel):
@@ -398,8 +399,9 @@ class CustomFieldDefinitionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackin
 
     permission_module = 'system'
     permission_resource = 'custom_field_definition'
+    allow_authenticated_read = True
     queryset = CustomFieldDefinition.objects.filter(is_deleted=False)
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsSystemAdminOrReadOnly]
     filterset_fields = ['model_name', 'field_type', 'is_required', 'is_visible']
     search_fields = ['field_code', 'field_name', 'description']
     ordering_fields = ['model_name', 'sort_order', 'field_code']

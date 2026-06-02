@@ -45,6 +45,7 @@ class WorkflowDefinitionViewSet(PermissionMixin, viewsets.ModelViewSet):
 
     permission_module = 'system'
     permission_resource = 'workflow_definition'
+    allow_authenticated_read = True
     queryset = WorkflowDefinition.objects.filter(is_deleted=False)
     serializer_class = WorkflowDefinitionSerializer
     filterset_fields = ['business_type', 'is_active']
@@ -66,6 +67,7 @@ class WorkflowInstanceViewSet(PermissionMixin, viewsets.ModelViewSet):
 
     permission_module = 'system'
     permission_resource = 'workflow_instance'
+    allow_authenticated_read = True
     queryset = WorkflowInstance.objects.filter(is_deleted=False)
     serializer_class = WorkflowInstanceSerializer
     filterset_fields = ['business_type', 'status', 'submitter']
@@ -229,6 +231,7 @@ class WorkflowTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
 
     permission_module = 'system'
     permission_resource = 'workflow_task'
+    allow_authenticated_read = True
     queryset = WorkflowTask.objects.filter(is_deleted=False)
     serializer_class = WorkflowTaskSerializer
     filterset_fields = ['instance', 'assignee', 'status']

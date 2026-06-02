@@ -26,7 +26,6 @@ from .import_export_views import (
     SupplierImportView,
 )
 from .import_templates import ImportTemplateDownloadView, ImportTemplateListView
-from .instant_message import ConversationMemberViewSet, ConversationViewSet, MessageViewSet
 from .mobile_api import (
     MobileApprovalViewSet,
     MobileDashboardView,
@@ -91,11 +90,6 @@ router.register(r'announcements', AnnouncementViewSet, basename='announcement')
 router.register(r'schedules', ScheduleViewSet, basename='schedule')
 router.register(r'meetings', MeetingViewSet, basename='meeting')
 router.register(r'meeting-rooms', MeetingRoomViewSet, basename='meeting-room')
-
-# IM - 即时通讯
-router.register(r'conversations', ConversationViewSet, basename='conversation')
-router.register(r'messages', MessageViewSet, basename='message')
-router.register(r'conversation-members', ConversationMemberViewSet, basename='conversation-member')
 
 # 移动端API
 router.register(r'mobile/time-entries', MobileTimeEntryViewSet, basename='mobile-time-entry')

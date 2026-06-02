@@ -36,6 +36,15 @@ def menu(code, name, sort_order, icon=None, route_path=None, parent_code=None):
     return d
 
 
+# 说明（审计 C2）：以下 ops()/field_perm() 是为“操作级 / 字段级”细粒度权限预留的脚手架，
+# 但 build_permission_tree() 目前【有意】只调用 menu()，从不调用它们——本系统按
+# “菜单级粒度”授权：持有某菜单码即可对该模块下资源做任意 view/create/edit/delete
+# （后端经 PermissionMixin._has_module_menu_access 兜底，前端经 hasPermission 的祖先通配）。
+# 因此数据库中没有 type='operation'/'field' 的权限记录，has_permission('x:y:create')
+# 对非超管恒走菜单兜底、字段脱敏（get_hidden_fields）恒为空。
+# 这两个函数【保留】是为将来若需启用真正的操作/字段级 RBAC 时可直接接入（见 README/审计报告 C2）。
+# 切勿误以为细粒度权限“已生效”——启用前必须在 build_permission_tree 中实际调用它们并重跑
+# init_permissions + init_roles，且需同步评估前端与 13 角色测试套件。
 def ops(parent_code, resource, actions=None):
     if actions is None:
         actions = CRUD_ACTIONS
@@ -86,7 +95,7 @@ def build_permission_tree():
     tree.append(menu('projects:milestone', '里程碑', 6, route_path='/projects/milestones', parent_code='projects'))
     tree.append(menu('projects:installation', '安装调试', 7, route_path='/projects/installation-tasks', parent_code='projects'))
     tree.append(menu('projects:acceptance', '验收管理', 8, route_path='/projects/acceptances', parent_code='projects'))
-    tree.append(menu('projects:service', '售后工单', 9, route_path='/projects/service-orders', parent_code='projects'))
+    tree.append(menu('projects:service', '售后工单', 9, icon='Headset', route_path='/projects/service-orders', parent_code='projects'))
     tree.append(menu('projects:cost', '项目成本', 10, route_path='/projects/cost-dashboard', parent_code='projects'))
 
     # ===================== 营销管理 =====================
@@ -151,7 +160,6 @@ def build_permission_tree():
     tree.append(menu('oa:announcement', '公告通知', 4, route_path='/oa/announcement', parent_code='oa'))
     tree.append(menu('oa:vehicle', '车辆管理', 5, route_path='/oa/vehicles', parent_code='oa'))
     tree.append(menu('oa:asset', '资产管理', 6, route_path='/oa/assets', parent_code='oa'))
-    tree.append(menu('oa:im', '即时通讯', 7, route_path='/oa/im', parent_code='oa'))
 
     # ===================== 系统管理 =====================
     tree.append(menu('system', '系统管理', 999, icon='Setting', route_path='/system'))

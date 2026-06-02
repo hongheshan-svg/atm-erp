@@ -347,23 +347,23 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
             # 使用上期对账单的期末余额
             opening_balance = last_reconciliation.closing_balance or Decimal('0')
 
-            # 减去上期对账单之后的付款金额
+            # 减去上期对账单之后的付款金额（付款经 AP→供应商 关联，Payment 无 supplier/status 字段）
             payments_after = Payment.objects.filter(
-                supplier_id=supplier_id,
+                ap__supplier_id=supplier_id,
+                payment_type='AP',
                 payment_date__gt=last_reconciliation.period_end,
-                status='COMPLETED',
                 is_deleted=False,
             ).aggregate(total=Sum('amount'))
             payments_after_amount = payments_after['total'] or Decimal('0')
             opening_balance = opening_balance - payments_after_amount
 
-            # 加上上期对账单之后的新发票金额
-            invoices_after = Invoice.objects.filter(
+            # 加上上期对账单之后新增的应付金额（以 AccountPayable 为准，含真实供应商 FK 与发票日期；
+            # 税务 Invoice 表无供应商关联，无法据以按供应商汇总）
+            invoices_after = AccountPayable.objects.filter(
                 supplier_id=supplier_id,
                 invoice_date__gt=last_reconciliation.period_end,
-                invoice_type='PURCHASE',
                 is_deleted=False,
-            ).aggregate(total=Sum('total_amount'))
+            ).aggregate(total=Sum('amount_due'))
             invoices_after_amount = invoices_after['total'] or Decimal('0')
             opening_balance = opening_balance + invoices_after_amount
 
@@ -721,23 +721,23 @@ class SalesReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
             # 使用上期对账单的期末余额
             opening_balance = last_reconciliation.closing_balance or Decimal('0')
 
-            # 减去上期对账单之后的收款金额
+            # 减去上期对账单之后的收款金额（收款经 AR→客户 关联，Payment 无 customer/status 字段）
             receipts_after = Payment.objects.filter(
-                customer_id=customer_id,
+                ar__customer_id=customer_id,
+                payment_type='AR',
                 payment_date__gt=last_reconciliation.period_end,
-                status='COMPLETED',
                 is_deleted=False,
             ).aggregate(total=Sum('amount'))
             receipts_after_amount = receipts_after['total'] or Decimal('0')
             opening_balance = opening_balance - receipts_after_amount
 
-            # 加上上期对账单之后的新发票金额
-            invoices_after = Invoice.objects.filter(
+            # 加上上期对账单之后新增的应收金额（以 AccountReceivable 为准，含真实客户 FK 与发票日期；
+            # 税务 Invoice 表无客户关联，无法据以按客户汇总）
+            invoices_after = AccountReceivable.objects.filter(
                 customer_id=customer_id,
                 invoice_date__gt=last_reconciliation.period_end,
-                invoice_type='SALE',
                 is_deleted=False,
-            ).aggregate(total=Sum('total_amount'))
+            ).aggregate(total=Sum('amount_due'))
             invoices_after_amount = invoices_after['total'] or Decimal('0')
             opening_balance = opening_balance + invoices_after_amount
 

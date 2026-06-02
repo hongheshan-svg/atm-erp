@@ -339,6 +339,8 @@ class ScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, views
 
     permission_module = 'system'
     permission_resource = 'schedule'
+    allow_authenticated_read = True
+    skip_data_scope = True  # 可见性由 get_queryset 的 owner|public|participant 控制（审计 H13）
     queryset = Schedule.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['schedule_type', 'owner', 'project', 'customer']
@@ -413,6 +415,8 @@ class MeetingRoomViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
 
     permission_module = 'system'
     permission_resource = 'meeting_room'
+    allow_authenticated_read = True
+    skip_data_scope = True  # 会议室为共享资源，全员可见（审计 H13）
     queryset = MeetingRoom.objects.filter(is_deleted=False)
     serializer_class = MeetingRoomSerializer
     permission_classes = [IsAuthenticated]
@@ -444,6 +448,8 @@ class MeetingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
 
     permission_module = 'system'
     permission_resource = 'meeting'
+    allow_authenticated_read = True
+    skip_data_scope = True  # 会议为协同数据；个人视图见 my_meetings 动作（审计 H13）
     queryset = Meeting.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticated]
     filterset_fields = ['status', 'organizer', 'project', 'meeting_room']

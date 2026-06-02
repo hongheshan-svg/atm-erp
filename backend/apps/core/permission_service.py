@@ -202,7 +202,8 @@ def resolve_data_scope(user, module: str) -> Tuple[str, List[int]]:
     Resolve data scope for a user in a specific module.
 
     查询 DataScope 表获取用户所有角色中最宽的数据范围。
-    无 DataScope 配置时默认返回 'all'（信息透明，促进协作）。
+    无角色 / 无 DataScope 配置时默认返回 'self'（fail-closed：最小可见，避免未配置数据范围
+    导致越权过度暴露；超管恒为 'all'）。标准角色经 init_roles 均有显式 DataScope，不受影响。（审计 H13 相关）
 
     Args:
         user: User instance
@@ -224,7 +225,7 @@ def resolve_data_scope(user, module: str) -> Tuple[str, List[int]]:
 
     user_roles = get_active_user_roles(user)
     if not user_roles.exists():
-        result = ('all', [])
+        result = ('self', [])
         cache.set(cache_key, result, PERMISSION_CACHE_TIMEOUT)
         return result
 
@@ -234,7 +235,7 @@ def resolve_data_scope(user, module: str) -> Tuple[str, List[int]]:
     )
 
     if not scopes.exists():
-        result = ('all', [])
+        result = ('self', [])
         cache.set(cache_key, result, PERMISSION_CACHE_TIMEOUT)
         return result
 
@@ -283,7 +284,9 @@ def get_department_tree_ids(dept_id: int) -> List[int]:
     return dept_ids
 
 
-def apply_scope_filter(queryset: QuerySet, user, scope_result: Tuple[str, List[int]]) -> QuerySet:
+def apply_scope_filter(
+    queryset: QuerySet, user, scope_result: Tuple[str, List[int]], user_field: str = 'created_by'
+) -> QuerySet:
     """
     Apply data scope filter to a queryset.
 
@@ -310,11 +313,11 @@ def apply_scope_filter(queryset: QuerySet, user, scope_result: Tuple[str, List[i
     if scope_type == 'all':
         return queryset
 
-    # Self scope - only user's own data
+    # Self scope - only user's own data. 归属字段可配置（默认 'created_by'）：
+    # 考勤/请假/加班等模型的归属是 `user`，而 created_by 是导入它的管理员而非本人。（审计 H14）
     if scope_type == 'self':
-        # Try to filter by created_by if field exists
-        if hasattr(queryset.model, 'created_by'):
-            return queryset.filter(created_by=user)
+        if hasattr(queryset.model, user_field):
+            return queryset.filter(**{user_field: user})
         return queryset.none()
 
     # Department scope - user's department only
@@ -348,17 +351,23 @@ def apply_scope_filter(queryset: QuerySet, user, scope_result: Tuple[str, List[i
 
 def collect_permission_ids(selected_codes: List[str]) -> List[int]:
     """
-    Collect permission IDs for a list of codes, including all descendants and ancestors.
+    Collect permission IDs for a list of codes, including all descendants.
 
-    For each code, finds the permission and collects:
+    For each selected code, collects:
     - The node itself
-    - All descendant nodes (so granting 'purchase' also grants 'purchase:orders:view' etc.)
-    - All ancestor nodes (so the menu tree path is navigable)
+    - All descendant nodes (so granting 'sales' also grants 'sales:order' etc.)
+
+    Ancestors are intentionally NOT collected. The frontend permission check
+    (usePermissionStore.hasPermission) matches hierarchically — having an ancestor
+    code grants every route beneath it — so injecting ancestors here would let a
+    role granted a single leaf (e.g. 'sales:lead') reach all sibling routes
+    ('sales:order', 'sales:contract', ...). Parent menu containers needed only for
+    sidebar rendering are completed separately by UserSerializer.get_menus.
 
     Special case: ['*'] returns all active permission IDs.
 
     Args:
-        selected_codes: List of permission codes (e.g., ['purchase:orders', 'finance'])
+        selected_codes: List of permission codes (e.g., ['supply:order', 'finance'])
 
     Returns:
         List of permission IDs (deduplicated)
@@ -369,9 +378,8 @@ def collect_permission_ids(selected_codes: List[str]) -> List[int]:
     if selected_codes == ['*']:
         return list(Permission.objects.filter(is_active=True, is_deleted=False).values_list('id', flat=True))
 
-    permissions = list(Permission.objects.filter(is_active=True, is_deleted=False).select_related('parent'))
+    permissions = list(Permission.objects.filter(is_active=True, is_deleted=False))
     permissions_by_code = {p.code: p for p in permissions}
-    permissions_by_id = {p.id: p for p in permissions}
     children_by_parent = {}
 
     for p in permissions:
@@ -385,8 +393,6 @@ def collect_permission_ids(selected_codes: List[str]) -> List[int]:
         if perm.id in collected_ids:
             continue
         collected_ids.add(perm.id)
-        if perm.parent_id and perm.parent_id in permissions_by_id:
-            stack.append(permissions_by_id[perm.parent_id])
         stack.extend(children_by_parent.get(perm.id, []))
 
     return list(collected_ids)
@@ -408,6 +414,12 @@ def get_hidden_fields(user, module: str, resource: str) -> List[str]:
         - Returns empty list for superusers
         - Checks field-level permissions for all user's roles
         - Only returns fields where user does NOT have permission
+
+    审计 C2 — 当前恒返回空列表（inert by design）：
+        本函数依赖 type='field' 的 Permission 记录，但 init_permissions 从不调用
+        field_perm()（详见该命令中的说明），数据库中没有任何字段权限，故下方查询恒为空，
+        字段脱敏在全系统不生效。本系统采用菜单级粒度授权；若将来要真正屏蔽敏感字段，需先
+        种子化字段权限并分配给角色，此函数无需改动即会随之生效。
     """
     # Handle None/unauthenticated user - hide all fields
     if user is None or not user.is_authenticated:

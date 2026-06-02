@@ -335,6 +335,32 @@ class OutsourceProgressViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
     filterset_fields = ['outsource_order', 'outsource_line', 'progress_type']
     ordering_fields = ['progress_date']
 
+    @action(detail=False, methods=['get'])
+    def statistics(self, request):
+        """外协进度统计"""
+        from django.db.models import Avg, Count
+
+        qs = self.get_queryset()
+        total = qs.count()
+        by_type = list(qs.values('progress_type').annotate(count=Count('id')).order_by('-count'))
+        avg_progress = qs.aggregate(avg=Avg('completion_rate'))['avg'] or 0
+
+        # 按外协订单汇总最新进度
+        latest_by_order = (
+            qs.values('outsource_order__id', 'outsource_order__order_no')
+            .annotate(latest_progress=Avg('completion_rate'), record_count=Count('id'))
+            .order_by('-latest_progress')[:20]
+        )
+
+        return Response(
+            {
+                'total': total,
+                'avg_progress': float(avg_progress),
+                'by_type': by_type,
+                'latest_by_order': list(latest_by_order),
+            }
+        )
+
 
 class OutsourceInspectionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """外协质量检验"""

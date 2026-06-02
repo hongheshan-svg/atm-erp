@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.permissions import IsSystemAdmin, IsSystemAdminOrReadOnly
 
 
 class EmailTemplate(BaseModel):
@@ -302,7 +303,7 @@ class EmailTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
     permission_module = 'system'
     permission_resource = 'email_template'
     queryset = EmailTemplate.objects.filter(is_deleted=False)
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsSystemAdminOrReadOnly]
     filterset_fields = ['template_type', 'is_enabled', 'is_system']
     search_fields = ['code', 'name', 'subject', 'description']
     ordering_fields = ['template_type', 'code', 'name']
@@ -527,7 +528,7 @@ class EmailLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     permission_resource = 'email_log'
     queryset = EmailLog.objects.all()
     serializer_class = EmailLogSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsSystemAdmin]
     filterset_fields = ['status', 'template']
     search_fields = ['recipient_email', 'recipient_name', 'subject']
     ordering_fields = ['created_at', 'sent_at']

@@ -103,14 +103,15 @@ class LeadViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
         if data.get('create_customer', True):
             from apps.masterdata.models import Customer
 
+            from apps.core.utils import generate_code
+
             customer = Customer.objects.create(
+                code=generate_code('C', rule_type='CUSTOMER'),
                 name=lead.company_name,
                 contact_person=lead.contact_name,
                 phone=lead.contact_phone,
                 email=lead.contact_email,
                 address=lead.address,
-                website=lead.website,
-                industry=lead.industry,
                 created_by=request.user,
                 updated_by=request.user,
             )
@@ -487,3 +488,39 @@ class CRMDashboardView(PermissionMixin, viewsets.ViewSet):
                 'won_amount': float(won_this_month['amount'] or 0),
             }
         )
+
+    @action(detail=False, methods=['get'])
+    def sales_ranking(self, request):
+        """销售人员排行榜（按本月已成交商机金额）"""
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        today = timezone.now().date()
+        month_start = today.replace(day=1)
+        limit = int(request.query_params.get('limit', 5))
+
+        won = (
+            Opportunity.objects.filter(
+                is_deleted=False, stage='CLOSED_WON', actual_close_date__gte=month_start
+            )
+            .values('owner_id')
+            .annotate(amount=Sum('estimated_amount'), count=Count('id'))
+            .order_by('-amount')[:limit]
+        )
+
+        owner_ids = [w['owner_id'] for w in won if w['owner_id']]
+        users = {u.id: u for u in User.objects.filter(id__in=owner_ids)} if owner_ids else {}
+
+        ranking = []
+        for w in won:
+            user = users.get(w['owner_id'])
+            ranking.append(
+                {
+                    'user_id': w['owner_id'],
+                    'name': user.get_full_name() if user else '未指派',
+                    'amount': float(w['amount'] or 0),
+                    'count': w['count'],
+                }
+            )
+
+        return Response({'ranking': ranking, 'period_start': month_start.isoformat()})

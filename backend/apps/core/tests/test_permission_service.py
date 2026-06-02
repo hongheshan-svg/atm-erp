@@ -412,10 +412,10 @@ class ResolveDataScopeTest(TestCase):
 
     def test_global_default_scope(self):
         """Test that global scope is returned when no module-specific scope exists"""
-        # Create global data scope
+        # Create global data scope（全局用 module=''，'__default__' 为已废弃的旧值，resolve 不识别）
         DataScope.objects.create(
             role=self.role_manager,
-            module='__default__',
+            module='',
             scope_type='all'
         )
 

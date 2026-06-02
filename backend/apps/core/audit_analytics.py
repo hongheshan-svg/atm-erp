@@ -8,7 +8,7 @@ from datetime import timedelta
 from django.db.models import Count
 from django.db.models.functions import TruncDate, TruncHour
 from django.utils import timezone
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -18,7 +18,7 @@ class AuditLogAnalyticsView(APIView):
     操作日志分析统计
     """
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         from apps.core.models import AuditLog
@@ -88,7 +88,7 @@ class AuditLogSecurityView(APIView):
     安全相关日志分析
     """
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         from apps.core.models import AuditLog

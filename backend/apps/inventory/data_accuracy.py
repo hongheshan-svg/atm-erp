@@ -285,7 +285,7 @@ class InventoryDataValidator:
                     'entity_id': stock.id,
                     'item_id': stock.item_id,
                     'warehouse_id': stock.warehouse_id,
-                    'issue_description': f'物料 [{stock.item.code}] 在仓库 [{stock.warehouse.name}] 存在负库存',
+                    'issue_description': f'物料 [{stock.item.sku}] 在仓库 [{stock.warehouse.name}] 存在负库存',
                     'expected_value': '>=0',
                     'actual_value': str(stock.qty_on_hand),
                     'variance': stock.qty_on_hand,
@@ -322,7 +322,7 @@ class InventoryDataValidator:
                             'entity_id': stock.id,
                             'item_id': stock.item_id,
                             'warehouse_id': stock.warehouse_id,
-                            'issue_description': f'物料 [{stock.item.code}] 库存数量与成本账不一致',
+                            'issue_description': f'物料 [{stock.item.sku}] 库存数量与成本账不一致',
                             'expected_value': str(last_cost.balance_qty),
                             'actual_value': str(stock.qty_on_hand),
                             'variance': stock.qty_on_hand - last_cost.balance_qty,
@@ -353,29 +353,44 @@ class InventoryDataValidator:
         stocks = Stock.objects.filter(**filters).select_related('item', 'warehouse')
 
         for stock in stocks:
-            # 计算期初（假设从历史记录获取）
-            opening_qty = Decimal('0')
+            # 计算期初结存 = 期初日期之前所有移动的净额（入-出），而非硬编码 0
+            # （原先恒为 0，任何有期初结存的物料都会被误判"进销存不平衡" —— 审计 medium）
+            opening_in = StockMove.objects.filter(
+                item=stock.item,
+                warehouse_to=stock.warehouse,
+                move_date__lt=start_date,
+                status='COMPLETED',
+                is_deleted=False,
+            ).aggregate(total=Sum('qty'))['total'] or Decimal('0')
+            opening_out = StockMove.objects.filter(
+                item=stock.item,
+                warehouse_from=stock.warehouse,
+                move_date__lt=start_date,
+                status='COMPLETED',
+                is_deleted=False,
+            ).aggregate(total=Sum('qty'))['total'] or Decimal('0')
+            opening_qty = opening_in - opening_out
 
             # 计算本期入库
             in_moves = StockMove.objects.filter(
                 item=stock.item,
-                to_warehouse=stock.warehouse,
+                warehouse_to=stock.warehouse,
                 move_date__gte=start_date,
                 move_date__lte=end_date,
                 status='COMPLETED',
                 is_deleted=False,
-            ).aggregate(total=Sum('quantity'))
+            ).aggregate(total=Sum('qty'))
             in_qty = in_moves['total'] or Decimal('0')
 
             # 计算本期出库
             out_moves = StockMove.objects.filter(
                 item=stock.item,
-                from_warehouse=stock.warehouse,
+                warehouse_from=stock.warehouse,
                 move_date__gte=start_date,
                 move_date__lte=end_date,
                 status='COMPLETED',
                 is_deleted=False,
-            ).aggregate(total=Sum('quantity'))
+            ).aggregate(total=Sum('qty'))
             out_qty = out_moves['total'] or Decimal('0')
 
             # 计算理论期末
@@ -391,7 +406,7 @@ class InventoryDataValidator:
                         'entity_id': stock.id,
                         'item_id': stock.item_id,
                         'warehouse_id': stock.warehouse_id,
-                        'issue_description': f'物料 [{stock.item.code}] 进销存不平衡',
+                        'issue_description': f'物料 [{stock.item.sku}] 进销存不平衡',
                         'expected_value': str(calculated_qty),
                         'actual_value': str(stock.qty_on_hand),
                         'variance': variance,
@@ -421,7 +436,7 @@ class InventoryDataValidator:
                     'entity_id': move.id,
                     'entity_code': move.move_no,
                     'item_id': move.item_id,
-                    'warehouse_id': move.from_warehouse_id or move.to_warehouse_id,
+                    'warehouse_id': move.warehouse_from_id or move.warehouse_to_id,
                     'issue_description': f'库存移动 [{move.move_no}] 没有关联源单据',
                     'expected_value': '有关联单据',
                     'actual_value': '无关联单据',
@@ -623,7 +638,7 @@ class DataValidationResultSerializer(serializers.ModelSerializer):
     rule_type = serializers.CharField(source='rule.rule_type', read_only=True)
     severity = serializers.CharField(source='rule.severity', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    item_code = serializers.CharField(source='item.code', read_only=True)
+    item_code = serializers.CharField(source='item.sku', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
 
@@ -643,7 +658,7 @@ class ReconciliationSessionSerializer(serializers.ModelSerializer):
 
 
 class ReconciliationItemSerializer(serializers.ModelSerializer):
-    item_code = serializers.CharField(source='item.code', read_only=True)
+    item_code = serializers.CharField(source='item.sku', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
 
