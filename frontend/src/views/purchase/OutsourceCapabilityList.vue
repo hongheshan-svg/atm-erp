@@ -99,7 +99,7 @@ getOutsourceCapabilities, createOutsourceCapability, updateOutsourceCapability, 
 } from '@/api/purchase'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/masterdata/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase/outsource-capabilities/')
 
 
 const loading = ref(false)

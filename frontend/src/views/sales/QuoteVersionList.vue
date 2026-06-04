@@ -340,7 +340,7 @@ import { getCustomerList } from '@/api/masterdata'
 import { getProjectList } from '@/api/projects/project'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/sales/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/sales/quote-versions/')
 
 
 const loading = ref(false)

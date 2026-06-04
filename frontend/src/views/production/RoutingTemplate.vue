@@ -129,7 +129,7 @@
       <el-form :model="applyForm" label-width="80px">
         <el-form-item label="选择项目" required>
           <el-select v-model="applyForm.project_id" filterable placeholder="选择项目" style="width: 100%">
-            <el-option v-for="p in projects" :key="p.id" :label="`${p.project_no} - ${p.name}`" :value="p.id" />
+            <el-option v-for="p in projects" :key="p.id" :label="`${p.code} - ${p.name}`" :value="p.id" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -155,7 +155,7 @@ getRoutingTemplates, createRoutingTemplate, updateRoutingTemplate,
 } from '@/api/production'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/core/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/routing-templates/')
 
 
 const router = useRouter()

@@ -102,7 +102,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getRiskAlerts, acknowledgeRiskAlert, resolveRiskAlert } from '@/api/reports'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/reports/')
+const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/reports/risk-alerts/')
 
 
 const loading = ref(false)

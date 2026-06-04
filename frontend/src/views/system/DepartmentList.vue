@@ -266,7 +266,7 @@ import {
 import { getDepartments, getUsers, createDepartment, updateDepartment, deleteDepartment } from '@/api/auth'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/auth/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/auth/users/')
 
 
 // 状态

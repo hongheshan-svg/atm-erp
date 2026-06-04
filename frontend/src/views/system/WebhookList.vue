@@ -96,7 +96,7 @@ import { Plus } from '@element-plus/icons-vue'
 import * as webhookApi from '@/api/webhook'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/webhook/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/core/webhooks/')
 
 
 const loading = ref(false)

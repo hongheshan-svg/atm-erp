@@ -250,7 +250,7 @@ import { getTechDocumentList, getTechDocument, createTechDocument, getTechDocCat
 import { getProjectList } from '@/api/projects/project'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_tech-document/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/tech-documents/')
 
 
 const loading = ref(false)

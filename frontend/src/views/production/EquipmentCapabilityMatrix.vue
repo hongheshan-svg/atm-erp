@@ -154,7 +154,7 @@ getEquipmentCapabilities, createEquipmentCapability,
 } from '@/api/production'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/equipment-capabilities/')
 
 
 const loading = ref(false)

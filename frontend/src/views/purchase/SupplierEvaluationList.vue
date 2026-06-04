@@ -279,7 +279,7 @@ import {
 } from '@/api/purchase/evaluation'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase_evaluation/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase/evaluations/')
 
 const loading = ref(false)
 const evaluations = ref<any[]>([])

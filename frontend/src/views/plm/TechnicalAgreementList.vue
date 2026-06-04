@@ -163,7 +163,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/plm_agreement/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/agreements/')
 
 
 const loading = ref(false)

@@ -188,7 +188,7 @@ import { WarningFilled, Warning, InfoFilled } from '@element-plus/icons-vue'
 import { getAlertList, getAlert, getAlertSummary, checkAllAlerts, acknowledgeAlert, resolveAlert, ignoreAlert } from '@/api/projects/alert'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_alert/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/alerts/')
 
 
 const loading = ref(false)

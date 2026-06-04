@@ -403,7 +403,7 @@ import { getFixedAssets, getFixedAsset, createFixedAsset, patchFixedAsset, getFi
 import { getDepartments, getUsers } from '@/api/auth'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/finance/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/finance/fixed-assets/')
 
 
 const loading = ref(false)

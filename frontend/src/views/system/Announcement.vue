@@ -176,7 +176,7 @@ import { Top } from '@element-plus/icons-vue'
 import { getAnnouncementList, createAnnouncement, updateAnnouncement, deleteAnnouncement, publishAnnouncement, withdrawAnnouncement } from '@/api/system'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/system/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/core/announcements/')
 
 
 const loading = ref(false)

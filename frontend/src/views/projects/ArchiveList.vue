@@ -131,7 +131,7 @@ import { getProjectArchiveList, getProjectArchive, createProjectArchive, generat
 import { getProjectList } from '@/api/projects/project'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_knowledge/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/project-archives/')
 
 
 const loading = ref(false)

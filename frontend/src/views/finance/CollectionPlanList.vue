@@ -276,7 +276,7 @@ import { getCustomerList } from '@/api/masterdata/customer'
 import { getProjectList } from '@/api/projects/project'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/finance_collection/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/finance/collection-plans/')
 
 
 const loading = ref(false)

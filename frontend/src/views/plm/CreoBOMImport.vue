@@ -332,7 +332,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Plus, Download, DocumentAdd, Connection } from '@element-plus/icons-vue'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/plm_creo/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/creo-bom-imports/')
 
 
 const loading = ref(false)

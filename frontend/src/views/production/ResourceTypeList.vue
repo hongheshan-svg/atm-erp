@@ -85,7 +85,7 @@ import { Plus } from '@element-plus/icons-vue'
 import { getResourceTypes, createResourceType, updateResourceType, patchResourceType } from '@/api/production'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/resource-types/')
 
 
 const loading = ref(false)

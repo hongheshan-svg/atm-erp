@@ -190,7 +190,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getMRPPlans, createMRPPlan, getMRPPlan, calculateMRPPlan, approveMRPPlan, generateMRPPlanPR } from '@/api/inventory'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/mrp-plans/')
 
 
 const loading = ref(false)

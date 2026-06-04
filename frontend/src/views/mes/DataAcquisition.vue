@@ -353,7 +353,7 @@ import { getDataSourceList, getDataPointList, getDataAlarmList, updateDataSource
 import * as echarts from 'echarts'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/mes/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/data-points/')
 
 
 // 数据

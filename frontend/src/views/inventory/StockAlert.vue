@@ -171,7 +171,7 @@ import { WarningFilled, Warning, InfoFilled } from '@element-plus/icons-vue'
 import { getStockAlerts, getStockAlertRules, getStockAlertsSummary, initStockAlertRules, checkAllStockAlerts, acknowledgeStockAlert, resolveStockAlert, ignoreStockAlert } from '@/api/inventory'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/stock-alerts/')
 
 
 const loading = ref(false)

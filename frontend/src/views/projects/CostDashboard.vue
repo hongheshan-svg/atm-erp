@@ -5,7 +5,7 @@
       <el-row :gutter="20" align="middle">
         <el-col :span="8">
           <el-select v-model="selectedProject" filterable placeholder="选择项目" style="width: 100%" @change="loadProjectCost">
-            <el-option v-for="p in projects" :key="p.id" :label="`${p.project_no} - ${p.name}`" :value="p.id" />
+            <el-option v-for="p in projects" :key="p.id" :label="`${p.code} - ${p.name}`" :value="p.id" />
           </el-select>
         </el-col>
         <el-col :span="16" class="project-info" v-if="projectData">

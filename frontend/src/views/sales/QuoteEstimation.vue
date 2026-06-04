@@ -175,7 +175,7 @@ import { getQuoteEstimations, createQuoteEstimation, patchQuoteEstimation, calcu
 import { getCustomerList } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/sales/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/sales/quote-estimations/')
 
 
 const router = useRouter()

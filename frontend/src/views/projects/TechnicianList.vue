@@ -117,7 +117,7 @@ import { getProjectList } from '@/api/projects/project'
 import { getUsers } from '@/api/auth'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_technician/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/technician-profiles/')
 
 
 const loading = ref(false)

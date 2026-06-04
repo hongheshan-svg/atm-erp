@@ -269,7 +269,7 @@ import { getBatches, getBatchesExpiringSoon, getBatchesExpired, createBatch, get
 import { getItemList, getWarehouseList } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/batches/')
 
 
 const loading = ref(false)

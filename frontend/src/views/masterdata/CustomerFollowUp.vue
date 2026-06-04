@@ -217,7 +217,7 @@ import { Plus } from '@element-plus/icons-vue'
 import { getCustomerList, getCustomerFollowUpList, createCustomerFollowUp, updateCustomerFollowUp, deleteCustomerFollowUp, getFollowTypes, getFollowUpStatistics } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/masterdata/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/masterdata/customer-followups/')
 
 
 const loading = ref(false)

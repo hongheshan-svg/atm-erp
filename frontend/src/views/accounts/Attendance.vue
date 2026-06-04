@@ -273,7 +273,7 @@ getAttendanceToday,
 } from '@/api/accounts'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/accounts/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/auth/attendance-records/')
 
 
 const activeTab = ref('records')

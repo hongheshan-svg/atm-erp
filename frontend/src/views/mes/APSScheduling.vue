@@ -193,7 +193,7 @@ const Magic = {
 import { h } from 'vue'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/mes/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/schedule-orders/')
 
 
 const loadingCapacity = ref(false)

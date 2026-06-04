@@ -93,7 +93,7 @@ import { ElMessage } from 'element-plus'
 import { getOutsourceProgress, getOutsourceProgressStatistics, updateOutsourceProgress } from '@/api/purchase'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase/outsource-progress/')
 
 
 const loading = ref(false)

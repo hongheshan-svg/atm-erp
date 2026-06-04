@@ -163,7 +163,7 @@ import { getAuditLogs } from '@/api/core'
 import { ElMessage } from 'element-plus'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/core/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/core/audit-logs/')
 
 
 const loading = ref(false)

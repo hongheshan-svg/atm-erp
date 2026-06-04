@@ -112,7 +112,7 @@ import { getProjectList, getProject, getTaskList } from '@/api/projects/project'
 import { ElMessage } from 'element-plus'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_project/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/tasks/')
 
 
 const loading = ref(false)

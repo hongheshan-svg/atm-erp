@@ -49,7 +49,7 @@ import { ElMessage } from 'element-plus'
 import { getSparePartAlerts, resolveSparePartAlert } from '@/api/inventory'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/spare-part-alerts/')
 
 
 const loading = ref(false)

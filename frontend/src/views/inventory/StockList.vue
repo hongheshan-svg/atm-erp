@@ -88,7 +88,7 @@ import { getStocks, getStockMoves } from '@/api/inventory'
 import { getWarehouseList } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/stocks/')
 
 
 const router = useRouter()

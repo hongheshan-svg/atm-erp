@@ -185,7 +185,7 @@ import { Clock, CircleCheck, Document, Timer, Van, Box } from '@element-plus/ico
 import { getAttendanceToday, getAttendanceRecords, getAttendanceMonthlySummary, checkIn, checkOut } from '@/api/oa'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/oa/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/oa/attendance-records/')
 
 
 const loading = ref(false)

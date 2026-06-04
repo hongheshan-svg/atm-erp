@@ -199,7 +199,7 @@ import { Plus, Search, Edit, Delete } from '@element-plus/icons-vue'
 import { getDictTypeList, createDictType, updateDictType, deleteDictType, initSystemDicts, getDictItemList, createDictItem, updateDictItem, deleteDictItem, setDictItemDefault, toggleDictItemEnable } from '@/api/system'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/system/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/core/dict-items/')
 
 
 const dictTypes = ref<any[]>([])

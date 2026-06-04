@@ -252,7 +252,7 @@ import { getAssetCategories, getAssets, createAsset, updateAsset, deleteAsset, g
 import { getUsers } from '@/api/auth'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/oa/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/oa/assets/')
 
 
 const loading = ref(false)

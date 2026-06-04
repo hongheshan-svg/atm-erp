@@ -234,7 +234,7 @@ import { getServiceRequests, getServiceContracts, createServiceRequest, getServi
 import { getCustomerList } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/sales/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/sales/service-requests/')
 
 
 const loading = ref(false)

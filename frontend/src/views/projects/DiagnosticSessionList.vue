@@ -66,7 +66,7 @@ import { ElMessage } from 'element-plus'
 import { getDiagnosticSessionList, getDiagnosticSession } from '@/api/projects/diagnostic'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_diagnostic/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/diagnostic-sessions/')
 
 
 const loading = ref(false)

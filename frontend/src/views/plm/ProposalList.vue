@@ -242,7 +242,7 @@ import { getProposalList, getProposal, createProposal, patchProposal, getProposa
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/plm_proposal/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/proposals/')
 
 
 const loading = ref(false)

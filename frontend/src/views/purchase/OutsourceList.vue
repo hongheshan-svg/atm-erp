@@ -386,7 +386,7 @@ getOutsourceOrders, getOutsourceOrder, createOutsourceOrder, updateOutsourceOrde
 } from '@/api/purchase'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/masterdata/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase/outsource-orders/')
 
 
 const loading = ref(false)

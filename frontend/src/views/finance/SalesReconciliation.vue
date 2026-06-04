@@ -347,7 +347,7 @@ import { getSalesReconciliations, getSalesReconciliation, createSalesReconciliat
 import { getCustomerList } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/finance/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/finance/sales-reconciliations/')
 
 
 const loading = ref(false)

@@ -59,7 +59,7 @@ export interface LoginResponse {
 // ===== Projects =====
 
 export interface Project extends BaseModel {
-  project_no: string
+  code: string
   name: string
   customer?: number
   customer_name?: string
