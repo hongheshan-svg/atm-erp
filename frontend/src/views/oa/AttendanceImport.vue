@@ -112,7 +112,6 @@
           
             <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
           
-            <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
           
             <el-button size="small" @click="batchExport">导出选中</el-button>
           
@@ -266,7 +265,7 @@ import { batchImportAttendance, recalculateMonthAttendance, exportAttendanceRepo
 import * as XLSX from 'xlsx'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/oa/')
+const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/oa/')
 
 
 // 数据

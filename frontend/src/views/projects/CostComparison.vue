@@ -22,7 +22,6 @@
       
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
       
-        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
       
         <el-button size="small" @click="batchExport">导出选中</el-button>
       
@@ -55,7 +54,7 @@ import { getProjectList, getProjectCostComparison } from '@/api/projects/project
 import * as echarts from 'echarts'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_project/')
+const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/projects_project/')
 
 
 const loading = ref(false)

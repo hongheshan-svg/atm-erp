@@ -76,7 +76,6 @@
           <!-- 批量操作 -->
           <div v-if="selectedRows.length > 0" class="batch-toolbar">
             <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-            <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
             <el-button size="small" @click="batchExport">导出选中</el-button>
           </div>
           <el-table :data="valuation.details" border stripe max-height="400" @selection-change="handleSelectionChange">
@@ -264,7 +263,7 @@ import { getInventoryValuation, getCostRecords, getCostConfigs, generatePeriodSu
 import * as echarts from 'echarts'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/')
+const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/inventory/')
 
 
 const activeTab = ref('valuation')

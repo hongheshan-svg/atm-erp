@@ -94,7 +94,6 @@
       <!-- 批量操作 -->
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
         <el-button size="small" @click="batchExport">导出选中</el-button>
       </div>
       <el-table :data="equipmentRanking" stripe @selection-change="handleSelectionChange">
@@ -147,7 +146,7 @@ getEquipmentList, getOEESummary, getOEERanking, getOEETrend, getOEEDowntime
 } from '@/api/equipment'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/equipment/')
+const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/equipment/')
 
 
 const dateRange = ref<any[]>([])

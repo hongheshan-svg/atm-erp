@@ -72,7 +72,6 @@
         <!-- 批量操作 -->
         <div v-if="selectedRows.length > 0" class="batch-toolbar">
           <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-          <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
           <el-button size="small" @click="batchExport">导出选中</el-button>
         </div>
         <el-table :data="parsedFiles" border stripe max-height="300" @selection-change="handleSelectionChange">
@@ -201,7 +200,7 @@ import { getDrawingImportSupportedFormats, batchImportDrawings } from '@/api/pro
 import { getProjectList } from '@/api/projects/project'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects_drawing/')
+const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/projects_drawing/')
 
 
 const projects = ref<any[]>([])
