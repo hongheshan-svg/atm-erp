@@ -1062,7 +1062,7 @@ const handleBatchDelete = async () => {
     
     // 使用批量删除接口
     const ids = selectedRows.value.map(row => row.id)
-    await bulkDeleteBOM( { ids })
+    await bulkDeleteBOM(ids)
     
     ElMessage.success(`成功删除 ${selectedRows.value.length} 项物料`)
     clearSelection()
