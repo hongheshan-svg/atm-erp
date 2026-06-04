@@ -55,7 +55,6 @@
       <!-- 批量操作 -->
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
         <el-button size="small" @click="batchExport">导出选中</el-button>
       </div>
       <el-table
@@ -163,7 +162,7 @@ import { getAuditLogs } from '@/api/core'
 import { ElMessage } from 'element-plus'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/core/audit-logs/')
+const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/core/audit-logs/')
 
 
 const loading = ref(false)
