@@ -229,7 +229,7 @@ import { Plus, Delete, Check, Rank } from '@element-plus/icons-vue'
 import { getCustomFieldList, createCustomField, updateCustomField, deleteCustomField, getSupportedModels, getFieldTypes, toggleFieldVisible, batchSortFields } from '@/api/system'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/core/custom-field-definitions/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/core/custom-field-definitions/', { onSuccess: () => loadFields() })
 
 
 const fields = ref<any[]>([])

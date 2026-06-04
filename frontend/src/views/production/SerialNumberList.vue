@@ -290,7 +290,7 @@ getSerialNumbers, getSerialNumberStatistics, searchSerialNumbers,
 } from '@/api/production'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/serial-numbers/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/serial-numbers/', { onSuccess: () => loadData() })
 
 
 const loading = ref(false)

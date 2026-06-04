@@ -297,7 +297,7 @@ import { Plus, Delete } from '@element-plus/icons-vue'
 import { getContractTemplates, getContractClauses, getGeneratedContracts, getContractTypes, previewContractTemplate, setDefaultContractTemplate, deleteContractTemplate, updateContractTemplate, createContractTemplate, updateContractClause, createContractClause, deleteContractClause, generateContract, getGeneratedContract } from '@/api/sales'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/sales/contract-templates/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/sales/contract-templates/', { onSuccess: () => fetchTemplates() })
 
 
 const activeTab = ref('templates')

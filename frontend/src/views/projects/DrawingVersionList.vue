@@ -121,7 +121,7 @@ getDrawingVersions, createDrawingVersion, getDrawingTimeline,
 } from '@/api/projects/enhancement'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/drawing-versions/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/drawing-versions/', { onSuccess: () => loadList() })
 
 
 const loading = ref(false)

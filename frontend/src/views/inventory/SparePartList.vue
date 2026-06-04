@@ -110,7 +110,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getSpareParts, getSparePartCategories, updateSparePart, createSparePart, consumeSparePart, deleteSparePart } from '@/api/inventory'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/spare-parts/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/spare-parts/', { onSuccess: () => loadData() })
 
 
 const loading = ref(false)

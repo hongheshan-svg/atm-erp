@@ -155,7 +155,7 @@ getRoutingTemplates, createRoutingTemplate, updateRoutingTemplate,
 } from '@/api/production'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/routing-templates/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/routing-templates/', { onSuccess: () => loadData() })
 
 
 const router = useRouter()

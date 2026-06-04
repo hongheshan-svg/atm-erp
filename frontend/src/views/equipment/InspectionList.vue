@@ -335,7 +335,7 @@ getEquipmentList,
 } from '@/api/equipment'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/inspection-records/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/inspection-records/', { onSuccess: () => fetchData() })
 
 
 const activeTab = ref('records')

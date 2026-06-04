@@ -182,7 +182,7 @@ import { getProjectList, getMemberList, createMember, updateMember, deleteMember
 import { getRoles, getUsers } from '@/api/auth'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/members/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/members/', { onSuccess: () => fetchMembers() })
 
 
 const loading = ref(false)

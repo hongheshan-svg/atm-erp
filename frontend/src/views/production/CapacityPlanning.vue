@@ -242,7 +242,7 @@ getCapacityDashboard, getResources, createResource as createResourceApi,
 } from '@/api/production'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/resources/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/resources/', { onSuccess: () => loadResources() })
 
 
 const loading = ref(false)

@@ -136,7 +136,7 @@ import { getTechnicalIssueList, getTechnicalIssue, createTechnicalIssue, convert
 import { getProjectList } from '@/api/projects/project'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/technical-issues/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/technical-issues/', { onSuccess: () => fetchData() })
 
 
 const loading = ref(false)

@@ -222,7 +222,7 @@ import { getDrawingList, patchDrawing, autoLinkDrawings, manualLinkDrawing, getC
 import { getProjectList } from '@/api/projects/project'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/drawings/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/drawings/', { onSuccess: () => loadDrawings() })
 
 
 const projects = ref<any[]>([])

@@ -290,7 +290,7 @@ import { usePermissionStore } from '@/stores/permission'
 import { getUsers } from '@/api/auth'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/milestones/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/milestones/', { onSuccess: () => fetchData() })
 
 
 const loading = ref(false)

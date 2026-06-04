@@ -66,7 +66,7 @@ import { ElMessage } from 'element-plus'
 import { getEquipmentAlarmList, acknowledgeEquipmentAlarm } from '@/api/projects/equipment-monitoring'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/equipment-alarms/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/equipment-alarms/', { onSuccess: () => loadData() })
 
 
 const loading = ref(false)

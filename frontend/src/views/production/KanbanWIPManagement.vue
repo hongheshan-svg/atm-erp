@@ -146,7 +146,7 @@ getKanbanWIPStatus, getKanbanWIPRules, createKanbanWIPRule,
 } from '@/api/production'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/kanban-wip-rules/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/kanban-wip-rules/', { onSuccess: () => loadRules() })
 
 
 const wipStatus = ref<any[]>([])

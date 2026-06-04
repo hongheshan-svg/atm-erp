@@ -117,7 +117,7 @@ getInstallationTasks, createInstallationTask, dispatchInstallationTask,
 } from '@/api/projects/enhancement'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/installation-tasks/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/installation-tasks/', { onSuccess: () => loadList() })
 
 
 const router = useRouter()

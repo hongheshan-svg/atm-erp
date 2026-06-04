@@ -189,7 +189,7 @@ import { getItemList, getWarehouseList } from '@/api/masterdata'
 import { getProjectList } from '@/api/projects/project'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/moves/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/moves/', { onSuccess: () => fetchData() })
 
 
 const loading = ref(false)

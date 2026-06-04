@@ -210,7 +210,7 @@ import { Plus } from '@element-plus/icons-vue'
 import { getAvailableVehicles, getVehicleRequests, getVehicleRequest, createVehicleRequest, submitVehicleRequest, pickupVehicle, returnVehicle, deleteVehicleRequest } from '@/api/oa'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/oa/vehicle-requests/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/oa/vehicle-requests/', { onSuccess: () => loadData() })
 
 
 const loading = ref(false)

@@ -248,7 +248,7 @@ getPurchaseBudgets, getPurchaseBudget, createPurchaseBudget, updatePurchaseBudge
 } from '@/api/purchase'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase/budgets/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase/budgets/', { onSuccess: () => fetchData() })
 
 
 const loading = ref(false)

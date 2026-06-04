@@ -99,7 +99,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getProjectList, getCostRecordList, createCostRecord, deleteCostRecord } from '@/api/projects/project'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/project-cost-records/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/project-cost-records/', { onSuccess: () => loadData() })
 
 
 const loading = ref(false)

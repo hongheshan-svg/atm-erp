@@ -266,7 +266,7 @@ import {
 import { getDepartments, getUsers, createDepartment, updateDepartment, deleteDepartment } from '@/api/auth'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/auth/users/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/auth/users/', { onSuccess: () => selectedDept.value && loadDeptMembers(selectedDept.value.id) })
 
 
 // 状态

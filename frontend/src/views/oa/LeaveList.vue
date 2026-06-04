@@ -137,7 +137,7 @@ import { Plus } from '@element-plus/icons-vue'
 import { getLeaveTypes, getLeaveRequests, updateLeaveRequest, createLeaveRequest, submitLeaveRequest, deleteLeaveRequest } from '@/api/oa'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/oa/leave-requests/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/oa/leave-requests/', { onSuccess: () => loadData() })
 
 
 const loading = ref(false)

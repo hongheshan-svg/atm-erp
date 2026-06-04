@@ -233,7 +233,7 @@ import { getAccuracyReport, getValidationResults, getReconciliationSessions, get
 import { getWarehouseList } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/validation-results/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/validation-results/', { onSuccess: () => loadPendingIssues() })
 
 
 const router = useRouter()

@@ -361,7 +361,7 @@ import { getPurchaseReconciliations, getPurchaseReconciliation, createPurchaseRe
 import { getSupplierList } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/finance/purchase-reconciliations/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/finance/purchase-reconciliations/', { onSuccess: () => loadReconciliations() })
 
 
 const loading = ref(false)

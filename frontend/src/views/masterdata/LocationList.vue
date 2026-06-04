@@ -168,7 +168,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getWarehouseList, getLocationTree, getLocation, getLocationChildren, createLocation, patchLocation, deleteLocation } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/masterdata/locations/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/masterdata/locations/', { onSuccess: () => selectedLocation.value && handleNodeClick(selectedLocation.value) })
 
 
 const warehouses = ref<any[]>([])

@@ -164,7 +164,7 @@ getBOMCostSnapshots, getBOMCostDetails, calculateBOMCost,
 } from '@/api/projects/enhancement'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/bom-cost-snapshots/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/bom-cost-snapshots/', { onSuccess: () => loadList() })
 
 
 const loading = ref(false)

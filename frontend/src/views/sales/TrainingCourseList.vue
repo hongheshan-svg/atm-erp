@@ -79,7 +79,7 @@ import { ElMessage } from 'element-plus'
 import { getTrainingCourses, createTrainingCourse, updateTrainingCourse } from '@/api/sales'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/sales/training-courses/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/sales/training-courses/', { onSuccess: () => loadData() })
 
 
 const loading = ref(false)

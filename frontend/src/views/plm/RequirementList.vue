@@ -317,7 +317,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Document } from '@element-plus/icons-vue'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/requirements/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/requirements/', { onSuccess: () => fetchList() })
 
 
 const loading = ref(false)

@@ -88,7 +88,7 @@ import { ElMessage } from 'element-plus'
 import { getDeliveryCollaborations, getDeliveryCollaboration, confirmDeliveryCollaboration } from '@/api/purchase'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase/delivery-collaborations/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase/delivery-collaborations/', { onSuccess: () => loadData() })
 
 
 const loading = ref(false)

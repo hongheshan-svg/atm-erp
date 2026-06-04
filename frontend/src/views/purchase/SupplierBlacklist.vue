@@ -142,7 +142,7 @@ import { Plus, Search } from '@element-plus/icons-vue'
 import { getBlacklistList, createBlacklist, liftBlacklist } from '@/api/purchase/evaluation'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase/blacklist/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase/blacklist/', { onSuccess: () => fetchData() })
 
 
 const loading = ref(false)

@@ -122,7 +122,7 @@ import { Plus, Search } from '@element-plus/icons-vue'
 import { getStandardComponentList, getStandardComponent, createStandardComponent } from '@/api/projects/knowledge'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/standard-components/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/standard-components/', { onSuccess: () => fetchData() })
 
 
 const loading = ref(false)

@@ -86,7 +86,7 @@ import { ElMessage } from 'element-plus'
 import { getLaborRateList, createLaborRate, updateLaborRate } from '@/api/projects/labor-rate'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/labor-rates/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/labor-rates/', { onSuccess: () => loadData() })
 
 
 const loading = ref(false)

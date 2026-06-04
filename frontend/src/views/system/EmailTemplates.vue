@@ -225,7 +225,7 @@ import { Plus } from '@element-plus/icons-vue'
 import { getEmailTemplateList, getEmailTemplateTypes, createEmailTemplate, updateEmailTemplate, deleteEmailTemplate, toggleEmailTemplate, previewEmailTemplate, testSendEmailTemplate, initSystemEmailTemplates } from '@/api/system'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/core/email-templates/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/core/email-templates/', { onSuccess: () => loadTemplates() })
 
 
 const templates = ref<any[]>([])

@@ -109,7 +109,7 @@ import { getTrainingPlans, getTrainingPlan, createTrainingPlan, updateTrainingPl
 import { getCustomerList } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/sales/training-plans/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/sales/training-plans/', { onSuccess: () => loadData() })
 
 
 const loading = ref(false)

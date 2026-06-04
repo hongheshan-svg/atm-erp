@@ -223,7 +223,7 @@ import { getPreventiveMaintenances, getPreventiveMaintenance, createPreventiveMa
 import { getUsers } from '@/api/auth'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/sales/preventive-maintenance/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/sales/preventive-maintenance/', { onSuccess: () => loadMaintenances() })
 
 
 const loading = ref(false)

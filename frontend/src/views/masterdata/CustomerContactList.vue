@@ -193,7 +193,7 @@ import { Plus } from '@element-plus/icons-vue'
 import { getCustomerList, getCustomerContactList, createCustomerContact, updateCustomerContact, deleteCustomerContact } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/masterdata/customer-contacts/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/masterdata/customer-contacts/', { onSuccess: () => loadContacts() })
 
 
 const router = useRouter()

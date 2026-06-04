@@ -131,7 +131,7 @@ getRFQCollaborations, getRFQCollaboration, createRFQCollaboration,
 } from '@/api/purchase'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase/rfq-collaborations/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase/rfq-collaborations/', { onSuccess: () => loadData() })
 
 
 const loading = ref(false)

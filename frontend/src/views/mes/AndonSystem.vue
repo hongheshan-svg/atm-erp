@@ -304,7 +304,7 @@ import { getAndonCallList, getPendingAndonCalls, getAndonStatusBoard, getAndonSt
 import * as echarts from 'echarts'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/andon-calls/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/andon-calls/', { onSuccess: () => fetchCalls() })
 
 
 const loading = ref(false)

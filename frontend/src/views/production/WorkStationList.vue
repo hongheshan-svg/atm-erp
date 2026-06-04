@@ -88,7 +88,7 @@ getWorkStations, createWorkStation, updateWorkStation,
 } from '@/api/production'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/work-stations/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/work-stations/', { onSuccess: () => loadData() })
 
 
 const loading = ref(false)

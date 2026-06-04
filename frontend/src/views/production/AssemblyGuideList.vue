@@ -73,7 +73,7 @@ import { ElMessage } from 'element-plus'
 import { getAssemblyGuides, createAssemblyGuide, updateAssemblyGuide } from '@/api/production'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/assembly-guides/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/assembly-guides/', { onSuccess: () => loadData() })
 
 
 const router = useRouter()

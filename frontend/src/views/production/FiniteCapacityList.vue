@@ -143,7 +143,7 @@ getFiniteCapacityPlans, createFiniteCapacityPlan, updateFiniteCapacityPlan,
 } from '@/api/production'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/finite-capacity-plans/')
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/finite-capacity-plans/', { onSuccess: () => loadList() })
 
 
 const loading = ref(false)
