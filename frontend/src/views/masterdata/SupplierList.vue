@@ -267,7 +267,7 @@ const { canDelete } = usePermission()
 
 // 批量删除功能
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
-  '/purchase/suppliers/',
+  '/masterdata/suppliers/',
   {
     confirmTitle: '确认删除供应商',
     confirmMessage: '此操作将永久删除选中的供应商记录，是否继续？',
