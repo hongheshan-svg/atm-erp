@@ -145,9 +145,9 @@
         </el-form-item>
         <el-form-item label="受控级别" prop="control_level">
           <el-radio-group v-model="uploadForm.control_level">
-            <el-radio label="UNCONTROLLED">非受控</el-radio>
-            <el-radio label="CONTROLLED">受控</el-radio>
-            <el-radio label="CONFIDENTIAL">机密</el-radio>
+            <el-radio value="UNCONTROLLED">非受控</el-radio>
+            <el-radio value="CONTROLLED">受控</el-radio>
+            <el-radio value="CONFIDENTIAL">机密</el-radio>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="文档描述">

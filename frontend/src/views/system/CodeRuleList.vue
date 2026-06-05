@@ -156,10 +156,10 @@
 
         <el-form-item label="重置模式" prop="reset_mode">
           <el-radio-group v-model="form.reset_mode" :disabled="form.rule_type === 'ITEM'">
-            <el-radio label="NONE">不重置</el-radio>
-            <el-radio label="DAILY">每日重置</el-radio>
-            <el-radio label="MONTHLY">每月重置</el-radio>
-            <el-radio label="YEARLY">每年重置</el-radio>
+            <el-radio value="NONE">不重置</el-radio>
+            <el-radio value="DAILY">每日重置</el-radio>
+            <el-radio value="MONTHLY">每月重置</el-radio>
+            <el-radio value="YEARLY">每年重置</el-radio>
           </el-radio-group>
           <div class="el-form-item__extra">序列号在指定周期后自动重置为起始值</div>
         </el-form-item>

@@ -304,9 +304,9 @@
         <el-form-item label="设备">{{ doInspectionRow?.equipment_name }}</el-form-item>
         <el-form-item label="检查结果">
           <el-radio-group v-model="inspectionResults.overall">
-            <el-radio label="PASS">合格</el-radio>
-            <el-radio label="FAIL">不合格</el-radio>
-            <el-radio label="NEED_REPAIR">需维修</el-radio>
+            <el-radio value="PASS">合格</el-radio>
+            <el-radio value="FAIL">不合格</el-radio>
+            <el-radio value="NEED_REPAIR">需维修</el-radio>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="备注">

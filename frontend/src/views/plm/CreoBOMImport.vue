@@ -126,20 +126,20 @@
       <el-form :model="uploadForm" label-width="100px">
         <el-form-item label="CAD软件">
           <el-radio-group v-model="uploadForm.cad_software">
-            <el-radio label="AUTO">自动识别</el-radio>
-            <el-radio label="CREO">Creo/Pro-E</el-radio>
-            <el-radio label="SOLIDWORKS">SolidWorks</el-radio>
-            <el-radio label="AUTOCAD">AutoCAD</el-radio>
-            <el-radio label="INVENTOR">Inventor</el-radio>
-            <el-radio label="GENERIC">通用</el-radio>
+            <el-radio value="AUTO">自动识别</el-radio>
+            <el-radio value="CREO">Creo/Pro-E</el-radio>
+            <el-radio value="SOLIDWORKS">SolidWorks</el-radio>
+            <el-radio value="AUTOCAD">AutoCAD</el-radio>
+            <el-radio value="INVENTOR">Inventor</el-radio>
+            <el-radio value="GENERIC">通用</el-radio>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="文件格式">
           <el-radio-group v-model="uploadForm.file_format">
-            <el-radio label="CSV">CSV</el-radio>
-            <el-radio label="XML">XML</el-radio>
-            <el-radio label="XLSX">Excel</el-radio>
-            <el-radio label="TXT">文本</el-radio>
+            <el-radio value="CSV">CSV</el-radio>
+            <el-radio value="XML">XML</el-radio>
+            <el-radio value="XLSX">Excel</el-radio>
+            <el-radio value="TXT">文本</el-radio>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="BOM文件">

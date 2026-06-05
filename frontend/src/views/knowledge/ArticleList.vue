@@ -67,13 +67,13 @@
         <el-card class="filter-card">
           <div class="filter-area">
             <el-radio-group v-model="queryParams.article_type" @change="handleFilter">
-              <el-radio-button label="">全部</el-radio-button>
-              <el-radio-button label="SOLUTION">解决方案</el-radio-button>
-              <el-radio-button label="STANDARD">标准规范</el-radio-button>
-              <el-radio-button label="TUTORIAL">教程指南</el-radio-button>
-              <el-radio-button label="FAQ">常见问题</el-radio-button>
-              <el-radio-button label="CASE">案例分享</el-radio-button>
-              <el-radio-button label="LESSON">经验教训</el-radio-button>
+              <el-radio-button value="">全部</el-radio-button>
+              <el-radio-button value="SOLUTION">解决方案</el-radio-button>
+              <el-radio-button value="STANDARD">标准规范</el-radio-button>
+              <el-radio-button value="TUTORIAL">教程指南</el-radio-button>
+              <el-radio-button value="FAQ">常见问题</el-radio-button>
+              <el-radio-button value="CASE">案例分享</el-radio-button>
+              <el-radio-button value="LESSON">经验教训</el-radio-button>
             </el-radio-group>
             <el-select v-model="queryParams.status" placeholder="状态" clearable @change="handleFilter">
               <el-option label="草稿" value="DRAFT" />

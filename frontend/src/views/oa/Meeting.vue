@@ -170,8 +170,8 @@
         </el-row>
         <el-form-item label="会议方式">
           <el-radio-group v-model="formData.is_online">
-            <el-radio :label="false">线下</el-radio>
-            <el-radio :label="true">线上</el-radio>
+            <el-radio :value="false">线下</el-radio>
+            <el-radio :value="true">线上</el-radio>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="会议室" v-if="!formData.is_online">

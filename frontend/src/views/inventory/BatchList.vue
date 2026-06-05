@@ -6,9 +6,9 @@
           <span>批次管理</span>
           <div class="header-actions">
             <el-radio-group v-model="viewMode" size="small" style="margin-right: 15px;">
-              <el-radio-button label="all">全部</el-radio-button>
-              <el-radio-button label="expiring">即将过期</el-radio-button>
-              <el-radio-button label="expired">已过期</el-radio-button>
+              <el-radio-button value="all">全部</el-radio-button>
+              <el-radio-button value="expiring">即将过期</el-radio-button>
+              <el-radio-button value="expired">已过期</el-radio-button>
             </el-radio-group>
             <el-button type="primary" :icon="Plus" v-permission="'inventory:stock:create'" @click="handleAdd">新增批次</el-button>
           </div>

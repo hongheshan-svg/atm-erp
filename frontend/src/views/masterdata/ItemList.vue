@@ -363,8 +363,8 @@
       <el-form label-width="100px">
         <el-form-item label="一级代码">
           <el-radio-group v-model="codeGenForm.level1">
-            <el-radio label="1">有图</el-radio>
-            <el-radio label="2">无图</el-radio>
+            <el-radio value="1">有图</el-radio>
+            <el-radio value="2">无图</el-radio>
           </el-radio-group>
         </el-form-item>
 

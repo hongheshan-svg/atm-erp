@@ -456,9 +456,9 @@
       <el-form :model="completeFormData" label-width="100px">
         <el-form-item label="检验结果" required>
           <el-radio-group v-model="completeFormData.result">
-            <el-radio-button label="PASS">合格</el-radio-button>
-            <el-radio-button label="FAIL">不合格</el-radio-button>
-            <el-radio-button label="CONDITIONAL">让步接收</el-radio-button>
+            <el-radio-button value="PASS">合格</el-radio-button>
+            <el-radio-button value="FAIL">不合格</el-radio-button>
+            <el-radio-button value="CONDITIONAL">让步接收</el-radio-button>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="检验结论">

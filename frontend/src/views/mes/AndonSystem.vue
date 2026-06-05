@@ -58,8 +58,8 @@
             <div class="card-header">
               <span>安灯呼叫</span>
               <el-radio-group v-model="callFilter" size="small" @change="fetchCalls">
-                <el-radio-button label="pending">待处理</el-radio-button>
-                <el-radio-button label="all">全部</el-radio-button>
+                <el-radio-button value="pending">待处理</el-radio-button>
+                <el-radio-button value="all">全部</el-radio-button>
               </el-radio-group>
             </div>
           </template>
@@ -182,10 +182,10 @@
         </el-form-item>
         <el-form-item label="优先级" prop="priority">
           <el-radio-group v-model="callForm.priority">
-            <el-radio-button label="LOW">低</el-radio-button>
-            <el-radio-button label="MEDIUM">中</el-radio-button>
-            <el-radio-button label="HIGH">高</el-radio-button>
-            <el-radio-button label="CRITICAL">紧急</el-radio-button>
+            <el-radio-button value="LOW">低</el-radio-button>
+            <el-radio-button value="MEDIUM">中</el-radio-button>
+            <el-radio-button value="HIGH">高</el-radio-button>
+            <el-radio-button value="CRITICAL">紧急</el-radio-button>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="详细描述">

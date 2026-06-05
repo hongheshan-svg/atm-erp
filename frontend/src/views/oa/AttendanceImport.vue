@@ -75,8 +75,8 @@
             </el-form-item>
             <el-form-item label="覆盖模式">
               <el-radio-group v-model="importForm.overwrite">
-                <el-radio :label="false">跳过已有记录</el-radio>
-                <el-radio :label="true">覆盖已有记录</el-radio>
+                <el-radio :value="false">跳过已有记录</el-radio>
+                <el-radio :value="true">覆盖已有记录</el-radio>
               </el-radio-group>
             </el-form-item>
           </el-form>

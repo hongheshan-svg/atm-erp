@@ -165,10 +165,10 @@
         </el-form-item>
         <el-form-item label="调整类型">
           <el-radio-group v-model="adjustForm.adjustment_type">
-            <el-radio label="INCREASE">增加</el-radio>
-            <el-radio label="DECREASE">减少</el-radio>
-            <el-radio label="TEMP_INCREASE">临时增加</el-radio>
-            <el-radio label="RESET">重置</el-radio>
+            <el-radio value="INCREASE">增加</el-radio>
+            <el-radio value="DECREASE">减少</el-radio>
+            <el-radio value="TEMP_INCREASE">临时增加</el-radio>
+            <el-radio value="RESET">重置</el-radio>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="调整金额">

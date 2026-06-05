@@ -6,9 +6,9 @@
           <span>现金流预测</span>
           <div class="header-actions">
             <el-radio-group v-model="forecastPeriod" @change="handlePeriodChange">
-              <el-radio-button label="30">30天</el-radio-button>
-              <el-radio-button label="60">60天</el-radio-button>
-              <el-radio-button label="90">90天</el-radio-button>
+              <el-radio-button value="30">30天</el-radio-button>
+              <el-radio-button value="60">60天</el-radio-button>
+              <el-radio-button value="90">90天</el-radio-button>
             </el-radio-group>
             <el-button type="primary" @click="handleExport" style="margin-left: 15px;">
               <el-icon><Download /></el-icon>

@@ -228,8 +228,8 @@
       <el-form :model="formData" :rules="rules" ref="formRef" label-width="120px">
         <el-form-item label="发票类型" prop="invoice_type">
           <el-radio-group v-model="formData.invoice_type">
-            <el-radio label="INPUT">进项发票</el-radio>
-            <el-radio label="OUTPUT">销项发票</el-radio>
+            <el-radio value="INPUT">进项发票</el-radio>
+            <el-radio value="OUTPUT">销项发票</el-radio>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="发票号" prop="invoice_no">
