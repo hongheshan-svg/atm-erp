@@ -30,6 +30,7 @@
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
 
 
+        <el-button v-if="isAdmin" type="danger" size="small" @click="batchDelete">批量删除</el-button>
         <el-button size="small" @click="batchExport">导出选中</el-button>
 
       </div>
@@ -86,8 +87,10 @@ import { ElMessage } from 'element-plus'
 import { getStocks, getStockMoves } from '@/api/inventory'
 import { getWarehouseList } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { usePermission } from '@/composables/usePermission'
 
-const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/inventory/stocks/')
+const { isAdmin } = usePermission()
+const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/stocks/', { onSuccess: () => loadStock() })
 
 
 const router = useRouter()

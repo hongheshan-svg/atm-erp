@@ -1,8 +1,9 @@
 """
 Views for inventory app.
 """
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, mixins
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from django.db import transaction
 from django.db.models import Sum, F
@@ -17,7 +18,7 @@ from .serializers import (
 from .cost_methods import FIFOCostingService, CostingMethodFactory
 
 
-class StockViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
+class StockViewSet(PermissionMixin, SoftDeleteMixin, mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewSet):
 
     permission_module = 'inventory'
     permission_resource = 'stock'
@@ -30,7 +31,15 @@ class StockViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     filterset_fields = ['warehouse', 'item']
     search_fields = ['item__sku', 'item__name']
     ordering_fields = ['warehouse', 'item', 'qty_on_hand', 'updated_at']
-    
+
+    def destroy(self, request, *args, **kwargs):
+        """库存只读,由 StockMove 自动维护;仅系统管理员/超管可软删除(账实敏感)。"""
+        user = request.user
+        is_admin = user.is_superuser or user.roles.filter(code='admin').exists()
+        if not is_admin:
+            raise PermissionDenied('仅系统管理员可删除库存记录')
+        return super().destroy(request, *args, **kwargs)
+
     @action(detail=False, methods=['get'])
     def low_stock(self, request):
         """Get items with low stock (below min_stock)."""
