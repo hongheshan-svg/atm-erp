@@ -304,7 +304,7 @@ const fetchData = async () => {
     const res = await getProjectCosts(params)
     const data = res.results || res.results || res || []
     tableData.value = data
-    pagination.total = res.count || res.count || data.length
+    pagination.total = res.count || (res.results || res)?.length || 0
     
     // 计算汇总
     calculateSummary(data)

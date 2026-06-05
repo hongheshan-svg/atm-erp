@@ -238,7 +238,7 @@ const fetchList = async () => {
     }
     const data = await getMRPPlans(params)
     planList.value = data.results || data
-    pagination.total = data.count || data.length
+    pagination.total = data.count || planList.value.length
   } catch (e) {
     console.error(e)
   } finally {

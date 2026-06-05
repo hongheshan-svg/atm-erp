@@ -391,7 +391,7 @@ const fetchList = async () => {
     }
     const data = await getRequirementList(params)
     requirementList.value = data.results || data
-    pagination.total = data.count || data.length
+    pagination.total = data.count || (data.results || data)?.length || 0
   } catch (e) {
     console.error(e)
   } finally {

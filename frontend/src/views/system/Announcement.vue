@@ -229,7 +229,7 @@ const fetchList = async () => {
     }
     const data = await getAnnouncementList(params)
     announcements.value = data.results || data
-    pagination.total = data.count || data.length
+    pagination.total = data.count || (data.results || data)?.length || 0
   } catch (e) {
     console.error(e)
   } finally {
