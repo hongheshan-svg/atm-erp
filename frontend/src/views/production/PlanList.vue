@@ -110,7 +110,13 @@
         <el-table-column prop="production_manager_name" label="生产负责人" width="100" />
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small" link @click.stop="handleEdit(row)">
+            <el-button
+              v-if="!['COMPLETED', 'CANCELLED'].includes(row.status)"
+              type="primary"
+              size="small"
+              link
+              @click.stop="handleEdit(row)"
+            >
               编辑
             </el-button>
             <el-button

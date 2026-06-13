@@ -264,8 +264,24 @@
     <!-- 升级对话框 -->
     <el-dialog v-model="escalateDialogVisible" title="升级呼叫" width="500px">
       <el-form :model="escalateForm" label-width="80px">
+        <el-form-item label="升级给">
+          <el-select
+            v-model="escalateForm.escalated_to"
+            filterable
+            clearable
+            placeholder="请选择升级接收人"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="u in userOptions"
+              :key="u.id"
+              :label="userLabel(u)"
+              :value="u.id"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="升级原因">
-          <el-input v-model="escalateForm.reason" type="textarea" :rows="3" 
+          <el-input v-model="escalateForm.reason" type="textarea" :rows="3"
             placeholder="请说明升级原因..." />
         </el-form-item>
       </el-form>
@@ -301,6 +317,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Bell } from '@element-plus/icons-vue'
 import { getAndonCallList, getPendingAndonCalls, getAndonStatusBoard, getAndonStationList, getAndonTypeList, getAndonStatistics, createAndonCall, getAndonCallDetail, respondAndon, resolveAndon, escalateAndon } from '@/api/mes'
+import { getUserList } from '@/api/accounts'
 import * as echarts from 'echarts'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
@@ -355,7 +372,13 @@ const resolveCallId = ref(null)
 
 // 升级
 const escalateDialogVisible = ref(false)
+const userOptions = ref<any[]>([])
+const userLabel = (u: any) => {
+  const name = [u.first_name, u.last_name].filter(Boolean).join('')
+  return name || u.username
+}
 const escalateForm = reactive({
+  escalated_to: null,
   reason: ''
 })
 const escalateCallId = ref(null)
@@ -409,12 +432,14 @@ const fetchStations = async () => {
 
 const fetchOptions = async () => {
   try {
-    const [stationsRes, typesRes] = await Promise.all([
+    const [stationsRes, typesRes, usersRes] = await Promise.all([
       getAndonStationList({ is_active: true }),
-      getAndonTypeList({ is_active: true })
+      getAndonTypeList({ is_active: true }),
+      getUserList({ is_active: true, page_size: 200 })
     ])
     stations.value = stationsRes.results || stationsRes || []
     andonTypes.value = typesRes.results || typesRes || []
+    userOptions.value = usersRes.results || usersRes || []
   } catch (e) {
     console.error(e)
   }
@@ -549,6 +574,7 @@ const submitResolve = async () => {
 
 const handleEscalate = (row) => {
   escalateCallId.value = row.id
+  escalateForm.escalated_to = null
   escalateForm.reason = ''
   escalateDialogVisible.value = true
 }
@@ -557,6 +583,7 @@ const submitEscalate = async () => {
   submitLoading.value = true
   try {
     await escalateAndon(escalateCallId.value, {
+      escalated_to: escalateForm.escalated_to,
       reason: escalateForm.reason
     })
     ElMessage.success('已升级')

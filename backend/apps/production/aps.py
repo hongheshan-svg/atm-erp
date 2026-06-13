@@ -14,12 +14,12 @@ Project Operation Scheduling
 """
 
 from datetime import date, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Sum
 from django.utils import timezone
-from rest_framework import serializers, viewsets
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -325,6 +325,109 @@ class APSService:
         return result
 
 
+def post_completion_stock_moves(order, completed_qty, materials, user):
+    """完工入库与领料出库对库存的联动。
+
+    在调用方的同一事务内执行：
+    - 完工入库：order.item × completed_qty 入到目标仓库（request.warehouse_id 优先，
+      否则取 item.default_warehouse），生成 IN 库存移动。
+    - 领料出库：materials 为前端显式传入的领料明细
+      [{item_id, qty, warehouse_id?}]，逐条生成 OUT_PROJECT 出库移动。
+
+    设计取舍：ScheduleOrder 无工艺路线/BOM 直连，为避免按项目 BOM 整单重复发料导致账实
+    损坏，领料明细由调用方显式提供；未提供则只做完工入库。不修改 inventory 代码，仅调用
+    其既有 StockMove 公共接口（save() 在 status=COMPLETED 时原子更新库存余额）。
+    """
+    # 延迟导入避免与 inventory 形成模块级循环依赖
+    from apps.inventory.models import StockMove
+
+    moves = []
+    today = timezone.now().date()
+
+    # 完工入库
+    if order.item and completed_qty and completed_qty > 0:
+        target_warehouse = order.item.default_warehouse
+        if target_warehouse is None:
+            raise serializers.ValidationError(
+                {'warehouse': '产品未配置默认仓库，无法生成完工入库，请先为物料设置默认仓库'}
+            )
+        moves.append(
+            StockMove(
+                item=order.item,
+                warehouse_to=target_warehouse,
+                qty=completed_qty,
+                unit_cost=Decimal('0'),
+                # inventory 现有 move_type 无 IN_PRODUCTION；ADJUSTMENT + warehouse_to
+                # 在 inventory 侧路由为入库且方向由仓库字段决定，用 reference 区分来源
+                move_type='ADJUSTMENT',
+                reference_type='ScheduleOrder',
+                reference_id=order.id,
+                project=order.project,
+                move_date=today,
+                status='COMPLETED',
+                notes=f'生产完工入库 {order.order_no}',
+                created_by=user,
+            )
+        )
+
+    # 领料出库
+    for line in materials or []:
+        item_id = line.get('item_id')
+        qty_raw = line.get('qty')
+        if not item_id or qty_raw in (None, ''):
+            continue
+        try:
+            qty = Decimal(str(qty_raw))
+        except (InvalidOperation, TypeError, ValueError):
+            raise serializers.ValidationError({'materials': f'领料数量非法: {qty_raw}'})
+        if qty <= 0:
+            raise serializers.ValidationError({'materials': '领料数量必须大于0'})
+
+        from apps.masterdata.models import Item
+
+        try:
+            mat_item = Item.objects.get(pk=item_id, is_deleted=False)
+        except Item.DoesNotExist:
+            raise serializers.ValidationError({'materials': f'领料物料不存在: {item_id}'})
+
+        src_warehouse = mat_item.default_warehouse
+        wh_id = line.get('warehouse_id')
+        if wh_id:
+            from apps.masterdata.models import Warehouse
+
+            try:
+                src_warehouse = Warehouse.objects.get(pk=wh_id, is_deleted=False)
+            except Warehouse.DoesNotExist:
+                raise serializers.ValidationError({'materials': f'领料仓库不存在: {wh_id}'})
+        if src_warehouse is None:
+            raise serializers.ValidationError(
+                {'materials': f'物料 {mat_item} 未指定领料仓库且无默认仓库'}
+            )
+
+        moves.append(
+            StockMove(
+                item=mat_item,
+                warehouse_from=src_warehouse,
+                qty=qty,
+                unit_cost=Decimal('0'),
+                move_type='OUT_PROJECT',
+                reference_type='ScheduleOrder',
+                reference_id=order.id,
+                project=order.project,
+                move_date=today,
+                status='COMPLETED',
+                notes=f'生产领料 {order.order_no}',
+                created_by=user,
+            )
+        )
+
+    # 逐条保存（StockMove.save 内含库存原子更新与库存不足校验）
+    for mv in moves:
+        mv.save()
+
+    return moves
+
+
 # =====================
 # Serializers
 # =====================
@@ -417,23 +520,59 @@ class ScheduleOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 
     @action(detail=True, methods=['post'])
     def start(self, request, pk=None):
-        """开始生产"""
-        order = self.get_object()
-        order.status = 'IN_PROGRESS'
-        order.actual_start = timezone.now()
-        order.save()
+        """开始生产（仅允许 SCHEDULED→IN_PROGRESS）"""
+        with transaction.atomic():
+            order = ScheduleOrder.objects.select_for_update().get(pk=self.get_object().pk)
+            if order.status != 'SCHEDULED':
+                return Response(
+                    {'error': '只有已排程的工单可以开始生产'}, status=status.HTTP_400_BAD_REQUEST
+                )
+            order.status = 'IN_PROGRESS'
+            order.actual_start = timezone.now()
+            order.save()
         return Response(self.get_serializer(order).data)
 
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
-        """完成生产"""
-        order = self.get_object()
-        completed_qty = request.data.get('completed_qty', order.quantity)
+        """完成生产（仅允许 IN_PROGRESS→COMPLETED）
 
-        order.status = 'COMPLETED'
-        order.actual_end = timezone.now()
-        order.completed_qty = completed_qty
-        order.save()
+        - 校验 completed_qty 为非负数且不超过 order.quantity。
+        - 在同一事务内联动库存：完工入库 + 可选领料出库。库存不足/校验失败整体回滚。
+        """
+        try:
+            with transaction.atomic():
+                order = ScheduleOrder.objects.select_for_update().get(pk=self.get_object().pk)
+                if order.status != 'IN_PROGRESS':
+                    return Response(
+                        {'error': '只有生产中的工单可以完成'}, status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                raw_qty = request.data.get('completed_qty', order.quantity)
+                try:
+                    completed_qty = Decimal(str(raw_qty))
+                except (InvalidOperation, TypeError, ValueError):
+                    return Response({'error': '完成数量非法'}, status=status.HTTP_400_BAD_REQUEST)
+                if completed_qty < 0:
+                    return Response({'error': '完成数量不能为负'}, status=status.HTTP_400_BAD_REQUEST)
+                if completed_qty > order.quantity:
+                    return Response(
+                        {'error': f'完成数量不能超过工单数量 {order.quantity}'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                order.status = 'COMPLETED'
+                order.actual_end = timezone.now()
+                order.completed_qty = completed_qty
+                order.save()
+
+                # 库存联动（完工入库 + 领料出库）
+                post_completion_stock_moves(
+                    order, completed_qty, request.data.get('materials'), request.user
+                )
+        except ValueError as e:
+            # StockMove 库存不足等抛 ValueError，整笔事务已回滚，返回干净 400
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
         return Response(self.get_serializer(order).data)
 
     @action(detail=False, methods=['get'])
@@ -476,27 +615,38 @@ class APSScheduleTaskViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
 
     @action(detail=True, methods=['post'])
     def start(self, request, pk=None):
-        """开始任务"""
-        task = self.get_object()
-        task.status = 'IN_PROGRESS'
-        task.actual_start = timezone.now()
-        task.save()
+        """开始任务（仅允许 PENDING/PAUSED→IN_PROGRESS）"""
+        with transaction.atomic():
+            task = APSScheduleTask.objects.select_for_update().get(pk=self.get_object().pk)
+            if task.status not in ('PENDING', 'PAUSED'):
+                return Response(
+                    {'error': '只有待开始或暂停的任务可以开始'}, status=status.HTTP_400_BAD_REQUEST
+                )
+            task.status = 'IN_PROGRESS'
+            if task.actual_start is None:
+                task.actual_start = timezone.now()
+            task.save()
         return Response(self.get_serializer(task).data)
 
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
-        """完成任务"""
-        task = self.get_object()
-        task.status = 'COMPLETED'
-        task.actual_end = timezone.now()
-        task.progress = 100
+        """完成任务（仅允许 IN_PROGRESS→COMPLETED）"""
+        with transaction.atomic():
+            task = APSScheduleTask.objects.select_for_update().get(pk=self.get_object().pk)
+            if task.status != 'IN_PROGRESS':
+                return Response(
+                    {'error': '只有进行中的任务可以完成'}, status=status.HTTP_400_BAD_REQUEST
+                )
+            task.status = 'COMPLETED'
+            task.actual_end = timezone.now()
+            task.progress = 100
 
-        # 计算实际工时
-        if task.actual_start:
-            delta = timezone.now() - task.actual_start
-            task.actual_hours = Decimal(str(delta.total_seconds() / 3600))
+            # 计算实际工时
+            if task.actual_start:
+                delta = timezone.now() - task.actual_start
+                task.actual_hours = Decimal(str(delta.total_seconds() / 3600))
 
-        task.save()
+            task.save()
         return Response(self.get_serializer(task).data)
 
     @action(detail=True, methods=['post'])

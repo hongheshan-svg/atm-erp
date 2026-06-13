@@ -184,7 +184,13 @@
         <el-table-column prop="inspector_name" label="检验员" width="90" />
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small" link @click.stop="handleEdit(row)">
+            <el-button
+              v-if="row.status !== 'COMPLETED'"
+              type="primary"
+              size="small"
+              link
+              @click.stop="handleEdit(row)"
+            >
               编辑
             </el-button>
             <el-button

@@ -10,6 +10,9 @@
           <el-button @click="loadData">
             <el-icon><Refresh /></el-icon> 刷新
           </el-button>
+          <el-button type="success" @click="openCreateDialog">
+            <el-icon><Plus /></el-icon> 新建工单
+          </el-button>
           <el-button type="primary" @click="autoSchedule" :loading="scheduling">
             <el-icon><Magic /></el-icon> 自动排程
           </el-button>
@@ -172,14 +175,82 @@
         </div>
       </div>
     </el-card>
+
+    <!-- 新建排程工单对话框 -->
+    <el-dialog v-model="createDialogVisible" title="新建排程工单" width="560px">
+      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="100px">
+        <el-form-item label="产品" prop="item">
+          <el-select
+            v-model="createForm.item"
+            filterable
+            clearable
+            placeholder="请选择产品（可选）"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="it in itemOptions"
+              :key="it.id"
+              :label="`${it.code} ${it.name}`"
+              :value="it.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="数量" prop="quantity">
+          <el-input-number v-model="createForm.quantity" :min="0.0001" :precision="4" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="需求日期" prop="required_date">
+          <el-date-picker
+            v-model="createForm.required_date"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="选择需求日期"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="优先级" prop="priority">
+          <el-select v-model="createForm.priority" style="width: 100%">
+            <el-option label="最高" :value="1" />
+            <el-option label="高" :value="2" />
+            <el-option label="中" :value="3" />
+            <el-option label="低" :value="4" />
+            <el-option label="最低" :value="5" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="工作中心" prop="work_center">
+          <el-select
+            v-model="createForm.work_center"
+            filterable
+            clearable
+            placeholder="可选，留空由自动排程分配"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="wc in workCenterOptions"
+              :key="wc.id"
+              :label="wc.name"
+              :value="wc.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="备注" prop="remarks">
+          <el-input v-model="createForm.remarks" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="creating" @click="submitCreate">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh } from '@element-plus/icons-vue'
-import { getScheduleCapacity, getScheduleOrderList, getScheduleGanttList, autoSchedule as apiAutoSchedule, startScheduleOrder, completeScheduleOrder } from '@/api/mes'
+import { Refresh, Plus } from '@element-plus/icons-vue'
+import { getScheduleCapacity, getScheduleOrderList, getScheduleGanttList, autoSchedule as apiAutoSchedule, startScheduleOrder, completeScheduleOrder, createScheduleOrder } from '@/api/mes'
+import { getItemList } from '@/api/masterdata'
+import { getWorkCenters } from '@/api/production'
 
 // 自定义Magic图标
 const Magic = {
@@ -213,6 +284,69 @@ const pagination = reactive({
   pageSize: 20,
   total: 0
 })
+
+// 新建工单
+const createDialogVisible = ref(false)
+const creating = ref(false)
+const createFormRef = ref()
+const itemOptions = ref<any[]>([])
+const workCenterOptions = ref<any[]>([])
+const createForm = reactive<Record<string, any>>({
+  item: null,
+  quantity: 1,
+  required_date: '',
+  priority: 3,
+  work_center: null,
+  remarks: ''
+})
+const createRules = {
+  quantity: [{ required: true, message: '请输入数量', trigger: 'blur' }],
+  required_date: [{ required: true, message: '请选择需求日期', trigger: 'change' }]
+}
+
+const loadCreateOptions = async () => {
+  try {
+    const [itemsRes, wcRes] = await Promise.all([
+      getItemList({ page_size: 200 }),
+      getWorkCenters({ is_active: true, page_size: 200 })
+    ])
+    itemOptions.value = itemsRes.results || itemsRes || []
+    workCenterOptions.value = wcRes.results || wcRes || []
+  } catch (error) {
+    console.error(error)
+  }
+}
+
+const openCreateDialog = () => {
+  createForm.item = null
+  createForm.quantity = 1
+  createForm.required_date = ''
+  createForm.priority = 3
+  createForm.work_center = null
+  createForm.remarks = ''
+  createDialogVisible.value = true
+  if (itemOptions.value.length === 0 || workCenterOptions.value.length === 0) {
+    loadCreateOptions()
+  }
+}
+
+const submitCreate = async () => {
+  if (!createFormRef.value) return
+  await createFormRef.value.validate(async (valid: boolean) => {
+    if (!valid) return
+    creating.value = true
+    try {
+      await createScheduleOrder({ ...createForm, status: 'PENDING' })
+      ElMessage.success('工单已创建')
+      createDialogVisible.value = false
+      loadOrders()
+    } catch (error) {
+      console.error(error)
+    } finally {
+      creating.value = false
+    }
+  })
+}
 
 const loadData = () => {
   loadCapacity()

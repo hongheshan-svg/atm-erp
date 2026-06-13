@@ -29,7 +29,7 @@ from .routing import (
     RoutingTemplateViewSet,
     WorkStationViewSet,
 )
-from .scheduling import WorkCenterViewSet
+from .scheduling import ProductionScheduleViewSet, ScheduleTaskViewSet, WorkCenterViewSet
 from .sn_traceability import ComponentBindingViewSet, SerialNumberViewSet, SNRuleViewSet, SNTraceRecordViewSet
 from .views import (
     DebugCheckItemViewSet,
@@ -56,6 +56,9 @@ router.register(r'inspection-items', InspectionItemViewSet, basename='inspection
 router.register(r'work-centers', WorkCenterViewSet, basename='work-center')
 router.register(r'schedule-orders', ScheduleOrderViewSet, basename='schedule-order')
 router.register(r'schedule-tasks', APSScheduleTaskViewSet, basename='schedule-task')
+# 生产排程（电子看板今日排程/工作中心负载数据源）
+router.register(r'production-schedules', ProductionScheduleViewSet, basename='production-schedule')
+router.register(r'production-schedule-tasks', ScheduleTaskViewSet, basename='production-schedule-task')
 
 # 安灯系统
 router.register(r'andon-types', AndonTypeViewSet, basename='andon-type')

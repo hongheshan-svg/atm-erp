@@ -14,7 +14,7 @@ Manufacturing Routing Management
 
 from decimal import Decimal
 
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Avg, Sum
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
@@ -629,6 +629,71 @@ class RoutingTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
                 )
 
         new_routing.calculate_totals()
+
+        return Response(RoutingTemplateSerializer(new_routing).data)
+
+    @action(detail=True, methods=['post'])
+    def copy(self, request, pk=None):
+        """复制工艺模板（新建副本，含工序与物料，状态复位为 DRAFT，工时合计由后端重算）
+
+        与 create_version 区别：不改原模板的 is_current/版本号，生成独立新 code 副本。
+        前端复制改为调用此动作，避免把列表只读字段(total_*hours/status)直接回传创建出
+        '工时合计>0 而工序数=0' 或 'APPROVED 但未审批' 的脏数据。
+        """
+        original = self.get_object()
+
+        new_code = request.data.get('code') or f'{original.code}_COPY'
+        new_name = request.data.get('name') or f'{original.name}(副本)'
+
+        if RoutingTemplate.objects.filter(code=new_code, is_deleted=False).exists():
+            return Response({'error': f'工艺编码 {new_code} 已存在'}, status=400)
+
+        with transaction.atomic():
+            new_routing = RoutingTemplate.objects.create(
+                code=new_code,
+                name=new_name,
+                product_category=original.product_category,
+                item=original.item,
+                version='1.0',
+                is_current=True,
+                status='DRAFT',
+                description=original.description,
+                created_by=request.user,
+            )
+
+            for op in original.operations.filter(is_deleted=False):
+                new_op = RoutingOperation.objects.create(
+                    routing=new_routing,
+                    sequence=op.sequence,
+                    operation_code=op.operation_code,
+                    operation_name=op.operation_name,
+                    operation_type=op.operation_type,
+                    work_station=op.work_station,
+                    work_center=op.work_center,
+                    setup_hours=op.setup_hours,
+                    standard_hours=op.standard_hours,
+                    cycle_time=op.cycle_time,
+                    operators_required=op.operators_required,
+                    skill_requirements=op.skill_requirements,
+                    equipment_required=op.equipment_required,
+                    tools_required=op.tools_required,
+                    inspection_required=op.inspection_required,
+                    work_instruction=op.work_instruction,
+                    safety_notes=op.safety_notes,
+                    created_by=request.user,
+                )
+
+                for mat in op.materials.filter(is_deleted=False):
+                    OperationMaterial.objects.create(
+                        operation=new_op,
+                        item=mat.item,
+                        quantity=mat.quantity,
+                        unit=mat.unit,
+                        consumption_type=mat.consumption_type,
+                        created_by=request.user,
+                    )
+
+            new_routing.calculate_totals()
 
         return Response(RoutingTemplateSerializer(new_routing).data)
 

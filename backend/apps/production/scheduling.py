@@ -7,10 +7,10 @@ MES核心功能
 from datetime import date, timedelta
 from decimal import Decimal
 
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Sum
 from django.utils import timezone
-from rest_framework import serializers, viewsets
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -485,39 +485,59 @@ class ProductionScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
 
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
-        """确认排程"""
-        schedule = self.get_object()
-        schedule.status = 'CONFIRMED'
-        schedule.save()
+        """确认排程（仅允许 DRAFT→CONFIRMED）"""
+        with transaction.atomic():
+            schedule = ProductionSchedule.objects.select_for_update().get(pk=self.get_object().pk)
+            if schedule.status != 'DRAFT':
+                return Response(
+                    {'error': '只有草稿状态的排程可以确认'}, status=status.HTTP_400_BAD_REQUEST
+                )
+            schedule.status = 'CONFIRMED'
+            schedule.save()
         return Response(self.get_serializer(schedule).data)
 
     @action(detail=True, methods=['post'])
     def release(self, request, pk=None):
-        """下达排程"""
-        schedule = self.get_object()
-        schedule.status = 'RELEASED'
-        schedule.save()
+        """下达排程（仅允许 CONFIRMED→RELEASED）"""
+        with transaction.atomic():
+            schedule = ProductionSchedule.objects.select_for_update().get(pk=self.get_object().pk)
+            if schedule.status != 'CONFIRMED':
+                return Response(
+                    {'error': '只有已确认的排程可以下达'}, status=status.HTTP_400_BAD_REQUEST
+                )
+            schedule.status = 'RELEASED'
+            schedule.save()
         return Response(self.get_serializer(schedule).data)
 
     @action(detail=True, methods=['post'])
     def start(self, request, pk=None):
-        """开始生产"""
-        schedule = self.get_object()
-        schedule.status = 'IN_PROGRESS'
-        schedule.actual_start = timezone.now()
-        schedule.save()
+        """开始生产（仅允许 RELEASED→IN_PROGRESS）"""
+        with transaction.atomic():
+            schedule = ProductionSchedule.objects.select_for_update().get(pk=self.get_object().pk)
+            if schedule.status != 'RELEASED':
+                return Response(
+                    {'error': '只有已下达的排程可以开始生产'}, status=status.HTTP_400_BAD_REQUEST
+                )
+            schedule.status = 'IN_PROGRESS'
+            schedule.actual_start = timezone.now()
+            schedule.save()
         return Response(self.get_serializer(schedule).data)
 
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
-        """完成生产"""
-        schedule = self.get_object()
-        schedule.status = 'COMPLETED'
-        schedule.actual_end = timezone.now()
-        if schedule.actual_start:
-            duration = (schedule.actual_end - schedule.actual_start).total_seconds() / 3600
-            schedule.actual_hours = Decimal(str(round(duration, 2)))
-        schedule.save()
+        """完成生产（仅允许 IN_PROGRESS→COMPLETED）"""
+        with transaction.atomic():
+            schedule = ProductionSchedule.objects.select_for_update().get(pk=self.get_object().pk)
+            if schedule.status != 'IN_PROGRESS':
+                return Response(
+                    {'error': '只有生产中的排程可以完成'}, status=status.HTTP_400_BAD_REQUEST
+                )
+            schedule.status = 'COMPLETED'
+            schedule.actual_end = timezone.now()
+            if schedule.actual_start:
+                duration = (schedule.actual_end - schedule.actual_start).total_seconds() / 3600
+                schedule.actual_hours = Decimal(str(round(duration, 2)))
+            schedule.save()
         return Response(self.get_serializer(schedule).data)
 
     @action(detail=False, methods=['get'])
@@ -543,21 +563,32 @@ class ScheduleTaskViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
 
     @action(detail=True, methods=['post'])
     def start(self, request, pk=None):
-        """开始任务"""
-        task = self.get_object()
-        task.status = 'IN_PROGRESS'
-        task.actual_start = timezone.now()
-        task.save()
+        """开始任务（仅允许 PENDING/PAUSED→IN_PROGRESS）"""
+        with transaction.atomic():
+            task = ScheduleTask.objects.select_for_update().get(pk=self.get_object().pk)
+            if task.status not in ('PENDING', 'PAUSED'):
+                return Response(
+                    {'error': '只有待处理或暂停的任务可以开始'}, status=status.HTTP_400_BAD_REQUEST
+                )
+            task.status = 'IN_PROGRESS'
+            if task.actual_start is None:
+                task.actual_start = timezone.now()
+            task.save()
         return Response(self.get_serializer(task).data)
 
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
-        """完成任务"""
-        task = self.get_object()
-        task.status = 'COMPLETED'
-        task.actual_end = timezone.now()
-        task.progress = 100
-        task.save()
+        """完成任务（仅允许 IN_PROGRESS→COMPLETED）"""
+        with transaction.atomic():
+            task = ScheduleTask.objects.select_for_update().get(pk=self.get_object().pk)
+            if task.status != 'IN_PROGRESS':
+                return Response(
+                    {'error': '只有进行中的任务可以完成'}, status=status.HTTP_400_BAD_REQUEST
+                )
+            task.status = 'COMPLETED'
+            task.actual_end = timezone.now()
+            task.progress = 100
+            task.save()
         return Response(self.get_serializer(task).data)
 
     @action(detail=True, methods=['post'])

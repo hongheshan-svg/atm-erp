@@ -45,6 +45,9 @@ export function getAndonCallDetail(id: number) {
 export function getScheduleOrderList(params?: Record<string, any>) {
   return request({ url: '/production/schedule-orders/', method: 'get', params })
 }
+export function createScheduleOrder(data: any) {
+  return request({ url: '/production/schedule-orders/', method: 'post', data })
+}
 export function autoSchedule(data: any) {
   return request({ url: '/production/schedule-orders/auto_schedule/', method: 'post', data })
 }

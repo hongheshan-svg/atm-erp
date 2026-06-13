@@ -11,6 +11,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
 from apps.core.permission_mixin import PermissionMixin
 
@@ -143,7 +144,9 @@ class FiniteCapacityPlanSerializer(serializers.ModelSerializer):
 # ─── ViewSets ───────────────────────────────────────────────────
 
 
-class FiniteCapacityPlanViewSet(PermissionMixin, viewsets.ModelViewSet):
+class FiniteCapacityPlanViewSet(
+    PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
+):
     permission_module = 'production'
     permission_resource = 'finite_capacity_plan'
     serializer_class = FiniteCapacityPlanSerializer
@@ -151,9 +154,6 @@ class FiniteCapacityPlanViewSet(PermissionMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         return FiniteCapacityPlan.objects.filter(is_deleted=False)
-
-    def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
 
     @action(detail=True, methods=['post'])
     def run_schedule(self, request, pk=None):
@@ -196,7 +196,9 @@ class FiniteCapacityPlanViewSet(PermissionMixin, viewsets.ModelViewSet):
         })
 
 
-class ScheduledTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
+class ScheduledTaskViewSet(
+    PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
+):
     permission_module = 'production'
     permission_resource = 'scheduled_task'
     serializer_class = ScheduledTaskSerializer
@@ -208,6 +210,3 @@ class ScheduledTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
         if plan_id:
             qs = qs.filter(plan_id=plan_id)
         return qs
-
-    def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
