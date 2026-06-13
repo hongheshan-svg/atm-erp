@@ -29,11 +29,14 @@
       </template>
 
       <el-form :inline="true" :model="searchForm" class="search-form">
-        <el-form-item label="物料编码">
-          <el-input v-model="searchForm.sku" placeholder="搜索物料编码" clearable />
-        </el-form-item>
-        <el-form-item label="名称">
-          <el-input v-model="searchForm.name" placeholder="搜索物料名称" clearable />
+        <el-form-item label="关键词">
+          <el-input
+            v-model="searchForm.search"
+            placeholder="搜索物料编码/名称/规格"
+            clearable
+            style="width: 240px"
+            @keyup.enter="loadItems"
+          />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="loadItems">搜索</el-button>
@@ -440,8 +443,7 @@ const codeGenForm = reactive({
 })
 
 const searchForm = reactive({
-  sku: '',
-  name: ''
+  search: ''
 })
 
 const pagination = reactive({
@@ -716,7 +718,7 @@ const handleSubmit = async () => {
 }
 
 const resetSearch = () => {
-  Object.assign(searchForm, { sku: '', name: '' })
+  Object.assign(searchForm, { search: '' })
   pagination.page = 1
   loadItems()
 }

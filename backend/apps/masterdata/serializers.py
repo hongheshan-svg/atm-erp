@@ -202,6 +202,18 @@ class CustomerSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['created_at', 'updated_at']
 
+    def validate_code(self, value):
+        """手填编码时校验重复，返回字段级 400（避免击穿到 DB 唯一约束 500）。"""
+        code = (value or '').strip()
+        if not code:
+            return value
+        qs = Customer.all_objects.filter(code=code)
+        if self.instance is not None:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError('客户编码已存在')
+        return value
+
 
 class SupplierSerializer(serializers.ModelSerializer):
     """Supplier serializer."""
@@ -239,6 +251,18 @@ class SupplierSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = ['created_at', 'updated_at']
+
+    def validate_code(self, value):
+        """手填编码时校验重复，返回字段级 400（避免击穿到 DB 唯一约束 500）。"""
+        code = (value or '').strip()
+        if not code:
+            return value
+        qs = Supplier.all_objects.filter(code=code)
+        if self.instance is not None:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError('供应商编码已存在')
+        return value
 
 
 class WarehouseSerializer(serializers.ModelSerializer):

@@ -227,7 +227,16 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
     workflow_business_type = 'SALES_ORDER'
     workflow_amount_field = 'total_with_tax'
     workflow_no_field = 'order_no'
-    
+
+    def perform_create(self, serializer):
+        """创建销售订单前校验客户状态：停用客户禁止建单（不影响已存在在途单据）。"""
+        from rest_framework.exceptions import ValidationError
+
+        customer = serializer.validated_data.get('customer')
+        if customer is not None and getattr(customer, 'status', None) == 'INACTIVE':
+            raise ValidationError({'customer': f'客户「{customer.name}」已停用，无法新建销售订单'})
+        super().perform_create(serializer)
+
     @action(detail=False, methods=['get'])
     def for_linking(self, request):
         """获取可用于关联的销售订单（不受数据权限限制）"""
@@ -349,14 +358,22 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
     
     def _do_confirm(self, so, request):
         """执行订单确认逻辑"""
-        so.status = 'CONFIRMED'
-        so.save()
+        # 信用额度 / 客户状态校验：停用、冻结、黑名单、超额时拦截
+        from apps.masterdata.credit_management import check_customer_credit_for_order
+        order_amount = so.total_with_tax or so.total_amount or 0
+        passed, message = check_customer_credit_for_order(so.customer, order_amount)
+        if not passed:
+            return Response({'error': message}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 应收账款 + 付款计划走共用函数（与工作流审批回写一致，避免两条路径行为漂移）
-        from apps.sales.services import create_sales_order_receivables
-        schedules = create_sales_order_receivables(
-            so, request.user, request.data.get('due_date', so.delivery_date)
-        )
+        with transaction.atomic():
+            so.status = 'CONFIRMED'
+            so.save()
+
+            # 应收账款 + 付款计划走共用函数（与工作流审批回写一致，避免两条路径行为漂移）
+            from apps.sales.services import create_sales_order_receivables
+            schedules = create_sales_order_receivables(
+                so, request.user, request.data.get('due_date', so.delivery_date)
+            )
 
         response_data = SalesOrderSerializer(so).data
         response_data['payment_schedules_count'] = len(schedules)

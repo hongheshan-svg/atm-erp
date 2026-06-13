@@ -22,12 +22,12 @@
         </el-form-item>
         <el-form-item label="角色">
           <el-select v-model="searchForm.role" placeholder="全部" clearable style="width: 120px;">
-            <el-option label="决策者" value="DECISION_MAKER" />
-            <el-option label="影响者" value="INFLUENCER" />
-            <el-option label="执行者" value="EXECUTOR" />
-            <el-option label="使用者" value="USER" />
-            <el-option label="财务" value="FINANCE" />
-            <el-option label="技术" value="TECHNICAL" />
+            <el-option label="决策者" value="DECISION" />
+            <el-option label="技术负责人" value="TECHNICAL" />
+            <el-option label="采购负责人" value="PURCHASE" />
+            <el-option label="财务负责人" value="FINANCE" />
+            <el-option label="项目负责人" value="PROJECT" />
+            <el-option label="操作人员" value="OPERATOR" />
             <el-option label="其他" value="OTHER" />
           </el-select>
         </el-form-item>

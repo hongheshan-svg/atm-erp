@@ -220,10 +220,10 @@
         <el-descriptions-item label="客户">{{ creditDetail.customer_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="信用额度">¥{{ creditDetail.credit_limit?.toLocaleString() || 0 }}</el-descriptions-item>
         <el-descriptions-item label="已用额度">¥{{ creditDetail.used_amount?.toLocaleString() || 0 }}</el-descriptions-item>
-        <el-descriptions-item label="剩余额度">¥{{ creditDetail.available_amount?.toLocaleString() || 0 }}</el-descriptions-item>
-        <el-descriptions-item label="信用等级">{{ creditDetail.credit_grade || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="剩余额度">¥{{ creditDetail.available_credit?.toLocaleString() || 0 }}</el-descriptions-item>
+        <el-descriptions-item label="信用等级">{{ creditDetail.level_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="状态">{{ creditDetail.status_display || creditDetail.status }}</el-descriptions-item>
-        <el-descriptions-item label="最后评估日期">{{ creditDetail.last_evaluation_date || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="最后评估日期">{{ creditDetail.last_reviewed_at || '-' }}</el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ creditDetail.created_at || '-' }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="2">{{ creditDetail.remarks || '-' }}</el-descriptions-item>
       </el-descriptions>

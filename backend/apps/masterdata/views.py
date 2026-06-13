@@ -834,14 +834,24 @@ class CustomerViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, views
         instance.save(update_fields=['is_deleted', 'deleted_at'])
     
     def perform_create(self, serializer):
-        """Auto-generate customer code if not provided."""
+        """Auto-generate customer code if not provided, and create credit profile."""
         from apps.core.utils import generate_code
-        
+        from apps.masterdata.credit_management import CustomerCredit
+
         code = serializer.validated_data.get('code', '').strip()
         if not code:
             code = generate_code('C', rule_type='CUSTOMER')
-        serializer.save(code=code)
-    
+        customer = serializer.save(code=code)
+
+        # 自动为新客户建立信用档案，初始额度取客户的信用额度字段，保持两处口径一致
+        CustomerCredit.objects.get_or_create(
+            customer=customer,
+            defaults={
+                'credit_limit': customer.credit_limit or 0,
+                'created_by': self.request.user if self.request.user.is_authenticated else None,
+            },
+        )
+
     @action(detail=False, methods=['get'])
     def download_template(self, request):
         """Download customer import template Excel file."""
@@ -1370,7 +1380,19 @@ class WarehouseLocationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
     filterset_fields = ['warehouse', 'parent', 'location_type', 'is_active', 'is_deleted']
     search_fields = ['code', 'name', 'full_path']
     ordering_fields = ['warehouse', 'sort_order', 'code', 'created_at']
-    
+
+    def perform_destroy(self, instance):
+        """软删除库位时级联软删除其全部子库位，避免产生孤儿库位。"""
+        from django.utils import timezone
+
+        now = timezone.now()
+        targets = [instance, *instance.get_descendants()]
+        for loc in targets:
+            if not loc.is_deleted:
+                loc.is_deleted = True
+                loc.deleted_at = now
+                loc.save(update_fields=['is_deleted', 'deleted_at'])
+
     @action(detail=False, methods=['get'])
     def tree(self, request):
         """Get location tree for all warehouses."""

@@ -31,13 +31,18 @@
             {{ getTypeLabel(row.warehouse_type) }}
           </template>
         </el-table-column>
+        <el-table-column prop="is_active" label="状态" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.is_active ? 'success' : 'info'" size="small">{{ row.is_active ? '启用' : '停用' }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" :width="canDelete ? 200 : 100" fixed="right">
           <template #default="{ row }">
             <el-button size="small" v-permission="'masterdata:warehouse:edit'" @click="handleEdit(row)">编辑</el-button>
-            <el-button 
+            <el-button
               v-if="canDelete"
-              size="small" 
-              type="danger" 
+              size="small"
+              type="danger"
               @click="deleteRow(row)"
               :loading="deleteLoading"
             >
@@ -46,14 +51,25 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <el-pagination
+        v-model:current-page="pagination.page"
+        v-model:page-size="pagination.pageSize"
+        :page-sizes="[20, 50, 100]"
+        :total="pagination.total"
+        layout="total, sizes, prev, pager, next"
+        style="margin-top: 16px; justify-content: flex-end;"
+        @size-change="loadWarehouses"
+        @current-change="loadWarehouses"
+      />
     </el-card>
 
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="600px">
-      <el-form :model="form" ref="formRef" label-width="120px">
-        <el-form-item label="编码">
-          <el-input v-model="form.code" />
+      <el-form :model="form" ref="formRef" label-width="120px" :rules="formRules">
+        <el-form-item label="编码" prop="code">
+          <el-input v-model="form.code" placeholder="请输入仓库编码（唯一）" />
         </el-form-item>
-        <el-form-item label="名称">
+        <el-form-item label="名称" prop="name">
           <el-input v-model="form.name" />
         </el-form-item>
         <el-form-item label="地址">
@@ -67,10 +83,16 @@
             <el-option label="虚拟仓" value="VIRTUAL" />
           </el-select>
         </el-form-item>
+        <el-form-item label="联系电话">
+          <el-input v-model="form.contact_phone" />
+        </el-form-item>
+        <el-form-item label="启用状态">
+          <el-switch v-model="form.is_active" />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmit">提交</el-button>
+        <el-button type="primary" @click="handleSubmit" :loading="submitLoading">提交</el-button>
       </template>
     </el-dialog>
   </div>
@@ -84,11 +106,23 @@ import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 
 const loading = ref(false)
+const submitLoading = ref(false)
 const warehouses = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增仓库')
 const isEdit = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
+
+const pagination = reactive({
+  page: 1,
+  pageSize: 20,
+  total: 0
+})
+
+const formRules = {
+  code: [{ required: true, message: '请输入仓库编码', trigger: 'blur' }],
+  name: [{ required: true, message: '请输入仓库名称', trigger: 'blur' }]
+}
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -108,7 +142,9 @@ const form = reactive({
   code: '',
   name: '',
   address: '',
-  warehouse_type: 'MAIN'
+  warehouse_type: 'MAIN',
+  contact_phone: '',
+  is_active: true
 })
 
 const getTypeLabel = (type) => {
@@ -119,8 +155,12 @@ const getTypeLabel = (type) => {
 async function loadWarehouses() {
   loading.value = true
   try {
-    const response = await getWarehouseList()
+    const response = await getWarehouseList({
+      page: pagination.page,
+      page_size: pagination.pageSize
+    })
     warehouses.value = response.results || response || []
+    pagination.total = response.count || warehouses.value.length || 0
   } catch (error) {
     ElMessage.error('加载仓库失败')
   } finally {
@@ -131,7 +171,10 @@ async function loadWarehouses() {
 const handleAdd = () => {
   dialogTitle.value = '新增仓库'
   isEdit.value = false
-  Object.assign(form, { id: null, code: '', name: '', address: '', warehouse_type: 'MAIN' })
+  Object.assign(form, {
+    id: null, code: '', name: '', address: '', warehouse_type: 'MAIN', contact_phone: '', is_active: true
+  })
+  formRef.value?.clearValidate?.()
   dialogVisible.value = true
 }
 
@@ -139,10 +182,16 @@ const handleEdit = (row) => {
   dialogTitle.value = '编辑仓库'
   isEdit.value = true
   Object.assign(form, row)
+  formRef.value?.clearValidate?.()
   dialogVisible.value = true
 }
 
 const handleSubmit = async () => {
+  if (formRef.value) {
+    const valid = await formRef.value.validate().catch(() => false)
+    if (!valid) return
+  }
+  submitLoading.value = true
   try {
     if (isEdit.value) {
       await updateWarehouse(form.id, form)
@@ -153,8 +202,12 @@ const handleSubmit = async () => {
     }
     dialogVisible.value = false
     loadWarehouses()
-  } catch (error) {
-    ElMessage.error('保存仓库失败')
+  } catch (error: any) {
+    const data = error?.response?.data
+    const detail = data?.code?.[0] || data?.name?.[0] || data?.detail || data?.error
+    ElMessage.error(detail || '保存仓库失败')
+  } finally {
+    submitLoading.value = false
   }
 }
 

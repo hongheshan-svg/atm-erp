@@ -168,15 +168,46 @@ class CustomerCredit(BaseModel):
 
     def update_used_amount(self):
         """更新已用额度"""
-        from apps.finance.models import AccountsReceivable
+        from django.db.models import F
 
-        # 计算未收款金额
-        ar_amount = AccountsReceivable.objects.filter(
-            customer=self.customer, status__in=['PENDING', 'PARTIAL'], is_deleted=False
-        ).aggregate(total=Sum('balance_amount'))['total'] or Decimal('0')
+        from apps.finance.models import AccountReceivable
+
+        # 计算未收款金额（应收-已收），仅统计待收款/部分收款/逾期
+        ar_amount = AccountReceivable.objects.filter(
+            customer=self.customer, status__in=['PENDING', 'PARTIAL', 'OVERDUE'], is_deleted=False
+        ).aggregate(total=Sum(F('amount_due') - F('amount_paid')))['total'] or Decimal('0')
 
         self.used_amount = ar_amount
         self.save()
+
+
+def check_customer_credit_for_order(customer, amount) -> tuple:
+    """销售下单/确认时的客户信用与状态校验。
+
+    校验内容：
+    1. 客户已停用（status == INACTIVE）直接拒绝；
+    2. 客户有信用档案时，调用 CustomerCredit.check_credit 校验冻结/黑名单/超额；
+    3. 客户无信用档案时放行（按业务约定不强制建档拦截）。
+
+    Args:
+        customer: masterdata.Customer 实例
+        amount: 订单含税金额（Decimal/数值）
+
+    Returns:
+        (passed: bool, message: str)
+    """
+    if customer is None:
+        return True, 'OK'
+
+    if getattr(customer, 'status', None) == 'INACTIVE':
+        return False, f'客户「{customer.name}」已停用，无法下单'
+
+    try:
+        credit = CustomerCredit.objects.get(customer=customer, is_deleted=False)
+    except CustomerCredit.DoesNotExist:
+        return True, 'OK'
+
+    return credit.check_credit(Decimal(str(amount or 0)))
 
 
 class CreditAdjustment(BaseModel):
