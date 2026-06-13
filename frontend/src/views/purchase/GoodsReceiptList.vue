@@ -47,7 +47,7 @@
       </div>
 
       <el-table :data="receipts" v-loading="loading" border stripe @selection-change="handleSelectionChange">
-        <el-table-column v-permission="'purchase:goods_receipt:delete'" v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'purchase:goods_receipt:delete'" v-if="canDelete" type="selection" width="55" fixed :selectable="(row) => row.status === 'DRAFT'" />
         <el-table-column prop="receipt_no" label="收货单号" width="150" />
         <el-table-column prop="purchase_order_no" label="采购订单号" width="150" />
         <el-table-column prop="supplier_name" label="供应商" min-width="150" />
@@ -64,10 +64,10 @@
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" type="primary" v-permission="'purchase:goods_receipt:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button size="small" type="success" @click="handleConfirm(row)" v-if="row.status === 'DRAFT'">确认入库</el-button>
-            <el-button 
-              v-if="canDelete"
-              size="small" 
-              type="danger" 
+            <el-button
+              v-if="canDelete && row.status === 'DRAFT'"
+              size="small"
+              type="danger"
               @click="deleteRow(row)"
               :loading="deleteLoading"
             >
@@ -292,8 +292,8 @@ const loadReceipts = async () => {
       page: pagination.page, 
       page_size: pagination.pageSize 
     }
-    if (searchForm.receipt_no) params.receipt_no = searchForm.receipt_no
-    if (searchForm.purchase_order) params.purchase_order = searchForm.purchase_order
+    if (searchForm.receipt_no) params.search = searchForm.receipt_no
+    if (searchForm.purchase_order) params.po = searchForm.purchase_order
     if (searchForm.status) params.status = searchForm.status
     
     const response = await getGoodsReceipts(params)
@@ -475,28 +475,30 @@ const handleConfirm = async (row) => {
 // handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 // 处理从采购订单页面跳转过来的情况
-const handleUrlParams = () => {
+const handleUrlParams = async () => {
+  // 从订单详情"查看"跳转：自动打开收货单详情弹窗
+  const receiptId = route.query.receipt_id
+  if (receiptId) {
+    await handleView({ id: parseInt(receiptId as string) })
+    return
+  }
+
   const poId = route.query.po_id
   if (poId) {
     // 自动打开创建收货单对话框并选择采购订单
     dialogTitle.value = '创建收货单'
     isEdit.value = false
     resetForm()
-    form.po = parseInt(poId)
-    onPurchaseOrderChange(parseInt(poId))
+    form.po = parseInt(poId as string)
+    onPurchaseOrderChange(parseInt(poId as string))
     dialogVisible.value = true
   }
 }
 
-onMounted(() => {
-  loadReceipts()
-  loadPurchaseOrders()
-  loadWarehouses()
-  
-  // 延迟处理URL参数，确保数据加载完成
-  setTimeout(() => {
-    handleUrlParams()
-  }, 500)
+onMounted(async () => {
+  // 等待依赖数据加载完成后再处理 URL 参数，避免慢网下下拉为空的竞态
+  await Promise.all([loadReceipts(), loadPurchaseOrders(), loadWarehouses()])
+  await handleUrlParams()
 })
 </script>
 

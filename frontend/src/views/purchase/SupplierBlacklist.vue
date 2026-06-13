@@ -117,14 +117,14 @@
     <!-- 黑名单详情 -->
     <el-dialog v-model="viewDialogVisible" title="黑名单详情" width="600px">
       <el-descriptions :column="1" border>
-        <el-descriptions-item label="供应商">{{ viewDetail.supplier_name }}</el-descriptions-item>
+        <el-descriptions-item label="供应商">{{ viewDetail.supplier_detail?.name }}</el-descriptions-item>
         <el-descriptions-item label="列入日期">{{ viewDetail.blacklist_date }}</el-descriptions-item>
         <el-descriptions-item label="列入原因">{{ viewDetail.reason }}</el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag :type="viewDetail.status === 'ACTIVE' ? 'danger' : 'success'">{{ viewDetail.status === 'ACTIVE' ? '有效' : '已解除' }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item v-if="viewDetail.lifted_date" label="解除日期">{{ viewDetail.lifted_date }}</el-descriptions-item>
-        <el-descriptions-item v-if="viewDetail.lift_reason" label="解除原因">{{ viewDetail.lift_reason }}</el-descriptions-item>
+        <el-descriptions-item v-if="viewDetail.lifted_reason" label="解除原因">{{ viewDetail.lifted_reason }}</el-descriptions-item>
         <el-descriptions-item label="操作人">{{ viewDetail.created_by_name || '-' }}</el-descriptions-item>
       </el-descriptions>
       <template #footer>
@@ -140,6 +140,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
 import { getBlacklistList, createBlacklist, liftBlacklist } from '@/api/purchase/evaluation'
+import { getSupplierList } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase/blacklist/', { onSuccess: () => fetchData() })
@@ -193,12 +194,22 @@ const fetchData = async () => {
   }
 }
 
+const loadSuppliers = async () => {
+  try {
+    const res = await getSupplierList({ page_size: 1000 })
+    suppliers.value = res.results || res || []
+  } catch (error) {
+    console.error('SupplierBlacklist getSupplierList error:', error)
+  }
+}
+
 const handleCreate = () => {
   Object.assign(form, {
     supplier: null,
     blacklist_date: new Date().toISOString().split('T')[0],
     reason: ''
   })
+  if (suppliers.value.length === 0) loadSuppliers()
   dialogVisible.value = true
 }
 
@@ -240,6 +251,7 @@ const confirmLift = async () => {
 
 onMounted(() => {
   fetchData()
+  loadSuppliers()
 })
 </script>
 

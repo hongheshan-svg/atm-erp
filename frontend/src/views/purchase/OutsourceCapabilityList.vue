@@ -24,17 +24,17 @@
         <el-table-column type="selection" width="45" />
         <el-table-column prop="supplier_name" label="供应商" width="150" />
         <el-table-column prop="process_type_display" label="加工类型" width="120" />
-        <el-table-column prop="capability_description" label="能力描述" />
-        <el-table-column prop="max_capacity" label="最大产能" width="100" />
-        <el-table-column prop="lead_time_days" label="交期(天)" width="100" />
+        <el-table-column prop="process_detail" label="工艺明细" />
+        <el-table-column prop="daily_capacity" label="日产能" width="100" />
+        <el-table-column prop="capacity_unit" label="单位" width="80" />
         <el-table-column prop="quality_rating" label="质量评级" width="100">
           <template #default="{ row }">
             <el-rate v-model="row.quality_rating" disabled />
           </template>
         </el-table-column>
-        <el-table-column prop="is_preferred" label="首选" width="80">
+        <el-table-column prop="is_verified" label="已验证" width="80">
           <template #default="{ row }">
-            <el-tag v-if="row.is_preferred" type="success">是</el-tag>
+            <el-tag v-if="row.is_verified" type="success">是</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
@@ -57,29 +57,38 @@
         </el-form-item>
         <el-form-item label="加工类型" prop="process_type">
           <el-select v-model="form.process_type" placeholder="选择类型" style="width: 100%">
-            <el-option label="CNC加工" value="CNC" />
-            <el-option label="钣金加工" value="SHEET_METAL" />
+            <el-option label="机加工" value="MACHINING" />
             <el-option label="焊接" value="WELDING" />
+            <el-option label="喷涂/烤漆" value="PAINTING" />
+            <el-option label="电镀" value="PLATING" />
+            <el-option label="热处理" value="HEAT_TREAT" />
             <el-option label="表面处理" value="SURFACE" />
-            <el-option label="热处理" value="HEAT" />
             <el-option label="装配" value="ASSEMBLY" />
+            <el-option label="测试" value="TESTING" />
+            <el-option label="激光加工" value="LASER" />
+            <el-option label="冲压" value="STAMPING" />
+            <el-option label="铸造" value="CASTING" />
+            <el-option label="锻造" value="FORGING" />
+            <el-option label="注塑" value="INJECTION" />
+            <el-option label="PCB制造" value="PCB" />
+            <el-option label="SMT贴片" value="SMT" />
             <el-option label="其他" value="OTHER" />
           </el-select>
         </el-form-item>
-        <el-form-item label="能力描述" prop="capability_description">
-          <el-input v-model="form.capability_description" type="textarea" :rows="3" />
+        <el-form-item label="工艺明细" prop="process_detail">
+          <el-input v-model="form.process_detail" type="textarea" :rows="3" />
         </el-form-item>
-        <el-form-item label="最大产能" prop="max_capacity">
-          <el-input-number v-model="form.max_capacity" :min="0" style="width: 100%" />
+        <el-form-item label="日产能" prop="daily_capacity">
+          <el-input-number v-model="form.daily_capacity" :min="0" style="width: 100%" />
         </el-form-item>
-        <el-form-item label="交期(天)" prop="lead_time_days">
-          <el-input-number v-model="form.lead_time_days" :min="1" style="width: 100%" />
+        <el-form-item label="产能单位" prop="capacity_unit">
+          <el-input v-model="form.capacity_unit" style="width: 100%" />
         </el-form-item>
         <el-form-item label="质量评级">
           <el-rate v-model="form.quality_rating" />
         </el-form-item>
-        <el-form-item label="首选供应商">
-          <el-switch v-model="form.is_preferred" />
+        <el-form-item label="已验证">
+          <el-switch v-model="form.is_verified" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -114,8 +123,8 @@ const isEdit = ref(false)
 const formRef = ref(null)
 
 const form = reactive({
-  id: null, supplier: null, process_type: '', capability_description: '',
-  max_capacity: 0, lead_time_days: 1, quality_rating: 0, is_preferred: false
+  id: null, supplier: null, process_type: '', process_detail: '',
+  daily_capacity: 0, capacity_unit: '件', quality_rating: 0, is_verified: false
 })
 
 const rules = {
@@ -147,14 +156,14 @@ const loadSuppliers = async () => {
 
 const handleCreate = () => {
   isEdit.value = false
-  Object.assign(form, { id: null, supplier: null, process_type: '', capability_description: '', max_capacity: 0, lead_time_days: 1, quality_rating: 0, is_preferred: false })
+  Object.assign(form, { id: null, supplier: null, process_type: '', process_detail: '', daily_capacity: 0, capacity_unit: '件', quality_rating: 0, is_verified: false })
   formRef.value?.resetFields()
   dialogVisible.value = true
 }
 
 const handleEdit = (row) => {
   isEdit.value = true
-  Object.assign(form, { id: row.id, supplier: row.supplier, process_type: row.process_type, capability_description: row.capability_description, max_capacity: row.max_capacity, lead_time_days: row.lead_time_days, quality_rating: row.quality_rating, is_preferred: row.is_preferred })
+  Object.assign(form, { id: row.id, supplier: row.supplier, process_type: row.process_type, process_detail: row.process_detail, daily_capacity: row.daily_capacity, capacity_unit: row.capacity_unit, quality_rating: row.quality_rating, is_verified: row.is_verified })
   dialogVisible.value = true
 }
 

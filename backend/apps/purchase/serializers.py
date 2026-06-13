@@ -424,8 +424,9 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
                 setattr(instance, attr, value)
             instance.save()
 
-            # Delete old lines and create new ones
-            instance.lines.all().delete()
+            # 软删除旧明细（避免硬删触发收货明细 PROTECT 外键 ProtectedError 500）
+            for old_line in instance.lines.filter(is_deleted=False):
+                old_line.soft_delete()
 
             for line_data in lines_data:
                 if line_data.get('item') and line_data.get('qty'):
@@ -553,9 +554,58 @@ class GoodsReceiptSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['receipt_no', 'created_at', 'updated_at']
 
+    def _validate_receipt_lines(self, po, lines_data, exclude_receipt_id=None):
+        """校验收货明细：PO 状态、po_line 归属、剩余可收数量（含同 PO 其他草稿收货单占用）。"""
+        if po is None:
+            raise serializers.ValidationError({'po': '请选择采购订单'})
+
+        # PO 状态校验：只能对已确认/部分收货的订单收货
+        if po.status not in ('CONFIRMED', 'PARTIAL'):
+            raise serializers.ValidationError({'po': '只能对已确认或部分收货状态的采购订单创建收货单'})
+
+        # 统计同一 PO 下其他未确认（草稿）收货单已占用的待收数量（按 po_line 归集）
+        draft_receipts = GoodsReceipt.objects.filter(po=po, status='DRAFT', is_deleted=False)
+        if exclude_receipt_id:
+            draft_receipts = draft_receipts.exclude(pk=exclude_receipt_id)
+        reserved_by_line = {}
+        for draft_line in GoodsReceiptLine.objects.filter(
+            receipt__in=draft_receipts, is_deleted=False
+        ):
+            reserved_by_line[draft_line.po_line_id] = (
+                reserved_by_line.get(draft_line.po_line_id, 0) + float(draft_line.qty or 0)
+            )
+
+        for line_data in lines_data:
+            if not line_data.get('item') or not line_data.get('qty'):
+                continue
+            po_line_id = line_data.get('po_line')
+            if not po_line_id:
+                raise serializers.ValidationError({'lines': '收货明细必须关联采购订单明细(po_line)'})
+            try:
+                po_line = PurchaseOrderLine.objects.get(pk=po_line_id, is_deleted=False)
+            except PurchaseOrderLine.DoesNotExist:
+                raise serializers.ValidationError({'lines': f'采购订单明细 {po_line_id} 不存在'})
+            # po_line 归属校验
+            if po_line.po_id != po.id:
+                raise serializers.ValidationError({'lines': '收货明细的采购订单明细不属于该采购订单'})
+
+            qty = float(line_data['qty'] or 0)
+            if qty <= 0:
+                raise serializers.ValidationError({'lines': '收货数量必须大于0'})
+
+            # 剩余可收 = 订单数量 - 已收 - 同PO其他草稿占用
+            remaining = float(po_line.qty) - float(po_line.received_qty) - reserved_by_line.get(po_line_id, 0)
+            if qty > remaining:
+                raise serializers.ValidationError(
+                    {'lines': f'物料超收：明细可收数量为 {remaining}，本次收货 {qty}'}
+                )
+            # 累计本次提交各行占用，避免同一收货单内重复行超收
+            reserved_by_line[po_line_id] = reserved_by_line.get(po_line_id, 0) + qty
+
     def create(self, validated_data):
         """Create GoodsReceipt with lines."""
         lines_data = self.initial_data.get('lines', [])
+        self._validate_receipt_lines(validated_data.get('po'), lines_data)
 
         with transaction.atomic():
             receipt = GoodsReceipt.objects.create(**validated_data)
@@ -576,7 +626,13 @@ class GoodsReceiptSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         """Update GoodsReceipt with lines."""
+        # 已确认/完成的收货单不允许改写明细（避免库存与已收数量账实分离）
+        if instance.status != 'DRAFT':
+            raise serializers.ValidationError({'status': '只能修改草稿状态的收货单，已确认收货单请走退货冲销'})
+
         lines_data = self.initial_data.get('lines', [])
+        target_po = validated_data.get('po', instance.po)
+        self._validate_receipt_lines(target_po, lines_data, exclude_receipt_id=instance.id)
 
         with transaction.atomic():
             # Update receipt fields
@@ -584,8 +640,9 @@ class GoodsReceiptSerializer(serializers.ModelSerializer):
                 setattr(instance, attr, value)
             instance.save()
 
-            # Delete old lines and create new ones
-            instance.lines.all().delete()
+            # Delete old lines and create new ones (软删除，避免 PROTECT 外键硬删失败)
+            for old_line in instance.lines.filter(is_deleted=False):
+                old_line.soft_delete()
 
             for line_data in lines_data:
                 if line_data.get('item') and line_data.get('qty'):

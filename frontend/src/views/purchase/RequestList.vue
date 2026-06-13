@@ -196,7 +196,7 @@
       </div>
 
       <el-table :data="requests" v-loading="loading" stripe border @selection-change="handleSelectionChange">
-        <el-table-column v-permission="'purchase:request:delete'" v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'purchase:request:delete'" v-if="canDelete" type="selection" width="55" fixed :selectable="(row) => ['DRAFT', 'REJECTED'].includes(row.status)" />
         <el-table-column prop="request_no" label="采购申请号" width="140" fixed />
         <el-table-column prop="project_name" label="项目" width="160" show-overflow-tooltip />
         <el-table-column label="物料名称" width="150" show-overflow-tooltip>
@@ -251,10 +251,10 @@
             <el-button size="small" type="danger" @click="handleReject(row)" v-if="row.status === 'SUBMITTED'">拒绝</el-button>
             <el-button size="small" type="info" @click="handleWithdraw(row)" v-if="row.status === 'SUBMITTED' || row.status === 'APPROVED'">撤回</el-button>
             <el-button size="small" type="primary" @click="convertToPO(row)" v-if="row.status === 'APPROVED'">转采购订单</el-button>
-            <el-button 
-              v-if="canDelete"
-              size="small" 
-              type="danger" 
+            <el-button
+              v-if="canDelete && ['DRAFT', 'REJECTED'].includes(row.status)"
+              size="small"
+              type="danger"
               @click="deleteRow(row)"
               :loading="deleteLoading"
             >
@@ -1219,8 +1219,8 @@ const doConvertToPO = async () => {
     ElMessage.success('成功转换为采购订单')
     convertDialogVisible.value = false
     loadRequests()
-  } catch (error) {
-    ElMessage.error('转换为采购订单失败')
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.error || '转换为采购订单失败')
   } finally {
     converting.value = false
   }

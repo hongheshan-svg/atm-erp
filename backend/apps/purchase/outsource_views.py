@@ -156,7 +156,24 @@ class OutsourceMaterialIssueViewSet(WorkflowEnforcementMixin, PermissionMixin, S
 
         with transaction.atomic():
             # 创建库存出库记录
-            from apps.inventory.models import StockMove
+            from apps.inventory.models import Stock, StockMove
+
+            # 服务端发料校验：发料数 ≤ 外协行剩余(qty-sent_qty) 且 ≤ 仓库可用量
+            for line in issue.lines.filter(is_deleted=False):
+                ol = line.outsource_line
+                remaining = float(ol.qty) - float(ol.sent_qty)
+                if float(line.qty) > remaining:
+                    return Response(
+                        {'error': f'物料 {line.item.sku} 超发：外协行剩余可发 {remaining}，本次 {line.qty}'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                stock = Stock.objects.filter(warehouse=issue.warehouse, item=line.item).first()
+                available = float(stock.qty_available) if stock else 0
+                if float(line.qty) > available:
+                    return Response(
+                        {'error': f'物料 {line.item.sku} 仓库可用量不足：可用 {available}，本次 {line.qty}'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
             for line in issue.lines.filter(is_deleted=False):
                 # 创建库存移动
@@ -264,6 +281,22 @@ class OutsourceReceiptViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDel
 
             total_qty = 0
             qualified_qty = 0
+
+            # 服务端收货校验：本次合格累计后 received_qty 不得超过外协行已发料量与订单量
+            for line in receipt.lines.filter(is_deleted=False):
+                ol = line.outsource_line
+                # 不得超过订单量
+                if float(ol.received_qty) + float(line.qualified_qty) > float(ol.qty):
+                    return Response(
+                        {'error': f'物料 {line.item.sku} 超收：订单量 {ol.qty}，已收 {ol.received_qty}，本次合格 {line.qualified_qty}'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                # 不得超过已发料量（收货合格累计 ≤ 已发）
+                if float(ol.received_qty) + float(line.qualified_qty) > float(ol.sent_qty):
+                    return Response(
+                        {'error': f'物料 {line.item.sku} 收货超过已发料量：已发 {ol.sent_qty}，已收 {ol.received_qty}，本次合格 {line.qualified_qty}'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
             for line in receipt.lines.filter(is_deleted=False):
                 # 创建库存入库记录（只入合格品）

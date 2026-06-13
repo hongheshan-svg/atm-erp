@@ -50,21 +50,16 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
     workflow_amount_field = 'total_amount'
     workflow_no_field = 'request_no'
     
-    def create(self, request, *args, **kwargs):
-        """Override create to add debugging."""
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning(f"PR Create request data: {request.data}")
-        
-        serializer = self.get_serializer(data=request.data)
-        if not serializer.is_valid():
-            logger.warning(f"PR Validation errors: {serializer.errors}")
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        self.perform_create(serializer)
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-    
+    def update(self, request, *args, **kwargs):
+        """只允许草稿或已拒绝状态的采购申请修改明细（与采购订单一致，防止绕过审批改金额）"""
+        instance = self.get_object()
+        if instance.status not in ['DRAFT', 'REJECTED']:
+            return Response(
+                {'error': '只有草稿或已拒绝的采购申请可以修改'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return super().update(request, *args, **kwargs)
+
     def perform_create(self, serializer):
         """Auto-set requestor to current user and update BOM status."""
         with transaction.atomic():
@@ -91,9 +86,13 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
                         bom.save(update_fields=['order_status', 'purchase_request', 'pr_qty'])
     
     def perform_destroy(self, instance):
-        """删除采购申请时回退BOM状态"""
+        """删除采购申请时回退BOM状态（仅允许草稿/已拒绝状态删除）"""
+        from rest_framework.exceptions import ValidationError as DRFValidationError
         from apps.projects.models import ProjectBOM
-        
+
+        if instance.status not in ('DRAFT', 'REJECTED'):
+            raise DRFValidationError({'error': '只能删除草稿或已拒绝状态的采购申请'})
+
         # 回退关联BOM的状态：PR_PENDING/PR_APPROVED -> NOT_ORDERED
         with transaction.atomic():
             # 获取采购申请行中的物料
@@ -243,18 +242,12 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
                 return Response(response_data)
                 
         except Exception as e:
-            # Workflow module not available, auto-approve
-            logger.warning(f'工作流服务异常，采购申请 {pr.request_no} 自动批准: {e}')
-            pr.status = 'APPROVED'
-            pr.save()
-            response_data = {
-                **PurchaseRequestSerializer(pr).data,
-                'auto_approved': True,
-                'message': '工作流服务不可用，已自动批准'
-            }
-            if budget_warning:
-                response_data['budget_warning'] = budget_warning
-            return Response(response_data)
+            # 工作流服务异常不应自动批准，避免绕过审批；返回错误让用户重试
+            logger.error(f'工作流服务异常，采购申请 {pr.request_no} 提交失败: {e}')
+            return Response(
+                {'error': f'工作流服务异常，提交失败，请稍后重试: {e}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
@@ -375,13 +368,6 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
     @action(detail=True, methods=['post'])
     def convert_to_po(self, request, pk=None):
         """Convert PR to PO."""
-        pr = self.get_object()
-        if pr.status != 'APPROVED':
-            return Response(
-                {'error': '只能转换已批准的申请'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
         supplier_id = request.data.get('supplier')
         if not supplier_id:
             return Response(
@@ -394,24 +380,39 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
                 {'error': '该供应商已被列入黑名单，不能转换为采购订单'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         with transaction.atomic():
+            # 锁定 PR 并原子地校验状态，避免并发双击生成两个 PO
+            pr = PurchaseRequest.objects.select_for_update().get(pk=self.get_object().pk)
+            if pr.status != 'APPROVED':
+                return Response(
+                    {'error': '只能转换已批准的申请'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             po = PurchaseOrder.objects.create(
                 supplier_id=supplier_id,
                 project=pr.project,
                 delivery_date=pr.required_date,
+                tax_rate=pr.tax_rate,  # 继承申请税率，避免含税总额口径变化
                 created_by=request.user
             )
-            
+
             for pr_line in pr.lines.filter(is_deleted=False):
                 PurchaseOrderLine.objects.create(
                     po=po,
                     item=pr_line.item,
                     qty=pr_line.qty,
                     unit_price=pr_line.estimated_price,
+                    # 继承 BOM/关键件/长周期/功能模块/交期/备注
+                    bom_item=pr_line.bom_item,
+                    is_critical=pr_line.is_critical,
+                    is_long_lead=pr_line.is_long_lead,
+                    function_module=pr_line.function_module,
+                    notes=pr_line.notes,
                     created_by=request.user
                 )
-            
+
             # 关联BOM到采购订单（但状态保持PR_APPROVED，等订单确认时再变为ORDERED）
             if pr.project:
                 from apps.projects.models import ProjectBOM
@@ -425,17 +426,17 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
                     for bom in bom_items:
                         bom.purchase_order = po  # 先关联订单，但状态不变
                         bom.save(update_fields=['purchase_order'])
-            
+
             # Update total amount and tax
             total = po.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
             po.total_amount = total
             po.tax_amount = total * po.tax_rate / 100
             po.total_with_tax = total + po.tax_amount
             po.save()
-            
+
             pr.status = 'CONVERTED'
             pr.save()
-        
+
         return Response(PurchaseOrderSerializer(po).data, status=status.HTTP_201_CREATED)
     
     @action(detail=False, methods=['post'])
@@ -851,6 +852,20 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
             raise drf_serializers.ValidationError({'supplier': '该供应商已被列入黑名单，不能创建采购订单'})
         super().perform_create(serializer)
 
+    def perform_destroy(self, instance):
+        """删除守卫：只允许草稿/已拒绝/已取消订单删除，且不得有收货/应付账款残留。"""
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+        if instance.status not in ('DRAFT', 'REJECTED', 'CANCELLED'):
+            raise DRFValidationError({'error': '只能删除草稿、已拒绝或已取消状态的采购订单'})
+        # 有收货单则禁止删除，避免下游收货单/库存孤儿
+        if GoodsReceipt.objects.filter(po=instance, is_deleted=False).exists():
+            raise DRFValidationError({'error': '该订单已有收货记录，不能删除'})
+        # 有未删除应付账款则禁止删除
+        from apps.finance.models import AccountPayable
+        if AccountPayable.objects.filter(po=instance, is_deleted=False).exists():
+            raise DRFValidationError({'error': '该订单已有应付账款，请先撤销后再删除'})
+        super().perform_destroy(instance)
+
     @action(detail=False, methods=['get'])
     def for_linking(self, request):
         """获取可用于关联的采购订单（不受数据权限限制）"""
@@ -923,40 +938,26 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                     'message': '已提交审批，请在审批中心查看审批进度'
                 })
             else:
-                # 未配置审批流程，直接确认
-                po.status = 'CONFIRMED'
-                po.save()
+                # 未配置审批流程，直接确认 —— 复用完整确认副作用(创建AP/付款计划/更新BOM)
+                schedules = self._apply_confirm_side_effects(po, request.user, request.data)
                 return Response({
                     **PurchaseOrderSerializer(po).data,
                     'workflow_started': False,
+                    'payment_schedules_count': len(schedules),
                     'message': error or '未配置审批流程，采购订单已直接确认'
                 })
-                
+
         except Exception as e:
-            # 审批模块不可用，直接确认
-            po.status = 'CONFIRMED'
-            po.save()
-            return Response({
-                **PurchaseOrderSerializer(po).data,
-                'workflow_started': False,
-                'message': f'采购订单已确认，但工作流服务异常: {e}'
-            })
-    
-    @action(detail=True, methods=['post'])
-    def confirm(self, request, pk=None):
-        """Confirm PO - 确认采购订单，此时BOM状态才变为已下单."""
-        po = self.get_object()
-        if po.status not in ['DRAFT', 'APPROVED']:
+            # 审批模块异常不应自动确认，避免跳过 AP 创建导致应付账款永久缺失
+            logger.error(f'采购订单 {po.order_no} 提交时工作流服务异常: {e}')
             return Response(
-                {'error': '只能确认草稿或已审批状态的订单'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': f'工作流服务异常，提交失败，请稍后重试: {e}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        
-        # 检查是否有活跃工作流（PENDING状态时需要通过工作流确认）
-        workflow_error = self.check_workflow_allows_direct_action(po, '确认')
-        if workflow_error:
-            return workflow_error
-        
+
+    def _apply_confirm_side_effects(self, po, user, data=None):
+        """确认采购订单的完整副作用：置 CONFIRMED、更新BOM、创建AP与付款计划。返回付款计划列表。"""
+        data = data or {}
         with transaction.atomic():
             po.status = 'CONFIRMED'
             po.save()
@@ -989,8 +990,8 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                     project=po.project,
                     invoice_date=po.order_date,
                     amount_due=po.total_with_tax or po.total_amount,  # 优先使用含税金额
-                    due_date=request.data.get('due_date', po.delivery_date),
-                    created_by=request.user
+                    due_date=data.get('due_date', po.delivery_date),
+                    created_by=user
                 )
 
             # 自动生成付款计划（避免重复创建）
@@ -999,10 +1000,28 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                 schedules = []
             else:
                 schedules = PurchasePaymentSchedule.generate_from_purchase_order(po)
-        
+        return schedules
+
+    @action(detail=True, methods=['post'])
+    def confirm(self, request, pk=None):
+        """Confirm PO - 确认采购订单，此时BOM状态才变为已下单."""
+        po = self.get_object()
+        if po.status not in ['DRAFT', 'APPROVED']:
+            return Response(
+                {'error': '只能确认草稿或已审批状态的订单'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 检查是否有活跃工作流（PENDING状态时需要通过工作流确认）
+        workflow_error = self.check_workflow_allows_direct_action(po, '确认')
+        if workflow_error:
+            return workflow_error
+
+        schedules = self._apply_confirm_side_effects(po, request.user, request.data)
+
         response_data = PurchaseOrderSerializer(po).data
         response_data['payment_schedules_count'] = len(schedules)
-        
+
         return Response(response_data)
     
     @action(detail=True, methods=['post'])
@@ -1107,12 +1126,12 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # 检查是否有收货记录
-        from apps.inventory.models import StockMove
-        has_receipts = GoodsReceipt.objects.filter(po=po, status='CONFIRMED', is_deleted=False).exists()
+        # 检查是否有任何未删除收货单（含草稿）——草稿收货单 PROTECT 引用订单明细，
+        # 撤回后编辑会硬删明细触发 ProtectedError 500，故一并拦截
+        has_receipts = GoodsReceipt.objects.filter(po=po, is_deleted=False).exists()
         if has_receipts:
             return Response(
-                {'error': '该订单已有收货记录，无法撤回'},
+                {'error': '该订单已有收货单（含草稿），请先删除收货单后再撤回'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -1174,7 +1193,14 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
 
     permission_module = 'purchase'
     permission_resource = 'goods_receipt'
-    
+
+    def perform_destroy(self, instance):
+        """只允许删除草稿收货单；已确认收货单须先退货冲销，避免账实分离。"""
+        if instance.status != 'DRAFT':
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError({'error': '只能删除草稿状态的收货单，已确认收货单请先退货冲销'})
+        super().perform_destroy(instance)
+
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
         """Confirm goods receipt and create stock moves with FIFO support."""
@@ -1184,16 +1210,37 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
                 {'error': '只能确认草稿状态的收货单'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
+        # PO 状态前置校验：只能对已确认/部分收货的订单确认收货（防止把已取消订单顶回 PARTIAL）
+        if receipt.po.status not in ('CONFIRMED', 'PARTIAL'):
+            return Response(
+                {'error': '只能对已确认或部分收货状态的采购订单确认收货'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         with transaction.atomic():
             from apps.inventory.models import StockMove
             from apps.projects.models import ProjectBOM
             from django.conf import settings
-            
+
             costing_method = getattr(settings, 'INVENTORY_COSTING_METHOD', 'WEIGHTED_AVG')
             po = receipt.po
-            
+
+            # 服务端二次校验：剩余可收数量（防御绕过 serializer 直接调 confirm 的超收）
             for line in receipt.lines.filter(is_deleted=False):
+                if line.quality_status == 'FAILED':
+                    continue
+                remaining = float(line.po_line.qty) - float(line.po_line.received_qty)
+                if float(line.qty) > remaining:
+                    return Response(
+                        {'error': f'物料 {line.item.sku} 超收：剩余可收 {remaining}，本次 {line.qty}'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            for line in receipt.lines.filter(is_deleted=False):
+                # 不合格品(FAILED)不入库、不计入已收数量，须走退货/让步流程处理
+                if line.quality_status == 'FAILED':
+                    continue
                 # Create stock move for receipt
                 StockMove.objects.create(
                     item=line.item,
@@ -1284,17 +1331,51 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
         with transaction.atomic():
             from apps.projects.models import ProjectBOM
             from apps.inventory.models import StockMove
-            
+            from django.db.models import F as DbF
+
             po = receipt.po
             returned_count = 0
-            
+
+            # 该收货单本身的合格收货行（按 po_line 归集，退货上限以收货行已收数量为准）
+            receipt_lines = {
+                rl.po_line_id: rl
+                for rl in receipt.lines.filter(is_deleted=False).exclude(quality_status='FAILED')
+            }
+
             for item_data in return_items:
                 item_id = item_data.get('item')
-                return_qty = item_data.get('qty', 0)
-                
+                po_line_id = item_data.get('po_line')
+                return_qty = float(item_data.get('qty', 0) or 0)
+
                 if not item_id or return_qty <= 0:
                     continue
-                
+
+                # 退货必须对应本收货单的收货行，且数量不得超过该行已收数量
+                receipt_line = None
+                if po_line_id:
+                    receipt_line = receipt_lines.get(po_line_id)
+                if receipt_line is None:
+                    # 兼容仅传 item 的旧前端：按 item 匹配第一条收货行
+                    receipt_line = next(
+                        (rl for rl in receipt_lines.values() if rl.item_id == int(item_id)), None
+                    )
+                if receipt_line is None:
+                    return Response(
+                        {'error': f'物料 {item_id} 不在该收货单的收货明细中，无法退货'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                if return_qty > float(receipt_line.qty):
+                    return Response(
+                        {'error': f'退货数量超过该收货行收货数量({receipt_line.qty})'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                # 退货不得超过 PO 行当前已收数量
+                if return_qty > float(receipt_line.po_line.received_qty):
+                    return Response(
+                        {'error': f'退货数量超过订单已收数量({receipt_line.po_line.received_qty})'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
                 # 创建退货库存移动
                 StockMove.objects.create(
                     item_id=item_id,
@@ -1308,7 +1389,12 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
                     notes=f'退货原因: {return_reason}',
                     created_by=request.user
                 )
-                
+
+                # 回退 PO 行已收数量
+                PurchaseOrderLine.objects.filter(pk=receipt_line.po_line_id).update(
+                    received_qty=DbF('received_qty') - return_qty
+                )
+
                 # 更新BOM的退货数量和状态
                 if po and po.project:
                     bom_items = ProjectBOM.objects.filter(
@@ -1325,13 +1411,26 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
                         if bom.received_qty <= 0:
                             bom.order_status = 'RETURNED'
                         bom.save(update_fields=['returned_qty', 'received_qty', 'order_status'])
-                
+
                 returned_count += 1
-            
+
+            # 回退 PO 状态：退货后若不再全部收齐则降为 PARTIAL
+            po.refresh_from_db()
+            po_lines = po.lines.filter(is_deleted=False)
+            all_received = all(pl.received_qty >= pl.qty for pl in po_lines)
+            any_received = any(pl.received_qty > 0 for pl in po_lines)
+            if all_received:
+                po.status = 'COMPLETED'
+            elif any_received:
+                po.status = 'PARTIAL'
+            else:
+                po.status = 'CONFIRMED'
+            po.save(update_fields=['status'])
+
             # 更新收货单状态
             receipt.notes = f"{receipt.notes}\n退货记录: {return_reason}" if receipt.notes else f"退货记录: {return_reason}"
             receipt.save()
-        
+
         return Response({
             'message': f'退货成功，共处理 {returned_count} 种物料',
             'returned_count': returned_count

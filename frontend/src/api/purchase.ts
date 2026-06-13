@@ -38,8 +38,8 @@ export function convertRequestToPO(id: number, data: any) {
   return request({ url: `/purchase/requests/${id}/convert_to_po/`, method: 'post', data })
 }
 
-export function importPurchaseRequests(data: any) {
-  return request({ url: '/purchase/requests/import_data/', method: 'post', data })
+export function importPurchaseRequests(data: any, config?: Record<string, any>) {
+  return request({ url: '/purchase/requests/import_excel/', method: 'post', data, ...config })
 }
 
 export function exportPurchaseRequestTemplate() {
@@ -85,11 +85,11 @@ export function withdrawPurchaseOrder(id: number) {
 }
 
 export function createContractFromPO(id: number) {
-  return request({ url: `/purchase/orders/${id}/create_contract/`, method: 'post' })
+  return request({ url: '/purchase/contracts/create_from_po/', method: 'post', data: { po_id: id } })
 }
 
-export function printPreviewContract(id: number) {
-  return request({ url: `/purchase/orders/${id}/print_preview/`, method: 'get' })
+export function printPreviewContract(contractId: number) {
+  return request({ url: `/purchase/contracts/${contractId}/print_preview/`, method: 'get' })
 }
 
 // ==================== 收货 ====================
@@ -147,7 +147,7 @@ export function sendRFQToSuppliers(id: number, data: any) {
 }
 
 export function matchRFQSuppliers(id: number) {
-  return request({ url: `/purchase/rfqs/${id}/match_suppliers/`, method: 'post' })
+  return request({ url: `/purchase/rfqs/${id}/match_suppliers/`, method: 'get' })
 }
 
 export function createRFQLine(data: any) {
@@ -196,8 +196,8 @@ export function updateComparisonWeights(id: number, data: any) {
   return request({ url: `/purchase/comparisons/${id}/update_weights/`, method: 'post', data })
 }
 
-export function updateComparisonScore(id: number, data: any) {
-  return request({ url: `/purchase/comparisons/${id}/update_score/`, method: 'post', data })
+export function updateComparisonScore(id: number, scoreId: number, data: any) {
+  return request({ url: `/purchase/comparisons/${id}/update_score/${scoreId}/`, method: 'post', data })
 }
 
 export function autoScoreComparison(id: number) {
@@ -339,7 +339,7 @@ export function createRFQCollaboration(data: any) {
 }
 
 export function compareRFQCollaboration(id: number) {
-  return request({ url: `/purchase/rfq-collaborations/${id}/compare/`, method: 'post' })
+  return request({ url: `/purchase/rfq-collaborations/${id}/compare_quotes/`, method: 'get' })
 }
 
 export function selectRFQCollaborationSupplier(id: number, data: any) {
@@ -354,8 +354,8 @@ export function getDeliveryCollaboration(id: number) {
   return request({ url: `/purchase/delivery-collaborations/${id}/`, method: 'get' })
 }
 
-export function confirmDeliveryCollaboration(id: number) {
-  return request({ url: `/purchase/delivery-collaborations/${id}/confirm/`, method: 'post' })
+export function confirmDeliveryCollaboration(id: number, data?: any) {
+  return request({ url: `/purchase/delivery-collaborations/${id}/supplier_confirm/`, method: 'post', data })
 }
 
 // ==================== 供应商门户 ====================

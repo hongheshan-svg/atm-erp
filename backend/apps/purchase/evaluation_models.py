@@ -138,6 +138,13 @@ class SupplierEvaluation(BaseModel):
     def __str__(self):
         return f'{self.evaluation_no} - {self.supplier.name}'
 
+    def save(self, *args, **kwargs):
+        if not self.evaluation_no:
+            from apps.core.utils import generate_code
+
+            self.evaluation_no = generate_code('SE', rule_type='SUPPLIER_EVALUATION')
+        super().save(*args, **kwargs)
+
     def calculate_scores(self):
         """计算评分"""
         scores = self.score_items.all()

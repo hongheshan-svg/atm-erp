@@ -53,7 +53,7 @@
         <el-descriptions-item label="状态">
           <el-tag :type="getStatusType(viewDetail.status)">{{ viewDetail.status_display || viewDetail.status }}</el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="备注" :span="2">{{ viewDetail.remarks || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="备注" :span="2">{{ viewDetail.description || '-' }}</el-descriptions-item>
       </el-descriptions>
       <template v-if="viewDetail.items && viewDetail.items.length">
         <h4 style="margin: 16px 0 8px">询价物料</h4>
@@ -90,7 +90,7 @@
           <el-date-picker v-model="form.deadline" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
         </el-form-item>
         <el-form-item label="备注">
-          <el-input v-model="form.remarks" type="textarea" :rows="3" />
+          <el-input v-model="form.description" type="textarea" :rows="3" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -148,7 +148,7 @@ const viewDetail = ref<Record<string, any>>({})
 const compareData = ref<any[]>([])
 const currentRFQId = ref(null)
 
-const form = reactive({ title: '', deadline: '', remarks: '' })
+const form = reactive({ title: '', deadline: '', description: '' })
 const rules = {
   title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
   deadline: [{ required: true, message: '请选择截止日期', trigger: 'change' }]
@@ -169,7 +169,7 @@ const loadData = async () => {
 }
 
 const handleCreate = () => {
-  Object.assign(form, { title: '', deadline: '', remarks: '' })
+  Object.assign(form, { title: '', deadline: '', description: '' })
   formRef.value?.resetFields()
   dialogVisible.value = true
 }

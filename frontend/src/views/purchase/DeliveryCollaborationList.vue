@@ -17,11 +17,11 @@
       
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
-        <el-table-column prop="collaboration_no" label="协作编号" width="150" />
-        <el-table-column prop="purchase_order_no" label="采购订单" width="150" />
+        <el-table-column prop="order_no" label="采购订单" width="150" />
         <el-table-column prop="supplier_name" label="供应商" width="150" />
-        <el-table-column prop="planned_delivery_date" label="计划送货日" width="120" />
-        <el-table-column prop="actual_delivery_date" label="实际送货日" width="120" />
+        <el-table-column prop="original_delivery_date" label="原交期" width="120" />
+        <el-table-column prop="current_delivery_date" label="当前交期" width="120" />
+        <el-table-column prop="supplier_confirmed_date" label="供应商确认交期" width="140" />
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.status)">{{ row.status_display }}</el-tag>
@@ -41,15 +41,14 @@
     <!-- 查看详情 -->
     <el-dialog v-model="viewDialogVisible" title="送货详情" width="700px">
       <el-descriptions :column="2" border>
-        <el-descriptions-item label="协作编号">{{ viewDetail.collaboration_no }}</el-descriptions-item>
-        <el-descriptions-item label="采购订单">{{ viewDetail.purchase_order_no }}</el-descriptions-item>
+        <el-descriptions-item label="采购订单">{{ viewDetail.order_no }}</el-descriptions-item>
         <el-descriptions-item label="供应商">{{ viewDetail.supplier_name }}</el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag :type="getStatusType(viewDetail.status)">{{ viewDetail.status_display || viewDetail.status }}</el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="计划送货日">{{ viewDetail.planned_delivery_date }}</el-descriptions-item>
-        <el-descriptions-item label="实际送货日">{{ viewDetail.actual_delivery_date || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="备注" :span="2">{{ viewDetail.remarks || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="原交期">{{ viewDetail.original_delivery_date }}</el-descriptions-item>
+        <el-descriptions-item label="当前交期">{{ viewDetail.current_delivery_date || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="供应商确认交期">{{ viewDetail.supplier_confirmed_date || '-' }}</el-descriptions-item>
       </el-descriptions>
       <template v-if="viewDetail.items && viewDetail.items.length">
         <h4 style="margin: 16px 0 8px">送货明细</h4>
@@ -140,12 +139,13 @@ const handleConfirm = (row) => {
 const saveConfirm = async () => {
   try {
     saving.value = true
-    await confirmDeliveryCollaboration(currentRow.value.id, confirmForm)
+    // 后端 supplier_confirm 读取 confirmed_date
+    await confirmDeliveryCollaboration(currentRow.value.id, { confirmed_date: confirmForm.actual_delivery_date })
     ElMessage.success('确认收货成功')
     confirmDialogVisible.value = false
     loadData()
-  } catch (error) {
-    ElMessage.error('确认失败')
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.error || '确认失败')
   } finally {
     saving.value = false
   }

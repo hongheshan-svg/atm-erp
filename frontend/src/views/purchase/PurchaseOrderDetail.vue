@@ -58,11 +58,11 @@
 
       <div style="margin-top: 20px; display: flex; justify-content: space-between;">
         <div>
-          <el-button type="primary" @click="handleCreateReceipt" v-if="order.status === 'CONFIRMED'">
+          <el-button type="primary" @click="handleCreateReceipt" v-if="['CONFIRMED', 'PARTIAL'].includes(order.status)">
             <el-icon><Box /></el-icon>
             创建收货单
           </el-button>
-          <el-button type="success" @click="handleConfirm" v-if="order.status === 'DRAFT'">确认订单</el-button>
+          <el-button type="success" @click="handleConfirm" v-if="['DRAFT', 'APPROVED'].includes(order.status)">确认订单</el-button>
           <el-button type="danger" @click="handleCancel" v-if="['DRAFT', 'CONFIRMED'].includes(order.status)">取消订单</el-button>
         </div>
         <el-statistic title="订单总金额" :value="parseFloat(order.total_amount || 0)" prefix="¥" :precision="2" />
@@ -142,8 +142,8 @@ const warehouses = ref<any[]>([])
 const receiptDialogVisible = ref(false)
 const receiptForm = ref({ warehouse: null, receipt_date: new Date().toISOString().split('T')[0], lines: [] })
 
-const getStatusType = (s) => ({ 'DRAFT': 'info', 'CONFIRMED': 'warning', 'PARTIAL': 'primary', 'RECEIVED': 'success', 'CANCELLED': 'danger' }[s] || 'info')
-const getStatusLabel = (s) => ({ 'DRAFT': '草稿', 'CONFIRMED': '已确认', 'PARTIAL': '部分收货', 'RECEIVED': '已完成', 'CANCELLED': '已取消' }[s] || s)
+const getStatusType = (s) => ({ 'DRAFT': 'info', 'PENDING': 'warning', 'APPROVED': 'primary', 'REJECTED': 'danger', 'CONFIRMED': 'warning', 'PARTIAL': 'primary', 'COMPLETED': 'success', 'CANCELLED': 'danger' }[s] || 'info')
+const getStatusLabel = (s) => ({ 'DRAFT': '草稿', 'PENDING': '待审批', 'APPROVED': '已审批', 'REJECTED': '已拒绝', 'CONFIRMED': '已确认', 'PARTIAL': '部分收货', 'COMPLETED': '完成', 'CANCELLED': '已取消' }[s] || s)
 const formatMoney = (val) => parseFloat(val || 0).toFixed(2)
 
 const loadOrderDetail = async () => {
@@ -151,7 +151,7 @@ const loadOrderDetail = async () => {
   try {
     const response = await getPurchaseOrder(route.params.id)
     order.value = response.data || response
-    const receiptRes = await getGoodsReceipts({ purchase_order: route.params.id })
+    const receiptRes = await getGoodsReceipts({ po: route.params.id })
     receipts.value = receiptRes.results || receiptRes.results || receiptRes || []
   } catch (error) {
     console.error('加载订单详情失败:', error)
@@ -196,7 +196,8 @@ const handleCancel = async () => {
 
 const handleCreateReceipt = () => {
   receiptForm.value.lines = order.value.lines.map(line => ({
-    order_line: line.id,
+    po_line: line.id,
+    item: line.item,
     item_name: line.item_name,
     qty: line.qty,
     received_qty: line.received_qty || 0,
@@ -209,22 +210,25 @@ const submitReceipt = async () => {
   if (!receiptForm.value.warehouse) return ElMessage.warning('请选择收货仓库')
   try {
     const payload = {
-      purchase_order: route.params.id,
+      po: route.params.id,
       warehouse: receiptForm.value.warehouse,
       receipt_date: receiptForm.value.receipt_date,
-      lines: receiptForm.value.lines.filter(l => l.receipt_qty > 0).map(l => ({ order_line: l.order_line, qty: l.receipt_qty }))
+      lines: receiptForm.value.lines
+        .filter(l => l.receipt_qty > 0)
+        .map(l => ({ po_line: l.po_line, item: l.item, qty: l.receipt_qty }))
     }
     if (payload.lines.length === 0) return ElMessage.warning('请至少选择一项要收货的明细')
     await createGoodsReceipt(payload)
     ElMessage.success('收货单创建成功')
     receiptDialogVisible.value = false
     loadOrderDetail()
-  } catch (error) {
-    ElMessage.error('创建收货单失败')
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.error || error.response?.data?.lines || '创建收货单失败')
   }
 }
 
-const viewReceipt = (row) => router.push(`/purchase/goods-receipts/${row.id}`)
+// 收货单无独立详情路由，跳转列表页并通过查询参数自动打开详情弹窗
+const viewReceipt = (row) => router.push(`/purchase/goods-receipts?receipt_id=${row.id}`)
 
 onMounted(() => {
   loadOrderDetail()

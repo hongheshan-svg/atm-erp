@@ -35,20 +35,19 @@
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="order_no" label="外协单号" width="150" />
-        <el-table-column prop="supplier_name" label="供应商" width="150" />
-        <el-table-column prop="process_name" label="加工工序" />
-        <el-table-column prop="quantity" label="数量" width="80" align="right" />
-        <el-table-column prop="delivery_date" label="交期" width="120" />
-        <el-table-column prop="progress" label="进度" width="150">
+        <el-table-column prop="progress_date" label="进度日期" width="120" />
+        <el-table-column prop="progress_type_display" label="进度类型" width="120">
           <template #default="{ row }">
-            <el-progress :percentage="row.progress || 0" :status="row.progress >= 100 ? 'success' : ''" />
+            <el-tag :type="getStatusType(row.progress_type)">{{ row.progress_type_display }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column prop="completed_qty" label="完成数量" width="100" align="right" />
+        <el-table-column prop="completion_rate" label="完成率" width="160">
           <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)">{{ row.status_display }}</el-tag>
+            <el-progress :percentage="Number(row.completion_rate) || 0" :status="Number(row.completion_rate) >= 100 ? 'success' : ''" />
           </template>
         </el-table-column>
+        <el-table-column prop="description" label="进度说明" show-overflow-tooltip />
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="handleProgress(row)">更新进度</el-button>
@@ -64,19 +63,20 @@
         <el-form-item label="外协单号">
           <el-input :model-value="currentRow?.order_no" disabled />
         </el-form-item>
-        <el-form-item label="当前进度">
-          <el-slider v-model="progressForm.progress" :min="0" :max="100" show-input />
+        <el-form-item label="完成率(%)">
+          <el-slider v-model="progressForm.completion_rate" :min="0" :max="100" show-input />
         </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="progressForm.status" style="width: 100%">
-            <el-option label="待处理" value="PENDING" />
-            <el-option label="进行中" value="IN_PROGRESS" />
-            <el-option label="已完成" value="COMPLETED" />
-            <el-option label="延期" value="DELAYED" />
+        <el-form-item label="进度类型">
+          <el-select v-model="progressForm.progress_type" style="width: 100%">
+            <el-option label="已发料" value="MATERIAL_SENT" />
+            <el-option label="生产进度" value="PRODUCTION" />
+            <el-option label="质检" value="QUALITY" />
+            <el-option label="发货" value="SHIPPING" />
+            <el-option label="已收货" value="RECEIVED" />
           </el-select>
         </el-form-item>
-        <el-form-item label="备注">
-          <el-input v-model="progressForm.remarks" type="textarea" :rows="3" />
+        <el-form-item label="进度说明">
+          <el-input v-model="progressForm.description" type="textarea" :rows="3" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -105,9 +105,9 @@ const total = ref(0)
 const stats = ref({ in_progress: 0, pending_inspection: 0, completed_this_month: 0, delayed: 0 })
 const progressDialogVisible = ref(false)
 const currentRow = ref(null)
-const progressForm = reactive({ progress: 0, status: '', remarks: '' })
+const progressForm = reactive({ completion_rate: 0, progress_type: '', description: '' })
 
-const getStatusType = (s) => ({ 'PENDING': 'info', 'IN_PROGRESS': 'primary', 'COMPLETED': 'success', 'DELAYED': 'danger' }[s] || 'info')
+const getStatusType = (s) => ({ 'MATERIAL_SENT': 'info', 'PRODUCTION': 'primary', 'QUALITY': 'warning', 'SHIPPING': 'primary', 'RECEIVED': 'success' }[s] || 'info')
 
 const loadData = async () => {
   loading.value = true
@@ -133,9 +133,9 @@ const loadStats = async () => {
 
 const handleProgress = (row) => {
   currentRow.value = row
-  progressForm.progress = row.progress || 0
-  progressForm.status = row.status || 'IN_PROGRESS'
-  progressForm.remarks = ''
+  progressForm.completion_rate = Number(row.completion_rate) || 0
+  progressForm.progress_type = row.progress_type || 'PRODUCTION'
+  progressForm.description = row.description || ''
   progressDialogVisible.value = true
 }
 

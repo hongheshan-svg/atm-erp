@@ -290,9 +290,10 @@
       </el-form>
       <template #footer>
         <el-button @click="sendDialogVisible = false">取消</el-button>
-        <el-button 
-          type="primary" 
-          @click="confirmSendToSuppliers" 
+        <el-button @click="openSupplierMatch(currentRFQ)">匹配推荐</el-button>
+        <el-button
+          type="primary"
+          @click="confirmSendToSuppliers"
           :disabled="selectedSuppliers.length === 0"
         >
           发送 ({{ selectedSuppliers.length }})

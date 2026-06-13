@@ -50,7 +50,7 @@
       </div>
 
       <el-table :data="orders" v-loading="loading" stripe border @selection-change="handleSelectionChange">
-        <el-table-column v-permission="'purchase:purchase_order:delete'" v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-permission="'purchase:purchase_order:delete'" v-if="canDelete" type="selection" width="55" fixed :selectable="(row) => ['DRAFT', 'REJECTED', 'CANCELLED'].includes(row.status)" />
         <el-table-column prop="order_no" label="采购订单号" width="140" fixed />
         <el-table-column prop="project_name" label="项目" width="150" show-overflow-tooltip />
         <el-table-column label="物料名称" width="150" show-overflow-tooltip>
