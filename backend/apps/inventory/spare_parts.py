@@ -167,7 +167,7 @@ class SparePart(BaseModel):
         if self.item:
             from apps.inventory.models import Stock
 
-            stock = Stock.objects.filter(item=self.item, is_deleted=False).aggregate(total=Sum('quantity'))
+            stock = Stock.objects.filter(item=self.item, is_deleted=False).aggregate(total=Sum('qty_on_hand'))
             return stock['total'] or 0
         return 0
 

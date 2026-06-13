@@ -173,7 +173,7 @@ export function getComparisonReport(id: number) {
 }
 
 export function createComparisonFromRFQ(data: any) {
-  return request({ url: '/purchase/comparisons/create_from_rfq/', method: 'post', data })
+  return request({ url: '/purchase/comparisons/create_comparison/', method: 'post', data })
 }
 
 export function getAvailableRFQsForComparison() {

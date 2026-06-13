@@ -1014,11 +1014,24 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                 {'error': '无法取消已完成或已取消的订单'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
+        # 已有确认收货则禁止直接取消（应先退货冲销，避免库存/应付账实分离）
+        has_receipts = GoodsReceipt.objects.filter(po=po, status='CONFIRMED', is_deleted=False).exists()
+        if has_receipts:
+            return Response(
+                {'error': '该订单已有确认收货记录，请先退货冲销后再取消'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         with transaction.atomic():
             po.status = 'CANCELLED'
             po.save()
-            
+
+            # 撤销关联的应付账款与付款计划（与 withdraw 一致），避免取消后财务仍全额挂账
+            from apps.finance.models import AccountPayable, PurchasePaymentSchedule
+            AccountPayable.objects.filter(po=po, is_deleted=False).update(is_deleted=True)
+            PurchasePaymentSchedule.objects.filter(purchase_order=po, is_deleted=False).update(is_deleted=True)
+
             # 回退BOM状态：ORDERED -> CANCELLED
             from apps.projects.models import ProjectBOM
             ProjectBOM.objects.filter(
@@ -1026,7 +1039,7 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                 is_deleted=False,
                 order_status='ORDERED'
             ).update(order_status='CANCELLED')
-        
+
         return Response(PurchaseOrderSerializer(po).data)
     
     @action(detail=True, methods=['post'])

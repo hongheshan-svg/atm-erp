@@ -191,11 +191,13 @@ class StockMove(BaseModel):
                 self._update_stock_in(self.warehouse_to, self.qty, self.unit_cost)
         
         elif self.move_type == 'ADJUSTMENT':
-            # Adjustment can be positive or negative
-            if self.qty > 0:
+            # qty 恒为正(apply_adjustment 写入 abs(qty_diff))，盘盈/盘亏方向由仓库字段决定：
+            # warehouse_to 有值=盘盈入库；warehouse_from 有值=盘亏出库。
+            # 原按 self.qty>0 判方向恒成立 → 盘亏被误当盘盈入库到 None 仓，账实损坏。
+            if self.warehouse_to:
                 self._update_stock_in(self.warehouse_to, self.qty, self.unit_cost)
-            else:
-                self._update_stock_out(self.warehouse_from, abs(self.qty))
+            elif self.warehouse_from:
+                self._update_stock_out(self.warehouse_from, self.qty)
     
     def _update_stock_in(self, warehouse, qty, cost):
         """Update stock for incoming movement (weighted average)."""
