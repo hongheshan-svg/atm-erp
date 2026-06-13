@@ -96,11 +96,11 @@
     
     <!-- 新增/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="800px">
-      <el-form :model="formData" :rules="formRules" ref="formRef" label-width="120px">
+      <el-form :model="formData" :rules="formRules" ref="formRef" label-width="120px" :disabled="isViewMode">
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="协议编号" prop="agreement_no">
-              <el-input v-model="formData.agreement_no" placeholder="自动生成或手动输入" />
+              <el-input v-model="formData.agreement_no" placeholder="请输入协议编号" :disabled="isViewMode" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -147,8 +147,8 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmit">保存</el-button>
+        <el-button @click="dialogVisible = false">{{ isViewMode ? '关闭' : '取消' }}</el-button>
+        <el-button v-if="!isViewMode" type="primary" @click="handleSubmit">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -156,7 +156,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { getAgreementList, createAgreement, updateAgreement, createAgreementFromTemplate, submitAgreementReview, sendAgreementToCustomer, confirmAgreement, signAgreement, makeAgreementEffective, getActiveAgreementTemplates } from '@/api/plm/agreement'
+import { getAgreementList, getAgreement, createAgreement, updateAgreement, createAgreementFromTemplate, submitAgreementReview, sendAgreementToCustomer, confirmAgreement, signAgreement, makeAgreementEffective, getActiveAgreementTemplates } from '@/api/plm/agreement'
 import { getProjectList } from '@/api/projects/project'
 import { getCustomerList } from '@/api/masterdata'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -175,6 +175,7 @@ const dialogVisible = ref(false)
 const dialogTitle = ref('新增技术协议')
 const formRef = ref(null)
 const selectedTemplate = ref(null)
+const isViewMode = ref(false)
 
 const searchForm = reactive({
   agreement_no: '',
@@ -297,32 +298,80 @@ const resetForm = () => {
 
 const handleAdd = () => {
   resetForm()
+  isViewMode.value = false
   dialogTitle.value = '新增技术协议'
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
-  Object.assign(formData, row)
-  dialogTitle.value = '编辑技术协议'
-  dialogVisible.value = true
+const handleEdit = async (row) => {
+  try {
+    // 用完整详情序列化器回填，避免列表精简序列化器丢失 content/条款等字段
+    const data = await getAgreement(row.id)
+    resetForm()
+    Object.assign(formData, {
+      id: data.id,
+      agreement_no: data.agreement_no || '',
+      name: data.name || '',
+      version: data.version || 'V1.0',
+      project: data.project ?? null,
+      customer: data.customer ?? null,
+      content: data.content || '',
+      delivery_terms: data.delivery_terms || '',
+      warranty_terms: data.warranty_terms || '',
+      special_requirements: data.special_requirements || ''
+    })
+    isViewMode.value = false
+    dialogTitle.value = '编辑技术协议'
+    dialogVisible.value = true
+  } catch (error) {
+    ElMessage.error('加载详情失败')
+  }
 }
 
-const handleView = (row) => {
-  Object.assign(formData, row)
-  dialogTitle.value = '查看技术协议'
-  dialogVisible.value = true
+const handleView = async (row) => {
+  try {
+    const data = await getAgreement(row.id)
+    resetForm()
+    Object.assign(formData, {
+      id: data.id,
+      agreement_no: data.agreement_no || '',
+      name: data.name || '',
+      version: data.version || 'V1.0',
+      project: data.project ?? null,
+      customer: data.customer ?? null,
+      content: data.content || '',
+      delivery_terms: data.delivery_terms || '',
+      warranty_terms: data.warranty_terms || '',
+      special_requirements: data.special_requirements || ''
+    })
+    isViewMode.value = true
+    dialogTitle.value = '查看技术协议'
+    dialogVisible.value = true
+  } catch (error) {
+    ElMessage.error('加载详情失败')
+  }
 }
 
 const applyTemplate = async () => {
-  if (!selectedTemplate.value || !formData.id) return
-  try {
-    const res = await createAgreementFromTemplate(formData.id, {
-      template_id: selectedTemplate.value
-    })
-    Object.assign(formData, res)
-    ElMessage.success('模板已应用')
-  } catch (error) {
-    ElMessage.error('应用模板失败')
+  if (!selectedTemplate.value) return
+  const tpl = templates.value.find((t) => t.id === selectedTemplate.value)
+  if (formData.id) {
+    // 已存在协议：调用后端 action 持久化套用模板
+    try {
+      const res = await createAgreementFromTemplate(formData.id, {
+        template_id: selectedTemplate.value
+      })
+      Object.assign(formData, res)
+      ElMessage.success('模板已应用')
+    } catch (error) {
+      ElMessage.error('应用模板失败')
+    }
+  } else if (tpl) {
+    // 新建态：本地把模板内容填入表单（后端 action 需已存在 id）
+    formData.content = tpl.content || formData.content
+    formData.delivery_terms = tpl.delivery_terms || formData.delivery_terms
+    formData.warranty_terms = tpl.warranty_terms || formData.warranty_terms
+    ElMessage.success('模板内容已填入')
   }
 }
 

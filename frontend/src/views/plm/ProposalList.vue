@@ -103,13 +103,19 @@
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleView(row)">详情</el-button>
-            <el-button type="success" link size="small" @click="handleSubmit(row)" 
-              v-if="row.status === 'DRAFT'">提交</el-button>
-            <el-button type="warning" link size="small" @click="handleStartReview(row)" 
+            <el-button type="primary" link size="small" @click="handleEdit(row)"
+              v-if="row.status === 'DRAFT' || row.status === 'REVISION'">编辑</el-button>
+            <el-button type="success" link size="small" @click="handleSubmit(row)"
+              v-if="row.status === 'DRAFT' || row.status === 'REVISION'">{{ row.status === 'REVISION' ? '重新提交' : '提交' }}</el-button>
+            <el-button type="warning" link size="small" @click="handleStartReview(row)"
               v-if="row.status === 'SUBMITTED'">评审</el-button>
-            <el-button type="success" link size="small" @click="handleApprove(row)" 
+            <el-button type="success" link size="small" @click="handleApprove(row)"
               v-if="row.status === 'REVIEWING'">批准</el-button>
-            <el-button type="info" link size="small" @click="handleNewVersion(row)" 
+            <el-button type="warning" link size="small" @click="handleRequestRevision(row)"
+              v-if="row.status === 'REVIEWING'">退回修改</el-button>
+            <el-button type="danger" link size="small" @click="handleReject(row)"
+              v-if="row.status === 'REVIEWING'">拒绝</el-button>
+            <el-button type="info" link size="small" @click="handleNewVersion(row)"
               v-if="row.status === 'APPROVED'">新版本</el-button>
           </template>
         </el-table-column>
@@ -238,7 +244,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { getProposalList, getProposal, createProposal, patchProposal, getProposalStatistics, submitProposal, startProposalReview, approveProposal, createProposalVersion } from '@/api/plm/proposal'
+import { getProposalList, getProposal, createProposal, patchProposal, getProposalStatistics, submitProposal, startProposalReview, approveProposal, requestProposalRevision, rejectProposal, createProposalVersion } from '@/api/plm/proposal'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
@@ -362,6 +368,52 @@ const handleView = async (row) => {
     detailDialogVisible.value = true
   } catch (e) {
     ElMessage.error('加载失败')
+  }
+}
+
+const handleEdit = async (row) => {
+  try {
+    const data = await getProposal(row.id)
+    currentProposal.value = data
+    isEdit.value = true
+    Object.assign(formData, {
+      title: data.title || '',
+      proposal_type: data.proposal_type || 'SCHEME',
+      estimated_cost: data.estimated_cost ?? null,
+      estimated_days: data.estimated_days ?? null,
+      summary: data.summary || '',
+      technical_requirements: data.technical_requirements || '',
+      solution_description: data.solution_description || '',
+      key_technologies: data.key_technologies || '',
+      risk_analysis: data.risk_analysis || ''
+    })
+    dialogVisible.value = true
+  } catch (e) {
+    ElMessage.error('加载失败')
+  }
+}
+
+const handleRequestRevision = async (row) => {
+  try {
+    await ElMessageBox.confirm('确定退回方案要求修改吗?', '提示')
+    await requestProposalRevision(row.id)
+    ElMessage.success('已退回修改')
+    fetchList()
+    fetchStats()
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error(e.response?.data?.error || '操作失败')
+  }
+}
+
+const handleReject = async (row) => {
+  try {
+    await ElMessageBox.confirm('确定拒绝该方案吗?', '提示', { type: 'warning' })
+    await rejectProposal(row.id)
+    ElMessage.success('已拒绝')
+    fetchList()
+    fetchStats()
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error(e.response?.data?.error || '操作失败')
   }
 }
 

@@ -331,17 +331,15 @@ const loadSnapshots = async () => {
     return
   }
   try {
-    const res = await getBOMSnapshotList({ params: { project: compareForm.project_id } 
-    })
+    const res = await getBOMSnapshotList({ project: compareForm.project_id })
     snapshots.value = res.results || res || []
   } catch (error) {
     console.error('Load snapshots failed:', error)
   }
-  
+
   // 同时加载CAD导入会话
   try {
-    const res = await getCreoBOMImportList({ params: { project_id: compareForm.project_id } 
-    })
+    const res = await getCreoBOMImportList({ project_id: compareForm.project_id })
     cadSessions.value = res.results || res || []
   } catch (error) {
     console.error('Load CAD sessions failed:', error)

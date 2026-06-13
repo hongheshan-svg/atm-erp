@@ -35,6 +35,14 @@ export function approveProposal(id: number) {
   return request({ url: `/projects/proposals/${id}/approve/`, method: 'post' })
 }
 
+export function requestProposalRevision(id: number, data?: any) {
+  return request({ url: `/projects/proposals/${id}/request_revision/`, method: 'post', data })
+}
+
+export function rejectProposal(id: number, data?: any) {
+  return request({ url: `/projects/proposals/${id}/reject/`, method: 'post', data })
+}
+
 export function createProposalVersion(id: number) {
   return request({ url: `/projects/proposals/${id}/create_new_version/`, method: 'post' })
 }

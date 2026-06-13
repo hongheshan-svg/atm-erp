@@ -207,18 +207,25 @@ const getFileColor = (type) => {
   return colors[type?.toLowerCase()] || '#909399'
 }
 
+// 3D 可预览文件类型白名单（Drawing 无 drawing_type 字段，按 file_type 本地过滤）
+const MODEL_FILE_TYPES = ['stl', 'obj', 'gltf', 'glb', 'step', 'stp', 'iges', 'igs']
+
 // 加载模型列表
 const fetchModels = async () => {
   loading.value = true
   try {
-    const data = await getDrawingList({ 
-        drawing_type: '3D',
-        search: searchKeyword.value 
+    const data = await getDrawingList({
+        search: searchKeyword.value
       })
-    
+
+    // 仅保留 3D 模型类文件，避免 PDF/DWG 等混入
+    const allItems = data.results || data
+    const items = (allItems || []).filter(item =>
+      MODEL_FILE_TYPES.includes((item.file_type || '').toLowerCase())
+    )
+
     // 按项目分组
     const grouped = {}
-    const items = data.results || data
     items.forEach(item => {
       const projectName = item.project_name || '未分类'
       if (!grouped[projectName]) {

@@ -7,12 +7,16 @@ export function getAgreementList(params?: Record<string, any>) {
   return request({ url: '/projects/agreements/', method: 'get', params })
 }
 
+export function getAgreement(id: number) {
+  return request({ url: `/projects/agreements/${id}/`, method: 'get' })
+}
+
 export function createAgreement(data: any) {
   return request({ url: '/projects/agreements/', method: 'post', data })
 }
 
 export function updateAgreement(id: number, data: any) {
-  return request({ url: `/projects/agreements/${id}/`, method: 'put', data })
+  return request({ url: `/projects/agreements/${id}/`, method: 'patch', data })
 }
 
 export function createAgreementFromTemplate(id: number, data: any) {

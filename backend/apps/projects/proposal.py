@@ -416,10 +416,10 @@ class TechnicalProposalViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
 
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
-        """提交方案"""
+        """提交方案（草稿或需修改状态均可提交/重新提交）"""
         proposal = self.get_object()
-        if proposal.status != 'DRAFT':
-            return Response({'error': '只有草稿状态可以提交'}, status=400)
+        if proposal.status not in ['DRAFT', 'REVISION']:
+            return Response({'error': '只有草稿或需修改状态可以提交'}, status=400)
         proposal.status = 'SUBMITTED'
         proposal.submit_date = date.today()
         proposal.save()

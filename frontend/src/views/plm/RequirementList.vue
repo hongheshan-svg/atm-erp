@@ -97,9 +97,11 @@
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleView(row)">详情</el-button>
-            <el-button type="success" link size="small" @click="handleSubmit(row)" 
+            <el-button type="primary" link size="small" @click="handleEdit(row)"
+              v-if="row.status === 'DRAFT'">编辑</el-button>
+            <el-button type="success" link size="small" @click="handleSubmit(row)"
               v-if="row.status === 'DRAFT'">提交</el-button>
-            <el-button type="warning" link size="small" @click="handleApprove(row)" 
+            <el-button type="warning" link size="small" @click="handleApprove(row)"
               v-if="row.status === 'SUBMITTED' || row.status === 'REVIEWING'">批准</el-button>
             <el-button type="info" link size="small" @click="handleDecompose(row)">分解</el-button>
           </template>
@@ -333,7 +335,7 @@ const fileList = ref<any[]>([])
 const commonTags = ['技术规格', '功能需求', '性能要求', '接口规范', '安全要求', '客户提供', '内部文档']
 
 // 文件上传配置
-const uploadUrl = '/core/upload/'
+const uploadUrl = '/api/core/files/upload/'
 const uploadHeaders = computed(() => ({
   Authorization: `Bearer ${localStorage.getItem('access_token')}`
 }))
@@ -534,6 +536,36 @@ const handleView = async (row) => {
     const data = await getRequirement(row.id)
     currentReq.value = data
     detailDialogVisible.value = true
+  } catch (e) {
+    ElMessage.error('加载失败')
+  }
+}
+
+const handleEdit = async (row) => {
+  try {
+    const data = await getRequirement(row.id)
+    currentReq.value = data
+    isEdit.value = true
+    fileList.value = (data.attachments || []).map((a) => ({ name: a.name, url: a.url }))
+    Object.assign(formData, {
+      title: data.title || '',
+      req_type: data.req_type || 'FUNCTIONAL',
+      priority: data.priority || 'MEDIUM',
+      due_date: data.due_date || '',
+      request_date: data.request_date || new Date().toISOString().split('T')[0],
+      description: data.description || '',
+      acceptance_criteria: data.acceptance_criteria || '',
+      assumptions: data.assumptions || '',
+      constraints: data.constraints || '',
+      estimated_hours: data.estimated_hours ?? null,
+      estimated_cost: data.estimated_cost ?? null,
+      customer: data.customer ?? null,
+      project: data.project ?? null,
+      owner: data.owner ?? null,
+      attachments: data.attachments || [],
+      tags: data.tags || []
+    })
+    dialogVisible.value = true
   } catch (e) {
     ElMessage.error('加载失败')
   }
