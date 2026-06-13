@@ -125,22 +125,23 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Delete } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import { usePermissionStore } from '@/stores/permission'
 import { getMyPendingTasks, getPendingTaskCount, approveTask, rejectTask, deleteWorkflowTask, batchDeleteWorkflowTasks } from '@/api/workflow'
 
+const router = useRouter()
 const userStore = useUserStore()
+const permissionStore = usePermissionStore()
+// 删除/批量删除入口：超管或持有审批中心(oa:workflow)菜单权限者可见。
+// 不再硬编码随机角色 code（换库/重建角色即失效）。
 const isAdmin = computed(() => {
   const user = userStore.userInfo
   if (!user) return false
   if (user.is_superuser) return true
-  // Check role_info.code (from serializer)
-  const roleCode = user.role_info?.code || user.role?.code
-  // Allow ADMIN, SUPER_ADMIN, 系统管理员, 总经理
-  const adminRoles = ['ADMIN', 'SUPER_ADMIN', 'ROLEDC4E40', 'ROLEF8477A']
-  if (roleCode && adminRoles.includes(roleCode)) return true
-  return false
+  return permissionStore.hasPermission('oa:workflow')
 })
 
 const loading = ref(false)
@@ -233,15 +234,23 @@ const confirmReject = async () => {
 }
 
 const viewDetail = (row) => {
-  // Navigate to business detail based on type
-  const routes = {
-    'PURCHASE_REQUEST': `/purchase/requests/${row.instance}`,
-    'EXPENSE': `/finance/expenses/${row.instance}`,
-    'SALES_ORDER': `/sales/orders/${row.instance}`,
+  // 用业务单据主键(business_id)而非工作流实例主键(instance)跳转；
+  // 经 vue-router push 自动带上 /erp/ base。无独立详情页的模块跳列表并带 highlight 查询。
+  const businessId = row.business_id
+  if (!businessId) {
+    ElMessage.warning('该审批关联的业务单据ID缺失，无法跳转')
+    return
   }
-  const route = routes[row.business_type]
-  if (route) {
-    window.open(route, '_blank')
+  const targets = {
+    'PURCHASE_REQUEST': { path: '/purchase/requests', query: { highlight: businessId } },
+    'EXPENSE': { path: '/finance/expenses', query: { highlight: businessId } },
+    'SALES_ORDER': { path: `/sales/orders/${businessId}` },
+  }
+  const target = targets[row.business_type]
+  if (target) {
+    router.push(target)
+  } else {
+    ElMessage.info('该业务类型暂不支持快速跳转，请到对应模块查看')
   }
 }
 

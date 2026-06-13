@@ -370,7 +370,7 @@ import {
 } from '@element-plus/icons-vue'
 import { 
   getWorkflowDefinitions, createWorkflowDefinition, updateWorkflowDefinition, deleteWorkflowDefinition,
-  getWorkflowSteps, createWorkflowStep, updateWorkflowStep, deleteWorkflowStep
+  getWorkflowSteps, createWorkflowStep, updateWorkflowStep, deleteWorkflowStep, reorderWorkflowSteps
 } from '@/api/workflow'
 import { getUsers, getRoles } from '@/api/auth'
 
@@ -749,13 +749,11 @@ const moveStep = async (index, direction) => {
   const step1 = steps.value[index]
   const step2 = steps.value[newIndex]
   try {
-    await Promise.all([
-      updateWorkflowStep(step1.id, { ...step1, step_order: step2.step_order }),
-      updateWorkflowStep(step2.id, { ...step2, step_order: step1.step_order })
-    ])
+    // 由后端在单事务内交换 step_order，规避并发互换撞 unique_together 唯一约束
+    await reorderWorkflowSteps(step1.id, step2.id)
     await loadSteps()
   } catch (error) {
-    ElMessage.error('移动失败')
+    ElMessage.error(error.response?.data?.error || '移动失败')
   }
 }
 

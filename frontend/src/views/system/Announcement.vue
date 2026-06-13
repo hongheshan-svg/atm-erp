@@ -2,7 +2,7 @@
   <div class="announcement-container">
     <div class="page-header">
       <h2>系统公告</h2>
-      <el-button type="primary" v-permission="'accounts:user:create'" @click="handleAdd">发布公告</el-button>
+      <el-button type="primary" v-permission="'system:config'" @click="handleAdd">发布公告</el-button>
     </div>
     
     <el-card shadow="never">
@@ -75,10 +75,10 @@
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link size="small" v-permission="'accounts:user:edit'" @click="handleEdit(row)">编辑</el-button>
-            <el-button type="success" link size="small" @click="handlePublish(row)" v-if="row.status === 'DRAFT'">发布</el-button>
-            <el-button type="warning" link size="small" @click="handleWithdraw(row)" v-if="row.status === 'PUBLISHED'">撤回</el-button>
-            <el-button type="danger" link size="small" v-permission="'accounts:user:delete'" @click="handleDelete(row)">删除</el-button>
+            <el-button type="primary" link size="small" v-permission="'system:config'" @click="handleEdit(row)">编辑</el-button>
+            <el-button type="success" link size="small" v-permission="'system:config'" @click="handlePublish(row)" v-if="row.status === 'DRAFT'">发布</el-button>
+            <el-button type="warning" link size="small" v-permission="'system:config'" @click="handleWithdraw(row)" v-if="row.status === 'PUBLISHED'">撤回</el-button>
+            <el-button type="danger" link size="small" v-permission="'system:config'" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>

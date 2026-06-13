@@ -3,7 +3,7 @@
     <!-- 顶部工具栏 -->
     <div class="toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" v-permission="'accounts:department:create'" @click="handleAdd(null)">
+        <el-button type="primary" v-permission="'system:department'" @click="handleAdd(null)">
           <el-icon><Plus /></el-icon>
           新建部门
         </el-button>
@@ -76,7 +76,7 @@
           </el-tree>
           
           <el-empty v-if="!loading && treeData.length === 0" description="暂无部门数据">
-            <el-button type="primary" v-permission="'accounts:department:create'" @click="handleAdd(null)">创建第一个部门</el-button>
+            <el-button type="primary" v-permission="'system:department'" @click="handleAdd(null)">创建第一个部门</el-button>
           </el-empty>
         </div>
       </div>
@@ -100,8 +100,8 @@
               </div>
             </div>
             <div class="header-actions">
-              <el-button v-permission="'accounts:department:edit'" @click="handleEdit(selectedDept)">编辑</el-button>
-              <el-button type="danger" v-permission="'accounts:department:delete'" @click="handleDelete(selectedDept)">删除</el-button>
+              <el-button v-permission="'system:department'" @click="handleEdit(selectedDept)">编辑</el-button>
+              <el-button type="danger" v-permission="'system:department'" @click="handleDelete(selectedDept)">删除</el-button>
             </div>
           </div>
 
@@ -210,7 +210,7 @@
         <!-- 未选择部门 -->
         <div v-else class="no-selection">
           <el-empty description="请从左侧选择一个部门查看详情">
-            <el-button type="primary" v-permission="'accounts:department:create'" @click="handleAdd(null)">或创建新部门</el-button>
+            <el-button type="primary" v-permission="'system:department'" @click="handleAdd(null)">或创建新部门</el-button>
           </el-empty>
         </div>
       </div>

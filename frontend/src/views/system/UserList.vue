@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>用户管理</span>
-          <el-button type="primary" v-permission="'accounts:user:create'" @click="handleAdd">新增用户</el-button>
+          <el-button type="primary" v-permission="'system:user'" @click="handleAdd">新增用户</el-button>
         </div>
       </template>
 
@@ -28,8 +28,8 @@
         </el-form-item>
       </el-form>
 
-      <!-- 批量操作工具栏 - 仅管理员可见 -->
-      <div class="table-toolbar" v-permission="'accounts:user:delete'" v-if="canDelete && selectedRows.length > 0">
+      <!-- 批量操作工具栏 - 仅系统管理员可见 -->
+      <div class="table-toolbar" v-if="canManage && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
         <el-button 
           type="danger" 
@@ -43,8 +43,8 @@
 
       <!-- Data Table -->
       <el-table :data="users" v-loading="loading" stripe border @selection-change="handleSelectionChange">
-        <!-- 仅管理员显示选择列 -->
-        <el-table-column v-permission="'accounts:user:delete'" v-if="canDelete" type="selection" width="55" fixed />
+        <!-- 仅系统管理员显示选择列 -->
+        <el-table-column v-if="canManage" type="selection" width="55" fixed />
         <el-table-column prop="id" label="编号" width="80" />
         <el-table-column prop="username" label="用户名" />
         <el-table-column prop="email" label="邮箱" />
@@ -58,12 +58,12 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" :width="canDelete ? 180 : 80" fixed="right">
+        <el-table-column label="操作" :width="canManage ? 180 : 80" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" v-permission="'accounts:user:edit'" @click="handleEdit(row)">编辑</el-button>
-            <!-- 仅管理员显示删除按钮 -->
-            <el-button 
-              v-if="canDelete"
+            <el-button size="small" v-permission="'system:user'" @click="handleEdit(row)">编辑</el-button>
+            <!-- 仅系统管理员显示删除按钮 -->
+            <el-button
+              v-if="canManage"
               size="small" 
               type="danger" 
               @click="deleteRow(row)"
@@ -147,14 +147,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getUsers, createUser, updateUser, getRoles, getDepartments } from '@/api/auth'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 
-// 权限检查
-const { canDelete } = usePermission()
+// 权限检查（菜单级粒度：持有 system:user 菜单即可管理用户）
+const { hasPermission } = usePermission()
+const canManage = computed(() => hasPermission('system:user'))
 
 // 批量删除功能
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(

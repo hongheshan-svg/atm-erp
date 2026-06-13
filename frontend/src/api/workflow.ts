@@ -74,6 +74,15 @@ export function deleteWorkflowStep(id: number) {
   })
 }
 
+// 交换两个审批步骤的顺序（后端单事务规避唯一约束冲突）
+export function reorderWorkflowSteps(stepId: number, targetId: number) {
+  return request({
+    url: '/core/workflow/steps/reorder/',
+    method: 'post',
+    data: { step_id: stepId, target_id: targetId }
+  })
+}
+
 // Workflow Instances
 export function getWorkflowInstances(params?: Record<string, any>) {
   return request({

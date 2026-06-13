@@ -2,6 +2,7 @@
 Workflow API views.
 """
 
+from django.db import transaction
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -60,6 +61,52 @@ class WorkflowStepViewSet(PermissionMixin, viewsets.ModelViewSet):
     queryset = WorkflowStep.objects.filter(is_deleted=False)
     serializer_class = WorkflowStepSerializer
     filterset_fields = ['workflow', 'approver_type']
+
+    @action(detail=False, methods=['post'])
+    def reorder(self, request):
+        """交换两个审批步骤的顺序。
+
+        前端上移/下移若并发提交两条互换 step_order 的 PUT，会撞
+        unique_together(workflow, step_order) 唯一约束导致 IntegrityError。
+        这里在单事务内用一个临时序号完成交换，规避唯一键冲突。
+        """
+        step_id = request.data.get('step_id')
+        target_id = request.data.get('target_id')
+        if not step_id or not target_id:
+            return Response(
+                {'error': '请提供 step_id 和 target_id'}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        queryset = self.filter_queryset(self.get_queryset())
+        try:
+            step = queryset.get(pk=step_id)
+            target = queryset.get(pk=target_id)
+        except WorkflowStep.DoesNotExist:
+            return Response({'error': '步骤不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        if step.workflow_id != target.workflow_id:
+            return Response({'error': '只能在同一工作流内调整顺序'}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            # 临时序号取该工作流现有最大序号 +1，确保不与任何现存（含软删除）记录冲突
+            max_order = (
+                WorkflowStep.all_objects.filter(workflow_id=step.workflow_id)
+                .order_by('-step_order')
+                .values_list('step_order', flat=True)
+                .first()
+                or 0
+            )
+            temp_order = max_order + 1
+            step_order, target_order = step.step_order, target.step_order
+
+            step.step_order = temp_order
+            step.save(update_fields=['step_order', 'updated_at'])
+            target.step_order = step_order
+            target.save(update_fields=['step_order', 'updated_at'])
+            step.step_order = target_order
+            step.save(update_fields=['step_order', 'updated_at'])
+
+        return Response({'message': '顺序已更新'})
 
 
 class WorkflowInstanceViewSet(PermissionMixin, viewsets.ModelViewSet):

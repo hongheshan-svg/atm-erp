@@ -9,7 +9,7 @@
               <el-icon><Setting /></el-icon>
               初始化默认规则
             </el-button>
-            <el-button type="success" v-permission="'accounts:user:create'" @click="handleAdd">
+            <el-button type="success" v-permission="'system:config'" @click="handleAdd">
               <el-icon><Plus /></el-icon>
               添加规则
             </el-button>
@@ -35,14 +35,14 @@
       </el-form>
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-permission="'accounts:user:delete'" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-if="canManage && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" v-permission="'accounts:user:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <!-- 数据表格 -->
       <el-table :data="rules" v-loading="loading" stripe border @selection-change="handleSelectionChange">
-        <el-table-column v-permission="'accounts:user:delete'" v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-if="canManage" type="selection" width="55" fixed />
         <el-table-column prop="rule_type_display" label="规则类型" width="140" />
         <el-table-column prop="rule_name" label="规则名称" width="150" />
         <el-table-column label="编码格式" min-width="200">
@@ -70,10 +70,10 @@
         </el-table-column>
         <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" v-permission="'accounts:user:edit'" @click="handleEdit(row)">编辑</el-button>
-            <el-button size="small" type="warning" @click="handleResetSeq(row)">重置序号</el-button>
+            <el-button size="small" v-permission="'system:config'" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" type="warning" v-permission="'system:config'" @click="handleResetSeq(row)">重置序号</el-button>
             <el-button size="small" type="info" @click="handleViewHistory(row)">历史</el-button>
-            <el-button v-if="canDelete" size="small" type="danger" @click="deleteRow(row)" :loading="deleteLoading">删除</el-button>
+            <el-button v-if="canManage" size="small" type="danger" @click="deleteRow(row)" :loading="deleteLoading">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -221,8 +221,9 @@ import { getCodeRuleList, createCodeRule, updateCodeRule, resetCodeRuleSequence,
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 
-// 权限检查
-const { canDelete } = usePermission()
+// 权限检查（菜单级粒度：持有 system:config 菜单即可管理编码规则）
+const { hasPermission } = usePermission()
+const canManage = computed(() => hasPermission('system:config'))
 
 // 批量删除功能
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(

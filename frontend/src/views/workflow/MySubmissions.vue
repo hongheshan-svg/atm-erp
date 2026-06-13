@@ -144,19 +144,18 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Delete } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import { usePermissionStore } from '@/stores/permission'
 import { getMySubmittedWorkflows, withdrawWorkflow, deleteWorkflowInstance, batchDeleteWorkflowInstances } from '@/api/workflow'
 
 const userStore = useUserStore()
+const permissionStore = usePermissionStore()
+// 删除/批量删除入口：超管或持有审批中心(oa:workflow)菜单权限者可见。
+// 不再硬编码随机角色 code（换库/重建角色即失效）。
 const isAdmin = computed(() => {
   const user = userStore.userInfo
   if (!user) return false
   if (user.is_superuser) return true
-  // Check role_info.code (from serializer)
-  const roleCode = user.role_info?.code || user.role?.code
-  // Allow ADMIN, SUPER_ADMIN, 系统管理员, 总经理
-  const adminRoles = ['ADMIN', 'SUPER_ADMIN', 'ROLEDC4E40', 'ROLEF8477A']
-  if (roleCode && adminRoles.includes(roleCode)) return true
-  return false
+  return permissionStore.hasPermission('oa:workflow')
 })
 
 const loading = ref(false)

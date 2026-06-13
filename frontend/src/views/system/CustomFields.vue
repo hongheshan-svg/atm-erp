@@ -311,9 +311,7 @@ const loadFields = async () => {
   if (!selectedModel.value) return
   loading.value = true
   try {
-    const res = await getCustomFieldList({
-      params: { model_name: selectedModel.value }
-    })
+    const res = await getCustomFieldList({ model_name: selectedModel.value })
     fields.value = res.results || res || []
   } catch (e) {
     console.error('加载字段失败:', e)

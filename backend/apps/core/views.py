@@ -436,9 +436,13 @@ class SystemConfigViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_permissions(self):
-        """list 方法允许匿名访问（用于登录页面显示公司信息）"""
+        """list 方法允许匿名访问（用于登录页面显示公司信息）；
+        写操作(create)收紧为仅系统管理员，防止任意登录用户篡改
+        公司银行账号/税号/法人等影响发票识别的敏感配置。"""
         if self.action == 'list':
             return [AllowAny()]
+        if self.action == 'create':
+            return [IsSystemAdmin()]
         return super().get_permissions()
 
     def list(self, request):

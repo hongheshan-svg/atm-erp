@@ -4,18 +4,18 @@
       <template #header>
         <div class="card-header">
           <span>角色管理</span>
-          <el-button type="primary" v-permission="'accounts:role:create'" @click="handleAdd">新增角色</el-button>
+          <el-button type="primary" v-permission="'system:role'" @click="handleAdd">新增角色</el-button>
         </div>
       </template>
 
       <!-- 批量操作工具栏 -->
-      <div class="table-toolbar" v-permission="'accounts:role:delete'" v-if="canDelete && selectedRows.length > 0">
+      <div class="table-toolbar" v-if="canManage && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" v-permission="'accounts:role:delete'" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
+        <el-button type="danger" size="small" @click="batchDelete" :loading="deleteLoading">批量删除</el-button>
       </div>
 
       <el-table :data="roles" v-loading="loading" stripe border @selection-change="handleSelectionChange">
-        <el-table-column v-permission="'accounts:role:delete'" v-if="canDelete" type="selection" width="55" fixed />
+        <el-table-column v-if="canManage" type="selection" width="55" fixed />
         <el-table-column prop="id" label="编号" width="80" />
         <el-table-column prop="name" label="角色名称" width="150" />
         <el-table-column prop="code" label="角色编码" width="150" />
@@ -32,9 +32,9 @@
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" v-permission="'accounts:role:edit'" @click="handleEdit(row)">编辑</el-button>
-            <el-button size="small" type="primary" @click="handlePermission(row)">权限配置</el-button>
-            <el-button v-if="canDelete" size="small" type="danger" @click="deleteRow(row)" :loading="deleteLoading">删除</el-button>
+            <el-button size="small" v-permission="'system:role'" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" type="primary" v-permission="'system:role'" @click="handlePermission(row)">权限配置</el-button>
+            <el-button v-if="canManage" size="small" type="danger" @click="deleteRow(row)" :loading="deleteLoading">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -164,8 +164,9 @@ import { getPermissionTree } from '@/api/system'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 
-// 权限检查
-const { canDelete } = usePermission()
+// 权限检查（菜单级粒度：持有 system:role 菜单即可管理角色）
+const { hasPermission } = usePermission()
+const canManage = computed(() => hasPermission('system:role'))
 
 // 批量删除功能
 const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
@@ -225,77 +226,77 @@ const presetRoles = ref([
     code: 'project_manager',
     type: 'warning',
     data_scope: 'all',
-    menu_ids: ['dashboard', 'projects', 'design', 'plm', 'knowledge', 'purchase:requests', 'purchase:orders', 'purchase:goods-receipts', 'purchase:outsource', 'sales:quotations', 'sales:orders', 'sales:delivery-orders', 'aftersales', 'inventory:stocks', 'inventory:requisitions', 'inventory:returns', 'inventory:mrp', 'production:plans', 'production:debug-records', 'production:inspections', 'mes:scheduling', 'mes:kanban', 'equipment:list', 'equipment:fixtures', 'reports:profitability', 'reports:cost-analysis', 'reports:timelog', 'masterdata:items', 'masterdata:customers', 'masterdata:suppliers', 'workflow:tasks', 'workflow:my-submissions', 'oa:schedule', 'oa:meeting', 'oa:leave', 'accounts:attendance']
+    menu_ids: ['dashboard', 'projects', 'design', 'plm', 'knowledge', 'purchase:requests', 'purchase:orders', 'purchase:goods-receipts', 'purchase:outsource', 'sales:quotations', 'sales:orders', 'sales:delivery-orders', 'aftersales', 'inventory:stocks', 'inventory:requisitions', 'inventory:returns', 'inventory:mrp', 'production:plans', 'production:debug-records', 'production:inspections', 'mes:scheduling', 'mes:kanban', 'equipment:list', 'equipment:fixtures', 'reports:profitability', 'reports:cost-analysis', 'reports:timelog', 'masterdata:items', 'masterdata:customers', 'masterdata:suppliers', 'oa:workflow', 'oa:schedule', 'oa:meeting', 'oa:leave', 'accounts:attendance']
   },
   {
     name: '技术工程师',
     code: 'engineer',
     type: 'primary',
     data_scope: 'all',
-    menu_ids: ['dashboard', 'projects:list', 'projects:tasks', 'projects:bom', 'projects:bom-cost', 'projects:bugs', 'projects:drawing-versions', 'projects:time-logs', 'projects:work-orders', 'design', 'plm', 'knowledge', 'purchase:requests', 'inventory:stocks', 'inventory:requisitions', 'inventory:returns', 'production:processes', 'production:routing', 'production:debug-records', 'production:inspections', 'masterdata:items', 'workflow:tasks', 'workflow:my-submissions', 'oa:schedule', 'oa:leave', 'accounts:attendance']
+    menu_ids: ['dashboard', 'projects:list', 'projects:tasks', 'projects:bom', 'projects:bom-cost', 'projects:bugs', 'projects:drawing-versions', 'projects:time-logs', 'projects:work-orders', 'design', 'plm', 'knowledge', 'purchase:requests', 'inventory:stocks', 'inventory:requisitions', 'inventory:returns', 'production:processes', 'production:routing', 'production:debug-records', 'production:inspections', 'masterdata:items', 'oa:workflow', 'oa:schedule', 'oa:leave', 'accounts:attendance']
   },
   {
     name: '销售经理',
     code: 'sales_manager',
     type: 'success',
     data_scope: 'all',
-    menu_ids: ['dashboard', 'sales', 'masterdata:customers', 'masterdata:customer-contacts', 'masterdata:customer-followups', 'masterdata:items', 'finance:ar', 'finance:collection', 'finance:sales-reconciliation', 'aftersales', 'projects:list', 'projects:dashboard', 'reports:profitability', 'reports:cash-flow', 'reports:aging', 'reports:customer-value', 'workflow:tasks', 'workflow:my-submissions', 'oa:schedule', 'oa:meeting', 'accounts:attendance']
+    menu_ids: ['dashboard', 'sales', 'masterdata:customers', 'masterdata:customer-contacts', 'masterdata:customer-followups', 'masterdata:items', 'finance:ar', 'finance:collection', 'finance:sales-reconciliation', 'aftersales', 'projects:list', 'projects:dashboard', 'reports:profitability', 'reports:cash-flow', 'reports:aging', 'reports:customer-value', 'oa:workflow', 'oa:schedule', 'oa:meeting', 'accounts:attendance']
   },
   {
     name: '销售人员',
     code: 'salesperson',
     type: 'success',
     data_scope: 'self',
-    menu_ids: ['dashboard', 'sales:crm-dashboard', 'sales:leads', 'sales:opportunities', 'sales:quotations', 'sales:quote', 'sales:quote-estimation', 'sales:orders', 'sales:contracts', 'sales:delivery-orders', 'masterdata:customers', 'masterdata:customer-contacts', 'masterdata:customer-followups', 'masterdata:items', 'aftersales:orders', 'projects:list', 'workflow:tasks', 'workflow:my-submissions', 'oa:schedule', 'accounts:attendance']
+    menu_ids: ['dashboard', 'sales:crm-dashboard', 'sales:leads', 'sales:opportunities', 'sales:quotations', 'sales:quote', 'sales:quote-estimation', 'sales:orders', 'sales:contracts', 'sales:delivery-orders', 'masterdata:customers', 'masterdata:customer-contacts', 'masterdata:customer-followups', 'masterdata:items', 'aftersales:orders', 'projects:list', 'oa:workflow', 'oa:schedule', 'accounts:attendance']
   },
   {
     name: '采购经理',
     code: 'purchase_manager',
     type: 'info',
     data_scope: 'all',
-    menu_ids: ['dashboard', 'purchase', 'masterdata:suppliers', 'masterdata:items', 'inventory:stocks', 'inventory:mrp', 'inventory:alerts', 'finance:ap', 'finance:purchase-reconciliation', 'projects:list', 'reports:slow-moving', 'reports:aging', 'reports:cost-analysis', 'workflow:tasks', 'workflow:my-submissions', 'oa:schedule', 'oa:meeting', 'accounts:attendance']
+    menu_ids: ['dashboard', 'purchase', 'masterdata:suppliers', 'masterdata:items', 'inventory:stocks', 'inventory:mrp', 'inventory:alerts', 'finance:ap', 'finance:purchase-reconciliation', 'projects:list', 'reports:slow-moving', 'reports:aging', 'reports:cost-analysis', 'oa:workflow', 'oa:schedule', 'oa:meeting', 'accounts:attendance']
   },
   {
     name: '采购人员',
     code: 'purchaser',
     type: 'info',
     data_scope: 'self',
-    menu_ids: ['dashboard', 'purchase:requests', 'purchase:orders', 'purchase:goods-receipts', 'purchase:rfqs', 'purchase:comparisons', 'purchase:outsource', 'purchase:collaboration', 'masterdata:suppliers', 'masterdata:items', 'inventory:stocks', 'inventory:mrp', 'finance:purchase-reconciliation', 'workflow:tasks', 'workflow:my-submissions', 'oa:schedule', 'accounts:attendance']
+    menu_ids: ['dashboard', 'purchase:requests', 'purchase:orders', 'purchase:goods-receipts', 'purchase:rfqs', 'purchase:comparisons', 'purchase:outsource', 'purchase:collaboration', 'masterdata:suppliers', 'masterdata:items', 'inventory:stocks', 'inventory:mrp', 'finance:purchase-reconciliation', 'oa:workflow', 'oa:schedule', 'accounts:attendance']
   },
   {
     name: '仓库管理',
     code: 'warehouse_manager',
     type: '',
     data_scope: 'all',
-    menu_ids: ['dashboard', 'inventory', 'purchase:goods-receipts', 'masterdata:items', 'masterdata:warehouses', 'masterdata:locations', 'workflow:tasks', 'workflow:my-submissions', 'oa:schedule', 'accounts:attendance']
+    menu_ids: ['dashboard', 'inventory', 'purchase:goods-receipts', 'masterdata:items', 'masterdata:warehouses', 'masterdata:locations', 'oa:workflow', 'oa:schedule', 'accounts:attendance']
   },
   {
     name: '生产主管',
     code: 'production_manager',
     type: 'danger',
     data_scope: 'all',
-    menu_ids: ['dashboard', 'production', 'mes', 'equipment', 'projects:list', 'projects:work-orders', 'inventory:stocks', 'inventory:requisitions', 'inventory:returns', 'purchase:outsource', 'reports:capacity-utilization', 'workflow:tasks', 'workflow:my-submissions', 'oa:schedule', 'accounts:attendance']
+    menu_ids: ['dashboard', 'production', 'mes', 'equipment', 'projects:list', 'projects:work-orders', 'inventory:stocks', 'inventory:requisitions', 'inventory:returns', 'purchase:outsource', 'reports:capacity-utilization', 'oa:workflow', 'oa:schedule', 'accounts:attendance']
   },
   {
     name: '财务经理',
     code: 'finance_manager',
     type: 'warning',
     data_scope: 'all',
-    menu_ids: ['dashboard', 'finance', 'reports:profitability', 'reports:project-profitability', 'reports:cost-analysis', 'reports:cash-flow', 'reports:aging', 'workflow:tasks', 'workflow:my-submissions', 'workflow:config', 'oa:schedule', 'accounts:attendance']
+    menu_ids: ['dashboard', 'finance', 'reports:profitability', 'reports:project-profitability', 'reports:cost-analysis', 'reports:cash-flow', 'reports:aging', 'oa:workflow', 'oa:schedule', 'accounts:attendance']
   },
   {
     name: '财务人员',
     code: 'accountant',
     type: 'warning',
     data_scope: 'self',
-    menu_ids: ['dashboard', 'finance:expenses', 'finance:ar', 'finance:ap', 'finance:invoices', 'finance:collection', 'finance:assets', 'finance:purchase-reconciliation', 'finance:sales-reconciliation', 'finance:shared-expenses', 'reports:aging', 'reports:cash-flow', 'workflow:tasks', 'workflow:my-submissions', 'oa:schedule', 'accounts:attendance']
+    menu_ids: ['dashboard', 'finance:expenses', 'finance:ar', 'finance:ap', 'finance:invoices', 'finance:collection', 'finance:assets', 'finance:purchase-reconciliation', 'finance:sales-reconciliation', 'finance:shared-expenses', 'reports:aging', 'reports:cash-flow', 'oa:workflow', 'oa:schedule', 'accounts:attendance']
   },
   {
     name: '普通员工',
     code: 'employee',
     type: '',
     data_scope: 'self',
-    menu_ids: ['dashboard', 'projects:list', 'projects:tasks', 'projects:time-logs', 'oa:announcement', 'oa:meeting', 'oa:schedule', 'oa:leave', 'oa:vehicle-request', 'workflow:tasks', 'workflow:my-submissions', 'accounts:attendance']
+    menu_ids: ['dashboard', 'projects:list', 'projects:tasks', 'projects:time-logs', 'oa:announcement', 'oa:meeting', 'oa:schedule', 'oa:leave', 'oa:vehicle-request', 'oa:workflow', 'accounts:attendance']
   }
 ])
 

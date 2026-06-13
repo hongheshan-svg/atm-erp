@@ -81,6 +81,7 @@ class WorkflowTaskSerializer(serializers.ModelSerializer):
     step_order = serializers.IntegerField(source='step.step_order', read_only=True)
     assignee_name = serializers.CharField(source='assignee.get_full_name', read_only=True)
     business_no = serializers.CharField(source='instance.business_no', read_only=True)
+    business_id = serializers.IntegerField(source='instance.business_id', read_only=True)
     business_type = serializers.CharField(source='instance.business_type', read_only=True)
     business_type_display = serializers.CharField(source='instance.workflow.get_business_type_display', read_only=True)
     workflow_name = serializers.CharField(source='instance.workflow.name', read_only=True)
@@ -103,6 +104,7 @@ class WorkflowTaskSerializer(serializers.ModelSerializer):
             'comment',
             'deadline',
             'business_no',
+            'business_id',
             'business_type',
             'business_type_display',
             'workflow_name',

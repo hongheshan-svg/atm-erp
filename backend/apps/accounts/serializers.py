@@ -27,6 +27,8 @@ class DepartmentSerializer(serializers.ModelSerializer):
 
     parent_name = serializers.CharField(source='parent.name', read_only=True)
     manager_name = serializers.SerializerMethodField()
+    member_count = serializers.SerializerMethodField()
+    total_member_count = serializers.SerializerMethodField()
 
     def get_manager_name(self, obj):
         if obj.manager:
@@ -35,6 +37,28 @@ class DepartmentSerializer(serializers.ModelSerializer):
                 return f'{obj.manager.last_name}{obj.manager.first_name}'
             return obj.manager.username
         return ''
+
+    def get_member_count(self, obj):
+        """直属成员数（不含下级部门）。"""
+        return obj.users.filter(is_deleted=False, is_active=True).count()
+
+    def get_total_member_count(self, obj):
+        """全部成员数（含所有下级部门），按部门树递归统计。"""
+        from apps.accounts.models import User
+
+        dept_ids = [obj.id]
+        frontier = [obj.id]
+        # 逐层向下收集子部门ID，避免对每个用户做查询
+        while frontier:
+            children = list(
+                Department.objects.filter(parent_id__in=frontier, is_deleted=False).values_list('id', flat=True)
+            )
+            children = [cid for cid in children if cid not in dept_ids]
+            if not children:
+                break
+            dept_ids.extend(children)
+            frontier = children
+        return User.objects.filter(department_id__in=dept_ids, is_deleted=False, is_active=True).count()
 
     class Meta:
         model = Department
@@ -46,6 +70,8 @@ class DepartmentSerializer(serializers.ModelSerializer):
             'parent_name',
             'manager',
             'manager_name',
+            'member_count',
+            'total_member_count',
             'description',
             'sort_order',
             'is_deleted',
@@ -198,6 +224,13 @@ class UserSerializer(serializers.ModelSerializer):
 
     department_name = serializers.CharField(source='department.name', read_only=True)
     role_name = serializers.CharField(source='role.name', read_only=True)
+    display_name = serializers.SerializerMethodField()
+
+    def get_display_name(self, obj):
+        """显示用姓名：中文姓在前名在后，缺省回退 username。"""
+        if obj.last_name or obj.first_name:
+            return f'{obj.last_name}{obj.first_name}'
+        return obj.username
 
     class Meta:
         model = User
@@ -208,6 +241,7 @@ class UserSerializer(serializers.ModelSerializer):
             'email',
             'first_name',
             'last_name',
+            'display_name',
             'phone',
             'avatar',
             'gender',
