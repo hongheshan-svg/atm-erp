@@ -86,11 +86,17 @@
             </el-button>
             
             <!-- 待项目确认: 项目确认 -->
-            <el-button size="small" type="success" @click="handleProjectConfirm(row)" 
+            <el-button size="small" type="success" @click="handleProjectConfirm(row)"
                        v-if="row.status === 'PROJECT_CONFIRMING'">
               项目确认
             </el-button>
-            
+
+            <!-- 操作环节(备货~项目确认): 终止/拒绝（出库后拒绝会红冲库存与已发数） -->
+            <el-button size="small" type="danger" plain @click="handleReject(row)"
+                       v-if="['APPROVED', 'PREPARING', 'LOGISTICS_BOOKING', 'CUSTOMER_SIGNING', 'UPLOADING_RECEIPT', 'PROJECT_CONFIRMING'].includes(row.status)">
+              终止
+            </el-button>
+
             <!-- 草稿/已拒绝: 可删除 -->
             <el-button 
               v-if="canDelete && ['DRAFT', 'REJECTED'].includes(row.status)"
@@ -300,7 +306,7 @@
 import WorkflowProgress from '@/components/WorkflowProgress.vue'
 
 import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { getDeliveryOrders, getDeliveryOrder, submitDeliveryOrder, confirmDeliveryPrepared, confirmDeliveryLogistics, confirmDeliverySigned, uploadDeliveryReceipt, projectConfirmDelivery, rejectDeliveryOrder } from '@/api/sales'
@@ -308,6 +314,8 @@ import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 
 const router = useRouter()
+const route = useRoute()
+void router
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -408,12 +416,14 @@ const getStatusLabel = (status) => {
 const loadDeliveryOrders = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
-      ...searchForm
+      status: searchForm.status,
+      // 发货单号走后端 search_fields（filterset 不含 delivery_no），用 search 参数传递
+      search: searchForm.delivery_no
     }
-    
+
     Object.keys(params).forEach(key => {
       if (params[key] === '' || params[key] === null) {
         delete params[key]
@@ -714,6 +724,10 @@ const handlePrint = (row) => {
 }
 
 onMounted(() => {
+  // 从订单详情页"查看发货记录"跳转携带 ?delivery_no=... 时自动按单号过滤
+  if (route.query.delivery_no) {
+    searchForm.delivery_no = String(route.query.delivery_no)
+  }
   loadDeliveryOrders()
 })
 </script>

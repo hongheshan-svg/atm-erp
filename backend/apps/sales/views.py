@@ -124,13 +124,12 @@ class SalesQuotationViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
                 })
                 
         except Exception as e:
-            quotation.status = 'APPROVED'
-            quotation.save()
-            return Response({
-                **SalesQuotationSerializer(quotation).data,
-                'workflow_started': False,
-                'message': f'报价单已通过，但工作流服务异常: {e}'
-            })
+            # 工作流服务异常不可 fail-open 自动通过：保持原状态，返回 5xx 供重试
+            logger.exception('报价单提交工作流异常 quote_no=%s', quotation.quote_no)
+            return Response(
+                {'error': f'审批服务暂时不可用，请稍后重试: {e}'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
     
     @action(detail=True, methods=['post'])
     def convert_to_so(self, request, pk=None):
@@ -237,6 +236,16 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
             raise ValidationError({'customer': f'客户「{customer.name}」已停用，无法新建销售订单'})
         super().perform_create(serializer)
 
+    def perform_destroy(self, instance):
+        """删除状态守卫：仅草稿/已取消/已拒绝可删，避免 API 直删已确认/部分发货订单。"""
+        from rest_framework.exceptions import ValidationError
+
+        if instance.status not in ['DRAFT', 'CANCELLED', 'REJECTED']:
+            raise ValidationError(
+                {'status': f'仅草稿/已取消/已拒绝状态的订单可删除，当前状态：{instance.get_status_display()}'}
+            )
+        super().perform_destroy(instance)
+
     @action(detail=False, methods=['get'])
     def for_linking(self, request):
         """获取可用于关联的销售订单（不受数据权限限制）"""
@@ -332,12 +341,16 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
                     'message': '已提交审批，请在审批中心查看审批进度'
                 })
             else:
-                # 未配置审批流程，直接确认
+                # 仅"未配置审批流程"才直接确认
                 return self._do_confirm(so, request)
-                
+
         except Exception as e:
-            # 审批模块不可用，直接确认
-            return self._do_confirm(so, request)
+            # 工作流服务异常不可 fail-open 自动确认：保持原状态，返回 5xx 供重试
+            logger.exception('销售订单提交工作流异常 order_no=%s', so.order_no)
+            return Response(
+                {'error': f'审批服务暂时不可用，请稍后重试: {e}'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
     
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
@@ -1306,7 +1319,7 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                     'message': '已提交审批，请在审批中心查看审批进度'
                 })
             else:
-                # 未配置审批流程，直接进入备货
+                # 仅"未配置审批流程"才直接进入备货
                 delivery.status = 'PREPARING'
                 delivery.save()
                 return Response({
@@ -1314,16 +1327,14 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                     'workflow_started': False,
                     'message': error or '未配置审批流程，已直接进入备货环节'
                 })
-                
+
         except Exception as e:
-            # 审批模块不可用，直接进入备货
-            delivery.status = 'PREPARING'
-            delivery.save()
-            return Response({
-                **DeliveryOrderSerializer(delivery).data,
-                'workflow_started': False,
-                'message': f'提交成功，但工作流服务异常: {e}'
-            })
+            # 工作流服务异常不可 fail-open：备货下一步即扣库存，必须保持原状态、返回 5xx 供重试
+            logger.exception('发货单提交工作流异常 delivery_no=%s', delivery.delivery_no)
+            return Response(
+                {'error': f'审批服务暂时不可用，请稍后重试: {e}'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
     
     # 获取当前审批状态
     @action(detail=True, methods=['get'])
@@ -1530,19 +1541,69 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
     # 拒绝操作（可在任意审批环节拒绝）
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
-        """拒绝发货申请"""
+        """拒绝发货申请
+
+        出库后（confirm_prepared 已创建 OUT_SALES 并累加 delivered_qty，
+        即 LOGISTICS_BOOKING 及之后）的拒绝必须同事务红冲：生成反向入库 StockMove
+        并回减 so_line.delivered_qty，否则库存已扣、已发数虚高，重新提交再次出库会二次扣库存。
+        """
         delivery = self.get_object()
         if delivery.status in ['DRAFT', 'COMPLETED', 'REJECTED']:
             return Response(
                 {'error': '当前状态不能拒绝'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         reason = request.data.get('reason', '')
-        delivery.status = 'REJECTED'
-        delivery.rejection_reason = reason
-        delivery.save()
-        
+        # 出库发生在 confirm_prepared（进入 LOGISTICS_BOOKING 前），故这些状态需回滚库存与已发数
+        stocked_out_statuses = [
+            'LOGISTICS_BOOKING', 'CUSTOMER_SIGNING', 'UPLOADING_RECEIPT', 'PROJECT_CONFIRMING'
+        ]
+
+        with transaction.atomic():
+            if delivery.status in stocked_out_statuses:
+                from django.db.models import F
+                from django.utils import timezone
+
+                from apps.inventory.models import StockMove
+                from apps.sales.models import SalesOrderLine
+
+                for line in delivery.lines.filter(is_deleted=False):
+                    if line.item:
+                        # 反向入库（ADJUSTMENT 设 warehouse_to → 走 _update_stock_in 回补库存）
+                        StockMove.objects.create(
+                            item=line.item,
+                            warehouse_to=delivery.warehouse,
+                            qty=line.qty,
+                            unit_cost=line.so_line.unit_price,
+                            move_type='ADJUSTMENT',
+                            reference_type='DeliveryOrder',
+                            reference_id=delivery.id,
+                            project=delivery.so.project,
+                            move_date=timezone.now().date(),
+                            status='COMPLETED',
+                            notes=f'发货单 {delivery.delivery_no} 拒绝红冲入库',
+                            created_by=request.user
+                        )
+                    # 回减销售订单已发数量
+                    SalesOrderLine.objects.filter(pk=line.so_line_id).update(
+                        delivered_qty=F('delivered_qty') - line.qty
+                    )
+
+                # 若订单此前已被置为 PARTIAL/COMPLETED，回滚后据剩余已发数重判
+                so = delivery.so
+                so.refresh_from_db()
+                if so.status in ['PARTIAL', 'COMPLETED']:
+                    any_delivered = any(
+                        (sl.delivered_qty or 0) > 0 for sl in so.lines.filter(is_deleted=False)
+                    )
+                    so.status = 'PARTIAL' if any_delivered else 'CONFIRMED'
+                    so.save()
+
+            delivery.status = 'REJECTED'
+            delivery.rejection_reason = reason
+            delivery.save()
+
         return Response({
             **DeliveryOrderSerializer(delivery).data,
             'message': '已拒绝'

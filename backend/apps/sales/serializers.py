@@ -379,7 +379,24 @@ class SalesOrderSerializer(serializers.ModelSerializer):
         return so
 
     def update(self, instance, validated_data):
-        """Update SO with lines."""
+        """Update SO with lines.
+
+        状态守卫：仅 DRAFT/REJECTED（或确无发货记录）允许全量重建明细。
+        已发货订单整单重建会触发 DeliveryOrderLine.so_line PROTECT 报 500，
+        且会清零 delivered_qty、不同步已生成的应收账款，故直接拒绝。
+        行删除走软删（soft_delete），避免硬删撞 ProtectedError。
+        """
+        from django.utils import timezone
+
+        if instance.status not in ['DRAFT', 'REJECTED']:
+            if instance.deliveries.filter(is_deleted=False).exists():
+                raise serializers.ValidationError(
+                    {'status': '订单已有发货记录，不能修改明细；请先处理发货单或走变更流程'}
+                )
+            raise serializers.ValidationError(
+                {'status': f'仅草稿/已拒绝状态的订单可编辑，当前状态：{instance.get_status_display()}'}
+            )
+
         lines_data = self.initial_data.get('lines', [])
 
         with transaction.atomic():
@@ -388,8 +405,11 @@ class SalesOrderSerializer(serializers.ModelSerializer):
                 setattr(instance, attr, value)
             instance.save()
 
-            # Delete old lines and create new ones
-            instance.lines.all().delete()
+            # 软删旧明细（避免硬删触发 ProtectedError）后重建
+            for old_line in instance.lines.filter(is_deleted=False):
+                old_line.is_deleted = True
+                old_line.deleted_at = timezone.now()
+                old_line.save(update_fields=['is_deleted', 'deleted_at'])
 
             for line_data in lines_data:
                 # 支持两种模式：选择物料 或 手动填写产品信息

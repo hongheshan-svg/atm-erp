@@ -88,7 +88,7 @@
 
       <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center;">
         <div>
-          <el-button type="primary" @click="handleCreateDelivery" v-if="order.status === 'CONFIRMED' && (order.lines?.length > 0)">
+          <el-button type="primary" @click="handleCreateDelivery" v-if="['CONFIRMED', 'PARTIAL'].includes(order.status) && (order.lines?.length > 0)">
             <el-icon><Van /></el-icon>
             创建发货单
           </el-button>
@@ -347,9 +347,7 @@ const loadOrderDetail = async () => {
 
 const loadWarehouses = async () => {
   try {
-    const response = await getWarehouseList({
-      params: { page_size: 100 }
-    })
+    const response = await getWarehouseList({ page_size: 100 })
     warehouses.value = response.results || response || []
   } catch (error) {
     console.error('加载仓库失败:', error)
@@ -361,7 +359,8 @@ const goBack = () => {
 }
 
 const handleEdit = () => {
-  router.push(`/sales/orders/${route.params.id}/edit`)
+  // 订单编辑实际是列表页的对话框，没有独立 /edit 路由；跳列表并带 query 自动打开编辑
+  router.push({ path: '/sales/orders', query: { edit: route.params.id } })
 }
 
 const handleConfirm = async () => {
@@ -540,7 +539,8 @@ const submitDelivery = async () => {
 }
 
 const viewDelivery = (row) => {
-  router.push(`/sales/delivery-orders/${row.id}`)
+  // 没有发货单详情独立路由；跳发货管理列表并带单号过滤
+  router.push({ path: '/sales/delivery-orders', query: { delivery_no: row.delivery_no } })
 }
 
 onMounted(async () => {

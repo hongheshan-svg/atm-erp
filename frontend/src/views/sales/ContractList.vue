@@ -68,7 +68,7 @@
             <el-button size="small" v-permission="'sales:contract:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button size="small" type="warning" @click="handleSubmitApproval(row)" v-if="row.status === 'DRAFT' || row.status === 'REJECTED'">提交审批</el-button>
             <el-button size="small" type="info" @click="showWorkflowProgress(row)" v-if="row.status === 'PENDING'">审批进度</el-button>
-            <el-button size="small" type="warning" @click="handleApprove(row)" v-if="row.status === 'PENDING'">审批</el-button>
+            <!-- PENDING 仅在 submit 启动工作流后出现，此时直接审批必被后端 400 拦截，故只走审批中心 -->
             <el-button size="small" type="success" @click="handleSign(row)" v-if="row.status === 'APPROVED'">签署</el-button>
             <el-button size="small" type="info" @click="handlePrint(row)">打印</el-button>
             <el-button v-if="canDelete && row.status === 'DRAFT'" size="small" type="danger" @click="deleteRow(row)" :loading="deleteLoading">删除</el-button>
@@ -277,7 +277,7 @@ import WorkflowProgress from '@/components/WorkflowProgress.vue'
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { getSalesContracts, getSalesContract, createContractFromSO, patchSalesContract, submitSalesContract, approveSalesContract, signSalesContract, printPreviewContract, getOrdersForLinking } from '@/api/sales'
+import { getSalesContracts, getSalesContract, createContractFromSO, patchSalesContract, submitSalesContract, signSalesContract, printPreviewContract, getSalesOrders } from '@/api/sales'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 import { getCustomerList } from '@/api/masterdata'
@@ -425,8 +425,13 @@ const searchOrders = async (query) => {
   if (query) {
     searchingOrders.value = true
     try {
-      const res = await getOrdersForLinking({ search: query })
-      salesOrders.value = res || []
+      // 合同可在订单确认后任意阶段签订，不应复用 for_linking（其会排除已立项订单）。
+      // 改用标准订单列表搜索，仅过滤已确认及之后的订单（草稿/审批中不签合同）。
+      const res = await getSalesOrders({ search: query, page_size: 50 })
+      const list = res.results || res || []
+      salesOrders.value = list.filter(o =>
+        ['CONFIRMED', 'PARTIAL', 'COMPLETED'].includes(o.status)
+      )
     } catch (error) {
       console.error('搜索订单失败:', error)
     } finally {
@@ -553,19 +558,6 @@ const handleSubmitApproval = async (row) => {
     if (error !== 'cancel') {
       const msg = error.response?.data?.error || '提交失败'
       ElMessage.error(msg)
-    }
-  }
-}
-
-const handleApprove = async (row) => {
-  try {
-    await ElMessageBox.confirm('确定要审批通过该合同吗？', '审批合同', { type: 'warning' })
-    await approveSalesContract(row.id)
-    ElMessage.success('合同已审批')
-    loadContracts()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('审批合同失败')
     }
   }
 }

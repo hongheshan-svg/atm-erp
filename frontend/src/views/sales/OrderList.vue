@@ -345,7 +345,7 @@
 import WorkflowProgress from '@/components/WorkflowProgress.vue'
 
 import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete, Download, Upload } from '@element-plus/icons-vue'
 import { getSalesOrders, getSalesOrder, createSalesOrder, updateSalesOrder, deleteSalesOrder, submitSalesOrder, confirmSalesOrder, cancelSalesOrder, downloadOrderTemplate, importSalesOrders, exportSalesOrders, bulkDeleteSalesOrders } from '@/api/sales'
@@ -355,6 +355,7 @@ import { getCustomerList } from '@/api/masterdata'
 import { getProjectList } from '@/api/projects/project'
 
 const router = useRouter()
+const route = useRoute()
 const permissionStore = usePermissionStore()
 const workflowDialogVisible = ref(false)
 const workflowBusinessId = ref(null)
@@ -831,9 +832,14 @@ const handleBulkDelete = async () => {
   }
 }
 
-onMounted(() => {
-  loadOrders()
+onMounted(async () => {
+  await loadOrders()
   loadCustomers()
+
+  // 支持从详情页跳转携带 ?edit=<id> 自动打开编辑对话框（详情页无独立编辑路由）
+  if (route.query.edit) {
+    handleEdit({ id: route.query.edit })
+  }
 })
 </script>
 

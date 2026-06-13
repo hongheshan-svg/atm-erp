@@ -191,7 +191,7 @@
 
       <template #footer>
         <el-button @click="detailVisible = false">关闭</el-button>
-        <el-button type="primary" @click="handlePrint">打印报价单</el-button>
+        <el-button type="primary" @click="handlePrint(currentQuotation)">打印报价单</el-button>
       </template>
     </el-dialog>
 
@@ -293,12 +293,15 @@ const formatMoney = (val) => parseFloat(val || 0).toFixed(2)
 const loadQuotations = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
-      ...searchForm
+      customer: searchForm.customer,
+      status: searchForm.status,
+      // 报价单号走后端 search_fields（filterset 不含 quote_no），用 search 参数传递
+      search: searchForm.quote_no
     }
-    
+
     // 移除空值
     Object.keys(params).forEach(key => {
       if (params[key] === '' || params[key] === null) {
@@ -495,10 +498,10 @@ const handlePrint = (row) => {
           ${(row.lines || []).map((line, index) => `
             <tr>
               <td>${index + 1}</td>
-              <td>${line.item_code || '-'}</td>
-              <td>${line.item_name || '-'}</td>
-              <td>${line.specification || '-'}</td>
-              <td>${line.unit || '-'}</td>
+              <td>${line.item_sku || '-'}</td>
+              <td>${line.item_name || line.custom_name || '-'}</td>
+              <td>${line.item_spec || line.custom_spec || '-'}</td>
+              <td>${line.item_unit || line.custom_unit || '-'}</td>
               <td class="number">${line.qty}</td>
               <td class="number">¥${Number(line.unit_price || 0).toFixed(2)}</td>
               <td class="number">¥${Number(line.line_amount || 0).toFixed(2)}</td>
