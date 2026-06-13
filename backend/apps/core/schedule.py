@@ -6,7 +6,7 @@ OA协同办公模块
 
 from datetime import date, timedelta
 
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import serializers, viewsets
@@ -245,6 +245,8 @@ class ScheduleSerializer(serializers.ModelSerializer):
         model = Schedule
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by']
+        # owner 可写但非必填；未传时由 ScheduleViewSet.perform_create 默认当前用户
+        extra_kwargs = {'owner': {'required': False}}
 
     def get_participant_names(self, obj):
         return [u.get_full_name() for u in obj.participants.all()]
@@ -297,6 +299,35 @@ class MeetingSerializer(serializers.ModelSerializer):
         model = Meeting
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by', 'meeting_no']
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        # 取本次/原有值（更新时部分字段可能不在 attrs 中）
+        instance = self.instance
+        room = attrs.get('meeting_room', getattr(instance, 'meeting_room', None))
+        start = attrs.get('start_time', getattr(instance, 'start_time', None))
+        end = attrs.get('end_time', getattr(instance, 'end_time', None))
+        status = attrs.get('status', getattr(instance, 'status', 'SCHEDULED'))
+
+        if start and end and end <= start:
+            raise serializers.ValidationError({'end_time': '结束时间必须晚于开始时间'})
+
+        # 仅占用会议室且未取消的会议参与冲突校验；线上无会议室不冲突
+        if room is not None and start and end and status != 'CANCELLED':
+            conflict_qs = Meeting.objects.filter(
+                meeting_room=room,
+                is_deleted=False,
+                start_time__lt=end,
+                end_time__gt=start,
+            ).exclude(status='CANCELLED')
+            if instance is not None:
+                conflict_qs = conflict_qs.exclude(pk=instance.pk)
+            if conflict_qs.exists():
+                raise serializers.ValidationError(
+                    {'meeting_room': '该会议室在所选时段已被预定，请选择其他时段或会议室'}
+                )
+
+        return attrs
 
 
 class MeetingListSerializer(serializers.ModelSerializer):
@@ -356,6 +387,12 @@ class ScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, views
         user = self.request.user
         # 只能看自己的日程或公开日程或被邀请的日程
         return qs.filter(Q(owner=user) | Q(is_public=True) | Q(participants=user)).distinct()
+
+    def perform_create(self, serializer):
+        # owner 未传时默认当前用户；created_by/updated_by 由 UserTrackingMixin 注入
+        if not serializer.validated_data.get('owner'):
+            serializer.validated_data['owner'] = self.request.user
+        super().perform_create(serializer)
 
     @action(detail=False, methods=['get'])
     def calendar(self, request):
@@ -461,12 +498,53 @@ class MeetingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
             return MeetingListSerializer
         return MeetingSerializer
 
+    @staticmethod
+    def _assert_room_free(room, start, end, status, exclude_pk=None):
+        """在事务内对会议室行加锁并复核时段冲突，防止并发重复预定。"""
+        if room is None or not start or not end or status == 'CANCELLED':
+            return
+        # 锁定会议室行，串行化对同一会议室的并发预定请求
+        MeetingRoom.all_objects.select_for_update().filter(pk=room.pk).first()
+        conflict_qs = Meeting.objects.filter(
+            meeting_room=room,
+            is_deleted=False,
+            start_time__lt=end,
+            end_time__gt=start,
+        ).exclude(status='CANCELLED')
+        if exclude_pk is not None:
+            conflict_qs = conflict_qs.exclude(pk=exclude_pk)
+        if conflict_qs.exists():
+            raise serializers.ValidationError(
+                {'meeting_room': '该会议室在所选时段已被预定，请选择其他时段或会议室'}
+            )
+
     def perform_create(self, serializer):
-        meeting = serializer.save(organizer=self.request.user, created_by=self.request.user)
-        # 添加参与者
-        participant_ids = self.request.data.get('participant_ids', [])
-        for uid in participant_ids:
-            MeetingParticipant.objects.create(meeting=meeting, user_id=uid, created_by=self.request.user)
+        data = serializer.validated_data
+        with transaction.atomic():
+            self._assert_room_free(
+                data.get('meeting_room'),
+                data.get('start_time'),
+                data.get('end_time'),
+                data.get('status', 'SCHEDULED'),
+            )
+            meeting = serializer.save(organizer=self.request.user, created_by=self.request.user)
+            # 添加参与者
+            participant_ids = self.request.data.get('participant_ids', [])
+            for uid in participant_ids:
+                MeetingParticipant.objects.create(meeting=meeting, user_id=uid, created_by=self.request.user)
+
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        data = serializer.validated_data
+        with transaction.atomic():
+            self._assert_room_free(
+                data.get('meeting_room', instance.meeting_room),
+                data.get('start_time', instance.start_time),
+                data.get('end_time', instance.end_time),
+                data.get('status', instance.status),
+                exclude_pk=instance.pk,
+            )
+            serializer.save(updated_by=self.request.user)
 
     @action(detail=True, methods=['post'])
     def respond(self, request, pk=None):
