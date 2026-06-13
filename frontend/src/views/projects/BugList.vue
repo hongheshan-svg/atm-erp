@@ -530,7 +530,7 @@ const loadBugs = async () => {
       }
     })
     
-    const response = await getBugList( { params })
+    const response = await getBugList(params)
     bugs.value = response.results || response || []
     pagination.total = response.count || 0
   } catch (error) {
@@ -543,7 +543,7 @@ const loadBugs = async () => {
 const loadStats = async () => {
   try {
     const params = searchForm.project ? { project: searchForm.project } : {}
-    const response = await getBugStatistics( { params })
+    const response = await getBugStatistics(params)
     stats.value = response
   } catch (error) {
     console.error('加载统计失败:', error)
@@ -552,7 +552,7 @@ const loadStats = async () => {
 
 const loadProjects = async () => {
   try {
-    const response = await getProjectList( { params: { page_size: 1000 } })
+    const response = await getProjectList({ page_size: 1000 })
     projects.value = response.results || response || []
   } catch (error) {
     console.error('加载项目失败:', error)

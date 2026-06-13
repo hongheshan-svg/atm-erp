@@ -35,12 +35,20 @@ class KnowledgeCategoryTreeSerializer(serializers.ModelSerializer):
         return KnowledgeCategoryTreeSerializer(children, many=True).data
 
 
+def _display_name(user):
+    """返回用户显示名：姓名优先，否则用户名。User 无 name 字段。"""
+    if not user:
+        return ''
+    name = f'{user.last_name}{user.first_name}'
+    return name if name else user.username
+
+
 class KnowledgeArticleSerializer(serializers.ModelSerializer):
     """知识文章序列化器"""
 
     category_name = serializers.CharField(source='category.name', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
-    author_name = serializers.CharField(source='author.name', read_only=True)
+    author_name = serializers.SerializerMethodField()
     article_type_display = serializers.CharField(source='get_article_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
 
@@ -48,12 +56,15 @@ class KnowledgeArticleSerializer(serializers.ModelSerializer):
         model = KnowledgeArticle
         fields = '__all__'
 
+    def get_author_name(self, obj):
+        return _display_name(obj.author)
+
 
 class KnowledgeArticleListSerializer(serializers.ModelSerializer):
     """知识文章列表序列化器（简化）"""
 
     category_name = serializers.CharField(source='category.name', read_only=True)
-    author_name = serializers.CharField(source='author.name', read_only=True)
+    author_name = serializers.SerializerMethodField()
     article_type_display = serializers.CharField(source='get_article_type_display', read_only=True)
 
     class Meta:
@@ -75,6 +86,9 @@ class KnowledgeArticleListSerializer(serializers.ModelSerializer):
             'created_at',
         ]
 
+    def get_author_name(self, obj):
+        return _display_name(obj.author)
+
 
 class ProjectArchiveSerializer(serializers.ModelSerializer):
     """项目归档报告序列化器"""
@@ -82,13 +96,16 @@ class ProjectArchiveSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(source='project.name', read_only=True)
     project_no = serializers.CharField(source='project.code', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    reviewer_name = serializers.CharField(source='reviewer.name', read_only=True)
+    reviewer_name = serializers.SerializerMethodField()
     cost_variance_amount = serializers.SerializerMethodField()
     schedule_variance_days = serializers.SerializerMethodField()
 
     class Meta:
         model = ProjectArchive
         fields = '__all__'
+
+    def get_reviewer_name(self, obj):
+        return _display_name(obj.reviewer)
 
     def get_cost_variance_amount(self, obj):
         return float(obj.actual_cost - obj.budget_amount)
@@ -104,14 +121,24 @@ class TechnicalIssueSerializer(serializers.ModelSerializer):
 
     project_name = serializers.CharField(source='project.name', read_only=True)
     category_name = serializers.CharField(source='category.name', read_only=True)
-    reported_by_name = serializers.CharField(source='reported_by.name', read_only=True)
-    resolved_by_name = serializers.CharField(source='resolved_by.name', read_only=True)
+    reported_by_name = serializers.SerializerMethodField()
+    resolved_by_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
     severity_display = serializers.CharField(source='get_severity_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
 
     class Meta:
         model = TechnicalIssue
         fields = '__all__'
+
+    def get_reported_by_name(self, obj):
+        return _display_name(obj.reported_by)
+
+    def get_resolved_by_name(self, obj):
+        return _display_name(obj.resolved_by)
+
+    def get_created_by_name(self, obj):
+        return _display_name(obj.created_by)
 
 
 class TechnicalIssueListSerializer(serializers.ModelSerializer):
@@ -146,13 +173,20 @@ class StandardComponentSerializer(serializers.ModelSerializer):
     """标准部件序列化器"""
 
     category_name = serializers.CharField(source='category.name', read_only=True)
-    maintainer_name = serializers.CharField(source='maintainer.name', read_only=True)
+    maintainer_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
 
     class Meta:
         model = StandardComponent
         fields = '__all__'
         read_only_fields = ['code', 'usage_count', 'last_used']
+
+    def get_maintainer_name(self, obj):
+        return _display_name(obj.maintainer)
+
+    def get_created_by_name(self, obj):
+        return _display_name(obj.created_by)
 
 
 class StandardComponentListSerializer(serializers.ModelSerializer):

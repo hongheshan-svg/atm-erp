@@ -297,15 +297,24 @@
     <!-- 校验对话框 -->
     <el-dialog v-model="calibrateDialogVisible" title="工装校验" width="500px">
       <el-form label-width="100px">
-        <el-form-item label="校验日期">
+        <el-form-item label="校验日期" required>
           <el-date-picker v-model="calibrateForm.calibration_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="校验机构" required>
+          <el-input v-model="calibrateForm.calibration_org" placeholder="校验机构" />
+        </el-form-item>
+        <el-form-item label="有效期至" required>
+          <el-date-picker v-model="calibrateForm.valid_until" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
         </el-form-item>
         <el-form-item label="校验结果">
           <el-select v-model="calibrateForm.result" style="width: 100%">
             <el-option label="合格" value="PASS" />
             <el-option label="不合格" value="FAIL" />
-            <el-option label="需调整" value="ADJUST" />
+            <el-option label="调整后合格" value="ADJUSTED" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="校验费用">
+          <el-input-number v-model="calibrateForm.cost" :min="0" :precision="2" style="width: 100%" />
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="calibrateForm.notes" type="textarea" :rows="3" />
@@ -320,21 +329,25 @@
     <!-- 维护对话框 -->
     <el-dialog v-model="maintainDialogVisible" title="工装维护" width="500px">
       <el-form label-width="100px">
-        <el-form-item label="维护日期">
+        <el-form-item label="维护日期" required>
           <el-date-picker v-model="maintainForm.maintenance_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
         </el-form-item>
-        <el-form-item label="维护类型">
+        <el-form-item label="维护类型" required>
           <el-select v-model="maintainForm.maintenance_type" style="width: 100%">
-            <el-option label="日常保养" value="ROUTINE" />
             <el-option label="维修" value="REPAIR" />
-            <el-option label="更换零件" value="REPLACE_PARTS" />
+            <el-option label="保养" value="OVERHAUL" />
+            <el-option label="升级改造" value="UPGRADE" />
+            <el-option label="清洁" value="CLEAN" />
           </el-select>
         </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="maintainForm.description" type="textarea" :rows="3" />
+        <el-form-item label="维护内容" required>
+          <el-input v-model="maintainForm.repair_content" type="textarea" :rows="3" placeholder="维护内容" />
         </el-form-item>
-        <el-form-item label="费用">
-          <el-input-number v-model="maintainForm.cost" :min="0" :precision="2" style="width: 100%" />
+        <el-form-item label="人工费用">
+          <el-input-number v-model="maintainForm.labor_cost" :min="0" :precision="2" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="配件费用">
+          <el-input-number v-model="maintainForm.parts_cost" :min="0" :precision="2" style="width: 100%" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -374,8 +387,8 @@ const loading = ref(false)
 const calibrateDialogVisible = ref(false)
 const maintainDialogVisible = ref(false)
 const opRow = ref(null)
-const calibrateForm = reactive({ calibration_date: '', result: 'PASS', notes: '' })
-const maintainForm = reactive({ maintenance_date: '', maintenance_type: 'ROUTINE', description: '', cost: 0 })
+const calibrateForm = reactive({ calibration_date: '', calibration_org: '', valid_until: '', result: 'PASS', cost: 0, notes: '' })
+const maintainForm = reactive({ maintenance_date: '', maintenance_type: 'REPAIR', repair_content: '', labor_cost: 0, parts_cost: 0 })
 const opSaving = ref(false)
 const submitting = ref(false)
 const dialogVisible = ref(false)
@@ -470,7 +483,12 @@ const fetchCategories = async () => {
 const fetchUsers = async () => {
   try {
     const res = await getUsers()
-    users.value = res.results || res || []
+    const list = res.results || res || []
+    // User 无 name 字段，前端拼姓名(姓+名)作为显示名，否则回退用户名
+    users.value = list.map(u => ({
+      ...u,
+      name: `${u.last_name || ''}${u.first_name || ''}`.trim() || u.username,
+    }))
   } catch (error) {
     console.error('获取用户失败', error)
   }
@@ -610,12 +628,12 @@ const handleCommand = async (command, row) => {
       break
     case 'calibrate':
       opRow.value = row
-      Object.assign(calibrateForm, { calibration_date: new Date().toISOString().split('T')[0], result: 'PASS', notes: '' })
+      Object.assign(calibrateForm, { calibration_date: new Date().toISOString().split('T')[0], calibration_org: row.calibration_org || '', valid_until: '', result: 'PASS', cost: 0, notes: '' })
       calibrateDialogVisible.value = true
       break
     case 'maintain':
       opRow.value = row
-      Object.assign(maintainForm, { maintenance_date: new Date().toISOString().split('T')[0], maintenance_type: 'ROUTINE', description: '', cost: 0 })
+      Object.assign(maintainForm, { maintenance_date: new Date().toISOString().split('T')[0], maintenance_type: 'REPAIR', repair_content: '', labor_cost: 0, parts_cost: 0 })
       maintainDialogVisible.value = true
       break
     case 'delete':
@@ -630,6 +648,11 @@ const handleCommand = async (command, row) => {
 
 
 const handleCalibrateSave = async () => {
+  // 后端 FixtureCalibration 必填：calibration_date / calibration_org / valid_until
+  if (!calibrateForm.calibration_date || !calibrateForm.calibration_org || !calibrateForm.valid_until) {
+    ElMessage.warning('请填写校验日期、校验机构与有效期至')
+    return
+  }
   opSaving.value = true
   try {
     await calibrateFixture(opRow.value.id, calibrateForm)
@@ -637,13 +660,18 @@ const handleCalibrateSave = async () => {
     calibrateDialogVisible.value = false
     fetchData()
   } catch (error) {
-    ElMessage.error('保存失败')
+    ElMessage.error(error.response?.data?.detail || '保存失败')
   } finally {
     opSaving.value = false
   }
 }
 
 const handleMaintainSave = async () => {
+  // 后端 FixtureMaintenance 必填：maintenance_date / maintenance_type / repair_content
+  if (!maintainForm.maintenance_date || !maintainForm.maintenance_type || !maintainForm.repair_content) {
+    ElMessage.warning('请填写维护日期、维护类型与维护内容')
+    return
+  }
   opSaving.value = true
   try {
     await maintainFixture(opRow.value.id, maintainForm)
@@ -651,7 +679,7 @@ const handleMaintainSave = async () => {
     maintainDialogVisible.value = false
     fetchData()
   } catch (error) {
-    ElMessage.error('保存失败')
+    ElMessage.error(error.response?.data?.detail || '保存失败')
   } finally {
     opSaving.value = false
   }

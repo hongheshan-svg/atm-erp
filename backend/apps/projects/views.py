@@ -100,16 +100,14 @@ class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewse
     @action(detail=True, methods=['post'])
     def change_status(self, request, pk=None):
         """Change project status."""
+        # 仅使用 Project.STATUS_CHOICES 中实际存在的状态，
+        # 避免引用模型不存在的 DEBUGGING/INSTALLATION/ACCEPTANCE/ON_HOLD/WARRANTY/CLOSED
         ALLOWED_TRANSITIONS = {
             'DRAFT': ['PLANNING', 'CANCELLED'],
             'PLANNING': ['IN_PROGRESS', 'DRAFT', 'CANCELLED'],
-            'IN_PROGRESS': ['DEBUGGING', 'ON_HOLD', 'CANCELLED'],
-            'DEBUGGING': ['INSTALLATION', 'IN_PROGRESS', 'ON_HOLD'],
-            'INSTALLATION': ['ACCEPTANCE', 'DEBUGGING', 'ON_HOLD'],
-            'ACCEPTANCE': ['COMPLETED', 'INSTALLATION'],
-            'ON_HOLD': ['IN_PROGRESS', 'DEBUGGING', 'INSTALLATION', 'CANCELLED'],
-            'COMPLETED': ['WARRANTY'],
-            'WARRANTY': ['CLOSED'],
+            'IN_PROGRESS': ['PAUSED', 'COMPLETED', 'CANCELLED'],
+            'PAUSED': ['IN_PROGRESS', 'CANCELLED'],
+            'COMPLETED': ['ARCHIVED'],
         }
 
         project = self.get_object()
@@ -356,9 +354,27 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
     
     def create(self, request, *args, **kwargs):
         """
-        创建BOM时，如果存在已软删除的相同记录，则恢复它而不是报错
+        创建BOM时，如果存在已软删除的相同 (project, item) 记录，则恢复并用新数据覆盖，
+        而不是新建重复行；不存在软删行时走标准创建。
         """
-        # 直接调用父类创建方法
+        project_id = request.data.get('project')
+        item_id = request.data.get('item')
+
+        if project_id and item_id:
+            deleted_bom = (
+                ProjectBOM.all_objects.filter(project_id=project_id, item_id=item_id, is_deleted=True)
+                .order_by('-created_at')
+                .first()
+            )
+            if deleted_bom is not None:
+                deleted_bom.is_deleted = False
+                deleted_bom.deleted_at = None
+                serializer = self.get_serializer(deleted_bom, data=request.data, partial=True)
+                serializer.is_valid(raise_exception=True)
+                serializer.save(updated_by=request.user)
+                headers = self.get_success_headers(serializer.data)
+                return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
         return super().create(request, *args, **kwargs)
     
     @action(detail=False, methods=['post'])
@@ -1901,11 +1917,13 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Get BOM items to convert - 只获取已询价的物料
+        # Get BOM items to convert - 只获取已询价、且尚未生成采购申请/下单的物料
+        # 排除已 PR_PENDING/已批准/已下单等下游状态，避免对同一批 BOM 行重复生成 PR
         bom_queryset = ProjectBOM.objects.filter(
             project=project,
             is_deleted=False,
-            quote_status='QUOTED'  # 只允许已询价的物料
+            quote_status='QUOTED',  # 只允许已询价的物料
+            order_status='NOT_ORDERED',  # 仅未下单行，防止重复申请
         ).select_related('item', 'quote_supplier')
         
         if item_ids:
@@ -1973,7 +1991,13 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                     created_by=request.user
                 )
                 total_amount += line_amount
-            
+
+                # 回写 BOM 行的采购申请跟踪，防止重复生成
+                bom.order_status = 'PR_PENDING'
+                bom.purchase_request = pr
+                bom.pr_qty = needed_qty
+                bom.save(update_fields=['order_status', 'purchase_request', 'pr_qty', 'updated_at'])
+
             pr.total_amount = total_amount
             pr.save()
         
@@ -2176,13 +2200,26 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                 skipped_count += 1
                 continue
             
+            # 复制计划态字段，排除询价/采购/库存等执行态字段
             ProjectBOM.objects.create(
                 project=target_project,
                 item=source_bom.item,
+                item_code=source_bom.item_code,
+                item_property=source_bom.item_property,
+                priority=source_bom.priority,
                 planned_qty=source_bom.planned_qty,
+                unit_qty=source_bom.unit_qty,
+                scrap_rate=source_bom.scrap_rate,
                 estimated_cost=source_bom.estimated_cost,
+                version_brand=source_bom.version_brand,
+                has_drawing=source_bom.has_drawing,
+                material_spec=source_bom.material_spec,
+                is_critical=source_bom.is_critical,
+                is_long_lead=source_bom.is_long_lead,
+                level=source_bom.level,
+                sort_order=source_bom.sort_order,
                 notes=source_bom.notes,
-                created_by=request.user
+                created_by=request.user,
             )
             created_count += 1
         
@@ -2703,6 +2740,23 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
 
         return Response(ECNSerializer(ecn, context={'request': request}).data)
     
+    def _resolve_bom_item(self, ecn, item):
+        """解析变更明细对应的 ProjectBOM 行。
+
+        优先使用前端显式传入的 bom_item；若缺失则按 项目+物料 反查未软删的
+        ProjectBOM 行，确保前端只传 masterdata.Item 主键时 MODIFY/DELETE/REPLACE
+        仍能命中 BOM 行。多条匹配时取最新一条。
+        """
+        if item.bom_item:
+            return item.bom_item
+        if not item.item:
+            return None
+        return (
+            ProjectBOM.objects.filter(project=ecn.project, item=item.item)
+            .order_by('-created_at')
+            .first()
+        )
+
     def _apply_bom_changes(self, ecn):
         """Apply ECN changes to project BOM."""
         for item in ecn.items.all():
@@ -2714,34 +2768,49 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
                     defaults={
                         'planned_qty': item.new_qty or 0,
                         'notes': f'通过ECN {ecn.ecn_no} 添加',
-                        'created_by': ecn.implemented_by
-                    }
+                        'created_by': ecn.implemented_by,
+                    },
                 )
-            elif item.change_type == 'DELETE' and item.bom_item:
-                # 物理删除BOM项
-                item.bom_item.delete()
-            elif item.change_type == 'MODIFY' and item.bom_item:
-                # Update BOM item quantity
-                if item.new_qty is not None:
-                    item.bom_item.planned_qty = item.new_qty
-                    item.bom_item.notes = f'{item.bom_item.notes}\n通过ECN {ecn.ecn_no} 修改数量'
-                    item.bom_item.save()
-            elif item.change_type == 'REPLACE' and item.bom_item and item.new_item:
-                # 替换BOM项：先创建新项，再删除旧项
-                old_qty = item.bom_item.planned_qty
-                old_sku = item.bom_item.item.sku
-                
-                # Create new BOM item
+            elif item.change_type == 'DELETE':
+                bom_item = self._resolve_bom_item(ecn, item)
+                if bom_item:
+                    # 已有下游采购/收货不允许删除，改为标记取消以保账实一致
+                    if bom_item.order_status != 'NOT_ORDERED' or bom_item.ordered_qty or bom_item.received_qty:
+                        bom_item.status = 'CANCELLED'
+                        bom_item.notes = f'{bom_item.notes}\n通过ECN {ecn.ecn_no} 取消(已关联采购，不可删除)'
+                        bom_item.save()
+                    else:
+                        # 软删除，保留审计与软删约定
+                        bom_item.soft_delete()
+            elif item.change_type == 'MODIFY':
+                bom_item = self._resolve_bom_item(ecn, item)
+                if bom_item and item.new_qty is not None:
+                    bom_item.planned_qty = item.new_qty
+                    bom_item.notes = f'{bom_item.notes}\n通过ECN {ecn.ecn_no} 修改数量'
+                    bom_item.save()
+            elif item.change_type == 'REPLACE' and item.new_item:
+                bom_item = self._resolve_bom_item(ecn, item)
+                if not bom_item:
+                    continue
+                # 替换BOM项：先创建新项，再软删旧项
+                old_qty = bom_item.planned_qty
+                old_sku = bom_item.item.sku
+
                 ProjectBOM.objects.create(
                     project=ecn.project,
                     item=item.new_item,
                     planned_qty=item.new_qty or old_qty,
                     notes=f'通过ECN {ecn.ecn_no} 替换自 {old_sku}',
-                    created_by=ecn.implemented_by
+                    created_by=ecn.implemented_by,
                 )
-                
-                # 物理删除旧的BOM项
-                item.bom_item.delete()
+
+                # 旧BOM项：已关联采购则取消，否则软删
+                if bom_item.order_status != 'NOT_ORDERED' or bom_item.ordered_qty or bom_item.received_qty:
+                    bom_item.status = 'CANCELLED'
+                    bom_item.notes = f'{bom_item.notes}\n通过ECN {ecn.ecn_no} 替换(已关联采购，原行标记取消)'
+                    bom_item.save()
+                else:
+                    bom_item.soft_delete()
     
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
@@ -2823,6 +2892,28 @@ class ECNItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
 
 # ==================== 售后管理视图 ====================
 
+def recompute_aftersales_costs(order):
+    """根据服务记录与备件使用记录重算工单成本(口径统一的唯一来源)。
+
+    labor_cost/travel_cost 由服务记录汇总，parts_cost 由备件使用记录汇总；
+    other_cost 为人工录入项，不在此重算。total_cost 为模型计算属性自动得出。
+    任何服务记录/备件记录的增删改后都应调用本函数，保证账实一致。
+    """
+    from django.db.models import F, Sum
+
+    service_totals = order.service_records.filter(is_deleted=False).aggregate(
+        labor=Sum('labor_cost'),
+        travel=Sum('travel_cost'),
+    )
+    parts_total = order.spare_parts.filter(is_deleted=False).aggregate(
+        parts_cost=Sum(F('qty') * F('unit_cost')),
+    )
+    order.labor_cost = service_totals['labor'] or 0
+    order.travel_cost = service_totals['travel'] or 0
+    order.parts_cost = parts_total['parts_cost'] or 0
+    order.save(update_fields=['labor_cost', 'travel_cost', 'parts_cost', 'updated_at'])
+
+
 class AfterSalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.ModelViewSet):
     """
     售后工单管理视图
@@ -2895,116 +2986,149 @@ class AfterSalesOrderViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin
     def assign(self, request, pk=None):
         """派单"""
         order = self.get_object()
+        if order.status not in ['PENDING', 'ASSIGNED']:
+            return Response(
+                {'error': '只有待处理或已派单的工单可以派单/改派'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         assigned_to_id = request.data.get('assigned_to')
-        
+
         if not assigned_to_id:
             return Response({'error': '请指定负责人'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         from apps.accounts.models import User
         try:
             assigned_to = User.objects.get(id=assigned_to_id)
         except User.DoesNotExist:
             return Response({'error': '用户不存在'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         order.assigned_to = assigned_to
         order.status = 'ASSIGNED'
         order.save()
-        
+
         return Response({'message': '派单成功', 'status': order.status})
-    
+
     @action(detail=True, methods=['post'])
     def start_service(self, request, pk=None):
         """开始服务"""
         order = self.get_object()
+        if order.status not in ['ASSIGNED', 'ON_SITE', 'WAITING_PARTS']:
+            return Response(
+                {'error': '只有已派单/现场/等待备件状态的工单可以开始服务'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         order.status = 'IN_PROGRESS'
         order.save()
         return Response({'message': '已开始服务', 'status': order.status})
-    
+
     @action(detail=True, methods=['post'])
     def on_site(self, request, pk=None):
         """现场服务"""
         order = self.get_object()
+        if order.status not in ['ASSIGNED', 'IN_PROGRESS', 'WAITING_PARTS']:
+            return Response(
+                {'error': '当前状态无法转为现场服务'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         order.status = 'ON_SITE'
         order.save()
         return Response({'message': '已到达现场', 'status': order.status})
-    
+
     @action(detail=True, methods=['post'])
     def waiting_parts(self, request, pk=None):
         """等待备件"""
         order = self.get_object()
+        if order.status not in ['IN_PROGRESS', 'ON_SITE']:
+            return Response(
+                {'error': '只有处理中/现场服务状态可以转为等待备件'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         order.status = 'WAITING_PARTS'
         order.save()
         return Response({'message': '等待备件', 'status': order.status})
-    
+
     @action(detail=True, methods=['post'])
     def resolve(self, request, pk=None):
         """解决问题"""
         order = self.get_object()
+        if order.status not in ['IN_PROGRESS', 'ON_SITE', 'WAITING_PARTS']:
+            return Response(
+                {'error': '只有处理中/现场/等待备件状态的工单可以标记解决'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         from django.utils import timezone
-        
+
         solution = request.data.get('solution', '')
         root_cause = request.data.get('root_cause', '')
         preventive_action = request.data.get('preventive_action', '')
-        
+
         order.solution = solution
         order.root_cause = root_cause
         order.preventive_action = preventive_action
         order.status = 'RESOLVED'
         order.resolved_at = timezone.now()
         order.save()
-        
+
         return Response({'message': '问题已解决', 'status': order.status})
-    
+
     @action(detail=True, methods=['post'])
     def close(self, request, pk=None):
         """关闭工单"""
         order = self.get_object()
+        if order.status != 'RESOLVED':
+            return Response(
+                {'error': '只有已解决的工单可以关闭'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         from django.utils import timezone
-        
+
         satisfaction_score = request.data.get('satisfaction_score')
         customer_feedback = request.data.get('customer_feedback', '')
-        
+
         if satisfaction_score:
             order.satisfaction_score = satisfaction_score
         order.customer_feedback = customer_feedback
         order.status = 'CLOSED'
         order.closed_at = timezone.now()
         order.save()
-        
+
         return Response({'message': '工单已关闭', 'status': order.status})
-    
+
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
         """取消工单"""
         order = self.get_object()
+        if order.status in ['CLOSED', 'CANCELLED']:
+            return Response(
+                {'error': '已关闭或已取消的工单无法取消'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         order.status = 'CANCELLED'
         order.save()
         return Response({'message': '工单已取消', 'status': order.status})
     
     @action(detail=True, methods=['post'])
     def update_cost(self, request, pk=None):
-        """更新成本"""
+        """更新工单成本。
+
+        人工/差旅/备件费用由服务记录与备件使用记录自动汇总（口径唯一），
+        不接受手工覆盖以免与自动汇总冲突造成账实不一致；此处仅允许编辑
+        无记录来源的"其他费用"。如需调整人工/差旅/备件，请增删对应的服务/备件记录。
+        """
         order = self.get_object()
-        
-        labor_cost = request.data.get('labor_cost')
-        travel_cost = request.data.get('travel_cost')
-        parts_cost = request.data.get('parts_cost')
+
         other_cost = request.data.get('other_cost')
-        
-        if labor_cost is not None:
-            order.labor_cost = labor_cost
-        if travel_cost is not None:
-            order.travel_cost = travel_cost
-        if parts_cost is not None:
-            order.parts_cost = parts_cost
         if other_cost is not None:
             order.other_cost = other_cost
-        
-        order.save()
-        
+            order.save(update_fields=['other_cost', 'updated_at'])
+
         return Response({
             'message': '成本更新成功',
-            'total_cost': order.total_cost
+            'labor_cost': order.labor_cost,
+            'travel_cost': order.travel_cost,
+            'parts_cost': order.parts_cost,
+            'other_cost': order.other_cost,
+            'total_cost': order.total_cost,
         })
 
 
@@ -3021,22 +3145,19 @@ class ServiceRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
     search_fields = ['work_content', 'findings', 'actions_taken']
     ordering_fields = ['service_date', 'created_at']
     ordering = ['-service_date']
-    
+
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
-        
-        # 更新工单人工和差旅费用
-        record = serializer.instance
-        order = record.aftersales_order
-        
-        from django.db.models import Sum
-        totals = order.service_records.aggregate(
-            labor=Sum('labor_cost'),
-            travel=Sum('travel_cost')
-        )
-        order.labor_cost = totals['labor'] or 0
-        order.travel_cost = totals['travel'] or 0
-        order.save()
+        recompute_aftersales_costs(serializer.instance.aftersales_order)
+
+    def perform_update(self, serializer):
+        serializer.save(updated_by=self.request.user)
+        recompute_aftersales_costs(serializer.instance.aftersales_order)
+
+    def perform_destroy(self, instance):
+        order = instance.aftersales_order
+        super().perform_destroy(instance)
+        recompute_aftersales_costs(order)
 
 
 class SparePartUsageViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
@@ -3052,20 +3173,22 @@ class SparePartUsageViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
     search_fields = ['serial_no', 'notes']
     ordering_fields = ['created_at']
     ordering = ['-created_at']
-    
+
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
-        
-        # 更新工单备件费用
-        usage = serializer.instance
-        order = usage.aftersales_order
-        
-        from django.db.models import Sum, F
-        total = order.spare_parts.aggregate(
-            parts_cost=Sum(F('qty') * F('unit_cost'))
-        )
-        order.parts_cost = total['parts_cost'] or 0
-        order.save()
+        recompute_aftersales_costs(serializer.instance.aftersales_order)
+        # 注意：备件使用当前不联动 inventory 库存出库。是否在备件消耗时生成
+        # 库存出库(StockMove)属产品决策，本期保持现状以免误改库存账；
+        # 如需联动应在此调用 inventory 既有出库接口（不在本模块改 inventory）。
+
+    def perform_update(self, serializer):
+        serializer.save(updated_by=self.request.user)
+        recompute_aftersales_costs(serializer.instance.aftersales_order)
+
+    def perform_destroy(self, instance):
+        order = instance.aftersales_order
+        super().perform_destroy(instance)
+        recompute_aftersales_costs(order)
 
 
 class DrawingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
@@ -3120,7 +3243,24 @@ class DrawingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
         drawing.approved_at = timezone.now()
         drawing.save()
         return Response(DrawingSerializer(drawing).data)
-    
+
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        """驳回图纸：审核中退回草稿，由设计者修改后重新提审"""
+        drawing = self.get_object()
+        if drawing.status != 'REVIEWING':
+            return Response(
+                {'error': '只能驳回审核中的图纸'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        drawing.status = 'DRAFT'
+        comment = request.data.get('comment', '')
+        if comment:
+            drawing.change_description = f'{drawing.change_description}\n[驳回意见] {comment}'.strip()
+        drawing.save()
+        return Response(DrawingSerializer(drawing).data)
+
     @action(detail=True, methods=['post'])
     def release(self, request, pk=None):
         """发布图纸"""

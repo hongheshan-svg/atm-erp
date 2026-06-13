@@ -86,8 +86,9 @@
         <el-descriptions-item label="实际成本">¥{{ viewDetail.actual_cost?.toLocaleString() || 0 }}</el-descriptions-item>
         <el-descriptions-item label="客户满意度">{{ viewDetail.customer_satisfaction || '-' }}</el-descriptions-item>
         <el-descriptions-item label="评审人">{{ viewDetail.reviewer_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="项目概况" :span="2">{{ viewDetail.project_summary || '-' }}</el-descriptions-item>
         <el-descriptions-item label="经验总结" :span="2">{{ viewDetail.lessons_learned || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="项目成果" :span="2">{{ viewDetail.achievements || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="交付成果" :span="2">{{ viewDetail.deliverables || '-' }}</el-descriptions-item>
       </el-descriptions>
       <template #footer>
         <el-button @click="viewDialogVisible = false">关闭</el-button>
@@ -105,14 +106,17 @@
         <el-form-item label="归档日期" prop="archive_date">
           <el-date-picker v-model="form.archive_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
         </el-form-item>
+        <el-form-item label="项目概况" prop="project_summary">
+          <el-input v-model="form.project_summary" type="textarea" :rows="3" placeholder="项目概况(必填)" />
+        </el-form-item>
         <el-form-item label="客户满意度">
-          <el-rate v-model="form.customer_satisfaction" :max="10" allow-half />
+          <el-rate v-model="form.customer_satisfaction" :max="10" />
         </el-form-item>
         <el-form-item label="经验总结">
           <el-input v-model="form.lessons_learned" type="textarea" :rows="3" />
         </el-form-item>
-        <el-form-item label="项目成果">
-          <el-input v-model="form.achievements" type="textarea" :rows="3" />
+        <el-form-item label="交付成果">
+          <el-input v-model="form.deliverables" type="textarea" :rows="3" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -145,10 +149,11 @@ const projectList = ref<any[]>([])
 const formRef = ref(null)
 
 const queryParams = reactive({ search: '', status: '', page: 1, page_size: 20 })
-const form = reactive({ project: null, archive_date: '', customer_satisfaction: 0, lessons_learned: '', achievements: '' })
+const form = reactive({ project: null, archive_date: '', project_summary: '', customer_satisfaction: 0, lessons_learned: '', deliverables: '' })
 const rules = {
   project: [{ required: true, message: '请选择项目', trigger: 'change' }],
-  archive_date: [{ required: true, message: '请选择归档日期', trigger: 'change' }]
+  archive_date: [{ required: true, message: '请选择归档日期', trigger: 'change' }],
+  project_summary: [{ required: true, message: '请填写项目概况', trigger: 'blur' }]
 }
 const getStatusType = (status) => ({ DRAFT: 'info', REVIEW: 'warning', APPROVED: 'success', REJECTED: 'danger' }[status] || '')
 
@@ -175,7 +180,7 @@ const loadProjects = async () => {
 }
 
 const handleCreate = () => {
-  Object.assign(form, { project: null, archive_date: new Date().toISOString().split('T')[0], customer_satisfaction: 0, lessons_learned: '', achievements: '' })
+  Object.assign(form, { project: null, archive_date: new Date().toISOString().split('T')[0], project_summary: '', customer_satisfaction: 0, lessons_learned: '', deliverables: '' })
   formRef.value?.resetFields()
   createDialogVisible.value = true
 }

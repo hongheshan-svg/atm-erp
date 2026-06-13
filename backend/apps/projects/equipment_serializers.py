@@ -15,6 +15,15 @@ from .equipment_models import (
 )
 from .fixture_models import Fixture, FixtureCalibration, FixtureCategory, FixtureMaintenance, FixtureUsageRecord
 
+
+def _display_name(user):
+    """返回用户显示名：姓名优先，否则用户名。User(AbstractUser) 无 name 字段。"""
+    if not user:
+        return ''
+    name = f'{user.last_name}{user.first_name}'
+    return name if name else user.username
+
+
 # ============================================================
 # 设备台账序列化器
 # ============================================================
@@ -79,11 +88,14 @@ class EquipmentShipmentSerializer(serializers.ModelSerializer):
 class InstallationLogSerializer(serializers.ModelSerializer):
     """安装日志序列化器"""
 
-    recorded_by_name = serializers.CharField(source='recorded_by.name', read_only=True)
+    recorded_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = InstallationLog
         fields = '__all__'
+
+    def get_recorded_by_name(self, obj):
+        return _display_name(obj.recorded_by)
 
 
 class EquipmentInstallationSerializer(serializers.ModelSerializer):
@@ -91,7 +103,7 @@ class EquipmentInstallationSerializer(serializers.ModelSerializer):
 
     equipment_name = serializers.CharField(source='equipment.name', read_only=True)
     equipment_no = serializers.CharField(source='equipment.equipment_no', read_only=True)
-    team_leader_name = serializers.CharField(source='team_leader.name', read_only=True)
+    team_leader_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     daily_logs = InstallationLogSerializer(many=True, read_only=True)
 
@@ -99,18 +111,24 @@ class EquipmentInstallationSerializer(serializers.ModelSerializer):
         model = EquipmentInstallation
         fields = '__all__'
 
+    def get_team_leader_name(self, obj):
+        return _display_name(obj.team_leader)
+
 
 class EquipmentAcceptanceSerializer(serializers.ModelSerializer):
     """设备验收记录序列化器"""
 
     equipment_name = serializers.CharField(source='equipment.name', read_only=True)
     equipment_no = serializers.CharField(source='equipment.equipment_no', read_only=True)
-    our_representative_name = serializers.CharField(source='our_representative.name', read_only=True)
+    our_representative_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
 
     class Meta:
         model = EquipmentAcceptance
         fields = '__all__'
+
+    def get_our_representative_name(self, obj):
+        return _display_name(obj.our_representative)
 
 
 class MaintenanceScheduleSerializer(serializers.ModelSerializer):
@@ -131,13 +149,16 @@ class TrainingRecordSerializer(serializers.ModelSerializer):
 
     equipment_name = serializers.CharField(source='equipment.name', read_only=True)
     equipment_no = serializers.CharField(source='equipment.equipment_no', read_only=True)
-    trainer_name = serializers.CharField(source='trainer.name', read_only=True)
+    trainer_name = serializers.SerializerMethodField()
     training_type_display = serializers.CharField(source='get_training_type_display', read_only=True)
 
     class Meta:
         model = TrainingRecord
         fields = '__all__'
         read_only_fields = ['training_no']
+
+    def get_trainer_name(self, obj):
+        return _display_name(obj.trainer)
 
 
 # ============================================================
@@ -179,7 +200,7 @@ class FixtureSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     equipment_name = serializers.CharField(source='equipment.name', read_only=True)
-    custodian_name = serializers.CharField(source='custodian.name', read_only=True)
+    custodian_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     ownership_display = serializers.CharField(source='get_ownership_display', read_only=True)
     is_calibration_due = serializers.BooleanField(read_only=True)
@@ -189,12 +210,15 @@ class FixtureSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['fixture_no', 'usage_count']
 
+    def get_custodian_name(self, obj):
+        return _display_name(obj.custodian)
+
 
 class FixtureListSerializer(serializers.ModelSerializer):
     """工装夹具列表序列化器（简化）"""
 
     category_name = serializers.CharField(source='category.name', read_only=True)
-    custodian_name = serializers.CharField(source='custodian.name', read_only=True)
+    custodian_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     is_calibration_due = serializers.BooleanField(read_only=True)
 
@@ -219,6 +243,9 @@ class FixtureListSerializer(serializers.ModelSerializer):
             'max_usage',
         ]
 
+    def get_custodian_name(self, obj):
+        return _display_name(obj.custodian)
+
 
 class FixtureUsageRecordSerializer(serializers.ModelSerializer):
     """工装使用记录序列化器"""
@@ -226,11 +253,14 @@ class FixtureUsageRecordSerializer(serializers.ModelSerializer):
     fixture_name = serializers.CharField(source='fixture.name', read_only=True)
     fixture_no = serializers.CharField(source='fixture.fixture_no', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
-    used_by_name = serializers.CharField(source='used_by.name', read_only=True)
+    used_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = FixtureUsageRecord
         fields = '__all__'
+
+    def get_used_by_name(self, obj):
+        return _display_name(obj.used_by)
 
 
 class FixtureCalibrationSerializer(serializers.ModelSerializer):
@@ -250,10 +280,13 @@ class FixtureMaintenanceSerializer(serializers.ModelSerializer):
 
     fixture_name = serializers.CharField(source='fixture.name', read_only=True)
     fixture_no = serializers.CharField(source='fixture.fixture_no', read_only=True)
-    performed_by_name = serializers.CharField(source='performed_by.name', read_only=True)
+    performed_by_name = serializers.SerializerMethodField()
     maintenance_type_display = serializers.CharField(source='get_maintenance_type_display', read_only=True)
 
     class Meta:
         model = FixtureMaintenance
         fields = '__all__'
         read_only_fields = ['total_cost']
+
+    def get_performed_by_name(self, obj):
+        return _display_name(obj.performed_by)

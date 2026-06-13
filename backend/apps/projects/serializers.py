@@ -125,6 +125,32 @@ class ProjectSerializer(serializers.ModelSerializer):
         """获取利润（收入-成本）"""
         return self.get_revenue(obj) - self.get_total_actual_cost(obj)
 
+    # 与 ProjectViewSet.change_status 保持一致的合法状态流转
+    ALLOWED_TRANSITIONS = {
+        'DRAFT': ['PLANNING', 'CANCELLED'],
+        'PLANNING': ['IN_PROGRESS', 'DRAFT', 'CANCELLED'],
+        'IN_PROGRESS': ['PAUSED', 'COMPLETED', 'CANCELLED'],
+        'PAUSED': ['IN_PROGRESS', 'CANCELLED'],
+        'COMPLETED': ['ARCHIVED'],
+    }
+
+    def update(self, instance, validated_data):
+        """普通编辑(PUT/PATCH)不允许绕过 submit 审批与 change_status 状态机随意跳转状态。
+
+        仅允许保持原状态或走 ALLOWED_TRANSITIONS 中的合法流转；
+        PENDING(审批中)状态禁止手工改动，应由审批流程驱动。
+        """
+        new_status = validated_data.get('status')
+        if new_status is not None and new_status != instance.status:
+            if instance.status == 'PENDING':
+                raise serializers.ValidationError({'status': '项目正在审批中，状态由审批流程驱动，不可手动修改'})
+            allowed = self.ALLOWED_TRANSITIONS.get(instance.status, [])
+            if new_status not in allowed:
+                raise serializers.ValidationError(
+                    {'status': f'不允许从 {instance.status} 直接修改为 {new_status}，请通过提交审批或状态流转操作'}
+                )
+        return super().update(instance, validated_data)
+
 
 class ProjectMemberSerializer(serializers.ModelSerializer):
     """
@@ -609,6 +635,25 @@ class ECNItemSerializer(serializers.ModelSerializer):
         if obj.bom_item:
             return f'{obj.bom_item.item.sku} - {obj.bom_item.item.name}'
         return None
+
+    def validate(self, attrs):
+        """MODIFY/DELETE/REPLACE 必须能定位到 BOM 行：要么显式传 bom_item，
+        要么传 item（后端在实施时按 项目+物料 反查 ProjectBOM）。
+        否则审批完成后变更对 BOM 不生效。"""
+        change_type = attrs.get('change_type', getattr(self.instance, 'change_type', None))
+        bom_item = attrs.get('bom_item', getattr(self.instance, 'bom_item', None))
+        item = attrs.get('item', getattr(self.instance, 'item', None))
+        new_item = attrs.get('new_item', getattr(self.instance, 'new_item', None))
+
+        if change_type in ('MODIFY', 'DELETE', 'REPLACE') and not bom_item and not item:
+            raise serializers.ValidationError(
+                {'bom_item': '修改/删除/替换类变更必须指定 BOM 条目或物料，否则审批后无法对 BOM 生效'}
+            )
+        if change_type == 'REPLACE' and not new_item:
+            raise serializers.ValidationError({'new_item': '替换类变更必须指定新物料'})
+        if change_type == 'ADD' and not item:
+            raise serializers.ValidationError({'item': '新增类变更必须指定物料'})
+        return attrs
 
 
 class ECNApprovalSerializer(serializers.ModelSerializer):

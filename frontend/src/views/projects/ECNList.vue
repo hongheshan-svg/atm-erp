@@ -223,9 +223,29 @@
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="原物料" width="200">
+          <el-table-column label="原物料" width="220">
             <template #default="{ row }">
+              <!-- 修改/删除/替换：从项目BOM行中选择，绑定 bom_item，确保审批后能命中BOM -->
               <el-select
+                v-if="row.change_type !== 'ADD'"
+                v-model="row.bom_item"
+                filterable
+                placeholder="选择BOM物料"
+                size="small"
+                clearable
+                style="width: 100%"
+                @change="onBomItemChange(row)"
+              >
+                <el-option
+                  v-for="bom in bomItems"
+                  :key="bom.id"
+                  :label="`${bom.item_sku || bom.item_code || ''} - ${bom.item_name || ''}`"
+                  :value="bom.id"
+                />
+              </el-select>
+              <!-- 新增：从物料主数据搜索 -->
+              <el-select
+                v-else
                 v-model="row.item"
                 filterable
                 remote
@@ -233,7 +253,6 @@
                 placeholder="搜索物料"
                 size="small"
                 clearable
-                :disabled="row.change_type === 'ADD'"
                 style="width: 100%"
               >
                 <el-option
@@ -394,12 +413,13 @@
 <script setup lang="ts">
 import WorkflowProgress from '@/components/WorkflowProgress.vue'
 
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import { getECNList, getECN, createECN, updateECN, submitECN, startECNImplementation } from '@/api/projects/ecn'
 import { getProjectList } from '@/api/projects/project'
+import { getBOMList } from '@/api/projects/bom'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 import { getItemList } from '@/api/masterdata'
@@ -432,6 +452,7 @@ const approving = ref(false)
 const ecnList = ref<any[]>([])
 const projects = ref<any[]>([])
 const itemOptions = ref<any[]>([])
+const bomItems = ref<any[]>([])
 const dialogVisible = ref(false)
 const detailVisible = ref(false)
 const approvalDialogVisible = ref(false)
@@ -509,7 +530,7 @@ const loadECNList = async () => {
       }
     })
     
-    const response = await getECNList( { params })
+    const response = await getECNList(params)
     const data = response.data || response
     ecnList.value = data.results || data
     pagination.total = data.count || ecnList.value.length
@@ -524,13 +545,40 @@ const loadECNList = async () => {
 // 加载项目列表
 const loadProjects = async () => {
   try {
-    const response = await getProjectList( { params: { page_size: 1000 } })
+    const response = await getProjectList({ page_size: 1000 })
     const data = response.data || response
     projects.value = data.results || data
   } catch (error) {
     console.error('加载项目失败:', error)
   }
 }
+
+// 加载当前项目的BOM行（供变更明细选择，确保提交 bom_item）
+const loadBomItems = async (projectId) => {
+  if (!projectId) {
+    bomItems.value = []
+    return
+  }
+  try {
+    const response = await getBOMList({ project: projectId, page_size: 1000 })
+    const data = response.data || response
+    bomItems.value = data.results || data
+  } catch (error) {
+    console.error('加载BOM失败:', error)
+    bomItems.value = []
+  }
+}
+
+// 选择BOM行后同步 item，便于后端反查与展示
+const onBomItemChange = (row) => {
+  const bom = bomItems.value.find(b => b.id === row.bom_item)
+  row.item = bom ? bom.item : null
+}
+
+// 项目变化时重新加载BOM
+watch(() => form.project, (projectId) => {
+  loadBomItems(projectId)
+})
 
 // 搜索物料
 const searchItems = async (query) => {
@@ -599,6 +647,7 @@ const handleEdit = async (row) => {
       schedule_impact: data.schedule_impact || '',
       items: data.items.map(item => ({
         change_type: item.change_type,
+        bom_item: item.bom_item,
         item: item.item,
         new_item: item.new_item,
         old_qty: item.old_qty,
@@ -629,6 +678,7 @@ const handleView = async (row) => {
 const addItem = () => {
   form.items.push({
     change_type: 'MODIFY',
+    bom_item: null,
     item: null,
     new_item: null,
     old_qty: null,
@@ -645,6 +695,8 @@ const removeItem = (index) => {
 // 变更项类型变化
 const onItemChangeTypeChange = (row) => {
   if (row.change_type === 'ADD') {
+    // 新增不依赖既有BOM行
+    row.bom_item = null
     row.item = null
     row.old_qty = null
   } else if (row.change_type === 'DELETE') {
@@ -676,14 +728,16 @@ const handleSave = async () => {
         cost_impact: form.cost_impact,
         schedule_impact: form.schedule_impact,
         items: form.items.filter(item => {
-          // 过滤无效的变更项
+          // 过滤无效的变更项；非新增类必须选中BOM行(bom_item)
           if (item.change_type === 'ADD') return item.new_item || item.item
-          if (item.change_type === 'DELETE') return item.item
-          if (item.change_type === 'MODIFY') return item.item
-          if (item.change_type === 'REPLACE') return item.item && item.new_item
+          if (item.change_type === 'DELETE') return item.bom_item
+          if (item.change_type === 'MODIFY') return item.bom_item
+          if (item.change_type === 'REPLACE') return item.bom_item && item.new_item
           return false
         }).map(item => ({
           change_type: item.change_type,
+          // 非新增类提交 bom_item(ProjectBOM行id)，确保审批后能命中BOM
+          bom_item: item.change_type === 'ADD' ? null : item.bom_item,
           item: item.change_type === 'ADD' ? (item.new_item || item.item) : item.item,
           new_item: item.change_type === 'REPLACE' ? item.new_item : (item.change_type === 'ADD' ? item.new_item : null),
           old_qty: item.old_qty,

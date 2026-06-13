@@ -290,7 +290,7 @@ watch(bomSearch, (val) => {
 
 const loadProjects = async () => {
   try {
-    const res = await getProjectList( { params: { page_size: 1000 } })
+    const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res || []
   } catch (error) {
     console.error('Load projects failed:', error)

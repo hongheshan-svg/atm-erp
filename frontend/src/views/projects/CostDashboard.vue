@@ -310,7 +310,9 @@ const getPhaseLabel = (phase) => {
 }
 
 const loadProjects = async () => {
-  const res = await getProjectList({ page_size: 500, status__in: 'IN_PROGRESS,DEBUGGING,INSTALLATION' })
+  // 列出项目供成本看板选择。后端 filterset 仅支持精确 status=，不支持 status__in，
+  // 且模型并无 DEBUGGING/INSTALLATION 状态（旧值会被静默忽略），故不再传无效过滤值。
+  const res = await getProjectList({ page_size: 500 })
   projects.value = res.results || res || []
 }
 

@@ -14,12 +14,48 @@
         </div>
       </template>
 
+      <!-- 搜索/筛选工具栏 -->
+      <el-form :inline="true" :model="filters" class="search-form" @submit.prevent>
+        <el-form-item label="项目编号/名称">
+          <el-input
+            v-model="filters.search"
+            placeholder="编号或名称"
+            clearable
+            style="width: 220px"
+            @keyup.enter="handleSearch"
+            @clear="handleSearch"
+          />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="filters.status" placeholder="全部状态" clearable style="width: 160px" @change="handleSearch">
+            <el-option label="草稿" value="DRAFT" />
+            <el-option label="规划中" value="PLANNING" />
+            <el-option label="审批中" value="PENDING" />
+            <el-option label="已拒绝" value="REJECTED" />
+            <el-option label="进行中" value="IN_PROGRESS" />
+            <el-option label="暂停" value="PAUSED" />
+            <el-option label="已完成" value="COMPLETED" />
+            <el-option label="已取消" value="CANCELLED" />
+            <el-option label="已归档" value="ARCHIVED" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="客户">
+          <el-select v-model="filters.customer" placeholder="全部客户" clearable filterable style="width: 200px" @change="handleSearch">
+            <el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="handleSearch">查询</el-button>
+          <el-button @click="handleResetFilters">重置</el-button>
+        </el-form-item>
+      </el-form>
+
       <!-- 批量操作工具栏 - 仅管理员可见 -->
       <div class="table-toolbar" v-permission="'projects:project:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button 
-          type="danger" 
-          size="small" 
+        <el-button
+          type="danger"
+          size="small"
           @click="batchDelete"
           :loading="deleteLoading"
         >
@@ -84,6 +120,17 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <el-pagination
+        class="pagination"
+        v-model:current-page="pagination.page"
+        v-model:page-size="pagination.pageSize"
+        :page-sizes="[20, 50, 100]"
+        :total="pagination.total"
+        layout="total, sizes, prev, pager, next, jumper"
+        @size-change="handleSizeChange"
+        @current-change="handleCurrentChange"
+      />
     </el-card>
 
     <!-- 新增/编辑对话框 -->
@@ -179,19 +226,18 @@
           <el-input-number v-model="form.budget_total" :min="0" :precision="2" />
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="form.status" :disabled="['PENDING'].includes(form.status)">
+          <!-- 编辑态状态只读：状态变更统一走"提交审批"与状态机，不允许在编辑表单随意跳转 -->
+          <template v-if="isEdit">
+            <el-tag :type="getStatusType(form.status)">{{ getStatusLabel(form.status) }}</el-tag>
+            <div class="el-form-item__help">
+              状态变更请通过"提交审批"或状态流转操作，不可在此随意修改
+            </div>
+          </template>
+          <!-- 新建态仅允许草稿/规划中，后续流转走审批与状态机 -->
+          <el-select v-else v-model="form.status">
             <el-option label="草稿" value="DRAFT" />
             <el-option label="规划中" value="PLANNING" />
-            <el-option v-if="['PENDING', 'REJECTED'].includes(form.status)" label="审批中" value="PENDING" disabled />
-            <el-option v-if="form.status === 'REJECTED'" label="已拒绝" value="REJECTED" disabled />
-            <el-option label="进行中" value="IN_PROGRESS" />
-            <el-option label="暂停" value="PAUSED" />
-            <el-option label="已完成" value="COMPLETED" />
-            <el-option label="已取消" value="CANCELLED" />
           </el-select>
-          <div v-if="form.status === 'PENDING'" class="el-form-item__help">
-            项目正在审批中，不可手动修改状态
-          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -265,6 +311,20 @@ const showWorkflowProgress = (row) => {
 const loading = ref(false)
 const projects = ref<any[]>([])
 const customers = ref<any[]>([])
+
+// 搜索/筛选条件
+const filters = reactive({
+  search: '',
+  status: '',
+  customer: null
+})
+
+// 分页
+const pagination = reactive({
+  page: 1,
+  pageSize: 20,
+  total: 0
+})
 const users = ref<any[]>([])
 const salesOrders = ref<any[]>([])
 const salesOrdersLoaded = ref(false)
@@ -333,13 +393,47 @@ const getUserDisplayName = (user) => {
 const loadProjects = async () => {
   loading.value = true
   try {
-    const response = await getProjectList()
-    projects.value = response.results || response || []
+    const params = {
+      page: pagination.page,
+      page_size: pagination.pageSize
+    }
+    if (filters.search) params.search = filters.search
+    if (filters.status) params.status = filters.status
+    if (filters.customer) params.customer = filters.customer
+
+    const response = await getProjectList(params)
+    const data = response.data || response
+    projects.value = data.results || data || []
+    pagination.total = data.count ?? projects.value.length
   } catch (error) {
     ElMessage.error('加载项目失败')
   } finally {
     loading.value = false
   }
+}
+
+const handleSearch = () => {
+  pagination.page = 1
+  loadProjects()
+}
+
+const handleResetFilters = () => {
+  filters.search = ''
+  filters.status = ''
+  filters.customer = null
+  pagination.page = 1
+  loadProjects()
+}
+
+const handleSizeChange = (size) => {
+  pagination.pageSize = size
+  pagination.page = 1
+  loadProjects()
+}
+
+const handleCurrentChange = (page) => {
+  pagination.page = page
+  loadProjects()
 }
 
 const loadCustomers = async () => {
@@ -459,8 +553,13 @@ const handleSubmit = async () => {
       manager: form.manager,
       start_date: form.start_date,
       end_date: form.end_date,
-      status: form.status || 'DRAFT',
       budget_total: form.budget_total || 0
+    }
+
+    // 仅新建时允许设置初始状态(草稿/规划中)；编辑不发送 status，
+    // 避免绕过 submit 审批与 change_status 状态机直接跳转任意状态
+    if (!isEdit.value) {
+      payload.status = form.status || 'DRAFT'
     }
     
     // 项目编号（可选，留空自动生成）
@@ -558,6 +657,13 @@ onMounted(() => {
 .header-actions {
   display: flex;
   gap: 10px;
+}
+.search-form {
+  margin-bottom: 10px;
+}
+.pagination {
+  margin-top: 15px;
+  justify-content: flex-end;
 }
 .table-toolbar {
   display: flex;

@@ -1074,29 +1074,38 @@ const handleBatchDelete = async () => {
   }
 }
 
+// 生成采购申请的可下单判定，与后端 generate_purchase_request 口径一致：
+// 仅已询价(QUOTED)且未下单(NOT_ORDERED)、且仍有剩余需求(planned_qty-actual_qty>0)的行
+const isOrderable = (item) => {
+  const remaining = (item.planned_qty || 0) - (item.actual_qty || 0)
+  return item.quote_status === 'QUOTED' && (item.order_status || 'NOT_ORDERED') === 'NOT_ORDERED' && remaining > 0
+}
+
 // 根据选中项生成采购申请
 const handleGeneratePRFromSelected = () => {
   if (selectedRows.value.length === 0) {
     ElMessage.warning('请先选择要生成采购申请的物料')
     return
   }
-  
-  // 使用选中的物料生成采购申请
-  generatePurchaseRequest(selectedRows.value)
+
+  const itemsToOrder = selectedRows.value.filter(isOrderable)
+  if (itemsToOrder.length === 0) {
+    ElMessage.warning('选中物料中没有可生成采购申请的行（需已询价、未下单且仍有剩余需求）')
+    return
+  }
+  // 使用选中且符合条件的物料生成采购申请
+  generatePurchaseRequest(itemsToOrder)
 }
 
 const handleGeneratePR = () => {
-  // 筛选出需要采购的物料（剩余需求 > 0）
-  const itemsToOrder = bomItems.value.filter(item => {
-    const remaining = (item.planned_qty || 0) - (item.issued_qty || 0)
-    return remaining > 0
-  })
-  
+  // 筛选出可下单的物料（已询价、未下单且剩余需求 > 0）
+  const itemsToOrder = bomItems.value.filter(isOrderable)
+
   if (itemsToOrder.length === 0) {
-    ElMessage.warning('所有物料已满足需求，无需生成采购申请')
+    ElMessage.warning('没有可生成采购申请的物料（需已询价、未下单且仍有剩余需求）')
     return
   }
-  
+
   generatePurchaseRequest(itemsToOrder)
 }
 
@@ -1127,7 +1136,8 @@ const generatePurchaseRequest = (itemsToOrder) => {
         item: item.item,
         item_sku: item.item_sku,
         item_name: item.item_name,
-        qty: Math.max(1, (item.planned_qty || 0) - (item.issued_qty || 0)),
+        // 需求口径与后端 generate_purchase_request 一致：planned_qty - actual_qty
+        qty: Math.max(1, (item.planned_qty || 0) - (item.actual_qty || 0)),
         estimated_price: item.estimated_cost || 0
       }))
     }

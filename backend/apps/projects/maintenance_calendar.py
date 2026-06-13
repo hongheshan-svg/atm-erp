@@ -81,7 +81,7 @@ class MaintenanceCalendarView(APIView):
                         'type': event_type,
                         'status': status,
                         'maintenance_type': schedule.maintenance_type,
-                        'description': schedule.description if hasattr(schedule, 'description') else '',
+                        'description': schedule.notes or schedule.maintenance_result or '',
                     }
                 )
 
@@ -126,31 +126,16 @@ class MaintenanceCalendarView(APIView):
 
     @staticmethod
     def _get_planned_dates(schedule, start_date, end_date):
-        """获取计划维护日期列表"""
-        dates = []
+        """获取计划维护日期列表。
 
-        # 获取基准日期
-        if hasattr(schedule, 'scheduled_date') and schedule.scheduled_date:
-            scheduled_date = schedule.scheduled_date
-        elif hasattr(schedule, 'last_date') and schedule.last_date:
-            scheduled_date = schedule.last_date + timedelta(days=schedule.interval_days or 30)
-        else:
-            scheduled_date = start_date
-
-        interval = schedule.interval_days if hasattr(schedule, 'interval_days') else 30
-        if not interval or interval <= 0:
-            interval = 30
-
-        # 找到第一个在范围内的日期
-        while scheduled_date < start_date:
-            scheduled_date += timedelta(days=interval)
-
-        # 生成日期范围内的所有计划日期
-        while scheduled_date <= end_date:
-            dates.append(scheduled_date)
-            scheduled_date += timedelta(days=interval)
-
-        return dates
+        MaintenanceSchedule 为单次计划事件（仅 scheduled_date，无 interval_days/
+        重复周期字段），因此返回落在范围内的单一计划日期，避免按虚构的 30 天
+        周期生成幽灵事件。
+        """
+        scheduled_date = getattr(schedule, 'scheduled_date', None)
+        if scheduled_date and start_date <= scheduled_date <= end_date:
+            return [scheduled_date]
+        return []
 
 
 class MaintenanceStatisticsView(APIView):
@@ -166,9 +151,9 @@ class MaintenanceStatisticsView(APIView):
 
         today = date.today()
 
-        # 逾期维护
+        # 逾期维护（MaintenanceSchedule.MAINTENANCE_STATUS 仅 PLANNED/OVERDUE/COMPLETED/CANCELLED）
         overdue_count = MaintenanceSchedule.objects.filter(
-            scheduled_date__lt=today, status__in=['PENDING', 'IN_PROGRESS'], is_deleted=False
+            scheduled_date__lt=today, status__in=['PLANNED', 'OVERDUE'], is_deleted=False
         ).count()
 
         # 今日维护

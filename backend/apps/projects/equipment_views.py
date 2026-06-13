@@ -85,12 +85,17 @@ class EquipmentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
     @action(detail=True, methods=['post'])
     def ship(self, request, pk=None):
         """创建发货记录"""
+        from apps.core.utils import generate_code
+
         equipment = self.get_object()
-        
+
         # 创建发货记录
         shipment_data = request.data.copy()
         shipment_data['equipment'] = equipment.id
-        
+        # 发货单号为必填且唯一，未提供时自动生成
+        if not shipment_data.get('shipment_no'):
+            shipment_data['shipment_no'] = generate_code('SHIP')
+
         serializer = EquipmentShipmentSerializer(data=shipment_data)
         if serializer.is_valid():
             serializer.save(created_by=request.user, updated_by=request.user)
@@ -106,11 +111,16 @@ class EquipmentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
     @action(detail=True, methods=['post'])
     def start_installation(self, request, pk=None):
         """开始安装"""
+        from apps.core.utils import generate_code
+
         equipment = self.get_object()
-        
+
         installation_data = request.data.copy()
         installation_data['equipment'] = equipment.id
-        
+        # 安装单号为必填且唯一，未提供时自动生成
+        if not installation_data.get('installation_no'):
+            installation_data['installation_no'] = generate_code('INST')
+
         serializer = EquipmentInstallationSerializer(data=installation_data)
         if serializer.is_valid():
             serializer.save(created_by=request.user, updated_by=request.user)
@@ -125,11 +135,16 @@ class EquipmentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
     @action(detail=True, methods=['post'])
     def accept(self, request, pk=None):
         """创建验收记录"""
+        from apps.core.utils import generate_code
+
         equipment = self.get_object()
-        
+
         acceptance_data = request.data.copy()
         acceptance_data['equipment'] = equipment.id
-        
+        # 验收单号为必填且唯一，未提供时自动生成
+        if not acceptance_data.get('acceptance_no'):
+            acceptance_data['acceptance_no'] = generate_code('ACPT')
+
         serializer = EquipmentAcceptanceSerializer(data=acceptance_data)
         if serializer.is_valid():
             acceptance = serializer.save(
@@ -483,13 +498,27 @@ class FixtureViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
     def add_calibration(self, request, pk=None):
         """添加校验记录"""
         fixture = self.get_object()
-        
+
         calibration_data = request.data.copy()
         calibration_data['fixture'] = fixture.id
-        
+
         serializer = FixtureCalibrationSerializer(data=calibration_data)
         if serializer.is_valid():
             serializer.save(created_by=request.user, updated_by=request.user)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'])
+    def add_maintenance(self, request, pk=None):
+        """添加维护记录"""
+        fixture = self.get_object()
+
+        maintenance_data = request.data.copy()
+        maintenance_data['fixture'] = fixture.id
+
+        serializer = FixtureMaintenanceSerializer(data=maintenance_data)
+        if serializer.is_valid():
+            serializer.save(created_by=request.user, updated_by=request.user, performed_by=request.user)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

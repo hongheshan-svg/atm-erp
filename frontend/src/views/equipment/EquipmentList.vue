@@ -263,7 +263,7 @@ import {
   Search, Refresh, Plus, ArrowDown, Tools, OfficeBuilding, CircleCheck, Warning
 } from '@element-plus/icons-vue'
 import request from '@/utils/request'
-import { getEquipmentList, getEquipmentStatistics, createEquipment, updateEquipment } from '@/api/equipment'
+import { getEquipmentList, getEquipment, getEquipmentStatistics, createEquipment, updateEquipment } from '@/api/equipment'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 import { getCustomerList } from '@/api/masterdata'
@@ -379,10 +379,17 @@ const resetFilters = () => {
   fetchData()
 }
 
-const showDialog = (mode, row = null) => {
+const showDialog = async (mode, row = null) => {
   dialogMode.value = mode
   if (mode === 'edit' && row) {
-    Object.assign(formData, row)
+    // 列表行来自精简序列化器，缺质保月数/联系人/电话/备注等字段；
+    // 编辑前拉取完整详情回填，避免提交时这些字段被静默重置/清空
+    try {
+      const detail = await getEquipment(row.id)
+      Object.assign(formData, detail.data || detail || row)
+    } catch (error) {
+      Object.assign(formData, row)
+    }
   } else {
     Object.keys(formData).forEach(key => {
       formData[key] = key === 'warranty_months' ? 12 : ''
@@ -427,12 +434,28 @@ const submitForm = async () => {
 
 
 const actionTitles = { ship: '发货确认', install: '安装确认', accept: '验收确认' }
-const actionEndpoints = { ship: 'ship', install: 'install', accept: 'accept' }
+// 设备台账动作定义在 EquipmentViewSet(/projects/equipment/)，而非 equipment-archives；
+// 开始安装的后端动作名为 start_installation
+const actionEndpoints = { ship: 'ship', install: 'start_installation', accept: 'accept' }
 
 const handleActionSave = async () => {
+  if (!actionForm.date) {
+    ElMessage.warning('请选择日期')
+    return
+  }
   actionSaving.value = true
   try {
-    await request.post(`/projects/equipment-archives/${actionRow.value.id}/${actionEndpoints[actionType.value]}/`, actionForm)
+    // 按各 action serializer 的字段名组装载荷
+    let payload = {}
+    if (actionType.value === 'ship') {
+      payload = { shipment_date: actionForm.date, notes: actionForm.remarks }
+    } else if (actionType.value === 'install') {
+      // EquipmentInstallation 计划开始/完成日期为必填
+      payload = { planned_start: actionForm.date, planned_end: actionForm.date, notes: actionForm.remarks }
+    } else if (actionType.value === 'accept') {
+      payload = { acceptance_date: actionForm.date, notes: actionForm.remarks }
+    }
+    await request.post(`/projects/equipment/${actionRow.value.id}/${actionEndpoints[actionType.value]}/`, payload)
     ElMessage.success('操作成功')
     actionDialogVisible.value = false
     fetchData()

@@ -146,10 +146,10 @@ export function deleteFixtureCategory(id: number) {
 
 // ========== 工装操作 ==========
 export function calibrateFixture(id: number, data: any) {
-  return request({ url: `/projects/fixtures/${id}/calibrate/`, method: 'post', data })
+  return request({ url: `/projects/fixtures/${id}/add_calibration/`, method: 'post', data })
 }
 export function maintainFixture(id: number, data: any) {
-  return request({ url: `/projects/fixtures/${id}/maintain/`, method: 'post', data })
+  return request({ url: `/projects/fixtures/${id}/add_maintenance/`, method: 'post', data })
 }
 
 // ========== 检验记录补充 ==========

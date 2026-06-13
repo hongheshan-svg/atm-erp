@@ -33,6 +33,10 @@ export function approveDrawing(id: number) {
   return request({ url: `/projects/drawings/${id}/approve/`, method: 'post' })
 }
 
+export function rejectDrawing(id: number, data?: Record<string, any>) {
+  return request({ url: `/projects/drawings/${id}/reject/`, method: 'post', data })
+}
+
 export function releaseDrawing(id: number) {
   return request({ url: `/projects/drawings/${id}/release/`, method: 'post' })
 }

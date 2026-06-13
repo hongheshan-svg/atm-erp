@@ -107,6 +107,7 @@
             <el-button size="small" link v-permission="'projects:project:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button size="small" link type="warning" @click="handleSubmitReview(row)" v-if="row.status === 'DRAFT'">提审</el-button>
             <el-button size="small" link type="success" @click="handleApprove(row)" v-if="row.status === 'REVIEWING'">批准</el-button>
+            <el-button size="small" link type="danger" @click="handleReject(row)" v-if="row.status === 'REVIEWING'">驳回</el-button>
             <el-button size="small" link type="primary" @click="handleRelease(row)" v-if="row.status === 'APPROVED'">发布</el-button>
             <el-button size="small" link type="info" @click="handleNewRevision(row)" v-if="row.status === 'RELEASED'">新版本</el-button>
             <el-button v-if="canDelete && row.status === 'DRAFT'" size="small" link type="danger" @click="deleteRow(row)" :loading="deleteLoading">删除</el-button>
@@ -308,7 +309,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Download, Upload, Document, ArrowDown } from '@element-plus/icons-vue'
-import { getDrawingList, getDrawing, createDrawing, updateDrawing, submitDrawingReview, approveDrawing, releaseDrawing, newDrawingRevision, exportDrawingExcel, exportDrawingTemplate, importDrawingExcel } from '@/api/projects/drawing'
+import { getDrawingList, getDrawing, createDrawing, updateDrawing, submitDrawingReview, approveDrawing, rejectDrawing, releaseDrawing, newDrawingRevision, exportDrawingExcel, exportDrawingTemplate, importDrawingExcel } from '@/api/projects/drawing'
 import { getProjectList } from '@/api/projects/project'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
@@ -406,7 +407,7 @@ const getFileTypeTag = (type) => {
 
 const loadProjects = async () => {
   try {
-    const res = await getProjectList( { params: { page_size: 200 } })
+    const res = await getProjectList({ page_size: 200 })
     projects.value = res.results || res || []
   } catch (error) {
     console.error('加载项目失败:', error)
@@ -435,7 +436,7 @@ const loadDrawings = async () => {
     }
     Object.keys(params).forEach(k => { if (!params[k]) delete params[k] })
     
-    const res = await getDrawingList( { params })
+    const res = await getDrawingList(params)
     drawings.value = res.results || res || []
     pagination.total = res.count || 0
   } catch (error) {
@@ -549,6 +550,23 @@ const handleApprove = async (row) => {
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '批准失败')
+    }
+  }
+}
+
+const handleReject = async (row) => {
+  try {
+    const { value: comment } = await ElMessageBox.prompt('请输入驳回意见', '驳回图纸', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+    })
+    await rejectDrawing(row.id, { comment })
+    ElMessage.success('图纸已驳回，退回草稿')
+    loadDrawings()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.error || '驳回失败')
     }
   }
 }
