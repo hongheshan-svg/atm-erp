@@ -42,16 +42,12 @@
         <el-form-item label="状态">
           <el-select v-model="searchForm.status" placeholder="选择状态" clearable style="width: 120px;">
             <el-option label="草稿" value="DRAFT" />
-            <el-option label="已提交" value="SUBMITTED" />
             <el-option label="审批中" value="PENDING" />
-            <el-option label="已审批" value="APPROVED" />
-            <el-option label="备货中" value="PREPARING" />
-            <el-option label="预约物流中" value="LOGISTICS_BOOKING" />
-            <el-option label="待客户签收" value="CUSTOMER_SIGNING" />
-            <el-option label="待上传送货单" value="UPLOADING_RECEIPT" />
-            <el-option label="待项目确认" value="PROJECT_CONFIRMING" />
-            <el-option label="已完成" value="COMPLETED" />
             <el-option label="已拒绝" value="REJECTED" />
+            <el-option label="已确认" value="CONFIRMED" />
+            <el-option label="部分发货" value="PARTIAL" />
+            <el-option label="已完成" value="COMPLETED" />
+            <el-option label="已取消" value="CANCELLED" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -95,10 +91,10 @@
             <el-button size="small" v-permission="'sales:order:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
             <el-button size="small" type="warning" @click="handleSubmitApproval(row)" v-if="row.status === 'DRAFT' || row.status === 'REJECTED'">提交审批</el-button>
             <el-button size="small" type="info" @click="showWorkflowProgress(row)" v-if="row.status === 'PENDING'">审批进度</el-button>
-            <el-button size="small" type="warning" @click="handleConfirm(row)" v-if="row.status === 'APPROVED'">确认</el-button>
+            <el-button size="small" type="warning" @click="handleConfirm(row)" v-if="row.status === 'DRAFT'">确认</el-button>
             <el-button size="small" type="warning" @click="handleViewAttachments(row)">附件</el-button>
-            <el-button size="small" type="success" @click="createDelivery(row)" v-if="row.status === 'APPROVED' || row.status === 'PARTIAL_DELIVERY'">发货</el-button>
-            <el-button size="small" type="danger" @click="handleCancel(row)" v-if="row.status === 'DRAFT' || row.status === 'CONFIRMED'">取消</el-button>
+            <el-button size="small" type="success" @click="createDelivery(row)" v-if="['CONFIRMED', 'PARTIAL'].includes(row.status)">发货</el-button>
+            <el-button size="small" type="danger" @click="handleCancel(row)" v-if="['DRAFT', 'PENDING', 'CONFIRMED', 'PARTIAL'].includes(row.status)">取消</el-button>
             <el-button size="small" type="danger" v-permission="'sales:order:delete'" @click="handleDelete(row)" v-if="['DRAFT', 'CANCELLED', 'REJECTED'].includes(row.status)">删除</el-button>
           </template>
         </el-table-column>
@@ -417,16 +413,12 @@ const rules = {
 const getStatusType = (status) => {
   const types = {
     DRAFT: 'info',
-    SUBMITTED: 'warning',
     PENDING: 'warning',
-    APPROVED: 'success',
-    PREPARING: 'primary',
-    LOGISTICS_BOOKING: 'primary',
-    CUSTOMER_SIGNING: 'primary',
-    UPLOADING_RECEIPT: 'primary',
-    PROJECT_CONFIRMING: 'primary',
+    REJECTED: 'danger',
+    CONFIRMED: 'success',
+    PARTIAL: 'primary',
     COMPLETED: '',
-    REJECTED: 'danger'
+    CANCELLED: 'info'
   }
   return types[status] || 'info'
 }
@@ -434,16 +426,12 @@ const getStatusType = (status) => {
 const getStatusLabel = (status) => {
   const labels = {
     DRAFT: '草稿',
-    SUBMITTED: '已提交',
     PENDING: '审批中',
-    APPROVED: '已审批',
-    PREPARING: '备货中',
-    LOGISTICS_BOOKING: '预约物流中',
-    CUSTOMER_SIGNING: '待客户签收',
-    UPLOADING_RECEIPT: '待上传送货单',
-    PROJECT_CONFIRMING: '待项目确认',
+    REJECTED: '已拒绝',
+    CONFIRMED: '已确认',
+    PARTIAL: '部分发货',
     COMPLETED: '已完成',
-    REJECTED: '已拒绝'
+    CANCELLED: '已取消'
   }
   return labels[status] || status
 }

@@ -20,7 +20,7 @@ export function createQuotationNewVersion(id: number) {
   return request({ url: `/sales/quotations/${id}/create_new_version/`, method: 'post' })
 }
 export function convertQuotationToOrder(id: number) {
-  return request({ url: `/sales/quotations/${id}/convert_to_order/`, method: 'post' })
+  return request({ url: `/sales/quotations/${id}/convert_to_so/`, method: 'post' })
 }
 
 // ========== 销售订单 ==========
@@ -349,7 +349,7 @@ export function calculateQuoteEstimation(id: number) {
   return request({ url: `/sales/quote-estimations/${id}/calculate/`, method: 'post' })
 }
 export function submitQuoteEstimation(id: number) {
-  return request({ url: `/sales/quote-estimations/${id}/submit/`, method: 'post' })
+  return request({ url: `/sales/quote-estimations/${id}/submit_review/`, method: 'post' })
 }
 
 // ========== 报价版本 ==========

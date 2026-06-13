@@ -100,7 +100,7 @@
               size="small"
               type="primary"
               @click="handleConvertToOrder(row)"
-              v-if="row.status === 'ACCEPTED'"
+              v-if="['APPROVED', 'SENT'].includes(row.status)"
             >
               转销售订单
             </el-button>

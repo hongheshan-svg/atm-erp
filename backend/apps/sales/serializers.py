@@ -540,23 +540,53 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['delivery_no', 'created_at', 'updated_at', 'total_amount', 'status']
 
+    def _build_lines(self, delivery, lines_data):
+        """构建发货明细：以 so_line 为有效性判据（非标产品 item 为空，从 so_line 回填），
+        并校验本次发货数量不超过订单明细剩余可发数（含其他草稿发货单占用）。"""
+        from apps.sales.models import SalesOrderLine
+        from django.db.models import Sum
+
+        for line_data in lines_data:
+            so_line_id = line_data.get('so_line')
+            qty = line_data.get('qty')
+            # 有效性判据改为 so_line + qty（item 可空，非标产品主业务）
+            if not so_line_id or not qty:
+                continue
+            try:
+                so_line = SalesOrderLine.objects.get(id=so_line_id)
+            except SalesOrderLine.DoesNotExist:
+                raise serializers.ValidationError(f'订单明细 {so_line_id} 不存在')
+
+            qty = Decimal(str(qty))
+            # 其他未完成草稿发货单已占用、但尚未计入 delivered_qty 的数量
+            reserved = DeliveryOrderLine.objects.filter(
+                so_line=so_line, is_deleted=False,
+                delivery__is_deleted=False, delivery__status='DRAFT',
+            ).exclude(delivery_id=delivery.id).aggregate(s=Sum('qty'))['s'] or Decimal('0')
+            allowed = (so_line.qty or Decimal('0')) - (so_line.delivered_qty or Decimal('0')) - reserved
+            if qty > allowed:
+                raise serializers.ValidationError(
+                    f'发货数量超出可发数：明细「{so_line}」剩余可发 {allowed}，本次 {qty}'
+                )
+
+            DeliveryOrderLine.objects.create(
+                delivery=delivery,
+                so_line=so_line,
+                item_id=line_data.get('item') or so_line.item_id,
+                qty=qty,
+                notes=line_data.get('notes', ''),
+                created_by=delivery.created_by,
+            )
+
     def create(self, validated_data):
         """Create delivery order with lines."""
         lines_data = self.initial_data.get('lines', [])
 
         with transaction.atomic():
             delivery = DeliveryOrder.objects.create(**validated_data)
-
-            for line_data in lines_data:
-                if line_data.get('item') and line_data.get('qty'):
-                    DeliveryOrderLine.objects.create(
-                        delivery=delivery,
-                        so_line_id=line_data.get('so_line'),
-                        item_id=line_data['item'],
-                        qty=line_data['qty'],
-                        notes=line_data.get('notes', ''),
-                        created_by=delivery.created_by,
-                    )
+            self._build_lines(delivery, lines_data)
+            if not delivery.lines.filter(is_deleted=False).exists():
+                raise serializers.ValidationError('发货单必须至少包含一条有效明细')
 
         return delivery
 
@@ -572,17 +602,7 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
 
             # Delete old lines and create new ones
             instance.lines.all().delete()
-
-            for line_data in lines_data:
-                if line_data.get('item') and line_data.get('qty'):
-                    DeliveryOrderLine.objects.create(
-                        delivery=instance,
-                        so_line_id=line_data.get('so_line'),
-                        item_id=line_data['item'],
-                        qty=line_data['qty'],
-                        notes=line_data.get('notes', ''),
-                        created_by=instance.created_by,
-                    )
+            self._build_lines(instance, lines_data)
 
         return instance
 

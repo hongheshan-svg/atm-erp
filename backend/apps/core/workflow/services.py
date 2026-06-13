@@ -223,8 +223,8 @@ class WorkflowService:
                     return payment_req.project.manager
             
             elif instance.business_type == 'QUOTATION':
-                from apps.sales.models import Quotation
-                quot = Quotation.objects.get(id=instance.business_id)
+                from apps.sales.models import SalesQuotation
+                quot = SalesQuotation.objects.get(id=instance.business_id)
                 if hasattr(quot, 'project') and quot.project:
                     return quot.project.manager
             
@@ -437,6 +437,12 @@ class WorkflowService:
                 if result == 'APPROVED':
                     so.status = 'CONFIRMED'  # 审批通过后确认订单
                     so.save()
+                    # 与直接确认路径一致：生成应收账款与付款计划，避免审批确认的订单漏记 AR
+                    try:
+                        from apps.sales.services import create_sales_order_receivables
+                        create_sales_order_receivables(so, getattr(instance, 'submitter', None) or so.created_by)
+                    except Exception as e:
+                        logger.error(f"销售订单 {so.order_no} 审批通过后创建应收/付款计划失败: {e}")
                     logger.info(f"Sales order {so.order_no} approved, status changed to CONFIRMED")
                 elif result == 'REJECTED':
                     so.status = 'REJECTED'
@@ -531,12 +537,12 @@ class WorkflowService:
                     po.save()
             
             elif instance.business_type == 'QUOTATION':
-                from apps.sales.models import Quotation
-                quot = Quotation.objects.get(id=instance.business_id)
+                from apps.sales.models import SalesQuotation
+                quot = SalesQuotation.objects.get(id=instance.business_id)
                 if result == 'APPROVED':
                     quot.status = 'APPROVED'
                     quot.save()
-                    logger.info(f"Quotation {quot.quotation_no} approved")
+                    logger.info(f"Quotation {quot.quote_no} approved")
                 elif result == 'REJECTED':
                     quot.status = 'REJECTED'
                     quot.save()

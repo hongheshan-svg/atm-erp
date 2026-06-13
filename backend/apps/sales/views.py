@@ -137,9 +137,10 @@ class SalesQuotationViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
         """Convert quotation to sales order."""
         quotation = self.get_object()
 
-        if quotation.status not in ['APPROVED', 'SENT', 'ACCEPTED']:
+        # 不含 ACCEPTED：转换成功后报价单即置 ACCEPTED，借此防止重复转换生成多张订单
+        if quotation.status not in ['APPROVED', 'SENT']:
             return Response(
-                {'error': '只能将已审批/已发送/已接受的报价单转换为订单'},
+                {'error': '只能将已审批/已发送的报价单转换为订单'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -148,34 +149,49 @@ class SalesQuotationViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
                 {'error': '报价单必须关联项目才能转换为订单'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
+        # delivery_date 为 SalesOrder 非空字段：优先取入参，回退报价有效期，仍无则报 400（而非 500）
+        delivery_date = request.data.get('delivery_date') or quotation.valid_until
+        if not delivery_date:
+            return Response(
+                {'error': '请指定交货日期'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         with transaction.atomic():
             so = SalesOrder.objects.create(
                 customer=quotation.customer,
                 project=quotation.project,
-                delivery_date=request.data.get('delivery_date'),
+                delivery_date=delivery_date,
+                tax_rate=quotation.tax_rate,
                 created_by=request.user
             )
-            
+
             for line in quotation.lines.filter(is_deleted=False):
                 SalesOrderLine.objects.create(
                     so=so,
                     item=line.item,
+                    custom_name=line.custom_name,
+                    custom_spec=line.custom_spec,
+                    custom_unit=line.custom_unit,
                     qty=line.qty,
                     unit_price=line.unit_price,
+                    notes=getattr(line, 'notes', '') or '',
                     created_by=request.user
                 )
-            
-            # Update total
+
+            # Update totals incl. tax（与序列化器口径一致，避免转出订单税额为 0）
             from decimal import Decimal as D
             from django.db.models import Sum
             total = so.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or D('0')
             so.total_amount = total
+            so.tax_amount = total * so.tax_rate / 100
+            so.total_with_tax = total + so.tax_amount
             so.save()
-            
+
             quotation.status = 'ACCEPTED'
             quotation.save()
-        
+
         return Response(SalesOrderSerializer(so).data, status=status.HTTP_201_CREATED)
 
 
@@ -335,33 +351,16 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
         """执行订单确认逻辑"""
         so.status = 'CONFIRMED'
         so.save()
-        
-        # Auto-create AR - 使用含税金额（避免重复创建）
-        from apps.finance.models import AccountReceivable, PaymentSchedule
-        
-        # 检查是否已存在该SO的应收账款
-        existing_ar = AccountReceivable.objects.filter(so=so, is_deleted=False).first()
-        if not existing_ar:
-            AccountReceivable.objects.create(
-                customer=so.customer,
-                so=so,
-                project=so.project,
-                invoice_date=so.order_date,
-                amount_due=so.total_with_tax or so.total_amount,
-                due_date=request.data.get('due_date', so.delivery_date),
-                created_by=request.user
-            )
-        
-        # 自动生成付款计划（避免重复创建）
-        existing_schedules = PaymentSchedule.objects.filter(sales_order=so, is_deleted=False).exists()
-        if existing_schedules:
-            schedules = []
-        else:
-            schedules = PaymentSchedule.generate_from_sales_order(so)
-        
+
+        # 应收账款 + 付款计划走共用函数（与工作流审批回写一致，避免两条路径行为漂移）
+        from apps.sales.services import create_sales_order_receivables
+        schedules = create_sales_order_receivables(
+            so, request.user, request.data.get('due_date', so.delivery_date)
+        )
+
         response_data = SalesOrderSerializer(so).data
         response_data['payment_schedules_count'] = len(schedules)
-        
+
         return Response(response_data)
     
     @action(detail=True, methods=['post'])
@@ -373,9 +372,46 @@ class SalesOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMix
                 {'error': '无法取消已完成或已取消的订单'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        so.status = 'CANCELLED'
-        so.save()
+
+        from apps.sales.models import DeliveryOrder
+        # 存在已提交/在途发货单时禁止直接取消（应先拒绝或走退货）
+        active_deliveries = DeliveryOrder.objects.filter(so=so, is_deleted=False).exclude(
+            status__in=['DRAFT', 'REJECTED']
+        ).exists()
+        if active_deliveries:
+            return Response(
+                {'error': '该订单存在已提交/在途的发货单，请先拒绝或退货后再取消'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        with transaction.atomic():
+            so.status = 'CANCELLED'
+            so.save()
+
+            # 撤销关联应收账款与未收款付款计划
+            from apps.finance.models import AccountReceivable, PaymentSchedule
+            AccountReceivable.objects.filter(so=so, is_deleted=False).exclude(
+                status__in=['PAID', 'CANCELLED']
+            ).update(status='CANCELLED')
+            PaymentSchedule.objects.filter(
+                sales_order=so, is_deleted=False, status='PENDING'
+            ).update(status='CANCELLED')
+
+            # 作废未开始的草稿/已拒绝发货单
+            from django.utils import timezone
+            DeliveryOrder.objects.filter(
+                so=so, is_deleted=False, status__in=['DRAFT', 'REJECTED']
+            ).update(is_deleted=True, deleted_at=timezone.now())
+
+            # 撤回活跃审批工作流，避免审批人继续审批把状态改回 CONFIRMED
+            has_wf, wf_instance = self.has_active_workflow(so)
+            if has_wf and wf_instance:
+                try:
+                    from apps.core.workflow.services import WorkflowService
+                    WorkflowService.withdraw_workflow(wf_instance, request.user)
+                except Exception:
+                    pass
+
         return Response(SalesOrderSerializer(so).data)
     
     @action(detail=True, methods=['post'], url_path='return_to_draft')
