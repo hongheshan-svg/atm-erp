@@ -74,6 +74,12 @@
               <span class="probability">{{ opp.probability }}%</span>
               <span class="date">{{ opp.expected_close_date || '未设置' }}</span>
             </div>
+            <div class="card-actions" @click.stop>
+              <el-button size="small" link type="primary" @click="handleChangeStage(opp)">变更阶段</el-button>
+              <el-button size="small" link @click="handleAddActivity(opp)">跟进</el-button>
+              <el-button size="small" link @click="handleCreateQuotation(opp)">生成报价</el-button>
+              <el-button v-if="canDelete" size="small" link type="danger" @click="deleteRow(opp)">删除</el-button>
+            </div>
           </div>
         </div>
       </div>
@@ -160,6 +166,58 @@
         <el-button type="primary" @click="handleSubmit" :loading="submitting">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 变更阶段对话框 -->
+    <el-dialog v-model="showStageDialog" title="变更商机阶段" width="500px">
+      <el-form :model="stageForm" label-width="100px">
+        <el-form-item label="目标阶段">
+          <el-select v-model="stageForm.new_stage" style="width: 100%">
+            <el-option v-for="s in stageOptions" :key="s.value" :label="s.label" :value="s.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="成功概率">
+          <el-slider v-model="stageForm.probability" :step="10" show-stops />
+        </el-form-item>
+        <el-form-item label="丢单原因" v-if="stageForm.new_stage === 'CLOSED_LOST'">
+          <el-input v-model="stageForm.lost_reason" type="textarea" :rows="2" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="stageForm.notes" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showStageDialog = false">取消</el-button>
+        <el-button type="primary" @click="confirmChangeStage">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 添加跟进对话框 -->
+    <el-dialog v-model="showActivityDialog" title="添加跟进" width="500px">
+      <el-form :model="activityForm" label-width="100px">
+        <el-form-item label="活动类型">
+          <el-select v-model="activityForm.activity_type" style="width: 100%">
+            <el-option label="电话" value="CALL" />
+            <el-option label="邮件" value="EMAIL" />
+            <el-option label="会议" value="MEETING" />
+            <el-option label="拜访" value="VISIT" />
+            <el-option label="演示" value="DEMO" />
+            <el-option label="方案" value="PROPOSAL" />
+            <el-option label="谈判" value="NEGOTIATION" />
+            <el-option label="其他" value="OTHER" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="主题">
+          <el-input v-model="activityForm.subject" />
+        </el-form-item>
+        <el-form-item label="内容">
+          <el-input v-model="activityForm.content" type="textarea" :rows="3" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showActivityDialog = false">取消</el-button>
+        <el-button type="primary" @click="confirmAddActivity">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -167,13 +225,17 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Opportunity } from '@element-plus/icons-vue'
 import {
   getOpportunityList,
+  getOpportunity,
   getOpportunityStatistics,
   createOpportunity,
-  updateOpportunity
+  updateOpportunity,
+  changeOpportunityStage,
+  addOpportunityActivity,
+  createQuotationFromOpportunity
 } from '@/api/sales/crm'
 import { getCustomerList } from '@/api/masterdata/customer'
 
@@ -195,8 +257,8 @@ const statistics = reactive({
 // 权限检查
 const { canDelete } = usePermission()
 
-// 批量删除功能
-const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+// 删除功能(看板卡片单条删除)
+const { deleteRow } = useBatchDelete(
   '/sales/opportunities/',
   {
     confirmTitle: '确认删除销售商机',
@@ -212,7 +274,25 @@ const queryParams = reactive({
   stage: '',
   priority: '',
   page: 1,
-  page_size: 200
+  page_size: 100
+})
+
+// 阶段变更 / 跟进 对话框状态
+const showStageDialog = ref(false)
+const stageTarget = ref<any>(null)
+const stageForm = reactive({
+  new_stage: 'QUALIFICATION',
+  probability: 20,
+  notes: '',
+  lost_reason: ''
+})
+
+const showActivityDialog = ref(false)
+const activityTarget = ref<any>(null)
+const activityForm = reactive({
+  activity_type: 'CALL',
+  subject: '',
+  content: ''
 })
 
 const formRef = ref(null)
@@ -258,7 +338,9 @@ const kanbanStages = [
   { value: 'QUALIFICATION', label: '需求确认', color: '#909399', type: 'info' },
   { value: 'NEEDS_ANALYSIS', label: '需求分析', color: '#E6A23C', type: 'warning' },
   { value: 'PROPOSAL', label: '方案报价', color: '#409EFF', type: '' },
-  { value: 'NEGOTIATION', label: '商务谈判', color: '#67C23A', type: 'success' }
+  { value: 'NEGOTIATION', label: '商务谈判', color: '#67C23A', type: 'success' },
+  { value: 'CLOSED_WON', label: '赢单', color: '#67C23A', type: 'success' },
+  { value: 'CLOSED_LOST', label: '丢单', color: '#F56C6C', type: 'danger' }
 ]
 
 // 方法
@@ -325,10 +407,88 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleView = (opp) => {
+const handleView = async (opp) => {
   dialogTitle.value = '编辑商机'
-  Object.assign(formData, opp)
-  dialogVisible.value = true
+  try {
+    // 列表序列化器缺联系人/产品类型/需求等字段，先 GET 详情回填避免跨记录脏写
+    const detail = await getOpportunity(opp.id)
+    Object.assign(formData, {
+      id: detail.id,
+      name: detail.name ?? '',
+      customer: detail.customer ?? null,
+      contact_name: detail.contact_name ?? '',
+      contact_phone: detail.contact_phone ?? '',
+      stage: detail.stage ?? 'QUALIFICATION',
+      priority: detail.priority ?? 'MEDIUM',
+      probability: detail.probability ?? 20,
+      estimated_amount: detail.estimated_amount ?? 0,
+      expected_close_date: detail.expected_close_date ?? null,
+      product_type: detail.product_type ?? '',
+      requirement: detail.requirement ?? '',
+      competitors: detail.competitors ?? ''
+    })
+    dialogVisible.value = true
+  } catch (e) {
+    ElMessage.error('加载商机详情失败')
+  }
+}
+
+const handleChangeStage = (opp) => {
+  stageTarget.value = opp
+  stageForm.new_stage = opp.stage
+  stageForm.probability = opp.probability
+  stageForm.notes = ''
+  stageForm.lost_reason = ''
+  showStageDialog.value = true
+}
+
+const confirmChangeStage = async () => {
+  try {
+    await changeOpportunityStage(stageTarget.value.id, { ...stageForm })
+    ElMessage.success('阶段已更新')
+    showStageDialog.value = false
+    fetchData()
+  } catch (e) {
+    ElMessage.error('阶段变更失败')
+  }
+}
+
+const handleAddActivity = (opp) => {
+  activityTarget.value = opp
+  activityForm.activity_type = 'CALL'
+  activityForm.subject = ''
+  activityForm.content = ''
+  showActivityDialog.value = true
+}
+
+const confirmAddActivity = async () => {
+  if (!activityForm.subject) {
+    ElMessage.warning('请输入跟进主题')
+    return
+  }
+  try {
+    await addOpportunityActivity(activityTarget.value.id, {
+      activity_type: activityForm.activity_type,
+      subject: activityForm.subject,
+      content: activityForm.content,
+      activity_date: new Date().toISOString()
+    })
+    ElMessage.success('跟进已记录')
+    showActivityDialog.value = false
+    fetchData()
+  } catch (e) {
+    ElMessage.error('记录跟进失败')
+  }
+}
+
+const handleCreateQuotation = async (opp) => {
+  try {
+    await ElMessageBox.confirm(`确定基于商机「${opp.name}」生成报价单吗？`, '生成报价', { type: 'info' })
+    const res = await createQuotationFromOpportunity(opp.id)
+    ElMessage.success(res?.message || '报价单已生成')
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error('生成报价失败')
+  }
 }
 
 const handleSubmit = async () => {
@@ -474,10 +634,19 @@ onMounted(() => {
   justify-content: space-between;
   font-size: 12px;
   color: #909399;
-  
+
   .probability {
     color: #67C23A;
   }
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed #ebeef5;
 }
 
 .table-toolbar {

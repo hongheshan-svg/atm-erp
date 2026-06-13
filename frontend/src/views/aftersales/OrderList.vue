@@ -449,7 +449,7 @@ import { getAfterSalesOrderList, getAfterSalesOrder, createAfterSalesOrder, upda
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 import { getUsers } from '@/api/auth'
-import { deleteAttachment, getAttachmentList, uploadAttachment } from '@/api/core'
+import { deleteAttachment, getAttachmentList, uploadAttachment, downloadAttachment as downloadAttachmentApi } from '@/api/core'
 import { getCustomerList } from '@/api/masterdata'
 import { getProjectList } from '@/api/projects/project'
 import { toFixedSafe } from '@/utils/number'
@@ -692,24 +692,31 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
-  Object.assign(form, {
-    id: row.id,
-    project: row.project,
-    customer: row.customer,
-    order_type: row.order_type,
-    priority: row.priority,
-    title: row.title,
-    description: row.description,
-    equipment_info: row.equipment_info,
-    fault_code: row.fault_code,
-    contact_person: row.contact_person,
-    contact_phone: row.contact_phone,
-    site_address: row.site_address,
-    expected_date: row.expected_date,
-    is_warranty: row.is_warranty
-  })
-  dialogVisible.value = true
+const handleEdit = async (row) => {
+  try {
+    // 列表序列化器缺 description/equipment_info/fault_code/site_address 等字段，
+    // 先 GET 详情回填，避免编辑时这些字段为 undefined 被空值覆盖
+    const detail = await getAfterSalesOrder(row.id)
+    Object.assign(form, {
+      id: detail.id,
+      project: detail.project,
+      customer: detail.customer,
+      order_type: detail.order_type,
+      priority: detail.priority,
+      title: detail.title,
+      description: detail.description,
+      equipment_info: detail.equipment_info,
+      fault_code: detail.fault_code,
+      contact_person: detail.contact_person,
+      contact_phone: detail.contact_phone,
+      site_address: detail.site_address,
+      expected_date: detail.expected_date,
+      is_warranty: detail.is_warranty
+    })
+    dialogVisible.value = true
+  } catch (error) {
+    ElMessage.error('加载工单详情失败')
+  }
 }
 
 const handleProjectChange = (projectId) => {
@@ -805,12 +812,10 @@ const loadAttachments = async () => {
   attachmentLoading.value = true
   try {
     const res = await getAttachmentList({
-      params: {
-        related_model: 'AfterSalesOrder',
-        related_id: currentAttachmentOrderId.value
-      }
+      related_model: 'AfterSalesOrder',
+      related_id: currentAttachmentOrderId.value
     })
-    attachmentList.value = res.results || res.results || []
+    attachmentList.value = res.results || res || []
   } catch (error) {
     console.error('加载附件失败:', error)
   } finally {
@@ -862,8 +867,21 @@ const getCategoryLabel = (category) => {
   return map[category] || category
 }
 
-const downloadAttachment = (attachment) => {
-  window.open(`/api/core/attachments/${attachment.id}/download/`, '_blank')
+const downloadAttachment = async (attachment) => {
+  try {
+    // 走带 JWT 的 blob 下载，window.open 不会携带 Authorization 头会 401
+    const blob = await downloadAttachmentApi(attachment.id)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = attachment.original_name || `attachment_${attachment.id}`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    ElMessage.error('下载失败')
+  }
 }
 
 const handleDeleteAttachment = async (attachment) => {

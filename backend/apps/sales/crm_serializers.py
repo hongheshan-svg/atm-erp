@@ -96,7 +96,13 @@ class OpportunitySerializer(serializers.ModelSerializer):
     def get_days_in_stage(self, obj):
         from django.utils import timezone
 
-        return (timezone.now() - obj.updated_at).days
+        # 优先以"最近一次阶段变更活动"的时间计算停留天数，避免改备注/联系人等编辑导致清零；
+        # 无阶段变更记录时回退到 created_at(自创建以来始终处于当前阶段)。
+        last_stage_change = (
+            obj.activities.filter(subject__startswith='阶段变更').order_by('-activity_date').first()
+        )
+        anchor = last_stage_change.activity_date if last_stage_change else obj.created_at
+        return (timezone.now() - anchor).days
 
 
 class OpportunityListSerializer(serializers.ModelSerializer):

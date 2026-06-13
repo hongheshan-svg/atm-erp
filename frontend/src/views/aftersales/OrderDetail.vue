@@ -54,6 +54,9 @@
               <el-button type="info" @click="handleWaitingParts" v-if="['IN_PROGRESS', 'ON_SITE'].includes(order.status)" block>
                 等待备件
               </el-button>
+              <el-button type="warning" @click="handleStartService" v-if="order.status === 'WAITING_PARTS'" block>
+                恢复服务
+              </el-button>
               <el-button type="success" @click="showResolveDialog" v-if="['IN_PROGRESS', 'ON_SITE', 'WAITING_PARTS'].includes(order.status)" block>
                 解决问题
               </el-button>
@@ -399,7 +402,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, VideoPlay, Document } from '@element-plus/icons-vue'
 import { getAfterSalesOrder, startService, onSiteService, waitingParts, resolveAfterSalesOrder, closeAfterSalesOrder, cancelAfterSalesOrder, createServiceRecord, deleteServiceRecord, createSparePart, deleteSparePart, updateAfterSalesCost } from '@/api/aftersales'
 import { useUserStore } from '@/stores/user'
-import { deleteAttachment, getAttachmentList, uploadAttachment } from '@/api/core'
+import { deleteAttachment, getAttachmentList, uploadAttachment, downloadAttachment as downloadAttachmentApi } from '@/api/core'
 import { getItemList } from '@/api/masterdata'
 import { toFixedSafe } from '@/utils/number'
 
@@ -739,12 +742,10 @@ const saveCost = async () => {
 const loadAttachments = async () => {
   try {
     const res = await getAttachmentList({
-      params: {
-        related_model: 'AfterSalesOrder',
-        related_id: route.params.id
-      }
+      related_model: 'AfterSalesOrder',
+      related_id: route.params.id
     })
-    attachments.value = res.results || res.results || []
+    attachments.value = res.results || res || []
   } catch (error) {
     console.error('加载附件失败:', error)
   }
@@ -839,8 +840,21 @@ const previewAttachment = (attachment) => {
   }
 }
 
-const downloadAttachment = (attachment) => {
-  window.open(`/api/core/attachments/${attachment.id}/download/`, '_blank')
+const downloadAttachment = async (attachment) => {
+  try {
+    // 走带 JWT 的 blob 下载，window.open 不会携带 Authorization 头会 401
+    const blob = await downloadAttachmentApi(attachment.id)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = attachment.original_name || `attachment_${attachment.id}`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    ElMessage.error('下载失败')
+  }
 }
 
 const handleDeleteAttachment = async (attachment) => {

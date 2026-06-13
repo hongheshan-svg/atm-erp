@@ -41,7 +41,7 @@
               <el-option label="已过期" value="EXPIRED" />
               <el-option label="已终止" value="TERMINATED" />
             </el-select>
-            <el-button type="primary" v-permission="'sales:contract:create'" @click="showCreateDialog = true">
+            <el-button type="primary" v-permission="'sales:service_contract:create'" @click="showCreateDialog = true">
               <el-icon><Plus /></el-icon>新建合同
             </el-button>
           </div>
@@ -201,7 +201,7 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button v-permission="'sales:contract:create'" @click="showCreateDialog = false">取消</el-button>
+        <el-button @click="showCreateDialog = false">取消</el-button>
         <el-button type="primary" @click="createContract" :loading="submitting">创建</el-button>
       </template>
     </el-dialog>

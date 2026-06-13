@@ -86,9 +86,9 @@
         <el-card class="sidebar-card" style="margin-top: 16px">
           <template #header>热门标签</template>
           <div class="tag-cloud">
-            <el-tag v-for="tag in popularTags" :key="tag.name" class="tag-item" 
-                    @click="searchByTag(tag.name)" style="cursor: pointer">
-              {{ tag.name }} ({{ tag.count }})
+            <el-tag v-for="tag in popularTags" :key="tag" class="tag-item"
+                    @click="searchByTag(tag)" style="cursor: pointer">
+              {{ tag }}
             </el-tag>
           </div>
         </el-card>
@@ -240,10 +240,19 @@ const getCategoryType = (category) => {
   return map[category] || 'info'
 }
 
+const escapeHtml = (text) => {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 const renderMarkdown = (content) => {
-  // 简单的Markdown渲染
+  // 先整体转义原始 HTML（防止 <img onerror>/<script> 等存储型 XSS），再做受控的 Markdown 替换
   if (!content) return ''
-  return content
+  return escapeHtml(content)
     .replace(/#{3}\s(.+)/g, '<h3>$1</h3>')
     .replace(/#{2}\s(.+)/g, '<h2>$1</h2>')
     .replace(/#{1}\s(.+)/g, '<h1>$1</h1>')
@@ -282,7 +291,8 @@ const loadPopularArticles = async () => {
 const loadPopularTags = async () => {
   try {
     const res = await getKnowledgeTags()
-    popularTags.value = res || []
+    // 后端返回 { tags: [字符串数组] }
+    popularTags.value = res?.tags || (Array.isArray(res) ? res : [])
   } catch (e) {
     console.error('加载热门标签失败')
   }

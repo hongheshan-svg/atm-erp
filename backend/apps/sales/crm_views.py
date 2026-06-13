@@ -2,6 +2,7 @@
 CRM - 商机/线索管理视图
 """
 
+from django.db import transaction
 from django.db.models import Count, Sum
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -53,11 +54,9 @@ class LeadViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
         return LeadSerializer
 
     def perform_create(self, serializer):
-        # 如果没有指定负责人，默认为当前用户
-        if not serializer.validated_data.get('owner'):
-            serializer.save(owner=self.request.user)
-        else:
-            serializer.save()
+        # 如果没有指定负责人，默认为当前用户；同时补齐审计字段(数据范围按 created_by 过滤)
+        owner = serializer.validated_data.get('owner') or self.request.user
+        serializer.save(owner=owner, created_by=self.request.user, updated_by=self.request.user)
 
     @action(detail=False, methods=['get'])
     def statistics(self, request):
@@ -96,50 +95,60 @@ class LeadViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        customer = None
-        opportunity = None
+        from apps.masterdata.models import Customer
 
-        # 创建或使用已有客户
-        if data.get('create_customer', True):
-            from apps.masterdata.models import Customer
+        from apps.core.utils import generate_code
 
-            from apps.core.utils import generate_code
-
-            customer = Customer.objects.create(
-                code=generate_code('C', rule_type='CUSTOMER'),
-                name=lead.company_name,
-                contact_person=lead.contact_name,
-                phone=lead.contact_phone,
-                email=lead.contact_email,
-                address=lead.address,
-                created_by=request.user,
-                updated_by=request.user,
-            )
-        elif data.get('customer_id'):
-            from apps.masterdata.models import Customer
-
-            customer = Customer.objects.get(id=data['customer_id'])
-
-        # 创建商机
-        if data.get('create_opportunity', True) and customer:
-            opportunity = Opportunity.objects.create(
-                name=data.get('opportunity_name', f'{lead.company_name}商机'),
-                customer=customer,
-                contact_name=lead.contact_name,
-                contact_phone=lead.contact_phone,
-                requirement=lead.requirement,
-                estimated_amount=data.get('estimated_amount', 0),
-                owner=lead.owner or request.user,
-                created_by=request.user,
-                updated_by=request.user,
+        # 必须能确定客户：要么新建，要么指定已有客户，否则不允许转化(避免孤儿 CONVERTED)
+        if not data.get('create_customer', True) and not data.get('customer_id'):
+            return Response(
+                {'error': '请创建新客户或选择已有客户'}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        # 更新线索状态
-        lead.status = 'CONVERTED'
-        lead.converted_customer = customer
-        lead.converted_opportunity = opportunity
-        lead.converted_at = timezone.now()
-        lead.save()
+        with transaction.atomic():
+            customer = None
+            opportunity = None
+
+            # 创建或使用已有客户
+            if data.get('create_customer', True):
+                customer = Customer.objects.create(
+                    code=generate_code('C', rule_type='CUSTOMER'),
+                    name=lead.company_name,
+                    contact_person=lead.contact_name,
+                    phone=lead.contact_phone,
+                    email=lead.contact_email,
+                    address=lead.address,
+                    created_by=request.user,
+                    updated_by=request.user,
+                )
+            else:
+                try:
+                    customer = Customer.objects.get(id=data['customer_id'])
+                except Customer.DoesNotExist:
+                    return Response(
+                        {'error': '指定的客户不存在'}, status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # 创建商机
+            if data.get('create_opportunity', True) and customer:
+                opportunity = Opportunity.objects.create(
+                    name=data.get('opportunity_name', f'{lead.company_name}商机'),
+                    customer=customer,
+                    contact_name=lead.contact_name,
+                    contact_phone=lead.contact_phone,
+                    requirement=lead.requirement,
+                    estimated_amount=data.get('estimated_amount', 0),
+                    owner=lead.owner or request.user,
+                    created_by=request.user,
+                    updated_by=request.user,
+                )
+
+            # 更新线索状态
+            lead.status = 'CONVERTED'
+            lead.converted_customer = customer
+            lead.converted_opportunity = opportunity
+            lead.converted_at = timezone.now()
+            lead.save()
 
         return Response(
             {
@@ -153,8 +162,12 @@ class LeadViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
     def disqualify(self, request, pk=None):
         """作废线索"""
         lead = self.get_object()
+        if lead.status == 'CONVERTED':
+            return Response({'error': '已转化的线索不可作废'}, status=status.HTTP_400_BAD_REQUEST)
+
+        reason = request.data.get('reason', '')
         lead.status = 'DISQUALIFIED'
-        lead.notes = request.data.get('reason', '') + '\n' + lead.notes
+        lead.notes = f'{reason}\n{lead.notes or ""}'.strip()
         lead.save()
 
         return Response(LeadSerializer(lead).data)
@@ -177,10 +190,8 @@ class OpportunityViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
         return OpportunitySerializer
 
     def perform_create(self, serializer):
-        if not serializer.validated_data.get('owner'):
-            serializer.save(owner=self.request.user)
-        else:
-            serializer.save()
+        owner = serializer.validated_data.get('owner') or self.request.user
+        serializer.save(owner=owner, created_by=self.request.user, updated_by=self.request.user)
 
     @action(detail=False, methods=['get'])
     def statistics(self, request):

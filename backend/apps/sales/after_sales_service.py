@@ -7,17 +7,20 @@ import secrets
 from datetime import timedelta
 
 from django.conf import settings
-from django.db import OperationalError, ProgrammingError, models
+from django.contrib.auth import get_user_model
+from django.db import OperationalError, ProgrammingError, models, transaction
 from django.db.models import Q
 from django.utils import timezone
-from rest_framework import serializers, viewsets
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.utils import generate_code
 from apps.core.workflow.mixins import WorkflowEnforcementMixin
 
 User = settings.AUTH_USER_MODEL
@@ -440,7 +443,7 @@ class KnowledgeBaseArticleSerializer(serializers.ModelSerializer):
 # ==================== ViewSets ====================
 
 
-class ServiceContractViewSet(PermissionMixin, viewsets.ModelViewSet):
+class ServiceContractViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """服务合同管理"""
     permission_module = 'sales'
     permission_resource = 'service_contract'
@@ -448,29 +451,37 @@ class ServiceContractViewSet(PermissionMixin, viewsets.ModelViewSet):
     queryset = ServiceContract.objects.filter(is_deleted=False)
     serializer_class = ServiceContractSerializer
     permission_classes = [IsAuthenticated]
+    search_fields = ['contract_no', 'title', 'customer__name']
 
     def get_queryset(self):
         qs = super().get_queryset()
         customer = self.request.query_params.get('customer')
         status_filter = self.request.query_params.get('status')
+        keyword = self.request.query_params.get('search')
 
         if customer:
             qs = qs.filter(customer_id=customer)
         if status_filter:
             qs = qs.filter(status=status_filter)
+        if keyword:
+            qs = qs.filter(
+                Q(contract_no__icontains=keyword)
+                | Q(title__icontains=keyword)
+                | Q(customer__name__icontains=keyword)
+            )
 
         return qs.select_related('customer', 'project')
 
     def perform_create(self, serializer):
-        today = timezone.now()
-        prefix = f'SC{today.strftime("%Y%m%d")}'
-        last = ServiceContract.objects.filter(contract_no__startswith=prefix).order_by('-contract_no').first()
-        seq = int(last.contract_no[-4:]) + 1 if last else 1
-        contract_no = f'{prefix}{seq:04d}'
-
-        instance = serializer.save(contract_no=contract_no)
-        instance.remaining_visits = instance.includes_onsite_visits
-        instance.save()
+        with transaction.atomic():
+            contract_no = generate_code('SC', rule_type='SERVICE_CONTRACT')
+            instance = serializer.save(
+                contract_no=contract_no,
+                created_by=self.request.user,
+                updated_by=self.request.user,
+            )
+            instance.remaining_visits = instance.includes_onsite_visits
+            instance.save(update_fields=['remaining_visits'])
 
     @action(detail=True, methods=['post'])
     def activate(self, request, pk=None):
@@ -505,7 +516,7 @@ class ServiceContractViewSet(PermissionMixin, viewsets.ModelViewSet):
         )
 
 
-class PreventiveMaintenanceViewSet(PermissionMixin, viewsets.ModelViewSet):
+class PreventiveMaintenanceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """预防性维护管理"""
     permission_module = 'sales'
     permission_resource = 'preventive_maintenance'
@@ -518,11 +529,17 @@ class PreventiveMaintenanceViewSet(PermissionMixin, viewsets.ModelViewSet):
         qs = super().get_queryset()
         contract = self.request.query_params.get('contract')
         status_filter = self.request.query_params.get('status')
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
 
         if contract:
             qs = qs.filter(service_contract_id=contract)
         if status_filter:
             qs = qs.filter(status=status_filter)
+        if start_date:
+            qs = qs.filter(scheduled_date__gte=start_date)
+        if end_date:
+            qs = qs.filter(scheduled_date__lte=end_date)
 
         return qs.select_related('service_contract__customer', 'technician')
 
@@ -598,7 +615,9 @@ class PreventiveMaintenanceViewSet(PermissionMixin, viewsets.ModelViewSet):
         return Response(PreventiveMaintenanceSerializer(pms, many=True).data)
 
 
-class ServiceRequestViewSet(WorkflowEnforcementMixin, PermissionMixin, viewsets.ModelViewSet):
+class ServiceRequestViewSet(
+    WorkflowEnforcementMixin, PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
+):
     workflow_business_type = 'SERVICE_REQUEST'
     workflow_no_field = 'request_no'
     """服务请求管理"""
@@ -625,20 +644,22 @@ class ServiceRequestViewSet(WorkflowEnforcementMixin, PermissionMixin, viewsets.
         return qs.select_related('customer', 'service_contract', 'assigned_to')
 
     def perform_create(self, serializer):
-        today = timezone.now()
-        prefix = f'SR{today.strftime("%Y%m%d")}'
-        last = ServiceRequest.objects.filter(request_no__startswith=prefix).order_by('-request_no').first()
-        seq = int(last.request_no[-4:]) + 1 if last else 1
-        request_no = f'{prefix}{seq:04d}'
+        with transaction.atomic():
+            today = timezone.now()
+            request_no = generate_code('SR', rule_type='SERVICE_REQUEST')
 
-        instance = serializer.save(request_no=request_no)
+            instance = serializer.save(
+                request_no=request_no,
+                created_by=self.request.user,
+                updated_by=self.request.user,
+            )
 
-        # 设置SLA
-        if instance.service_contract:
-            contract = instance.service_contract
-            instance.sla_response_deadline = today + timedelta(hours=contract.response_time_hours)
-            instance.sla_resolution_deadline = today + timedelta(hours=contract.resolution_time_hours)
-            instance.save()
+            # 设置SLA
+            if instance.service_contract:
+                contract = instance.service_contract
+                instance.sla_response_deadline = today + timedelta(hours=contract.response_time_hours)
+                instance.sla_resolution_deadline = today + timedelta(hours=contract.resolution_time_hours)
+                instance.save(update_fields=['sla_response_deadline', 'sla_resolution_deadline'])
 
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
@@ -679,9 +700,18 @@ class ServiceRequestViewSet(WorkflowEnforcementMixin, PermissionMixin, viewsets.
     def assign(self, request, pk=None):
         """分配请求"""
         sr = self.get_object()
-        sr.assigned_to_id = request.data.get('user_id')
+        # 兼容前端传 assigned_to / user_id 两种参数名
+        user_id = request.data.get('assigned_to') or request.data.get('user_id')
+        if not user_id:
+            return Response({'error': '请指定处理人'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user_model = get_user_model()
+        if not user_model.objects.filter(pk=user_id).exists():
+            return Response({'error': '指定的处理人不存在'}, status=status.HTTP_400_BAD_REQUEST)
+
+        sr.assigned_to_id = user_id
         sr.status = 'ASSIGNED'
-        sr.save()
+        sr.save(update_fields=['assigned_to', 'status', 'updated_at'])
         return Response({'message': '已分配'})
 
     @action(detail=True, methods=['post'])
@@ -697,9 +727,24 @@ class ServiceRequestViewSet(WorkflowEnforcementMixin, PermissionMixin, viewsets.
         # 检查SLA
         if sr.sla_resolution_deadline and sr.resolved_at > sr.sla_resolution_deadline:
             sr.sla_breached = True
-            sr.save()
+            sr.save(update_fields=['sla_breached'])
+
+        # 若已绑定服务合同且有现场服务活动，扣减剩余服务次数
+        contract = sr.service_contract
+        if (
+            contract
+            and contract.remaining_visits > 0
+            and sr.activities.filter(activity_type='ONSITE_VISIT').exists()
+        ):
+            contract.remaining_visits -= 1
+            contract.save(update_fields=['remaining_visits'])
 
         return Response({'message': '请求已解决'})
+
+    @action(detail=True, methods=['post'])
+    def complete(self, request, pk=None):
+        """完成请求(resolve 的别名，供前端“完成”按钮调用)"""
+        return self.resolve(request, pk)
 
     @action(detail=True, methods=['post'])
     def close(self, request, pk=None):
@@ -734,7 +779,7 @@ class ServiceRequestViewSet(WorkflowEnforcementMixin, PermissionMixin, viewsets.
         return Response(ServiceActivitySerializer(activity).data)
 
 
-class KnowledgeBaseArticleViewSet(PermissionMixin, viewsets.ModelViewSet):
+class KnowledgeBaseArticleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """知识库文章管理"""
     permission_module = 'sales'
     permission_resource = 'knowledge_base_article'
@@ -747,7 +792,8 @@ class KnowledgeBaseArticleViewSet(PermissionMixin, viewsets.ModelViewSet):
         qs = super().get_queryset()
         category = self.request.query_params.get('category')
         tag = self.request.query_params.get('tag')
-        keyword = self.request.query_params.get('keyword')
+        # 同时兼容 keyword 与 search 两种搜索参数
+        keyword = self.request.query_params.get('keyword') or self.request.query_params.get('search')
 
         if category:
             qs = qs.filter(category=category)
@@ -759,30 +805,33 @@ class KnowledgeBaseArticleViewSet(PermissionMixin, viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+        serializer.save(author=self.request.user, created_by=self.request.user, updated_by=self.request.user)
 
     @action(detail=True, methods=['post'])
     def publish(self, request, pk=None):
         """发布文章"""
         article = self.get_object()
         article.status = 'PUBLISHED'
-        article.save()
+        article.save(update_fields=['status', 'updated_at'])
         return Response({'message': '文章已发布'})
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], url_path='feedback')
     def mark_helpful(self, request, pk=None):
-        """标记有帮助"""
+        """标记有帮助/反馈"""
         article = self.get_object()
-        article.helpful_count += 1
-        article.save()
+        # 仅当反馈为有帮助时累加(helpful=false 不增长)
+        helpful = request.data.get('helpful', True)
+        if helpful:
+            article.helpful_count += 1
+            article.save(update_fields=['helpful_count'])
         return Response({'helpful_count': article.helpful_count})
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], url_path='view')
     def record_view(self, request, pk=None):
         """记录浏览"""
         article = self.get_object()
         article.view_count += 1
-        article.save()
+        article.save(update_fields=['view_count'])
         return Response({'view_count': article.view_count})
 
     @action(detail=False, methods=['get'])
@@ -889,11 +938,7 @@ class CustomerPortalSubmitRequestView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, customer_id):
-        today = timezone.now()
-        prefix = f'SR{today.strftime("%Y%m%d")}'
-        last = ServiceRequest.objects.filter(request_no__startswith=prefix).order_by('-request_no').first()
-        seq = int(last.request_no[-4:]) + 1 if last else 1
-        request_no = f'{prefix}{seq:04d}'
+        request_no = generate_code('SR', rule_type='SERVICE_REQUEST')
 
         sr = ServiceRequest.objects.create(
             request_no=request_no,

@@ -88,6 +88,7 @@
           <template #default="{ row }">
             <el-button size="small" v-permission="'sales:lead:edit'" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" type="success" @click="handleConvert(row)" v-if="row.status !== 'CONVERTED' && row.status !== 'DISQUALIFIED'">转化</el-button>
+            <el-button size="small" type="warning" @click="handleDisqualify(row)" v-if="row.status !== 'CONVERTED' && row.status !== 'DISQUALIFIED'">作废</el-button>
             <!-- 仅管理员显示删除按钮 -->
             <el-button 
               v-if="canDelete"
@@ -186,6 +187,11 @@
         <el-form-item label="创建新客户">
           <el-switch v-model="convertData.create_customer" />
         </el-form-item>
+        <el-form-item label="选择已有客户" v-if="!convertData.create_customer">
+          <el-select v-model="convertData.customer_id" filterable placeholder="请选择已有客户" style="width: 100%">
+            <el-option v-for="c in customerOptions" :key="c.id" :label="c.name" :value="c.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="创建商机">
           <el-switch v-model="convertData.create_opportunity" />
         </el-form-item>
@@ -206,16 +212,19 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
 import {
   getLeadList,
+  getLead,
   getLeadStatistics,
   getLeadSourceList,
   createLead,
   updateLead,
-  convertLead
+  convertLead,
+  disqualifyLead
 } from '@/api/sales/crm'
+import { getCustomerList } from '@/api/masterdata'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 
@@ -275,10 +284,13 @@ const formData = reactive({
 const convertData = reactive({
   lead_id: null,
   create_customer: true,
+  customer_id: null,
   create_opportunity: true,
   opportunity_name: '',
   estimated_amount: 0
 })
+
+const customerOptions = ref<any[]>([])
 
 const formRules = {
   company_name: [{ required: true, message: '请输入公司名称', trigger: 'blur' }],
@@ -346,10 +358,42 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = async (row) => {
   dialogTitle.value = '编辑线索'
-  Object.assign(formData, row)
-  dialogVisible.value = true
+  try {
+    // 列表序列化器缺部分字段，先 GET 详情回填，避免残留上一条记录的值被写库
+    const detail = await getLead(row.id)
+    Object.assign(formData, {
+      id: detail.id,
+      company_name: detail.company_name ?? '',
+      contact_name: detail.contact_name ?? '',
+      contact_phone: detail.contact_phone ?? '',
+      contact_email: detail.contact_email ?? '',
+      industry: detail.industry ?? '',
+      source: detail.source ?? null,
+      budget_range: detail.budget_range ?? '',
+      expected_date: detail.expected_date ?? null,
+      requirement: detail.requirement ?? '',
+      address: detail.address ?? ''
+    })
+    dialogVisible.value = true
+  } catch (e) {
+    ElMessage.error('加载线索详情失败')
+  }
+}
+
+const handleDisqualify = (row) => {
+  ElMessageBox.prompt('请输入作废原因', '作废线索', {
+    inputType: 'textarea'
+  }).then(async ({ value }) => {
+    try {
+      await disqualifyLead(row.id, { reason: value || '' })
+      ElMessage.success('线索已作废')
+      fetchData()
+    } catch (e) {
+      ElMessage.error('作废失败')
+    }
+  }).catch(() => {})
 }
 
 const handleSubmit = async () => {
@@ -378,12 +422,18 @@ const handleConvert = (row) => {
   convertData.lead_id = row.id
   convertData.opportunity_name = `${row.company_name}商机`
   convertData.create_customer = true
+  convertData.customer_id = null
   convertData.create_opportunity = true
   convertData.estimated_amount = 0
   convertDialogVisible.value = true
 }
 
 const submitConvert = async () => {
+  // 不创建新客户时必须选择已有客户，避免后端产生孤儿 CONVERTED 状态
+  if (!convertData.create_customer && !convertData.customer_id) {
+    ElMessage.warning('请创建新客户或选择已有客户')
+    return
+  }
   converting.value = true
   try {
     await convertLead(convertData.lead_id, convertData)
@@ -397,9 +447,19 @@ const submitConvert = async () => {
   }
 }
 
+const fetchCustomers = async () => {
+  try {
+    const res = await getCustomerList({ page_size: 1000 })
+    customerOptions.value = res.results || res || []
+  } catch (error) {
+    console.error('获取客户列表失败', error)
+  }
+}
+
 onMounted(() => {
   fetchData()
   fetchSources()
+  fetchCustomers()
 })
 </script>
 
