@@ -29,6 +29,24 @@ from .serializers import (
 )
 
 
+def _normalize_payment_method(method):
+    """归一化前端付款方式到 Payment.PAYMENT_METHOD_CHOICES。
+
+    前端使用 BANK/CASH/CHECK，模型枚举为 CASH/BANK_TRANSFER/CREDIT_CARD/CHECK/OTHER。
+    """
+    if not method:
+        return 'BANK_TRANSFER'
+    mapping = {
+        'BANK': 'BANK_TRANSFER',
+        'BANK_TRANSFER': 'BANK_TRANSFER',
+        'CASH': 'CASH',
+        'CHECK': 'CHECK',
+        'CREDIT_CARD': 'CREDIT_CARD',
+        'OTHER': 'OTHER',
+    }
+    return mapping.get(str(method).upper(), 'OTHER')
+
+
 class CurrencyViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
     ViewSet for Currency management.
@@ -118,7 +136,14 @@ class ExpenseViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin,
     workflow_business_type = 'EXPENSE'
     workflow_amount_field = 'amount'
     workflow_no_field = 'expense_no'
-    
+
+    def perform_create(self, serializer):
+        # 默认申请人为当前用户（前端未传 user 时），同时保留 created_by/updated_by 注入
+        kwargs = {'created_by': self.request.user, 'updated_by': self.request.user}
+        if not serializer.validated_data.get('user'):
+            kwargs['user'] = self.request.user
+        serializer.save(**kwargs)
+
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
         """Submit expense for approval with workflow."""
@@ -241,19 +266,23 @@ class AccountReceivableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
     
     @action(detail=True, methods=['post'])
     def record_payment(self, request, pk=None):
-        """Record a payment."""
+        """Record a payment.
+
+        创建 Payment 记录并由 Payment.save() 统一更新 amount_paid，
+        保证与对账（按 Payment 取收款明细）口径一致，避免重复记账。
+        """
         payment_amount = request.data.get('amount')
 
-        if not payment_amount or payment_amount <= 0:
+        if not payment_amount or float(payment_amount) <= 0:
             return Response(
                 {'error': '请提供有效的付款金额'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         from decimal import Decimal as D
+
         payment_amount = D(str(payment_amount))
 
-        from django.db import transaction
         with transaction.atomic():
             ar = AccountReceivable.objects.select_for_update().get(pk=pk)
             if ar.amount_paid + payment_amount > ar.amount_due:
@@ -262,12 +291,27 @@ class AccountReceivableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            ar.amount_paid += payment_amount
+            # 创建收款记录，Payment.save() 会原子更新 ar.amount_paid
+            Payment.objects.create(
+                payment_type='AR',
+                ar=ar,
+                payment_date=request.data.get('payment_date') or timezone.now().date(),
+                payment_method=_normalize_payment_method(request.data.get('payment_method')),
+                amount=payment_amount,
+                currency=ar.currency,
+                exchange_rate=ar.exchange_rate,
+                notes=request.data.get('notes', ''),
+                created_by=request.user,
+                updated_by=request.user,
+            )
+
+            # 重新计算状态（Payment.save 已 F() 自增 amount_paid，需刷新后判断）
+            ar.refresh_from_db(fields=['amount_paid'])
             if ar.amount_paid >= ar.amount_due:
                 ar.status = 'PAID'
             elif ar.amount_paid > 0:
                 ar.status = 'PARTIAL'
-            ar.save(update_fields=['amount_paid', 'status'])
+            ar.save(update_fields=['status'])
 
         return Response(AccountReceivableSerializer(ar).data)
     
@@ -329,19 +373,23 @@ class AccountPayableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
     
     @action(detail=True, methods=['post'])
     def record_payment(self, request, pk=None):
-        """Record a payment."""
+        """Record a payment.
+
+        创建 Payment 记录并由 Payment.save() 统一更新 amount_paid，
+        保证与对账（按 Payment 取付款明细）口径一致，避免重复记账。
+        """
         payment_amount = request.data.get('amount')
 
-        if not payment_amount or payment_amount <= 0:
+        if not payment_amount or float(payment_amount) <= 0:
             return Response(
                 {'error': '请提供有效的付款金额'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         from decimal import Decimal as D
+
         payment_amount = D(str(payment_amount))
 
-        from django.db import transaction
         with transaction.atomic():
             ap = AccountPayable.objects.select_for_update().get(pk=pk)
             if ap.amount_paid + payment_amount > ap.amount_due:
@@ -350,12 +398,26 @@ class AccountPayableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            ap.amount_paid += payment_amount
+            # 创建付款记录，Payment.save() 会原子更新 ap.amount_paid
+            Payment.objects.create(
+                payment_type='AP',
+                ap=ap,
+                payment_date=request.data.get('payment_date') or timezone.now().date(),
+                payment_method=_normalize_payment_method(request.data.get('payment_method')),
+                amount=payment_amount,
+                currency=ap.currency,
+                exchange_rate=ap.exchange_rate,
+                notes=request.data.get('notes', ''),
+                created_by=request.user,
+                updated_by=request.user,
+            )
+
+            ap.refresh_from_db(fields=['amount_paid'])
             if ap.amount_paid >= ap.amount_due:
                 ap.status = 'PAID'
             elif ap.amount_paid > 0:
                 ap.status = 'PARTIAL'
-            ap.save(update_fields=['amount_paid', 'status'])
+            ap.save(update_fields=['status'])
 
         return Response(AccountPayableSerializer(ap).data)
     
@@ -1424,19 +1486,25 @@ class SharedExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         n = len(project_list)
         
         if method == 'EQUAL':
-            # Equal split
+            # Equal split — 用 Decimal 计算，舍入尾差补到最后一项，保证合计=总额
             ratio = Decimal('1') / n
-            return [
-                {
-                    'project_id': p.id,
-                    'project_code': p.code,
-                    'project_name': p.name,
-                    'ratio': float(ratio),
-                    'amount': float(total_amount / n)
-                }
-                for p in project_list
-            ]
-        
+            per = (total_amount / n).quantize(Decimal('0.01'))
+            result = []
+            allocated = Decimal('0')
+            for idx, p in enumerate(project_list):
+                amount = total_amount - allocated if idx == n - 1 else per
+                allocated += amount
+                result.append(
+                    {
+                        'project_id': p.id,
+                        'project_code': p.code,
+                        'project_name': p.name,
+                        'ratio': float(ratio),
+                        'amount': float(amount),
+                    }
+                )
+            return result
+
         elif method == 'REVENUE':
             # By revenue ratio
             from apps.sales.models import SalesOrder
@@ -1530,32 +1598,51 @@ class SharedExpenseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
             ]
         
         elif method == 'CUSTOM' and custom_ratios:
-            # Custom ratios provided
-            total_ratio = sum(Decimal(str(v)) for v in custom_ratios.values()) or Decimal('1')
-            
-            return [
+            # Custom ratios provided — 校验比例合计>0，避免全 0 时各项金额为 0 仍标记已分摊
+            total_ratio = sum(Decimal(str(v)) for v in custom_ratios.values())
+            if total_ratio <= 0:
+                from rest_framework.exceptions import ValidationError
+
+                raise ValidationError({'custom_ratios': '自定义比例合计必须大于 0'})
+
+            result = []
+            allocated = Decimal('0')
+            for idx, p in enumerate(project_list):
+                share = Decimal(str(custom_ratios.get(str(p.id), 0)))
+                ratio = share / total_ratio
+                amount = (total_amount * share / total_ratio).quantize(Decimal('0.01'))
+                if idx == n - 1:
+                    amount = total_amount - allocated
+                allocated += amount
+                result.append(
+                    {
+                        'project_id': p.id,
+                        'project_code': p.code,
+                        'project_name': p.name,
+                        'ratio': float(ratio),
+                        'amount': float(amount),
+                    }
+                )
+            return result
+
+        # Default to equal — 同 EQUAL，Decimal 计算并把尾差补到最后一项
+        ratio = Decimal('1') / n
+        per = (total_amount / n).quantize(Decimal('0.01'))
+        result = []
+        allocated = Decimal('0')
+        for idx, p in enumerate(project_list):
+            amount = total_amount - allocated if idx == n - 1 else per
+            allocated += amount
+            result.append(
                 {
                     'project_id': p.id,
                     'project_code': p.code,
                     'project_name': p.name,
-                    'ratio': float(Decimal(str(custom_ratios.get(str(p.id), 0))) / total_ratio),
-                    'amount': float(total_amount * Decimal(str(custom_ratios.get(str(p.id), 0))) / total_ratio)
+                    'ratio': float(ratio),
+                    'amount': float(amount),
                 }
-                for p in project_list
-            ]
-        
-        # Default to equal
-        ratio = Decimal('1') / n
-        return [
-            {
-                'project_id': p.id,
-                'project_code': p.code,
-                'project_name': p.name,
-                'ratio': float(ratio),
-                'amount': float(total_amount / n)
-            }
-            for p in project_list
-        ]
+            )
+        return result
 
 
 class SharedExpenseAllocationViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):

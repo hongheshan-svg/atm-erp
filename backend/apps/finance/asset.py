@@ -461,21 +461,27 @@ class FixedAssetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
         """资产处置"""
         asset = self.get_object()
 
+        # 归一化处置类型大小写，兼容前端历史小写传参
+        disposal_type = (request.data.get('disposal_type') or 'SELL').upper()
+        disposal_value = Decimal(str(request.data.get('disposal_value', 0) or 0))
+        # 兼容旧字段 disposal_reason
+        reason = request.data.get('reason') or request.data.get('disposal_reason', '')
+
         disposal = AssetDisposal.objects.create(
             asset=asset,
-            disposal_type=request.data.get('disposal_type'),
-            disposal_value=request.data.get('disposal_value', 0),
+            disposal_type=disposal_type,
+            disposal_value=disposal_value,
             net_book_value=asset.net_value,
-            gain_loss=Decimal(str(request.data.get('disposal_value', 0))) - asset.net_value,
-            reason=request.data.get('reason', ''),
+            gain_loss=disposal_value - asset.net_value,
+            reason=reason,
             approval_no=request.data.get('approval_no', ''),
             created_by=request.user,
         )
 
         # 更新资产状态
-        asset.status = 'SCRAPPED' if request.data.get('disposal_type') == 'SCRAP' else 'SOLD'
+        asset.status = 'SCRAPPED' if disposal_type == 'SCRAP' else 'SOLD'
         asset.disposal_date = date.today()
-        asset.disposal_value = request.data.get('disposal_value', 0)
+        asset.disposal_value = disposal_value
         asset.save()
 
         return Response(AssetDisposalSerializer(disposal).data)
@@ -488,6 +494,7 @@ class FixedAssetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
 
         assets = self.get_queryset().filter(status='IN_USE')
         depreciated_count = 0
+        total_amount = Decimal('0')
 
         for asset in assets:
             if asset.start_depreciation_date and asset.start_depreciation_date <= date(year, month, 1):
@@ -513,8 +520,17 @@ class FixedAssetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                     asset.save()
 
                     depreciated_count += 1
+                    total_amount += depreciation_amount
 
-        return Response({'success': True, 'year': year, 'month': month, 'depreciated_count': depreciated_count})
+        return Response(
+            {
+                'success': True,
+                'year': year,
+                'month': month,
+                'depreciated_count': depreciated_count,
+                'total_amount': float(total_amount),
+            }
+        )
 
     @action(detail=False, methods=['get'])
     def statistics(self, request):

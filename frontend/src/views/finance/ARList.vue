@@ -69,10 +69,11 @@
             </el-form-item>
             <el-form-item label="状态">
               <el-select v-model="searchForm.status" placeholder="全部状态" clearable style="width: 120px;">
-                <el-option label="未收款" value="UNPAID" />
+                <el-option label="待收款" value="PENDING" />
                 <el-option label="部分收款" value="PARTIAL" />
                 <el-option label="已收款" value="PAID" />
                 <el-option label="已逾期" value="OVERDUE" />
+                <el-option label="已取消" value="CANCELLED" />
               </el-select>
             </el-form-item>
             <el-form-item>
@@ -316,8 +317,18 @@
           <span class="text-success" style="font-weight: bold; font-size: 16px;">¥{{ formatNumber(currentBankStatement.amount) }}</span>
         </el-form-item>
         <el-form-item label="选择客户" required>
-          <el-select v-model="bankMatchForm.customer_id" placeholder="请选择客户" filterable style="width: 100%;">
+          <el-select v-model="bankMatchForm.customer_id" placeholder="请选择客户" filterable style="width: 100%;" @change="onMatchCustomerChange">
             <el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="关联应收单">
+          <el-select v-model="bankMatchForm.ar_id" placeholder="可选关联应收单（关联后自动核销）" filterable clearable style="width: 100%;">
+            <el-option
+              v-for="ar in matchableReceivables"
+              :key="ar.id"
+              :label="`${ar.ar_no} 待收¥${formatNumber(getRemaining(ar))}`"
+              :value="ar.id"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="关联项目">
@@ -404,7 +415,8 @@ const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
 const bankSearchForm = reactive({ status: null, customer: null })
 const bankPagination = reactive({ page: 1, pageSize: 20, total: 0 })
 const paymentForm = reactive({ amount: 0, payment_date: new Date().toISOString().split('T')[0], payment_method: 'BANK', notes: '' })
-const bankMatchForm = reactive({ customer_id: null, project_id: null, sales_order_id: null, notes: '' })
+const bankMatchForm = reactive({ customer_id: null, ar_id: null, project_id: null, sales_order_id: null, notes: '' })
+const matchableReceivables = ref<any[]>([])
 
 // Upload configuration
 const uploadUrl = computed(() => {
@@ -425,8 +437,8 @@ const getProgress = (row) => {
   return due > 0 ? Math.min(100, Math.round((paid / due) * 100)) : 0
 }
 const getProgressColor = (p) => p >= 100 ? '#67c23a' : p >= 50 ? '#409eff' : '#e6a23c'
-const getStatusType = (s) => ({ UNPAID: 'warning', PARTIAL: 'primary', PAID: 'success', OVERDUE: 'danger' }[s] || 'info')
-const getStatusLabel = (s) => ({ UNPAID: '未收款', PARTIAL: '部分收款', PAID: '已收款', OVERDUE: '已逾期' }[s] || s)
+const getStatusType = (s) => ({ PENDING: 'warning', PARTIAL: 'primary', PAID: 'success', OVERDUE: 'danger', CANCELLED: 'info' }[s] || 'info')
+const getStatusLabel = (s) => ({ PENDING: '待收款', PARTIAL: '部分收款', PAID: '已收款', OVERDUE: '已逾期', CANCELLED: '已取消' }[s] || s)
 const getBankStatusType = (s) => ({ PENDING: 'warning', MATCHED: 'success', IGNORED: 'info' }[s] || 'info')
 const getBankStatusLabel = (s) => ({ PENDING: '待匹配', MATCHED: '已匹配', IGNORED: '已忽略' }[s] || s)
 
@@ -623,10 +635,31 @@ const handleMatchBank = async (row) => {
   }
   currentBankStatement.value = row
   bankMatchForm.customer_id = row.customer || null
+  bankMatchForm.ar_id = null
   bankMatchForm.project_id = null
   bankMatchForm.sales_order_id = null
   bankMatchForm.notes = ''
+  matchableReceivables.value = []
   bankMatchVisible.value = true
+  if (bankMatchForm.customer_id) loadMatchableReceivables(bankMatchForm.customer_id)
+}
+
+const loadMatchableReceivables = async (customerId) => {
+  if (!customerId) { matchableReceivables.value = []; return }
+  try {
+    const res = await getReceivables({ customer: customerId, page_size: 200 })
+    const list = res.results || res || []
+    // 仅展示未结清的应收单
+    matchableReceivables.value = list.filter((ar) => getRemaining(ar) > 0)
+  } catch (error) {
+    console.error('ARList loadMatchableReceivables error:', error)
+    matchableReceivables.value = []
+  }
+}
+
+const onMatchCustomerChange = (customerId) => {
+  bankMatchForm.ar_id = null
+  loadMatchableReceivables(customerId)
 }
 
 const handleIgnoreBank = async (row) => {

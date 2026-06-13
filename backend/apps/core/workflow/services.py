@@ -484,7 +484,6 @@ class WorkflowService:
             
             elif instance.business_type == 'ECN':
                 from apps.projects.models import ECN, ECNApproval
-                from django.utils import timezone
                 ecn = ECN.objects.get(id=instance.business_id)
                 
                 # 获取最后一个审批任务的审批人（而非提交人）

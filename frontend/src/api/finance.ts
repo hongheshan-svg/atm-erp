@@ -380,10 +380,14 @@ export function disposeFixedAsset(id: number, data: any) {
   return request({ url: `/finance/fixed-assets/${id}/dispose/`, method: 'post', data })
 }
 export function scrapFixedAsset(id: number, data: any) {
-  return request({ url: `/finance/fixed-assets/${id}/dispose/`, method: 'post', data: { ...data, disposal_type: 'scrap' } })
+  return request({ url: `/finance/fixed-assets/${id}/dispose/`, method: 'post', data: { ...data, disposal_type: 'SCRAP' } })
 }
-export function activateFixedAsset(id: number) {
-  return request({ url: `/finance/fixed-assets/${id}/`, method: 'patch', data: { status: 'active' } })
+export function activateFixedAsset(id: number, data?: any) {
+  return request({
+    url: `/finance/fixed-assets/${id}/`,
+    method: 'patch',
+    data: { status: 'IN_USE', start_depreciation_date: new Date().toISOString().split('T')[0], ...data },
+  })
 }
 export function depreciateFixedAssets(data: any) {
   return request({ url: '/finance/fixed-assets/run_depreciation/', method: 'post', data })

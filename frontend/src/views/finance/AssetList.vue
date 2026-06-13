@@ -15,13 +15,13 @@
     <el-row :gutter="16" class="stat-row">
       <el-col :span="6">
         <el-card shadow="never" class="stat-card">
-          <div class="stat-value">{{ stats.total_count || 0 }}</div>
+          <div class="stat-value">{{ stats.count || 0 }}</div>
           <div class="stat-label">资产总数</div>
         </el-card>
       </el-col>
       <el-col :span="6">
         <el-card shadow="never" class="stat-card primary">
-          <div class="stat-value">¥{{ formatPrice(stats.total_value) }}</div>
+          <div class="stat-value">¥{{ formatPrice(stats.total_original) }}</div>
           <div class="stat-label">资产原值</div>
         </el-card>
       </el-col>
@@ -33,7 +33,7 @@
       </el-col>
       <el-col :span="6">
         <el-card shadow="never" class="stat-card success">
-          <div class="stat-value">¥{{ formatPrice(stats.total_net_value) }}</div>
+          <div class="stat-value">¥{{ formatPrice(stats.total_net) }}</div>
           <div class="stat-label">资产净值</div>
         </el-card>
       </el-col>
@@ -59,12 +59,11 @@
           </el-form-item>
           <el-form-item>
             <el-select v-model="queryParams.status" placeholder="状态" clearable @change="fetchList">
-              <el-option label="草稿" value="DRAFT" />
-              <el-option label="使用中" value="ACTIVE" />
               <el-option label="闲置" value="IDLE" />
-              <el-option label="维修中" value="REPAIRING" />
-              <el-option label="已处置" value="DISPOSED" />
+              <el-option label="使用中" value="IN_USE" />
+              <el-option label="维修中" value="MAINTENANCE" />
               <el-option label="已报废" value="SCRAPPED" />
+              <el-option label="已变卖" value="SOLD" />
             </el-select>
           </el-form-item>
           <el-form-item>
@@ -124,11 +123,11 @@
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleView(row)">详情</el-button>
-            <el-button type="success" link size="small" @click="handleActivate(row)" 
-              v-if="row.status === 'DRAFT'">启用</el-button>
-            <el-button type="warning" link size="small" @click="handleTransfer(row)" 
-              v-if="row.status === 'ACTIVE'">调拨</el-button>
-            <el-dropdown v-if="row.status === 'ACTIVE' || row.status === 'IDLE'" trigger="click">
+            <el-button type="success" link size="small" @click="handleActivate(row)"
+              v-if="row.status === 'IDLE'">启用</el-button>
+            <el-button type="warning" link size="small" @click="handleTransfer(row)"
+              v-if="row.status === 'IN_USE'">调拨</el-button>
+            <el-dropdown v-if="row.status === 'IN_USE' || row.status === 'IDLE'" trigger="click">
               <el-button type="info" link size="small">更多</el-button>
               <template #dropdown>
                 <el-dropdown-menu>
@@ -180,20 +179,20 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="品牌">
-              <el-input v-model="formData.brand" placeholder="品牌" />
+            <el-form-item label="生产厂家">
+              <el-input v-model="formData.manufacturer" placeholder="生产厂家" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="序列号">
-              <el-input v-model="formData.serial_number" placeholder="序列号" />
+            <el-form-item label="出厂编号">
+              <el-input v-model="formData.serial_no" placeholder="出厂编号" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="生产厂家">
-              <el-input v-model="formData.manufacturer" placeholder="生产厂家" />
+            <el-form-item label="使用年限(月)">
+              <el-input-number v-model="formData.useful_life_months" :min="1" style="width: 100%" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -233,7 +232,7 @@
           <el-input v-model="formData.location" placeholder="存放位置" />
         </el-form-item>
         <el-form-item label="备注">
-          <el-input v-model="formData.notes" type="textarea" :rows="3" />
+          <el-input v-model="formData.remarks" type="textarea" :rows="3" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -251,10 +250,10 @@
             <el-descriptions-item label="资产名称">{{ currentAsset.name }}</el-descriptions-item>
             <el-descriptions-item label="分类">{{ currentAsset.category_name }}</el-descriptions-item>
             <el-descriptions-item label="规格型号">{{ currentAsset.model || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="品牌">{{ currentAsset.brand || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="序列号">{{ currentAsset.serial_number || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="生产厂家">{{ currentAsset.manufacturer || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="出厂编号">{{ currentAsset.serial_no || '-' }}</el-descriptions-item>
             <el-descriptions-item label="购置日期">{{ currentAsset.purchase_date || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="启用日期">{{ currentAsset.start_date || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="开始折旧日期">{{ currentAsset.start_depreciation_date || '-' }}</el-descriptions-item>
             <el-descriptions-item label="状态">
               <el-tag :type="getStatusType(currentAsset.status)">{{ currentAsset.status_display }}</el-tag>
             </el-descriptions-item>
@@ -435,15 +434,15 @@ const formData = reactive({
   name: '',
   category: null,
   model: '',
-  brand: '',
-  serial_number: '',
+  serial_no: '',
   manufacturer: '',
+  useful_life_months: 60,
   purchase_date: null,
   original_value: 0,
   department: null,
   custodian: null,
   location: '',
-  notes: ''
+  remarks: ''
 })
 const rules = {
   name: [{ required: true, message: '请输入资产名称', trigger: 'blur' }],
@@ -499,7 +498,7 @@ const fetchList = async () => {
 const fetchStats = async () => {
   try {
     const data = await getFixedAssetStatistics()
-    stats.value = data.totals || {}
+    stats.value = data.total || {}
   } catch (e) {
     console.error(e)
   }
@@ -526,15 +525,15 @@ const handleAdd = () => {
     name: '',
     category: null,
     model: '',
-    brand: '',
-    serial_number: '',
+    serial_no: '',
     manufacturer: '',
+    useful_life_months: 60,
     purchase_date: null,
     original_value: 0,
     department: null,
     custodian: null,
     location: '',
-    notes: ''
+    remarks: ''
   })
   dialogVisible.value = true
 }
@@ -614,30 +613,42 @@ const submitTransfer = async () => {
 
 const handleDispose = async (row) => {
   try {
-    const { value } = await ElMessageBox.prompt('请输入处置原因', '资产处置', {
+    const { value } = await ElMessageBox.prompt('请输入处置原因', '资产处置（变卖）', {
       confirmButtonText: '确认处置',
       cancelButtonText: '取消'
     })
+    const { value: valueStr } = await ElMessageBox.prompt('请输入处置收入金额（元）', '处置金额', {
+      confirmButtonText: '确认',
+      cancelButtonText: '取消',
+      inputValue: '0',
+      inputPattern: /^\d+(\.\d{1,2})?$/,
+      inputErrorMessage: '请输入有效金额'
+    })
     await disposeFixedAsset(row.id, {
-      disposal_reason: value
+      disposal_type: 'SELL',
+      reason: value,
+      disposal_value: Number(valueStr) || 0
     })
     ElMessage.success('资产已处置')
     fetchList()
     fetchStats()
   } catch (e) {
-    console.error('AssetList fetchStats error:', e)
+    if (e !== 'cancel') console.error('AssetList handleDispose error:', e)
   }
 }
 
 const handleScrap = async (row) => {
   try {
-    await ElMessageBox.confirm('确定报废该资产吗？', '资产报废', { type: 'warning' })
-    await scrapFixedAsset(row.id)
+    const { value } = await ElMessageBox.prompt('请输入报废原因', '资产报废', {
+      confirmButtonText: '确认报废',
+      cancelButtonText: '取消'
+    })
+    await scrapFixedAsset(row.id, { reason: value, disposal_value: 0 })
     ElMessage.success('资产已报废')
     fetchList()
     fetchStats()
   } catch (e) {
-    console.error('AssetList fetchStats error:', e)
+    if (e !== 'cancel') console.error('AssetList handleScrap error:', e)
   }
 }
 
@@ -654,7 +665,7 @@ const submitDepreciate = async () => {
       year: depreciateForm.year,
       month: depreciateForm.month
     })
-    ElMessage.success(`已计提${data.depreciated_count}项资产折旧，共¥${data.total_amount.toFixed(2)}`)
+    ElMessage.success(`已计提${data.depreciated_count}项资产折旧，共¥${Number(data.total_amount || 0).toFixed(2)}`)
     depreciateDialogVisible.value = false
     fetchList()
     fetchStats()
@@ -694,12 +705,11 @@ const submitInventory = async () => {
 
 const getStatusType = (status) => {
   const types = {
-    DRAFT: 'info',
-    ACTIVE: 'success',
     IDLE: 'warning',
-    REPAIRING: 'warning',
-    DISPOSED: 'info',
-    SCRAPPED: 'danger'
+    IN_USE: 'success',
+    MAINTENANCE: 'warning',
+    SCRAPPED: 'danger',
+    SOLD: 'info'
   }
   return types[status] || ''
 }

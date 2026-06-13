@@ -69,10 +69,11 @@
             </el-form-item>
             <el-form-item label="状态">
               <el-select v-model="searchForm.status" placeholder="全部状态" clearable style="width: 120px;">
-                <el-option label="未付款" value="UNPAID" />
+                <el-option label="待付款" value="PENDING" />
                 <el-option label="部分付款" value="PARTIAL" />
                 <el-option label="已付款" value="PAID" />
                 <el-option label="已逾期" value="OVERDUE" />
+                <el-option label="已取消" value="CANCELLED" />
               </el-select>
             </el-form-item>
             <el-form-item>
@@ -315,8 +316,18 @@
           <span class="text-danger" style="font-weight: bold; font-size: 16px;">¥{{ formatNumber(currentBankStatement.amount) }}</span>
         </el-form-item>
         <el-form-item label="选择供应商" required>
-          <el-select v-model="bankMatchForm.supplier_id" placeholder="请选择供应商" filterable style="width: 100%;">
+          <el-select v-model="bankMatchForm.supplier_id" placeholder="请选择供应商" filterable style="width: 100%;" @change="onMatchSupplierChange">
             <el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="关联应付单">
+          <el-select v-model="bankMatchForm.ap_id" placeholder="可选关联应付单（关联后自动核销）" filterable clearable style="width: 100%;">
+            <el-option
+              v-for="ap in matchablePayables"
+              :key="ap.id"
+              :label="`${ap.ap_no} 待付¥${formatNumber(getRemaining(ap))}`"
+              :value="ap.id"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="关联采购订单">
@@ -395,7 +406,8 @@ const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
 const bankSearchForm = reactive({ status: null, supplier: null })
 const bankPagination = reactive({ page: 1, pageSize: 20, total: 0 })
 const paymentForm = reactive({ amount: 0, payment_date: new Date().toISOString().split('T')[0], payment_method: 'BANK', notes: '' })
-const bankMatchForm = reactive({ supplier_id: null, purchase_order_id: null, notes: '' })
+const bankMatchForm = reactive({ supplier_id: null, ap_id: null, purchase_order_id: null, notes: '' })
+const matchablePayables = ref<any[]>([])
 
 // Upload configuration
 const uploadUrl = computed(() => {
@@ -416,8 +428,8 @@ const getProgress = (row) => {
   return due > 0 ? Math.min(100, Math.round((paid / due) * 100)) : 0
 }
 const getProgressColor = (p) => p >= 100 ? '#67c23a' : p >= 50 ? '#409eff' : '#e6a23c'
-const getStatusType = (s) => ({ UNPAID: 'warning', PARTIAL: 'primary', PAID: 'success', OVERDUE: 'danger' }[s] || 'info')
-const getStatusLabel = (s) => ({ UNPAID: '未付款', PARTIAL: '部分付款', PAID: '已付款', OVERDUE: '已逾期' }[s] || s)
+const getStatusType = (s) => ({ PENDING: 'warning', PARTIAL: 'primary', PAID: 'success', OVERDUE: 'danger', CANCELLED: 'info' }[s] || 'info')
+const getStatusLabel = (s) => ({ PENDING: '待付款', PARTIAL: '部分付款', PAID: '已付款', OVERDUE: '已逾期', CANCELLED: '已取消' }[s] || s)
 const getBankStatusType = (s) => ({ PENDING: 'warning', MATCHED: 'success', IGNORED: 'info' }[s] || 'info')
 const getBankStatusLabel = (s) => ({ PENDING: '待匹配', MATCHED: '已匹配', IGNORED: '已忽略' }[s] || s)
 
@@ -581,9 +593,29 @@ const handleMatchBank = async (row) => {
   await ensurePurchaseOrdersLoaded()
   currentBankStatement.value = row
   bankMatchForm.supplier_id = row.supplier || null
+  bankMatchForm.ap_id = null
   bankMatchForm.purchase_order_id = null
   bankMatchForm.notes = ''
+  matchablePayables.value = []
   bankMatchVisible.value = true
+  if (bankMatchForm.supplier_id) loadMatchablePayables(bankMatchForm.supplier_id)
+}
+
+const loadMatchablePayables = async (supplierId) => {
+  if (!supplierId) { matchablePayables.value = []; return }
+  try {
+    const res = await getPayables({ supplier: supplierId, page_size: 200 })
+    const list = res.results || res || []
+    matchablePayables.value = list.filter((ap) => getRemaining(ap) > 0)
+  } catch (error) {
+    console.error('APList loadMatchablePayables error:', error)
+    matchablePayables.value = []
+  }
+}
+
+const onMatchSupplierChange = (supplierId) => {
+  bankMatchForm.ap_id = null
+  loadMatchablePayables(supplierId)
 }
 
 const handleIgnoreBank = async (row) => {

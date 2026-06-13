@@ -662,35 +662,35 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         
         data = serializer.validated_data
         match_type = data.get('match_type')
-        
+
         with transaction.atomic():
             statement.match_type = match_type
             statement.match_notes = data.get('notes', '')
-            
+
             if match_type == 'AP':
                 supplier_id = data.get('supplier_id')
                 if supplier_id:
                     statement.supplier = Supplier.objects.get(id=supplier_id)
-                
+
                 ap_id = data.get('ap_id')
                 if ap_id:
                     statement.related_ap = AccountPayable.objects.get(id=ap_id)
-                
+
                 statement.customer = None
                 statement.related_ar = None
-                
+
             elif match_type == 'AR':
                 customer_id = data.get('customer_id')
                 if customer_id:
                     statement.customer = Customer.objects.get(id=customer_id)
-                
+
                 ar_id = data.get('ar_id')
                 if ar_id:
                     statement.related_ar = AccountReceivable.objects.get(id=ar_id)
-                
+
                 statement.supplier = None
                 statement.related_ap = None
-            
+
             # Set project if provided
             project_id = data.get('project_id')
             if project_id:
@@ -701,12 +701,72 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                 project = statement.auto_match_project()
                 if project:
                     statement.project = project
-            
+
             statement.status = 'MATCHED'
             statement.match_confidence = Decimal('100')
             statement.save()
-        
+
+            # 命中具体 AR/AP 时落收/付款，使 amount_paid 与对账口径一致（不超核销）
+            self._apply_statement_payment(statement, request.user)
+
         return Response(BankStatementSerializer(statement).data)
+
+    def _apply_statement_payment(self, statement, user):
+        """匹配到具体 AR/AP 时生成 Payment，更新已收/已付金额并重算状态。"""
+        amount = statement.amount or Decimal('0')
+        if amount <= 0:
+            return
+
+        # 用 notes 携带流水 id 做幂等标记，避免重复匹配重复记账
+        marker = f'[BS#{statement.id}]'
+
+        if statement.match_type == 'AR' and statement.related_ar_id:
+            ar = AccountReceivable.objects.select_for_update().get(pk=statement.related_ar_id)
+            if Payment.objects.filter(ar=ar, notes__contains=marker).exists():
+                return
+            remaining = ar.amount_due - ar.amount_paid
+            pay_amount = min(amount, remaining)
+            if pay_amount <= 0:
+                return
+            Payment.objects.create(
+                payment_type='AR',
+                ar=ar,
+                payment_date=statement.transaction_time.date(),
+                payment_method='BANK_TRANSFER',
+                amount=pay_amount,
+                currency=ar.currency,
+                exchange_rate=ar.exchange_rate,
+                notes=f'{marker} 银行流水匹配',
+                created_by=user,
+                updated_by=user,
+            )
+            ar.refresh_from_db(fields=['amount_paid'])
+            ar.status = 'PAID' if ar.amount_paid >= ar.amount_due else 'PARTIAL'
+            ar.save(update_fields=['status'])
+
+        elif statement.match_type == 'AP' and statement.related_ap_id:
+            ap = AccountPayable.objects.select_for_update().get(pk=statement.related_ap_id)
+            if Payment.objects.filter(ap=ap, notes__contains=marker).exists():
+                return
+            remaining = ap.amount_due - ap.amount_paid
+            pay_amount = min(amount, remaining)
+            if pay_amount <= 0:
+                return
+            Payment.objects.create(
+                payment_type='AP',
+                ap=ap,
+                payment_date=statement.transaction_time.date(),
+                payment_method='BANK_TRANSFER',
+                amount=pay_amount,
+                currency=ap.currency,
+                exchange_rate=ap.exchange_rate,
+                notes=f'{marker} 银行流水匹配',
+                created_by=user,
+                updated_by=user,
+            )
+            ap.refresh_from_db(fields=['amount_paid'])
+            ap.status = 'PAID' if ap.amount_paid >= ap.amount_due else 'PARTIAL'
+            ap.save(update_fields=['status'])
     
     @action(detail=True, methods=['post'])
     def ignore(self, request, pk=None):
@@ -724,11 +784,16 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         Also attempts to match projects based on customer/supplier.
         """
         batch = request.data.get('import_batch')
+        ids = request.data.get('ids')
         queryset = self.get_queryset().filter(status='PENDING')
-        
+
         if batch:
             queryset = queryset.filter(import_batch=batch)
-        
+
+        # 支持仅对选中流水执行匹配（前端批量/单条匹配传入 ids）
+        if ids:
+            queryset = queryset.filter(id__in=ids)
+
         matched_count = 0
         project_matched_count = 0
         

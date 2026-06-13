@@ -34,7 +34,7 @@
             <el-option label="已提交" value="SUBMITTED" />
             <el-option label="已批准" value="APPROVED" />
             <el-option label="已拒绝" value="REJECTED" />
-            <el-option label="已报销" value="REIMBURSED" />
+            <el-option label="已报销" value="PAID" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -212,7 +212,7 @@
         related-model="Expense"
         :related-id="currentExpense.id"
         title="报销凭证（发票、收据等）"
-        :disabled="currentExpense.status === 'REIMBURSED'"
+        :disabled="currentExpense.status === 'PAID'"
       />
       <div v-if="currentExpense?.status === 'DRAFT'" class="attachment-tip">
         <el-alert 
@@ -297,23 +297,23 @@ const rules = {
 }
 
 const getStatusType = (status) => {
-  const types = { 
-    DRAFT: 'info', 
+  const types = {
+    DRAFT: 'info',
     SUBMITTED: 'warning',
-    APPROVED: 'success', 
-    REJECTED: 'danger', 
-    REIMBURSED: '' 
+    APPROVED: 'success',
+    REJECTED: 'danger',
+    PAID: ''
   }
   return types[status] || 'info'
 }
 
 const getStatusLabel = (status) => {
-  const labels = { 
-    DRAFT: '草稿', 
+  const labels = {
+    DRAFT: '草稿',
     SUBMITTED: '已提交',
-    APPROVED: '已批准', 
-    REJECTED: '已拒绝', 
-    REIMBURSED: '已报销' 
+    APPROVED: '已批准',
+    REJECTED: '已拒绝',
+    PAID: '已报销'
   }
   return labels[status] || status
 }

@@ -194,7 +194,20 @@
           </el-descriptions-item>
         </el-descriptions>
 
-        <h4 style="margin: 20px 0 10px">回款节点</h4>
+        <div class="milestone-header">
+          <h4 style="margin: 20px 0 10px">回款节点</h4>
+          <div v-if="currentPlan.status === 'DRAFT'" class="milestone-actions">
+            <el-button size="small" @click="handleGenerateStandard" :loading="generating">从合同生成标准节点</el-button>
+            <el-button size="small" type="primary" @click="openAddMilestone">添加回款节点</el-button>
+            <el-button
+              size="small"
+              type="success"
+              :disabled="!(currentPlan.milestones && currentPlan.milestones.length)"
+              @click="handleConfirmPlan"
+              :loading="confirming"
+            >确认计划</el-button>
+          </div>
+        </div>
         <el-table :data="currentPlan.milestones || []" stripe>
           <el-table-column prop="name" label="节点名称" />
           <el-table-column label="类型">
@@ -255,12 +268,44 @@
         <el-button type="primary" @click="submitRecord" :loading="recording">确认</el-button>
       </template>
     </el-dialog>
+
+    <!-- 添加回款节点对话框 -->
+    <el-dialog v-model="milestoneDialogVisible" title="添加回款节点" width="520px">
+      <el-form :model="milestoneForm" label-width="100px">
+        <el-form-item label="节点名称" required>
+          <el-input v-model="milestoneForm.name" placeholder="如：预付款" />
+        </el-form-item>
+        <el-form-item label="节点类型">
+          <el-select v-model="milestoneForm.milestone_type" style="width: 100%">
+            <el-option label="预付款" value="ADVANCE" />
+            <el-option label="发货款" value="DELIVERY" />
+            <el-option label="验收款" value="ACCEPTANCE" />
+            <el-option label="质保款" value="WARRANTY" />
+            <el-option label="进度款" value="PROGRESS" />
+            <el-option label="其他" value="OTHER" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="计划金额" required>
+          <el-input-number v-model="milestoneForm.planned_amount" :min="0" :precision="2" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="计划日期" required>
+          <el-date-picker v-model="milestoneForm.planned_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="说明">
+          <el-input v-model="milestoneForm.description" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="milestoneDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitMilestone" :loading="addingMilestone">确认</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, Money, Check, Clock, Warning } from '@element-plus/icons-vue'
 import {
   getCollectionPlanList,
@@ -270,7 +315,10 @@ import {
   getUpcomingCollections,
   createCollectionPlan,
   updateCollectionPlan,
-  addCollectionRecord
+  addCollectionRecord,
+  addMilestones,
+  createStandardMilestones,
+  confirmCollectionPlan
 } from '@/api/finance/collection'
 import { getCustomerList } from '@/api/masterdata/customer'
 import { getProjectList } from '@/api/projects/project'
@@ -482,6 +530,85 @@ const submitRecord = async () => {
   }
 }
 
+// 回款节点维护
+const milestoneDialogVisible = ref(false)
+const addingMilestone = ref(false)
+const generating = ref(false)
+const confirming = ref(false)
+const milestoneForm = reactive({
+  name: '',
+  milestone_type: 'OTHER',
+  planned_amount: 0,
+  planned_date: '',
+  description: ''
+})
+
+const refreshCurrentPlan = async () => {
+  if (!currentPlan.value) return
+  const res = await getCollectionPlan(currentPlan.value.id)
+  currentPlan.value = res
+}
+
+const openAddMilestone = () => {
+  Object.assign(milestoneForm, {
+    name: '',
+    milestone_type: 'OTHER',
+    planned_amount: 0,
+    planned_date: new Date().toISOString().split('T')[0],
+    description: ''
+  })
+  milestoneDialogVisible.value = true
+}
+
+const submitMilestone = async () => {
+  if (!milestoneForm.name) return ElMessage.warning('请输入节点名称')
+  if (!milestoneForm.planned_amount || milestoneForm.planned_amount <= 0) return ElMessage.warning('请输入计划金额')
+  if (!milestoneForm.planned_date) return ElMessage.warning('请选择计划日期')
+  addingMilestone.value = true
+  try {
+    await addMilestones(currentPlan.value.id, { milestones: [{ ...milestoneForm }] })
+    ElMessage.success('节点添加成功')
+    milestoneDialogVisible.value = false
+    await refreshCurrentPlan()
+    fetchData()
+  } catch (error) {
+    ElMessage.error('添加节点失败')
+  } finally {
+    addingMilestone.value = false
+  }
+}
+
+const handleGenerateStandard = async () => {
+  try {
+    await ElMessageBox.confirm('将按 预付30%/发货40%/验收20%/质保10% 生成标准回款节点，确认继续？', '生成标准节点')
+    generating.value = true
+    await createStandardMilestones(currentPlan.value.id, {})
+    ElMessage.success('标准节点已生成')
+    await refreshCurrentPlan()
+    fetchData()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error('生成失败')
+  } finally {
+    generating.value = false
+  }
+}
+
+const handleConfirmPlan = async () => {
+  try {
+    await ElMessageBox.confirm('确认该回款计划？确认后将进入执行阶段。', '确认计划')
+    confirming.value = true
+    await confirmCollectionPlan(currentPlan.value.id)
+    ElMessage.success('计划已确认')
+    await refreshCurrentPlan()
+    fetchData()
+    fetchStatistics()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error('确认失败')
+  } finally {
+    confirming.value = false
+  }
+}
+
 onMounted(() => {
   fetchData()
   fetchStatistics()
@@ -562,5 +689,16 @@ onMounted(() => {
 
 .detail-content {
   padding: 0 20px;
+}
+
+.milestone-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.milestone-actions {
+  display: flex;
+  gap: 8px;
 }
 </style>

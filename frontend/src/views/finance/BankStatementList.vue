@@ -325,7 +325,18 @@ const handleImport = async () => {
 }
 
 const handleMatch = async (row: any) => {
-  ElMessage.info('请在应收/应付页面进行手动匹配')
+  try {
+    await ElMessageBox.confirm('确认对该流水执行自动匹配？如需关联具体应收/应付单，请到应收/应付页面手动匹配。', '自动匹配')
+    const res = await autoMatchAllBankStatements({ ids: [row.id] })
+    if (res?.matched_count > 0) {
+      ElMessage.success('匹配成功')
+    } else {
+      ElMessage.warning('未找到匹配的客户/供应商，请到应收/应付页面手动匹配')
+    }
+    loadData()
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error('操作失败')
+  }
 }
 
 const handleIgnore = async (row: any) => {

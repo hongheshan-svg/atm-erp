@@ -132,7 +132,9 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
                     reference_date=po.order_date,
                     debit_amount=order_amount,
                     credit_amount=0,
-                    balance=running_balance + order_amount,
+                    # 订单/收货行不计入连续应付余额（仅发票/付款累计），
+                    # 此处沿用当前 running_balance 避免误导性的累计列
+                    balance=running_balance,
                     order_qty=order_qty,
                     received_qty=received_qty,
                     receipt_status=receipt_status,
@@ -524,7 +526,9 @@ class SalesReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
                     reference_date=so.order_date,
                     debit_amount=order_amount,
                     credit_amount=0,
-                    balance=running_balance + order_amount,
+                    # 订单/发货行不计入连续应收余额（仅发票/收款累计），
+                    # 此处沿用当前 running_balance 避免误导性的累计列
+                    balance=running_balance,
                     order_qty=order_qty,
                     delivered_qty=delivered_qty,
                     delivery_status=delivery_status,
