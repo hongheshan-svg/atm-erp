@@ -27,21 +27,20 @@
       
       <el-table :data="tableData" v-loading="loading" stripe show-summary @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
-        <el-table-column prop="project_name" label="项目名称" />
+        <el-table-column prop="project_no" label="项目编号" width="140" />
+        <el-table-column prop="project_name" label="项目名称" min-width="160" />
+        <el-table-column prop="customer_name" label="客户" min-width="140" />
         <el-table-column prop="contract_amount" label="合同金额" align="right">
           <template #default="{ row }">¥ {{ formatMoney(row.contract_amount) }}</template>
         </el-table-column>
-        <el-table-column prop="total_cost" label="总成本" align="right">
-          <template #default="{ row }">¥ {{ formatMoney(row.total_cost) }}</template>
+        <el-table-column prop="actual_cost" label="实际成本" align="right">
+          <template #default="{ row }">¥ {{ formatMoney(row.actual_cost) }}</template>
         </el-table-column>
-        <el-table-column prop="profit" label="利润" align="right">
-          <template #default="{ row }">¥ {{ formatMoney(row.profit) }}</template>
+        <el-table-column prop="gross_profit" label="毛利" align="right">
+          <template #default="{ row }">¥ {{ formatMoney(row.gross_profit) }}</template>
         </el-table-column>
-        <el-table-column prop="margin" label="利润率" align="right">
-          <template #default="{ row }">{{ (row.margin * 100).toFixed(2) }}%</template>
-        </el-table-column>
-        <el-table-column prop="completion" label="完成度" width="100">
-          <template #default="{ row }">{{ row.completion }}%</template>
+        <el-table-column prop="gross_margin" label="毛利率" align="right" width="100">
+          <template #default="{ row }">{{ Number(row.gross_margin || 0).toFixed(2) }}%</template>
         </el-table-column>
       </el-table>
     </el-card>
@@ -89,24 +88,29 @@ const renderChart = () => {
   const chart = echarts.init(chartRef.value)
   chart.setOption({
     tooltip: { trigger: 'axis' },
-    legend: { data: ['合同金额', '总成本', '利润'] },
+    legend: { data: ['合同金额', '实际成本', '毛利'] },
     xAxis: { type: 'category', data: tableData.value.map(d => d.project_name), axisLabel: { rotate: 45 } },
     yAxis: { type: 'value' },
     series: [
       { name: '合同金额', type: 'bar', data: tableData.value.map(d => d.contract_amount) },
-      { name: '总成本', type: 'bar', data: tableData.value.map(d => d.total_cost) },
-      { name: '利润', type: 'bar', data: tableData.value.map(d => d.profit) }
+      { name: '实际成本', type: 'bar', data: tableData.value.map(d => d.actual_cost) },
+      { name: '毛利', type: 'bar', data: tableData.value.map(d => d.gross_profit) }
     ]
   })
 }
 
 const handleExport = async () => {
   try {
-    const res = await exportProjectProfitabilityReport()
-    const url = window.URL.createObjectURL(new Blob([res || res]))
+    const params: Record<string, any> = {}
+    if (dateRange.value?.length) {
+      params.start_date = dateRange.value[0]
+      params.end_date = dateRange.value[1]
+    }
+    const res = await exportProjectProfitabilityReport(params)
+    const url = window.URL.createObjectURL(new Blob([res]))
     const link = document.createElement('a')
     link.href = url
-    link.setAttribute('download', '项目利润率报表.xlsx')
+    link.setAttribute('download', '项目利润率报表.csv')
     document.body.appendChild(link)
     link.click()
     link.remove()

@@ -201,8 +201,10 @@ def aging_report(request):
     report_type = request.query_params.get('type', 'ar')
     today = datetime.now().date()
 
-    # Define aging buckets
-    buckets = [('current', 0, 30), ('30_60', 31, 60), ('60_90', 61, 90), ('over_90', 91, 9999)]
+    # Define aging buckets（按逾期天数划分）：
+    # current=未逾期(days_overdue<=0)，1_30=逾期1-30天，31_60=逾期31-60天，
+    # 61_90=逾期61-90天，over_90=逾期90天以上
+    buckets = [('1_30', 1, 30), ('31_60', 31, 60), ('61_90', 61, 90), ('over_90', 91, 9999)]
 
     if report_type == 'ar':
         customer_id = request.query_params.get('customer')
@@ -273,8 +275,9 @@ def aging_report(request):
     # Calculate summary
     summary = {
         'current': sum(r['balance'] for r in results if r['bucket'] == 'current'),
-        '30_60': sum(r['balance'] for r in results if r['bucket'] == '30_60'),
-        '60_90': sum(r['balance'] for r in results if r['bucket'] == '60_90'),
+        '1_30': sum(r['balance'] for r in results if r['bucket'] == '1_30'),
+        '31_60': sum(r['balance'] for r in results if r['bucket'] == '31_60'),
+        '61_90': sum(r['balance'] for r in results if r['bucket'] == '61_90'),
         'over_90': sum(r['balance'] for r in results if r['bucket'] == 'over_90'),
         'total': sum(r['balance'] for r in results),
     }
@@ -283,49 +286,57 @@ def aging_report(request):
 
 
 class TimelogReportExportView(APIView):
-    """工时报表导出"""
+    """工时报表导出
+
+    与 TimelogReport 页面口径一致：统一使用 TimeLog(project_time_log)，
+    并支持 start_date/end_date/project/user 过滤。
+    """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from apps.projects.models import WorkLog
+        from apps.projects.models import TimeLog
 
-        qs = WorkLog.objects.filter(is_deleted=False).select_related(
-            'dispatch__worker', 'dispatch__work_order__project', 'created_by'
-        )
+        qs = TimeLog.objects.filter(is_deleted=False).select_related('project', 'task', 'user')
 
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
+        project_id = request.query_params.get('project')
+        user_id = request.query_params.get('user')
         if start_date:
-            qs = qs.filter(created_at__date__gte=start_date)
+            qs = qs.filter(date__gte=start_date)
         if end_date:
-            qs = qs.filter(created_at__date__lte=end_date)
+            qs = qs.filter(date__lte=end_date)
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+        if user_id:
+            qs = qs.filter(user_id=user_id)
 
         response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
         response['Content-Disposition'] = 'attachment; filename="timelog_report.csv"'
 
         writer = csv.writer(response)
-        writer.writerow(['日期', '项目', '工单', '人员', '工时(小时)', '内容'])
+        writer.writerow(['日期', '项目', '任务', '人员', '工时(小时)', '内容'])
         for log in qs[:5000]:
-            dispatch = log.dispatch
-            work_order = dispatch.work_order if dispatch else None
-            project = work_order.project if work_order else None
-            worker = dispatch.worker if dispatch else None
             writer.writerow(
                 [
-                    log.created_at.strftime('%Y-%m-%d') if log.created_at else '',
-                    str(project) if project else '',
-                    work_order.order_no if work_order else '',
-                    worker.get_full_name() if worker else (str(log.created_by) if log.created_by else ''),
+                    log.date.strftime('%Y-%m-%d') if log.date else '',
+                    str(log.project) if log.project else '',
+                    log.task.name if log.task else '',
+                    log.user.get_full_name() or log.user.username if log.user else '',
                     log.hours or '',
-                    log.content or '',
+                    log.description or '',
                 ]
             )
         return response
 
 
 class ProjectProfitabilityExportView(APIView):
-    """项目利润分析导出"""
+    """项目利润分析导出
+
+    使用 CostCalculationService 计算真实收入/成本/利润，
+    并读取 Project 真实字段(code/name/status)。
+    """
 
     permission_classes = [IsAuthenticated]
 
@@ -334,21 +345,34 @@ class ProjectProfitabilityExportView(APIView):
 
         projects = Project.objects.filter(is_deleted=False)
 
+        # 与前端报表筛选保持一致（按创建日期范围 / 状态）
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        status_filter = request.query_params.get('status')
+        if start_date:
+            projects = projects.filter(created_at__date__gte=start_date)
+        if end_date:
+            projects = projects.filter(created_at__date__lte=end_date)
+        if status_filter:
+            projects = projects.filter(status=status_filter)
+
         response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
         response['Content-Disposition'] = 'attachment; filename="project_profitability.csv"'
 
         writer = csv.writer(response)
         writer.writerow(['项目编号', '项目名称', '状态', '合同金额', '实际成本', '利润', '利润率'])
         for p in projects[:5000]:
-            contract = float(p.contract_amount) if hasattr(p, 'contract_amount') and p.contract_amount else 0
-            cost = float(p.actual_cost) if hasattr(p, 'actual_cost') and p.actual_cost else 0
-            profit = contract - cost
-            rate = f'{profit/contract*100:.1f}%' if contract > 0 else 'N/A'
+            profit_data = CostCalculationService.calculate_project_profit(p.id)
+            contract = float(profit_data.get('revenue') or 0)
+            cost = float(profit_data.get('total_cost') or 0)
+            profit = float(profit_data.get('profit') or (contract - cost))
+            margin = profit_data.get('margin_percent')
+            rate = f'{float(margin):.1f}%' if margin is not None and contract > 0 else 'N/A'
             writer.writerow(
                 [
-                    p.project_no if hasattr(p, 'project_no') else p.id,
-                    p.name if hasattr(p, 'name') else str(p),
-                    p.status if hasattr(p, 'status') else '',
+                    p.code or p.id,
+                    p.name,
+                    p.get_status_display(),
                     contract,
                     cost,
                     profit,

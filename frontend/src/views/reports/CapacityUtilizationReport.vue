@@ -29,14 +29,10 @@
         <el-table-column prop="work_center_name" label="工作中心" />
         <el-table-column prop="available_hours" label="可用工时" align="right" />
         <el-table-column prop="planned_hours" label="计划工时" align="right" />
-        <el-table-column prop="actual_hours" label="实际工时" align="right" />
-        <el-table-column prop="utilization_rate" label="利用率" width="150">
+        <el-table-column prop="utilization_rate" label="利用率" width="180">
           <template #default="{ row }">
-            <el-progress :percentage="row.utilization_rate" :status="row.utilization_rate >= 80 ? 'success' : row.utilization_rate >= 50 ? '' : 'warning'" />
+            <el-progress :percentage="Math.min(row.utilization_rate, 100)" :status="row.utilization_rate >= 80 ? 'success' : row.utilization_rate >= 50 ? '' : 'warning'" />
           </template>
-        </el-table-column>
-        <el-table-column prop="efficiency" label="效率" width="100">
-          <template #default="{ row }">{{ row.efficiency }}%</template>
         </el-table-column>
       </el-table>
     </el-card>
@@ -61,13 +57,13 @@ const chartRef = ref(null)
 const loadData = async () => {
   loading.value = true
   try {
-    const params = {}
+    const params: Record<string, any> = {}
     if (dateRange.value?.length) {
       params.start_date = dateRange.value[0]
       params.end_date = dateRange.value[1]
     }
     const res = await getCapacityUtilizationReport(params)
-    tableData.value = res.work_centers || res.work_centers || []
+    tableData.value = res.work_centers || []
     await nextTick()
     renderChart()
   } catch (error) {

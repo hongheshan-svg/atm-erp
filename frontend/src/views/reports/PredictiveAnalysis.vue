@@ -6,24 +6,20 @@
         <el-card shadow="never">
           <template #header>
             <div class="card-header">
-              <span>项目成本趋势预测</span>
-              <div>
-                <el-input v-model="costProjectId" placeholder="项目ID" style="width: 150px; margin-right: 12px" />
-                <el-button type="primary" @click="loadCostTrend" :loading="costLoading">分析</el-button>
-              </div>
+              <span>项目预算成本趋势</span>
+              <el-button type="primary" @click="loadCostTrend" :loading="costLoading">分析</el-button>
             </div>
           </template>
           <div ref="costChartRef" style="height: 400px"></div>
-          <el-descriptions v-if="costResult" :column="4" border style="margin-top: 16px">
-            <el-descriptions-item label="当前总成本">¥{{ formatMoney(costResult.current_total) }}</el-descriptions-item>
-            <el-descriptions-item label="预测总成本">¥{{ formatMoney(costResult.predicted_total) }}</el-descriptions-item>
-            <el-descriptions-item label="趋势">
-              <el-tag :type="costResult.trend === 'up' ? 'danger' : (costResult.trend === 'down' ? 'success' : 'info')">
-                {{ { up: '上升', down: '下降', stable: '平稳' }[costResult.trend] }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="置信度">{{ costResult.confidence }}%</el-descriptions-item>
-          </el-descriptions>
+          <el-table :data="costTrends" v-loading="costLoading" stripe style="margin-top: 16px" size="small">
+            <el-table-column prop="month" label="月份" width="160">
+              <template #default="{ row }">{{ formatMonth(row.month) }}</template>
+            </el-table-column>
+            <el-table-column prop="count" label="项目数" width="120" align="right" />
+            <el-table-column prop="total_budget" label="预算合计" align="right">
+              <template #default="{ row }">¥{{ formatMoney(row.total_budget) }}</template>
+            </el-table-column>
+          </el-table>
         </el-card>
       </el-tab-pane>
 
@@ -49,20 +45,12 @@
                 <el-tag :type="riskLevelType(row.risk_level)">{{ riskLevelLabel(row.risk_level) }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="完成进度" width="150">
+            <el-table-column prop="planned_end" label="计划交期" width="140" align="center" />
+            <el-table-column prop="days_overdue" label="逾期天数" width="120" align="center">
               <template #default="{ row }">
-                <el-progress :percentage="row.progress || 0" :status="row.progress < 50 && row.days_remaining < 30 ? 'exception' : ''" />
+                <span :style="{ color: row.days_overdue > 0 ? '#f56c6c' : '' }">{{ row.days_overdue }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="days_remaining" label="剩余天数" width="100" align="center">
-              <template #default="{ row }">
-                <span :style="{ color: row.days_remaining < 15 ? '#f56c6c' : '' }">{{ row.days_remaining }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="delay_probability" label="延期概率" width="100" align="center">
-              <template #default="{ row }">{{ row.delay_probability }}%</template>
-            </el-table-column>
-            <el-table-column prop="risk_factors" label="风险因素" min-width="250" show-overflow-tooltip />
           </el-table>
         </el-card>
       </el-tab-pane>
@@ -72,25 +60,14 @@
         <el-card shadow="never">
           <template #header>
             <div class="card-header">
-              <span>产能负荷预测</span>
-              <div>
-                <el-input-number v-model="capacityWeeks" :min="1" :max="24" style="width: 120px; margin-right: 12px" />
-                <span style="margin-right: 12px; color: #909399">周</span>
-                <el-button type="primary" @click="loadCapacityLoad" :loading="capacityLoading">预测</el-button>
-              </div>
+              <span>工作中心产能负荷</span>
+              <el-button type="primary" @click="loadCapacityLoad" :loading="capacityLoading">预测</el-button>
             </div>
           </template>
           <div ref="capacityChartRef" style="height: 400px"></div>
           <el-table :data="capacityData" v-loading="capacityLoading" stripe style="margin-top: 16px" size="small">
-            <el-table-column prop="week" label="周次" width="100" />
-            <el-table-column prop="planned_hours" label="计划工时" width="120" align="right" />
-            <el-table-column prop="available_hours" label="可用工时" width="120" align="right" />
-            <el-table-column label="负荷率" width="150">
-              <template #default="{ row }">
-                <el-progress :percentage="row.utilization || 0" :status="row.utilization > 100 ? 'exception' : (row.utilization > 85 ? 'warning' : '')" />
-              </template>
-            </el-table-column>
-            <el-table-column prop="bottleneck" label="瓶颈资源" min-width="150" />
+            <el-table-column prop="work_center_name" label="工作中心" min-width="180" />
+            <el-table-column prop="active_orders" label="在制工单数" width="160" align="right" />
           </el-table>
         </el-card>
       </el-tab-pane>
@@ -99,9 +76,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { getCostTrend, getDeliveryRisk, getCapacityLoad } from '@/api/reports'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import * as echarts from 'echarts'
 
 const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/reports/')
 
@@ -111,24 +89,53 @@ const costLoading = ref(false)
 const deliveryLoading = ref(false)
 const capacityLoading = ref(false)
 
-const costProjectId = ref('')
-const costResult = ref(null)
+const costTrends = ref<any[]>([])
 const costChartRef = ref(null)
 const deliveryRisks = ref<any[]>([])
-const capacityWeeks = ref(8)
 const capacityData = ref<any[]>([])
 const capacityChartRef = ref(null)
 
 const formatMoney = (v) => v ? Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
+const formatMonth = (m) => (m ? String(m).substring(0, 7) : '')
 const riskLevelType = (l) => ({ low: 'success', medium: 'warning', high: 'danger', critical: 'danger' }[l] || 'info')
 const riskLevelLabel = (l) => ({ low: '低', medium: '中', high: '高', critical: '严重' }[l] || l)
 
+const renderCostChart = () => {
+  if (!costChartRef.value || !costTrends.value.length) return
+  const chart = echarts.init(costChartRef.value)
+  chart.setOption({
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['预算合计', '项目数'] },
+    xAxis: { type: 'category', data: costTrends.value.map(d => formatMonth(d.month)) },
+    yAxis: [
+      { type: 'value', name: '预算' },
+      { type: 'value', name: '项目数' }
+    ],
+    series: [
+      { name: '预算合计', type: 'line', smooth: true, data: costTrends.value.map(d => d.total_budget || 0) },
+      { name: '项目数', type: 'bar', yAxisIndex: 1, data: costTrends.value.map(d => d.count || 0) }
+    ]
+  })
+}
+
+const renderCapacityChart = () => {
+  if (!capacityChartRef.value || !capacityData.value.length) return
+  const chart = echarts.init(capacityChartRef.value)
+  chart.setOption({
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    xAxis: { type: 'category', data: capacityData.value.map(d => d.work_center_name), axisLabel: { rotate: 30 } },
+    yAxis: { type: 'value', name: '在制工单数' },
+    series: [{ name: '在制工单数', type: 'bar', data: capacityData.value.map(d => d.active_orders || 0) }]
+  })
+}
+
 const loadCostTrend = async () => {
-  if (!costProjectId.value) return
   costLoading.value = true
   try {
-    const res = await getCostTrend({ project_id: costProjectId.value })
-    costResult.value = res
+    const res = await getCostTrend()
+    costTrends.value = res.trends || []
+    await nextTick()
+    renderCostChart()
   } finally { costLoading.value = false }
 }
 
@@ -143,12 +150,18 @@ const loadDeliveryRisk = async () => {
 const loadCapacityLoad = async () => {
   capacityLoading.value = true
   try {
-    const res = await getCapacityLoad({ weeks: capacityWeeks.value })
+    const res = await getCapacityLoad()
     capacityData.value = res.capacity_load || res.results || (Array.isArray(res) ? res : [])
+    await nextTick()
+    renderCapacityChart()
   } finally { capacityLoading.value = false }
 }
 
-onMounted(() => { loadDeliveryRisk() })
+onMounted(() => {
+  loadCostTrend()
+  loadDeliveryRisk()
+  loadCapacityLoad()
+})
 </script>
 
 <style scoped>

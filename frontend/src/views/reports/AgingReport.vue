@@ -208,12 +208,13 @@ const loadReport = async () => {
     const response = await getAgingReport(params)
     
     // 映射后端的 summary 字段到前端期望的格式
+    // 后端桶：current(未逾期) / 1_30 / 31_60 / 61_90 / over_90
     const summary = response.summary || {}
     Object.assign(agingSummary, {
       current: summary.current || 0,
-      days_1_30: summary['30_60'] || 0,  // 后端用 30_60 表示 1-30天后的逾期
-      days_31_60: summary['60_90'] || 0,
-      days_60_plus: summary.over_90 || 0
+      days_1_30: summary['1_30'] || 0,
+      days_31_60: summary['31_60'] || 0,
+      days_60_plus: (summary['61_90'] || 0) + (summary.over_90 || 0)
     })
     
     // 映射后端字段到前端显示字段

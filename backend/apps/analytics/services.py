@@ -209,19 +209,59 @@ class InventoryAnalyticsService:
 
     @staticmethod
     def get_slow_moving_items(days=90):
-        """Identify slow-moving inventory"""
-        start_date = datetime.now() - timedelta(days=days)
+        """Identify slow-moving inventory.
 
-        # Items with no movements
+        返回字段与前端 SlowMovingReport.vue / InventoryAnalytics.vue 对齐：
+        item_code/item_name/category_name/specification/unit/warehouse_name/
+        qty/unit_cost/total_value/aging_days/last_move_date 以及 id 字段。
+        """
+        from django.db.models import Max
+
+        today = datetime.now().date()
+        start_date = today - timedelta(days=days)
+
+        # 有近期移动的物料（按物料维度，不区分仓库）
         moved_item_ids = (
             StockMove.objects.filter(move_date__gte=start_date).values_list('item_id', flat=True).distinct()
         )
 
-        slow_moving = (
-            Stock.objects.exclude(item_id__in=moved_item_ids)
-            .select_related('item', 'warehouse')
-            .values('item__sku', 'item__name', 'warehouse__name', 'qty_on_hand', 'weighted_avg_cost')
-            .annotate(value=F('qty_on_hand') * F('weighted_avg_cost'))
+        # 每个物料的最后移动日期（用于计算呆滞天数）
+        last_move_map = {
+            row['item_id']: row['last_date']
+            for row in StockMove.objects.values('item_id').annotate(last_date=Max('move_date'))
+        }
+
+        stocks = (
+            Stock.objects.filter(is_deleted=False, qty_on_hand__gt=0)
+            .exclude(item_id__in=moved_item_ids)
+            .select_related('item', 'item__category', 'warehouse')
         )
 
-        return list(slow_moving)
+        items = []
+        for stock in stocks:
+            item = stock.item
+            qty = float(stock.qty_on_hand or 0)
+            unit_cost = float(stock.weighted_avg_cost or 0)
+            last_move_date = last_move_map.get(item.id)
+            aging_days = (today - last_move_date).days if last_move_date else days
+            items.append(
+                {
+                    'id': stock.id,
+                    'item_id': item.id,
+                    'warehouse_id': stock.warehouse_id,
+                    'item_code': item.sku,
+                    'item_name': item.name,
+                    'specification': item.specification or '',
+                    'unit': item.unit,
+                    'category_name': item.category.name if item.category else '',
+                    'warehouse_name': stock.warehouse.name if stock.warehouse else '',
+                    'qty': qty,
+                    'unit_cost': unit_cost,
+                    'total_value': round(qty * unit_cost, 2),
+                    'last_move_date': last_move_date.isoformat() if last_move_date else '',
+                    'aging_days': aging_days,
+                }
+            )
+
+        items.sort(key=lambda x: x['aging_days'], reverse=True)
+        return items

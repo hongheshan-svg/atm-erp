@@ -27,8 +27,8 @@
         <el-card style="margin-top: 16px">
           <template #header>收藏的报表</template>
           <div class="template-list">
-            <div v-for="fav in favorites" :key="fav.id" class="template-item" @click="selectTemplate(fav.template_detail)">
-              <div class="template-name">{{ fav.template_name }}</div>
+            <div v-for="fav in favorites" :key="fav.id" class="template-item" @click="selectTemplate(fav)">
+              <div class="template-name">{{ fav.name }}</div>
             </div>
             <el-empty v-if="!favorites.length" description="暂无收藏" :image-size="60" />
           </div>
@@ -110,8 +110,8 @@
 
     <!-- 新建模板对话框 -->
     <el-dialog v-model="showTemplateDialog" title="新建报表模板" width="700px">
-      <el-form :model="templateForm" ref="templateFormRef" label-width="100px">
-        <el-form-item label="模板名称" :rules="[{required:true, message:'必填'}]" prop="name">
+      <el-form :model="templateForm" :rules="templateRules" ref="templateFormRef" label-width="100px">
+        <el-form-item label="模板名称" prop="name">
           <el-input v-model="templateForm.name" />
         </el-form-item>
         <el-row :gutter="16">
@@ -176,6 +176,12 @@ const filterValues = reactive<Record<string, any>>({})
 
 const templateForm = reactive({ name: '', category: '', data_source: '', description: '' })
 
+const templateRules = {
+  name: [{ required: true, message: '请输入模板名称', trigger: 'blur' }],
+  category: [{ required: true, message: '请选择分类', trigger: 'change' }],
+  data_source: [{ required: true, message: '请选择数据源', trigger: 'change' }]
+}
+
 const categoryLabel = (c) => ({ sales: '销售', purchase: '采购', inventory: '库存', production: '生产', finance: '财务', project: '项目', quality: '质量', equipment: '设备', comprehensive: '综合' }[c] || c)
 
 const filteredTemplates = computed(() => {
@@ -209,11 +215,19 @@ const selectTemplate = (tpl) => {
 const executeReport = async () => {
   executing.value = true
   try {
-    const res = await executeReportTemplate(selectedTemplate.value.id, filterValues)
-    const data = res
-    reportData.value = data.results || data.data || []
-    if (reportData.value.length) {
-      reportColumns.value = Object.keys(reportData.value[0]).map(k => ({ prop: k, label: k }))
+    const res = await executeReportTemplate(selectedTemplate.value.id, { parameters: filterValues })
+    if (res.status === 'failed') {
+      ElMessage.error(res.error_message || '报表执行失败')
+      reportData.value = []
+      reportColumns.value = []
+    } else {
+      reportData.value = res.result_data?.rows || []
+      if (reportData.value.length) {
+        reportColumns.value = Object.keys(reportData.value[0]).map(k => ({ prop: k, label: k }))
+      } else {
+        reportColumns.value = []
+        ElMessage.info('报表执行成功，但无数据')
+      }
     }
     loadExecutions()
   } finally { executing.value = false }

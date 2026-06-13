@@ -225,7 +225,7 @@ const renderTrendChart = () => {
     tooltip: { trigger: 'axis' },
     xAxis: {
       type: 'category',
-      data: data.map(d => d.date?.substring(5) || ''),
+      data: data.map(d => (d.log_date ? String(d.log_date).substring(5) : '')),
       axisLabel: { rotate: 45 }
     },
     yAxis: { type: 'value', name: '工时 (h)' },

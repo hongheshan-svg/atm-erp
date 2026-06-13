@@ -2,6 +2,8 @@
 Predictive Analytics for ERP
 """
 
+import logging
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -115,6 +117,9 @@ class RiskAlert(BaseModel):
         return f'[{self.get_severity_display()}] {self.title}'
 
 
+logger = logging.getLogger(__name__)
+
+
 class PredictionService:
     """Predictive analytics service."""
 
@@ -132,12 +137,13 @@ class PredictionService:
                 .values('month')
                 .annotate(
                     count=Count('id'),
-                    total_budget=Sum('budget'),
+                    total_budget=Sum('budget_total'),
                 )
                 .order_by('month')
             )
             return list(projects)
         except Exception:
+            logger.exception('analyze_cost_trend failed')
             return []
 
     @staticmethod
@@ -145,10 +151,10 @@ class PredictionService:
         try:
             from apps.projects.models import Project
 
-            projects = Project.objects.filter(is_deleted=False, status__in=['in_progress', 'active'])
+            projects = Project.objects.filter(is_deleted=False, status__in=['IN_PROGRESS', 'ACTIVE'])
             risks = []
             for proj in projects:
-                planned_end = getattr(proj, 'planned_end_date', None) or getattr(proj, 'end_date', None)
+                planned_end = getattr(proj, 'end_date', None)
                 if planned_end and planned_end < timezone.now().date():
                     risks.append(
                         {
@@ -161,6 +167,7 @@ class PredictionService:
                     )
             return risks
         except Exception:
+            logger.exception('analyze_delivery_risk failed')
             return []
 
     @staticmethod
@@ -168,16 +175,24 @@ class PredictionService:
         try:
             from django.db.models import Count
 
-            from apps.production.models import ProductionOrder
+            from apps.production.aps import ScheduleOrder
 
             load = (
-                ProductionOrder.objects.filter(is_deleted=False, status='in_progress')
-                .values('work_center')
+                ScheduleOrder.objects.filter(is_deleted=False, status='IN_PROGRESS')
+                .values('work_center', 'work_center__name')
                 .annotate(active_orders=Count('id'))
                 .order_by('-active_orders')
             )
-            return list(load)
+            return [
+                {
+                    'work_center': row['work_center'],
+                    'work_center_name': row['work_center__name'] or '未分配',
+                    'active_orders': row['active_orders'],
+                }
+                for row in load
+            ]
         except Exception:
+            logger.exception('analyze_capacity_load failed')
             return []
 
 

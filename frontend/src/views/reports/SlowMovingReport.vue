@@ -423,11 +423,11 @@ const handleExport = () => {
       { field: 'item_name', title: '物料名称' },
       { field: 'category_name', title: '分类' },
       { field: 'warehouse_name', title: '仓库' },
-      { field: 'qty_on_hand', title: '库存数量' },
+      { field: 'qty', title: '库存数量' },
       { field: 'unit_cost', title: '单位成本', formatter: formatMoney },
-      { field: 'inventory_value', title: '库存金额', formatter: formatMoney },
-      { field: 'days_no_movement', title: '未动天数' },
-      { field: 'last_movement_date', title: '最后移动日期' }
+      { field: 'total_value', title: '库存金额', formatter: formatMoney },
+      { field: 'aging_days', title: '呆滞天数' },
+      { field: 'last_move_date', title: '最后移动日期' }
     ]
     exportToExcel(tableData.value, columns, '呆滞物料分析')
     ElMessage.success('导出成功')

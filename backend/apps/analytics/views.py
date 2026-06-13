@@ -46,10 +46,16 @@ class AnalyticsViewSet(viewsets.ViewSet):
     
     @action(detail=False, methods=['get'])
     def slow_moving_items(self, request):
-        """Get slow-moving inventory items"""
+        """Get slow-moving inventory items (分页返回 results/count)"""
         days = int(request.query_params.get('days', 90))
         items = InventoryAnalyticsService.get_slow_moving_items(days)
-        return Response(items)
+
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 20))
+        total = len(items)
+        start = (page - 1) * page_size
+        end = start + page_size
+        return Response({'results': items[start:end], 'count': total})
     
     @action(detail=False, methods=['get'])
     def slow_moving(self, request):
@@ -329,12 +335,31 @@ class AnalyticsViewSet(viewsets.ViewSet):
             is_deleted=False
         ).select_related('customer')[:10]
         
+        # 计算各项目进度（按任务完成率）
+        from apps.projects.models import ProjectTask
+        task_stats = {
+            row['project_id']: row
+            for row in ProjectTask.objects.filter(
+                project__in=active_projects_list, is_deleted=False
+            ).values('project_id').annotate(
+                total=Count('id'),
+                completed=Count('id', filter=Q(status='COMPLETED')),
+            )
+        }
+
+        def _project_progress(pid):
+            stat = task_stats.get(pid)
+            if not stat or not stat['total']:
+                return 0
+            return round(stat['completed'] / stat['total'] * 100)
+
         active_projects_data = [{
             'id': p.id,
             'name': p.name,
             'customer_name': p.customer.name if p.customer else '',
             'status': p.status,
-            'budget_total': float(p.budget_total or 0)
+            'budget_total': float(p.budget_total or 0),
+            'progress': _project_progress(p.id)
         } for p in active_projects_list]
         
         # Top 5 客户

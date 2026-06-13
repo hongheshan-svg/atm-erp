@@ -143,10 +143,23 @@ class EquipmentLifecycleReportView(APIView):
         from apps.projects.models import Equipment
 
         equipment_id = request.query_params.get('equipment_id')
+        status_filter = request.query_params.get('status')
 
         if not equipment_id:
             # 返回设备概览
-            equipments = Equipment.objects.filter(is_deleted=False)
+            equipments = Equipment.objects.filter(is_deleted=False).select_related('customer')
+            if status_filter:
+                equipments = equipments.filter(status=status_filter)
+
+            # 状态分布统计（用于前端统计卡）
+            running_statuses = ['PRODUCING', 'TESTING', 'READY', 'SHIPPING', 'INSTALLING', 'COMMISSIONING']
+            warranty_statuses = ['ACCEPTED', 'WARRANTY']
+            stats = {
+                'total_equipment': equipments.count(),
+                'running': equipments.filter(status__in=running_statuses).count(),
+                'in_warranty': equipments.filter(status__in=warranty_statuses).count(),
+                'scrapped': equipments.filter(status='SCRAPPED').count(),
+            }
 
             overview = []
             for eq in equipments[:50]:  # 限制数量
@@ -167,13 +180,16 @@ class EquipmentLifecycleReportView(APIView):
                         'equipment_no': eq.equipment_no,
                         'name': eq.name,
                         'customer_name': eq.customer.name if eq.customer else '',
-                        'install_date': eq.install_date,
+                        'install_date': eq.installation_date,
+                        'warranty_end_date': eq.warranty_end_date,
+                        'status': eq.status,
+                        'status_display': eq.get_status_display(),
                         'service_count': service_count,
                         'spare_cost': float(spare_cost),
                     }
                 )
 
-            return Response({'equipments': overview})
+            return Response({'equipments': overview, 'stats': stats})
 
         # 单设备详细分析
         try:
@@ -434,28 +450,34 @@ class ProjectDeliveryReportView(APIView):
         status_dist = projects.values('status').annotate(count=Count('id'))
 
         # 交期统计
+        # Project 模型仅有 start_date / end_date（计划交期），无独立的实际完成日期字段，
+        # 故以 end_date 作为交期基准；如未来补充 actual_end_date 可按需扩展。
         completed = projects.filter(status='COMPLETED')
         on_time = 0
         delayed = 0
         total_delay_days = 0
 
         for p in completed:
-            if p.actual_end_date and p.planned_end_date:
-                if p.actual_end_date <= p.planned_end_date:
+            planned_end = getattr(p, 'end_date', None)
+            actual_end = getattr(p, 'actual_end_date', None)
+            if planned_end and actual_end:
+                if actual_end <= planned_end:
                     on_time += 1
                 else:
                     delayed += 1
-                    total_delay_days += (p.actual_end_date - p.planned_end_date).days
+                    total_delay_days += (actual_end - planned_end).days
 
         on_time_rate = (on_time / completed.count() * 100) if completed.count() > 0 else 0
         avg_delay = (total_delay_days / delayed) if delayed > 0 else 0
 
-        # 项目周期分析
+        # 项目周期分析（开始日期 → 计划结束日期）
         cycle_times = []
         for p in completed:
-            if p.actual_end_date and p.start_date:
-                cycle = (p.actual_end_date - p.start_date).days
-                cycle_times.append(cycle)
+            end = getattr(p, 'actual_end_date', None) or getattr(p, 'end_date', None)
+            if end and p.start_date:
+                cycle = (end - p.start_date).days
+                if cycle >= 0:
+                    cycle_times.append(cycle)
 
         avg_cycle = sum(cycle_times) / len(cycle_times) if cycle_times else 0
 

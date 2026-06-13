@@ -111,23 +111,23 @@
           <el-table :data="slowMovingItems" stripe border v-loading="loading" @selection-change="handleSelectionChange">
             <el-table-column type="selection" width="45" />
             <el-table-column type="index" label="#" width="50" />
-            <el-table-column prop="item__sku" label="物料编码" width="120" />
-            <el-table-column prop="item__name" label="物料名称" />
-            <el-table-column prop="warehouse__name" label="仓库" width="120" />
-            <el-table-column prop="qty_on_hand" label="库存数量" width="100" />
+            <el-table-column prop="item_code" label="物料编码" width="120" />
+            <el-table-column prop="item_name" label="物料名称" />
+            <el-table-column prop="warehouse_name" label="仓库" width="120" />
+            <el-table-column prop="qty" label="库存数量" width="100" />
             <el-table-column prop="unit_cost" label="单位成本" width="100">
               <template #default="{ row }">
                 {{ formatCurrency(row.unit_cost) }}
               </template>
             </el-table-column>
-            <el-table-column prop="value" label="库存价值" width="120">
+            <el-table-column prop="total_value" label="库存价值" width="120">
               <template #default="{ row }">
-                {{ formatCurrency(row.value) }}
+                {{ formatCurrency(row.total_value) }}
               </template>
             </el-table-column>
             <el-table-column label="滞销天数" width="100">
-              <template #default="{ row: _row }">
-                <el-tag type="warning">{{ slowMovingDays }}天</el-tag>
+              <template #default="{ row }">
+                <el-tag type="warning">{{ row.aging_days ?? slowMovingDays }}天</el-tag>
               </template>
             </el-table-column>
           </el-table>
@@ -137,7 +137,7 @@
               v-model:current-page="pagination.page"
               v-model:page-size="pagination.pageSize"
               :page-sizes="[10, 20, 50]"
-              :total="slowMovingItems.length"
+              :total="slowMovingTotal"
               layout="total, sizes, prev, pager, next"
               @size-change="handleSizeChange"
               @current-change="handleCurrentChange"
@@ -184,6 +184,7 @@ const metrics = reactive({
 })
 
 const slowMovingItems = ref<any[]>([])
+const slowMovingTotal = ref(0)
 const warehouseChart = ref(null)
 const turnoverChart = ref(null)
 const abcChart = ref(null)
@@ -227,11 +228,17 @@ const loadTurnoverData = async () => {
 const loadSlowMovingItems = async () => {
   loading.value = true
   try {
-    const data = await getSlowMovingItems({ days: slowMovingDays.value })
-    slowMovingItems.value = data || []
+    const data = await getSlowMovingItems({
+      days: slowMovingDays.value,
+      page: pagination.page,
+      page_size: pagination.pageSize
+    })
+    slowMovingItems.value = data.results || (Array.isArray(data) ? data : [])
+    slowMovingTotal.value = data.count ?? slowMovingItems.value.length
   } catch (error) {
     console.error('加载滞销物料失败', error)
     slowMovingItems.value = []
+    slowMovingTotal.value = 0
   } finally {
     loading.value = false
   }
@@ -241,11 +248,12 @@ const loadWarehouseDistribution = async () => {
   try {
     const response = await getInventoryStocks()
     
-    // Group by warehouse
+    // Group by warehouse（Stock 序列化器暴露 weighted_avg_cost，无 unit_cost）
     const warehouseValues = {}
-    response.results.forEach(stock => {
+    const stocks = response.results || response || []
+    stocks.forEach(stock => {
       const warehouse = stock.warehouse_name || 'Unknown'
-      const value = (stock.qty_on_hand || 0) * (stock.unit_cost || 0)
+      const value = (Number(stock.qty_on_hand) || 0) * (Number(stock.weighted_avg_cost) || 0)
       warehouseValues[warehouse] = (warehouseValues[warehouse] || 0) + value
     })
     
@@ -402,10 +410,11 @@ const exportSlowMoving = () => {
     const columns = [
       { field: 'item_code', title: '物料编码' },
       { field: 'item_name', title: '物料名称' },
-      { field: 'qty_on_hand', title: '库存数量' },
+      { field: 'warehouse_name', title: '仓库' },
+      { field: 'qty', title: '库存数量' },
       { field: 'unit_cost', title: '单位成本', formatter: formatMoney },
-      { field: 'inventory_value', title: '库存金额', formatter: formatMoney },
-      { field: 'days_no_movement', title: '未动天数' }
+      { field: 'total_value', title: '库存金额', formatter: formatMoney },
+      { field: 'aging_days', title: '滞销天数' }
     ]
     exportToExcel(slowMovingItems.value, columns, '滞销物料分析')
     ElMessage.success('导出成功')
@@ -414,10 +423,13 @@ const exportSlowMoving = () => {
 
 const handleSizeChange = (size) => {
   pagination.pageSize = size
+  pagination.page = 1
+  loadSlowMovingItems()
 }
 
 const handleCurrentChange = (page) => {
   pagination.page = page
+  loadSlowMovingItems()
 }
 
 onMounted(async () => {
