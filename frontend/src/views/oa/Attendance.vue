@@ -118,7 +118,7 @@
             placeholder="选择月份"
             format="YYYY年MM月"
             value-format="YYYY-MM"
-            @change="loadRecords"
+            @change="handleMonthChange"
           />
         </div>
       </template>
@@ -239,9 +239,7 @@ const loadTodayStatus = async () => {
 const loadRecords = async () => {
   loading.value = true
   try {
-    const res = await getAttendanceRecords({
-      params: { month: selectedMonth.value }
-    })
+    const res = await getAttendanceRecords({ month: selectedMonth.value })
     // res 已经是 response.data
     if (Array.isArray(res)) {
       records.value = res
@@ -258,11 +256,14 @@ const loadRecords = async () => {
   }
 }
 
+const handleMonthChange = () => {
+  loadRecords()
+  loadMonthlySummary()
+}
+
 const loadMonthlySummary = async () => {
   try {
-    const res = await getAttendanceMonthlySummary({
-      params: { month: selectedMonth.value }
-    })
+    const res = await getAttendanceMonthlySummary({ month: selectedMonth.value })
     // res 已经是 response.data
     if (Array.isArray(res) && res.length > 0) {
       monthSummary.value = res[0]

@@ -2,7 +2,7 @@
   <div class="schedule-container">
     <div class="page-header">
       <h2>日程管理</h2>
-      <el-button type="primary" v-permission="'oa:archive:create'" @click="handleAdd">新建日程</el-button>
+      <el-button type="primary" v-permission="'oa:schedule:create'" @click="handleAdd">新建日程</el-button>
     </div>
     
     <el-row :gutter="16">
@@ -180,6 +180,9 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getCalendarSchedules, getTodaySchedules, getUpcomingSchedules, getCoreSchedule, updateCoreSchedule, createCoreSchedule } from '@/api/oa'
+import { useUserStore } from '@/stores/user'
+
+const userStore = useUserStore()
 
 const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 const currentDate = ref(new Date())
@@ -287,9 +290,7 @@ const fetchCalendar = async () => {
   const end = new Date(year, month + 2, 0).toISOString().slice(0, 10)
   
   try {
-    const data = await getCalendarSchedules({
-      params: { start, end }
-    })
+    const data = await getCalendarSchedules({ start, end })
     events.value = data || []
   } catch (e) {
     console.error(e)
@@ -369,7 +370,8 @@ const submitForm = async () => {
     if (isEdit.value) {
       await updateCoreSchedule(formData.id, formData)
     } else {
-      await createCoreSchedule(formData)
+      // owner 为后端必填外键，前端注入当前用户，避免 400（后端 ScheduleViewSet 未注入 owner）
+      await createCoreSchedule({ ...formData, owner: userStore.userInfo?.id })
     }
     ElMessage.success('保存成功')
     dialogVisible.value = false

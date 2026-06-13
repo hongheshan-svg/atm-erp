@@ -68,6 +68,12 @@ export function getOvertimeRequests(params?: Record<string, any>) {
 export function createOvertimeRequest(data: any) {
   return request({ url: '/oa/overtime-requests/', method: 'post', data })
 }
+export function submitOvertimeRequest(id: number) {
+  return request({ url: `/oa/overtime-requests/${id}/submit/`, method: 'post' })
+}
+export function deleteOvertimeRequest(id: number) {
+  return request({ url: `/oa/overtime-requests/${id}/`, method: 'delete' })
+}
 
 // ========== 车辆管理 ==========
 export function getVehicles(params?: Record<string, any>) {
@@ -175,12 +181,33 @@ export function reclaimAsset(id: number) {
   return request({ url: `/oa/assets/${id}/reclaim/`, method: 'post' })
 }
 
-// ========== 资产借用 = =========
+// ========== 资产借用 ==========
+export function getAssetBorrows(params?: Record<string, any>) {
+  return request({ url: '/oa/asset-borrows/', method: 'get', params })
+}
+export function getAssetBorrow(id: number) {
+  return request({ url: `/oa/asset-borrows/${id}/`, method: 'get' })
+}
 export function createAssetBorrow(data: any) {
   return request({ url: '/oa/asset-borrows/', method: 'post', data })
 }
 export function submitAssetBorrow(id: number) {
   return request({ url: `/oa/asset-borrows/${id}/submit/`, method: 'post' })
+}
+export function approveAssetBorrow(id: number, data?: any) {
+  return request({ url: `/oa/asset-borrows/${id}/approve/`, method: 'post', data })
+}
+export function rejectAssetBorrow(id: number, data?: any) {
+  return request({ url: `/oa/asset-borrows/${id}/reject/`, method: 'post', data })
+}
+export function borrowAsset(id: number) {
+  return request({ url: `/oa/asset-borrows/${id}/borrow/`, method: 'post' })
+}
+export function returnAssetBorrow(id: number, data?: any) {
+  return request({ url: `/oa/asset-borrows/${id}/return_asset/`, method: 'post', data })
+}
+export function deleteAssetBorrow(id: number) {
+  return request({ url: `/oa/asset-borrows/${id}/`, method: 'delete' })
 }
 
 // ========== 会议管理 ==========
@@ -251,6 +278,9 @@ export function getTodayMeetings() {
 }
 export function getMeetingRooms() {
   return request({ url: '/core/meeting-rooms/', method: 'get' })
+}
+export function getMeetingRoomAvailability(roomId: number, date: string) {
+  return request({ url: `/core/meeting-rooms/${roomId}/availability/`, method: 'get', params: { date } })
 }
 export function startMeeting(id: number) {
   return request({ url: `/core/meetings/${id}/start/`, method: 'post' })

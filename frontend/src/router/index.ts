@@ -1029,6 +1029,12 @@ const routes = [
         meta: { title: '请假申请', icon: 'Document', menuId: 'oa:attendance' }
       },
       {
+        path: 'oa/overtime',
+        name: 'OvertimeRequest',
+        component: () => import('@/views/oa/OvertimeList.vue'),
+        meta: { title: '加班申请', icon: 'Timer', menuId: 'oa:attendance' }
+      },
+      {
         path: 'attendance',
         name: 'Attendance',
         component: () => import('@/views/accounts/Attendance.vue'),
@@ -1073,6 +1079,12 @@ const routes = [
         name: 'OAAssetList',
         component: () => import('@/views/oa/AssetList.vue'),
         meta: { title: '资产管理', icon: 'Box', menuId: 'oa:asset' }
+      },
+      {
+        path: 'oa/asset-borrow',
+        name: 'OAAssetBorrowList',
+        component: () => import('@/views/oa/AssetBorrowList.vue'),
+        meta: { title: '资产借用', icon: 'Tickets', menuId: 'oa:asset' }
       },
       // ====== Group 9: System 系统管理 ======
       {

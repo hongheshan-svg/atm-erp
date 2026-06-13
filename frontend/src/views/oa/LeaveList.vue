@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>请假申请</span>
-          <el-button type="primary" v-permission="'oa:archive:create'" @click="handleCreate">
+          <el-button type="primary" v-permission="'oa:leave:create'" @click="handleCreate">
             <el-icon><Plus /></el-icon>
             新建请假
           </el-button>
@@ -66,7 +66,7 @@
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button v-if="row.status === 'DRAFT'" size="small" type="primary" @click="handleSubmit(row)">提交</el-button>
-            <el-button v-if="row.status === 'DRAFT'" size="small" type="danger" v-permission="'oa:archive:delete'" @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="row.status === 'DRAFT'" size="small" type="danger" v-permission="'oa:leave:delete'" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -83,8 +83,8 @@
       />
     </el-card>
     
-    <!-- 新建/编辑对话框 -->
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑请假' : '新建请假'" width="600px" destroy-on-close>
+    <!-- 新建对话框 -->
+    <el-dialog v-model="dialogVisible" title="新建请假" width="600px" destroy-on-close>
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
         <el-form-item label="请假类型" prop="leave_type">
           <el-select v-model="form.leave_type" placeholder="选择类型" style="width: 100%;">
@@ -134,7 +134,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { getLeaveTypes, getLeaveRequests, updateLeaveRequest, createLeaveRequest, submitLeaveRequest, deleteLeaveRequest } from '@/api/oa'
+import { getLeaveTypes, getLeaveRequests, createLeaveRequest, submitLeaveRequest, deleteLeaveRequest } from '@/api/oa'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/oa/leave-requests/', { onSuccess: () => loadData() })
@@ -146,7 +146,6 @@ const list = ref<any[]>([])
 const leaveTypes = ref<any[]>([])
 const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
-const isEdit = ref(false)
 const currentItem = ref(null)
 const formRef = ref(null)
 
@@ -234,7 +233,6 @@ const resetSearch = () => {
 }
 
 const handleCreate = () => {
-  isEdit.value = false
   Object.assign(form, {
     leave_type: 'PERSONAL',
     start_date: '',
@@ -254,15 +252,10 @@ const handleSave = async () => {
   try {
     await formRef.value?.validate()
     saving.value = true
-    
-    if (isEdit.value) {
-      await updateLeaveRequest(form.id, form)
-      ElMessage.success('更新成功')
-    } else {
-      await createLeaveRequest(form)
-      ElMessage.success('创建成功')
-    }
-    
+
+    await createLeaveRequest(form)
+    ElMessage.success('创建成功')
+
     dialogVisible.value = false
     loadData()
   } catch (error) {

@@ -24,6 +24,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
+from apps.accounts.models import User
 from apps.core.models import BaseModel
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.permission_mixin import PermissionMixin
@@ -469,7 +470,10 @@ class AssetBorrowSerializer(serializers.ModelSerializer):
     asset_no = serializers.CharField(source='asset.asset_no', read_only=True)
     borrower_name = serializers.CharField(source='borrower.get_full_name', read_only=True)
     approver_name = serializers.CharField(source='approver.get_full_name', read_only=True)
-    
+    # 借用日期允许缺省（perform_create 默认今日），借用人由视图按代借规则处理
+    borrow_date = serializers.DateField(required=False)
+    borrower = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=False, allow_null=True)
+
     class Meta:
         model = AssetBorrow
         fields = '__all__'
@@ -644,8 +648,16 @@ class AssetBorrowViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
     ordering_fields = ['borrow_date', 'created_at']
     
     def perform_create(self, serializer):
-        serializer.save(borrower=self.request.user, created_by=self.request.user)
-    
+        # 借用人：允许代他人登记（如管理员代借），优先取请求提交的 borrower
+        # （已由序列化器校验存在性），缺省时回退为当前用户
+        save_kwargs = {'created_by': self.request.user}
+        if not serializer.validated_data.get('borrower'):
+            save_kwargs['borrower'] = self.request.user
+        # 借用日期：前端未提交时默认今日，避免必填字段缺失导致 400
+        if not serializer.validated_data.get('borrow_date'):
+            save_kwargs['borrow_date'] = date.today()
+        serializer.save(**save_kwargs)
+
     @action(detail=False, methods=['get'])
     def my_borrows(self, request):
         """我的借用"""

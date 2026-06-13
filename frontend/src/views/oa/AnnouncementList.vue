@@ -9,7 +9,7 @@
               <el-icon><Check /></el-icon>
               全部已读
             </el-button>
-            <el-button v-if="isAdmin" type="primary" v-permission="'oa:archive:create'" @click="handleCreate">
+            <el-button v-if="isAdmin" type="primary" v-permission="'oa:announcement:create'" @click="handleCreate">
               <el-icon><Plus /></el-icon>
               发布公告
             </el-button>
@@ -93,7 +93,7 @@
     </el-dialog>
     
     <!-- 发布公告 -->
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑公告' : '发布公告'" width="700px" destroy-on-close>
+    <el-dialog v-model="dialogVisible" title="发布公告" width="700px" destroy-on-close>
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
         <el-form-item label="公告类型" prop="announcement_type">
           <el-select v-model="form.announcement_type" style="width: 100%;">
@@ -144,7 +144,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, Check, View } from '@element-plus/icons-vue'
-import { getPublishedAnnouncements, createAnnouncement, updateAnnouncement, publishAnnouncement, readAnnouncement, markAllAnnouncementsRead } from '@/api/oa'
+import { getPublishedAnnouncements, createAnnouncement, publishAnnouncement, readAnnouncement, markAllAnnouncementsRead } from '@/api/oa'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
@@ -156,7 +156,6 @@ const markingRead = ref(false)
 const list = ref<any[]>([])
 const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
-const isEdit = ref(false)
 const currentItem = ref(null)
 const formRef = ref(null)
 
@@ -271,7 +270,6 @@ const markAllRead = async () => {
 }
 
 const handleCreate = () => {
-  isEdit.value = false
   Object.assign(form, {
     announcement_type: 'NOTICE',
     priority: 'NORMAL',
@@ -292,13 +290,9 @@ const handleSave = async (status = 'DRAFT') => {
     saving.value = true
     
     const data = { ...form, status }
-    
-    if (isEdit.value) {
-      await updateAnnouncement(form.id, data)
-    } else {
-      await createAnnouncement(data)
-    }
-    
+
+    await createAnnouncement(data)
+
     ElMessage.success(status === 'DRAFT' ? '保存成功' : '发布成功')
     dialogVisible.value = false
     loadData()
@@ -318,18 +312,8 @@ const handleSaveAndPublish = async () => {
     
     // 先保存
     const data = { ...form, status: 'DRAFT' }
-    let announcement
-    
-    if (isEdit.value) {
-      const res = await updateAnnouncement(form.id, data)
-      // res 已经是 response.data
-      announcement = res
-    } else {
-      const res = await createAnnouncement(data)
-      // res 已经是 response.data
-      announcement = res
-    }
-    
+    const announcement = await createAnnouncement(data)
+
     // 再发布
     await publishAnnouncement(announcement.id)
     

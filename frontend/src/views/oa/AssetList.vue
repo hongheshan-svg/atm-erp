@@ -226,8 +226,11 @@
         <el-form-item label="资产">{{ borrowRow?.name }}</el-form-item>
         <el-form-item label="借用人">
           <el-select v-model="borrowForm.borrower" placeholder="选择借用人" filterable style="width: 100%">
-            <el-option v-for="u in users" :key="u.id" :label="u.full_name || u.username" :value="u.id" />
+            <el-option v-for="u in users" :key="u.id" :label="u.name || u.username" :value="u.id" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="借用日期">
+          <el-date-picker v-model="borrowForm.borrow_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
         </el-form-item>
         <el-form-item label="预计归还">
           <el-date-picker v-model="borrowForm.expected_return_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
@@ -259,7 +262,7 @@ const loading = ref(false)
 const saving = ref(false)
 const borrowDialogVisible = ref(false)
 const borrowRow = ref(null)
-const borrowForm = reactive({ borrower: null, expected_return_date: '', purpose: '' })
+const borrowForm = reactive({ borrower: null, borrow_date: '', expected_return_date: '', purpose: '' })
 const borrowSaving = ref(false)
 const list = ref<any[]>([])
 const categories = ref<any[]>([])
@@ -480,7 +483,9 @@ const handleReclaim = async (row) => {
 
 const handleBorrow = (row) => {
   borrowRow.value = row
-  Object.assign(borrowForm, { borrower: null, expected_return_date: '', purpose: '' })
+  const today = new Date().toISOString().slice(0, 10)
+  Object.assign(borrowForm, { borrower: null, borrow_date: today, expected_return_date: '', purpose: '' })
+  if (users.value.length === 0) loadUsers()
   borrowDialogVisible.value = true
 }
 

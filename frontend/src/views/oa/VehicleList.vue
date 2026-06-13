@@ -186,12 +186,12 @@
     <el-dialog v-model="maintDialogVisible" :title="'维护记录 - ' + (currentVehicle?.plate_number || '')" width="700px">
       <el-table :data="maintRecords" v-loading="maintLoading" stripe>
         <el-table-column prop="maintenance_date" label="维护日期" width="120" />
-        <el-table-column prop="maintenance_type_display" label="类型" width="100" />
+        <el-table-column prop="type_display" label="类型" width="100" />
         <el-table-column prop="description" label="描述" show-overflow-tooltip />
         <el-table-column prop="cost" label="费用" width="100" align="right">
           <template #default="{ row }">¥{{ row.cost?.toLocaleString() || 0 }}</template>
         </el-table-column>
-        <el-table-column prop="service_provider" label="服务商" width="120" />
+        <el-table-column prop="vendor" label="服务商" width="120" />
         <el-table-column prop="next_maintenance_date" label="下次维护" width="120" />
       </el-table>
       <el-empty v-if="!maintLoading && maintRecords.length === 0" description="暂无维护记录" />

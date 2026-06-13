@@ -373,13 +373,20 @@ class VehicleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
         """更新里程"""
         vehicle = self.get_object()
         mileage = request.data.get('mileage', 0)
-        
+
         if mileage < vehicle.current_mileage:
             return Response({'error': '里程数不能小于当前里程'}, status=400)
-        
+
         vehicle.current_mileage = mileage
         vehicle.save()
         return Response(self.get_serializer(vehicle).data)
+
+    @action(detail=True, methods=['get'], url_path='maintenance-records')
+    def maintenance_records(self, request, pk=None):
+        """获取该车辆的维护记录"""
+        vehicle = self.get_object()
+        records = vehicle.maintenance_records.filter(is_deleted=False).order_by('-maintenance_date')
+        return Response(VehicleMaintenanceSerializer(records, many=True).data)
 
 
 class VehicleRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
@@ -516,6 +523,9 @@ class VehicleRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
         if req.status != 'APPROVED':
             return Response({'error': '只有已批准的申请可以取车'}, status=400)
 
+        if req.vehicle is None:
+            return Response({'error': '该申请尚未指定车辆，请先在审批时分配车辆后再取车'}, status=400)
+
         with transaction.atomic():
             req.status = 'IN_USE'
             req.start_mileage = req.vehicle.current_mileage
@@ -532,6 +542,9 @@ class VehicleRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
         req = self.get_object()
         if req.status != 'IN_USE':
             return Response({'error': '只有使用中的申请可以还车'}, status=400)
+
+        if req.vehicle is None:
+            return Response({'error': '该申请未关联车辆，无法还车'}, status=400)
 
         end_mileage = request.data.get('end_mileage', req.vehicle.current_mileage)
 

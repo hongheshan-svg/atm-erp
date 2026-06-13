@@ -2,7 +2,7 @@
   <div class="meeting-container">
     <div class="page-header">
       <h2>会议管理</h2>
-      <el-button type="primary" v-permission="'oa:archive:create'" @click="handleAdd">预约会议</el-button>
+      <el-button type="primary" v-permission="'oa:meeting:create'" @click="handleAdd">预约会议</el-button>
     </div>
     
     <el-row :gutter="16">
@@ -255,7 +255,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { VideoCameraFilled, Location } from '@element-plus/icons-vue'
-import { getCoreMeetings, getCoreMeeting, getTodayMeetings, getMeetingRooms, startMeeting, completeMeeting, cancelMeeting, updateCoreMeeting, createCoreMeeting } from '@/api/oa'
+import { getCoreMeetings, getCoreMeeting, getTodayMeetings, getMeetingRooms, getMeetingRoomAvailability, startMeeting, completeMeeting, cancelMeeting, updateCoreMeeting, createCoreMeeting } from '@/api/oa'
 import { usePermissionStore } from '@/stores/permission'
 import { getUsers } from '@/api/auth'
 import { useBatchOperation } from '@/composables/useBatchOperation'
@@ -441,10 +441,35 @@ const handleCancel = async (row) => {
   }
 }
 
+// 检测线下会议室在所选时段是否已被占用（后端暂无冲突校验，前端预检提示）
+const hasRoomConflict = async () => {
+  if (formData.is_online || !formData.meeting_room) return false
+  const start = formData.start_time
+  const end = formData.end_time
+  if (!start || !end) return false
+  const dateStr = start.slice(0, 10)
+  try {
+    const res: any = await getMeetingRoomAvailability(formData.meeting_room, dateStr)
+    const slots = res?.booked_slots || []
+    const reqStart = start.slice(11, 16)
+    const reqEnd = end.slice(11, 16)
+    // 编辑时排除自身已占用的时段无法区分，故仅在新建时强校验
+    return slots.some((s: any) => reqStart < s.end && reqEnd > s.start)
+  } catch (e) {
+    // 可用性查询失败不阻断提交
+    return false
+  }
+}
+
 const submitForm = async () => {
   const valid = await formRef.value?.validate()
   if (!valid) return
-  
+
+  if (!isEdit.value && (await hasRoomConflict())) {
+    ElMessage.error('该会议室在所选时间段已被预定，请调整时间或更换会议室')
+    return
+  }
+
   submitLoading.value = true
   try {
     if (isEdit.value) {

@@ -254,6 +254,7 @@ const returnForm = reactive({
 })
 
 const rules = {
+  vehicle: [{ required: true, message: '请选择申请车辆', trigger: 'change' }],
   purpose: [{ required: true, message: '请选择用途', trigger: 'change' }],
   start_time: [{ required: true, message: '请选择开始时间', trigger: 'change' }],
   end_time: [{ required: true, message: '请选择结束时间', trigger: 'change' }],
