@@ -94,43 +94,32 @@
           </template>
 
           <el-row :gutter="16" v-if="costAnalysis" style="margin-bottom: 16px">
-            <el-col :span="8">
+            <el-col :span="6">
               <el-card class="stat-card">
-                <el-statistic title="月均消耗金额" :value="costAnalysis.avg_monthly_cost" prefix="¥" :precision="2" />
+                <el-statistic title="采购建议总数" :value="costAnalysis.total_suggestions || 0" />
               </el-card>
             </el-col>
-            <el-col :span="8">
+            <el-col :span="6">
               <el-card class="stat-card">
-                <el-statistic title="年度预测总额" :value="costAnalysis.yearly_forecast" prefix="¥" :precision="2" />
+                <el-statistic title="待处理" :value="costAnalysis.pending || 0" />
               </el-card>
             </el-col>
-            <el-col :span="8">
+            <el-col :span="6">
               <el-card class="stat-card">
-                <el-statistic title="同比变化" :value="costAnalysis.yoy_change" suffix="%" />
+                <el-statistic title="已接受" :value="costAnalysis.accepted || 0" />
+              </el-card>
+            </el-col>
+            <el-col :span="6">
+              <el-card class="stat-card">
+                <el-statistic title="预计采购总额" :value="Number(costAnalysis.total_estimated_cost || 0)" prefix="¥" :precision="2" />
               </el-card>
             </el-col>
           </el-row>
-
-          <!-- Top消耗 -->
-          <el-row :gutter="16">
-            <el-col :span="12">
-              <h4 style="margin-bottom: 12px">消耗金额 Top 10</h4>
-              <el-table :data="costAnalysis?.top_cost_parts || []" size="small" stripe>
-                <el-table-column type="index" width="50" />
-                <el-table-column prop="name" label="备件" min-width="150" />
-                <el-table-column prop="total_cost" label="总金额" width="120" align="right">
-                  <template #default="{ row }">¥{{ formatMoney(row.total_cost) }}</template>
-                </el-table-column>
-              </el-table>
-            </el-col>
-            <el-col :span="12">
-              <h4 style="margin-bottom: 12px">消耗频次 Top 10</h4>
-              <el-table :data="costAnalysis?.top_frequency_parts || []" size="small" stripe>
-                <el-table-column type="index" width="50" />
-                <el-table-column prop="name" label="备件" min-width="150" />
-                <el-table-column prop="consumption_count" label="频次" width="80" align="center" />
-                <el-table-column prop="total_quantity" label="总数量" width="80" align="center" />
-              </el-table>
+          <el-row :gutter="16" v-if="costAnalysis">
+            <el-col :span="8">
+              <el-card class="stat-card">
+                <el-statistic title="平均建议数量" :value="Number(costAnalysis.avg_quantity || 0)" :precision="1" />
+              </el-card>
             </el-col>
           </el-row>
         </el-card>
@@ -145,7 +134,7 @@ import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import {
 getSparePartLifecyclePrediction, getSparePartPurchaseSuggestions,
-  getSparePartCostAnalysis
+  getSparePartCostAnalysis, updatePurchaseSuggestion
 } from '@/api/inventory'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
@@ -189,14 +178,24 @@ const loadCostAnalysis = async () => {
   } finally { costLoading.value = false }
 }
 
-const acceptSuggestion = (row) => {
-  row.status = 'accepted'
-  ElMessage.success('已接受采购建议')
+const acceptSuggestion = async (row) => {
+  try {
+    await updatePurchaseSuggestion(row.id, 'accepted')
+    row.status = 'accepted'
+    ElMessage.success('已接受采购建议')
+  } catch (error) {
+    ElMessage.error('操作失败')
+  }
 }
 
-const rejectSuggestion = (row) => {
-  row.status = 'rejected'
-  ElMessage.info('已忽略')
+const rejectSuggestion = async (row) => {
+  try {
+    await updatePurchaseSuggestion(row.id, 'rejected')
+    row.status = 'rejected'
+    ElMessage.info('已忽略')
+  } catch (error) {
+    ElMessage.error('操作失败')
+  }
 }
 
 onMounted(() => {

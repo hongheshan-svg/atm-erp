@@ -162,6 +162,14 @@ class SparePart(BaseModel):
     def __str__(self):
         return f'{self.part_no} - {self.name}'
 
+    def save(self, *args, **kwargs):
+        # 备件编号通过 CodeRule 自动生成（前端不提交 part_no），避免唯一约束/必填导致创建 400。
+        if not self.part_no:
+            from apps.core.utils import generate_code
+
+            self.part_no = generate_code('SP', rule_type='SPARE_PART')
+        super().save(*args, **kwargs)
+
     def get_current_stock(self):
         """获取当前库存"""
         if self.item:
@@ -417,6 +425,7 @@ class SparePartSerializer(serializers.ModelSerializer):
     class Meta:
         model = SparePart
         fields = '__all__'
+        read_only_fields = ['part_no']
 
     def get_current_stock(self, obj):
         return obj.get_current_stock()

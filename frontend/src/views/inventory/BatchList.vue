@@ -148,6 +148,9 @@
         <el-form-item label="到期日期">
           <el-date-picker v-model="form.expiry_date" type="date" placeholder="选择到期日期" style="width: 100%;" />
         </el-form-item>
+        <el-form-item label="初始数量">
+          <el-input-number v-model="form.initial_qty" :min="0" :precision="3" style="width: 100%;" />
+        </el-form-item>
         <el-form-item label="供应商批次号">
           <el-input v-model="form.supplier_batch_no" placeholder="供应商批次号（可选）" />
         </el-form-item>
@@ -315,6 +318,7 @@ const form = reactive({
   warehouse: null,
   manufacture_date: null,
   expiry_date: null,
+  initial_qty: 0,
   supplier_batch_no: '',
   unit_cost: 0,
   quality_status: 'PENDING',
@@ -435,6 +439,7 @@ const handleAdd = () => {
   form.warehouse = null
   form.manufacture_date = null
   form.expiry_date = null
+  form.initial_qty = 0
   form.supplier_batch_no = ''
   form.unit_cost = 0
   form.quality_status = 'PENDING'

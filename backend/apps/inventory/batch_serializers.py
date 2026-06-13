@@ -16,6 +16,10 @@ class BatchSerializer(serializers.ModelSerializer):
     quality_status_display = serializers.CharField(source='get_quality_status_display', read_only=True)
     is_expired = serializers.BooleanField(read_only=True)
     days_to_expiry = serializers.IntegerField(read_only=True)
+    # 初始入库数量（仅创建时写入）：直接设置 qty_on_hand 并生成 IN 流水，补全追溯链。
+    initial_qty = serializers.DecimalField(
+        max_digits=12, decimal_places=3, write_only=True, required=False, default=0
+    )
 
     class Meta:
         model = Batch
@@ -30,6 +34,7 @@ class BatchSerializer(serializers.ModelSerializer):
             'manufacture_date',
             'expiry_date',
             'qty_on_hand',
+            'initial_qty',
             'unit_cost',
             'supplier_batch_no',
             'quality_status',
@@ -41,6 +46,27 @@ class BatchSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = ['created_at', 'updated_at', 'qty_on_hand']
+
+    def create(self, validated_data):
+        from django.db import transaction
+
+        from .batch_models import BatchMove
+
+        initial_qty = validated_data.pop('initial_qty', 0) or 0
+        with transaction.atomic():
+            validated_data['qty_on_hand'] = initial_qty
+            batch = super().create(validated_data)
+            if initial_qty and initial_qty > 0:
+                BatchMove.objects.create(
+                    batch=batch,
+                    move_type='IN',
+                    qty=initial_qty,
+                    reference_type='BATCH_INIT',
+                    reference_id=batch.id,
+                    notes='批次初始入库',
+                    created_by=validated_data.get('created_by'),
+                )
+        return batch
 
 
 class BatchMoveSerializer(serializers.ModelSerializer):

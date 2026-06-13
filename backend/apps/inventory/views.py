@@ -199,36 +199,40 @@ class StockMoveViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
             return Response({'error': '请添加调拨明细'}, status=status.HTTP_400_BAD_REQUEST)
         
         created_moves = []
-        with transaction.atomic():
-            for line in lines:
-                if not line.get('item') or not line.get('qty') or line.get('qty') <= 0:
-                    continue
-                    
-                # Get unit cost from stock
-                unit_cost = 0
-                try:
-                    stock = Stock.objects.get(
-                        warehouse_id=data.get('from_warehouse'),
-                        item_id=line.get('item')
+        try:
+            with transaction.atomic():
+                for line in lines:
+                    if not line.get('item') or not line.get('qty') or line.get('qty') <= 0:
+                        continue
+
+                    # Get unit cost from stock
+                    unit_cost = 0
+                    try:
+                        stock = Stock.objects.get(
+                            warehouse_id=data.get('from_warehouse'),
+                            item_id=line.get('item')
+                        )
+                        unit_cost = stock.weighted_avg_cost
+                    except Stock.DoesNotExist:
+                        pass
+
+                    move = StockMove.objects.create(
+                        item_id=line.get('item'),
+                        warehouse_from_id=data.get('from_warehouse'),
+                        warehouse_to_id=data.get('to_warehouse'),
+                        qty=line.get('qty'),
+                        unit_cost=unit_cost,
+                        move_type='TRANSFER',
+                        move_date=data.get('transfer_date'),
+                        notes=line.get('notes') or data.get('notes', ''),
+                        status='COMPLETED',
+                        created_by=request.user
                     )
-                    unit_cost = stock.weighted_avg_cost
-                except Stock.DoesNotExist:
-                    pass
-                
-                move = StockMove.objects.create(
-                    item_id=line.get('item'),
-                    warehouse_from_id=data.get('from_warehouse'),
-                    warehouse_to_id=data.get('to_warehouse'),
-                    qty=line.get('qty'),
-                    unit_cost=unit_cost,
-                    move_type='TRANSFER',
-                    move_date=data.get('transfer_date'),
-                    notes=line.get('notes') or data.get('notes', ''),
-                    status='COMPLETED',
-                    created_by=request.user
-                )
-                created_moves.append(move)
-        
+                    created_moves.append(move)
+        except ValueError as e:
+            # 库存不足等业务校验错误转为可读的 400，避免未捕获 ValueError 冒泡为 500
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
         if not created_moves:
             return Response({'error': '没有有效的调拨明细'}, status=status.HTTP_400_BAD_REQUEST)
         

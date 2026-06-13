@@ -36,12 +36,12 @@
       
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
-        <el-table-column prop="spare_part_no" label="备件编号" width="140" />
+        <el-table-column prop="part_no" label="备件编号" width="140" />
         <el-table-column prop="name" label="备件名称" />
         <el-table-column prop="category_name" label="分类" width="120" />
         <el-table-column prop="specification" label="规格" width="120" />
         <el-table-column prop="current_stock" label="当前库存" width="100" align="right" />
-        <el-table-column prop="safety_stock" label="安全库存" width="100" align="right" />
+        <el-table-column prop="reorder_point" label="补货点" width="100" align="right" />
         <el-table-column prop="unit_price" label="单价" width="100" align="right">
           <template #default="{ row }">¥ {{ row.unit_price }}</template>
         </el-table-column>
@@ -74,8 +74,11 @@
         <el-form-item label="单价">
           <el-input-number v-model="form.unit_price" :min="0" :precision="2" style="width: 100%" />
         </el-form-item>
-        <el-form-item label="安全库存">
-          <el-input-number v-model="form.safety_stock" :min="0" style="width: 100%" />
+        <el-form-item label="最低库存">
+          <el-input-number v-model="form.min_stock" :min="0" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="补货点">
+          <el-input-number v-model="form.reorder_point" :min="0" style="width: 100%" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -93,7 +96,7 @@
           <el-input-number v-model="consumeForm.quantity" :min="1" :max="currentRow?.current_stock || 99999" style="width: 100%" />
         </el-form-item>
         <el-form-item label="消耗原因">
-          <el-input v-model="consumeForm.reason" type="textarea" :rows="2" />
+          <el-input v-model="consumeForm.notes" type="textarea" :rows="2" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -128,8 +131,8 @@ const currentRow = ref(null)
 const formRef = ref(null)
 const consumeFormRef = ref(null)
 
-const form = reactive({ id: null, name: '', category: null, specification: '', unit_price: 0, safety_stock: 0 })
-const consumeForm = reactive({ quantity: 1, reason: '' })
+const form = reactive({ id: null, name: '', category: null, specification: '', unit_price: 0, min_stock: 0, reorder_point: 0 })
+const consumeForm = reactive({ quantity: 1, notes: '' })
 const rules = { name: [{ required: true, message: '请输入备件名称', trigger: 'blur' }] }
 const consumeRules = { quantity: [{ required: true, message: '请输入消耗数量', trigger: 'change' }] }
 
@@ -158,14 +161,14 @@ const loadCategories = async () => {
 
 const handleCreate = () => {
   isEdit.value = false
-  Object.assign(form, { id: null, name: '', category: null, specification: '', unit_price: 0, safety_stock: 0 })
+  Object.assign(form, { id: null, name: '', category: null, specification: '', unit_price: 0, min_stock: 0, reorder_point: 0 })
   formRef.value?.resetFields()
   dialogVisible.value = true
 }
 
 const handleEdit = (row) => {
   isEdit.value = true
-  Object.assign(form, { id: row.id, name: row.name, category: row.category, specification: row.specification, unit_price: row.unit_price, safety_stock: row.safety_stock })
+  Object.assign(form, { id: row.id, name: row.name, category: row.category, specification: row.specification, unit_price: row.unit_price, min_stock: row.min_stock, reorder_point: row.reorder_point })
   dialogVisible.value = true
 }
 
@@ -191,7 +194,7 @@ const handleSave = async () => {
 
 const handleConsume = (row) => {
   currentRow.value = row
-  Object.assign(consumeForm, { quantity: 1, reason: '' })
+  Object.assign(consumeForm, { quantity: 1, notes: '' })
   consumeFormRef.value?.resetFields()
   consumeDialogVisible.value = true
 }
@@ -200,12 +203,23 @@ const handleConsumeSubmit = async () => {
   try {
     await consumeFormRef.value?.validate()
     saving.value = true
-    await consumeSparePart(currentRow.value.id, consumeForm)
+    // 后端 SparePartConsumption 必填 spare_part / consumption_date / quantity，备注字段为 notes
+    const payload = {
+      spare_part: currentRow.value.id,
+      consumption_date: new Date().toISOString().split('T')[0],
+      quantity: consumeForm.quantity,
+      notes: consumeForm.notes
+    }
+    await consumeSparePart(currentRow.value.id, payload)
     ElMessage.success('消耗记录已保存')
     consumeDialogVisible.value = false
     loadData()
   } catch (error) {
-    ElMessage.error('操作失败')
+    if (error?.response?.data) {
+      ElMessage.error(JSON.stringify(error.response.data))
+    } else if (error !== false && error !== undefined) {
+      ElMessage.error('操作失败')
+    }
   } finally {
     saving.value = false
   }

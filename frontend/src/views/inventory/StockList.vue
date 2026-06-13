@@ -41,7 +41,14 @@
         <el-table-column prop="item_name" label="物料" />
         <el-table-column prop="item_sku" label="物料编码" width="150" />
         <el-table-column prop="qty_on_hand" label="在库" width="100" align="right" />
-        <el-table-column prop="qty_reserved" label="预留" width="100" align="right" />
+        <el-table-column prop="qty_reserved" width="110" align="right">
+          <template #header>
+            <span>预留</span>
+            <el-tooltip content="预留功能尚未启用，当前恒为 0（未对接销售/项目锁料）" placement="top">
+              <el-icon style="margin-left: 2px; vertical-align: middle;"><InfoFilled /></el-icon>
+            </el-tooltip>
+          </template>
+        </el-table-column>
         <el-table-column prop="qty_available" label="可用" width="100" align="right">
           <template #default="{ row }">
             <span :class="row.qty_available < 0 ? 'text-danger' : ''">
@@ -65,13 +72,13 @@
     <!-- 库存历史 -->
     <el-dialog v-model="historyVisible" :title="'库存历史 - ' + (historyItem?.item_name || '')" width="800px">
       <el-table :data="historyList" v-loading="historyLoading" max-height="400">
-        <el-table-column prop="movement_no" label="单号" width="160" />
-        <el-table-column prop="movement_type_display" label="类型" width="100" />
-        <el-table-column prop="quantity" label="数量" width="100" />
-        <el-table-column prop="from_warehouse_name" label="来源仓库" />
-        <el-table-column prop="to_warehouse_name" label="目标仓库" />
-        <el-table-column prop="created_at" label="时间" width="160" />
-        <el-table-column prop="remarks" label="备注" />
+        <el-table-column prop="move_no" label="单号" width="160" />
+        <el-table-column prop="move_type_display" label="类型" width="100" />
+        <el-table-column prop="qty" label="数量" width="100" />
+        <el-table-column prop="warehouse_from_name" label="来源仓库" />
+        <el-table-column prop="warehouse_to_name" label="目标仓库" />
+        <el-table-column prop="move_date" label="日期" width="120" />
+        <el-table-column prop="notes" label="备注" />
       </el-table>
       <template #footer>
         <el-button @click="historyVisible = false">关闭</el-button>
@@ -84,6 +91,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { InfoFilled } from '@element-plus/icons-vue'
 import { getStocks, getStockMoves } from '@/api/inventory'
 import { getWarehouseList } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'

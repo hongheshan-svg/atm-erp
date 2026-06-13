@@ -110,7 +110,9 @@ class SparePartPredictionService:
                 {
                     'id': pred.id,
                     'spare_part_id': pred.spare_part_id,
+                    'spare_part_name': pred.spare_part.name if pred.spare_part else '',
                     'equipment_id': pred.equipment_id,
+                    'equipment_name': pred.equipment.name if pred.equipment else '',
                     'predicted_life_hours': str(pred.predicted_life_hours),
                     'current_usage_hours': str(pred.current_usage_hours),
                     'remaining_hours': str(pred.remaining_hours),
@@ -186,6 +188,8 @@ class SparePartLifecyclePredictionSerializer(serializers.ModelSerializer):
 
 class PurchaseSuggestionSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    spare_part_name = serializers.CharField(source='spare_part.name', read_only=True)
+    spare_part_no = serializers.CharField(source='spare_part.part_no', read_only=True)
 
     class Meta:
         model = PurchaseSuggestion
@@ -220,6 +224,27 @@ class PurchaseSuggestionView(APIView):
             return Response(PurchaseSuggestionSerializer(suggestions, many=True).data)
         except (ProgrammingError, OperationalError):
             return Response([])
+
+    def patch(self, request):
+        """更新采购建议状态（接受/忽略），持久化到库，避免仅改前端本地值刷新即丢失。"""
+        suggestion_id = request.data.get('id')
+        new_status = request.data.get('status')
+        valid_status = dict(PurchaseSuggestion.STATUS_CHOICES)
+        if not suggestion_id:
+            return Response({'error': '请提供采购建议 id'}, status=400)
+        if new_status not in valid_status:
+            return Response(
+                {'error': f'非法状态: {new_status}，可选值 {list(valid_status.keys())}'}, status=400
+            )
+        try:
+            suggestion = PurchaseSuggestion.objects.get(id=suggestion_id, is_deleted=False)
+        except PurchaseSuggestion.DoesNotExist:
+            return Response({'error': '采购建议不存在'}, status=404)
+
+        suggestion.status = new_status
+        suggestion.updated_by = request.user
+        suggestion.save(update_fields=['status', 'updated_by', 'updated_at'])
+        return Response(PurchaseSuggestionSerializer(suggestion).data)
 
 
 class SparePartCostAnalysisView(APIView):

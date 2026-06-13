@@ -118,6 +118,33 @@ class MaterialRequisitionSerializer(serializers.ModelSerializer):
 
             return requisition
 
+    def update(self, instance, validated_data):
+        """更新领料单表头并同步明细（软删旧行后重建），否则编辑明细会被静默丢弃。"""
+        from django.utils import timezone
+
+        lines_data = self.initial_data.get('lines', None)
+        user = self.context['request'].user
+
+        with transaction.atomic():
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            instance.save()
+
+            # lines 未提供则只更新表头，避免误删既有明细
+            if lines_data is not None:
+                instance.lines.filter(is_deleted=False).update(is_deleted=True, deleted_at=timezone.now())
+                for line_data in lines_data:
+                    if line_data.get('item') and line_data.get('qty'):
+                        MaterialRequisitionLine.objects.create(
+                            requisition=instance,
+                            item_id=line_data['item'],
+                            qty=line_data['qty'],
+                            notes=line_data.get('notes', ''),
+                            created_by=user,
+                        )
+
+        return instance
+
 
 class MaterialRequisitionListSerializer(serializers.ModelSerializer):
     """领料单列表序列化器（简化版）"""
@@ -280,6 +307,33 @@ class MaterialReturnSerializer(serializers.ModelSerializer):
                     )
 
             return material_return
+
+    def update(self, instance, validated_data):
+        """更新退料单表头并同步明细（软删旧行后重建），否则编辑明细会被静默丢弃。"""
+        from django.utils import timezone
+
+        lines_data = self.initial_data.get('lines', None)
+        user = self.context['request'].user
+
+        with transaction.atomic():
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            instance.save()
+
+            if lines_data is not None:
+                instance.lines.filter(is_deleted=False).update(is_deleted=True, deleted_at=timezone.now())
+                for line_data in lines_data:
+                    if line_data.get('item') and line_data.get('qty'):
+                        MaterialReturnLine.objects.create(
+                            material_return=instance,
+                            item_id=line_data['item'],
+                            qty=line_data['qty'],
+                            condition=line_data.get('condition', 'GOOD'),
+                            notes=line_data.get('notes', ''),
+                            created_by=user,
+                        )
+
+        return instance
 
 
 class MaterialReturnListSerializer(serializers.ModelSerializer):

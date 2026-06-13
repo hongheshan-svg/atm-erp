@@ -178,7 +178,7 @@ const handleItemChange = (index) => {
   const stock = fromStock.value.find(s => s.item === line.item)
   if (stock) {
     line.available_qty = stock.qty_available || 0
-    line.unit = stock.unit
+    line.unit = stock.item_unit
     line.qty = Math.min(1, line.available_qty)
   }
 }
@@ -197,7 +197,9 @@ const handleSubmit = async () => {
       resetForm()
       loadHistory()
     } catch (error) {
-      ElMessage.error('调拨失败')
+      // 后端库存不足等校验错误以可读消息返回（error/detail 字段）
+      const msg = error?.response?.data?.error || error?.response?.data?.detail || '调拨失败'
+      ElMessage.error(msg)
     } finally {
       submitting.value = false
     }

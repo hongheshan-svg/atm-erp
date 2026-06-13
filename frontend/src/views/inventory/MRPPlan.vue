@@ -18,6 +18,7 @@
               <el-option label="已完成" value="COMPLETED" />
               <el-option label="已批准" value="APPROVED" />
               <el-option label="执行中" value="EXECUTING" />
+              <el-option label="已关闭" value="CLOSED" />
             </el-select>
           </el-form-item>
           <el-form-item>

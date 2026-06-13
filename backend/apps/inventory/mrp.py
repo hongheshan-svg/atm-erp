@@ -252,16 +252,21 @@ class MRPService:
                 'total'
             ] or Decimal('0')
 
-            # 获取已分配数量（已确认的领料申请）
+            # 获取已分配数量（已提交但未完成出库的领料申请）
+            # 领料单审批后状态置为 PENDING（待备料），不会出现 APPROVED；
+            # 计入审批后到出库前的全部在途状态，避免已分配恒为 0 而高估缺口。
             from apps.inventory.models import MaterialRequisitionLine
 
             allocated = MaterialRequisitionLine.objects.filter(
-                item_id=item_id, requisition__status__in=['APPROVED', 'PARTIAL'], is_deleted=False
+                item_id=item_id,
+                requisition__status__in=['SUBMITTED', 'PENDING', 'PREPARING', 'READY', 'PARTIAL'],
+                is_deleted=False,
             ).aggregate(total=Sum('qty'))['total'] or Decimal('0')
 
-            # 获取在途数量
+            # 获取在途数量（已确认/已审批/部分收货待收的采购订单）
+            # 纳入 CONFIRMED（已确认下单待收货），避免漏算导致过量建议采购。
             on_order = PurchaseOrderLine.objects.filter(
-                item_id=item_id, po__status__in=['APPROVED', 'PARTIAL'], is_deleted=False
+                item_id=item_id, po__status__in=['APPROVED', 'CONFIRMED', 'PARTIAL'], is_deleted=False
             ).aggregate(total=Sum(F('qty') - F('received_qty')))['total'] or Decimal('0')
 
             # 安全库存

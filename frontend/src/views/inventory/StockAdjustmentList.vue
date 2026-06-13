@@ -77,16 +77,16 @@
 
     <!-- 新增/编辑盘点 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="80%">
-      <el-form :model="adjustmentForm" label-width="100px">
-        <el-form-item label="仓库" required>
+      <el-form ref="formRef" :model="adjustmentForm" :rules="rules" label-width="100px">
+        <el-form-item label="仓库" prop="warehouse">
           <el-select v-model="adjustmentForm.warehouse" placeholder="请选择仓库" @change="loadStockForAdjustment" style="width: 100%">
             <el-option v-for="w in warehouses" :key="w.id" :label="w.name" :value="w.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="盘点日期" required>
+        <el-form-item label="盘点日期" prop="adjustment_date">
           <el-date-picker v-model="adjustmentForm.adjustment_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
         </el-form-item>
-        <el-form-item label="原因" required>
+        <el-form-item label="原因" prop="reason">
           <el-input v-model="adjustmentForm.reason" placeholder="例如：定期盘点、异常盘点" />
         </el-form-item>
         
@@ -112,7 +112,7 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitAdjustment">提交盘点</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitAdjustment">提交盘点</el-button>
       </template>
     </el-dialog>
 
@@ -122,15 +122,15 @@
         <el-descriptions-item label="盘点单号">{{ viewDetail.adjustment_no }}</el-descriptions-item>
         <el-descriptions-item label="仓库">{{ viewDetail.warehouse_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="状态">{{ viewDetail.status_display || viewDetail.status }}</el-descriptions-item>
-        <el-descriptions-item label="盘点类型">{{ viewDetail.adjustment_type_display || viewDetail.adjustment_type }}</el-descriptions-item>
+        <el-descriptions-item label="盘点原因">{{ viewDetail.reason || '-' }}</el-descriptions-item>
         <el-descriptions-item label="创建人">{{ viewDetail.created_by_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ viewDetail.created_at }}</el-descriptions-item>
-        <el-descriptions-item label="备注" :span="2">{{ viewDetail.remarks || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="备注" :span="2">{{ viewDetail.notes || '-' }}</el-descriptions-item>
       </el-descriptions>
-      <el-table :data="viewDetail.items || []" stripe style="margin-top: 16px">
-        <el-table-column prop="material_name" label="物料" />
-        <el-table-column prop="system_qty" label="系统数量" width="100" align="right" />
-        <el-table-column prop="actual_qty" label="实际数量" width="100" align="right" />
+      <el-table :data="viewDetail.lines || []" stripe style="margin-top: 16px">
+        <el-table-column prop="item_name" label="物料" />
+        <el-table-column prop="qty_system" label="系统数量" width="100" align="right" />
+        <el-table-column prop="qty_actual" label="实际数量" width="100" align="right" />
         <el-table-column label="差异" width="100" align="right">
           <template #default="{ row }">
             <span :style="{ color: (row.qty_diff || 0) < 0 ? '#F56C6C' : '#67C23A' }">{{ row.qty_diff || 0 }}</span>
@@ -186,6 +186,7 @@ const showWorkflowProgress = (row) => {
 }
 
 const loading = ref(false)
+const submitting = ref(false)
 const viewDialogVisible = ref(false)
 const viewDetail = ref<Record<string, any>>({})
 const adjustments = ref<any[]>([])
@@ -325,10 +326,15 @@ const handleConfirm = async (row) => {
 }
 
 const submitAdjustment = async () => {
-  if (!adjustmentForm.warehouse) return ElMessage.warning('请选择仓库')
-  if (!adjustmentForm.reason) return ElMessage.warning('请输入盘点原因')
+  // 走表单 rules 校验仓库/日期/原因
+  try {
+    await formRef.value?.validate()
+  } catch {
+    return
+  }
   if (adjustmentForm.lines.length === 0) return ElMessage.warning('请先加载库存数据')
-  
+
+  submitting.value = true
   try {
     await createAdjustment(adjustmentForm)
     ElMessage.success('盘点单创建成功')
@@ -336,6 +342,8 @@ const submitAdjustment = async () => {
     loadAdjustments()
   } catch (error) {
     ElMessage.error('创建盘点单失败')
+  } finally {
+    submitting.value = false
   }
 }
 

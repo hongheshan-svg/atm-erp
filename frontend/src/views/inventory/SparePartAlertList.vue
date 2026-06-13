@@ -24,9 +24,9 @@
           </template>
         </el-table-column>
         <el-table-column prop="current_stock" label="当前库存" width="100" align="right" />
-        <el-table-column prop="threshold" label="阈值" width="100" align="right" />
-        <el-table-column prop="triggered_at" label="触发时间" width="180" />
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column prop="required_stock" label="需求库存" width="100" align="right" />
+        <el-table-column prop="alert_date" label="触发时间" width="180" />
+        <el-table-column label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="row.is_resolved ? 'success' : 'danger'">{{ row.is_resolved ? '已解决' : '未解决' }}</el-tag>
           </template>

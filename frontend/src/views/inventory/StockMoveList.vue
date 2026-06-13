@@ -158,8 +158,8 @@
         <el-table-column prop="created_by_name" label="操作人" width="100" />
         <el-table-column label="状态" width="80">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'CONFIRMED' ? 'success' : 'warning'" size="small">
-              {{ row.status === 'CONFIRMED' ? '已确认' : '待确认' }}
+            <el-tag :type="moveStatusType(row.status)" size="small">
+              {{ row.status_display || row.status }}
             </el-tag>
           </template>
         </el-table-column>
@@ -239,6 +239,16 @@ const getMoveTypeTag = (type) => {
     'ADJUSTMENT': ''
   }
   return tags[type] || ''
+}
+
+// StockMove 状态为 DRAFT/COMPLETED/CANCELLED（无 CONFIRMED），按真实状态映射标签颜色
+const moveStatusType = (status) => {
+  const types = {
+    COMPLETED: 'success',
+    CANCELLED: 'info',
+    DRAFT: 'warning'
+  }
+  return types[status] || 'warning'
 }
 
 const formatNumber = (num) => {

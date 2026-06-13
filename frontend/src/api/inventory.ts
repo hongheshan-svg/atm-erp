@@ -18,6 +18,10 @@ export function generatePurchaseSuggestions(data: any) {
   return request({ url: '/inventory/spare-parts/purchase-suggestions/', method: 'post', data })
 }
 
+export function updatePurchaseSuggestion(id: number, status: string) {
+  return request({ url: '/inventory/spare-parts/purchase-suggestions/', method: 'patch', data: { id, status } })
+}
+
 export function getSparePartCostAnalysis(params?: Record<string, any>) {
   return request({ url: '/inventory/spare-parts/cost-analysis/', method: 'get', params })
 }
