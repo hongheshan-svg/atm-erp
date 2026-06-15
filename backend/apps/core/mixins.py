@@ -6,13 +6,34 @@ Mixins for views and viewsets.
 class UserTrackingMixin:
     """
     Mixin to automatically set created_by and updated_by fields.
+
+    仅在目标模型确实存在对应字段时才注入，避免对不继承 BaseModel
+    的模型(如 User/Role/Department)注入 created_by/updated_by 导致
+    `TypeError: Model() got unexpected keyword arguments`。
     """
 
+    @staticmethod
+    def _model_field_names(serializer):
+        model = getattr(getattr(serializer, 'Meta', None), 'model', None)
+        if model is None:
+            return set()
+        return {f.name for f in model._meta.get_fields()}
+
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        fields = self._model_field_names(serializer)
+        kwargs = {}
+        if 'created_by' in fields:
+            kwargs['created_by'] = self.request.user
+        if 'updated_by' in fields:
+            kwargs['updated_by'] = self.request.user
+        serializer.save(**kwargs)
 
     def perform_update(self, serializer):
-        serializer.save(updated_by=self.request.user)
+        fields = self._model_field_names(serializer)
+        kwargs = {}
+        if 'updated_by' in fields:
+            kwargs['updated_by'] = self.request.user
+        serializer.save(**kwargs)
 
 
 class SoftDeleteMixin:
