@@ -3,7 +3,6 @@
 After Sales Service - 服务合同、预防维护、客户门户
 """
 
-import secrets
 from datetime import timedelta
 
 from django.conf import settings
@@ -12,10 +11,14 @@ from django.db import OperationalError, ProgrammingError, models, transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import serializers, status, viewsets
+from rest_framework.authentication import BaseAuthentication
 from rest_framework.decorators import action
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
@@ -861,9 +864,95 @@ class KnowledgeBaseArticleViewSet(PermissionMixin, SoftDeleteMixin, UserTracking
 # ==================== 客户门户API ====================
 
 
+class PortalPrincipal:
+    """
+    门户登录主体（非内部 User）。
+    DRF/权限层把它放到 request.user;`is_authenticated=True` 让 IsAuthenticated 之类
+    的检查不会误判,但门户视图只用 IsPortalAccount 放行,内部接口拿不到该类型。
+    """
+
+    def __init__(self, portal_account):
+        self.portal_account = portal_account
+        self.customer_id = portal_account.customer_id
+
+    @property
+    def is_authenticated(self):
+        return True
+
+    @property
+    def is_anonymous(self):
+        return False
+
+    @property
+    def id(self):
+        return self.portal_account.id
+
+    def __str__(self):
+        return f'PortalAccount<{self.portal_account.username}>'
+
+
+class CustomerPortalJWTAuthentication(BaseAuthentication):
+    """
+    客户门户专用 JWT 认证。
+    只消费 scope='portal' 的 simplejwt AccessToken;非门户 token(如内部用户 JWT)
+    一律 return None,交回 DRF 认证链由其它认证类处理,绝不影响内部接口。
+    """
+
+    keyword = 'Bearer'
+
+    def authenticate(self, request):
+        auth = request.META.get('HTTP_AUTHORIZATION', '')
+        parts = auth.split()
+        if len(parts) != 2 or parts[0] != self.keyword:
+            return None
+
+        raw_token = parts[1]
+        try:
+            token = AccessToken(raw_token)
+        except (InvalidToken, TokenError):
+            # 签名/过期等校验失败:不在此处抛错,留给其它认证类(内部用户 JWT)再试。
+            return None
+
+        # 不是门户 token,放行给后续认证类(内部用户 JWT 等)。
+        if token.get('scope') != 'portal':
+            return None
+
+        portal_account_id = token.get('portal_account_id')
+        if not portal_account_id:
+            raise AuthenticationFailed('门户令牌缺少账户标识')
+
+        try:
+            account = CustomerPortalAccount.objects.get(id=portal_account_id, is_active=True)
+        except CustomerPortalAccount.DoesNotExist:
+            raise AuthenticationFailed('门户账户不存在或已停用')
+
+        return (PortalPrincipal(account), token)
+
+
+class IsPortalAccount(BasePermission):
+    """仅当 request.user 是门户主体时放行(内部用户 User 会被拒绝)。"""
+
+    message = '需要客户门户账户认证'
+
+    def has_permission(self, request, view):
+        return isinstance(getattr(request, 'user', None), PortalPrincipal)
+
+
+def _portal_assert_same_customer(request, customer_id):
+    """
+    防越权:URL/请求里的 customer_id 必须等于 token 里的 customer_id。
+    不一致返回 403 Response;一致返回 None。
+    """
+    token_customer_id = request.user.customer_id
+    if str(customer_id) != str(token_customer_id):
+        return Response({'error': '无权访问该客户的数据'}, status=403)
+    return None
+
+
 class CustomerPortalLoginView(APIView):
     """客户门户登录"""
 
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -881,9 +970,15 @@ class CustomerPortalLoginView(APIView):
         account.last_login = timezone.now()
         account.save()
 
+        # 签发受限的无状态门户 JWT(scope=portal),仅供门户认证消费。
+        token = AccessToken()
+        token['portal_account_id'] = account.id
+        token['customer_id'] = account.customer_id
+        token['scope'] = 'portal'
+
         return Response(
             {
-                'token': secrets.token_urlsafe(32),
+                'access': str(token),
                 'customer_id': account.customer_id,
                 'customer_name': account.customer.name,
                 'name': account.name,
@@ -894,9 +989,13 @@ class CustomerPortalLoginView(APIView):
 class CustomerPortalDashboardView(APIView):
     """客户门户首页"""
 
-    permission_classes = [IsAuthenticated]
+    authentication_classes = [CustomerPortalJWTAuthentication]
+    permission_classes = [IsPortalAccount]
 
     def get(self, request, customer_id):
+        forbidden = _portal_assert_same_customer(request, customer_id)
+        if forbidden is not None:
+            return forbidden
         # 活跃合同
         active_contracts = ServiceContract.objects.filter(
             customer_id=customer_id, status='ACTIVE', is_deleted=False
@@ -935,14 +1034,21 @@ class CustomerPortalDashboardView(APIView):
 class CustomerPortalSubmitRequestView(APIView):
     """客户提交服务请求"""
 
-    permission_classes = [IsAuthenticated]
+    authentication_classes = [CustomerPortalJWTAuthentication]
+    permission_classes = [IsPortalAccount]
 
     def post(self, request, customer_id):
+        forbidden = _portal_assert_same_customer(request, customer_id)
+        if forbidden is not None:
+            return forbidden
+
         request_no = generate_code('SR', rule_type='SERVICE_REQUEST')
 
+        # customer 一律取 token 的 customer_id,不信任请求体/URL(URL 已经过越权校验)。
+        # 门户主体不是内部 User,created_by/updated_by 留空(两字段均可空)。
         sr = ServiceRequest.objects.create(
             request_no=request_no,
-            customer_id=customer_id,
+            customer_id=request.user.customer_id,
             service_contract_id=request.data.get('contract_id'),
             request_type=request.data.get('request_type'),
             priority=request.data.get('priority', 'MEDIUM'),
@@ -952,8 +1058,8 @@ class CustomerPortalSubmitRequestView(APIView):
             contact_name=request.data.get('contact_name'),
             contact_phone=request.data.get('contact_phone'),
             contact_email=request.data.get('contact_email', ''),
-            created_by=request.user,
-            updated_by=request.user,
+            created_by=None,
+            updated_by=None,
         )
 
         return Response({'request_no': sr.request_no, 'message': '服务请求已提交'})
