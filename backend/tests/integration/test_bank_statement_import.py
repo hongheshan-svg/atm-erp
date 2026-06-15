@@ -62,14 +62,14 @@ def _upload(client, xlsx_bytes: bytes, filename: str = 'test.xlsx'):
 
 
 # ---------------------------------------------------------------------------
-# Test 1 – header on row 2 (the only row the view actually reads headers from)
+# Test 1 – header on row 2 (auto-detected; row 1 is a title/metadata row)
 # ---------------------------------------------------------------------------
 
 def test_import_header_on_row_2(api_client_admin):
     """Header on row 2 is the expected format; data row starts at row 3."""
     xlsx = _make_xlsx({
         1: ['银行流水明细'],  # title / metadata row, ignored
-        2: HEADERS,           # header row (view always reads row 2)
+        2: HEADERS,           # header row (auto-detected within first 10 rows)
         3: [
             'V001',           # 凭证号
             '123456789',      # 对方账号
@@ -97,20 +97,14 @@ def test_import_header_on_row_2(api_client_admin):
 
 # ---------------------------------------------------------------------------
 # Test 2 – header on row 1 (no title row above it)
-# NOTE: The view hard-codes header_row = 2, so if headers are on row 1 the
-# view will not find them, return 0 matched columns and import 0 records but
-# still succeed (200). This test documents that behaviour.
+# The view auto-detects the header row by scanning the first 10 rows, so a
+# header on row 1 is correctly recognised and the following data row imported.
 # ---------------------------------------------------------------------------
 
 def test_import_header_on_row_1(api_client_admin):
-    """When header is on row 1 (no blank rows above) the view still returns 200.
-
-    The view always looks at row 2 for headers, so a file with the header
-    on row 1 will not match any columns – resulting in zero records imported
-    (success_count == 0) but no error status.
-    """
+    """Header on row 1 is auto-detected; the data row on row 2 is imported."""
     xlsx = _make_xlsx({
-        1: HEADERS,  # header on row 1
+        1: HEADERS,  # header on row 1 (auto-detected)
         2: [
             'V001', '123456789', '2024-01-15 10:00:00', '贷',
             '测试客户有限公司', 'BANK001', '货款', '销售货款',
@@ -119,18 +113,20 @@ def test_import_header_on_row_1(api_client_admin):
     })
 
     resp = _upload(api_client_admin, xlsx)
-    # The view returns 200 regardless; with no matched columns no real data
-    # rows are found (the view starts reading data from row 3 onward).
     assert resp.status_code == 200, f"Unexpected status: {resp.status_code}: {resp.data}"
+    assert resp.data['success_count'] >= 1
 
 
 # ---------------------------------------------------------------------------
-# Test 3 – garbage headers → no columns matched → 0 records but still 200
-# The view does NOT return 400 for unrecognised headers; it just imports 0 rows.
+# Test 3 – garbage headers → header auto-detection fails → 400
+# The current view scans the first 10 rows for a header containing at least 3
+# recognised column names. Garbage headers match nothing, so it rejects the
+# upload with HTTP 400 and an explanatory error (instead of silently importing
+# zero rows). This is the corrected behaviour.
 # ---------------------------------------------------------------------------
 
 def test_import_no_matching_header(api_client_admin):
-    """Garbage headers produce no column matches and zero records imported."""
+    """Garbage headers are rejected with 400 (no recognisable header row)."""
     xlsx = _make_xlsx({
         1: ['Title row'],
         2: ['Col_A', 'Col_B', 'Col_C', 'Col_D'],
@@ -138,18 +134,19 @@ def test_import_no_matching_header(api_client_admin):
     })
 
     resp = _upload(api_client_admin, xlsx)
-    # The view returns 200 with success_count == 0
-    assert resp.status_code == 200, f"Unexpected status {resp.status_code}: {resp.data}"
-    assert resp.data['success_count'] == 0
+    # Header auto-detection requires >= 3 known columns; none match → 400.
+    assert resp.status_code == 400, f"Unexpected status {resp.status_code}: {resp.data}"
+    assert 'error' in resp.data
 
 
 # ---------------------------------------------------------------------------
-# Test 4 – empty Excel file → the view tries to read max_row which is 1 for an
-# empty sheet and processes zero data rows, returning 200 with success_count=0.
+# Test 4 – empty Excel file → no header row found → 400
+# An empty sheet has no recognisable header, so the view rejects it with 400
+# rather than reporting a successful import of zero rows.
 # ---------------------------------------------------------------------------
 
 def test_import_empty_file(api_client_admin):
-    """Empty xlsx returns 200 with zero records imported."""
+    """Empty xlsx is rejected with 400 (no recognisable header row)."""
     wb = openpyxl.Workbook()
     # Leave the sheet completely empty
     buf = io.BytesIO()
@@ -157,5 +154,5 @@ def test_import_empty_file(api_client_admin):
     xlsx_bytes = buf.getvalue()
 
     resp = _upload(api_client_admin, xlsx_bytes)
-    assert resp.status_code == 200, f"Unexpected status {resp.status_code}: {resp.data}"
-    assert resp.data.get('success_count', 0) == 0
+    assert resp.status_code == 400, f"Unexpected status {resp.status_code}: {resp.data}"
+    assert 'error' in resp.data

@@ -52,9 +52,10 @@ describe('useBatchDelete', () => {
       await batchDelete()
 
       expect(request.default.delete).toHaveBeenCalledTimes(3)
-      expect(request.default.delete).toHaveBeenCalledWith('/api/test/1/')
-      expect(request.default.delete).toHaveBeenCalledWith('/api/test/2/')
-      expect(request.default.delete).toHaveBeenCalledWith('/api/test/3/')
+      // request has baseURL '/api', so the composable strips the '/api' prefix
+      expect(request.default.delete).toHaveBeenCalledWith('/test/1/')
+      expect(request.default.delete).toHaveBeenCalledWith('/test/2/')
+      expect(request.default.delete).toHaveBeenCalledWith('/test/3/')
       expect(onSuccess).toHaveBeenCalled()
     })
 
@@ -65,8 +66,8 @@ describe('useBatchDelete', () => {
       handleSelectionChange([{ uid: 'abc' }, { uid: 'def' }])
       await batchDelete()
 
-      expect(request.default.delete).toHaveBeenCalledWith('/api/items/abc/')
-      expect(request.default.delete).toHaveBeenCalledWith('/api/items/def/')
+      expect(request.default.delete).toHaveBeenCalledWith('/items/abc/')
+      expect(request.default.delete).toHaveBeenCalledWith('/items/def/')
     })
 
     it('clears selection after successful delete', async () => {
@@ -101,7 +102,7 @@ describe('useBatchDelete', () => {
 
       await deleteRow({ id: 42 })
 
-      expect(request.default.delete).toHaveBeenCalledWith('/api/test/42/')
+      expect(request.default.delete).toHaveBeenCalledWith('/test/42/')
       expect(onSuccess).toHaveBeenCalled()
     })
   })

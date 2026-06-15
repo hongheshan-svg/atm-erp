@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { usePermission } from '../usePermission'
 import { useUserStore } from '@/stores/user'
+import { usePermissionStore } from '@/stores/permission'
 
 describe('usePermission', () => {
   beforeEach(() => {
@@ -83,7 +84,10 @@ describe('usePermission', () => {
 
     it('returns true for wildcard user', () => {
       const userStore = useUserStore()
-      userStore.userInfo = { is_superuser: false, permissions: ['*:*:*'] } as any
+      userStore.userInfo = { is_superuser: false } as any
+      // permissions live in the permission store (seeded via setPermissions),
+      // not on userInfo. '*' is the canonical full-access token.
+      usePermissionStore().setPermissions(['*'])
 
       const { hasPermission } = usePermission()
       expect(hasPermission('purchase:order:view')).toBe(true)
@@ -91,7 +95,8 @@ describe('usePermission', () => {
 
     it('returns true for exact match', () => {
       const userStore = useUserStore()
-      userStore.userInfo = { is_superuser: false, permissions: ['purchase:order:view'] } as any
+      userStore.userInfo = { is_superuser: false } as any
+      usePermissionStore().setPermissions(['purchase:order:view'])
 
       const { hasPermission } = usePermission()
       expect(hasPermission('purchase:order:view')).toBe(true)
@@ -99,7 +104,8 @@ describe('usePermission', () => {
 
     it('returns false for non-matching permission', () => {
       const userStore = useUserStore()
-      userStore.userInfo = { is_superuser: false, permissions: ['purchase:order:view'] } as any
+      userStore.userInfo = { is_superuser: false } as any
+      usePermissionStore().setPermissions(['purchase:order:view'])
 
       const { hasPermission } = usePermission()
       expect(hasPermission('sales:order:view')).toBe(false)
@@ -117,7 +123,9 @@ describe('usePermission', () => {
 
     it('returns true when user has delete permission', () => {
       const userStore = useUserStore()
-      userStore.userInfo = { is_superuser: false, permissions: ['purchase:order:delete'] } as any
+      userStore.userInfo = { is_superuser: false } as any
+      // canDelete scans the permission store for a ':delete' permission
+      usePermissionStore().setPermissions(['purchase:order:delete'])
 
       const { canDelete } = usePermission()
       expect(canDelete.value).toBe(true)

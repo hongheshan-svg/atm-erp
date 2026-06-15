@@ -13,6 +13,8 @@ Scope rules implemented in apps/core/permission_service.py:
 API target: GET /api/projects/projects/
 """
 
+import datetime
+
 import pytest
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
@@ -109,6 +111,9 @@ def test_scope_self_filters(admin_user, make_customer):
         code='PRJ-SCOPE-OTHER',
         name='Other user project',
         customer=_ensure_customer(admin_user),
+        manager=admin_user,
+        start_date=datetime.date.today(),
+        end_date=datetime.date.today() + datetime.timedelta(days=30),
         created_by=admin_user,
     )
 
@@ -117,6 +122,9 @@ def test_scope_self_filters(admin_user, make_customer):
         code='PRJ-SCOPE-OWN',
         name='Own project',
         customer=_ensure_customer(admin_user),
+        manager=admin_user,
+        start_date=datetime.date.today(),
+        end_date=datetime.date.today() + datetime.timedelta(days=30),
         created_by=user_self,
     )
 
@@ -147,6 +155,9 @@ def test_scope_department_filters(admin_user):
         code='PRJ-SCOPE-DEPT',
         name='Department scope test project',
         customer=_ensure_customer(admin_user),
+        manager=admin_user,
+        start_date=datetime.date.today(),
+        end_date=datetime.date.today() + datetime.timedelta(days=30),
         created_by=admin_user,
     )
 

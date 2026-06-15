@@ -116,8 +116,9 @@ describe('useBatchOperation', () => {
       handleSelectionChange([{ id: 1 }, { id: 2 }])
       await batchUpdateStatus('APPROVED')
 
-      expect(request.default.patch).toHaveBeenCalledWith('/api/orders/1/', { status: 'APPROVED' })
-      expect(request.default.patch).toHaveBeenCalledWith('/api/orders/2/', { status: 'APPROVED' })
+      // request has baseURL '/api', so the composable strips the '/api' prefix
+      expect(request.default.patch).toHaveBeenCalledWith('/orders/1/', { status: 'APPROVED' })
+      expect(request.default.patch).toHaveBeenCalledWith('/orders/2/', { status: 'APPROVED' })
       expect(onSuccess).toHaveBeenCalled()
     })
   })
@@ -130,7 +131,7 @@ describe('useBatchOperation', () => {
       handleSelectionChange([{ id: 5 }])
       await batchDelete()
 
-      expect(request.default.delete).toHaveBeenCalledWith('/api/orders/5/')
+      expect(request.default.delete).toHaveBeenCalledWith('/orders/5/')
     })
   })
 })

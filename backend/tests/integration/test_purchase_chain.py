@@ -49,8 +49,12 @@ def test_create_purchase_request(api_client_admin, admin_user, make_supplier, ma
         'lines': [
             {
                 'item': item.id,
-                'qty': '5',
-                'estimated_price': '50.00',
+                # Nested line qty/price are passed straight to the model (read
+                # from initial_data, not coerced by the serializer), so they
+                # must be sent as JSON numbers — strings raise a model-level
+                # TypeError in line_amount = qty * price.
+                'qty': 5,
+                'estimated_price': 50.00,
             }
         ],
     }
@@ -82,8 +86,10 @@ def test_create_po_from_request(api_client_admin, admin_user, make_supplier, mak
         'lines': [
             {
                 'item': item.id,
-                'qty': '10',
-                'unit_price': '100.00',
+                # JSON numbers (not strings): nested line values are passed
+                # straight to the model where line_amount = qty * unit_price.
+                'qty': 10,
+                'unit_price': 100.00,
             }
         ],
     }

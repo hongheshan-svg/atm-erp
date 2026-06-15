@@ -76,6 +76,8 @@ def make_supplier(db, admin_user):
 
 @pytest.fixture
 def make_project(db, admin_user, make_customer):
+    import datetime
+
     counter = {'n': 0}
 
     def _make(name='测试项目', customer=None, **kwargs):
@@ -84,6 +86,10 @@ def make_project(db, admin_user, make_customer):
             'code': f'PRJ-CI-{counter["n"]:04d}',
             'name': f'{name}-{counter["n"]}',
             'customer': customer or make_customer(),
+            # Project requires manager (FK, PROTECT), start_date and end_date.
+            'manager': admin_user,
+            'start_date': datetime.date.today(),
+            'end_date': datetime.date.today() + datetime.timedelta(days=30),
             'created_by': admin_user,
         }
         defaults.update(kwargs)
@@ -120,9 +126,11 @@ def make_item(db, admin_user):
     def _make(name='测试物料', standard_cost=Decimal('100.00'), **kwargs):
         counter['n'] += 1
         defaults = {
-            'code': f'ITEM-CI-{counter["n"]:04d}',
+            # Item's unique code field is `sku` (not `code`); `unit` uses
+            # UNIT_CHOICES keys ('PCS' == 个).
+            'sku': f'ITEM-CI-{counter["n"]:04d}',
             'name': f'{name}-{counter["n"]}',
-            'unit': '个',
+            'unit': 'PCS',
             'category': category,
             'standard_cost': standard_cost,
             'created_by': admin_user,
