@@ -2,9 +2,22 @@
 Serializers for purchase app.
 """
 
+from decimal import Decimal, InvalidOperation
+
 from django.db import transaction
 from django.db.models import Sum
 from rest_framework import serializers
+
+
+def _to_decimal(value, default='0'):
+    """把前端明细行的数值字段(可能是字符串数字/None)安全转 Decimal，
+    避免原始字符串塞入模型后 qty*price 触发 TypeError 500(契约脆弱性)。"""
+    if value is None or value == '':
+        value = default
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal(default)
 
 from .models import (
     GoodsReceipt,
@@ -185,8 +198,8 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
             total_amount = 0
             for line_data in lines_data:
                 if line_data.get('item') and line_data.get('qty'):
-                    qty = line_data['qty']
-                    estimated_price = line_data.get('estimated_price', 0)
+                    qty = _to_decimal(line_data['qty'])
+                    estimated_price = _to_decimal(line_data.get('estimated_price', 0))
                     line = PurchaseRequestLine.objects.create(
                         pr=pr,
                         item_id=line_data['item'],
@@ -222,8 +235,8 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
             total_amount = 0
             for line_data in lines_data:
                 if line_data.get('item') and line_data.get('qty'):
-                    qty = line_data['qty']
-                    estimated_price = line_data.get('estimated_price', 0)
+                    qty = _to_decimal(line_data['qty'])
+                    estimated_price = _to_decimal(line_data.get('estimated_price', 0))
                     PurchaseRequestLine.objects.create(
                         pr=instance,
                         item_id=line_data['item'],
@@ -399,8 +412,8 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
                     PurchaseOrderLine.objects.create(
                         po=po,
                         item_id=line_data['item'],
-                        qty=line_data['qty'],
-                        unit_price=line_data.get('unit_price', 0),
+                        qty=_to_decimal(line_data['qty']),
+                        unit_price=_to_decimal(line_data.get('unit_price', 0)),
                         notes=line_data.get('notes', ''),
                         created_by=po.created_by,
                     )
@@ -433,8 +446,8 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
                     PurchaseOrderLine.objects.create(
                         po=instance,
                         item_id=line_data['item'],
-                        qty=line_data['qty'],
-                        unit_price=line_data.get('unit_price', 0),
+                        qty=_to_decimal(line_data['qty']),
+                        unit_price=_to_decimal(line_data.get('unit_price', 0)),
                         notes=line_data.get('notes', ''),
                         created_by=instance.created_by,
                     )
@@ -616,7 +629,7 @@ class GoodsReceiptSerializer(serializers.ModelSerializer):
                         receipt=receipt,
                         po_line_id=line_data.get('po_line'),
                         item_id=line_data['item'],
-                        qty=line_data['qty'],
+                        qty=_to_decimal(line_data['qty']),
                         quality_status=line_data.get('quality_status', 'PENDING'),
                         notes=line_data.get('notes', ''),
                         created_by=receipt.created_by,
@@ -650,7 +663,7 @@ class GoodsReceiptSerializer(serializers.ModelSerializer):
                         receipt=instance,
                         po_line_id=line_data.get('po_line'),
                         item_id=line_data['item'],
-                        qty=line_data['qty'],
+                        qty=_to_decimal(line_data['qty']),
                         quality_status=line_data.get('quality_status', 'PENDING'),
                         notes=line_data.get('notes', ''),
                         created_by=instance.created_by,
