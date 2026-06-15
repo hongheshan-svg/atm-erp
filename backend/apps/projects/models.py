@@ -1062,7 +1062,9 @@ class Drawing(BaseModel):
     part_type = models.CharField(max_length=20, choices=PART_TYPE_CHOICES, default='PART', verbose_name='图纸类型')
 
     # 关联
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='drawings', verbose_name='所属项目')
+    project = models.ForeignKey(
+        Project, on_delete=models.CASCADE, related_name='drawings', null=True, blank=True, verbose_name='所属项目'
+    )
     item = models.ForeignKey(
         'masterdata.Item',
         on_delete=models.SET_NULL,
@@ -1162,7 +1164,8 @@ class Drawing(BaseModel):
         return f'{self.drawing_no} v{self.version}.{self.revision}'
 
     def save(self, *args, **kwargs):
-        # 上传文件时自动回填路径/大小,使 file_path 变为可选,支持(含3D)图纸直接上传
+        # 上传文件时自动回填路径/大小/类型/名称,并在缺省时生成图纸号,
+        # 使 file_path/drawing_no/name/project 均可缺省,支持(含3D)图纸直接上传。
         if self.file:
             if not self.file_path:
                 self.file_path = self.file.name
@@ -1171,6 +1174,19 @@ class Drawing(BaseModel):
                     self.file_size = self.file.size
             except (ValueError, OSError):
                 pass
+            ext = self.file.name.rsplit('.', 1)[-1].upper() if '.' in self.file.name else ''
+            ext_map = {
+                'STP': 'STP', 'STEP': 'STEP', 'IGS': 'IGES', 'IGES': 'IGES', 'STL': 'STL',
+                'DWG': 'DWG', 'DXF': 'DXF', 'PDF': 'PDF',
+            }
+            if ext and (not self.file_type or self.file_type == 'PDF'):
+                self.file_type = ext_map.get(ext, 'OTHER')
+            if not self.name:
+                self.name = self.file.name.rsplit('/', 1)[-1]
+        if not self.drawing_no:
+            from apps.core.utils import generate_code
+
+            self.drawing_no = generate_code('DWG', rule_type='DRAWING')
         super().save(*args, **kwargs)
 
 

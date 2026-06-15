@@ -1054,6 +1054,12 @@ class DrawingSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = ['created_at', 'updated_at']
+        # drawing_no/name 在模型 save() 中可由上传文件自动生成,API 层设为可选,
+        # 支持 ModelViewer 仅上传文件即创建图纸(含3D)。
+        extra_kwargs = {
+            'drawing_no': {'required': False},
+            'name': {'required': False},
+        }
 
 
 class DrawingChangeNoticeSerializer(serializers.ModelSerializer):
