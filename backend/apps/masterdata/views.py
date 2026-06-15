@@ -1011,44 +1011,49 @@ class CustomerViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, views
             # Track processed codes within this import
             processed_codes = set()
             
-            with transaction.atomic():
-                for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
-                    try:
-                        data = {}
-                        for col_idx, cell in enumerate(row):
-                            if col_idx in header_to_field:
-                                field = header_to_field[col_idx]
-                                value = cell.value
-                                if value is not None:
-                                    data[field] = str(value).strip() if not isinstance(value, (int, float)) else value
-                        
-                        if not data.get('code') or not data.get('name'):
-                            continue
-                        
-                        # Check for in-file duplicate
-                        code = str(data.get('code', '')).strip()
-                        if code in processed_codes:
-                            skip_count += 1
-                            continue
-                        processed_codes.add(code)
-                        
-                        # Handle credit_limit
-                        if 'credit_limit' in data:
-                            try:
-                                data['credit_limit'] = Decimal(str(data['credit_limit']))
-                            except (InvalidOperation, ValueError):
-                                data['credit_limit'] = Decimal('0')
-                        
-                        # Handle status
-                        status_map = {'激活': 'ACTIVE', '停用': 'INACTIVE', '潜在客户': 'POTENTIAL'}
-                        if 'status' in data and data['status'] in status_map:
-                            data['status'] = status_map[data['status']]
-                        elif 'status' not in data:
-                            data['status'] = 'ACTIVE'
-                        
-                        # Check if customer exists
-                        existing = Customer.objects.filter(code=data['code']).first()
+            for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
+                try:
+                    data = {}
+                    for col_idx, cell in enumerate(row):
+                        if col_idx in header_to_field:
+                            field = header_to_field[col_idx]
+                            value = cell.value
+                            if value is not None:
+                                data[field] = str(value).strip() if not isinstance(value, (int, float)) else value
+
+                    if not data.get('code') or not data.get('name'):
+                        continue
+
+                    # Check for in-file duplicate
+                    code = str(data.get('code', '')).strip()
+                    if code in processed_codes:
+                        skip_count += 1
+                        continue
+                    processed_codes.add(code)
+
+                    # Handle credit_limit
+                    if 'credit_limit' in data:
+                        try:
+                            data['credit_limit'] = Decimal(str(data['credit_limit']))
+                        except (InvalidOperation, ValueError):
+                            data['credit_limit'] = Decimal('0')
+
+                    # Handle status
+                    status_map = {'激活': 'ACTIVE', '停用': 'INACTIVE', '潜在客户': 'POTENTIAL'}
+                    if 'status' in data and data['status'] in status_map:
+                        data['status'] = status_map[data['status']]
+                    elif 'status' not in data:
+                        data['status'] = 'ACTIVE'
+
+                    # 每行独立事务(savepoint)：一行出错只回滚该行，不污染整批后续行
+                    with transaction.atomic():
+                        # 用 all_objects 查重(含软删除)：唯一约束 customer_code 不分软删，
+                        # 若编码被软删客户占用，复活并更新，避免 create 撞唯一约束 IntegrityError
+                        existing = Customer.all_objects.filter(code=data['code']).first()
                         if existing:
+                            if existing.is_deleted:
+                                existing.is_deleted = False
+                                existing.deleted_at = None
                             for key, value in data.items():
                                 if value:
                                     setattr(existing, key, value)
@@ -1057,9 +1062,9 @@ class CustomerViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, views
                         else:
                             Customer.objects.create(**data)
                             success_count += 1
-                    
-                    except Exception as e:
-                        errors.append({'row': row_idx, 'error': str(e)})
+
+                except Exception as e:
+                    errors.append({'row': row_idx, 'error': str(e)})
             
             return Response({
                 'success_count': success_count,
@@ -1267,35 +1272,41 @@ class SupplierViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, views
             # Track processed codes within this import
             processed_codes = set()
             
-            with transaction.atomic():
-                for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
-                    try:
-                        data = {}
-                        for col_idx, cell in enumerate(row):
-                            if col_idx in header_to_field:
-                                field = header_to_field[col_idx]
-                                value = cell.value
-                                if value is not None:
-                                    data[field] = str(value).strip() if not isinstance(value, (int, float)) else value
-                        
-                        if not data.get('code') or not data.get('name'):
-                            continue
-                        
-                        # Check for in-file duplicate
-                        code = str(data.get('code', '')).strip()
-                        if code in processed_codes:
-                            skip_count += 1
-                            continue
-                        processed_codes.add(code)
-                        
-                        status_map = {'激活': 'ACTIVE', '停用': 'INACTIVE', '潜在供应商': 'POTENTIAL'}
-                        if 'status' in data and data['status'] in status_map:
-                            data['status'] = status_map[data['status']]
-                        elif 'status' not in data:
-                            data['status'] = 'ACTIVE'
-                        
-                        existing = Supplier.objects.filter(code=data['code']).first()
+            for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
+                try:
+                    data = {}
+                    for col_idx, cell in enumerate(row):
+                        if col_idx in header_to_field:
+                            field = header_to_field[col_idx]
+                            value = cell.value
+                            if value is not None:
+                                data[field] = str(value).strip() if not isinstance(value, (int, float)) else value
+
+                    if not data.get('code') or not data.get('name'):
+                        continue
+
+                    # Check for in-file duplicate
+                    code = str(data.get('code', '')).strip()
+                    if code in processed_codes:
+                        skip_count += 1
+                        continue
+                    processed_codes.add(code)
+
+                    status_map = {'激活': 'ACTIVE', '停用': 'INACTIVE', '潜在供应商': 'POTENTIAL'}
+                    if 'status' in data and data['status'] in status_map:
+                        data['status'] = status_map[data['status']]
+                    elif 'status' not in data:
+                        data['status'] = 'ACTIVE'
+
+                    # 每行独立事务(savepoint)：一行出错只回滚该行，不污染整批后续行
+                    with transaction.atomic():
+                        # 用 all_objects 查重(含软删除)：唯一约束不分软删，
+                        # 编码被软删供应商占用时复活更新，避免 create 撞唯一约束 IntegrityError
+                        existing = Supplier.all_objects.filter(code=data['code']).first()
                         if existing:
+                            if existing.is_deleted:
+                                existing.is_deleted = False
+                                existing.deleted_at = None
                             for key, value in data.items():
                                 if value:
                                     setattr(existing, key, value)
@@ -1304,9 +1315,9 @@ class SupplierViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, views
                         else:
                             Supplier.objects.create(**data)
                             success_count += 1
-                    
-                    except Exception as e:
-                        errors.append({'row': row_idx, 'error': str(e)})
+
+                except Exception as e:
+                    errors.append({'row': row_idx, 'error': str(e)})
             
             return Response({
                 'success_count': success_count,
