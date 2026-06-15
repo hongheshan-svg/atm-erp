@@ -996,6 +996,23 @@ class DrawingSerializer(serializers.ModelSerializer):
     designer_name = serializers.CharField(source='designer.get_full_name', read_only=True)
     reviewer_name = serializers.CharField(source='reviewer.get_full_name', read_only=True)
     approver_name = serializers.CharField(source='approver.get_full_name', read_only=True)
+    file_url = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+
+    def get_file_url(self, obj):
+        if obj.file:
+            try:
+                request = self.context.get('request')
+                url = obj.file.url
+                return request.build_absolute_uri(url) if request else url
+            except (ValueError, OSError):
+                return ''
+        return ''
+
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.username
+        return ''
 
     class Meta:
         model = Drawing
@@ -1014,8 +1031,11 @@ class DrawingSerializer(serializers.ModelSerializer):
             'bom_item',
             'file_type',
             'file_type_display',
+            'file',
+            'file_url',
             'file_path',
             'file_size',
+            'created_by_name',
             'public_share_path',
             'status',
             'status_display',

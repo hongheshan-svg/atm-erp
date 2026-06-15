@@ -3176,10 +3176,64 @@ class SparePartUsageViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
-        recompute_aftersales_costs(serializer.instance.aftersales_order)
-        # 注意：备件使用当前不联动 inventory 库存出库。是否在备件消耗时生成
-        # 库存出库(StockMove)属产品决策，本期保持现状以免误改库存账；
-        # 如需联动应在此调用 inventory 既有出库接口（不在本模块改 inventory）。
+        instance = serializer.instance
+        recompute_aftersales_costs(instance.aftersales_order)
+        # opt-in 库存联动：请求显式带 warehouse 时生成备件出库(OUT_PROJECT)扣减库存；
+        # 不带 warehouse 则仅记录(保持原行为,避免未配置时误改库存账)。
+        self._sync_spare_stock_out(instance)
+
+    def _sync_spare_stock_out(self, instance):
+        warehouse_id = self.request.data.get('warehouse')
+        if not warehouse_id or not instance.is_replaced or not instance.qty:
+            return
+        from django.utils import timezone
+
+        from apps.inventory.models import StockMove
+
+        # 幂等：该使用记录已有出库则不重复(库存不足时 StockMove.save 抛错,事务回滚)
+        if StockMove.objects.filter(
+            reference_type='SparePartUsage', reference_id=instance.id, is_deleted=False
+        ).exists():
+            return
+        StockMove.objects.create(
+            item=instance.item,
+            warehouse_from_id=warehouse_id,
+            qty=instance.qty,
+            unit_cost=instance.unit_cost or 0,
+            move_type='OUT_PROJECT',
+            reference_type='SparePartUsage',
+            reference_id=instance.id,
+            move_date=timezone.now().date(),
+            status='COMPLETED',
+            created_by=self.request.user,
+        )
+
+    def _reverse_spare_stock_out(self, instance):
+        from django.utils import timezone
+
+        from apps.inventory.models import StockMove
+
+        out_moves = StockMove.objects.filter(
+            reference_type='SparePartUsage', reference_id=instance.id,
+            move_type='OUT_PROJECT', is_deleted=False,
+        )
+        for mv in out_moves:
+            if not mv.warehouse_from_id:
+                continue
+            # ADJUSTMENT + warehouse_to → 入库回补原仓库
+            StockMove.objects.create(
+                item=mv.item,
+                warehouse_to_id=mv.warehouse_from_id,
+                qty=mv.qty,
+                unit_cost=mv.unit_cost,
+                move_type='ADJUSTMENT',
+                reference_type='SparePartUsageReverse',
+                reference_id=instance.id,
+                move_date=timezone.now().date(),
+                status='COMPLETED',
+                created_by=self.request.user,
+            )
+            mv.soft_delete()
 
     def perform_update(self, serializer):
         serializer.save(updated_by=self.request.user)
@@ -3187,6 +3241,8 @@ class SparePartUsageViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 
     def perform_destroy(self, instance):
         order = instance.aftersales_order
+        # 删除备件使用时若曾出库,反向回补库存,避免账实分离
+        self._reverse_spare_stock_out(instance)
         super().perform_destroy(instance)
         recompute_aftersales_costs(order)
 

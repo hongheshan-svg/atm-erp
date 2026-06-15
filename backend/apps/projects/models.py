@@ -1107,7 +1107,8 @@ class Drawing(BaseModel):
 
     # 文件信息
     file_type = models.CharField(max_length=20, choices=FILE_TYPE_CHOICES, default='PDF', verbose_name='文件类型')
-    file_path = models.CharField(max_length=500, verbose_name='文件路径')
+    file = models.FileField(upload_to='drawings/%Y/%m/', blank=True, null=True, verbose_name='图纸文件')
+    file_path = models.CharField(max_length=500, blank=True, verbose_name='文件路径')
     file_size = models.BigIntegerField(default=0, verbose_name='文件大小(bytes)')
 
     # 公共盘存储路径
@@ -1159,6 +1160,18 @@ class Drawing(BaseModel):
 
     def __str__(self):
         return f'{self.drawing_no} v{self.version}.{self.revision}'
+
+    def save(self, *args, **kwargs):
+        # 上传文件时自动回填路径/大小,使 file_path 变为可选,支持(含3D)图纸直接上传
+        if self.file:
+            if not self.file_path:
+                self.file_path = self.file.name
+            try:
+                if not self.file_size:
+                    self.file_size = self.file.size
+            except (ValueError, OSError):
+                pass
+        super().save(*args, **kwargs)
 
 
 class DrawingChangeNotice(BaseModel):
