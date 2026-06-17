@@ -4,15 +4,16 @@
 services:
   postgres:
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
   redis:
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
   elasticsearch:
     ports:
-      - "9201:9200"
+      - "127.0.0.1:9201:9200"
   celery:
     network_mode: host
+    networks: !reset []
     environment:
       - DEBUG=${DEBUG:-False}
       - SECRET_KEY=${SECRET_KEY:-django-insecure-change-this-in-production-123456}
