@@ -68,3 +68,25 @@ jobs:
             NPM_REGISTRY=https://registry.npmjs.org
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  release-assets:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Attach deploy assets to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${GITHUB_REF_NAME}" \
+            install.sh \
+            install.ps1 \
+            docker-compose.yml \
+            docker-compose.build.yml \
+            docker-compose.linux-host.yml \
+            docker-compose.expose.yml \
+            .env.example \
+            --clobber
