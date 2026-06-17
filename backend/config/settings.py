@@ -291,17 +291,6 @@ NOTIFICATION_CHANNELS_ENABLED = config(
 )
 
 # =============================================================================
-# WeChat Work (企业微信) Configuration
-# =============================================================================
-WECHAT_WORK_WEBHOOK_URL = config(
-    'WECHAT_WORK_WEBHOOK_URL',
-    default='https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=***REMOVED***',
-)
-WECHAT_WORK_CORP_ID = config('WECHAT_WORK_CORP_ID', default='ww338f2a2b8bb31d89')
-WECHAT_WORK_CORP_SECRET = config('WECHAT_WORK_CORP_SECRET', default='***REMOVED***')
-WECHAT_WORK_AGENT_ID = config('WECHAT_WORK_AGENT_ID', default='1000019')
-
-# =============================================================================
 # Inventory Costing Method
 # =============================================================================
 # Options: 'WEIGHTED_AVG' (default), 'FIFO'
