@@ -93,10 +93,13 @@ if (-not (Test-Path $CertFile) -or -not (Test-Path $KeyFile)) {
         -keyout /certs/server.key `
         -out    /certs/server.crt `
         -subj   "/C=CN/ST=Shanghai/L=Shanghai/O=ATM-ERP/CN=localhost"
-    if ($LASTEXITCODE -ne 0) {
-        Warn "SSL 证书生成失败（HTTPS 可能不可用），继续安装..."
-    } else {
+    # nginx 监听 443 时硬依赖证书，缺失会导致容器反复重启 —— 生成失败必须中止
+    if ((Test-Path $CertFile) -and (Test-Path $KeyFile)) {
         Ok "SSL 证书已生成（自签名，3650 天有效期）"
+    } else {
+        Err "SSL 证书生成失败：nginx 需要证书才能启动，安装中止。"
+        Err "请确认 Docker 可拉取 alpine/openssl 镜像，并已在 Docker Desktop 设置中共享工作目录所在磁盘后重试。"
+        exit 1
     }
 } else {
     Info "SSL 证书已存在，跳过生成"

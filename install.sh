@@ -122,10 +122,21 @@ if [ ! -f "$SSL_DIR/server.crt" ] || [ ! -f "$SSL_DIR/server.key" ]; then
       -keyout "$SSL_DIR/server.key" \
       -out    "$SSL_DIR/server.crt" \
       -subj "/C=CN/ST=Shanghai/L=Shanghai/O=ATM-ERP/CN=localhost" \
-      >/dev/null 2>&1
+      >/dev/null 2>&1 || true
+  else
+    c_warn "未找到本地 openssl，改用 Docker 容器生成证书..."
+    $SUDO docker run --rm -v "$SSL_DIR:/certs" alpine/openssl \
+      req -x509 -nodes -newkey rsa:2048 -days 3650 \
+      -keyout /certs/server.key -out /certs/server.crt \
+      -subj "/C=CN/ST=Shanghai/L=Shanghai/O=ATM-ERP/CN=localhost" >/dev/null 2>&1 || true
+  fi
+  # nginx 监听 443 时硬依赖证书，缺失会导致容器反复重启 —— 生成失败必须中止
+  if [ -f "$SSL_DIR/server.crt" ] && [ -f "$SSL_DIR/server.key" ]; then
     c_ok "SSL 证书已生成 (自签名，3650 天有效期)"
   else
-    c_warn "未找到 openssl，跳过 SSL 证书生成（HTTPS 可能不可用）"
+    c_err "SSL 证书生成失败：nginx 需要证书才能启动，安装中止。"
+    c_err "请安装 openssl，或确认可拉取 alpine/openssl 镜像后重试。"
+    exit 1
   fi
 else
   c_info "SSL 证书已存在，跳过生成"
