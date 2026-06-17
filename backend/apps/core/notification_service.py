@@ -415,3 +415,22 @@ class NotificationService:
 
         if cls._is_wechat_enabled():
             WeChatWorkNotification.send_markdown(safe_content)
+
+    @classmethod
+    def send_targeted_reminders(cls, personal_messages, title, group_safe_content, has_unassigned=False):
+        """个人优先 + 群播兜底。
+
+        personal_messages: list[(user, detail)] —— 对 is_active 且有 wechat_work_id 的责任人推个人；
+        若有未分配项(has_unassigned)、有被跳过的责任人、或一个个人都没发出，则群播 group_safe_content 兜底。
+        """
+        sent = 0
+        skipped = 0
+        for user, content in personal_messages:
+            if user and getattr(user, 'is_active', True) and getattr(user, 'wechat_work_id', ''):
+                cls.send_to_user(user, title, content)
+                sent += 1
+            else:
+                skipped += 1
+        if has_unassigned or skipped > 0 or sent == 0:
+            cls.send_custom_notification(title, group_safe_content, group_safe_content=group_safe_content)
+        return {'personal_sent': sent, 'personal_skipped': skipped}
