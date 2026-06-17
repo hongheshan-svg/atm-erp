@@ -47,6 +47,16 @@ done
 
 OS="$(uname -s)"
 
+# --- Windows shell (Git-Bash/MSYS/Cygwin) 引导到 PowerShell 脚本 ---
+case "$OS" in
+  MINGW*|CYGWIN*|MSYS*)
+    c_err "检测到 Windows 环境。请改用 PowerShell 一键脚本 install.ps1："
+    c_err "  irm https://github.com/${REPO}/releases/latest/download/install.ps1 | iex"
+    c_err "（在纯 Linux 的 WSL2 中运行本脚本则无需切换）"
+    exit 1
+    ;;
+esac
+
 # --- --native 委托原生 Ubuntu 脚本 ---
 if [ "$NATIVE" = "1" ]; then
   [ "$OS" = "Linux" ] || { c_err "--native 仅支持 Linux"; exit 1; }
@@ -225,7 +235,7 @@ for attempt in $(seq 1 $MAX_ATTEMPTS); do
     READY=1
     break
   fi
-  # 每 30 次（约 1.5 分钟）打印一次进度
+  # 每 10 次（约 30 秒）打印一次进度
   if [ $(( attempt % 10 )) -eq 0 ]; then
     c_info "等待中... (${attempt}/${MAX_ATTEMPTS} 次，已等待 $(( attempt * 3 ))s)，可用 '$DC logs -f backend' 查看进度"
   fi
