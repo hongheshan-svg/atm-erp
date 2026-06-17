@@ -8,6 +8,55 @@ from celery import shared_task
 from django.utils import timezone
 
 
+def build_personal_project_reminders(overdue_projects, upcoming_projects, today):
+    """按 Project.manager 分组明细。返回 (personal_messages, has_unassigned)。"""
+    from collections import defaultdict
+
+    lines = defaultdict(list)
+    has_unassigned = False
+    for p in list(overdue_projects) + list(upcoming_projects):
+        if getattr(p, 'manager', None):
+            d = (today - p.end_date).days
+            tag = f'逾期{d}天' if d > 0 else f'{-d}天后到期'
+            lines[p.manager].append(f'- {p.code} | {p.name} | {tag}')
+        else:
+            has_unassigned = True
+    messages = [(u, '📋 您负责的项目截止提醒:\n' + '\n'.join(ls)) for u, ls in lines.items()]
+    return messages, has_unassigned
+
+
+def build_personal_task_reminders(assignee_map, unassigned_present=False):
+    """assignee_map: dict[User, {'overdue':[str],'upcoming':[str],'behind':[str]}]。返回 (personal_messages, has_unassigned)。"""
+    messages = []
+    for user, data in assignee_map.items():
+        parts = ['📋 您负责的项目任务提醒:']
+        for key, label in (('overdue', '【已逾期】'), ('upcoming', '【即将到期】'), ('behind', '【进度落后】')):
+            if data.get(key):
+                parts.append(label)
+                parts.extend(data[key][:5])
+        messages.append((user, '\n'.join(parts)))
+    return messages, unassigned_present
+
+
+def build_personal_aftersales_reminders(overdue_orders, upcoming_orders, today):
+    """按 AfterSalesOrder.assigned_to 分组。返回 (personal_messages, has_unassigned)。"""
+    from collections import defaultdict
+
+    lines = defaultdict(list)
+    has_unassigned = False
+    for order in list(overdue_orders) + list(upcoming_orders):
+        if getattr(order, 'assigned_to', None):
+            d = (today - order.expected_date).days
+            tag = f'逾期{d}天' if d > 0 else f'{-d}天后到期'
+            lines[order.assigned_to].append(
+                f'- {order.order_no} | {order.customer.name} | {order.get_priority_display()} | {tag}'
+            )
+        else:
+            has_unassigned = True
+    messages = [(u, '🔧 您负责的售后工单提醒:\n' + '\n'.join(ls)) for u, ls in lines.items()]
+    return messages, has_unassigned
+
+
 @shared_task
 def check_project_task_reminders():
     """
@@ -66,6 +115,7 @@ def check_project_task_reminders():
 
     # Group by assignee
     assignee_reminders = {}
+    assignee_objs = {}  # assignee_id -> User，供企微个人推送取 wechat_work_id
 
     def add_to_assignee(assignee_id, category, item):
         if assignee_id not in assignee_reminders:
@@ -85,6 +135,7 @@ def check_project_task_reminders():
         }
         overdue_items.append(item)
         if task.assignee:
+            assignee_objs[task.assignee_id] = task.assignee
             add_to_assignee(task.assignee_id, 'overdue', item)
 
     # Collect upcoming tasks
@@ -100,6 +151,7 @@ def check_project_task_reminders():
         }
         upcoming_items.append(item)
         if task.assignee:
+            assignee_objs[task.assignee_id] = task.assignee
             add_to_assignee(task.assignee_id, 'upcoming', item)
 
     # Collect behind schedule tasks
@@ -116,6 +168,7 @@ def check_project_task_reminders():
         }
         behind_items.append(item)
         if task.assignee:
+            assignee_objs[task.assignee_id] = task.assignee
             add_to_assignee(task.assignee_id, 'behind', item)
 
     # Create notifications for each assignee
@@ -178,11 +231,11 @@ def check_project_task_reminders():
                 link='/projects/tasks',
             )
 
-    # Send to DingTalk/WeChat Work
+    # 外部推送:个人优先 + 群播兜底
     try:
         title = '📋 项目任务进度提醒'
 
-        # 群发安全内容（不含具体项目和人员信息）
+        # 群播兜底脱敏内容（不含具体项目和人员信息）
         safe_content = f'### {title}\n\n'
         if overdue_items:
             safe_content += f'⚠️ **{len(overdue_items)}** 个任务已逾期\n'
@@ -192,7 +245,30 @@ def check_project_task_reminders():
             safe_content += f'🔴 **{len(behind_items)}** 个任务进度落后\n'
         safe_content += '\n请登录ERP系统查看详情并及时跟进！'
 
-        NotificationService.send_custom_notification(title, safe_content, group_safe_content=safe_content)
+        assignee_map = {}
+        for aid, data in assignee_reminders.items():
+            user = assignee_objs.get(aid)
+            if not user:
+                continue
+            assignee_map[user] = {
+                'overdue': [
+                    f"[{i['project_code']}] {i['task_name']} | 逾期{i['days_overdue']}天 | 进度{i['progress']}%"
+                    for i in data['overdue']
+                ],
+                'upcoming': [
+                    f"[{i['project_code']}] {i['task_name']} | {i['days_until']}天后到期 | 进度{i['progress']}%"
+                    for i in data['upcoming']
+                ],
+                'behind': [
+                    f"[{i['project_code']}] {i['task_name']} | 应完成{i['expected_progress']}% 实际{i['actual_progress']}%"
+                    for i in data['behind']
+                ],
+            }
+        unassigned_present = any(
+            i['assignee_name'] == '未指定' for i in (overdue_items + upcoming_items + behind_items)
+        )
+        messages, has_unassigned = build_personal_task_reminders(assignee_map, unassigned_present)
+        NotificationService.send_targeted_reminders(messages, title, safe_content, has_unassigned=has_unassigned)
     except Exception:
         pass
 
@@ -282,11 +358,11 @@ def check_project_deadline_reminders():
             user_id=user_id, title='项目截止日期提醒', content=message, notification_type='WARNING', link='/projects'
         )
 
-    # Send to DingTalk/WeChat Work
+    # 外部推送:个人优先 + 群播兜底
     try:
         title = '📋 项目截止日期提醒'
 
-        # 群发安全内容（不含具体项目信息）
+        # 群播兜底脱敏内容（不含具体项目信息）
         safe_content = f'### {title}\n\n'
         if overdue_items:
             safe_content += f'⚠️ **{len(overdue_items)}** 个项目已逾期\n'
@@ -294,7 +370,8 @@ def check_project_deadline_reminders():
             safe_content += f'📅 **{len(upcoming_items)}** 个项目即将到期\n'
         safe_content += '\n请登录ERP系统查看详情并及时跟进！'
 
-        NotificationService.send_custom_notification(title, safe_content, group_safe_content=safe_content)
+        messages, has_unassigned = build_personal_project_reminders(overdue_projects, upcoming_projects, today)
+        NotificationService.send_targeted_reminders(messages, title, safe_content, has_unassigned=has_unassigned)
     except Exception:
         pass
 
@@ -428,11 +505,11 @@ def check_aftersales_reminders():
             link='/projects/aftersales',
         )
 
-    # Send to DingTalk/WeChat Work
+    # 外部推送:个人优先 + 群播兜底
     try:
         title = '🔧 售后工单提醒'
 
-        # 群发安全内容（不含具体客户信息）
+        # 群播兜底脱敏内容（不含具体客户信息）
         safe_content = f'### {title}\n\n'
         if overdue_items:
             safe_content += f'⚠️ **{len(overdue_items)}** 个工单已逾期\n'
@@ -442,7 +519,10 @@ def check_aftersales_reminders():
             safe_content += f'🔴 **{len(unassigned_items)}** 个紧急工单待指派\n'
         safe_content += '\n请登录ERP系统查看详情并及时处理！'
 
-        NotificationService.send_custom_notification(title, safe_content, group_safe_content=safe_content)
+        messages, has_unassigned = build_personal_aftersales_reminders(overdue_orders, upcoming_orders, today)
+        NotificationService.send_targeted_reminders(
+            messages, title, safe_content, has_unassigned=(has_unassigned or bool(unassigned_items))
+        )
     except Exception:
         pass
 
