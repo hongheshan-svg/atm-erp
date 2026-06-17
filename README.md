@@ -29,6 +29,7 @@
 - [Tech Stack](#tech-stack)
 - [Architecture](#architecture)
 - [Quick Start](#quick-start)
+  - [One-click install (Linux / macOS / Windows)](#one-click-install-linux--macos--windows)
   - [Option 1: Docker Compose (recommended)](#option-1-docker-compose-recommended)
   - [Option 2: One-click native deploy on Ubuntu](#option-2-one-click-native-deploy-on-ubuntu)
   - [Option 3: Manual local dev setup](#option-3-manual-local-dev-setup)
@@ -181,6 +182,32 @@ Docker Compose orchestrates 7 services: `postgres`, `redis`, `elasticsearch`,
   ZKTeco attendance terminal.
 
 ## Quick Start
+
+### One-click install (Linux / macOS / Windows)
+
+Pre-built multi-arch images are published to GHCR; the installer detects Docker,
+generates a `.env`, pulls images, starts the stack, and prints the admin login.
+
+**Linux / macOS:**
+
+```bash
+curl -fsSL https://github.com/hongheshan-svg/atm-erp/releases/latest/download/install.sh | bash
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://github.com/hongheshan-svg/atm-erp/releases/latest/download/install.ps1 | iex
+```
+
+Pin a version with `--tag 0.2.0` (Linux/macOS) or `-Tag 0.2.0` (Windows). To build
+from source instead of pulling images, see [Option 1](#option-1-docker-compose-recommended)
+with the `docker-compose.build.yml` override.
+
+> After installation, open **`http://localhost/erp/`** in your browser (the SPA is
+> served under `/erp/`; the root `/` returns 404). The first run pulls images and
+> runs a multi-minute first-boot bootstrap; the admin username and generated password
+> are printed to the console at the end.
 
 ### Option 1: Docker Compose (recommended)
 

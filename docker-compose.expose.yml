@@ -1,0 +1,12 @@
+# 调试用：向宿主机暴露内部服务端口
+# 用法: docker compose -f docker-compose.yml -f docker-compose.expose.yml up -d
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:5433:5432"
+  redis:
+    ports:
+      - "127.0.0.1:6380:6379"
+  elasticsearch:
+    ports:
+      - "127.0.0.1:9201:9200"

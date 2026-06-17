@@ -1,10 +1,6 @@
-# ERP System Docker Compose
-# Services: PostgreSQL, Redis, Elasticsearch, Backend, Celery, Nginx
-
+# ATM-ERP 基础编排（可移植，三平台一致）
+# 镜像来自 GHCR；本地构建用 docker-compose.build.yml override
 services:
-  # ===========================================
-  # PostgreSQL Database
-  # ===========================================
   postgres:
     image: postgres:15-alpine
     container_name: erp-postgres
@@ -16,8 +12,6 @@ services:
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5433:5432"  # 使用5433避免与本地PostgreSQL冲突
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-erp_user} -d ${DB_NAME:-erp_db}"]
       interval: 10s
@@ -26,9 +20,6 @@ services:
     networks:
       - erp-network
 
-  # ===========================================
-  # Redis Cache & Message Broker
-  # ===========================================
   redis:
     image: redis:7-alpine
     container_name: erp-redis
@@ -36,8 +27,6 @@ services:
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
-    ports:
-      - "6380:6379"  # 使用6380避免与本地Redis冲突
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -46,9 +35,6 @@ services:
     networks:
       - erp-network
 
-  # ===========================================
-  # Elasticsearch (Search Engine)
-  # ===========================================
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.17.16
     container_name: erp-elasticsearch
@@ -67,8 +53,6 @@ services:
         hard: 65536
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
-    ports:
-      - "9201:9200"  # 使用9201避免与本地ES冲突
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
       interval: 30s
@@ -77,13 +61,8 @@ services:
     networks:
       - erp-network
 
-  # ===========================================
-  # Django Backend (API Server)
-  # ===========================================
   backend:
-    build:
-      context: .
-      dockerfile: docker/backend/Dockerfile
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-hongheshan-svg}/atm-erp-backend:${IMAGE_TAG:-latest}
     container_name: erp-backend
     restart: unless-stopped
     environment:
@@ -100,9 +79,13 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - ELASTICSEARCH_HOST=elasticsearch:9200
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:80,https://localhost,https://localhost:8443,https://192.168.2.3:8443}
-      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-http://localhost,http://localhost:80,https://localhost,https://localhost:8443,https://192.168.2.3:8443}
-      - FRONTEND_URL=${FRONTEND_URL:-https://192.168.2.3:8443}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1}
+      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-http://localhost,http://127.0.0.1}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost}
+      - RUN_BOOTSTRAP=1
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - SEED_DEMO_DATA=${SEED_DEMO_DATA:-0}
       - WECHAT_WORK_WEBHOOK_URL=${WECHAT_WORK_WEBHOOK_URL:-}
       - WECHAT_WORK_CORP_ID=${WECHAT_WORK_CORP_ID:-}
       - WECHAT_WORK_CORP_SECRET=${WECHAT_WORK_CORP_SECRET:-}
@@ -121,36 +104,31 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      # 首次启动需跑迁移+初始化(权限/角色/widget/工作流),可达数分钟;
+      # 放宽 start_period 避免被判 unhealthy 导致 celery/celery-beat 依赖中止
+      start_period: 600s
     networks:
       - erp-network
 
-  # ===========================================
-  # Celery Worker (Async Tasks)
-  # ===========================================
   celery:
-    build:
-      context: .
-      dockerfile: docker/backend/Dockerfile
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-hongheshan-svg}/atm-erp-backend:${IMAGE_TAG:-latest}
     container_name: erp-celery
     restart: unless-stopped
     command: celery -A config worker -l info --concurrency=2
-    # 使用host网络模式，允许访问宿主机局域网设备(如考勤机192.168.2.x)
-    network_mode: host
     environment:
       - DEBUG=${DEBUG:-False}
       - SECRET_KEY=${SECRET_KEY:-django-insecure-change-this-in-production-123456}
-      # 使用localhost端口访问其他服务(host网络模式)
-      - DB_HOST=127.0.0.1
-      - DB_PORT=5433
+      - RUN_BOOTSTRAP=0
+      - DB_HOST=postgres
+      - DB_PORT=5432
       - DB_NAME=${DB_NAME:-erp_db}
       - DB_USER=${DB_USER:-erp_user}
       - DB_PASSWORD=${DB_PASSWORD:-erp_password}
-      - REDIS_HOST=127.0.0.1
-      - REDIS_URL=redis://127.0.0.1:6380/1
-      - CELERY_BROKER_URL=redis://127.0.0.1:6380/0
-      - CELERY_RESULT_BACKEND=redis://127.0.0.1:6380/0
-      - ELASTICSEARCH_HOST=127.0.0.1:9201
+      - REDIS_HOST=redis
+      - REDIS_URL=redis://redis:6379/1
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - ELASTICSEARCH_HOST=elasticsearch:9200
       - WECHAT_WORK_WEBHOOK_URL=${WECHAT_WORK_WEBHOOK_URL:-}
       - WECHAT_WORK_CORP_ID=${WECHAT_WORK_CORP_ID:-}
       - WECHAT_WORK_CORP_SECRET=${WECHAT_WORK_CORP_SECRET:-}
@@ -159,22 +137,20 @@ services:
       - media_files:/app/uploads
       - backend_logs:/app/logs
     depends_on:
-      - backend
-      - redis
+      backend:
+        condition: service_healthy
+    networks:
+      - erp-network
 
-  # ===========================================
-  # Celery Beat (Scheduled Tasks)
-  # ===========================================
   celery-beat:
-    build:
-      context: .
-      dockerfile: docker/backend/Dockerfile
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-hongheshan-svg}/atm-erp-backend:${IMAGE_TAG:-latest}
     container_name: erp-celery-beat
     restart: unless-stopped
     command: celery -A config beat -l info
     environment:
       - DEBUG=${DEBUG:-False}
       - SECRET_KEY=${SECRET_KEY:-django-insecure-change-this-in-production-123456}
+      - RUN_BOOTSTRAP=0
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=${DB_NAME:-erp_db}
@@ -189,28 +165,23 @@ services:
       - WECHAT_WORK_CORP_SECRET=${WECHAT_WORK_CORP_SECRET:-}
       - WECHAT_WORK_AGENT_ID=${WECHAT_WORK_AGENT_ID:-}
     depends_on:
-      - backend
-      - redis
+      backend:
+        condition: service_healthy
     networks:
       - erp-network
 
-  # ===========================================
-  # Nginx (Reverse Proxy + Static Files)
-  # ===========================================
   nginx:
-    build:
-      context: .
-      dockerfile: docker/frontend/Dockerfile
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-hongheshan-svg}/atm-erp-frontend:${IMAGE_TAG:-latest}
     container_name: erp-nginx
     restart: unless-stopped
     ports:
-      - "80:80"     # HTTP
-      - "443:443"   # HTTPS
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
     volumes:
       - static_files:/app/staticfiles:ro
       - media_files:/app/uploads:ro
       - nginx_logs:/var/log/nginx
-      - ./docker/ssl:/etc/nginx/ssl:ro  # SSL证书
+      - ./docker/ssl:/etc/nginx/ssl:ro
     depends_on:
       - backend
     healthcheck:
@@ -218,32 +189,19 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 30s
     networks:
       - erp-network
 
-# ===========================================
-# Volumes
-# ===========================================
 volumes:
   postgres_data:
-    driver: local
   redis_data:
-    driver: local
   elasticsearch_data:
-    driver: local
   static_files:
-    driver: local
   media_files:
-    driver: local
   backend_logs:
-    driver: local
   nginx_logs:
-    driver: local
 
-# ===========================================
-# Networks
-# ===========================================
 networks:
   erp-network:
     driver: bridge
-

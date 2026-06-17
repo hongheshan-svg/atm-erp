@@ -27,6 +27,7 @@
 - [技术栈](#技术栈)
 - [系统架构](#系统架构)
 - [快速开始](#快速开始)
+  - [一键安装（Linux / macOS / Windows）](#一键安装linux--macos--windows)
   - [方式一：Docker Compose（推荐）](#方式一docker-compose推荐)
   - [方式二：Ubuntu 一键原生部署](#方式二ubuntu-一键原生部署)
   - [方式三：本地手动开发环境](#方式三本地手动开发环境)
@@ -162,6 +163,28 @@ Docker Compose 编排 7 个服务：`postgres` · `redis` · `elasticsearch` · 
 - **Celery Worker** 使用 host 网络模式，以便访问局域网设备（如 ZKTeco 考勤机）。
 
 ## 快速开始
+
+### 一键安装（Linux / macOS / Windows）
+
+预构建多架构镜像已发布到 GHCR；安装脚本会检测 Docker、生成 `.env`、拉取镜像、启动并打印管理员登录信息。
+
+**Linux / macOS：**
+
+```bash
+curl -fsSL https://github.com/hongheshan-svg/atm-erp/releases/latest/download/install.sh | bash
+```
+
+**Windows（PowerShell）：**
+
+```powershell
+irm https://github.com/hongheshan-svg/atm-erp/releases/latest/download/install.ps1 | iex
+```
+
+指定版本：`--tag 0.2.0`（Linux/macOS）或 `-Tag 0.2.0`（Windows）。若想从源码构建而非拉取镜像，见
+[方式一](#方式一docker-compose推荐) 配合 `docker-compose.build.yml` override。
+
+> 安装完成后，在浏览器中打开 **`http://localhost/erp/`**（前端 SPA 部署在 `/erp/` 路径下，
+> 访问根路径 `/` 会返回 404）。首次启动会拉取镜像并执行数分钟初始化，结束后打印管理员账号与随机密码。
 
 ### 方式一：Docker Compose（推荐）
 
