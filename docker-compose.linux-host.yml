@@ -1,0 +1,29 @@
+# 可选（仅 Linux）：Celery 走 host 网络以支持局域网设备 UDP 发现/广播等边缘场景。
+# 自含 PG/Redis/ES 端口暴露，因为 host 网络下 Celery 需经宿主机端口访问这些服务。
+# 用法: docker compose -f docker-compose.yml -f docker-compose.linux-host.yml up -d
+services:
+  postgres:
+    ports:
+      - "5433:5432"
+  redis:
+    ports:
+      - "6380:6379"
+  elasticsearch:
+    ports:
+      - "9201:9200"
+  celery:
+    network_mode: host
+    environment:
+      - DEBUG=${DEBUG:-False}
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-change-this-in-production-123456}
+      - RUN_BOOTSTRAP=0
+      - DB_HOST=127.0.0.1
+      - DB_PORT=5433
+      - DB_NAME=${DB_NAME:-erp_db}
+      - DB_USER=${DB_USER:-erp_user}
+      - DB_PASSWORD=${DB_PASSWORD:-erp_password}
+      - REDIS_HOST=127.0.0.1
+      - REDIS_URL=redis://127.0.0.1:6380/1
+      - CELERY_BROKER_URL=redis://127.0.0.1:6380/0
+      - CELERY_RESULT_BACKEND=redis://127.0.0.1:6380/0
+      - ELASTICSEARCH_HOST=127.0.0.1:9201
