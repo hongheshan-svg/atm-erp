@@ -8,6 +8,25 @@ from celery import shared_task
 from django.utils import timezone
 
 
+def build_personal_delivery_reminders(overdue_orders, upcoming_orders, today):
+    """按 SalesOrder.created_by 分组明细。返回 (personal_messages, has_unassigned)。"""
+    from collections import defaultdict
+
+    lines = defaultdict(list)
+    has_unassigned = False
+    for order in list(overdue_orders) + list(upcoming_orders):
+        if getattr(order, 'created_by', None):
+            d = (today - order.expected_delivery_date).days
+            tag = f'逾期{d}天' if d > 0 else f'{-d}天后到期'
+            lines[order.created_by].append(
+                f'- {order.order_no} | {order.customer.name} | ¥{order.total_amount:,.2f} | {tag}'
+            )
+        else:
+            has_unassigned = True
+    messages = [(u, '🚚 您负责的销售订单交货提醒:\n' + '\n'.join(ls)) for u, ls in lines.items()]
+    return messages, has_unassigned
+
+
 @shared_task
 def check_delivery_reminders():
     """
@@ -30,7 +49,7 @@ def check_delivery_reminders():
     # Find orders with overdue delivery
     overdue_orders = SalesOrder.objects.filter(
         expected_delivery_date__lt=today, status__in=['CONFIRMED', 'IN_PRODUCTION'], is_deleted=False
-    ).select_related('customer', 'project')
+    ).select_related('customer', 'project', 'created_by')
 
     # Find orders due within 3 days
     upcoming_orders = SalesOrder.objects.filter(
@@ -38,7 +57,7 @@ def check_delivery_reminders():
         expected_delivery_date__lte=warning_date,
         status__in=['CONFIRMED', 'IN_PRODUCTION'],
         is_deleted=False,
-    ).select_related('customer', 'project')
+    ).select_related('customer', 'project', 'created_by')
 
     if not overdue_orders.exists() and not upcoming_orders.exists():
         return 'No delivery reminders needed'
@@ -99,11 +118,11 @@ def check_delivery_reminders():
             link='/sales/orders',
         )
 
-    # Send to DingTalk/WeChat Work
+    # 外部推送:个人优先 + 群播兜底
     try:
         title = '🚚 销售订单交货提醒'
 
-        # 群发安全内容（不含具体客户和金额）
+        # 群播兜底脱敏内容（不含具体客户和金额）
         safe_content = f'### {title}\n\n'
         if overdue_items:
             safe_content += f'⚠️ **{len(overdue_items)}** 笔订单已逾期交货\n'
@@ -111,7 +130,8 @@ def check_delivery_reminders():
             safe_content += f'📅 **{len(upcoming_items)}** 笔订单即将到期\n'
         safe_content += '\n请登录ERP系统查看详情并及时安排发货！'
 
-        NotificationService.send_custom_notification(title, safe_content, group_safe_content=safe_content)
+        messages, has_unassigned = build_personal_delivery_reminders(overdue_orders, upcoming_orders, today)
+        NotificationService.send_targeted_reminders(messages, title, safe_content, has_unassigned=has_unassigned)
     except Exception:
         pass
 
