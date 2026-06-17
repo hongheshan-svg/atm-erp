@@ -104,7 +104,9 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 90s
+      # 首次启动需跑迁移+初始化(权限/角色/widget/工作流),可达数分钟;
+      # 放宽 start_period 避免被判 unhealthy 导致 celery/celery-beat 依赖中止
+      start_period: 600s
     networks:
       - erp-network
 
@@ -187,6 +189,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 30s
     networks:
       - erp-network
 
