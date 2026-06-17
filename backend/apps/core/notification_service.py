@@ -234,23 +234,27 @@ class NotificationService:
     @classmethod
     def send_approval_notification(cls, task):
         """
-        Send approval task notification.
+        Send approval task notification to the assignee (个人优先 + 群播兜底).
 
         Args:
             task: WorkflowTask instance
         """
         title = '📋 审批任务提醒'
+        biz = task.instance.workflow.get_business_type_display()
 
-        # 群发安全内容（不含具体金额和人员）
+        # 群播兜底脱敏内容（不含具体金额和人员）
         safe_content = f'### {title}\n\n'
-        safe_content += f'您有一个新的 **{task.instance.workflow.get_business_type_display()}** 审批任务待处理\n\n'
+        safe_content += f'您有一个新的 **{biz}** 审批任务待处理\n\n'
         safe_content += '请登录ERP系统查看详情并及时处理！'
 
-        if cls._is_dingtalk_enabled():
-            DingTalkNotification.send_markdown(title, safe_content)
-
-        if cls._is_wechat_enabled():
-            WeChatWorkNotification.send_markdown(safe_content)
+        assignee = getattr(task, 'assignee', None)
+        detail = f'您有一个新的 **{biz}** 审批任务待处理:单据 {task.instance.business_no}。请登录ERP及时处理。'
+        cls.send_targeted_reminders(
+            [(assignee, detail)] if assignee else [],
+            title,
+            safe_content,
+            has_unassigned=(assignee is None),
+        )
 
     @classmethod
     def send_workflow_result_notification(cls, instance, result):
@@ -266,17 +270,21 @@ class NotificationService:
         result_text = {'APPROVED': '已通过', 'REJECTED': '已拒绝', 'WITHDRAWN': '已撤回'}.get(result, result)
 
         title = f'{result_emoji} 审批结果通知'
+        biz = instance.workflow.get_business_type_display()
 
-        # 群发安全内容（不含具体金额）
+        # 群播兜底脱敏内容（不含具体金额）
         safe_content = f'### {title}\n\n'
-        safe_content += f'您提交的 **{instance.workflow.get_business_type_display()}** 审批{result_text}\n\n'
+        safe_content += f'您提交的 **{biz}** 审批{result_text}\n\n'
         safe_content += '请登录ERP系统查看详情。'
 
-        if cls._is_dingtalk_enabled():
-            DingTalkNotification.send_markdown(title, safe_content)
-
-        if cls._is_wechat_enabled():
-            WeChatWorkNotification.send_markdown(safe_content)
+        submitter = getattr(instance, 'submitter', None)
+        detail = f'您提交的 **{biz}** 审批{result_text}:单据 {instance.business_no}。'
+        cls.send_targeted_reminders(
+            [(submitter, detail)] if submitter else [],
+            title,
+            safe_content,
+            has_unassigned=(submitter is None),
+        )
 
     @classmethod
     def send_custom_notification(cls, title, content, at_mobiles=None, to_users=None, group_safe_content=None):
