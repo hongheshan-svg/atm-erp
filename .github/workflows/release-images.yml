@@ -90,3 +90,84 @@ jobs:
             docker-compose.expose.yml \
             .env.example \
             --clobber
+
+  publish-manifest:
+    # 发布(打 v* 正式标签)后,用真实镜像 digest 覆写 manifest.json 并提交回默认分支,
+    # 供各实例从 raw.githubusercontent.com/<owner>/atm-erp/main/manifest.json 检查更新。
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve version and multi-arch image digests
+        id: meta
+        run: |
+          set -euo pipefail
+          VER="${GITHUB_REF_NAME#v}"
+          REG="${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}"
+          BACKEND_DIGEST=$(docker buildx imagetools inspect "$REG/atm-erp-backend:$VER" --format '{{.Manifest.Digest}}')
+          FRONTEND_DIGEST=$(docker buildx imagetools inspect "$REG/atm-erp-frontend:$VER" --format '{{.Manifest.Digest}}')
+          case "${BACKEND_DIGEST}${FRONTEND_DIGEST}" in
+            *sha256:*) ;;
+            *) echo "::error::failed to resolve image digests"; exit 1;;
+          esac
+          {
+            echo "ver=$VER"
+            echo "backend=$BACKEND_DIGEST"
+            echo "frontend=$FRONTEND_DIGEST"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build manifest.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VER="${{ steps.meta.outputs.ver }}"
+          # 发布说明优先取 GitHub Release body,否则取 tag 注释
+          NOTES=$(gh release view "${GITHUB_REF_NAME}" --json body --jq '.body' 2>/dev/null || true)
+          [ -n "$NOTES" ] || NOTES=$(git tag -l --format='%(contents)' "${GITHUB_REF_NAME}")
+          # min_upgradable_from:保留清单已有值,否则默认本次版本
+          MINFROM=$(jq -r '.min_upgradable_from // empty' manifest.json 2>/dev/null || true)
+          [ -n "$MINFROM" ] || MINFROM="$VER"
+          jq -n \
+            --arg ver "$VER" \
+            --arg pub "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg notes "$NOTES" \
+            --arg minfrom "$MINFROM" \
+            --arg owner "${{ env.IMAGE_OWNER }}" \
+            --arg bdig "${{ steps.meta.outputs.backend }}" \
+            --arg fdig "${{ steps.meta.outputs.frontend }}" \
+            '{
+               latest_version: $ver,
+               published_at: $pub,
+               release_notes_md: $notes,
+               min_upgradable_from: $minfrom,
+               docker: {
+                 registry: "ghcr.io",
+                 owner: $owner,
+                 image_tag: $ver,
+                 digests: { backend: $bdig, frontend: $fdig }
+               },
+               native: null
+             }' > manifest.json
+          echo "----- manifest.json -----"; cat manifest.json
+
+      - name: Commit manifest.json to default branch
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          if git diff --cached --quiet; then
+            echo "manifest.json unchanged; nothing to commit"
+          else
+            git commit -m "chore(release): manifest.json -> ${GITHUB_REF_NAME} [skip ci]"
+            git push origin "HEAD:${{ github.event.repository.default_branch }}"
+          fi
