@@ -170,6 +170,7 @@ def build_permission_tree():
     tree.append(menu('system:dict', '数据字典', 5, route_path='/system/data-dictionary', parent_code='system'))
     tree.append(menu('system:config', '系统配置', 6, route_path='/system/config', parent_code='system'))
     tree.append(menu('system:audit', '审计日志', 7, route_path='/system/audit-log', parent_code='system'))
+    tree.append(menu('system:upgrade', '系统升级', 8, route_path='/system/upgrade', parent_code='system'))
 
     return tree
 

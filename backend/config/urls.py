@@ -25,6 +25,9 @@ urlpatterns = [
     
     # Health check (for Docker/K8s)
     path('api/v1/health/', api_health_check, name='api-health'),
+
+    # Remote-upgrade admin API
+    path('api/v1/', include('apps.core.upgrade_urls')),
     
     # API Documentation (requires authentication)
     path('api/schema/', SpectacularAPIView.as_view(permission_classes=[IsAuthenticated]), name='schema'),
