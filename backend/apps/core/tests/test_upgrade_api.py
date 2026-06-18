@@ -4,7 +4,6 @@ from django.test import TestCase
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from apps.core import upgrade_service as svc
-from apps.core.manifest_client import Manifest
 
 User = get_user_model()
 
@@ -45,3 +44,35 @@ class UpgradeApiTest(TestCase):
     def test_upgrade_busy_409(self, _p):
         r = self.client.post('/api/v1/system/upgrade')
         self.assertEqual(r.status_code, 409)
+
+    @mock.patch('apps.core.upgrade_views.upgrade_service.perform_upgrade',
+                side_effect=svc.NoUpdateAvailable('x'))
+    def test_upgrade_no_update_409(self, _p):
+        r = self.client.post('/api/v1/system/upgrade')
+        self.assertEqual(r.status_code, 409)
+
+    @mock.patch('apps.core.upgrade_views.upgrade_service.perform_upgrade',
+                side_effect=svc.UpgradeNotAllowed('x'))
+    def test_upgrade_not_allowed_400(self, _p):
+        r = self.client.post('/api/v1/system/upgrade')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['code'], 'UPGRADE_NOT_ALLOWED')
+
+    @mock.patch('apps.core.upgrade_views.upgrade_service.perform_rollback')
+    def test_rollback_success_202(self, perform):
+        perform.return_value = mock.Mock(id='rb1', status='pending')
+        r = self.client.post('/api/v1/system/rollback')
+        self.assertEqual(r.status_code, 202)
+        self.assertEqual(r.json()['job_id'], 'rb1')
+
+    @mock.patch('apps.core.upgrade_views.upgrade_service.perform_rollback',
+                side_effect=svc.UpgradeNotAllowed('x'))
+    def test_rollback_not_allowed_400(self, _p):
+        r = self.client.post('/api/v1/system/rollback')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['code'], 'UPGRADE_NOT_ALLOWED')
+
+    @mock.patch('apps.core.upgrade_views.upgrade_service.get_job', return_value=None)
+    def test_job_detail_404(self, _g):
+        r = self.client.get('/api/v1/system/upgrade/jobs/00000000-0000-0000-0000-000000000000')
+        self.assertEqual(r.status_code, 404)

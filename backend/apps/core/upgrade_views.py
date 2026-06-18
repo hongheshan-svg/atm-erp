@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 
 from . import upgrade_service
 from apps.core.permission_service import get_user_permissions
+from apps.core.version import get_deploy_mode
 
 
 def _check_upgrade_permission(request):
@@ -39,7 +40,7 @@ class SystemVersionView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response({'version': upgrade_service.get_app_version()})
+        return Response({'version': upgrade_service.get_app_version(), 'deploy_mode': get_deploy_mode()})
 
 
 class CheckUpdateView(APIView):
@@ -101,6 +102,11 @@ class RollbackView(APIView):
             return Response(
                 {'detail': str(e), 'code': 'NO_ROLLBACK'},
                 status=status.HTTP_409_CONFLICT,
+            )
+        except upgrade_service.UpgradeNotAllowed as e:
+            return Response(
+                {'detail': str(e), 'code': 'UPGRADE_NOT_ALLOWED'},
+                status=status.HTTP_400_BAD_REQUEST,
             )
         return Response(
             {'job_id': str(job.id), 'status': job.status},
