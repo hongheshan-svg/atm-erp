@@ -90,6 +90,8 @@ services:
       - WECHAT_WORK_CORP_ID=${WECHAT_WORK_CORP_ID:-}
       - WECHAT_WORK_CORP_SECRET=${WECHAT_WORK_CORP_SECRET:-}
       - WECHAT_WORK_AGENT_ID=${WECHAT_WORK_AGENT_ID:-}
+      - APP_VERSION=${IMAGE_TAG:-latest}
+      - DEPLOY_MODE=docker
     volumes:
       - static_files:/app/staticfiles
       - media_files:/app/uploads
@@ -208,6 +210,8 @@ services:
       - PGUSER=${DB_USER:-erp_user}
       - PGPASSWORD=${DB_PASSWORD:-erp_password}
       - PGDATABASE=${DB_NAME:-erp_db}
+      - APP_VERSION=${IMAGE_TAG:-latest}
+      - DEPLOY_MODE=docker
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - .:/project

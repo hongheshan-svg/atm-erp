@@ -41,6 +41,7 @@
 - [Code Style & Git Workflow](#code-style--git-workflow)
 - [Project Structure](#project-structure)
 - [Design Conventions](#design-conventions)
+- [Remote Upgrade](#remote-upgrade)
 - [WeChat Mini Program](#wechat-mini-program)
 - [Documentation](#documentation)
 - [License](#license)
@@ -513,6 +514,27 @@ atm-erp/
   add new endpoints under `frontend/src/api/<module>.ts`, organized per module.
   **Never `import axios` directly in view components.**
 
+## Remote Upgrade
+
+From the admin panel under **System Settings → System Upgrade**, super-administrators can:
+
+1. **Check for updates** — the system fetches the public release manifest from
+   [hongheshan-svg/atm-erp-release](https://github.com/hongheshan-svg/atm-erp-release)
+   and compares the latest version against the running version reported by
+   `GET /api/v1/health/`.
+2. **One-click upgrade** — clicking "Upgrade" queues the job; the `erp-updater`
+   service then:
+   - takes an automatic PostgreSQL snapshot (rollback safety net),
+   - pulls the new images (Docker) or downloads and verifies the signed tar.gz (native),
+   - restarts the stack and waits for the health gate to pass,
+   - auto-rolls back to the previous version if the health gate fails within 60 s.
+3. **Live progress** — real-time step updates stream to the browser via WebSocket;
+   progress is also persisted so the UI can resume after a backend restart.
+
+Requires the `system:upgrade` permission (super-admin only by default).
+See [`docs/REMOTE_UPGRADE.md`](docs/REMOTE_UPGRADE.md) for the full architecture,
+manifest format, security design, and a step-by-step manual test procedure.
+
 ## WeChat Mini Program
 
 `miniprogram/` is a standalone WeChat client (independent from the Vue frontend),
@@ -538,6 +560,7 @@ Full docs live under `docs/`:
 | `docs/业务流程手册.md` | Business process handbook |
 | `docs/USER_MANUAL.md` | User manual |
 | `docs/SYSTEM_REQUIREMENTS.md` | System requirements |
+| `docs/REMOTE_UPGRADE.md` | Remote upgrade architecture, manifest format, security, and manual test procedure |
 
 Live API docs:
 
