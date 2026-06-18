@@ -14,7 +14,8 @@
 - SSRF 可信主机白名单(仅 HTTPS):`raw.githubusercontent.com`、`github.com`、`objects.githubusercontent.com`、`ghcr.io`。
 - 版本比较:去前导 `v` 后按 semver 整型分段比较,函数 `compare_versions(a,b)->int` 返回 -1/0/1。
 - 权限标识 `system:upgrade`(前端 `meta.permission` / `v-permission` / 后端 `PermissionMixin` 三处一致)。
-- Redis 键:任务队列 `erp:upgrade:queue`;进度 `erp:upgrade:progress:<job_id>`;单飞锁 `erp:upgrade:lock`。
+- Redis 键:任务队列 `erp:upgrade:queue`;进度 `erp:upgrade:progress:<job_id>`;单飞锁 `erp:upgrade:lock`;进度频道 `erp:upgrade:events`。
+- **Redis DB 必须一致**:后端 `get_redis_connection('default')` 用 CACHES 的 `REDIS_URL`(默认 `redis://redis:6379/1`,即 **DB 1**)。升级代理与 relay 必须连同一个 DB——Docker:`redis://redis:6379/1`;原生:`redis://127.0.0.1:6379/1`(原生 redis 在宿主 6379,非 Docker 的 6380)。切勿用 Celery 的 DB 0。
 - `UpgradeJob.status` 取值:`pending|running|healthcheck|success|failed|rolled_back`;`action`:`upgrade|rollback`;`mode`:`docker|native`。
 - 业务模型继承 `apps.core.models.BaseModel`;删除走 `soft_delete()`;查询走默认 `objects`。
 - 视图保留 `PermissionMixin`;前端网络调用走 `frontend/src/api/system.ts`,不在组件内 `import axios`。
@@ -1173,7 +1174,7 @@ class Agent:
 
 def _main() -> None:  # pragma: no cover
     import redis
-    url = os.environ.get('REDIS_URL', 'redis://redis:6379/0')
+    url = os.environ.get('REDIS_URL', 'redis://redis:6379/1')
     Agent(redis.Redis.from_url(url)).run_forever()
 
 
@@ -1325,7 +1326,7 @@ CMD ["python", "-m", "deploy.updater.agent"]
     container_name: erp-updater
     restart: unless-stopped
     environment:
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://redis:6379/1
       - ERP_HEALTH_URL=http://nginx/api/v1/health/
       - ERP_PROJECT_DIR=/project
       - PGHOST=postgres
@@ -1485,7 +1486,7 @@ After=network.target redis-server.service postgresql.service
 Type=simple
 User=root
 Environment=DEPLOY_MODE=native
-Environment=REDIS_URL=redis://127.0.0.1:6380/0
+Environment=REDIS_URL=redis://127.0.0.1:6379/1
 Environment=ERP_HEALTH_URL=http://127.0.0.1/api/v1/health/
 ExecStart=/usr/bin/python3 -m deploy.updater.agent
 WorkingDirectory=/opt/erp/updater
