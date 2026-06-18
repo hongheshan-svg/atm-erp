@@ -25,13 +25,13 @@
 ```
   管理员浏览器
       │
-      │  POST /api/v1/upgrade/perform/
+      │  POST /api/v1/system/upgrade
       ▼
   ┌─────────────────────────────────────────┐
   │  Django Backend (erp-backend)           │
   │  UpgradeService.perform()               │
   │    ├─ 获取清单 → 版本比对               │
-  │    ├─ 写 UpgradeJob(status=queued)      │
+  │    ├─ 写 UpgradeJob(status=pending)     │
   │    └─ LPUSH erp:upgrade:queue           │──► Redis
   └─────────────────────────────────────────┘         │
                                                        │ BRPOP
@@ -42,7 +42,7 @@
   │    3. _apply_docker() / _apply_native()               │
   │       Docker: docker compose pull → up -d             │
   │       Native: 下载 tar.gz → sha256 → 解包 → reload    │
-  │    4. health_gate() — 轮询 /api/v1/health/ (60 s)     │
+  │    4. health_gate() — 轮询 /api/v1/health/ (600 s)    │
   │    5. status=success 或 _rollback()                   │
   │    6. report(event, payload)                          │
   └───────────────────────────────────────────────────────┘
@@ -53,17 +53,17 @@
   ┌───────▼────────────────────────────────────────────────┐
   │  erp-upgrade-relay 容器 (upgrade_progress_relay 命令)  │
   │    SUBSCRIBE erp:upgrade:events                        │
-  │    → 写 UpgradeJob.progress_log (JSONB)                │
+  │    → 写 UpgradeJob.steps (JSON)                        │
   │    → Django Channels PUBLISH → WS 推送管理员浏览器      │
   └────────────────────────────────────────────────────────┘
-          │  WebSocket /ws/upgrade/<job_id>/
+          │  WebSocket ws/system/upgrade/<job_id>/
           ▼
   管理员浏览器（前端升级页面实时展示进度）
 ```
 
 **要点说明**
 
-- **进度持久化，UI 可重连**：`relay` 把每条进度事件写入数据库；前端断线重连或 backend 重启后，可通过 `GET /api/v1/upgrade/jobs/<id>/` 取回完整日志，无需重新升级。
+- **进度持久化，UI 可重连**：`relay` 把每条进度事件写入数据库；前端断线重连或 backend 重启后，可通过 `GET /api/v1/system/upgrade/jobs/<id>` 取回完整日志，无需重新升级。
 - **Docker 升级时 backend 本身会重启**，WebSocket 中断属预期行为，前端会自动轮询 job 状态直到 `success` 或 `failed`。
 - **进度锁**：Redis 键 `erp:upgrade:lock` 确保同一时刻只有一个升级任务运行，防止并发升级相互干扰。
 
@@ -87,20 +87,17 @@ get_deploy_mode()   # → "docker" | "native" | "unknown"
 
 ```json
 {
-  "status": "ok",
-  "version": "1.2.3",
-  "deploy_mode": "docker"
+  "status": "healthy",
+  "version": "1.2.3"
 }
 ```
 
-版本信息端点 `GET /api/v1/version/` 响应体：
+版本信息端点 `GET /api/v1/system/version` 响应体：
 
 ```json
 {
-  "current_version": "1.2.3",
-  "deploy_mode": "docker",
-  "latest_version": null,
-  "update_available": false
+  "version": "1.2.3",
+  "deploy_mode": "docker"
 }
 ```
 
@@ -183,36 +180,66 @@ https://raw.githubusercontent.com/hongheshan-svg/atm-erp-release/main/manifest.j
 
 ## API 接口
 
-所有接口位于 `/api/v1/upgrade/`，均需认证（Bearer JWT），并校验 `system:upgrade` 权限。
+所有接口均需认证（Bearer JWT），并校验 `system:upgrade` 权限（`GET /api/v1/system/version` 仅需登录）。
 
-### 1. 检查更新
+### 1. 查询当前版本
 
 ```
-GET /api/v1/upgrade/check/
+GET /api/v1/system/version
 ```
 
-拉取清单并与当前版本比对，**不执行任何升级操作**。
+返回当前运行版本与部署模式，**任意已登录用户**可访问。
+
+**响应示例：**
+
+```json
+{
+  "version": "1.2.0",
+  "deploy_mode": "docker"
+}
+```
+
+### 2. 检查更新
+
+```
+GET /api/v1/system/check-update
+GET /api/v1/system/check-update?force=1
+```
+
+拉取清单并与当前版本比对，**不执行任何升级操作**。默认结果缓存 20 分钟；加 `?force=1` 强制绕过缓存。
 
 **响应示例（有更新）：**
 
 ```json
 {
-  "update_available": true,
   "current_version": "1.2.0",
   "latest_version": "1.3.0",
+  "has_update": true,
   "deploy_mode": "docker",
   "release_notes_md": "## v1.3.0\n...",
   "min_upgradable_from": "1.0.0",
-  "can_upgrade": true
+  "cached": false,
+  "warning": ""
 }
 ```
 
-`can_upgrade=false` 时，`reason` 字段会说明原因（如当前版本低于 `min_upgradable_from`）。
+**响应字段说明：**
 
-### 2. 执行升级
+| 字段 | 说明 |
+|------|------|
+| `current_version` | 当前运行版本 |
+| `latest_version` | 清单中最新版本 |
+| `has_update` | 是否有可用更新（`true` / `false`） |
+| `deploy_mode` | 当前部署模式（`docker` / `native`） |
+| `release_notes_md` | Markdown 格式发布说明 |
+| `min_upgradable_from` | 最低可直接升级的起始版本 |
+| `cached` | 结果是否来自缓存 |
+| `warning` | 拉取清单失败时的错误信息（成功时为空串） |
+
+### 3. 执行升级
 
 ```
-POST /api/v1/upgrade/perform/
+POST /api/v1/system/upgrade
 ```
 
 创建 `UpgradeJob` 并将任务入队，立即返回 job 信息。
@@ -227,10 +254,8 @@ POST /api/v1/upgrade/perform/
 
 ```json
 {
-  "job_id": 42,
-  "status": "queued",
-  "target_version": "1.3.0",
-  "created_at": "2026-06-01T10:00:00Z"
+  "job_id": "42",
+  "status": "pending"
 }
 ```
 
@@ -238,48 +263,69 @@ POST /api/v1/upgrade/perform/
 
 ```json
 {
-  "detail": "升级任务已在运行中，请等待完成"
+  "detail": "升级任务已在运行中，请等待完成",
+  "code": "UPGRADE_BUSY"
 }
 ```
 
-### 3. 查询 Job 详情
+### 4. 手动回滚
 
 ```
-GET /api/v1/upgrade/jobs/<job_id>/
+POST /api/v1/system/rollback
+```
+
+人工触发回滚至上一次成功升级前的版本，创建 `UpgradeJob`（`action=rollback`）并入队。
+
+**响应（202 Accepted）：**
+
+```json
+{
+  "job_id": "43",
+  "status": "pending"
+}
+```
+
+若无可回滚的历史记录，返回 `409 Conflict`（`code: "NO_ROLLBACK"`）。
+
+### 5. 查询 Job 详情
+
+```
+GET /api/v1/system/upgrade/jobs/<job_id>
 ```
 
 **响应示例：**
 
 ```json
 {
-  "id": 42,
-  "target_version": "1.3.0",
-  "status": "running",
+  "id": "42",
   "action": "upgrade",
   "mode": "docker",
   "from_version": "1.2.0",
-  "started_at": "2026-06-01T10:00:05Z",
-  "completed_at": null,
-  "progress_log": [
-    {"step": "backup_db",  "event": "progress", "msg": "数据库快照完成", "ts": "2026-06-01T10:00:10Z"},
-    {"step": "pull",       "event": "progress", "msg": "镜像拉取中...",   "ts": "2026-06-01T10:00:15Z"}
+  "target_version": "1.3.0",
+  "status": "running",
+  "steps": [
+    {"stage": "backup", "message": "pg_dump -> /var/backups/erp/pre-upgrade-20260601-100010.sql", "level": "info", "ts": 1748779210.0},
+    {"stage": "apply",  "message": "set IMAGE_TAG=1.3.0; docker compose pull && up -d",          "level": "info", "ts": 1748779215.0}
   ],
-  "error_message": null
+  "started_at": "2026-06-01T10:00:05Z",
+  "finished_at": null
 }
 ```
 
-`status` 枚举：`queued` | `running` | `success` | `failed` | `rolled_back`
+`status` 枚举：`pending` | `running` | `healthcheck` | `success` | `failed` | `rolled_back`
 
-### 4. Job 列表（分页）
-
-```
-GET /api/v1/upgrade/jobs/?page=1&page_size=10
-```
-
-### 5. 进度 WebSocket
+### 6. Job 列表
 
 ```
-ws://<host>/ws/upgrade/<job_id>/
+GET /api/v1/system/upgrade/jobs
+```
+
+返回最近 20 条 Job 记录（按创建时间降序），每条记录结构与 Job 详情相同。
+
+### 7. 进度 WebSocket
+
+```
+ws://<host>/ws/system/upgrade/<job_id>/
 ```
 
 需在握手时带 JWT（`Authorization: Bearer <token>` 头或 query param `token=<token>`）。
@@ -288,14 +334,14 @@ ws://<host>/ws/upgrade/<job_id>/
 
 ```json
 {
-  "step":  "apply",
-  "event": "progress",
-  "msg":   "docker compose up -d 执行完成",
-  "ts":    "2026-06-01T10:01:00Z"
+  "stage":   "apply",
+  "message": "docker compose up -d 执行完成",
+  "level":   "info",
+  "ts":      1748779260.0
 }
 ```
 
-`event` 枚举：`progress` | `success` | `failed` | `rollback`
+`level` 枚举：`info` | `error`
 
 ---
 
@@ -303,13 +349,13 @@ ws://<host>/ws/upgrade/<job_id>/
 
 ### Docker 模式
 
-1. **数据库快照** (`backup_db`)：调用 `pg_dump` 将当前数据库备份至 `/var/backups/erp/backup_<timestamp>.dump`（卷 `backend_logs:/var/backups/erp`）。
+1. **数据库快照** (`backup_db`)：调用 `pg_dump` 将当前数据库备份至 `/var/backups/erp/pre-upgrade-<timestamp>.sql`（卷 `backend_logs:/var/backups/erp`）。
 2. **更新 `.env`** (`_apply_docker`)：将 `IMAGE_TAG=<target_version>` 写入项目根目录的 `.env` 文件。
 3. **拉取镜像**：在项目目录执行 `docker compose pull`，拉取新版本镜像。
 4. **校验摘要**：对清单中每个 `digest` 调用 `docker inspect` 验证拉到的镜像 sha256 与清单一致，防止中间人攻击。
 5. **滚动重启**：执行 `docker compose up -d`，Compose 依次重启各服务（backend/celery/celery-beat 先重启，nginx 最后）。
-6. **健康门控** (`health_gate`)：循环轮询 `http://nginx/api/v1/health/`，最多等待 60 秒。健康响应要求 `status=ok` 且版本字段与 `target_version` 一致。
-7. **成功**：写 `UpgradeJob.status=success`，推送 `success` 事件。
+6. **健康门控** (`health_gate`)：循环轮询 `http://nginx/api/v1/health/`，最多等待 600 秒。健康门控要求 HTTP 响应码为 200 **且** 响应体中 `version` 字段等于 `target_version`。
+7. **成功**：写 `UpgradeJob.status=success`，推送进度事件。
 
 ### 原生模式
 
@@ -318,28 +364,40 @@ ws://<host>/ws/upgrade/<job_id>/
 3. **sha256 校验**：对下载文件计算 SHA-256，与清单 `native.sha256` 比对；不匹配则中止升级。
 4. **路径穿越防护**：解包前校验所有 tar 条目路径，拒绝含 `../` 或绝对路径的压缩包。
 5. **解包**：将 tar.gz 解压至安全目录，替换源码与静态资源。
-6. **服务重载**：`systemctl reload erp-backend erp-celery erp-celery-beat`（无中断重载）。
+6. **服务重载**：`systemctl restart erp-backend erp-celery erp-celery-beat`。
 7. **健康门控 + 成功**：同 Docker 模式。
 
 ---
 
 ## 回滚机制
 
+### 自动回滚（agent 触发）
+
 当任意步骤（拉取/重启/健康门控）失败时，agent 自动调用 `_rollback()` / `_rollback_native()`：
 
-### Docker 回滚
+#### Docker 回滚
 
 1. 将 `.env` 中 `IMAGE_TAG` 恢复为升级前版本。
 2. 执行 `docker compose up -d` 拉起旧版本容器（旧镜像仍在本地缓存中，无需重新拉取）。
 3. 等待健康门控通过。
-4. 写 `UpgradeJob.status=rolled_back`，推送 `rollback` 事件。
+4. 写 `UpgradeJob.status=rolled_back`，推送进度事件。
 
-### 原生回滚
+#### 原生回滚
 
 1. 将源码目录符号链接还原至旧版本（升级前已保存旧链接路径）。
-2. `systemctl reload` 恢复旧版本。
+2. `systemctl restart` 恢复旧版本。
 3. 等待健康门控通过。
-4. 写 `UpgradeJob.status=rolled_back`，推送 `rollback` 事件。
+4. 写 `UpgradeJob.status=rolled_back`，推送进度事件。
+
+### 手动回滚（人工触发）
+
+管理员可在升级完成后通过 API 主动触发回滚至上一次成功升级前的版本：
+
+```
+POST /api/v1/system/rollback
+```
+
+详见 [API 接口 → 手动回滚](#4-手动回滚)。
 
 ### 数据库回滚
 
@@ -348,7 +406,7 @@ ws://<host>/ws/upgrade/<job_id>/
 ```bash
 # 手动恢复数据库快照（谨慎操作，会覆盖现有数据）
 docker compose exec erp-updater pg_restore -h postgres -U erp_user -d erp_db \
-  /var/backups/erp/backup_<timestamp>.dump
+  /var/backups/erp/pre-upgrade-<timestamp>.sql
 ```
 
 ---
@@ -504,7 +562,7 @@ curl -s http://localhost:8080/api/v1/health/ | python3 -m json.tool
    ```bash
    TOKEN="<your-jwt-token>"
    curl -s -H "Authorization: Bearer $TOKEN" \
-     http://localhost:8080/api/v1/upgrade/check/ | python3 -m json.tool
+     http://localhost:8080/api/v1/system/check-update | python3 -m json.tool
    ```
 
 ### 步骤四：执行升级
@@ -538,6 +596,10 @@ curl -s http://localhost:8080/api/v1/health/ | python3 -m json.tool
 curl -s http://localhost:8080/api/v1/health/ | python3 -m json.tool
 # 期望: "version": "1.3.0"
 
+# 检查 job 详情（status 应为 success）
+curl -s -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8080/api/v1/system/upgrade/jobs | python3 -m json.tool
+
 # 检查容器镜像
 docker compose ps
 docker inspect erp-backend | jq '.[0].Config.Image'
@@ -550,7 +612,7 @@ grep IMAGE_TAG .env
 
 ### 步骤六：测试回滚（可选）
 
-在实际升级前，可通过以下方式模拟失败来测试回滚：
+在实际升级前，可通过以下方式模拟失败来测试自动回滚：
 
 ```bash
 # 方法：将 docker-compose.yml 中 backend healthcheck 临时改为总是失败
@@ -564,6 +626,14 @@ grep IMAGE_TAG .env
 # 验证版本已回滚
 curl -s http://localhost:8080/api/v1/health/ | jq '.version'
 # 期望: "1.2.0"
+```
+
+也可在升级成功后手动触发回滚：
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8080/api/v1/system/rollback | python3 -m json.tool
+# 期望: {"job_id": "...", "status": "pending"}
 ```
 
 ### 步骤七：清理测试状态（测试完毕后）
