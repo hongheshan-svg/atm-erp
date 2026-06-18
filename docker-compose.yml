@@ -217,6 +217,26 @@ services:
     networks:
       - erp-network
 
+  erp-upgrade-relay:
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-hongheshan-svg}/atm-erp-backend:${IMAGE_TAG:-latest}
+    container_name: erp-upgrade-relay
+    restart: unless-stopped
+    command: python manage.py upgrade_progress_relay
+    environment:
+      - RUN_BOOTSTRAP=0
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-erp_db}
+      - DB_USER=${DB_USER:-erp_user}
+      - DB_PASSWORD=${DB_PASSWORD:-erp_password}
+      - REDIS_URL=redis://redis:6379/1
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-change-this-in-production-123456}
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - erp-network
+
 volumes:
   postgres_data:
   redis_data:
