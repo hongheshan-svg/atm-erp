@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- 清单默认 URL:`https://raw.githubusercontent.com/hongheshan-svg/atm-erp-release/main/manifest.json`,env `ERP_UPDATE_MANIFEST_URL` 可覆盖。
+- 清单默认 URL:`https://raw.githubusercontent.com/hongheshan-svg/atm-erp/main/manifest.json`,env `ERP_UPDATE_MANIFEST_URL` 可覆盖。
 - SSRF 可信主机白名单(仅 HTTPS):`raw.githubusercontent.com`、`github.com`、`objects.githubusercontent.com`、`ghcr.io`。
 - 版本比较:去前导 `v` 后按 semver 整型分段比较,函数 `compare_versions(a,b)->int` 返回 -1/0/1。
 - 权限标识 `system:upgrade`(前端 `meta.permission` / `v-permission` / 后端 `PermissionMixin` 三处一致)。
@@ -318,7 +318,7 @@ SAMPLE = {
     "release_notes_md": "## 0.3.0", "min_upgradable_from": "0.2.0",
     "docker": {"registry": "ghcr.io", "owner": "hongheshan-svg", "image_tag": "0.3.0",
                "digests": {"backend": "sha256:a", "frontend": "sha256:b"}},
-    "native": {"tarball_url": "https://github.com/hongheshan-svg/atm-erp-release/releases/download/v0.3.0/erp-0.3.0.tar.gz",
+    "native": {"tarball_url": "https://github.com/hongheshan-svg/atm-erp/releases/download/v0.3.0/erp-0.3.0.tar.gz",
                "sha256": "deadbeef"},
 }
 
@@ -333,7 +333,7 @@ class ValidateUrlTest(SimpleTestCase):
             validate_url('https://evil.example.com/manifest.json')
 
     def test_allows_trusted(self):
-        validate_url('https://raw.githubusercontent.com/hongheshan-svg/atm-erp-release/main/manifest.json')
+        validate_url('https://raw.githubusercontent.com/hongheshan-svg/atm-erp/main/manifest.json')
 
 
 class FetchManifestTest(SimpleTestCase):
@@ -457,7 +457,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```python
 ERP_UPDATE_MANIFEST_URL = config(
     'ERP_UPDATE_MANIFEST_URL',
-    default='https://raw.githubusercontent.com/hongheshan-svg/atm-erp-release/main/manifest.json',
+    default='https://raw.githubusercontent.com/hongheshan-svg/atm-erp/main/manifest.json',
 )
 ```
 
@@ -1867,7 +1867,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 **Files:**
 - Create: `docs/REMOTE_UPGRADE.md`
-- Modify: `README.md` / `README.zh-CN.md`(加「系统升级」一节,指向公开伴生仓)
+- Modify: `README.md` / `README.zh-CN.md`(加「系统升级」一节,指向公开仓库)
 - Modify: `docker-compose.yml`(backend/updater 注入 `APP_VERSION`/`DEPLOY_MODE`)
 
 **Interfaces:** 无新代码接口;端到端验证 + 文档。
@@ -1904,11 +1904,11 @@ Expected: 全绿。
 
 - [ ] **Step 4: 写 `docs/REMOTE_UPGRADE.md`**
 
-内容:架构图、清单格式、公开伴生仓 `atm-erp-release` 的发布流程(生成 image digest / native tar sha256 / 更新 manifest)、`system:upgrade` 权限、回滚说明、安全说明(docker.sock 风险与收敛)。(完整文档,无占位。)
+内容:架构图、清单格式、公开仓库 `atm-erp` 的发布流程(生成 image digest / native tar sha256 / 更新 manifest)、`system:upgrade` 权限、回滚说明、安全说明(docker.sock 风险与收敛)。(完整文档,无占位。)
 
 - [ ] **Step 5: README 双语加「系统升级」小节**
 
-在两个 README 的功能/运维区追加一段:管理员后台「系统升级」→ 检查更新 → 一键升级(自动备份+健康门+失败回滚),并注明升级源为公开伴生仓清单。
+在两个 README 的功能/运维区追加一段:管理员后台「系统升级」→ 检查更新 → 一键升级(自动备份+健康门+失败回滚),并注明升级源为公开仓库清单。
 
 - [ ] **Step 6: 提交**
 

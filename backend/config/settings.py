@@ -301,7 +301,7 @@ INVENTORY_COSTING_METHOD = config('INVENTORY_COSTING_METHOD', default='WEIGHTED_
 # =============================================================================
 ERP_UPDATE_MANIFEST_URL = config(
     'ERP_UPDATE_MANIFEST_URL',
-    default='https://raw.githubusercontent.com/hongheshan-svg/atm-erp-release/main/manifest.json',
+    default='https://raw.githubusercontent.com/hongheshan-svg/atm-erp/main/manifest.json',
 )
 
 # =============================================================================

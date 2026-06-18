@@ -116,10 +116,10 @@ get_deploy_mode()   # → "docker" | "native" | "unknown"
 
 ## 清单格式（Manifest）
 
-升级源为公开伴生仓库 GitHub Release 中的 `manifest.json`，URL 默认为：
+升级源为公开仓库 GitHub Release 中的 `manifest.json`，URL 默认为：
 
 ```
-https://raw.githubusercontent.com/hongheshan-svg/atm-erp-release/main/manifest.json
+https://raw.githubusercontent.com/hongheshan-svg/atm-erp/main/manifest.json
 ```
 
 可通过环境变量 `ERP_UPDATE_MANIFEST_URL` 覆盖（仅限 SSRF 白名单内的主机）。
@@ -152,7 +152,7 @@ https://raw.githubusercontent.com/hongheshan-svg/atm-erp-release/main/manifest.j
     ]
   },
   "native": {
-    "download_url": "https://github.com/hongheshan-svg/atm-erp-release/releases/download/v1.3.0/atm-erp-v1.3.0.tar.gz",
+    "download_url": "https://github.com/hongheshan-svg/atm-erp/releases/download/v1.3.0/atm-erp-v1.3.0.tar.gz",
     "sha256": "0a1b2c...（64 位十六进制，tar.gz 文件的 SHA-256）",
     "target_version": "1.3.0"
   }
@@ -467,7 +467,7 @@ docker compose exec erp-updater pg_restore -h postgres -U erp_user -d erp_db \
 
 ## 发布新版本的操作流程（维护者）
 
-在伴生仓库 `hongheshan-svg/atm-erp-release` 中执行以下步骤：
+在本项目仓库 `hongheshan-svg/atm-erp` 中执行以下步骤：
 
 ### 1. 构建并推送镜像（CI 流程）
 
@@ -497,10 +497,10 @@ sha256sum atm-erp-v1.3.0.tar.gz
 
 ### 3. 更新 manifest.json
 
-将上述摘要与 sha256 填入 `manifest.json` 并提交到伴生仓库 main 分支：
+将上述摘要与 sha256 填入 `manifest.json` 并提交到仓库 main 分支：
 
 ```bash
-# 在 atm-erp-release 仓库
+# 在 atm-erp 仓库
 cat > manifest.json <<'EOF'
 {
   "latest_version": "1.3.0",
@@ -518,7 +518,7 @@ cat > manifest.json <<'EOF'
     ]
   },
   "native": {
-    "download_url": "https://github.com/hongheshan-svg/atm-erp-release/releases/download/v1.3.0/atm-erp-v1.3.0.tar.gz",
+    "download_url": "https://github.com/hongheshan-svg/atm-erp/releases/download/v1.3.0/atm-erp-v1.3.0.tar.gz",
     "sha256": "<tar-gz-sha256>",
     "target_version": "1.3.0"
   }
@@ -536,7 +536,7 @@ git add manifest.json && git commit -m "release: v1.3.0" && git push
 > - `erp-updater` 容器正常（`docker compose ps erp-updater`）
 > - `erp-upgrade-relay` 容器正常
 > - 已有超级管理员账号（拥有 `system:upgrade` 权限）
-> - 伴生仓库已发布目标版本的 manifest.json 且镜像已推送到 GHCR
+> - 仓库已发布目标版本的 manifest.json 且镜像已推送到 GHCR
 
 ### 步骤一：准备"旧版本"状态
 
@@ -662,5 +662,5 @@ docker compose exec backend python manage.py shell -c \
 ---
 
 > 如在测试中遇到 SSRF 白名单阻断（`ERP_UPDATE_MANIFEST_URL` 指向非白名单地址），
-> 请改用伴生仓库的真实 raw URL，或在测试中 mock `ManifestClient.fetch()`，
+> 请改用仓库的真实 raw URL，或在测试中 mock `ManifestClient.fetch()`，
 > **不要**修改白名单配置提交到版本控制。
