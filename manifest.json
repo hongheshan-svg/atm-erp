@@ -1,12 +1,12 @@
 {
-  "latest_version": "0.1.0",
-  "published_at": "2026-06-18T00:00:00Z",
-  "release_notes_md": "初始清单脚手架。每次发布(打 v* 标签)由 CI 的 publish-manifest 作业自动覆盖为真实版本与镜像 digest。",
+  "latest_version": "0.1.1",
+  "published_at": "2026-06-18T16:00:00Z",
+  "release_notes_md": "v0.1.1:Docker 多平台一键安装 + 软件版本远程升级(Docker) + AGPL-3.0。详见 GitHub Release。注:digests 为占位值,代理按 image_tag 拉取;真实 digest 由下次发布的 CI 自动回填。",
   "min_upgradable_from": "0.1.0",
   "docker": {
     "registry": "ghcr.io",
     "owner": "hongheshan-svg",
-    "image_tag": "0.1.0",
+    "image_tag": "0.1.1",
     "digests": {
       "backend": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
       "frontend": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
