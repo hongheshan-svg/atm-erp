@@ -5,7 +5,7 @@ WebSocket consumers for real-time notifications
 import json
 
 from channels.db import database_sync_to_async
-from channels.generic.websocket import AsyncWebsocketConsumer
+from channels.generic.websocket import AsyncJsonWebsocketConsumer, AsyncWebsocketConsumer
 
 
 class NotificationConsumer(AsyncWebsocketConsumer):
@@ -138,3 +138,26 @@ class DashboardConsumer(AsyncWebsocketConsumer):
         from apps.analytics.services import DashboardKPIService
 
         return DashboardKPIService.get_all_kpis()
+
+
+class UpgradeProgressConsumer(AsyncJsonWebsocketConsumer):
+    """
+    WebSocket consumer for streaming remote-upgrade progress.
+
+    Clients connect to ws/system/upgrade/<job_id>/.
+    The relay task calls channel_layer.group_send('upgrade_<job_id>', {'type': 'upgrade.progress', 'data': {...}})
+    and this consumer forwards `data` directly to the WebSocket client.
+    """
+
+    async def connect(self):
+        self.job_id = self.scope['url_route']['kwargs']['job_id']
+        self.group = f'upgrade_{self.job_id}'
+        await self.channel_layer.group_add(self.group, self.channel_name)
+        await self.accept()
+
+    async def disconnect(self, code):
+        await self.channel_layer.group_discard(self.group, self.channel_name)
+
+    async def upgrade_progress(self, event):
+        """Handle upgrade.progress events from the channel layer and forward to client."""
+        await self.send_json(event['data'])
