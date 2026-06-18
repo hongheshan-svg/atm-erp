@@ -149,6 +149,7 @@ class Agent:
         self.report(job, 'apply', f"download {nat['tarball_url']} -> release {target}, migrate, restart")
         if self.dry_run:
             return
+        job['_old_link'] = os.path.realpath(self.CURRENT_LINK) if os.path.islink(self.CURRENT_LINK) else ''
         import requests
         rel_dir = os.path.join(self.RELEASES_DIR, target)
         os.makedirs(rel_dir, exist_ok=True)
@@ -160,7 +161,6 @@ class Agent:
                     f.write(chunk)
         verify_sha256(tar_path, nat['sha256'])
         self._run(['tar', '-xzf', tar_path, '-C', rel_dir, '--strip-components=1'])
-        job['_old_link'] = os.path.realpath(self.CURRENT_LINK) if os.path.islink(self.CURRENT_LINK) else ''
         # 迁移与静态(在新发布目录)
         py = os.path.join(rel_dir, 'venv/bin/python')
         py = py if os.path.exists(py) else 'python'
@@ -168,7 +168,7 @@ class Agent:
         self._run([py, 'manage.py', 'collectstatic', '--noinput'], cwd=os.path.join(rel_dir, 'backend'))
         # 切换 current 软链 + 重启
         tmp_link = self.CURRENT_LINK + '.new'
-        if os.path.islink(tmp_link):
+        if os.path.lexists(tmp_link):
             os.remove(tmp_link)
         os.symlink(rel_dir, tmp_link)
         os.replace(tmp_link, self.CURRENT_LINK)
@@ -189,7 +189,7 @@ class Agent:
         old = job.get('_old_link')
         if old and os.path.isdir(old):
             tmp = self.CURRENT_LINK + '.rb'
-            if os.path.islink(tmp):
+            if os.path.lexists(tmp):
                 os.remove(tmp)
             os.symlink(old, tmp)
             os.replace(tmp, self.CURRENT_LINK)
