@@ -297,6 +297,14 @@ NOTIFICATION_CHANNELS_ENABLED = config(
 INVENTORY_COSTING_METHOD = config('INVENTORY_COSTING_METHOD', default='WEIGHTED_AVG')
 
 # =============================================================================
+# Remote Upgrade
+# =============================================================================
+ERP_UPDATE_MANIFEST_URL = config(
+    'ERP_UPDATE_MANIFEST_URL',
+    default='https://raw.githubusercontent.com/hongheshan-svg/atm-erp-release/main/manifest.json',
+)
+
+# =============================================================================
 # Security Settings (Production)
 # =============================================================================
 
