@@ -3,10 +3,21 @@
 Docker/native 具体执行在 _apply_docker / _apply_native。"""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
 import time
+
+
+def verify_sha256(path: str, expected: str) -> None:
+    h = hashlib.sha256()
+    with open(path, 'rb') as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b''):
+            h.update(chunk)
+    actual = h.hexdigest()
+    if actual.lower() != expected.lower():
+        raise ValueError(f'sha256 mismatch: {actual} != {expected}')
 
 
 def set_env_image_tag(env_path: str, new_tag: str) -> str:
@@ -37,6 +48,9 @@ PROJECT_DIR = os.environ.get('ERP_PROJECT_DIR', '/app')
 
 
 class Agent:
+    RELEASES_DIR = os.environ.get('ERP_RELEASES_DIR', '/opt/erp/releases')
+    CURRENT_LINK = os.environ.get('ERP_CURRENT_LINK', '/opt/erp/current')
+
     def __init__(self, redis_client, *, dry_run: bool = False):
         self.r = redis_client
         self.dry_run = dry_run
@@ -130,10 +144,35 @@ class Agent:
         self._compose('up', '-d')
 
     def _apply_native(self, job: dict, backup: str) -> None:
-        self.report(job, 'apply', 'native apply (placeholder)')
+        nat = job['manifest']['native']
+        target = job['target_version']
+        self.report(job, 'apply', f"download {nat['tarball_url']} -> release {target}, migrate, restart")
         if self.dry_run:
             return
-        raise NotImplementedError('native apply implemented in Task 9')
+        import requests
+        rel_dir = os.path.join(self.RELEASES_DIR, target)
+        os.makedirs(rel_dir, exist_ok=True)
+        tar_path = os.path.join(rel_dir, 'release.tar.gz')
+        with requests.get(nat['tarball_url'], stream=True, timeout=60) as resp:
+            resp.raise_for_status()
+            with open(tar_path, 'wb') as f:
+                for chunk in resp.iter_content(1024 * 1024):
+                    f.write(chunk)
+        verify_sha256(tar_path, nat['sha256'])
+        self._run(['tar', '-xzf', tar_path, '-C', rel_dir, '--strip-components=1'])
+        job['_old_link'] = os.path.realpath(self.CURRENT_LINK) if os.path.islink(self.CURRENT_LINK) else ''
+        # 迁移与静态(在新发布目录)
+        py = os.path.join(rel_dir, 'venv/bin/python')
+        py = py if os.path.exists(py) else 'python'
+        self._run([py, 'manage.py', 'migrate', '--noinput'], cwd=os.path.join(rel_dir, 'backend'))
+        self._run([py, 'manage.py', 'collectstatic', '--noinput'], cwd=os.path.join(rel_dir, 'backend'))
+        # 切换 current 软链 + 重启
+        tmp_link = self.CURRENT_LINK + '.new'
+        if os.path.islink(tmp_link):
+            os.remove(tmp_link)
+        os.symlink(rel_dir, tmp_link)
+        os.replace(tmp_link, self.CURRENT_LINK)
+        self._run(['systemctl', 'restart', 'erp-backend', 'erp-celery', 'erp-celery-beat'])
 
     def _rollback(self, job: dict, backup: str) -> None:
         self.report(job, 'rollback', f'rollback (dry_run={self.dry_run})')
@@ -147,8 +186,14 @@ class Agent:
             self._rollback_native(job, backup)
 
     def _rollback_native(self, job: dict, backup: str) -> None:
-        # Task 9 实现
-        pass
+        old = job.get('_old_link')
+        if old and os.path.isdir(old):
+            tmp = self.CURRENT_LINK + '.rb'
+            if os.path.islink(tmp):
+                os.remove(tmp)
+            os.symlink(old, tmp)
+            os.replace(tmp, self.CURRENT_LINK)
+            self._run(['systemctl', 'restart', 'erp-backend', 'erp-celery', 'erp-celery-beat'])
 
     # ---- 循环 ----
     def run_once(self) -> bool:

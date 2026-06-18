@@ -1,0 +1,17 @@
+[Unit]
+Description=ATM-ERP Remote Upgrade Agent
+After=network.target redis-server.service postgresql.service
+
+[Service]
+Type=simple
+User=root
+Environment=DEPLOY_MODE=native
+Environment=REDIS_URL=redis://127.0.0.1:6379/1
+Environment=ERP_HEALTH_URL=http://127.0.0.1/api/v1/health/
+ExecStart=/usr/bin/python3 -m deploy.updater.agent
+WorkingDirectory=/opt/erp/updater
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
