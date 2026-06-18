@@ -8,6 +8,26 @@ import os
 import subprocess
 import time
 
+
+def set_env_image_tag(env_path: str, new_tag: str) -> str:
+    """把 .env 里的 IMAGE_TAG 改成 new_tag,返回旧值(没有则空串)。"""
+    old = ''
+    lines = []
+    found = False
+    with open(env_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            if line.startswith('IMAGE_TAG='):
+                old = line.split('=', 1)[1].strip()
+                lines.append(f'IMAGE_TAG={new_tag}\n')
+                found = True
+            else:
+                lines.append(line)
+    if not found:
+        lines.append(f'IMAGE_TAG={new_tag}\n')
+    with open(env_path, 'w', encoding='utf-8') as f:
+        f.writelines(lines)
+    return old
+
 QUEUE_KEY = 'erp:upgrade:queue'
 PROGRESS_PREFIX = 'erp:upgrade:progress:'
 LOCK_KEY = 'erp:upgrade:lock'
@@ -94,12 +114,20 @@ class Agent:
         finally:
             self.r.delete(LOCK_KEY)
 
-    # ---- 占位:Task 8/9 实现 ----
+    # ---- Docker 分支 (Task 8) ----
+    def _compose(self, *args: str) -> None:
+        self._run(['docker', 'compose', *args], cwd=PROJECT_DIR)
+
     def _apply_docker(self, job: dict, backup: str) -> None:
-        self.report(job, 'apply', 'docker apply (placeholder)')
+        new_tag = job['manifest']['docker']['image_tag']
+        env_path = os.path.join(PROJECT_DIR, '.env')
+        self.report(job, 'apply', f'set IMAGE_TAG={new_tag}; docker compose pull && up -d')
         if self.dry_run:
+            job['_old_tag'] = '0.0.0'
             return
-        raise NotImplementedError('docker apply implemented in Task 8')
+        job['_old_tag'] = set_env_image_tag(env_path, new_tag)
+        self._compose('pull')
+        self._compose('up', '-d')
 
     def _apply_native(self, job: dict, backup: str) -> None:
         self.report(job, 'apply', 'native apply (placeholder)')
@@ -111,7 +139,15 @@ class Agent:
         self.report(job, 'rollback', f'rollback (dry_run={self.dry_run})')
         if self.dry_run:
             return
-        # Docker/native 各自回滚在 Task 8/9 覆盖
+        if job['mode'] == 'docker':
+            old = job.get('_old_tag') or job.get('from_version')
+            set_env_image_tag(os.path.join(PROJECT_DIR, '.env'), old)
+            self._compose('up', '-d')
+        else:
+            self._rollback_native(job, backup)
+
+    def _rollback_native(self, job: dict, backup: str) -> None:
+        # Task 9 实现
         pass
 
     # ---- 循环 ----

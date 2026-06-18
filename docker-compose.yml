@@ -193,6 +193,30 @@ services:
     networks:
       - erp-network
 
+  erp-updater:
+    build:
+      context: .
+      dockerfile: docker/updater/Dockerfile
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-hongheshan-svg}/atm-erp-updater:${IMAGE_TAG:-latest}
+    container_name: erp-updater
+    restart: unless-stopped
+    environment:
+      - REDIS_URL=redis://redis:6379/1
+      - ERP_HEALTH_URL=http://nginx/api/v1/health/
+      - ERP_PROJECT_DIR=/project
+      - PGHOST=postgres
+      - PGUSER=${DB_USER:-erp_user}
+      - PGPASSWORD=${DB_PASSWORD:-erp_password}
+      - PGDATABASE=${DB_NAME:-erp_db}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/project
+      - backend_logs:/var/backups/erp
+    depends_on:
+      - redis
+    networks:
+      - erp-network
+
 volumes:
   postgres_data:
   redis_data:
