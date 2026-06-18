@@ -38,3 +38,13 @@ class FetchManifestTest(SimpleTestCase):
         self.assertEqual(m.min_upgradable_from, '0.2.0')
         self.assertEqual(m.docker['image_tag'], '0.3.0')
         self.assertEqual(m.native['sha256'], 'deadbeef')
+
+    def test_rejects_redirect(self):
+        """3xx 响应必须抛出 ManifestError，防止 SSRF 白名单绕过。"""
+        resp = mock.Mock(status_code=302, headers={'Location': 'https://evil.example.com/x'})
+        resp.raise_for_status = mock.Mock()  # raise_for_status does NOT raise on 3xx
+        with mock.patch('apps.core.manifest_client.requests.get', return_value=resp) as g:
+            with self.assertRaises(ManifestError):
+                fetch_manifest('https://raw.githubusercontent.com/x/y/main/manifest.json')
+        # ensure redirects were disabled
+        self.assertEqual(g.call_args.kwargs.get('allow_redirects'), False)

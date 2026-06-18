@@ -39,7 +39,11 @@ class Manifest:
 def fetch_manifest(url: str, *, timeout: int = 10) -> Manifest:
     validate_url(url)
     try:
-        resp = requests.get(url, timeout=timeout, headers={'Accept': 'application/json'})
+        resp = requests.get(url, timeout=timeout, headers={'Accept': 'application/json'}, allow_redirects=False)
+        if 300 <= resp.status_code < 400:
+            raise ManifestError(
+                f'unexpected redirect ({resp.status_code}) — possible SSRF, refusing to follow'
+            )
         resp.raise_for_status()
         data = resp.json()
     except (requests.RequestException, ValueError) as exc:
