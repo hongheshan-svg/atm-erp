@@ -89,6 +89,9 @@ def perform_upgrade(user) -> UpgradeJob:
     mode = get_deploy_mode()
     if mode not in (UpgradeJob.MODE_DOCKER, UpgradeJob.MODE_NATIVE):
         raise UpgradeNotAllowed(f'deploy mode {mode!r} is not upgradable')
+    if mode == UpgradeJob.MODE_NATIVE:
+        raise UpgradeNotAllowed(
+            '原生部署的一键升级暂未支持，请使用手动升级流程（见 docs/REMOTE_UPGRADE.md）')
     if not _acquire_lock():
         raise UpgradeBusy('another upgrade is in progress')
     try:
@@ -114,6 +117,9 @@ def perform_rollback(user) -> UpgradeJob:
     mode = get_deploy_mode()
     if mode not in (UpgradeJob.MODE_DOCKER, UpgradeJob.MODE_NATIVE):
         raise UpgradeNotAllowed(f'deploy mode {mode!r} is not upgradable')
+    if mode == UpgradeJob.MODE_NATIVE:
+        raise UpgradeNotAllowed(
+            '原生部署的一键升级暂未支持，请使用手动升级流程（见 docs/REMOTE_UPGRADE.md）')
     if not _acquire_lock():
         raise UpgradeBusy('another upgrade is in progress')
     try:

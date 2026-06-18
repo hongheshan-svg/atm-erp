@@ -78,6 +78,25 @@ class PerformUpgradeTest(TestCase):
         with self.assertRaises(svc.UpgradeNotAllowed):
             svc.perform_upgrade(self.user)
 
+    @mock.patch('apps.core.upgrade_service.get_deploy_mode', return_value='native')
+    @mock.patch('apps.core.upgrade_service.get_app_version', return_value='0.2.0')
+    @mock.patch('apps.core.upgrade_service.fetch_manifest',
+                return_value=_manifest('0.3.0'))
+    def test_upgrade_refused_native_mode(self, *_):
+        with self.assertRaises(svc.UpgradeNotAllowed):
+            svc.perform_upgrade(self.user)
+
+    @mock.patch('apps.core.upgrade_service.get_deploy_mode', return_value='native')
+    def test_rollback_refused_native_mode(self, _mode):
+        # plant a successful upgrade so rollback has a record to find
+        UpgradeJob.objects.create(
+            action=UpgradeJob.ACTION_UPGRADE, mode=UpgradeJob.MODE_DOCKER,
+            from_version='0.2.0', target_version='0.3.0',
+            status=UpgradeJob.STATUS_SUCCESS, triggered_by=self.user,
+        )
+        with self.assertRaises(svc.UpgradeNotAllowed):
+            svc.perform_rollback(self.user)
+
 
 class CheckUpdateCacheTest(TestCase):
     def setUp(self):

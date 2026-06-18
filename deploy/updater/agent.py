@@ -92,8 +92,9 @@ class Agent:
         while time.time() < deadline:
             try:
                 resp = requests.get(HEALTH_URL, timeout=5)
-                if resp.status_code == 200 and \
-                        resp.json().get('version') == job['target_version']:
+                expected = str(job.get('_expected_version') or job.get('target_version') or '').lstrip('v')
+                got = str(resp.json().get('version', '')).lstrip('v')
+                if resp.status_code == 200 and got == expected:
                     return True
             except Exception:
                 pass
@@ -139,8 +140,10 @@ class Agent:
         self.report(job, 'apply', f'set IMAGE_TAG={new_tag}; docker compose pull && up -d')
         if self.dry_run:
             job['_old_tag'] = '0.0.0'
+            job['_expected_version'] = new_tag
             return
         job['_old_tag'] = set_env_image_tag(env_path, new_tag)
+        job['_expected_version'] = new_tag
         self._compose('pull')
         self._compose('up', '-d')
 
