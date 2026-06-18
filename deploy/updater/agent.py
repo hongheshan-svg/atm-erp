@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import subprocess
 import time
 
@@ -144,14 +145,18 @@ class Agent:
         self._compose('up', '-d')
 
     def _apply_native(self, job: dict, backup: str) -> None:
-        nat = job['manifest']['native']
         target = job['target_version']
+        if not re.fullmatch(r'[A-Za-z0-9._-]{1,64}', target or '') or target.startswith('.') or '..' in target:
+            raise ValueError(f'invalid target_version: {target!r}')
+        nat = job['manifest']['native']
         self.report(job, 'apply', f"download {nat['tarball_url']} -> release {target}, migrate, restart")
         if self.dry_run:
             return
         job['_old_link'] = os.path.realpath(self.CURRENT_LINK) if os.path.islink(self.CURRENT_LINK) else ''
         import requests
         rel_dir = os.path.join(self.RELEASES_DIR, target)
+        if os.path.commonpath([os.path.realpath(rel_dir), os.path.realpath(self.RELEASES_DIR)]) != os.path.realpath(self.RELEASES_DIR):
+            raise ValueError('release dir escapes RELEASES_DIR')
         os.makedirs(rel_dir, exist_ok=True)
         tar_path = os.path.join(rel_dir, 'release.tar.gz')
         with requests.get(nat['tarball_url'], stream=True, timeout=60) as resp:
@@ -160,7 +165,8 @@ class Agent:
                 for chunk in resp.iter_content(1024 * 1024):
                     f.write(chunk)
         verify_sha256(tar_path, nat['sha256'])
-        self._run(['tar', '-xzf', tar_path, '-C', rel_dir, '--strip-components=1'])
+        self._run(['tar', '--no-same-owner', '--no-same-permissions', '--no-overwrite-dir',
+                   '-xzf', tar_path, '-C', rel_dir, '--strip-components=1'])
         # 迁移与静态(在新发布目录)
         py = os.path.join(rel_dir, 'venv/bin/python')
         py = py if os.path.exists(py) else 'python'

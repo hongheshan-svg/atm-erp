@@ -26,3 +26,16 @@ def test_native_apply_dry_run():
     Agent(r, dry_run=True)._apply_native(job, '/tmp/b.sql')
     steps = json.loads(r.get('erp:upgrade:progress:n1') or '{"steps":[]}')['steps']
     assert any(s['stage'] == 'apply' for s in steps)
+
+
+def test_apply_native_rejects_path_traversal():
+    import fakeredis
+    r = fakeredis.FakeStrictRedis()
+    job = {'id': 'bad1', 'action': 'upgrade', 'mode': 'native', 'target_version': '../etc',
+           'from_version': '0.2.0',
+           'manifest': {'native': {'tarball_url': 'https://github.com/x/y/releases/download/v/erp.tar.gz', 'sha256': 'x'}}}
+    try:
+        Agent(r, dry_run=True)._apply_native(job, '/tmp/b.sql')
+        assert False, 'expected ValueError'
+    except ValueError:
+        pass
