@@ -39,6 +39,7 @@
 - [代码规范与提交流程](#代码规范与提交流程)
 - [项目结构](#项目结构)
 - [核心设计约定](#核心设计约定)
+- [系统升级](#系统升级)
 - [微信小程序端](#微信小程序端)
 - [文档索引](#文档索引)
 - [License](#license)
@@ -483,6 +484,24 @@ atm-erp/
 - **前端网络调用**：统一走 `frontend/src/utils/request.ts`，新接口在
   `frontend/src/api/<module>.ts` 按模块组织，**不要在视图组件里直接 `import axios`**。
 
+## 系统升级
+
+超级管理员可在后台「**系统设置 → 系统升级**」页面完成在线升级：
+
+1. **检查更新** — 系统从公开伴生仓库
+   [hongheshan-svg/atm-erp-release](https://github.com/hongheshan-svg/atm-erp-release)
+   拉取最新清单，与 `GET /api/v1/health/` 报告的运行版本进行 semver 比对。
+2. **一键升级** — 点击「升级」后，`erp-updater` 服务将依次执行：
+   - 自动备份 PostgreSQL 数据库快照（回滚保底）；
+   - Docker 模式：拉取新镜像并校验 sha256 摘要；原生模式：下载 tar.gz 并校验 SHA-256；
+   - 重启服务并等待健康门控（60 秒内 `/api/v1/health/` 返回新版本）；
+   - 若健康门控失败，自动回滚至升级前版本。
+3. **实时进度** — 升级步骤通过 WebSocket 推送到浏览器；进度同时落库，
+   前端断线重连或 backend 重启后可无缝恢复展示。
+
+此功能需要 `system:upgrade` 权限（默认仅超级管理员拥有）。
+详细架构、清单格式、安全设计与端到端测试流程见 [`docs/REMOTE_UPGRADE.md`](docs/REMOTE_UPGRADE.md)。
+
 ## 微信小程序端
 
 `miniprogram/` 是独立于 Vue 前端的微信小程序客户端，主打**移动审批**：
@@ -505,6 +524,7 @@ atm-erp/
 | `docs/业务流程手册.md` | 业务流程参考 |
 | `docs/USER_MANUAL.md` | 用户操作手册 |
 | `docs/SYSTEM_REQUIREMENTS.md` | 系统需求 |
+| `docs/REMOTE_UPGRADE.md` | 远程升级架构、清单格式、安全设计与端到端测试流程 |
 
 在线 API 文档：
 

@@ -481,12 +481,29 @@ show_completion() {
     echo
 }
 
+# 安装升级代理
+install_updater() {
+    print_step "安装远程升级代理"
+
+    mkdir -p /opt/erp/updater/deploy/updater
+    cp -r "$SOURCE_DIR/deploy/updater/." /opt/erp/updater/deploy/updater/
+    pip install redis requests >/dev/null 2>&1 || true
+    cp "$SOURCE_DIR/deploy/updater/erp-updater.service" /etc/systemd/system/
+    systemctl daemon-reload
+    systemctl enable --now erp-updater
+    # 写入版本与模式(被 backend 读取)
+    echo "DEPLOY_MODE=native" >> "$APP_DIR/.env"
+    echo "APP_VERSION=$(git -C "$SOURCE_DIR" describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)" >> "$APP_DIR/.env"
+
+    print_success "远程升级代理安装完成"
+}
+
 # 主函数
 main() {
     print_banner
     check_root
     get_project_dir
-    
+
     install_dependencies
     create_app_user
     setup_postgresql
@@ -498,8 +515,9 @@ main() {
     setup_celery
     setup_nginx
     setup_firewall
+    install_updater
     save_config
-    
+
     show_completion
 }
 

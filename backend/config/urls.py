@@ -9,6 +9,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from apps.core.version import get_app_version
 
 
 @api_view(['GET'])
@@ -16,7 +17,7 @@ from rest_framework.response import Response
 @throttle_classes([])
 def api_health_check(request):
     """Simple health check for Docker/Kubernetes."""
-    return Response({'status': 'healthy', 'version': '1.0.0'})
+    return Response({'status': 'healthy', 'version': get_app_version()})
 
 
 urlpatterns = [
@@ -24,6 +25,9 @@ urlpatterns = [
     
     # Health check (for Docker/K8s)
     path('api/v1/health/', api_health_check, name='api-health'),
+
+    # Remote-upgrade admin API
+    path('api/v1/', include('apps.core.upgrade_urls')),
     
     # API Documentation (requires authentication)
     path('api/schema/', SpectacularAPIView.as_view(permission_classes=[IsAuthenticated]), name='schema'),

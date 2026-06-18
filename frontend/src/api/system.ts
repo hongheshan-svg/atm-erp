@@ -181,3 +181,23 @@ export function saveSystemConfig(data: any) {
 export function getPermissionTree() {
   return request({ url: '/core/permissions/tree/', method: 'get' })
 }
+
+// ========== 系统升级 ==========
+export function getSystemVersion() {
+  return request({ url: '/v1/system/version', method: 'get' })
+}
+export function checkUpdate(force = false) {
+  return request({ url: '/v1/system/check-update', method: 'get', params: { force: force ? 1 : 0 } })
+}
+export function performUpgrade() {
+  return request({ url: '/v1/system/upgrade', method: 'post' })
+}
+export function getUpgradeJob(id: string | number) {
+  return request({ url: `/v1/system/upgrade/jobs/${id}`, method: 'get' })
+}
+export function listUpgradeJobs() {
+  return request({ url: '/v1/system/upgrade/jobs', method: 'get' })
+}
+export function rollbackUpgrade() {
+  return request({ url: '/v1/system/rollback', method: 'post' })
+}

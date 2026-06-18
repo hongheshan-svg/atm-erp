@@ -272,3 +272,52 @@ class SystemConfig(models.Model):
 # 导入编码规则模型
 
 # 导入移动端API模型
+
+
+class UpgradeJob(BaseModel):
+    """远程升级任务(持久记录,供进度/审计/回滚)。"""
+
+    ACTION_UPGRADE = 'upgrade'
+    ACTION_ROLLBACK = 'rollback'
+    ACTION_CHOICES = [(ACTION_UPGRADE, '升级'), (ACTION_ROLLBACK, '回滚')]
+
+    MODE_DOCKER = 'docker'
+    MODE_NATIVE = 'native'
+    MODE_CHOICES = [(MODE_DOCKER, 'Docker'), (MODE_NATIVE, '原生')]
+
+    STATUS_PENDING = 'pending'
+    STATUS_RUNNING = 'running'
+    STATUS_HEALTHCHECK = 'healthcheck'
+    STATUS_SUCCESS = 'success'
+    STATUS_FAILED = 'failed'
+    STATUS_ROLLED_BACK = 'rolled_back'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, '排队中'), (STATUS_RUNNING, '执行中'),
+        (STATUS_HEALTHCHECK, '健康检查'), (STATUS_SUCCESS, '成功'),
+        (STATUS_FAILED, '失败'), (STATUS_ROLLED_BACK, '已回滚'),
+    ]
+
+    action = models.CharField('动作', max_length=16, choices=ACTION_CHOICES)
+    mode = models.CharField('部署模式', max_length=16, choices=MODE_CHOICES)
+    from_version = models.CharField('升级前版本', max_length=32)
+    target_version = models.CharField('目标版本', max_length=32)
+    status = models.CharField('状态', max_length=16, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    steps = models.JSONField('步骤日志', default=list, blank=True)
+    db_backup_path = models.CharField('DB 备份路径', max_length=512, blank=True, default='')
+    started_at = models.DateTimeField('开始时间', null=True, blank=True)
+    finished_at = models.DateTimeField('结束时间', null=True, blank=True)
+    triggered_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='upgrade_jobs', verbose_name='触发人',
+    )
+
+    class Meta:
+        verbose_name = '升级任务'
+        verbose_name_plural = '升级任务'
+        ordering = ['-created_at']
+
+    def append_step(self, stage: str, message: str, level: str = 'info') -> None:
+        from django.utils import timezone
+        entry = {'ts': timezone.now().isoformat(), 'stage': stage, 'message': message, 'level': level}
+        self.steps = (self.steps or []) + [entry]
+        self.save(update_fields=['steps', 'updated_at'])
