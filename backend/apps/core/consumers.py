@@ -147,17 +147,36 @@ class UpgradeProgressConsumer(AsyncJsonWebsocketConsumer):
     Clients connect to ws/system/upgrade/<job_id>/.
     The relay task calls channel_layer.group_send('upgrade_<job_id>', {'type': 'upgrade.progress', 'data': {...}})
     and this consumer forwards `data` directly to the WebSocket client.
+
+    Access control: requires authentication AND the system:upgrade permission.
     """
 
     async def connect(self):
+        user = self.scope.get('user')
+        if user is None or not user.is_authenticated:
+            await self.close(code=4401)
+            return
+        if not await self._can_watch(user):
+            await self.close(code=4403)
+            return
         self.job_id = self.scope['url_route']['kwargs']['job_id']
         self.group = f'upgrade_{self.job_id}'
         await self.channel_layer.group_add(self.group, self.channel_name)
         await self.accept()
 
     async def disconnect(self, code):
-        await self.channel_layer.group_discard(self.group, self.channel_name)
+        if hasattr(self, 'group'):
+            await self.channel_layer.group_discard(self.group, self.channel_name)
 
     async def upgrade_progress(self, event):
         """Handle upgrade.progress events from the channel layer and forward to client."""
         await self.send_json(event['data'])
+
+    @database_sync_to_async
+    def _can_watch(self, user):
+        """Return True if user holds the system:upgrade permission (or is superuser)."""
+        if user.is_superuser:
+            return True
+        from apps.core.permission_service import get_user_permissions
+        perms = get_user_permissions(user)
+        return any(p == 'system:upgrade' or p.startswith('system:upgrade:') for p in perms)
