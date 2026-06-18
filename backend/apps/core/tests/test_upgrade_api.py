@@ -74,5 +74,5 @@ class UpgradeApiTest(TestCase):
 
     @mock.patch('apps.core.upgrade_views.upgrade_service.get_job', return_value=None)
     def test_job_detail_404(self, _g):
-        r = self.client.get('/api/v1/system/upgrade/jobs/00000000-0000-0000-0000-000000000000')
+        r = self.client.get('/api/v1/system/upgrade/jobs/999999')
         self.assertEqual(r.status_code, 404)

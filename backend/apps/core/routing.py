@@ -9,5 +9,5 @@ from . import consumers
 websocket_urlpatterns = [
     re_path(r'ws/notifications/$', consumers.NotificationConsumer.as_asgi()),
     re_path(r'ws/dashboard/$', consumers.DashboardConsumer.as_asgi()),
-    re_path(r'ws/system/upgrade/(?P<job_id>[0-9a-fA-F-]{36})/$', consumers.UpgradeProgressConsumer.as_asgi()),
+    re_path(r'ws/system/upgrade/(?P<job_id>[0-9]+)/$', consumers.UpgradeProgressConsumer.as_asgi()),
 ]
