@@ -28,8 +28,8 @@
 | 目标部署形态 | Docker 与原生 systemd **都支持**（代理按 `DEPLOY_MODE` 分支） |
 | 升级源 | **厂商发布清单**（公开 JSON），实例轮询 |
 | 执行模型 | **宿主升级代理**（特权）；后端只校验+投递+推进度 |
-| 清单托管 | **公开伴生仓** `hongheshan-svg/atm-erp-release` 的 raw |
-| 清单默认 URL | `https://raw.githubusercontent.com/hongheshan-svg/atm-erp-release/main/manifest.json`（env `ERP_UPDATE_MANIFEST_URL` 可覆盖） |
+| 清单托管 | **公开仓库** `hongheshan-svg/atm-erp` 的 raw |
+| 清单默认 URL | `https://raw.githubusercontent.com/hongheshan-svg/atm-erp/main/manifest.json`（env `ERP_UPDATE_MANIFEST_URL` 可覆盖） |
 | 升级前 DB 快照 | 默认**每次 `pg_dump` 全量快照**（可配置阈值/保留份数） |
 | 健康门不过 | 默认**自动回滚** |
 
@@ -114,7 +114,7 @@
     "registry": "ghcr.io", "owner": "hongheshan-svg", "image_tag": "0.3.0",
     "digests": { "backend": "sha256:...", "frontend": "sha256:..." }
   },
-  "native": { "tarball_url": "https://github.com/hongheshan-svg/atm-erp-release/releases/download/v0.3.0/erp-0.3.0.tar.gz", "sha256": "..." }
+  "native": { "tarball_url": "https://github.com/hongheshan-svg/atm-erp/releases/download/v0.3.0/erp-0.3.0.tar.gz", "sha256": "..." }
 }
 ```
 - **版本比较**：semver 整型分段比较（同 sub2api `compareVersions`），去前导 `v`。
@@ -179,5 +179,5 @@ Docker 升级会重建 backend 容器 → WebSocket 断开。前端处理：
 | 越权触发 | `system:upgrade` 权限 + 审计 |
 
 ## 14. 待办前置（实现期产出，非本设计）
-- 新建公开伴生仓 `hongheshan-svg/atm-erp-release` 并放首个 `manifest.json`。
+- 新建公开仓库 `hongheshan-svg/atm-erp` 并放首个 `manifest.json`。
 - 在发布流程（CI）里生成镜像 digest 与原生 tar 的 sha256 并更新清单。

@@ -518,8 +518,8 @@ atm-erp/
 
 From the admin panel under **System Settings → System Upgrade**, super-administrators can:
 
-1. **Check for updates** — the system fetches the public release manifest from
-   [hongheshan-svg/atm-erp-release](https://github.com/hongheshan-svg/atm-erp-release)
+1. **Check for updates** — the system fetches the public release manifest
+   (`manifest.json` at the repo root, served via `raw.githubusercontent.com`)
    and compares the latest version against the running version reported by
    `GET /api/v1/health/`.
 2. **One-click upgrade** — clicking "Upgrade" queues the job; the `erp-updater`
@@ -569,5 +569,11 @@ Live API docs:
 
 ## License
 
-This is an internal enterprise system; all rights reserved by the respective owners.
-Add an appropriate license here if you intend to open-source or distribute it.
+Licensed under the **GNU Affero General Public License v3.0** (`AGPL-3.0-only`) — see [LICENSE](./LICENSE).
+
+AGPL-3.0 is a strong copyleft license: if you run a modified version of this software to provide a
+service over a network, you must offer the complete corresponding source code of your modified
+version to the users of that service. Any distribution or derivative work must also be licensed
+under AGPL-3.0.
+
+Copyright (C) 2026 ATM-ERP contributors.

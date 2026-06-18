@@ -488,8 +488,8 @@ atm-erp/
 
 超级管理员可在后台「**系统设置 → 系统升级**」页面完成在线升级：
 
-1. **检查更新** — 系统从公开伴生仓库
-   [hongheshan-svg/atm-erp-release](https://github.com/hongheshan-svg/atm-erp-release)
+1. **检查更新** — 系统从公开仓库
+   [hongheshan-svg/atm-erp](https://github.com/hongheshan-svg/atm-erp)
    拉取最新清单，与 `GET /api/v1/health/` 报告的运行版本进行 semver 比对。
 2. **一键升级** — 点击「升级」后，`erp-updater` 服务将依次执行：
    - 自动备份 PostgreSQL 数据库快照（回滚保底）；
@@ -533,4 +533,9 @@ atm-erp/
 
 ## License
 
-本项目为企业内部系统，版权归属相关权利人。如需开源或对外授权，请补充对应 License。
+采用 **GNU Affero 通用公共许可证 v3.0**（`AGPL-3.0-only`）—— 详见 [LICENSE](./LICENSE)。
+
+AGPL-3.0 是强 copyleft 协议：如果你运行本软件的修改版本并通过**网络**对外提供服务，
+必须向该服务的使用者提供你修改版本的完整对应源代码；任何分发或衍生作品也必须以 AGPL-3.0 授权。
+
+Copyright (C) 2026 ATM-ERP contributors.
