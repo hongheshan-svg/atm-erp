@@ -86,11 +86,14 @@ def perform_upgrade(user) -> UpgradeJob:
     if m.min_upgradable_from and compare_versions(current, m.min_upgradable_from) < 0:
         raise UpgradeNotAllowed(
             f'must upgrade to {m.min_upgradable_from} first (current {current})')
+    mode = get_deploy_mode()
+    if mode not in (UpgradeJob.MODE_DOCKER, UpgradeJob.MODE_NATIVE):
+        raise UpgradeNotAllowed(f'deploy mode {mode!r} is not upgradable')
     if not _acquire_lock():
         raise UpgradeBusy('another upgrade is in progress')
     try:
         job = UpgradeJob.objects.create(
-            action=UpgradeJob.ACTION_UPGRADE, mode=get_deploy_mode(),
+            action=UpgradeJob.ACTION_UPGRADE, mode=mode,
             from_version=current, target_version=m.latest_version,
             status=UpgradeJob.STATUS_PENDING, triggered_by=user,
             started_at=timezone.now(),
@@ -108,11 +111,14 @@ def perform_rollback(user) -> UpgradeJob:
             .order_by('-created_at').first())
     if last is None:
         raise NoUpdateAvailable('no successful upgrade to roll back')
+    mode = get_deploy_mode()
+    if mode not in (UpgradeJob.MODE_DOCKER, UpgradeJob.MODE_NATIVE):
+        raise UpgradeNotAllowed(f'deploy mode {mode!r} is not upgradable')
     if not _acquire_lock():
         raise UpgradeBusy('another upgrade is in progress')
     try:
         job = UpgradeJob.objects.create(
-            action=UpgradeJob.ACTION_ROLLBACK, mode=get_deploy_mode(),
+            action=UpgradeJob.ACTION_ROLLBACK, mode=mode,
             from_version=get_app_version(), target_version=last.from_version,
             status=UpgradeJob.STATUS_PENDING, triggered_by=user, started_at=timezone.now(),
         )
@@ -128,4 +134,4 @@ def get_job(job_id):
 
 
 def list_jobs(limit: int = 20):
-    return list(UpgradeJob.objects.all()[:limit])
+    return list(UpgradeJob.objects.all().order_by('-created_at')[:limit])
