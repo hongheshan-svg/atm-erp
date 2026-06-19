@@ -57,6 +57,14 @@ Go 会误跳、Django 不跳。**✅ 已修**:Go 改为"阈值与金额皆非 ni
 `action_type=COUNTERSIGN` 时一步为全部审批人各生成一条 task,**全部 APPROVED 才推进**(任一拒绝整单驳回)。
 集成测试(无 Django 裁判,验意图语义):2 审批人,签 1 实例仍 PENDING、签 2 实例 APPROVED,PASS。
 
+**真实审批人 resolver**(对齐 Django `_get_step_assignee`):`accounts.WorkflowResolver` 实现
+`workflow.AssigneeResolver` 并经 `RoutesWithService` 注入(引擎仍零业务 import,依赖方向 accounts→workflow):
+- `USER`→step.approver_user;`ROLE`→该角色在岗用户(role_id + 兼容 user_roles M2M);
+  `DEPARTMENT_MANAGER`/`SUPERIOR`→提交人部门负责人;兜底 approver_role→末位 superuser(对齐 Django,
+  superuser 兜底越权风险见待定);`ResolveAll`(会签)ROLE 取该角色全部在岗用户。
+- `PROJECT_MANAGER` 需业务上下文,返回 0 由引擎跳过,留 callback/port 接入(TODO)。
+集成测试 `TestWorkflowResolverIAM`:step1 ROLE→角色用户、step2 DEPARTMENT_MANAGER→部门负责人,PASS。
+
 ## ✅ finance — 回款核销级联(已移植并验证)
 
 权威:`apps.finance.collection_models.CollectionRecord.save()` 三级汇总:
@@ -95,6 +103,7 @@ A 波用 AutoMigrate 从 Go 模型建表,掩盖了与真实 Django schema 的不
 ## 下一步
 
 1. finance 回款核销接 REST 路由 + 前端;前端各业务表按真库 schema 校验字段名。
-2. workflow:抄送(cc_users/cc_roles)、超时升级、PROJECT_MANAGER/SUPERIOR 真实 resolver 接入。
+2. workflow 余项(依赖 notify/asynq 调度基础设施):抄送(cc_users/cc_roles M2M + 通知派发)、
+   超时升级(asynq 定时扫 deadline 过期 task → escalate/auto-pass)、PROJECT_MANAGER 经业务 callback 解析。
 3. inventory 成本账本(ItemCostRecord)与 Stock 移动联动(目前 Stock 走 weighted_avg_cost,
    ItemCostRecord 账本由其它流程喂);若需两者统一,需评估 Django 侧实际喂账本的入口。

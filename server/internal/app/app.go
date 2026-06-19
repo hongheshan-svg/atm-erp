@@ -105,7 +105,8 @@ func buildRouter(cfg *config.Config, gdb *gorm.DB, ps iam.PermissionService) *gi
 	production.Routes(api, gdb, perm)
 	finance.Routes(api, gdb, perm)
 	oa.Routes(api, gdb, perm)
-	workflow.Routes(api, gdb, perm)
+	// 工作流:注入 IAM 真实审批人 resolver(ROLE/DEPARTMENT_MANAGER/SUPERIOR 查 accounts 表)。
+	workflow.RoutesWithService(api, workflow.NewService(gdb, workflow.NewCallbackRegistry(), accounts.NewWorkflowResolver(gdb)), perm)
 
 	return r
 }
