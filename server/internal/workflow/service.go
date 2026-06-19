@@ -156,11 +156,12 @@ func (s *Service) createNextTask(ctx context.Context, tx *gorm.DB, inst *Workflo
 	for i := range steps {
 		st := &steps[i]
 		if st.StepOrder >= inst.CurrentStep {
-			// 按金额跳步(skip_amount_threshold)。
-			if st.SkipAmountThreshold != nil && inst.Amount != nil {
-				if *inst.Amount < *st.SkipAmountThreshold {
-					continue
-				}
+			// 按金额跳步:对齐 Django `step.skip_amount_threshold and instance.amount`——
+			// 两者皆为真值(非 nil 且非 0)且 amount < 阈值才跳。阈值或金额为 0 时不跳(Python 0 视为假)。
+			if st.SkipAmountThreshold != nil && *st.SkipAmountThreshold != 0 &&
+				inst.Amount != nil && *inst.Amount != 0 &&
+				*inst.Amount < *st.SkipAmountThreshold {
+				continue
 			}
 			current = st
 			break
@@ -172,31 +173,40 @@ func (s *Service) createNextTask(ctx context.Context, tx *gorm.DB, inst *Workflo
 		return s.completeTx(ctx, tx, inst, InstanceStatusApproved)
 	}
 
-	assignee, err := s.resolver.Resolve(ctx, current, inst)
-	if err != nil {
-		return err
-	}
-	if assignee == 0 {
-		// 无审批人:跳过本步并前进(对齐 Django,带步数上限防死循环)。
-		inst.CurrentStep = current.StepOrder + 1
-		if err := tx.WithContext(ctx).Save(inst).Error; err != nil {
-			return err
-		}
-		if inst.CurrentStep > len(steps) {
-			return s.completeTx(ctx, tx, inst, InstanceStatusApproved)
-		}
-		return s.createNextTask(ctx, tx, inst)
-	}
-
 	timeoutHours := current.TimeoutHours
 	if timeoutHours <= 0 {
 		timeoutHours = 24
 	}
 	deadline := time.Now().Add(time.Duration(timeoutHours) * time.Hour)
 
-	// TODO(verify): COUNTERSIGN 会签——Django 声明未实现。按设计文档应在
-	// action_type=COUNTERSIGN 时一步生成多 task(多审批人全 APPROVED 才进下一步)。
-	// 当前 resolver 仅返回单审批人,会签留待 resolver 扩展为多人后补齐。
+	// 会签(COUNTERSIGN):一步为全部审批人各生成一条 task,全部 APPROVED 才进下一步
+	// (推进判定见 transition)。Django 声明未实现,此为 Go 新增能力。
+	if current.ActionType == ActionTypeCountersign {
+		approvers, err := s.resolver.ResolveAll(ctx, current, inst)
+		if err != nil {
+			return err
+		}
+		if len(approvers) == 0 {
+			return s.skipNoAssignee(ctx, tx, inst, current, len(steps))
+		}
+		for _, aid := range approvers {
+			d := deadline
+			t := &WorkflowTask{InstanceID: inst.ID, StepID: current.ID, AssigneeID: aid, Status: TaskStatusPending, Deadline: &d}
+			if err := tx.WithContext(ctx).Create(t).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// 单人审批(APPROVE/REVIEW)。
+	assignee, err := s.resolver.Resolve(ctx, current, inst)
+	if err != nil {
+		return err
+	}
+	if assignee == 0 {
+		return s.skipNoAssignee(ctx, tx, inst, current, len(steps))
+	}
 	task := &WorkflowTask{
 		InstanceID: inst.ID,
 		StepID:     current.ID,
@@ -209,6 +219,18 @@ func (s *Service) createNextTask(ctx context.Context, tx *gorm.DB, inst *Workflo
 	}
 	// TODO(port): _notify_assignee —— 站内信 + 钉钉/企微,依赖 notification 服务。
 	return nil
+}
+
+// skipNoAssignee 无审批人时跳过本步并前进(对齐 Django,带步数上限防死循环)。
+func (s *Service) skipNoAssignee(ctx context.Context, tx *gorm.DB, inst *WorkflowInstance, current *WorkflowStep, totalSteps int) error {
+	inst.CurrentStep = current.StepOrder + 1
+	if err := tx.WithContext(ctx).Save(inst).Error; err != nil {
+		return err
+	}
+	if inst.CurrentStep > totalSteps {
+		return s.completeTx(ctx, tx, inst, InstanceStatusApproved)
+	}
+	return s.createNextTask(ctx, tx, inst)
 }
 
 // completeTx 在事务内置实例终态(同步 completed_at)。callback 分发在事务后由调用方触发。
@@ -289,6 +311,16 @@ func (s *Service) transition(ctx context.Context, taskID uint64, comment string,
 		step, err := s.getStepTx(txCtx, tx, task.StepID)
 		if err != nil {
 			return err
+		}
+		// 会签:仅当本步所有 task 都已 APPROVED 才推进;否则保持等待其他会签人。
+		if step.ActionType == ActionTypeCountersign {
+			pending, err := s.countPendingTasksTx(txCtx, tx, inst.ID, step.ID)
+			if err != nil {
+				return err
+			}
+			if pending > 0 {
+				return nil // 还有未审批的会签人,本步未完成,不推进
+			}
 		}
 		inst.CurrentStep = step.StepOrder + 1
 		if err := tx.WithContext(txCtx).Save(inst).Error; err != nil {
@@ -381,6 +413,15 @@ func (s *Service) stepsByWorkflowTx(ctx context.Context, tx *gorm.DB, workflowID
 	var steps []WorkflowStep
 	err := tx.WithContext(ctx).Where("workflow_id = ?", workflowID).Order("step_order").Find(&steps).Error
 	return steps, err
+}
+
+// countPendingTasksTx 统计某实例某步骤下仍为 PENDING 的 task 数(会签推进判定用)。
+func (s *Service) countPendingTasksTx(ctx context.Context, tx *gorm.DB, instanceID, stepID uint64) (int64, error) {
+	var n int64
+	err := tx.WithContext(ctx).Model(&WorkflowTask{}).
+		Where("instance_id = ? AND step_id = ? AND status = ?", instanceID, stepID, TaskStatusPending).
+		Count(&n).Error
+	return n, err
 }
 
 func (s *Service) getTaskTx(ctx context.Context, tx *gorm.DB, id uint64) (*WorkflowTask, error) {

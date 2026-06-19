@@ -77,8 +77,10 @@ func (r *CallbackRegistry) dispatch(ctx context.Context, instance *WorkflowInsta
 //
 // 返回 (0, nil) 表示未解析到审批人,引擎据 _create_next_task 语义跳过/兜底。
 type AssigneeResolver interface {
-	// Resolve 返回该步骤在此实例下的审批人用户 ID。
+	// Resolve 返回该步骤在此实例下的审批人用户 ID(单人审批 APPROVE/REVIEW)。
 	Resolve(ctx context.Context, step *WorkflowStep, instance *WorkflowInstance) (uint64, error)
+	// ResolveAll 返回会签(COUNTERSIGN)步骤的全部审批人(每人一条 task,全 APPROVED 才推进)。
+	ResolveAll(ctx context.Context, step *WorkflowStep, instance *WorkflowInstance) ([]uint64, error)
 }
 
 // defaultResolver 兜底解析器:仅处理 USER 类型(读 step.ApproverUserID)。
@@ -94,4 +96,13 @@ func (defaultResolver) Resolve(_ context.Context, step *WorkflowStep, _ *Workflo
 	}
 	// 非 USER 类型本轮无法解析:返回 0,引擎按「无审批人」处理。
 	return 0, nil
+}
+
+// ResolveAll 默认仅支持 USER 单人(会签需注入能返回多人的 resolver,如按角色取全部用户)。
+func (r defaultResolver) ResolveAll(ctx context.Context, step *WorkflowStep, inst *WorkflowInstance) ([]uint64, error) {
+	id, err := r.Resolve(ctx, step, inst)
+	if err != nil || id == 0 {
+		return nil, err
+	}
+	return []uint64{id}, nil
 }

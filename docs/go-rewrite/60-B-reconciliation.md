@@ -40,6 +40,17 @@ Go 实现:`server/internal/inventory/cost/`(shopspring/decimal,禁 float64),
 Go 实现:`server/internal/workflow/repo.go: SelectForBusiness`——同 `Order("amount_threshold DESC")`(同 PG → 同 NULLS FIRST),算法逐行一致。
 集成测试 `select_integration_test.go`(真库,因 NULLS 排序是 DB 行为)断言两场景与裁判一致,PASS。
 
+## ✅ workflow — 跳步 / 会签(已对账并补齐)
+
+**跳步**(`skip_amount_threshold`):Django `if step.skip_amount_threshold and instance.amount: if amount < threshold: continue`。
+对账发现 Go 与之有真实差异——Go 只判 `!= nil`,而 Django 用 Python 真值(**0 视为假**),故 `amount=0` + 正阈值时
+Go 会误跳、Django 不跳。**✅ 已修**:Go 改为"阈值与金额皆非 nil 且非 0 才比较"。裁判:`amount 0→step1`、
+`3000→step2`、`8000→step1`、`None→step1`;Go 集成测试断言一致,PASS。
+
+**会签**(`COUNTERSIGN`):Django **声明未实现**(每步单 task、单签即推进)——Go 新增能力。已实现:
+`action_type=COUNTERSIGN` 时一步为全部审批人各生成一条 task,**全部 APPROVED 才推进**(任一拒绝整单驳回)。
+集成测试(无 Django 裁判,验意图语义):2 审批人,签 1 实例仍 PENDING、签 2 实例 APPROVED,PASS。
+
 ## ✅ finance — 回款核销级联(已移植并验证)
 
 权威:`apps.finance.collection_models.CollectionRecord.save()` 三级汇总:
@@ -77,6 +88,6 @@ A 波用 AutoMigrate 从 Go 模型建表,掩盖了与真实 Django schema 的不
 
 ## 下一步
 
-1. workflow:会签(COUNTERSIGN)、按金额跳步(skip_amount_threshold)、自动批准兜底 的对账。
-2. inventory:把成本服务接入库存移动 confirm(入/出库自动记账),端到端对账。
-3. finance 回款核销接 REST 路由 + 前端;前端各业务表也按真库 schema 校验字段名。
+1. inventory:把成本服务接入库存移动 confirm(入/出库自动记账),端到端对账。
+2. finance 回款核销接 REST 路由 + 前端;前端各业务表按真库 schema 校验字段名。
+3. workflow:抄送(cc_users/cc_roles)、超时升级、PROJECT_MANAGER/SUPERIOR 真实 resolver 接入。
