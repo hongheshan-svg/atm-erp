@@ -32,9 +32,21 @@ func (h *Hub) remove(c *websocket.Conn) {
 	h.mu.Unlock()
 }
 
-// Broadcast 向所有连接推送文本消息(信封 {type,data} 由调用方序列化)。
-// TODO(port): 按 group(user_{id}/dashboard/upgrade_{job})定向 + Redis Pub/Sub 多实例扇出。
-func (h *Hub) Broadcast(ctx context.Context, msg []byte) {
+// SendToUser 仅向指定用户的连接推送(按 uid 过滤),避免跨用户数据泄露。
+func (h *Hub) SendToUser(ctx context.Context, uid uint64, msg []byte) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for c, u := range h.conns {
+		if u == uid {
+			_ = c.Write(ctx, websocket.MessageText, msg)
+		}
+	}
+}
+
+// BroadcastPublic 向所有连接推送——仅限真正面向全员的公开消息(如系统公告);
+// 严禁用于用户私有数据(用户态数据请用 SendToUser)。
+// TODO(port): group(user_{id}/dashboard/upgrade_{job})定向 + Redis Pub/Sub 多实例扇出。
+func (h *Hub) BroadcastPublic(ctx context.Context, msg []byte) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for c := range h.conns {
@@ -59,8 +71,14 @@ func (h *Hub) Handler(tm *iam.TokenManager) gin.HandlerFunc {
 		defer h.remove(c)
 		defer func() { _ = c.Close(websocket.StatusNormalClosure, "") }()
 
+		// 连接生命周期不超过 token 有效期:到期自动断开(对齐安全评审建议)。
 		ctx := g.Request.Context()
-		for { // 读循环保持连接;收到错误(断开)即退出
+		if claims.ExpiresAt != nil {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithDeadline(ctx, claims.ExpiresAt.Time)
+			defer cancel()
+		}
+		for { // 读循环保持连接;收到错误(断开/到期)即退出
 			if _, _, err := c.Read(ctx); err != nil {
 				return
 			}

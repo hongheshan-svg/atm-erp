@@ -134,7 +134,8 @@ func Worker(_ context.Context) error {
 	if err != nil {
 		return err
 	}
-	slog.Info("erpd worker 启动(asynq)", "redis", cfg.RedisURL)
+	// 不记原始 URL(可能含密码);只记已解析的 addr/db。
+	slog.Info("erpd worker 启动(asynq)", "addr", opt.Addr, "db", opt.DB)
 	return task.Run(opt)
 }
 
