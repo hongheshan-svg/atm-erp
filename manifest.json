@@ -1,15 +1,15 @@
 {
-  "latest_version": "0.1.1",
-  "published_at": "2026-06-18T16:00:00Z",
-  "release_notes_md": "v0.1.1:Docker 多平台一键安装 + 软件版本远程升级(Docker) + AGPL-3.0。详见 GitHub Release。注:digests 为占位值,代理按 image_tag 拉取;真实 digest 由下次发布的 CI 自动回填。",
+  "latest_version": "0.1.2",
+  "published_at": "2026-06-19T14:46:57Z",
+  "release_notes_md": "## v0.1.2\n\n修复自动升级发布流水线:\n\n- **manifest.json 镜像 digest 回填**:CI `publish-manifest` 现登录 GHCR 后用 `docker buildx imagetools inspect` 解析多架构镜像 digest,并把带真实 `backend`/`frontend` digest 的 `manifest.json` 提交回主分支。这一步在 v0.1.1 发布时失败(占位 digest),自本版起携带真实 digest。\n- 多架构镜像(linux/amd64 + linux/arm64)照常发布到 GHCR。\n- 应用功能同 v0.1.1(后端运行版本由镜像 tag 注入,`min_upgradable_from` 保持 0.1.0)。\n\nDocker 一键安装 / 远程升级见 `docs/REMOTE_UPGRADE.md`。",
   "min_upgradable_from": "0.1.0",
   "docker": {
     "registry": "ghcr.io",
     "owner": "hongheshan-svg",
-    "image_tag": "0.1.1",
+    "image_tag": "0.1.2",
     "digests": {
-      "backend": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-      "frontend": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      "backend": "sha256:a4cb0172b40b19d838a8b796d34a2f6569f3afed4b43d475e2df770fe833d881",
+      "frontend": "sha256:9332e2141f82dcace46c4e2e615a78122c8546ec14f8e7d94d2ca90e5ca96568"
     }
   },
   "native": null
