@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/atm-erp/server/internal/iam"
+	"github.com/atm-erp/server/internal/inventory/cost"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -120,7 +121,7 @@ func (s *Service) CreateMove(ctx context.Context, in StockMoveCreateInput) (*Sto
 			return e
 		}
 		if m.Status == MoveStatusCompleted {
-			return applyMoveToStock(tx, m, uid)
+			return applyMoveToStock(ctx, tx, m, uid)
 		}
 		return nil
 	})
@@ -148,7 +149,7 @@ func (s *Service) CompleteMove(ctx context.Context, id uint64) (*StockMove, erro
 			return e
 		}
 		m.Status = MoveStatusCompleted
-		return applyMoveToStock(tx, m, uid)
+		return applyMoveToStock(ctx, tx, m, uid)
 	})
 	if err != nil {
 		return nil, err
@@ -212,30 +213,119 @@ func (s *Service) DeleteMove(ctx context.Context, id uint64) error {
 
 // ── 账实更新核心(忠实迁移 Django _update_stock / 加权平均)──────────────
 
-// applyMoveToStock 按移动类型落库存。tx 须为外层事务句柄,行锁防并发。
-// 对齐 Django StockMove._update_stock。
-func applyMoveToStock(tx *gorm.DB, m *StockMove, uid *uint64) error {
+// applyMoveToStock 按移动类型落库存,并在同一事务内同步写「成本账本」(append-only ItemCostRecord)。
+// tx 须为外层事务句柄,行锁防并发。对齐 Django StockMove._update_stock;
+// 账本忠实 Django CostCalculationService.process_inbound/outbound(在 Django 为死代码,Go 侧补成活台账)。
+//
+// 联动统一原则:Stock 与账本消费同一 m.UnitCost 输入、同事务各自记账;账本不回填 Stock、Stock 不读账本。
+// 账本仅在 Stock 实际变更时写(出库无库存被跳过则不写),保证账本与 Stock 一致。
+// 并发安全:每次账本写入前,本事务已对同 (item,warehouse) 的 Stock 行加 FOR UPDATE 锁(账本键=Stock 键),
+// 故同键并发移动在 Stock 行锁处串行化,账本结存游标无需再单独加锁。
+func applyMoveToStock(ctx context.Context, tx *gorm.DB, m *StockMove, uid *uint64) error {
 	switch m.MoveType {
 	case MoveTypeInPurchase:
-		return stockIn(tx, derefWH(m.WarehouseTo), m.ItemID, m.Qty, m.UnitCost, uid)
-	case MoveTypeOutSales, MoveTypeOutProject:
-		return stockOut(tx, derefWH(m.WarehouseFrom), m.ItemID, m.Qty)
-	case MoveTypeTransfer:
-		if err := stockOut(tx, derefWH(m.WarehouseFrom), m.ItemID, m.Qty); err != nil {
+		wh := derefWH(m.WarehouseTo)
+		if err := stockIn(tx, wh, m.ItemID, m.Qty, m.UnitCost, uid); err != nil {
 			return err
 		}
-		return stockIn(tx, derefWH(m.WarehouseTo), m.ItemID, m.Qty, m.UnitCost, uid)
+		return ledgerIn(ctx, tx, m, wh)
+	case MoveTypeOutSales, MoveTypeOutProject:
+		wh := derefWH(m.WarehouseFrom)
+		applied, err := stockOut(tx, wh, m.ItemID, m.Qty)
+		if err != nil {
+			return err
+		}
+		if applied {
+			return ledgerOut(ctx, tx, m, wh)
+		}
+		return nil
+	case MoveTypeTransfer:
+		// 账本按 (item,warehouse) 分账:from 仓出库行 + to 仓入库行(顺序与 Stock 一致)。
+		from, to := derefWH(m.WarehouseFrom), derefWH(m.WarehouseTo)
+		applied, err := stockOut(tx, from, m.ItemID, m.Qty)
+		if err != nil {
+			return err
+		}
+		if applied {
+			if err := ledgerOut(ctx, tx, m, from); err != nil {
+				return err
+			}
+		}
+		if err := stockIn(tx, to, m.ItemID, m.Qty, m.UnitCost, uid); err != nil {
+			return err
+		}
+		return ledgerIn(ctx, tx, m, to)
 	case MoveTypeAdjustment:
 		// qty 恒为正;方向由仓库字段决定:to=盘盈入库,from=盘亏出库。
 		if m.WarehouseTo != nil {
-			return stockIn(tx, *m.WarehouseTo, m.ItemID, m.Qty, m.UnitCost, uid)
+			if err := stockIn(tx, *m.WarehouseTo, m.ItemID, m.Qty, m.UnitCost, uid); err != nil {
+				return err
+			}
+			return ledgerIn(ctx, tx, m, *m.WarehouseTo)
 		}
 		if m.WarehouseFrom != nil {
-			return stockOut(tx, *m.WarehouseFrom, m.ItemID, m.Qty)
+			applied, err := stockOut(tx, *m.WarehouseFrom, m.ItemID, m.Qty)
+			if err != nil {
+				return err
+			}
+			if applied {
+				return ledgerOut(ctx, tx, m, *m.WarehouseFrom)
+			}
+			return nil
 		}
 		return nil
 	}
 	return ErrBadMoveType
+}
+
+// ledgerTxTypeIn/Out 把 Go 移动类型映射到 Django ItemCostRecord.TRANSACTION_TYPES 合法值,
+// 并按方向区分(TRANSFER/ADJUSTMENT 入出两行各自落 *_IN / *_OUT,不丢方向语义)。
+func ledgerTxTypeIn(moveType string) string {
+	switch moveType {
+	case MoveTypeInPurchase:
+		return "PURCHASE_IN"
+	case MoveTypeTransfer:
+		return "TRANSFER_IN"
+	case MoveTypeAdjustment:
+		return "ADJUST_IN"
+	}
+	return "PURCHASE_IN"
+}
+
+func ledgerTxTypeOut(moveType string) string {
+	switch moveType {
+	case MoveTypeOutSales:
+		return "SALES_OUT"
+	case MoveTypeOutProject: // 项目领料 → 生产领料
+		return "PRODUCTION_OUT"
+	case MoveTypeTransfer:
+		return "TRANSFER_OUT"
+	case MoveTypeAdjustment:
+		return "ADJUST_OUT"
+	}
+	return "SALES_OUT"
+}
+
+// ledgerIn 同事务写一条入库成本账本行(移动加权平均),unit_cost 与喂给 Stock 的同源、交易日期用业务日期。
+func ledgerIn(ctx context.Context, tx *gorm.DB, m *StockMove, wh uint64) error {
+	if wh == 0 {
+		return nil
+	}
+	whp := &wh
+	_, err := cost.NewService(tx).ProcessInbound(ctx, m.ItemID, whp,
+		decimal.NewFromFloat(m.Qty), decimal.NewFromFloat(m.UnitCost), ledgerTxTypeIn(m.MoveType), m.MoveNo, m.MoveDate)
+	return err
+}
+
+// ledgerOut 同事务写一条出库成本账本行(出库成本取账本自身结存单价,对齐 process_outbound)。
+func ledgerOut(ctx context.Context, tx *gorm.DB, m *StockMove, wh uint64) error {
+	if wh == 0 {
+		return nil
+	}
+	whp := &wh
+	_, err := cost.NewService(tx).ProcessOutbound(ctx, m.ItemID, whp,
+		decimal.NewFromFloat(m.Qty), ledgerTxTypeOut(m.MoveType), m.MoveNo, m.MoveDate)
+	return err
 }
 
 func derefWH(p *uint64) uint64 {
@@ -285,26 +375,30 @@ func stockIn(tx *gorm.DB, warehouseID, itemID uint64, qty, cost float64, uid *ui
 }
 
 // stockOut 出库。对齐 Django _update_stock_out:库存不足抛错;Stock 不存在则静默跳过。
-func stockOut(tx *gorm.DB, warehouseID, itemID uint64, qty float64) error {
+// 返回 applied:true=确实扣减了库存(调用方据此决定是否写出库账本,保证账本与 Stock 一致)。
+func stockOut(tx *gorm.DB, warehouseID, itemID uint64, qty float64) (bool, error) {
 	if warehouseID == 0 {
-		return errors.New("出库缺少来源仓库")
+		return false, errors.New("出库缺少来源仓库")
 	}
 	var st Stock
 	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("warehouse_id = ? AND item_id = ?", warehouseID, itemID).
 		First(&st).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil // Django: except Stock.DoesNotExist: pass
+		return false, nil // Django: except Stock.DoesNotExist: pass(无库存→不动账本)
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
 	if st.QtyOnHand < qty {
-		return fmt.Errorf("%w: 物料 %d 在仓库 %d 当前库存 %.2f, 需要 %.2f",
+		return false, fmt.Errorf("%w: 物料 %d 在仓库 %d 当前库存 %.2f, 需要 %.2f",
 			ErrInsufficient, itemID, warehouseID, st.QtyOnHand, qty)
 	}
 	st.QtyOnHand -= qty
-	return tx.Model(&Stock{}).Where("id = ?", st.ID).Update("qty_on_hand", st.QtyOnHand).Error
+	if err := tx.Model(&Stock{}).Where("id = ?", st.ID).Update("qty_on_hand", st.QtyOnHand).Error; err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // ── Batch ──────────────────────────────────────────────────────────────

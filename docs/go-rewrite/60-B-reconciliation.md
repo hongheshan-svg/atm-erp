@@ -121,5 +121,29 @@ A 波用 AutoMigrate 从 Go 模型建表,掩盖了与真实 Django schema 的不
    **WS 鉴权(安全评审):token 经 `Sec-WebSocket-Protocol` 子协议(`["access_token", <jwt>]`)传递,
    不进 URL**(避免 access log / 代理日志 / 浏览器历史泄漏);服务端 `bearerSubprotocol` 取 token、
    握手只回选哨兵子协议绝不回显 token(单测 `TestBearerSubprotocol` 覆盖)。
-3. inventory 成本账本(ItemCostRecord)与 Stock 移动联动(目前 Stock 走 weighted_avg_cost,
-   ItemCostRecord 账本由其它流程喂);若需两者统一,需评估 Django 侧实际喂账本的入口。
+3. ✅ inventory 成本账本(ItemCostRecord)与 Stock 加权均价**联动统一**(已实现并对账)。
+
+## ✅ inventory — 成本账本 × Stock 联动统一(已实现并验证)
+
+**关键发现(裁判核验)**:Django 的库存成本账本写入路径 `CostCalculationService.process_inbound/outbound`
+是**死代码**——全后端零调用方(grep 确认;`reports` 包里的同名 `CostCalculationService` 是算项目利润的
+另一个类,无关),`ItemCostRecord` 仅被 `data_accuracy.py` 只读对账 + 一个只读 ViewSet 消费。
+故 `Stock.weighted_avg_cost` 是事实唯一真相源,所有出库成本取自它,从不取账本结存价。
+
+**Go 侧统一方案**(忠于 Django 语义 + 修复其缺陷):在 `applyMoveToStock` 每个确认点,Stock 更新与账本写入
+置于**同一事务**、共用同一 `m.UnitCost` 输入,**各自**按移动加权平均记账;账本不回填 Stock、Stock 不读账本
+(不引入 Django 没有的耦合)。要点:
+- 账本仅在 Stock 实际变更时写(`stockOut` 返回 `applied`;空仓出库 Django pass → 不写账本,保证账本与 Stock 一致)。
+- TRANSFER 写两行(from 仓 `TRANSFER_OUT` + to 仓 `TRANSFER_IN`,账本按 item+warehouse 分账)。
+- 并发安全:账本写入前同事务已对同 (item,warehouse) 的 Stock 行加 `FOR UPDATE`(账本键=Stock 键),
+  故同键并发移动在 Stock 行锁处串行化,账本结存游标无需再单独加锁(`cost.NewService(tx)` 复用外层事务)。
+- Django 保真补正:`transaction_type` 映射 Django 闭合枚举并按方向分(`PURCHASE_IN/SALES_OUT/PRODUCTION_OUT/
+  TRANSFER_IN|OUT/ADJUST_IN|OUT`),`transaction_date` 用业务日期 `m.MoveDate`(对账评审两条低危偏离已修)。
+
+**四层验证**:①算法源 1:1 比对;②`cost_test` 纯函数对裁判;③Go 集成测试(`confirm_integration_test`:
+Stock+账本结存+出库行+一致性+清库归零+调拨双行+超量回滚+空仓跳过);④**活体 Django** 临时调 `process_*`
+裁判逐一吻合(A `17/2338.27/137.5453`、B `14/1566.83/111.9164`、D 清库 `0/0/120`、调拨 from`6@100`/to`4@100`)。
+经 3 视角对抗评审(Django 保真/事务并发/边界一致性):无账本-Stock 不一致、无漏锁、无漏回滚,可提交。
+
+> 遗留(非本统一范畴,属喂给 move 的 unit_cost 数据问题,迁移对应业务模块时处理):生产完工 unit_cost=0 稀释、
+> 销售红冲用销售价、同仓 TRANSFER(from==to)无守卫(忠实镜像 Django)、`OUT_OUTSOURCE` 不在枚举。

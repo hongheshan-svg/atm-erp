@@ -95,17 +95,22 @@ func (s *Service) last(ctx context.Context, itemID uint64, warehouseID *uint64) 
 }
 
 // ProcessInbound 落一条入库成本记录并返回(移动加权平均)。
-func (s *Service) ProcessInbound(ctx context.Context, itemID uint64, warehouseID *uint64, qty, unitCost decimal.Decimal, txType, refNo string) (*ItemCostRecord, error) {
+// txType 须为 Django TRANSACTION_TYPES 合法值(如 PURCHASE_IN/TRANSFER_IN/ADJUST_IN);
+// txDate 为业务交易日期,零值时回退当天(对齐 Django transaction_date or date.today())。
+func (s *Service) ProcessInbound(ctx context.Context, itemID uint64, warehouseID *uint64, qty, unitCost decimal.Decimal, txType, refNo string, txDate time.Time) (*ItemCostRecord, error) {
 	prevQty, prevCost := decimal.Zero, decimal.Zero
 	if last, err := s.last(ctx, itemID, warehouseID); err != nil {
 		return nil, err
 	} else if last != nil {
 		prevQty, prevCost = last.BalanceQty, last.BalanceCost
 	}
+	if txDate.IsZero() {
+		txDate = time.Now()
+	}
 	newQty, newCost, newUnit := Inbound(prevQty, prevCost, qty, unitCost)
 	rec := &ItemCostRecord{
 		ItemID: itemID, WarehouseID: warehouseID, TransactionType: txType, ReferenceNo: refNo,
-		TransactionDate: time.Now(), Quantity: qty, UnitCost: unitCost, TotalCost: qty.Mul(unitCost).Round(2),
+		TransactionDate: txDate, Quantity: qty, UnitCost: unitCost, TotalCost: qty.Mul(unitCost).Round(2),
 		BalanceQty: newQty, BalanceCost: newCost, BalanceUnitCost: newUnit,
 	}
 	if err := s.db.WithContext(ctx).Create(rec).Error; err != nil {
@@ -114,18 +119,22 @@ func (s *Service) ProcessInbound(ctx context.Context, itemID uint64, warehouseID
 	return rec, nil
 }
 
-// ProcessOutbound 落一条出库成本记录并返回。
-func (s *Service) ProcessOutbound(ctx context.Context, itemID uint64, warehouseID *uint64, qty decimal.Decimal, txType, refNo string) (*ItemCostRecord, error) {
+// ProcessOutbound 落一条出库成本记录并返回。txType 须为 Django 合法出库类型
+// (SALES_OUT/PRODUCTION_OUT/TRANSFER_OUT/ADJUST_OUT);txDate 零值回退当天。
+func (s *Service) ProcessOutbound(ctx context.Context, itemID uint64, warehouseID *uint64, qty decimal.Decimal, txType, refNo string, txDate time.Time) (*ItemCostRecord, error) {
 	prevQty, prevCost, prevUnit := decimal.Zero, decimal.Zero, decimal.Zero
 	if last, err := s.last(ctx, itemID, warehouseID); err != nil {
 		return nil, err
 	} else if last != nil {
 		prevQty, prevCost, prevUnit = last.BalanceQty, last.BalanceCost, last.BalanceUnitCost
 	}
+	if txDate.IsZero() {
+		txDate = time.Now()
+	}
 	newQty, newCost, newUnit, outUnit, outTotal := Outbound(prevQty, prevCost, prevUnit, qty)
 	rec := &ItemCostRecord{
 		ItemID: itemID, WarehouseID: warehouseID, TransactionType: txType, ReferenceNo: refNo,
-		TransactionDate: time.Now(), Quantity: qty.Neg(), UnitCost: outUnit, TotalCost: outTotal.Neg(),
+		TransactionDate: txDate, Quantity: qty.Neg(), UnitCost: outUnit, TotalCost: outTotal.Neg(),
 		BalanceQty: newQty, BalanceCost: newCost, BalanceUnitCost: newUnit,
 	}
 	if err := s.db.WithContext(ctx).Create(rec).Error; err != nil {
