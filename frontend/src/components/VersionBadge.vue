@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh, Download, Check, Close, RefreshRight } from '@element-plus/icons-vue'
+import { Refresh, Download, Check, Close, RefreshRight, TopRight } from '@element-plus/icons-vue'
 import { usePermissionStore } from '@/stores/permission'
 import {
   getSystemVersion,
@@ -18,7 +18,7 @@ const canUpgrade = computed(() => permissionStore.hasPermission('system:upgrade'
 const currentVersion = ref('')
 const latestVersion = ref('')
 const hasUpdate = ref(false)
-const releaseNotes = ref('')
+const releaseUrl = ref('') // GitHub 发布页,点击自行查看更新内容
 const checking = ref(false)
 
 const busy = ref(false) // 升级/回滚进行中
@@ -53,7 +53,7 @@ async function doCheck(force = false) {
     currentVersion.value = res.current_version || currentVersion.value
     latestVersion.value = res.latest_version || ''
     hasUpdate.value = !!res.has_update
-    releaseNotes.value = res.release_notes_md || ''
+    releaseUrl.value = res.release_url || ''
     if (force) ElMessage.success(res.has_update ? `发现新版本 v${res.latest_version}` : '已是最新版本')
   } catch {
     /* ignore */
@@ -229,16 +229,33 @@ onBeforeUnmount(() => {
               <p class="vb-alert-desc">v{{ latestVersion }}</p>
             </div>
           </div>
-          <div v-if="releaseNotes" class="vb-notes">{{ releaseNotes }}</div>
           <button type="button" class="vb-btn primary" @click="onUpgrade">
             <el-icon><Download /></el-icon> 立即升级
           </button>
+          <a
+            v-if="releaseUrl"
+            :href="releaseUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="vb-changelog"
+          >
+            查看更新内容<el-icon><TopRight /></el-icon>
+          </a>
         </template>
 
-        <!-- 已是最新:回滚入口 -->
-        <button v-if="!hasUpdate && !job" type="button" class="vb-link" @click="onRollback">
-          回滚到上一版本
-        </button>
+        <!-- 已是最新:查看发布 + 回滚 -->
+        <template v-if="!hasUpdate && !job">
+          <a
+            v-if="releaseUrl"
+            :href="releaseUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="vb-changelog"
+          >
+            查看发布说明<el-icon><TopRight /></el-icon>
+          </a>
+          <button type="button" class="vb-link" @click="onRollback">回滚到上一版本</button>
+        </template>
       </div>
     </div>
   </el-popover>
@@ -473,18 +490,22 @@ onBeforeUnmount(() => {
   color: var(--el-color-warning);
 }
 
-.vb-notes {
+.vb-changelog {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
   margin-top: 10px;
-  max-height: 120px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-  background: var(--el-fill-color-light);
-  border-radius: 8px;
-  padding: 8px 10px;
-  font-size: 11px;
-  line-height: 1.5;
+  font-size: 12px;
   color: var(--el-text-color-secondary);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.vb-changelog:hover {
+  color: var(--el-color-primary);
+}
+.vb-changelog .el-icon {
+  font-size: 13px;
 }
 
 .vb-btn {

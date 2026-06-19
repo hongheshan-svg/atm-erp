@@ -70,7 +70,6 @@
 
       <div class="login-footer">
         © {{ new Date().getFullYear() }} {{ companyName || '深圳市奥特迈智能装备有限公司' }}
-        <span class="version">v{{ appVersion }}</span>
       </div>
     </div>
   </div>
@@ -82,12 +81,10 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock, Cpu, Folder, DataAnalysis, TrendCharts } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
-import { APP_VERSION } from '@/config/version'
 import { useCompanyConfig } from '@/stores/companyConfig'
 
 const router = useRouter()
 const userStore = useUserStore()
-const appVersion = APP_VERSION
 const { companyName, loadCompanyConfig } = useCompanyConfig()
 
 const loginFormRef = ref(null)

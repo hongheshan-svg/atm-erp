@@ -87,7 +87,6 @@
 
       <el-footer class="footer" height="36px">
         <span>© {{ new Date().getFullYear() }} {{ companyName || '深圳市奥特迈智能装备有限公司' }}</span>
-        <span class="version">v{{ appVersion }}</span>
       </el-footer>
     </el-container>
   </el-container>
@@ -103,7 +102,6 @@ import { ElMessageBox } from 'element-plus'
 import { Fold, Expand, User, Lock, SwitchButton, FullScreen, ArrowDown } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { usePermissionStore } from '@/stores/permission'
-import { APP_VERSION } from '@/config/version'
 import { useCompanyConfig } from '@/stores/companyConfig'
 import DynamicMenu from '@/components/DynamicMenu.vue'
 import VersionBadge from '@/components/VersionBadge.vue'
@@ -114,7 +112,6 @@ const permissionStore = usePermissionStore()
 const { companyName, companyShortName, loadCompanyConfig } = useCompanyConfig()
 
 const isCollapse = ref(false)
-const appVersion = APP_VERSION
 
 const toggleCollapse = () => {
   isCollapse.value = !isCollapse.value
