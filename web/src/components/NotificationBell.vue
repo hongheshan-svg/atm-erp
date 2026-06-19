@@ -47,7 +47,8 @@ function connect() {
   const token = localStorage.getItem('access_token')
   if (!token) return
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  ws = new WebSocket(`${proto}://${location.host}/ws/notifications?token=${encodeURIComponent(token)}`)
+  // token 经 Sec-WebSocket-Protocol 子协议传递(["access_token", <jwt>]),不进 URL,避免 access log 泄漏。
+  ws = new WebSocket(`${proto}://${location.host}/ws/notifications`, ['access_token', token])
   ws.onmessage = (e) => {
     try {
       const msg = JSON.parse(e.data) as { type?: string }

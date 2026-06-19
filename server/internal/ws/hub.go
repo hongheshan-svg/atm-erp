@@ -5,12 +5,35 @@ package ws
 import (
 	"context"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/atm-erp/server/internal/iam"
 	"github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
 )
+
+// wsAuthSubprotocol 是承载 access token 的鉴权子协议哨兵。
+// 客户端按 ["access_token", <jwt>] 发起握手;服务端只回选哨兵本身(绝不回显 token)。
+const wsAuthSubprotocol = "access_token"
+
+// bearerSubprotocol 从 Sec-WebSocket-Protocol 取 access token(约定客户端发送
+// ["access_token", <jwt>]),令 token 走握手头而非 URL,避免进 access log / 代理日志 / 浏览器历史。
+// JWT(base64url + '.')是合法的子协议 token 字符,无需额外编码。
+func bearerSubprotocol(r *http.Request) (string, bool) {
+	for _, header := range r.Header.Values("Sec-WebSocket-Protocol") {
+		parts := strings.Split(header, ",")
+		for i := range parts {
+			parts[i] = strings.TrimSpace(parts[i])
+		}
+		for i, p := range parts {
+			if p == wsAuthSubprotocol && i+1 < len(parts) && parts[i+1] != "" {
+				return parts[i+1], true
+			}
+		}
+	}
+	return "", false
+}
 
 // Hub 管理活动连接(单实例内存)。
 type Hub struct {
@@ -54,16 +77,24 @@ func (h *Hub) BroadcastPublic(ctx context.Context, msg []byte) {
 	}
 }
 
-// Handler 升级 WS 连接,?token= 用 JWT 鉴权(对齐旧 consumer 的 query token)。
-// TODO(security): 评审建议改 Sec-WebSocket-Protocol 子协议鉴权,避免 token 进 access log。
+// Handler 升级 WS 连接,经 Sec-WebSocket-Protocol 子协议(["access_token", <jwt>])做 JWT 鉴权,
+// 令 token 不进 URL(避免 access log / 代理日志 / 浏览器历史泄漏)。握手只回选哨兵子协议,绝不回显 token。
 func (h *Hub) Handler(tm *iam.TokenManager) gin.HandlerFunc {
 	return func(g *gin.Context) {
-		claims, err := tm.Parse(g.Query("token"))
+		token, ok := bearerSubprotocol(g.Request)
+		if !ok {
+			g.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+		claims, err := tm.Parse(token)
 		if err != nil || claims.TokenType != "access" {
 			g.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
-		c, err := websocket.Accept(g.Writer, g.Request, nil)
+		// 只声明哨兵子协议:浏览器要求服务端回选其所提供的某个子协议,这里回 "access_token"(非 token 值)。
+		c, err := websocket.Accept(g.Writer, g.Request, &websocket.AcceptOptions{
+			Subprotocols: []string{wsAuthSubprotocol},
+		})
 		if err != nil {
 			return
 		}

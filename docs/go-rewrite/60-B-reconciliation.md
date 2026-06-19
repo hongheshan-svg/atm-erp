@@ -113,7 +113,10 @@ A 波用 AutoMigrate 从 Go 模型建表,掩盖了与真实 Django schema 的不
    解析不到 → 0 → 引擎兜底 approver_role→superuser(与 Django None 后一致)。引擎与 accounts 均不引业务包。
    集成测试 `TestWorkflowResolverProjectManager`(PROJECT 直接 / SALES_ORDER 单跳 / 无单据 → 兜底)PASS。
 4. ✅ 站内信 WebSocket 实时推送:`notify.Service` 落库成功后经 `Pusher`(*ws.Hub 直接满足)`SendToUser`
-   推 `{type:"notification",data}`;前端 `NotificationBell` 连 `/ws/notifications?token=` 收到即刷新未读/列表
+   推 `{type:"notification",data}`;前端 `NotificationBell` 连 `/ws/notifications` 收到即刷新未读/列表
    (30s 轮询兜底 + 5s 重连)。worker 进程无 WS,超时提醒仅落库由轮询拾取。
+   **WS 鉴权(安全评审):token 经 `Sec-WebSocket-Protocol` 子协议(`["access_token", <jwt>]`)传递,
+   不进 URL**(避免 access log / 代理日志 / 浏览器历史泄漏);服务端 `bearerSubprotocol` 取 token、
+   握手只回选哨兵子协议绝不回显 token(单测 `TestBearerSubprotocol` 覆盖)。
 3. inventory 成本账本(ItemCostRecord)与 Stock 移动联动(目前 Stock 走 weighted_avg_cost,
    ItemCostRecord 账本由其它流程喂);若需两者统一,需评估 Django 侧实际喂账本的入口。
