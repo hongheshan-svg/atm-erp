@@ -21,7 +21,19 @@ interface MenuItem {
 
 const allMenus: MenuItem[] = [
   { index: '/dashboard', title: '工作台' },
-  { index: '/masterdata/items', title: '物料管理', permission: 'masterdata:item:view' }
+  { index: '/masterdata/items', title: '物料管理', permission: 'masterdata:item:view' },
+  { index: '/masterdata/customers', title: '客户管理', permission: 'masterdata:customer:view' },
+  { index: '/masterdata/suppliers', title: '供应商管理', permission: 'masterdata:supplier:view' },
+  { index: '/masterdata/warehouses', title: '仓库管理', permission: 'masterdata:warehouse:view' },
+  { index: '/sales/quotations', title: '销售报价', permission: 'sales:quotation:view' },
+  { index: '/purchase/orders', title: '采购订单', permission: 'purchase:order:view' },
+  { index: '/inventory/stocks', title: '库存查询', permission: 'inventory:stock:view' },
+  { index: '/inventory/stock-moves', title: '库存移动', permission: 'inventory:stock_move:view' },
+  { index: '/projects/projects', title: '项目管理', permission: 'projects:project:view' },
+  { index: '/production/work-orders', title: '生产工单', permission: 'production:work_order:view' },
+  { index: '/finance/receivables', title: '应收账款', permission: 'finance:receivable:view' },
+  { index: '/oa/vehicles', title: '车辆管理', permission: 'oa:vehicle:view' },
+  { index: '/accounts/users', title: '用户列表', permission: 'accounts:user:view' }
 ]
 
 // 按权限裁剪侧边菜单(父码通配由 store 处理)。
