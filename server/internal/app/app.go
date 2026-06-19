@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/atm-erp/server/internal/iam"
 	"github.com/atm-erp/server/internal/masterdata/item"
@@ -21,20 +22,28 @@ import (
 // Serve 启动 HTTP 服务。
 func Serve(_ context.Context) error {
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
 	obs.Setup(cfg.AppEnv)
+
+	ps, err := permissionService(cfg)
+	if err != nil {
+		return err
+	}
 
 	gdb, err := db.Open(cfg)
 	if err != nil {
 		return fmt.Errorf("数据库连接失败: %w", err)
 	}
 
-	r := buildRouter(cfg, gdb)
+	r := buildRouter(cfg, gdb, ps)
 	slog.Info("erpd serve 启动", "addr", cfg.HTTPAddr, "env", cfg.AppEnv)
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: r}
 	return srv.ListenAndServe()
 }
 
-func buildRouter(cfg *config.Config, gdb *gorm.DB) *gin.Engine {
+func buildRouter(cfg *config.Config, gdb *gorm.DB, ps iam.PermissionService) *gin.Engine {
 	if cfg.AppEnv != "development" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -58,8 +67,6 @@ func buildRouter(cfg *config.Config, gdb *gorm.DB) *gin.Engine {
 	})
 
 	tm := iam.NewTokenManager(cfg.JWTSecret, cfg.JWTAccessMinutes, cfg.JWTRefreshDays)
-	// 脚手架默认权限服务:已认证用户暂当超管。TODO(iam): Phase 1 换 GORM RBAC 实现。
-	ps := &iam.StaticPermissionService{Superuser: true}
 
 	api := r.Group("/api")
 	api.Use(middleware.Auth(tm, ps))
@@ -69,6 +76,15 @@ func buildRouter(cfg *config.Config, gdb *gorm.DB) *gin.Engine {
 	itemHandler.Register(api, middleware.RequirePermission)
 
 	return r
+}
+
+// permissionService 选择权限服务:非 dev 或未显式 opt-in 时拒绝 fail-open 超管(安全 fail-closed)。
+func permissionService(cfg *config.Config) (iam.PermissionService, error) {
+	if cfg.AppEnv == "development" && os.Getenv("ERPD_DEV_SUPERUSER") == "1" {
+		slog.Warn("⚠ 启用 dev 超管权限服务(StaticPermissionService),仅限本地开发,切勿用于生产")
+		return &iam.StaticPermissionService{Superuser: true}, nil
+	}
+	return nil, errors.New("未接入真实 RBAC PermissionService:仅 development 且 ERPD_DEV_SUPERUSER=1 时允许 dev 超管,否则拒绝启动(见 docs/go-rewrite Phase 1)")
 }
 
 // Healthcheck 供容器 distroless 健康检查子命令使用。
