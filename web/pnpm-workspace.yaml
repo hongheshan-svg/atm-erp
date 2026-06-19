@@ -1,0 +1,4 @@
+# pnpm 11 设置:批准 esbuild / vue-demi 运行构建脚本(否则运行前依赖校验会失败)。
+onlyBuiltDependencies:
+  - esbuild
+  - vue-demi
