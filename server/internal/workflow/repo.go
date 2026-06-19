@@ -23,7 +23,7 @@ func NewDefinitionRepo(db *gorm.DB) *DefinitionRepo { return &DefinitionRepo{db:
 func (r *DefinitionRepo) scoped(ctx context.Context) *gorm.DB {
 	q := r.db.WithContext(ctx).Model(&WorkflowDefinition{})
 	if u, ok := iam.AuthUserFrom(ctx); ok {
-		q = iam.ApplyScope(q, u, scopeModule, "created_by")
+		q = iam.ApplyScope(q, u, scopeModule, "created_by_id")
 	}
 	return q
 }
@@ -108,7 +108,7 @@ func NewStepRepo(db *gorm.DB) *StepRepo { return &StepRepo{db: db} }
 func (r *StepRepo) scoped(ctx context.Context) *gorm.DB {
 	q := r.db.WithContext(ctx).Model(&WorkflowStep{})
 	if u, ok := iam.AuthUserFrom(ctx); ok {
-		q = iam.ApplyScope(q, u, scopeModule, "created_by")
+		q = iam.ApplyScope(q, u, scopeModule, "created_by_id")
 	}
 	return q
 }

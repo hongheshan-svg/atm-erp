@@ -16,7 +16,7 @@ func NewRepo(db *gorm.DB) *Repo { return &Repo{db: db} }
 func (r *Repo) scoped(ctx context.Context, model any) *gorm.DB {
 	q := r.db.WithContext(ctx).Model(model)
 	if u, ok := iam.AuthUserFrom(ctx); ok {
-		q = iam.ApplyScope(q, u, scopeModule, "created_by")
+		q = iam.ApplyScope(q, u, scopeModule, "created_by_id")
 	}
 	return q
 }

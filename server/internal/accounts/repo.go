@@ -19,7 +19,7 @@ func (r *Repo) raw(ctx context.Context) *gorm.DB { return r.db.WithContext(ctx) 
 
 // ---------------- Department ----------------
 // 说明:User/Role/Department 表无 created_by 列(继承 TimeStampedModel+SoftDeleteModel),
-// 故不套 iam.ApplyScope("created_by");这些为系统管理实体,访问由权限码 accounts:* 控制。
+// 故不套 iam.ApplyScope("created_by_id");这些为系统管理实体,访问由权限码 accounts:* 控制。
 // TODO(verify): 若后续要按 dept 维度做数据范围,需引入专门的 owner 列或部门归属逻辑。
 
 func (r *Repo) ListDepartments(ctx context.Context, q DeptListQuery, offset, limit int) ([]Department, int64, error) {
@@ -214,7 +214,7 @@ func (r *Repo) permScoped(ctx context.Context) *gorm.DB {
 	q := r.raw(ctx).Model(&Permission{})
 	if u, ok := iam.AuthUserFrom(ctx); ok && !u.IsSuperuser {
 		// 非超管时仍按数据范围控制(created_by);超管查看全部权限树。
-		q = iam.ApplyScope(q, u, scopeModule, "created_by")
+		q = iam.ApplyScope(q, u, scopeModule, "created_by_id")
 	}
 	return q
 }

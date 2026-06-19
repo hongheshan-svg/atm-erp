@@ -110,7 +110,7 @@ func NewAnnouncementRepo(db *gorm.DB) *AnnouncementRepo { return &AnnouncementRe
 func (r *AnnouncementRepo) scoped(ctx context.Context) *gorm.DB {
 	q := r.db.WithContext(ctx).Model(&Announcement{})
 	if u, ok := iam.AuthUserFrom(ctx); ok {
-		q = iam.ApplyScope(q, u, scopeModule, "created_by")
+		q = iam.ApplyScope(q, u, scopeModule, "created_by_id")
 	}
 	return q
 }

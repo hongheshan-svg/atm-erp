@@ -61,9 +61,22 @@ A 波用 AutoMigrate 从 Go 模型建表,掩盖了与真实 Django schema 的不
 经真库 `\d item` 核对一致,前端 vue-tsc 通过。
 提示:其它模块也应逐一用真库 schema 校验字段名(本轮发现并修了 item;建议下一波对每模块跑 `\d <table>` diff)。
 
+## 🔍 全模块真库 schema diff(已完成)
+
+用真库全表列(dump 494 表 / 8666 列到 `/tmp/real_schema.tsv`)对 10 个模块逐表 diff Go 模型列名。结论:
+
+- **唯一系统性偏差:审计列命名**。真库审计外键列是 `created_by_id`/`updated_by_id`(Django FK 加 `_id`),
+  而共享 `platform/model.Base` 的 gorm 标签写成 `created_by`/`updated_by`,且各模块 `iam.ApplyScope(…, "created_by")`
+  把列名直接拼进 WHERE → 对真库 `column "created_by" does not exist`(非超管 self/dept 范围查询必失败)。
+  **✅ 已修**:`Base` 标签改为 `created_by_id`/`updated_by_id`、`BeforeDelete` 同步 `updated_by_id`、
+  全仓 22 处 ApplyScope ownerCol 统一为 `created_by_id`;build/test/vet 全绿,masterdata 集成测试真库 PASS。
+- **其余模块业务列名全部匹配真库**(sales/purchase/inventory/projects/production/finance/oa/accounts/workflow):
+  生成 agent 当初读了 Django models.py,列名基本正确;item 是早期手写切片,故唯一列名错(已先修)。
+- 次要信息(无碍,未改):`project_drawing.file`(Django FileField)Go 未映射;`reference_id` integer vs Go `*int64`;
+  `transaction_date` date vs Go `time.Time`——语义一致。
+
 ## 下一步
 
-1. 修 masterdata sku/code(共库阻断)+ 对各模块做"Go 模型列 vs 真实 Django schema"diff。
-2. 移植 finance 回款核销三级模型 + 级联,按本文裁判方法对账。
-3. workflow:会签(COUNTERSIGN)、按金额跳步(skip_amount_threshold)、自动批准兜底 的对账。
-4. inventory:把成本服务接入库存移动 confirm(入/出库自动记账),端到端对账。
+1. workflow:会签(COUNTERSIGN)、按金额跳步(skip_amount_threshold)、自动批准兜底 的对账。
+2. inventory:把成本服务接入库存移动 confirm(入/出库自动记账),端到端对账。
+3. finance 回款核销接 REST 路由 + 前端;前端各业务表也按真库 schema 校验字段名。

@@ -28,8 +28,8 @@ type Base struct {
 	ID        uint64         `gorm:"primaryKey;column:id" json:"id"`
 	CreatedAt time.Time      `gorm:"column:created_at" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"column:updated_at" json:"updated_at"`
-	CreatedBy *uint64        `gorm:"column:created_by" json:"created_by,omitempty"`
-	UpdatedBy *uint64        `gorm:"column:updated_by" json:"updated_by,omitempty"`
+	CreatedBy *uint64        `gorm:"column:created_by_id" json:"created_by,omitempty"`
+	UpdatedBy *uint64        `gorm:"column:updated_by_id" json:"updated_by,omitempty"`
 	IsDeleted bool           `gorm:"column:is_deleted;index" json:"is_deleted"`
 	DeletedAt gorm.DeletedAt `gorm:"column:deleted_at;index" json:"-"`
 }
@@ -58,7 +58,7 @@ func (b *Base) BeforeUpdate(tx *gorm.DB) error {
 func (b *Base) BeforeDelete(tx *gorm.DB) error {
 	tx.Statement.SetColumn("is_deleted", true)
 	if uid, ok := UserIDFrom(tx.Statement.Context); ok {
-		tx.Statement.SetColumn("updated_by", uid)
+		tx.Statement.SetColumn("updated_by_id", uid)
 	}
 	return nil
 }
