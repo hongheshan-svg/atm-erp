@@ -65,6 +65,18 @@ export interface CollectionPlanListQuery {
   page_size?: number
 }
 
+// 站内信(notify)。命名 App 前缀避开浏览器全局 Notification。
+export interface AppNotification {
+  id: number
+  user_id: number
+  type: string
+  title: string
+  message: string
+  is_read: boolean
+  created_at: string
+  read_at?: string | null
+}
+
 // 用户档案。刷新/登录后由后端回灌 permissions/menus/data_scopes。
 export interface UserProfile {
   id: number

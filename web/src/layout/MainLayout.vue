@@ -5,6 +5,7 @@ import { ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { usePermissionStore } from '@/stores/permission'
 import { useCompanyConfigStore } from '@/stores/companyConfig'
+import NotificationBell from '@/components/NotificationBell.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -74,14 +75,17 @@ async function handleLogout() {
     <el-container>
       <el-header class="layout__header">
         <span class="layout__title">{{ (route.meta.title as string) || '' }}</span>
-        <el-dropdown @command="handleLogout">
-          <span class="layout__user">{{ displayName }}</span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="logout">退出登录</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <div class="layout__actions">
+          <NotificationBell />
+          <el-dropdown @command="handleLogout">
+            <span class="layout__user">{{ displayName }}</span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
       </el-header>
 
       <el-main>
@@ -119,6 +123,12 @@ async function handleLogout() {
 .layout__title {
   font-size: 16px;
   font-weight: 600;
+}
+
+.layout__actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
 }
 
 .layout__user {
