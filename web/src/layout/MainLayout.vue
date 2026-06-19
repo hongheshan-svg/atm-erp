@@ -32,6 +32,7 @@ const allMenus: MenuItem[] = [
   { index: '/projects/projects', title: '项目管理', permission: 'projects:project:view' },
   { index: '/production/work-orders', title: '生产工单', permission: 'production:work_order:view' },
   { index: '/finance/receivables', title: '应收账款', permission: 'finance:receivable:view' },
+  { index: '/finance/collection', title: '回款核销', permission: 'finance:collection_plan:view' },
   { index: '/oa/vehicles', title: '车辆管理', permission: 'oa:vehicle:view' },
   { index: '/accounts/users', title: '用户列表', permission: 'accounts:user:view' }
 ]

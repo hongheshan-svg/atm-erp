@@ -14,6 +14,57 @@ export interface ApiError {
   error?: string
 }
 
+// ===== 回款核销(finance/collection)。金额字段后端为 decimal,序列化为字符串。 =====
+export interface CollectionPlan {
+  id: number
+  plan_no: string
+  name: string
+  customer_id: number
+  total_amount: string
+  planned_amount: string
+  collected_amount: string
+  status: string
+  notes?: string
+}
+export interface CollectionMilestone {
+  id: number
+  plan_id: number
+  milestone_type: string
+  name: string
+  planned_amount: string
+  collected_amount: string
+  planned_date: string
+  status: string
+}
+export interface CollectionPlanDetail {
+  plan: CollectionPlan
+  milestones: CollectionMilestone[]
+}
+export interface CollectionPlanCreateInput {
+  name: string
+  customer_id: number
+  total_amount?: number
+  notes?: string
+}
+export interface CollectionMilestoneCreateInput {
+  name: string
+  milestone_type?: string
+  planned_amount?: number
+  planned_date?: string
+}
+export interface CollectionRecordCreateInput {
+  amount: number
+  collection_date?: string
+  payment_method?: string
+  notes?: string
+}
+export interface CollectionPlanListQuery {
+  keyword?: string
+  status?: string
+  page?: number
+  page_size?: number
+}
+
 // 用户档案。刷新/登录后由后端回灌 permissions/menus/data_scopes。
 export interface UserProfile {
   id: number

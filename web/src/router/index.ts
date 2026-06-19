@@ -86,6 +86,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '应收账款', permission: 'finance:receivable:view' }
       },
       {
+        path: 'finance/collection',
+        name: 'CollectionPlanList',
+        component: () => import('@/views/finance/CollectionPlanList.vue'),
+        meta: { title: '回款核销', permission: 'finance:collection_plan:view' }
+      },
+      {
         path: 'oa/vehicles',
         name: 'VehicleList',
         component: () => import('@/views/oa/VehicleList.vue'),
