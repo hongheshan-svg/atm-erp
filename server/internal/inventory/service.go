@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/atm-erp/server/internal/iam"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -263,21 +264,24 @@ func stockIn(tx *gorm.DB, warehouseID, itemID uint64, qty, cost float64, uid *ui
 		return err
 	}
 
-	oldValue := st.QtyOnHand * st.WeightedAvgCost
-	newValue := qty * cost
-	newQty := st.QtyOnHand + qty
-	if newQty > 0 {
-		st.WeightedAvgCost = (oldValue + newValue) / newQty
-	} else {
-		st.WeightedAvgCost = cost
-	}
-	st.QtyOnHand = newQty
-
+	// 首次入库(新建):avg=cost、qty=qty,均为 2dp 输入,无除法,float64 精确。
 	if st.ID == 0 {
+		st.QtyOnHand = qty
+		st.WeightedAvgCost = cost
 		return tx.Create(&st).Error
 	}
+
+	// 已有库存:加权平均用 decimal 计算并存入,匹配 Django Decimal 口径
+	// (PG numeric(15,2) 量化与 Django 一致,消除 float64 在分位边界的偏差)。
+	oldQty := decimal.NewFromFloat(st.QtyOnHand)
+	oldAvg := decimal.NewFromFloat(st.WeightedAvgCost)
+	newQty := oldQty.Add(decimal.NewFromFloat(qty))
+	newAvg := decimal.NewFromFloat(cost)
+	if newQty.IsPositive() {
+		newAvg = oldQty.Mul(oldAvg).Add(decimal.NewFromFloat(qty).Mul(decimal.NewFromFloat(cost))).Div(newQty)
+	}
 	return tx.Model(&Stock{}).Where("id = ?", st.ID).
-		Updates(map[string]any{"qty_on_hand": st.QtyOnHand, "weighted_avg_cost": st.WeightedAvgCost}).Error
+		Updates(map[string]any{"qty_on_hand": newQty, "weighted_avg_cost": newAvg}).Error
 }
 
 // stockOut 出库。对齐 Django _update_stock_out:库存不足抛错;Stock 不存在则静默跳过。

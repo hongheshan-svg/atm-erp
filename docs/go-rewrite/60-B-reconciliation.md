@@ -28,6 +28,12 @@ ES 未起会报错——用 `Model.objects.bulk_create([...])` 绕过 post_save 
 Go 实现:`server/internal/inventory/cost/`(shopspring/decimal,禁 float64),
 单测 `TestWeightedAverageMatchesDjangoOracle` 断言同一序列得到**完全相同数字**,PASS。
 
+**库存移动 confirm → Stock 端到端**(独立于上面的成本账本,对齐 `StockMove._update_stock`):
+`CompleteMove`/`CreateMove(COMPLETED)` → `applyMoveToStock`(IN/OUT/TRANSFER/ADJUSTMENT)→
+`stockIn`(加权平均,行锁)/`stockOut`(库存不足报错)。裁判算例(IN 10@100、5@130、3@121.50、OUT 4):
+Stock `qty=14.00 avg=111.92`;Go 集成测试 `TestStockMoveConfirmMatchesDjango` 断言一致,PASS。
+并把 `stockIn` 的加权平均除法由 float64 改 decimal,消除分位四舍五入边界与 Django 的潜在偏差。
+
 ## ✅ workflow — 选流算法(已验证一致)
 
 权威:`WorkflowService.get_workflow_for_business`:
@@ -88,6 +94,7 @@ A 波用 AutoMigrate 从 Go 模型建表,掩盖了与真实 Django schema 的不
 
 ## 下一步
 
-1. inventory:把成本服务接入库存移动 confirm(入/出库自动记账),端到端对账。
-2. finance 回款核销接 REST 路由 + 前端;前端各业务表按真库 schema 校验字段名。
-3. workflow:抄送(cc_users/cc_roles)、超时升级、PROJECT_MANAGER/SUPERIOR 真实 resolver 接入。
+1. finance 回款核销接 REST 路由 + 前端;前端各业务表按真库 schema 校验字段名。
+2. workflow:抄送(cc_users/cc_roles)、超时升级、PROJECT_MANAGER/SUPERIOR 真实 resolver 接入。
+3. inventory 成本账本(ItemCostRecord)与 Stock 移动联动(目前 Stock 走 weighted_avg_cost,
+   ItemCostRecord 账本由其它流程喂);若需两者统一,需评估 Django 侧实际喂账本的入口。
