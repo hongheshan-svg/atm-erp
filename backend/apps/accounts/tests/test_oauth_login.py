@@ -4,8 +4,9 @@ from unittest.mock import patch
 from django.test import TestCase, override_settings
 
 from apps.accounts.models import Role, User
-from apps.accounts.oauth.base import OAuthIdentity
+from apps.accounts.oauth.base import OAuthError, OAuthIdentity
 from apps.accounts.oauth.services import find_or_create_user, issue_state, verify_state
+from apps.accounts.oauth.views import STATE_COOKIE
 from apps.accounts.oauth.wecom import WeComProvider
 
 CALLBACK = '/api/auth/oauth/wecom/callback'
@@ -37,7 +38,9 @@ class OAuthServiceTests(TestCase):
         self.assertEqual(u1.id, u2.id)
         self.assertEqual(User.objects.filter(is_deleted=False).count(), 1)
 
-    def test_backfill_existing_by_phone(self):
+    @override_settings(OAUTH_BIND_EXISTING_BY_PHONE=True)
+    def test_backfill_when_binding_enabled(self):
+        """显式开启绑定后:非特权既有账号按 IM 核验手机号绑定并回填 *_id。"""
         existing = User.objects.create_user(username='wang', employee_id='E001', phone='13700137000')
         ident = OAuthIdentity(external_id='wx_wang', name='王五', mobile='137-0013-7000')  # 含分隔符
         user, created = find_or_create_user('wecom', ident)
@@ -45,6 +48,31 @@ class OAuthServiceTests(TestCase):
         self.assertEqual(user.id, existing.id)
         user.refresh_from_db()
         self.assertEqual(user.wechat_work_id, 'wx_wang')  # 回填
+
+    def test_existing_match_refused_by_default(self):
+        """默认不绑定既有账号:phone 命中既有 → 拒绝(防接管),不建重复、不发 token。"""
+        User.objects.create_user(username='wang', employee_id='E001', phone='13700137000')
+        ident = OAuthIdentity(external_id='wx_wang', mobile='13700137000')
+        with self.assertRaises(OAuthError):
+            find_or_create_user('wecom', ident)
+        self.assertEqual(User.objects.filter(is_deleted=False).count(), 1)  # 未建重复
+
+    @override_settings(OAUTH_BIND_EXISTING_BY_PHONE=True)
+    def test_privileged_account_refused_even_when_binding_enabled(self):
+        """特权账号(superuser)即便开了绑定也拒绝扫码自动登录。"""
+        User.objects.create_user(username='boss', employee_id='E000', phone='13800138001',
+                                 is_superuser=True, is_staff=True)
+        ident = OAuthIdentity(external_id='wx_boss', mobile='13800138001')
+        with self.assertRaises(OAuthError):
+            find_or_create_user('wecom', ident)
+
+    def test_email_not_used_for_binding(self):
+        """email 不作匹配键:同邮箱、无手机 → 不绑定既有,按新人自动建号。"""
+        existing = User.objects.create_user(username='z', employee_id='E002', email='z@corp.com')
+        ident = OAuthIdentity(external_id='wx_z', email='z@corp.com')  # 无 mobile
+        user, created = find_or_create_user('wecom', ident)
+        self.assertTrue(created)
+        self.assertNotEqual(user.id, existing.id)
 
     @override_settings(OAUTH_AUTO_CREATE=False)
     def test_auto_create_disabled_returns_none(self):
@@ -75,6 +103,7 @@ class OAuthCallbackHTTPTests(TestCase):
 
     def _post(self, identity, state=None):
         state = state or issue_state('wecom')
+        self.client.cookies[STATE_COOKIE] = state  # state 绑定本浏览器(防 CSRF)
         with patch.object(WeComProvider, 'resolve_identity', return_value=identity):
             return self.client.post(CALLBACK, {'code': 'CODE_%s' % identity.external_id, 'state': state})
 
@@ -96,11 +125,22 @@ class OAuthCallbackHTTPTests(TestCase):
         resp = self._post(ident, state='bad-state')
         self.assertEqual(resp.status_code, 400)
 
+    def test_callback_missing_state_cookie_400(self):
+        """有效签名 state 但浏览器无对应 cookie → 拒绝(登录 CSRF 防护)。"""
+        ident = OAuthIdentity(external_id='wx_d', mobile='13300133000')
+        state = issue_state('wecom')
+        self.client.cookies.pop(STATE_COOKIE, None)  # 显式不带 cookie
+        with patch.object(WeComProvider, 'resolve_identity', return_value=ident):
+            resp = self.client.post(CALLBACK, {'code': 'CODE_d', 'state': state})
+        self.assertEqual(resp.status_code, 400)
+
     def test_callback_code_replay_400(self):
         ident = OAuthIdentity(external_id='wx_c', mobile='13400134000')
-        state = issue_state('wecom')
+        s1, s2 = issue_state('wecom'), issue_state('wecom')
         with patch.object(WeComProvider, 'resolve_identity', return_value=ident):
-            r1 = self.client.post(CALLBACK, {'code': 'SAME', 'state': state})
-            r2 = self.client.post(CALLBACK, {'code': 'SAME', 'state': issue_state('wecom')})
+            self.client.cookies[STATE_COOKIE] = s1
+            r1 = self.client.post(CALLBACK, {'code': 'SAME', 'state': s1})
+            self.client.cookies[STATE_COOKIE] = s2
+            r2 = self.client.post(CALLBACK, {'code': 'SAME', 'state': s2})
         self.assertEqual(r1.status_code, 200, r1.content)
         self.assertEqual(r2.status_code, 400)  # 同 code 重放被拒

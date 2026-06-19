@@ -14,7 +14,7 @@ from django.db import IntegrityError, transaction
 
 from apps.accounts.models import Department, Role, User
 
-from .base import OAuthIdentity
+from .base import OAuthError, OAuthIdentity
 
 logger = logging.getLogger(__name__)
 
@@ -73,18 +73,26 @@ def _domain_allowed(email: str) -> bool:
     return email.rsplit('@', 1)[1].lower() in domains
 
 
+def _is_privileged_account(user) -> bool:
+    """特权账号:superuser/staff 或拥有 system 权限。禁止经扫码自动绑定/登录(防账号接管)。"""
+    if user.is_superuser or user.is_staff:
+        return True
+    try:
+        from apps.core.permission_service import get_user_permissions
+
+        perms = get_user_permissions(user)
+    except Exception:  # noqa: BLE001
+        return False
+    return any(p == 'system' or p.startswith('system:') for p in perms)
+
+
 def _match_existing(identity: OAuthIdentity):
-    base = User.objects.filter(is_deleted=False)
+    # 仅按 phone 匹配(IM 平台核验过的登录手机号)。**不按 email 匹配**——email 多为用户可改/易冒名,
+    # 用其绑定既有账号会导致账号接管(安全评审 HIGH)。email 仅用于新建账号填充,不作匹配键。
     mobile = _normalize_mobile(identity.mobile)
-    if mobile:
-        u = base.filter(phone=mobile).first()
-        if u:
-            return u
-    if identity.email:
-        u = base.filter(email__iexact=identity.email).first()
-        if u:
-            return u
-    return None
+    if not mobile:
+        return None
+    return User.objects.filter(is_deleted=False, phone=mobile).first()
 
 
 def _unique_username(identity: OAuthIdentity, platform: str) -> str:
@@ -148,9 +156,15 @@ def _find_or_create(platform: str, identity: OAuthIdentity):
         )
         if bound:
             return bound, False
-        # (2) 匹配既有用户(phone>email),仅在该 *_id 为空时回填(不覆盖已有手工值)
+        # (2) 命中既有账号(按 phone):默认**不**自动绑定/登入,防账号接管(安全评审 HIGH)。
         matched = _match_existing(identity)
         if matched:
+            if _is_privileged_account(matched):
+                # 特权账号始终拒绝扫码自动绑定:必须密码登录或管理员显式绑定
+                raise OAuthError('该账号涉及管理权限,不能通过扫码登录;请用密码登录或联系管理员')
+            if not settings.OAUTH_BIND_EXISTING_BY_PHONE:
+                raise OAuthError('该手机号已存在 ERP 账号;请用密码登录,或联系管理员绑定企业 IM 后再扫码')
+            # 显式开启后:仅按 IM 核验手机号绑定非特权账号,且仅在 *_id 为空时回填(不覆盖手工值)
             if not getattr(matched, id_field):
                 setattr(matched, id_field, ext)
                 matched.save(update_fields=[id_field])

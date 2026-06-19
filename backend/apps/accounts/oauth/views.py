@@ -37,6 +37,11 @@ class OAuthProvidersView(APIView):
         ])
 
 
+# state 绑定到本浏览器的 HttpOnly cookie(防登录 CSRF):回调要求 cookie==提交的 state。
+STATE_COOKIE = 'erp_oauth_state'
+STATE_COOKIE_PATH = '/api'
+
+
 class OAuthLoginURLView(APIView):
     permission_classes = [AllowAny]
     throttle_scope = 'login'
@@ -50,7 +55,13 @@ class OAuthLoginURLView(APIView):
         if not provider.is_configured():
             return Response({'detail': '该登录方式未启用'}, status=400)
         state = issue_state(platform)
-        return Response({'auth_url': provider.get_authorize_url(state, build_redirect_uri(platform)), 'state': state})
+        resp = Response({'auth_url': provider.get_authorize_url(state, build_redirect_uri(platform)), 'state': state})
+        # 把 state 钉到发起扫码的这个浏览器;回调若 cookie 缺失/不符即拒绝,防止被诱导登入他人账号。
+        resp.set_cookie(
+            STATE_COOKIE, state, max_age=300, httponly=True,
+            samesite='Lax', secure=request.is_secure(), path=STATE_COOKIE_PATH,
+        )
+        return resp
 
 
 class OAuthCallbackView(APIView):
@@ -71,6 +82,10 @@ class OAuthCallbackView(APIView):
             return Response({'detail': '缺少 code 或 state'}, status=400)
         if not verify_state(state, platform):
             return Response({'detail': '登录状态校验失败(state 无效或已过期),请重新扫码'}, status=400)
+        # CSRF:state 必须与本浏览器 cookie 一致(防被诱导登入他人账号)
+        cookie_state = request.COOKIES.get(STATE_COOKIE)
+        if not cookie_state or cookie_state != state:
+            return Response({'detail': '登录状态校验失败(请在发起扫码的同一浏览器完成),请重新扫码'}, status=400)
         if not consume_code_once(platform, code):
             return Response({'detail': '该登录码已使用,请重新扫码'}, status=400)
 
@@ -90,7 +105,12 @@ class OAuthCallbackView(APIView):
             logger.exception('OAuth %s 回调异常', platform)
             return Response({'detail': '第三方登录失败,请稍后重试'}, status=502)
 
-        user, created = find_or_create_user(platform, identity)
+        try:
+            user, created = find_or_create_user(platform, identity)
+        except OAuthError as e:
+            # 既有账号需显式绑定 / 特权账号拒绝 / 绑定未开启等(防账号接管)
+            logger.warning('OAuth %s 绑定/建号被拒: %s', platform, e)
+            return Response({'detail': str(e)}, status=403)
         if user is None:
             return Response({'detail': '账号不存在且未开启自动建号,请联系管理员'}, status=403)
         if not user.is_active:
@@ -98,12 +118,14 @@ class OAuthCallbackView(APIView):
 
         _audit(user, platform, created)
         refresh = RefreshToken.for_user(user)
-        return Response({
+        resp = Response({
             'access': str(refresh.access_token),
             'refresh': str(refresh),
             'user': UserProfileSerializer(user).data,
             'is_new_user': created,
         })
+        resp.delete_cookie(STATE_COOKIE, path=STATE_COOKIE_PATH)  # state 一次性
+        return resp
 
 
 def _audit(user, platform, created):

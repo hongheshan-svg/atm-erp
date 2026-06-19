@@ -300,6 +300,10 @@ OAUTH_ALLOWED_EMAIL_DOMAINS = config(
 )
 # 自动建号默认角色编码(对齐 init_roles 的 employee,data_scope=SELF)。
 OAUTH_DEFAULT_ROLE_CODE = config('OAUTH_DEFAULT_ROLE_CODE', default='employee')
+# 是否允许「扫码时按手机号自动绑定到已存在的 ERP 账号」。默认 False(安全):
+# 首扫不静默绑定既有账号,避免账号接管;既有员工由管理员一次性绑定其 IM ID 即可扫码。
+# 设为 True 时,组织信任「IM 平台核验的手机号」,非特权既有账号可按手机号自动绑定(特权账号始终拒绝)。
+OAUTH_BIND_EXISTING_BY_PHONE = config('OAUTH_BIND_EXISTING_BY_PHONE', default=False, cast=bool)
 
 # Frontend URL for notification links
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost')
