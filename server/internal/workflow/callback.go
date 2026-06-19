@@ -106,3 +106,17 @@ func (r defaultResolver) ResolveAll(ctx context.Context, step *WorkflowStep, ins
 	}
 	return []uint64{id}, nil
 }
+
+// Notifier 由引擎在 task 创建 / 完成时调用,推送站内信(fire-and-forget,失败不阻断审批)。
+type Notifier interface {
+	NotifyUser(ctx context.Context, userID uint64, title, message string)
+}
+
+type noopNotifier struct{}
+
+func (noopNotifier) NotifyUser(context.Context, uint64, string, string) {}
+
+// CCResolver 可选接口:resolver 若实现它,引擎在 task 创建时解析抄送人并通知(对齐 cc_users/cc_roles)。
+type CCResolver interface {
+	ResolveCC(ctx context.Context, step *WorkflowStep, instance *WorkflowInstance) []uint64
+}

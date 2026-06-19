@@ -103,7 +103,9 @@ A 波用 AutoMigrate 从 Go 模型建表,掩盖了与真实 Django schema 的不
 ## 下一步
 
 1. finance 回款核销接 REST 路由 + 前端;前端各业务表按真库 schema 校验字段名。
-2. workflow 余项(依赖 notify/asynq 调度基础设施):抄送(cc_users/cc_roles M2M + 通知派发)、
-   超时升级(asynq 定时扫 deadline 过期 task → escalate/auto-pass)、PROJECT_MANAGER 经业务 callback 解析。
+2. ✅ notify(站内信落库,`internal/notify`:system_notification + REST 列表/未读/已读)+ workflow
+   待办/抄送/结果通知 + 超时提醒(对齐 Django check_workflow_deadline_reminders:仅提醒不改状态,
+   asynq `@every 1h` 调度)均已落地并验证。余项:PROJECT_MANAGER 经业务 callback 解析;
+   站内信 WebSocket 实时推送;前端通知中心(铃铛/未读角标)。
 3. inventory 成本账本(ItemCostRecord)与 Stock 移动联动(目前 Stock 走 weighted_avg_cost,
    ItemCostRecord 账本由其它流程喂);若需两者统一,需评估 Django 侧实际喂账本的入口。

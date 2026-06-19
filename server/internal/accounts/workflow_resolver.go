@@ -105,6 +105,39 @@ func (r *WorkflowResolver) deptManager(ctx context.Context, submitterID uint64) 
 	return *d.ManagerID
 }
 
+var _ workflow.CCResolver = (*WorkflowResolver)(nil)
+
+// ResolveCC 解析抄送人(cc_users + cc_roles 的在岗用户),对齐 Django WorkflowStep.cc_users/cc_roles。
+// M2M 中间表(workflow_step_cc_users / workflow_step_cc_roles)存在时查询,不存在则忽略(best-effort)。
+func (r *WorkflowResolver) ResolveCC(ctx context.Context, step *workflow.WorkflowStep, _ *workflow.WorkflowInstance) []uint64 {
+	set := map[uint64]struct{}{}
+
+	var userIDs []uint64
+	_ = r.db.WithContext(ctx).Raw(
+		`SELECT user_id FROM workflow_step_cc_users WHERE workflowstep_id = ?`, step.ID).Scan(&userIDs).Error
+	for _, id := range userIDs {
+		if id != 0 {
+			set[id] = struct{}{}
+		}
+	}
+
+	var roleIDs []uint64
+	_ = r.db.WithContext(ctx).Raw(
+		`SELECT role_id FROM workflow_step_cc_roles WHERE workflowstep_id = ?`, step.ID).Scan(&roleIDs).Error
+	for _, rid := range roleIDs {
+		rid := rid
+		for _, uid := range r.usersWithRole(ctx, &rid, 0) {
+			set[uid] = struct{}{}
+		}
+	}
+
+	out := make([]uint64, 0, len(set))
+	for id := range set {
+		out = append(out, id)
+	}
+	return out
+}
+
 func (r *WorkflowResolver) firstSuperuser(ctx context.Context) uint64 {
 	var ids []uint64
 	_ = r.db.WithContext(ctx).Model(&User{}).

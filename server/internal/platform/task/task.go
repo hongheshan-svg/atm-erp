@@ -46,3 +46,24 @@ func Run(opt asynq.RedisClientOpt) error {
 	srv := asynq.NewServer(opt, asynq.Config{Concurrency: 4})
 	return srv.Run(Mux())
 }
+
+// RunWithJobs 启动 worker(handlers)+ 定时调度(cron)。
+// jobs: 任务类型→处理函数;schedule: 任务类型→cron 表达式(支持 asynq 的 @every 等)。
+func RunWithJobs(opt asynq.RedisClientOpt, jobs map[string]func(context.Context) error, schedule map[string]string) error {
+	mux := Mux()
+	for typ, fn := range jobs {
+		fn := fn
+		mux.HandleFunc(typ, func(ctx context.Context, _ *asynq.Task) error { return fn(ctx) })
+	}
+	if len(schedule) > 0 {
+		sched := asynq.NewScheduler(opt, nil)
+		for typ, spec := range schedule {
+			if _, err := sched.Register(spec, asynq.NewTask(typ, nil)); err != nil {
+				return err
+			}
+		}
+		go func() { _ = sched.Run() }()
+	}
+	srv := asynq.NewServer(opt, asynq.Config{Concurrency: 4})
+	return srv.Run(mux)
+}

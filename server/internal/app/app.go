@@ -16,6 +16,7 @@ import (
 	"github.com/atm-erp/server/internal/masterdata"
 	"github.com/atm-erp/server/internal/masterdata/item"
 	"github.com/atm-erp/server/internal/middleware"
+	"github.com/atm-erp/server/internal/notify"
 	"github.com/atm-erp/server/internal/oa"
 	"github.com/atm-erp/server/internal/platform/cache"
 	"github.com/atm-erp/server/internal/platform/config"
@@ -105,8 +106,12 @@ func buildRouter(cfg *config.Config, gdb *gorm.DB, ps iam.PermissionService) *gi
 	production.Routes(api, gdb, perm)
 	finance.Routes(api, gdb, perm)
 	oa.Routes(api, gdb, perm)
-	// 工作流:注入 IAM 真实审批人 resolver(ROLE/DEPARTMENT_MANAGER/SUPERIOR 查 accounts 表)。
-	workflow.RoutesWithService(api, workflow.NewService(gdb, workflow.NewCallbackRegistry(), accounts.NewWorkflowResolver(gdb)), perm)
+	// 站内信(系统通知)。
+	notify.Routes(api, gdb, perm)
+	// 工作流:注入 IAM 真实审批人 resolver + 站内信通知器(任务待办/抄送/结果)。
+	wfSvc := workflow.NewService(gdb, workflow.NewCallbackRegistry(), accounts.NewWorkflowResolver(gdb))
+	wfSvc.SetNotifier(notify.AsWorkflowNotifier(notify.NewService(gdb)))
+	workflow.RoutesWithService(api, wfSvc, perm)
 
 	return r
 }
@@ -135,9 +140,21 @@ func Worker(_ context.Context) error {
 	if err != nil {
 		return err
 	}
+	gdb, err := db.Open(cfg)
+	if err != nil {
+		return fmt.Errorf("数据库连接失败: %w", err)
+	}
+	notifySvc := notify.NewService(gdb)
+	wfSvc := workflow.NewService(gdb, workflow.NewCallbackRegistry(), accounts.NewWorkflowResolver(gdb))
+	wfSvc.SetNotifier(notify.AsWorkflowNotifier(notifySvc))
+	jobs := map[string]func(context.Context) error{
+		// 审批超时提醒(对齐 Django check_workflow_deadline_reminders:扫超时待办 → 给审批人发站内信)。
+		"workflow:remind_overdue": func(ctx context.Context) error { _, e := wfSvc.RemindOverdue(ctx); return e },
+	}
+	schedule := map[string]string{"workflow:remind_overdue": "@every 1h"}
 	// 不记原始 URL(可能含密码);只记已解析的 addr/db。
-	slog.Info("erpd worker 启动(asynq)", "addr", opt.Addr, "db", opt.DB)
-	return task.Run(opt)
+	slog.Info("erpd worker 启动(asynq + 定时)", "addr", opt.Addr, "db", opt.DB)
+	return task.RunWithJobs(opt, jobs, schedule)
 }
 
 // Healthcheck 供容器 distroless 健康检查子命令使用。

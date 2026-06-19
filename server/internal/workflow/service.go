@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/atm-erp/server/internal/iam"
@@ -35,6 +36,7 @@ type Service struct {
 	tasks     *TaskRepo
 	registry  *CallbackRegistry
 	resolver  AssigneeResolver
+	notifier  Notifier
 }
 
 // NewService 装配引擎。registry/resolver 允许为 nil(用默认空实现)。
@@ -53,7 +55,64 @@ func NewService(db *gorm.DB, registry *CallbackRegistry, resolver AssigneeResolv
 		tasks:     NewTaskRepo(db),
 		registry:  registry,
 		resolver:  resolver,
+		notifier:  noopNotifier{},
 	}
+}
+
+// SetNotifier 注入站内信通知器(默认 no-op)。app wire 阶段调用以接入 notify 服务。
+func (s *Service) SetNotifier(n Notifier) {
+	if n != nil {
+		s.notifier = n
+	}
+}
+
+// notifyTaskCreated 通知审批人有新待办。notifyCC 通知抄送人(resolver 实现 CCResolver 时)。
+func (s *Service) notifyTaskCreated(ctx context.Context, inst *WorkflowInstance, assigneeID uint64) {
+	s.notifier.NotifyUser(ctx, assigneeID, "审批待办",
+		fmt.Sprintf("单据 %s(%s)需要您审批", inst.BusinessNo, inst.BusinessType))
+}
+
+func (s *Service) notifyCC(ctx context.Context, inst *WorkflowInstance, step *WorkflowStep) {
+	cr, ok := s.resolver.(CCResolver)
+	if !ok {
+		return
+	}
+	for _, uid := range cr.ResolveCC(ctx, step, inst) {
+		s.notifier.NotifyUser(ctx, uid, "抄送",
+			fmt.Sprintf("单据 %s(%s)的审批已抄送给您", inst.BusinessNo, inst.BusinessType))
+	}
+}
+
+func resultText(result string) string {
+	switch result {
+	case ResultApproved:
+		return "通过"
+	case ResultRejected:
+		return "驳回"
+	case ResultWithdrawn:
+		return "撤回"
+	default:
+		return result
+	}
+}
+
+// RemindOverdue 扫描已超时(deadline 过期)的待处理任务,给审批人发提醒站内信。
+// 对齐 Django check_workflow_deadline_reminders:仅提醒,不改任务状态、不自动通过/升级。
+func (s *Service) RemindOverdue(ctx context.Context) (int, error) {
+	var tasks []WorkflowTask
+	if err := s.db.WithContext(ctx).
+		Where("deadline IS NOT NULL AND deadline < ? AND status = ?", time.Now(), TaskStatusPending).
+		Find(&tasks).Error; err != nil {
+		return 0, err
+	}
+	for i := range tasks {
+		t := &tasks[i]
+		var inst WorkflowInstance
+		_ = s.db.WithContext(ctx).Where("id = ?", t.InstanceID).First(&inst).Error
+		s.notifier.NotifyUser(ctx, t.AssigneeID, "审批超时提醒",
+			fmt.Sprintf("单据 %s 的审批任务已超时,请尽快处理", inst.BusinessNo))
+	}
+	return len(tasks), nil
 }
 
 // Registry 暴露注册表给业务包在 wire 阶段 Register callback。
@@ -138,6 +197,8 @@ func (s *Service) Start(ctx context.Context, in StartInput) (*StartResult, error
 	// 若启流过程中已直接完成(全部步骤被跳过),事务后分发 callback。
 	if created != nil && created.Status == InstanceStatusApproved {
 		_ = s.registry.dispatch(ctx, created, ResultApproved)
+		s.notifier.NotifyUser(ctx, created.SubmitterID, "审批结果",
+			fmt.Sprintf("单据 %s 审批%s", created.BusinessNo, resultText(ResultApproved)))
 	}
 	return &StartResult{Instance: created}, nil
 }
@@ -195,7 +256,9 @@ func (s *Service) createNextTask(ctx context.Context, tx *gorm.DB, inst *Workflo
 			if err := tx.WithContext(ctx).Create(t).Error; err != nil {
 				return err
 			}
+			s.notifyTaskCreated(ctx, inst, aid)
 		}
+		s.notifyCC(ctx, inst, current)
 		return nil
 	}
 
@@ -217,7 +280,8 @@ func (s *Service) createNextTask(ctx context.Context, tx *gorm.DB, inst *Workflo
 	if err := tx.WithContext(ctx).Create(task).Error; err != nil {
 		return err
 	}
-	// TODO(port): _notify_assignee —— 站内信 + 钉钉/企微,依赖 notification 服务。
+	s.notifyTaskCreated(ctx, inst, assignee)
+	s.notifyCC(ctx, inst, current)
 	return nil
 }
 
@@ -341,7 +405,8 @@ func (s *Service) transition(ctx context.Context, taskID uint64, comment string,
 	// 事务提交后分发业务 callback(松耦合,避免长事务/跨域死锁,见设计文档待定)。
 	if completedInst != nil {
 		_ = s.registry.dispatch(ctx, completedInst, completeResult)
-		// TODO(port): _notify_submitter —— 依赖 notification 服务。
+		s.notifier.NotifyUser(ctx, completedInst.SubmitterID, "审批结果",
+			fmt.Sprintf("单据 %s 审批%s", completedInst.BusinessNo, resultText(completeResult)))
 	}
 	return nil
 }
