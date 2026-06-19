@@ -9,11 +9,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// softBase 对应 Django TimeStampedModel + SoftDeleteModel(无 created_by/updated_by)。
+// SoftBase 对应 Django TimeStampedModel + SoftDeleteModel(无 created_by/updated_by)。
 // User/Role/Department 继承的是这两个抽象类,故其表无操作人列;不可直接用 model.Base
 // (model.Base 含 created_by/updated_by,会与现有表结构不符)。
 // BeforeDelete 复刻软删除互认:UPDATE 时同步写 is_deleted=true(对齐 ADR-006)。
-type softBase struct {
+type SoftBase struct {
 	ID        uint64         `gorm:"primaryKey;column:id" json:"id"`
 	CreatedAt time.Time      `gorm:"column:created_at" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"column:updated_at" json:"updated_at"`
@@ -22,14 +22,14 @@ type softBase struct {
 }
 
 // BeforeDelete 在软删除 UPDATE 中同步 is_deleted=true(与 Django soft_delete 互认)。
-func (b *softBase) BeforeDelete(tx *gorm.DB) error {
+func (b *SoftBase) BeforeDelete(tx *gorm.DB) error {
 	tx.Statement.SetColumn("is_deleted", true)
 	return nil
 }
 
 // Department 部门(层级树),对齐 Django Department / db_table=department。
 type Department struct {
-	softBase
+	SoftBase
 	Name        string  `gorm:"column:name;size:100" json:"name"`
 	Code        string  `gorm:"column:code;size:50;uniqueIndex" json:"code"`
 	ParentID    *uint64 `gorm:"column:parent_id" json:"parent_id,omitempty"`
@@ -45,7 +45,7 @@ func (Department) TableName() string { return "department" }
 // Permissions 为 JSON 旧字段({"menu_ids":[...],"permissions":[...]});结构化权限走
 // core_role_permission(见 RolePermission),数据范围走 core_data_scope(见 DataScope)。
 type Role struct {
-	softBase
+	SoftBase
 	Name        string `gorm:"column:name;size:100;uniqueIndex" json:"name"`
 	Code        string `gorm:"column:code;size:50;uniqueIndex" json:"code"`
 	Description string `gorm:"column:description" json:"description"`
@@ -67,7 +67,7 @@ func (Role) TableName() string { return "role" }
 // 注意:Django AbstractUser 的 PK 仍是 BigAutoField id(model.Base 已含);
 // password 是 PBKDF2 编码串(算法$迭代$盐$哈希)。
 type User struct {
-	softBase
+	SoftBase
 	// --- Django AbstractUser 内建字段 ---
 	Password    string     `gorm:"column:password;size:128" json:"-"`
 	LastLogin   *time.Time `gorm:"column:last_login" json:"last_login,omitempty"`

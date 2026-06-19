@@ -37,16 +37,12 @@ func Serve(_ context.Context) error {
 	}
 	obs.Setup(cfg.AppEnv)
 
-	ps, err := permissionService(cfg)
-	if err != nil {
-		return err
-	}
-
 	gdb, err := db.Open(cfg)
 	if err != nil {
 		return fmt.Errorf("数据库连接失败: %w", err)
 	}
 
+	ps := permissionService(cfg, gdb)
 	r := buildRouter(cfg, gdb, ps)
 	slog.Info("erpd serve 启动", "addr", cfg.HTTPAddr, "env", cfg.AppEnv)
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: r}
@@ -77,9 +73,14 @@ func buildRouter(cfg *config.Config, gdb *gorm.DB, ps iam.PermissionService) *gi
 	})
 
 	tm := iam.NewTokenManager(cfg.JWTSecret, cfg.JWTAccessMinutes, cfg.JWTRefreshDays)
+	authH := accounts.NewAuthHandler(gdb, tm)
+
+	// 公开端点(无需鉴权):登录、刷新
+	authH.MountPublic(r.Group("/api"))
 
 	api := r.Group("/api")
 	api.Use(middleware.Auth(tm, ps))
+	authH.MountAuthed(api)
 
 	// 参考切片:masterdata/item
 	itemHandler := item.NewHandler(item.NewService(item.NewRepo(gdb)))
@@ -101,13 +102,14 @@ func buildRouter(cfg *config.Config, gdb *gorm.DB, ps iam.PermissionService) *gi
 	return r
 }
 
-// permissionService 选择权限服务:非 dev 或未显式 opt-in 时拒绝 fail-open 超管(安全 fail-closed)。
-func permissionService(cfg *config.Config) (iam.PermissionService, error) {
+// permissionService 选择权限服务:默认走 GORM RBAC(查 user/role/core_permission 等表);
+// 仅在 development 且显式 ERPD_DEV_SUPERUSER=1 时用 dev 超管旁路(安全 fail-closed)。
+func permissionService(cfg *config.Config, gdb *gorm.DB) iam.PermissionService {
 	if cfg.AppEnv == "development" && os.Getenv("ERPD_DEV_SUPERUSER") == "1" {
 		slog.Warn("⚠ 启用 dev 超管权限服务(StaticPermissionService),仅限本地开发,切勿用于生产")
-		return &iam.StaticPermissionService{Superuser: true}, nil
+		return &iam.StaticPermissionService{Superuser: true}
 	}
-	return nil, errors.New("未接入真实 RBAC PermissionService:仅 development 且 ERPD_DEV_SUPERUSER=1 时允许 dev 超管,否则拒绝启动(见 docs/go-rewrite Phase 1)")
+	return accounts.NewGormPermissionService(gdb)
 }
 
 // Healthcheck 供容器 distroless 健康检查子命令使用。
