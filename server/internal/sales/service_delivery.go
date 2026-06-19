@@ -16,7 +16,6 @@ func (s *Service) GetDelivery(ctx context.Context, id uint64) (*DeliveryOrder, e
 
 func (s *Service) CreateDelivery(ctx context.Context, in DeliveryCreateInput) (*DeliveryOrder, error) {
 	d := &DeliveryOrder{
-		DeliveryNo:      genCode("DO"),
 		SOID:            in.SOID,
 		WarehouseID:     in.WarehouseID,
 		DeliveryDate:    in.DeliveryDate,
@@ -27,7 +26,10 @@ func (s *Service) CreateDelivery(ctx context.Context, in DeliveryCreateInput) (*
 		PackagingType:   orDefault(in.PackagingType, "STANDARD"),
 		Notes:           in.Notes,
 	}
-	if err := s.repo.CreateDelivery(ctx, d); err != nil {
+	if err := createWithCodeRetry(
+		func() { d.DeliveryNo = genCode("DO") },
+		func() error { return s.repo.CreateDelivery(ctx, d) },
+	); err != nil {
 		return nil, err
 	}
 	lines := make([]DeliveryOrderLine, 0, len(in.Lines))

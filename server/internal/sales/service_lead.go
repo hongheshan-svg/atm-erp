@@ -19,7 +19,6 @@ func (s *Service) GetLead(ctx context.Context, id uint64) (*Lead, error) {
 
 func (s *Service) CreateLead(ctx context.Context, in LeadCreateInput) (*Lead, error) {
 	l := &Lead{
-		LeadNo:          genCode("LEAD"),
 		CompanyName:     in.CompanyName,
 		ContactName:     in.ContactName,
 		ContactPhone:    in.ContactPhone,
@@ -40,7 +39,10 @@ func (s *Service) CreateLead(ctx context.Context, in LeadCreateInput) (*Lead, er
 		Score:           in.Score,
 		Notes:           in.Notes,
 	}
-	if err := s.repo.CreateLead(ctx, l); err != nil {
+	if err := createWithCodeRetry(
+		func() { l.LeadNo = genCode("LEAD") },
+		func() error { return s.repo.CreateLead(ctx, l) },
+	); err != nil {
 		return nil, err
 	}
 	return l, nil
@@ -125,7 +127,6 @@ func (s *Service) ConvertLead(ctx context.Context, id uint64, in LeadConvertInpu
 			name = l.CompanyName + "商机"
 		}
 		opp = &Opportunity{
-			OpportunityNo:   genCode("OPP"),
 			Name:            name,
 			CustomerID:      *customerID,
 			ContactName:     l.ContactName,
@@ -138,7 +139,10 @@ func (s *Service) ConvertLead(ctx context.Context, id uint64, in LeadConvertInpu
 			OwnerID:         l.OwnerID,
 		}
 		opp.WeightedAmount = opp.EstimatedAmount * float64(opp.Probability) / 100
-		if err := s.repo.CreateOpportunity(ctx, opp); err != nil {
+		if err := createWithCodeRetry(
+			func() { opp.OpportunityNo = genCode("OPP") },
+			func() error { return s.repo.CreateOpportunity(ctx, opp) },
+		); err != nil {
 			return nil, nil, err
 		}
 	}

@@ -3,6 +3,7 @@ package sales
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"gorm.io/gorm"
 )
@@ -30,6 +31,33 @@ func errWrap(sentinel error, detail string) error {
 func notFoundOr(err error) error {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return ErrNotFound
+	}
+	return err
+}
+
+// isDuplicateCode 判断是否为业务编号唯一键冲突(Postgres SQLSTATE 23505)。
+// 临时进程内发号(genCode)在「同日 + 4 位序号回绕」下仍可能撞号,
+// 故创建时遇唯一冲突需换号重试(切流改 CodeRule 持久化发号后可移除)。
+func isDuplicateCode(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "23505") || strings.Contains(err.Error(), "duplicate key")
+}
+
+// createWithCodeRetry 反复「重设编号 → 创建」直至成功或非冲突错误。
+// setCode 须把新编号写入实体;create 执行落库。
+func createWithCodeRetry(setCode func(), create func() error) error {
+	const maxAttempts = 5
+	var err error
+	for i := 0; i < maxAttempts; i++ {
+		setCode()
+		if err = create(); err == nil {
+			return nil
+		}
+		if !isDuplicateCode(err) {
+			return err
+		}
 	}
 	return err
 }

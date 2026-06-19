@@ -20,7 +20,6 @@ func (s *Service) CreateOpportunity(ctx context.Context, in OpportunityCreateInp
 		probability = *in.Probability
 	}
 	o := &Opportunity{
-		OpportunityNo:         genCode("OPP"),
 		Name:                  in.Name,
 		CustomerID:            in.CustomerID,
 		ContactName:           in.ContactName,
@@ -41,7 +40,10 @@ func (s *Service) CreateOpportunity(ctx context.Context, in OpportunityCreateInp
 	}
 	// 加权金额 = 预估金额 * 概率 / 100(对齐 Django Opportunity.save)。
 	o.WeightedAmount = o.EstimatedAmount * float64(o.Probability) / 100
-	if err := s.repo.CreateOpportunity(ctx, o); err != nil {
+	if err := createWithCodeRetry(
+		func() { o.OpportunityNo = genCode("OPP") },
+		func() error { return s.repo.CreateOpportunity(ctx, o) },
+	); err != nil {
 		return nil, err
 	}
 	return o, nil

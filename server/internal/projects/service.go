@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/atm-erp/server/internal/iam"
@@ -419,6 +420,9 @@ func (s *Service) CreateBOM(ctx context.Context, in BOMCreateInput) (*ProjectBOM
 	}
 	// total_cost = actual_cost × actual_qty(Django update_total_cost)。
 	b.TotalCost = b.ActualCost * b.ActualQty
+	// extra_fields 落 jsonb 列,空字符串非合法 JSON 会触发 22P02;
+	// 对齐 Django JSONField(default=dict) 归一为 "{}"。
+	b.ExtraFields = normalizeJSON(b.ExtraFields)
 	if err := s.repo.CreateBOM(ctx, b); err != nil {
 		return nil, err
 	}
@@ -433,6 +437,8 @@ func (s *Service) UpdateBOM(ctx context.Context, id uint64, in BOMUpdateInput) (
 	applyBOMUpdate(b, in)
 	// 重算总成本(actual_cost × actual_qty)。
 	b.TotalCost = b.ActualCost * b.ActualQty
+	// 归一 extra_fields,避免空串写入 jsonb 触发 22P02。
+	b.ExtraFields = normalizeJSON(b.ExtraFields)
 	if err := s.repo.UpdateBOM(ctx, b); err != nil {
 		return nil, err
 	}
@@ -678,4 +684,13 @@ func (s *Service) genCode(ctx context.Context, prefix string, countFn func(strin
 		return fmt.Sprintf("%s%d", full, time.Now().Unix()%100000)
 	}
 	return fmt.Sprintf("%s%04d", full, n+1)
+}
+
+// normalizeJSON 把空白字符串归一为合法 JSON 字面量 "{}",供 jsonb 列存储。
+// Django 端 JSONField(default=dict) 等价行为;非空值原样保留(由 DB 校验合法性)。
+func normalizeJSON(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return "{}"
+	}
+	return s
 }

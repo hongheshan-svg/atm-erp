@@ -20,7 +20,6 @@ func (s *Service) CreateQuotation(ctx context.Context, in QuotationCreateInput) 
 		taxRate = *in.TaxRate
 	}
 	q := &Quotation{
-		QuoteNo:    genCode("QT"),
 		CustomerID: in.CustomerID,
 		ProjectID:  in.ProjectID,
 		ValidUntil: in.ValidUntil,
@@ -29,7 +28,10 @@ func (s *Service) CreateQuotation(ctx context.Context, in QuotationCreateInput) 
 		TaxRate:    taxRate,
 		Notes:      in.Notes,
 	}
-	if err := s.repo.CreateQuotation(ctx, q); err != nil {
+	if err := createWithCodeRetry(
+		func() { q.QuoteNo = genCode("QT") },
+		func() error { return s.repo.CreateQuotation(ctx, q) },
+	); err != nil {
 		return nil, err
 	}
 	// 明细 + 金额回算(line_amount = qty*unit_price,对齐 Django Line.save)。
@@ -146,7 +148,6 @@ func (s *Service) ConvertToSO(ctx context.Context, id uint64, in ConvertToSOInpu
 	}
 
 	so := &SalesOrder{
-		OrderNo:       genCode("SO"),
 		CustomerID:    q.CustomerID,
 		ProjectID:     q.ProjectID,
 		DeliveryDate:  deliveryDate,
@@ -157,7 +158,10 @@ func (s *Service) ConvertToSO(ctx context.Context, id uint64, in ConvertToSOInpu
 	}
 	// TODO(verify): Django convert_to_so 未用显式事务包裹本 Go 实现的多步写;
 	// 接入 db 事务封装后改为 r.db.Transaction(...) 保证原子性。
-	if err := s.repo.CreateSalesOrder(ctx, so); err != nil {
+	if err := createWithCodeRetry(
+		func() { so.OrderNo = genCode("SO") },
+		func() error { return s.repo.CreateSalesOrder(ctx, so) },
+	); err != nil {
 		return nil, err
 	}
 	var total float64

@@ -20,7 +20,6 @@ func (s *Service) CreateSalesOrder(ctx context.Context, in SalesOrderCreateInput
 		taxRate = *in.TaxRate
 	}
 	so := &SalesOrder{
-		OrderNo:         genCode("SO"),
 		CustomerOrderNo: in.CustomerOrderNo,
 		CustomerID:      in.CustomerID,
 		ProjectID:       in.ProjectID,
@@ -31,7 +30,10 @@ func (s *Service) CreateSalesOrder(ctx context.Context, in SalesOrderCreateInput
 		PaymentMethod:   orDefault(in.PaymentMethod, "WIRE"),
 		Notes:           in.Notes,
 	}
-	if err := s.repo.CreateSalesOrder(ctx, so); err != nil {
+	if err := createWithCodeRetry(
+		func() { so.OrderNo = genCode("SO") },
+		func() error { return s.repo.CreateSalesOrder(ctx, so) },
+	); err != nil {
 		return nil, err
 	}
 	var total float64
