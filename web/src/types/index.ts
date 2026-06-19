@@ -32,42 +32,55 @@ export interface LoginResult {
   user: UserProfile
 }
 
-// 物料,对齐 server/internal/masterdata/item Item。
+// 物料,对齐 server/internal/masterdata/item Item(真实 item 表列:sku/specification/...)。
 export interface Item {
   id: number
-  code: string
+  sku: string
   name: string
-  spec: string
+  specification: string
+  brand?: string
+  model?: string
+  category_id?: number | null
   unit: string
-  category: string
-  price: number
+  standard_cost: number
+  purchase_price?: number
+  sale_price?: number
+  is_active?: boolean
   created_at?: string
   updated_at?: string
 }
 
 // 物料创建入参(对齐 CreateInput)。
 export interface ItemCreateInput {
-  code: string
+  sku: string
   name: string
-  spec?: string
+  specification?: string
+  brand?: string
+  model?: string
+  category_id?: number | null
   unit?: string
-  category?: string
-  price?: number
+  standard_cost?: number
+  purchase_price?: number
+  sale_price?: number
 }
 
 // 物料更新入参(对齐 UpdateInput,局部更新)。
 export interface ItemUpdateInput {
   name?: string
-  spec?: string
+  specification?: string
+  brand?: string
+  model?: string
+  category_id?: number | null
   unit?: string
-  category?: string
-  price?: number
+  standard_cost?: number
+  purchase_price?: number
+  sale_price?: number
 }
 
 // 物料列表查询条件。
 export interface ItemListQuery {
   keyword?: string
-  category?: string
+  category_id?: string
   page?: number
   page_size?: number
 }

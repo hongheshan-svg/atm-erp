@@ -15,7 +15,7 @@ func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
 func (h *Handler) List(c *gin.Context) {
 	p := httpx.ParsePage(c)
-	q := ListQuery{Keyword: c.Query("keyword"), Category: c.Query("category")}
+	q := ListQuery{Keyword: c.Query("keyword"), CategoryID: c.Query("category_id")}
 	items, total, err := h.svc.List(c.Request.Context(), q, p.Offset(), p.PageSize)
 	if err != nil {
 		httpx.Error(c, http.StatusInternalServerError, err.Error())

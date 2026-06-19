@@ -12,16 +12,14 @@ import {
 import type { Item, ItemCreateInput, ItemListQuery } from '@/types'
 
 // ===== 查询条件与分页 =====
-const filters = reactive({ keyword: '', category: '' })
+const filters = reactive({ keyword: '' })
 const page = ref(1)
 const pageSize = ref(20)
 
-// 已提交的查询(点查询才生效,避免输入即请求)。
-const submittedQuery = reactive<ItemListQuery>({ keyword: '', category: '' })
+const submittedQuery = reactive<ItemListQuery>({ keyword: '' })
 
 const query = computed<ItemListQuery>(() => ({
   keyword: submittedQuery.keyword,
-  category: submittedQuery.category,
   page: page.value,
   page_size: pageSize.value
 }))
@@ -33,13 +31,11 @@ const total = computed(() => data.value?.count ?? 0)
 
 function handleSearch() {
   submittedQuery.keyword = filters.keyword
-  submittedQuery.category = filters.category
   page.value = 1
 }
 
 function handleReset() {
   filters.keyword = ''
-  filters.category = ''
   handleSearch()
 }
 
@@ -58,28 +54,26 @@ const editingId = ref<number | null>(null)
 const formRef = ref<FormInstance>()
 
 const form = reactive<ItemCreateInput>({
-  code: '',
+  sku: '',
   name: '',
-  spec: '',
+  specification: '',
   unit: '',
-  category: '',
-  price: 0
+  standard_cost: 0
 })
 
 const rules: FormRules<ItemCreateInput> = {
-  code: [{ required: true, message: '请输入编码', trigger: 'blur' }],
+  sku: [{ required: true, message: '请输入 SKU', trigger: 'blur' }],
   name: [{ required: true, message: '请输入名称', trigger: 'blur' }]
 }
 
 const dialogTitle = computed(() => (editingId.value === null ? '新建物料' : '编辑物料'))
 
 function resetForm() {
-  form.code = ''
+  form.sku = ''
   form.name = ''
-  form.spec = ''
+  form.specification = ''
   form.unit = ''
-  form.category = ''
-  form.price = 0
+  form.standard_cost = 0
 }
 
 function openCreate() {
@@ -90,12 +84,11 @@ function openCreate() {
 
 function openEdit(row: Item) {
   editingId.value = row.id
-  form.code = row.code
+  form.sku = row.sku
   form.name = row.name
-  form.spec = row.spec
+  form.specification = row.specification
   form.unit = row.unit
-  form.category = row.category
-  form.price = row.price
+  form.standard_cost = row.standard_cost
   dialogVisible.value = true
 }
 
@@ -120,10 +113,9 @@ async function handleSubmit() {
         id: editingId.value,
         input: {
           name: form.name,
-          spec: form.spec,
+          specification: form.specification,
           unit: form.unit,
-          category: form.category,
-          price: form.price
+          standard_cost: form.standard_cost
         }
       })
       ElMessage.success('更新成功')
@@ -159,20 +151,16 @@ async function handleDelete(row: Item) {
 
     <SearchForm @search="handleSearch" @reset="handleReset">
       <el-form-item label="关键字">
-        <el-input v-model="filters.keyword" placeholder="编码/名称" clearable @keyup.enter="handleSearch" />
-      </el-form-item>
-      <el-form-item label="分类">
-        <el-input v-model="filters.category" placeholder="分类" clearable @keyup.enter="handleSearch" />
+        <el-input v-model="filters.keyword" placeholder="SKU/名称" clearable @keyup.enter="handleSearch" />
       </el-form-item>
     </SearchForm>
 
     <el-table v-loading="isFetching" :data="items" border stripe>
-      <el-table-column prop="code" label="编码" width="160" />
+      <el-table-column prop="sku" label="SKU" width="160" />
       <el-table-column prop="name" label="名称" min-width="160" />
-      <el-table-column prop="spec" label="规格" min-width="140" />
+      <el-table-column prop="specification" label="规格" min-width="140" />
       <el-table-column prop="unit" label="单位" width="90" />
-      <el-table-column prop="category" label="分类" width="120" />
-      <el-table-column prop="price" label="单价" width="120" align="right" />
+      <el-table-column prop="standard_cost" label="标准成本" width="120" align="right" />
       <el-table-column label="操作" width="160" fixed="right">
         <template #default="{ row }">
           <el-button v-permission="'masterdata:item:update'" link type="primary" @click="openEdit(row)">
@@ -198,23 +186,20 @@ async function handleDelete(row: Item) {
 
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="480px">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
-        <el-form-item label="编码" prop="code">
-          <el-input v-model="form.code" :disabled="editingId !== null" placeholder="物料编码" />
+        <el-form-item label="SKU" prop="sku">
+          <el-input v-model="form.sku" :disabled="editingId !== null" placeholder="物料 SKU" />
         </el-form-item>
         <el-form-item label="名称" prop="name">
           <el-input v-model="form.name" placeholder="物料名称" />
         </el-form-item>
         <el-form-item label="规格">
-          <el-input v-model="form.spec" placeholder="规格" />
+          <el-input v-model="form.specification" placeholder="规格" />
         </el-form-item>
         <el-form-item label="单位">
           <el-input v-model="form.unit" placeholder="单位" />
         </el-form-item>
-        <el-form-item label="分类">
-          <el-input v-model="form.category" placeholder="分类" />
-        </el-form-item>
-        <el-form-item label="单价">
-          <el-input-number v-model="form.price" :min="0" :precision="2" />
+        <el-form-item label="标准成本">
+          <el-input-number v-model="form.standard_cost" :min="0" :precision="2" />
         </el-form-item>
       </el-form>
       <template #footer>

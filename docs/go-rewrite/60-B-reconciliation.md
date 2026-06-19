@@ -40,22 +40,26 @@ Go 实现:`server/internal/inventory/cost/`(shopspring/decimal,禁 float64),
 Go 实现:`server/internal/workflow/repo.go: SelectForBusiness`——同 `Order("amount_threshold DESC")`(同 PG → 同 NULLS FIRST),算法逐行一致。
 集成测试 `select_integration_test.go`(真库,因 NULLS 排序是 DB 行为)断言两场景与裁判一致,PASS。
 
-## ⏳ finance — 回款核销级联(已提取算法,待移植)
+## ✅ finance — 回款核销级联(已移植并验证)
 
 权威:`apps.finance.collection_models.CollectionRecord.save()` 三级汇总:
 1. 节点 `collected_amount = SUM(records.amount)`;状态:`>= planned → COLLECTED`(补 actual_date),`>0 → PARTIAL`。
-2. 计划 `collected_amount = SUM(plan 下所有 records)`;状态:`>= total → COMPLETED`,`DRAFT → IN_PROGRESS`。
+2. 计划 `collected_amount = SUM(plan 下所有 records)`;状态:`>= total → COMPLETED`,`DRAFT → IN_PROGRESS`(否则不变)。
 3. `plan.remaining_amount = total_amount - collected_amount`。
 
-现状:Go finance 模块移植的是 `models.py` 的 Receivable/Payment,**没有 collection 回款子系统**(CollectionPlan/Milestone/Record)。
-待办:在 Go 落地该三级模型 + 级联汇总服务(decimal),再对账确认状态阈值与金额。
+Go 实现:`server/internal/finance/collection/`(CollectionPlan/Milestone/Record 三级模型 +
+`AddRecord` 事务级联 + 纯状态函数 `MilestoneStatus`/`PlanStatus`,decimal)。
+裁判算例(计划 10w;m1 预付 3w、m2 尾款 7w):`m1+1w→PARTIAL/计划 IN_PROGRESS`;`m1+2w→COLLECTED`;
+`m2+7w→计划 COMPLETED`;`remaining=0`。纯状态单测(默认)+ 级联集成测试(真库)均与裁判一致,PASS。
 
 ## 🐞 对账发现的真实 bug(共库阻断,待修)
 
 **masterdata.Item 业务主键字段名不符**:Django `item` 表用 **`sku`**(必填),Go 移植用了 `code` 列。
-A 波用 AutoMigrate 从 Go 模型建表,掩盖了与真实 Django schema 的不匹配——**共库切流前**必须把 Go
-`internal/masterdata/item` 的 `Code`/`code` 改为 `Sku`/`sku`,并连带 dto/repo/handler/前端 api 与视图。
-提示:其它模块也应逐一用真库 schema 校验字段名(本轮仅发现 item;建议下一波对每模块跑 `\d <table>` diff)。
+A 波用 AutoMigrate 从 Go 模型建表,掩盖了与真实 Django schema 的不匹配。
+**✅ 已修**:item 模型按真实列对齐(`sku`/`specification`/`category_id` FK/`standard_cost`/`purchase_price`/
+`sale_price`,去掉不存在的 `code`/`price`/`spec`/`category`),连带 dto/repo/handler 与前端 api/视图/类型;
+经真库 `\d item` 核对一致,前端 vue-tsc 通过。
+提示:其它模块也应逐一用真库 schema 校验字段名(本轮发现并修了 item;建议下一波对每模块跑 `\d <table>` diff)。
 
 ## 下一步
 

@@ -27,10 +27,10 @@ func (r *Repo) List(ctx context.Context, q ListQuery, offset, limit int) ([]Item
 	tx := r.scoped(ctx)
 	if q.Keyword != "" {
 		kw := "%" + q.Keyword + "%"
-		tx = tx.Where("code LIKE ? OR name LIKE ?", kw, kw)
+		tx = tx.Where("sku LIKE ? OR name LIKE ?", kw, kw)
 	}
-	if q.Category != "" {
-		tx = tx.Where("category = ?", q.Category)
+	if q.CategoryID != "" {
+		tx = tx.Where("category_id = ?", q.CategoryID)
 	}
 	var total int64
 	if err := tx.Count(&total).Error; err != nil {

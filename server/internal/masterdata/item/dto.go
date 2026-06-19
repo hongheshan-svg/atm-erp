@@ -1,26 +1,34 @@
 package item
 
-// CreateInput 新建物料入参(validator/v10 标签由 gin binding 驱动)。
+// CreateInput 新建物料入参(sku 业务编码,对齐真实列)。
 type CreateInput struct {
-	Code     string  `json:"code" binding:"required"`
-	Name     string  `json:"name" binding:"required"`
-	Spec     string  `json:"spec"`
-	Unit     string  `json:"unit"`
-	Category string  `json:"category"`
-	Price    float64 `json:"price"`
+	Sku           string  `json:"sku" binding:"required"`
+	Name          string  `json:"name" binding:"required"`
+	Specification string  `json:"specification"`
+	Brand         string  `json:"brand"`
+	Model         string  `json:"model"`
+	CategoryID    *uint64 `json:"category_id"`
+	Unit          string  `json:"unit"`
+	StandardCost  float64 `json:"standard_cost"`
+	PurchasePrice float64 `json:"purchase_price"`
+	SalePrice     float64 `json:"sale_price"`
 }
 
-// UpdateInput 局部更新入参(指针区分“未传”与“置零值”)。
+// UpdateInput 局部更新(指针区分未传与置零值)。
 type UpdateInput struct {
-	Name     *string  `json:"name"`
-	Spec     *string  `json:"spec"`
-	Unit     *string  `json:"unit"`
-	Category *string  `json:"category"`
-	Price    *float64 `json:"price"`
+	Name          *string  `json:"name"`
+	Specification *string  `json:"specification"`
+	Brand         *string  `json:"brand"`
+	Model         *string  `json:"model"`
+	CategoryID    *uint64  `json:"category_id"`
+	Unit          *string  `json:"unit"`
+	StandardCost  *float64 `json:"standard_cost"`
+	PurchasePrice *float64 `json:"purchase_price"`
+	SalePrice     *float64 `json:"sale_price"`
 }
 
-// ListQuery 列表筛选条件(对应前端可选筛选,生产可换 Squirrel 动态拼装)。
+// ListQuery 列表筛选(keyword 命中 sku/name)。
 type ListQuery struct {
-	Keyword  string
-	Category string
+	Keyword    string
+	CategoryID string
 }
