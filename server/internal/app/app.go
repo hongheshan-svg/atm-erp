@@ -22,11 +22,13 @@ import (
 	"github.com/atm-erp/server/internal/platform/db"
 	migratepkg "github.com/atm-erp/server/internal/platform/migrate"
 	"github.com/atm-erp/server/internal/platform/obs"
+	"github.com/atm-erp/server/internal/platform/task"
 	"github.com/atm-erp/server/internal/production"
 	"github.com/atm-erp/server/internal/projects"
 	"github.com/atm-erp/server/internal/purchase"
 	"github.com/atm-erp/server/internal/sales"
 	"github.com/atm-erp/server/internal/workflow"
+	"github.com/atm-erp/server/internal/ws"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -84,6 +86,10 @@ func buildRouter(cfg *config.Config, gdb *gorm.DB, ps iam.PermissionService) *gi
 	api.Use(middleware.Auth(tm, ps))
 	authH.MountAuthed(api)
 
+	// WebSocket(?token= JWT 鉴权;单实例内存 Hub,多实例 Redis 扇出待接)
+	hub := ws.NewHub()
+	r.GET("/ws/notifications", hub.Handler(tm))
+
 	// 参考切片:masterdata/item
 	itemHandler := item.NewHandler(item.NewService(item.NewRepo(gdb)))
 	itemHandler.Register(api, middleware.RequirePermission)
@@ -119,6 +125,17 @@ func permissionService(cfg *config.Config, gdb *gorm.DB) iam.PermissionService {
 	}
 	slog.Info("权限服务启用 Redis 缓存(TTL 5m)")
 	return accounts.NewCachedPermissionService(base, c)
+}
+
+// Worker 启动 asynq 异步任务 worker(替代 Celery worker)。
+func Worker(_ context.Context) error {
+	cfg := config.Load()
+	opt, err := task.RedisOpt(cfg.RedisURL)
+	if err != nil {
+		return err
+	}
+	slog.Info("erpd worker 启动(asynq)", "redis", cfg.RedisURL)
+	return task.Run(opt)
 }
 
 // Healthcheck 供容器 distroless 健康检查子命令使用。
