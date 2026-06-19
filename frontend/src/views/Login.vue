@@ -66,6 +66,21 @@
             </el-button>
           </el-form-item>
         </el-form>
+
+        <div v-if="enabledProviders.length" class="scan-login">
+          <div class="scan-divider"><span>企业 IM 扫码登录</span></div>
+          <div class="scan-buttons">
+            <el-button
+              v-for="p in enabledProviders"
+              :key="p.platform"
+              class="scan-btn"
+              :loading="scanLoading === p.platform"
+              @click="handleScanLogin(p.platform)"
+            >
+              {{ p.name }}
+            </el-button>
+          </div>
+        </div>
       </div>
 
       <div class="login-footer">
@@ -84,6 +99,7 @@ import { User, Lock, Cpu, Folder, DataAnalysis, TrendCharts } from '@element-plu
 import { useUserStore } from '@/stores/user'
 import { APP_VERSION } from '@/config/version'
 import { useCompanyConfig } from '@/stores/companyConfig'
+import { getOAuthLoginUrl, getOAuthProviders, type OAuthProvider } from '@/api/auth'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -92,6 +108,10 @@ const { companyName, loadCompanyConfig } = useCompanyConfig()
 
 const loginFormRef = ref(null)
 const loading = ref(false)
+
+// 企业 IM 扫码登录:仅展示后端已配置 secret 的平台
+const enabledProviders = ref<OAuthProvider[]>([])
+const scanLoading = ref('')
 
 const loginForm = reactive({
   username: '',
@@ -104,7 +124,28 @@ onMounted(async () => {
     loginForm.username = lastUsername
   }
   await loadCompanyConfig()
+  try {
+    const list: any = await getOAuthProviders()
+    enabledProviders.value = (Array.isArray(list) ? list : []).filter((p: OAuthProvider) => p.enabled)
+  } catch {
+    // 拉取失败则不显示扫码入口,不影响账号密码登录
+  }
 })
+
+async function handleScanLogin(platform: string) {
+  scanLoading.value = platform
+  try {
+    const data: any = await getOAuthLoginUrl(platform)
+    if (data?.auth_url) {
+      window.location.href = data.auth_url // 跳转平台授权页(桌面显示二维码 / IM 内静默授权)
+    } else {
+      ElMessage.error('获取扫码登录链接失败')
+      scanLoading.value = ''
+    }
+  } catch {
+    scanLoading.value = ''
+  }
+}
 
 const loginRules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
@@ -282,6 +323,43 @@ const handleLogin = async () => {
   border-radius: var(--radius-sm);
   letter-spacing: 0.05em;
   margin-top: 8px;
+}
+
+/* ---- 扫码登录 ---- */
+.scan-login {
+  margin-top: 24px;
+}
+
+.scan-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-bottom: 16px;
+}
+
+.scan-divider::before,
+.scan-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border, #e4e7ed);
+}
+
+.scan-divider span {
+  padding: 0 12px;
+}
+
+.scan-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.scan-btn {
+  flex: 1;
+  height: 40px;
+  border-radius: var(--radius-sm);
 }
 
 .login-footer {

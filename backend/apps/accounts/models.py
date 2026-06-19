@@ -100,9 +100,10 @@ class User(AbstractUser, SoftDeleteModel):
     gender = models.CharField(max_length=1, choices=GENDER_CHOICES, blank=True, verbose_name='性别')
     birth_date = models.DateField(null=True, blank=True, verbose_name='出生日期')
     
-    # 企业微信/钉钉用户ID，用于发送个人消息
-    wechat_work_id = models.CharField(max_length=100, blank=True, verbose_name='企业微信用户ID')
-    dingtalk_id = models.CharField(max_length=100, blank=True, verbose_name='钉钉用户ID')
+    # 企业微信/钉钉/飞书用户ID，用于发送个人消息 + 扫码登录身份绑定
+    wechat_work_id = models.CharField(max_length=100, blank=True, default='', verbose_name='企业微信用户ID')
+    dingtalk_id = models.CharField(max_length=100, blank=True, default='', verbose_name='钉钉用户ID')
+    feishu_id = models.CharField(max_length=100, blank=True, default='', verbose_name='飞书用户ID')
     
     department = models.ForeignKey(
         Department,
@@ -142,7 +143,23 @@ class User(AbstractUser, SoftDeleteModel):
         verbose_name = '用户'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+        constraints = [
+            # 三方身份ID 非空时唯一（空串可重复:未绑定/软删后释放）。
+            # 作为扫码登录并发重复建号的 DB 兜底（业务层另有行锁）。
+            models.UniqueConstraint(
+                fields=['wechat_work_id'], condition=~models.Q(wechat_work_id=''),
+                name='uniq_user_wechat_work_id',
+            ),
+            models.UniqueConstraint(
+                fields=['dingtalk_id'], condition=~models.Q(dingtalk_id=''),
+                name='uniq_user_dingtalk_id',
+            ),
+            models.UniqueConstraint(
+                fields=['feishu_id'], condition=~models.Q(feishu_id=''),
+                name='uniq_user_feishu_id',
+            ),
+        ]
+
     def __str__(self):
         return f"{self.username} ({self.get_full_name() or self.employee_id})"
     
@@ -170,6 +187,11 @@ class User(AbstractUser, SoftDeleteModel):
         self.username = f"{self.username}{deleted_suffix}"
         self.email = f"{self.email}{deleted_suffix}"
         self.employee_id = f"{self.employee_id}{deleted_suffix}"
+        # 释放三方身份ID，允许同一企业微信/钉钉/飞书账号删号后重新扫码建号
+        # （这些字段有 partial unique 约束，不清空会挡住重建）
+        self.wechat_work_id = ''
+        self.dingtalk_id = ''
+        self.feishu_id = ''
         self.is_active = False
         self.is_deleted = True
         self.deleted_at = timezone.now()

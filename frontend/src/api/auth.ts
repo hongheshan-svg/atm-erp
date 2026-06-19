@@ -12,6 +12,26 @@ export function getUserProfile() {
   return request({ url: '/auth/users/profile/', method: 'get' })
 }
 
+// ===== 企业 IM 扫码登录(企业微信/钉钉/飞书)=====
+
+export interface OAuthProvider {
+  platform: 'wecom' | 'dingtalk' | 'feishu'
+  name: string
+  enabled: boolean
+}
+
+export function getOAuthProviders() {
+  return request({ url: '/auth/oauth/providers', method: 'get' })
+}
+
+export function getOAuthLoginUrl(platform: string) {
+  return request({ url: `/auth/oauth/${platform}/login-url`, method: 'get' })
+}
+
+export function oauthCallback(platform: string, data: { code: string; state: string }) {
+  return request({ url: `/auth/oauth/${platform}/callback`, method: 'post', data })
+}
+
 export function updateProfile(data: any) {
   return request({ url: '/auth/users/update_profile/', method: 'put', data })
 }
