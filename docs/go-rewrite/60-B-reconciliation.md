@@ -102,7 +102,10 @@ A 波用 AutoMigrate 从 Go 模型建表,掩盖了与真实 Django schema 的不
 
 ## 下一步
 
-1. finance 回款核销接 REST 路由 + 前端;前端各业务表按真库 schema 校验字段名。
+1. ✅ finance 回款核销接 REST 路由 + 前端:`/finance/collection` 计划 CRUD + 节点 + 收款记录(级联汇总);
+   前端 `CollectionPlanList.vue` 列表/搜索/分页 + 新建/编辑/删除(草稿)计划 + 明细(节点 + 剩余应收)+
+   加节点(类型对齐 Django MILESTONE_TYPE)+ 完整记收款表单(金额/日期/方式 PAYMENT_METHOD/备注 → 触发
+   记录→节点→计划级联)。REST 集成测试覆盖级联 + PUT 更新 + DELETE 软删,前端 vue-tsc/vite build 全绿。
 2. ✅ notify(站内信落库,`internal/notify`:system_notification + REST 列表/未读/已读)+ workflow
    待办/抄送/结果通知 + 超时提醒(对齐 Django check_workflow_deadline_reminders:仅提醒不改状态,
    asynq `@every 1h` 调度)均已落地并验证;✅ 前端通知中心(顶栏铃铛 + 未读角标 + 列表 + 一键已读,

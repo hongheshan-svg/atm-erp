@@ -8,6 +8,7 @@ import type {
   CollectionPlanCreateInput,
   CollectionPlanDetail,
   CollectionPlanListQuery,
+  CollectionPlanUpdateInput,
   CollectionRecordCreateInput,
   PageResult
 } from '@/types'
@@ -26,6 +27,14 @@ export function fetchPlanDetail(id: number): Promise<CollectionPlanDetail> {
 
 export function createPlan(input: CollectionPlanCreateInput): Promise<CollectionPlan> {
   return request.post<CollectionPlan>(`${BASE}/plans`, input)
+}
+
+export function updatePlan(id: number, input: CollectionPlanUpdateInput): Promise<CollectionPlan> {
+  return request.put<CollectionPlan>(`${BASE}/plans/${id}`, input)
+}
+
+export function deletePlan(id: number): Promise<void> {
+  return request.delete<void>(`${BASE}/plans/${id}`)
 }
 
 export function addMilestone(planId: number, input: CollectionMilestoneCreateInput): Promise<CollectionMilestone> {
@@ -55,6 +64,26 @@ export function useCreatePlanMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input: CollectionPlanCreateInput) => createPlan(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: collectionKeys.all })
+    }
+  })
+}
+
+export function useUpdatePlanMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: { id: number; input: CollectionPlanUpdateInput }) => updatePlan(vars.id, vars.input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: collectionKeys.all })
+    }
+  })
+}
+
+export function useDeletePlanMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => deletePlan(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: collectionKeys.all })
     }

@@ -46,6 +46,12 @@ export interface CollectionPlanCreateInput {
   total_amount?: number
   notes?: string
 }
+export interface CollectionPlanUpdateInput {
+  name?: string
+  total_amount?: number
+  owner_id?: number
+  notes?: string
+}
 export interface CollectionMilestoneCreateInput {
   name: string
   milestone_type?: string

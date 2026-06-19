@@ -87,3 +87,52 @@ func TestCollectionRESTCascade(t *testing.T) {
 		t.Errorf("节点应 2 个且 m1 COLLECTED,得 %d 个", len(ms))
 	}
 }
+
+// 验证计划 PUT 更新与 DELETE 软删(前端列表「编辑/删除」用到的 REST)。
+func TestCollectionPlanUpdateDelete(t *testing.T) {
+	dsn := "host=127.0.0.1 port=55561 user=u password=p dbname=d sslmode=disable TimeZone=Asia/Shanghai"
+	db := testutil.OpenDB(t, dsn, &collection.CollectionPlan{}, &collection.CollectionMilestone{}, &collection.CollectionRecord{})
+	r, api := testutil.NewAPIEngine()
+	collection.Routes(api, db, testutil.AllowAll)
+
+	do := func(method, path string, body any) (int, map[string]any) {
+		var buf bytes.Buffer
+		if body != nil {
+			_ = json.NewEncoder(&buf).Encode(body)
+		}
+		req := httptest.NewRequest(method, path, &buf)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		var out map[string]any
+		_ = json.Unmarshal(w.Body.Bytes(), &out)
+		return w.Code, out
+	}
+
+	code, plan := do("POST", "/api/finance/collection/plans",
+		map[string]any{"name": "待改计划", "customer_id": 2, "total_amount": 50000})
+	if code != http.StatusCreated {
+		t.Fatalf("create: %d %v", code, plan)
+	}
+	planID := uint64(plan["id"].(float64))
+
+	// PUT 更新名称 + 总额
+	code, _ = do("PUT", fmt.Sprintf("/api/finance/collection/plans/%d", planID),
+		map[string]any{"name": "已改名", "total_amount": 88000})
+	if code != http.StatusOK {
+		t.Fatalf("update: %d", code)
+	}
+	var p collection.CollectionPlan
+	db.First(&p, planID)
+	if p.Name != "已改名" || !p.TotalAmount.Equal(decimal.RequireFromString("88000")) {
+		t.Errorf("更新后 name=%s total=%s,期望 已改名/88000", p.Name, p.TotalAmount)
+	}
+
+	// DELETE 软删 → 再 GET 应 404
+	if code, _ = do("DELETE", fmt.Sprintf("/api/finance/collection/plans/%d", planID), nil); code != http.StatusNoContent {
+		t.Fatalf("delete: %d,期望 204", code)
+	}
+	if code, _ = do("GET", fmt.Sprintf("/api/finance/collection/plans/%d", planID), nil); code != http.StatusNotFound {
+		t.Errorf("软删后 GET 应 404,得 %d", code)
+	}
+}
