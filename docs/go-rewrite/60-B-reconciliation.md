@@ -106,7 +106,14 @@ A 波用 AutoMigrate 从 Go 模型建表,掩盖了与真实 Django schema 的不
 2. ✅ notify(站内信落库,`internal/notify`:system_notification + REST 列表/未读/已读)+ workflow
    待办/抄送/结果通知 + 超时提醒(对齐 Django check_workflow_deadline_reminders:仅提醒不改状态,
    asynq `@every 1h` 调度)均已落地并验证;✅ 前端通知中心(顶栏铃铛 + 未读角标 + 列表 + 一键已读,
-   `web/src/components/NotificationBell.vue`,未读 30s 轮询兜底)。余项:PROJECT_MANAGER 经业务
-   callback 解析;站内信 WebSocket 实时推送(替换轮询)。
+   `web/src/components/NotificationBell.vue`)。
+3. ✅ workflow PROJECT_MANAGER 解析(对齐 Django `_get_project_manager`):`accounts.WorkflowResolver.
+   projectManager` 用真库表名直查 `business_type → 业务表.project_id → project.manager_id`(单跳 9 类 +
+   PROJECT 直接 + DELIVERY_ORDER/CONTRACT_EXECUTION/PAYMENT_RECORD 多跳);全程 best-effort,
+   解析不到 → 0 → 引擎兜底 approver_role→superuser(与 Django None 后一致)。引擎与 accounts 均不引业务包。
+   集成测试 `TestWorkflowResolverProjectManager`(PROJECT 直接 / SALES_ORDER 单跳 / 无单据 → 兜底)PASS。
+4. ✅ 站内信 WebSocket 实时推送:`notify.Service` 落库成功后经 `Pusher`(*ws.Hub 直接满足)`SendToUser`
+   推 `{type:"notification",data}`;前端 `NotificationBell` 连 `/ws/notifications?token=` 收到即刷新未读/列表
+   (30s 轮询兜底 + 5s 重连)。worker 进程无 WS,超时提醒仅落库由轮询拾取。
 3. inventory 成本账本(ItemCostRecord)与 Stock 移动联动(目前 Stock 走 weighted_avg_cost,
    ItemCostRecord 账本由其它流程喂);若需两者统一,需评估 Django 侧实际喂账本的入口。

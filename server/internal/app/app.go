@@ -106,11 +106,12 @@ func buildRouter(cfg *config.Config, gdb *gorm.DB, ps iam.PermissionService) *gi
 	production.Routes(api, gdb, perm)
 	finance.Routes(api, gdb, perm)
 	oa.Routes(api, gdb, perm)
-	// 站内信(系统通知)。
-	notify.Routes(api, gdb, perm)
-	// 工作流:注入 IAM 真实审批人 resolver + 站内信通知器(任务待办/抄送/结果)。
+	// 站内信(系统通知):落库 + 经 WebSocket Hub 实时推送给本人(hub 直接满足 notify.Pusher)。
+	notifySvc := notify.NewService(gdb).SetPusher(hub)
+	notify.RoutesWithService(api, notifySvc, perm)
+	// 工作流:注入 IAM 真实审批人 resolver + 站内信通知器(任务待办/抄送/结果,带实时推送)。
 	wfSvc := workflow.NewService(gdb, workflow.NewCallbackRegistry(), accounts.NewWorkflowResolver(gdb))
-	wfSvc.SetNotifier(notify.AsWorkflowNotifier(notify.NewService(gdb)))
+	wfSvc.SetNotifier(notify.AsWorkflowNotifier(notifySvc))
 	workflow.RoutesWithService(api, wfSvc, perm)
 
 	return r

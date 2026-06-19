@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useQueryClient } from '@tanstack/vue-query'
 import { ElMessage } from 'element-plus'
 import {
@@ -35,6 +35,40 @@ async function readAll() {
   ElMessage.success('已全部标记已读')
   refresh()
 }
+
+// WebSocket 实时推送:后端 notify 落库即推 {type:'notification'},到达即刷新未读/列表。
+// 掉线由 useUnreadCountQuery 的 30s 轮询兜底,简单 5s 重连。
+let ws: WebSocket | null = null
+let closed = false
+let retry: ReturnType<typeof setTimeout> | null = null
+
+function connect() {
+  if (closed) return
+  const token = localStorage.getItem('access_token')
+  if (!token) return
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  ws = new WebSocket(`${proto}://${location.host}/ws/notifications?token=${encodeURIComponent(token)}`)
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data) as { type?: string }
+      if (msg?.type === 'notification') refresh()
+    } catch {
+      /* 忽略非 JSON 帧 */
+    }
+  }
+  ws.onclose = () => {
+    ws = null
+    if (!closed) retry = setTimeout(connect, 5000)
+  }
+  ws.onerror = () => ws?.close()
+}
+
+onMounted(connect)
+onBeforeUnmount(() => {
+  closed = true
+  if (retry) clearTimeout(retry)
+  ws?.close()
+})
 </script>
 
 <template>

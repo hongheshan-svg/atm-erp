@@ -15,8 +15,13 @@ type Handler struct{ svc *Service }
 func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
 // Routes 注册站内信路由。通知按用户隔离(只看自己的),仅需登录,不额外做权限码校验。
-func Routes(rg *gin.RouterGroup, gdb *gorm.DB, _ func(string) gin.HandlerFunc) {
-	h := NewHandler(NewService(gdb))
+func Routes(rg *gin.RouterGroup, gdb *gorm.DB, perm func(string) gin.HandlerFunc) {
+	RoutesWithService(rg, NewService(gdb), perm)
+}
+
+// RoutesWithService 用既有 Service 注册路由(便于注入带 WebSocket 推送的 Service)。
+func RoutesWithService(rg *gin.RouterGroup, svc *Service, _ func(string) gin.HandlerFunc) {
+	h := NewHandler(svc)
 	g := rg.Group("/notifications")
 	g.GET("", h.list)
 	g.GET("/unread_count", h.unreadCount)

@@ -9,10 +9,11 @@ import (
 
 // WorkflowResolver 是 workflow.AssigneeResolver 的 IAM 实现,对齐 Django
 // WorkflowService._get_step_assignee:USER/ROLE/DEPARTMENT_MANAGER/SUPERIOR 走 accounts 表;
-// PROJECT_MANAGER 需业务上下文,本实现不解析(由业务 callback 提供,见 TODO)。
+// PROJECT_MANAGER 经 business_type → 业务表.project_id → project.manager_id 解析(见 projectManager)。
 //
 // 放在 accounts 包(持有 User/Role/Department 模型),实现 workflow 接口;
 // workflow 引擎零业务 import,依赖方向为 accounts→workflow(无环)。
+// 项目经理用真库表名直查(不引各业务包),保持引擎与本包都不依赖业务模块。
 type WorkflowResolver struct{ db *gorm.DB }
 
 func NewWorkflowResolver(db *gorm.DB) *WorkflowResolver { return &WorkflowResolver{db: db} }
@@ -36,8 +37,11 @@ func (r *WorkflowResolver) Resolve(ctx context.Context, step *workflow.WorkflowS
 			return id, nil
 		}
 	case workflow.ApproverTypeProjectManager:
-		// 需业务上下文(项目经理),由业务侧通过 callback/port 提供;引擎据 0 跳过本步。
-		return 0, nil
+		// 业务对象 → project → manager(对齐 Django _get_project_manager);
+		// 找不到则落入下方 approver_role/superuser 兜底(与 Django 返回 None 后一致)。
+		if id := r.projectManager(ctx, inst.BusinessType, uint64(inst.BusinessID)); id != 0 {
+			return id, nil
+		}
 	}
 	// 兜底:approver_role 优先,再末位 superuser(对齐 Django;superuser 兜底有越权风险,见设计待定)。
 	if id := r.firstUserWithRole(ctx, step.ApproverRoleID); id != 0 {
@@ -103,6 +107,62 @@ func (r *WorkflowResolver) deptManager(ctx context.Context, submitterID uint64) 
 		return 0
 	}
 	return *d.ManagerID
+}
+
+// projectManagerSources: business_type → (业务表, 取 project_id 的列)。单跳:表.<col> → project.manager_id。
+// 对齐 Django WorkflowService._get_project_manager 各分支(真库表名)。
+var projectManagerSources = map[string]struct{ table, col string }{
+	"PURCHASE_REQUEST":  {"purchase_request", "project_id"},
+	"PURCHASE_ORDER":    {"purchase_order", "project_id"},
+	"PURCHASE_CONTRACT": {"purchase_contract", "project_id"},
+	"EXPENSE":           {"expense", "project_id"},
+	"PAYMENT":           {"payment_request", "project_id"},
+	"QUOTATION":         {"sales_quotation", "project_id"},
+	"SALES_ORDER":       {"sales_order", "project_id"},
+	"SALES_CONTRACT":    {"sales_contract", "project_id"},
+	"ECN":               {"project_ecn", "project_id"},
+}
+
+// projectManager 解析 PROJECT_MANAGER:业务对象 → project → manager(对齐 Django _get_project_manager)。
+// 全程 best-effort:任一步缺失/出错/NULL → 0(引擎据此走 approver_role→superuser 兜底,
+// 与 Django except/None 后的兜底完全一致)。两跳/三跳类型(发货单/合同执行/付款记录)显式串联。
+func (r *WorkflowResolver) projectManager(ctx context.Context, businessType string, businessID uint64) uint64 {
+	if businessID == 0 {
+		return 0
+	}
+	var projectID uint64
+	switch businessType {
+	case "PROJECT":
+		projectID = businessID
+	case "DELIVERY_ORDER": // delivery_order.so_id → sales_order.project_id
+		so := r.scalarUint(ctx, "delivery_order", "so_id", businessID)
+		projectID = r.scalarUint(ctx, "sales_order", "project_id", so)
+	case "CONTRACT_EXECUTION": // purchase_contract_execution.contract_id → purchase_contract.project_id
+		c := r.scalarUint(ctx, "purchase_contract_execution", "contract_id", businessID)
+		projectID = r.scalarUint(ctx, "purchase_contract", "project_id", c)
+	case "PAYMENT_RECORD": // purchase_payment_record.execution_id → execution.contract → contract.project
+		exec := r.scalarUint(ctx, "purchase_payment_record", "execution_id", businessID)
+		c := r.scalarUint(ctx, "purchase_contract_execution", "contract_id", exec)
+		projectID = r.scalarUint(ctx, "purchase_contract", "project_id", c)
+	default:
+		if src, ok := projectManagerSources[businessType]; ok {
+			projectID = r.scalarUint(ctx, src.table, src.col, businessID)
+		}
+	}
+	return r.scalarUint(ctx, "project", "manager_id", projectID)
+}
+
+// scalarUint 取 <table>.<col> WHERE id=? 的单值(best-effort:出错/无行/NULL → 0)。
+func (r *WorkflowResolver) scalarUint(ctx context.Context, table, col string, id uint64) uint64 {
+	if id == 0 {
+		return 0
+	}
+	var out []*uint64
+	_ = r.db.WithContext(ctx).Table(table).Where("id = ?", id).Limit(1).Pluck(col, &out).Error
+	if len(out) > 0 && out[0] != nil {
+		return *out[0]
+	}
+	return 0
 }
 
 var _ workflow.CCResolver = (*WorkflowResolver)(nil)
