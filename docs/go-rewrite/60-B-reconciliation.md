@@ -117,10 +117,17 @@ A 波用 AutoMigrate 从 Go 模型建表,掩盖了与真实 Django schema 的不
    集成测试 `TestWorkflowResolverProjectManager`(PROJECT 直接 / SALES_ORDER 单跳 / 无单据 → 兜底)PASS。
 4. ✅ 站内信 WebSocket 实时推送:`notify.Service` 落库成功后经 `Pusher`(*ws.Hub 直接满足)`SendToUser`
    推 `{type:"notification",data}`;前端 `NotificationBell` 连 `/ws/notifications` 收到即刷新未读/列表
-   (30s 轮询兜底 + 5s 重连)。worker 进程无 WS,超时提醒仅落库由轮询拾取。
+   (30s 轮询兜底 + 5s 重连)。
    **WS 鉴权(安全评审):token 经 `Sec-WebSocket-Protocol` 子协议(`["access_token", <jwt>]`)传递,
    不进 URL**(避免 access log / 代理日志 / 浏览器历史泄漏);服务端 `bearerSubprotocol` 取 token、
    握手只回选哨兵子协议绝不回显 token(单测 `TestBearerSubprotocol` 覆盖)。
+5. ✅ WS 多实例 Redis Pub/Sub 扇出:`ws.Hub` 注入 Redis 后,`SendToUser`/`BroadcastPublic` 改为发布到
+   频道 `ws:fanout`(信封含 user_id/broadcast/data),各 serve 实例订阅后投递给本地对应连接,支持多副本部署;
+   worker 用 `NewHubPublisher` 只发布(超时提醒等也能实时推到在线用户)。Redis 不可用时降级单实例(告警)。
+   要点:发布即唯一投递(不双投)、订阅确认后才返回(发布不丢)、`writeAll` 每连接独立 goroutine 写
+   (防慢/死连接拖垮消费循环)、`Close()` 终止 consume、权限缓存与 WS 共用单个 Redis client。
+   集成测试 `TestRedisFanoutCrossInstance`(两 Hub 共享 Redis:hubB 发布→hubA 投递 + uid 隔离)PASS;
+   经 code-reviewer 对抗评审三条(串行写阻塞/订阅泄漏/双 client)已修。
 3. ✅ inventory 成本账本(ItemCostRecord)与 Stock 加权均价**联动统一**(已实现并对账)。
 
 ## ✅ inventory — 成本账本 × Stock 联动统一(已实现并验证)

@@ -18,7 +18,8 @@ func TestBuildRouterNoDuplicateRoutes(t *testing.T) {
 			t.Fatalf("buildRouter panic(可能存在重复路由): %v", r)
 		}
 	}()
-	if buildRouter(cfg, nil, ps) == nil {
+	// rc=nil:测试环境无 Redis,WS Hub 降级单实例(仅校验路由注册不冲突)。
+	if buildRouter(cfg, nil, ps, nil) == nil {
 		t.Fatal("buildRouter 返回 nil")
 	}
 }

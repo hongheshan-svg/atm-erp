@@ -47,14 +47,21 @@ func Serve(_ context.Context) error {
 		return fmt.Errorf("数据库连接失败: %w", err)
 	}
 
-	ps := permissionService(cfg, gdb)
-	r := buildRouter(cfg, gdb, ps)
+	// 单个 Redis 客户端,权限缓存与 WS 扇出共用(避免双连接池)。Redis 不可用时为 nil,二者各自降级。
+	var rc *cache.Redis
+	if c, e := cache.NewRedis(cfg.RedisURL); e == nil {
+		rc = c
+	} else {
+		slog.Warn("Redis 不可用,权限不缓存、WS 降级单实例", "err", e)
+	}
+	ps := permissionService(cfg, gdb, rc)
+	r := buildRouter(cfg, gdb, ps, rc)
 	slog.Info("erpd serve 启动", "addr", cfg.HTTPAddr, "env", cfg.AppEnv)
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: r}
 	return srv.ListenAndServe()
 }
 
-func buildRouter(cfg *config.Config, gdb *gorm.DB, ps iam.PermissionService) *gin.Engine {
+func buildRouter(cfg *config.Config, gdb *gorm.DB, ps iam.PermissionService, rc *cache.Redis) *gin.Engine {
 	if cfg.AppEnv != "development" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -87,8 +94,19 @@ func buildRouter(cfg *config.Config, gdb *gorm.DB, ps iam.PermissionService) *gi
 	api.Use(middleware.Auth(tm, ps))
 	authH.MountAuthed(api)
 
-	// WebSocket(?token= JWT 鉴权;单实例内存 Hub,多实例 Redis 扇出待接)
+	// WebSocket(Sec-WebSocket-Protocol 子协议鉴权)。有 Redis 则启用多实例 Pub/Sub 扇出,
+	// 否则降级单实例内存(多副本部署下跨实例推送会失效,日志告警)。
 	hub := ws.NewHub()
+	if rc != nil {
+		if rh, e := ws.NewHubWithRedis(context.Background(), rc.Client(), ws.FanoutChannel); e == nil {
+			hub = rh
+			slog.Info("WS 启用 Redis Pub/Sub 多实例扇出", "channel", ws.FanoutChannel)
+		} else {
+			slog.Warn("WS Redis 扇出初始化失败,降级单实例", "err", e)
+		}
+	} else {
+		slog.Warn("Redis 不可用,WS 降级单实例(多副本下跨实例推送失效)")
+	}
 	r.GET("/ws/notifications", hub.Handler(tm))
 
 	// 参考切片:masterdata/item
@@ -119,19 +137,17 @@ func buildRouter(cfg *config.Config, gdb *gorm.DB, ps iam.PermissionService) *gi
 
 // permissionService 选择权限服务:默认走 GORM RBAC(查 user/role/core_permission 等表);
 // 仅在 development 且显式 ERPD_DEV_SUPERUSER=1 时用 dev 超管旁路(安全 fail-closed)。
-func permissionService(cfg *config.Config, gdb *gorm.DB) iam.PermissionService {
+func permissionService(cfg *config.Config, gdb *gorm.DB, rc *cache.Redis) iam.PermissionService {
 	if cfg.AppEnv == "development" && os.Getenv("ERPD_DEV_SUPERUSER") == "1" {
 		slog.Warn("⚠ 启用 dev 超管权限服务(StaticPermissionService),仅限本地开发,切勿用于生产")
 		return &iam.StaticPermissionService{Superuser: true}
 	}
 	base := accounts.NewGormPermissionService(gdb)
-	c, err := cache.NewRedis(cfg.RedisURL)
-	if err != nil {
-		slog.Warn("Redis 不可用,权限不缓存", "err", err)
-		return base
+	if rc == nil {
+		return base // Redis 不可用(已在 Serve 告警),权限不缓存
 	}
 	slog.Info("权限服务启用 Redis 缓存(TTL 5m)")
-	return accounts.NewCachedPermissionService(base, c)
+	return accounts.NewCachedPermissionService(base, rc)
 }
 
 // Worker 启动 asynq 异步任务 worker(替代 Celery worker)。
@@ -146,6 +162,11 @@ func Worker(_ context.Context) error {
 		return fmt.Errorf("数据库连接失败: %w", err)
 	}
 	notifySvc := notify.NewService(gdb)
+	// worker 无 WS 端点:有 Redis 时把站内信发布到扇出频道,由 serve 实例投递给在线用户。
+	if rc, err := cache.NewRedis(cfg.RedisURL); err == nil {
+		notifySvc.SetPusher(ws.NewHubPublisher(rc.Client(), ws.FanoutChannel))
+		slog.Info("worker 站内信经 Redis 扇出实时推送")
+	}
 	wfSvc := workflow.NewService(gdb, workflow.NewCallbackRegistry(), accounts.NewWorkflowResolver(gdb))
 	wfSvc.SetNotifier(notify.AsWorkflowNotifier(notifySvc))
 	jobs := map[string]func(context.Context) error{
