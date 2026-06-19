@@ -9,12 +9,22 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/atm-erp/server/internal/accounts"
+	"github.com/atm-erp/server/internal/finance"
 	"github.com/atm-erp/server/internal/iam"
+	"github.com/atm-erp/server/internal/inventory"
+	"github.com/atm-erp/server/internal/masterdata"
 	"github.com/atm-erp/server/internal/masterdata/item"
 	"github.com/atm-erp/server/internal/middleware"
+	"github.com/atm-erp/server/internal/oa"
 	"github.com/atm-erp/server/internal/platform/config"
 	"github.com/atm-erp/server/internal/platform/db"
 	"github.com/atm-erp/server/internal/platform/obs"
+	"github.com/atm-erp/server/internal/production"
+	"github.com/atm-erp/server/internal/projects"
+	"github.com/atm-erp/server/internal/purchase"
+	"github.com/atm-erp/server/internal/sales"
+	"github.com/atm-erp/server/internal/workflow"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -74,6 +84,19 @@ func buildRouter(cfg *config.Config, gdb *gorm.DB, ps iam.PermissionService) *gi
 	// 参考切片:masterdata/item
 	itemHandler := item.NewHandler(item.NewService(item.NewRepo(gdb)))
 	itemHandler.Register(api, middleware.RequirePermission)
+
+	// 业务模块路由(本波从 Django 移植生成,逐步验证中)
+	perm := middleware.RequirePermission
+	accounts.Routes(api, gdb, perm)
+	masterdata.Routes(api, gdb, perm)
+	sales.Routes(api, gdb, perm)
+	purchase.Routes(api, gdb, perm)
+	inventory.Routes(api, gdb, perm)
+	projects.Routes(api, gdb, perm)
+	production.Routes(api, gdb, perm)
+	finance.Routes(api, gdb, perm)
+	oa.Routes(api, gdb, perm)
+	workflow.Routes(api, gdb, perm)
 
 	return r
 }
