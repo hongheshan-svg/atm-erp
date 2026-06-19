@@ -164,8 +164,8 @@ func TestIntegrationDeliveryCRUD(t *testing.T) {
 func TestIntegrationLeadCRUD(t *testing.T) {
 	h := setup(t)
 	rec := do(t, h, http.MethodPost, "/api/sales/leads", map[string]any{
-		"company_name": "Acme Co",
-		"contact_name": "Jane",
+		"company_name":  "Acme Co",
+		"contact_name":  "Jane",
 		"contact_phone": "123456",
 	})
 	if !is2xx(rec.Code) {

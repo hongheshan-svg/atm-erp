@@ -17,8 +17,10 @@ import (
 	"github.com/atm-erp/server/internal/masterdata/item"
 	"github.com/atm-erp/server/internal/middleware"
 	"github.com/atm-erp/server/internal/oa"
+	"github.com/atm-erp/server/internal/platform/cache"
 	"github.com/atm-erp/server/internal/platform/config"
 	"github.com/atm-erp/server/internal/platform/db"
+	migratepkg "github.com/atm-erp/server/internal/platform/migrate"
 	"github.com/atm-erp/server/internal/platform/obs"
 	"github.com/atm-erp/server/internal/production"
 	"github.com/atm-erp/server/internal/projects"
@@ -109,7 +111,14 @@ func permissionService(cfg *config.Config, gdb *gorm.DB) iam.PermissionService {
 		slog.Warn("⚠ 启用 dev 超管权限服务(StaticPermissionService),仅限本地开发,切勿用于生产")
 		return &iam.StaticPermissionService{Superuser: true}
 	}
-	return accounts.NewGormPermissionService(gdb)
+	base := accounts.NewGormPermissionService(gdb)
+	c, err := cache.NewRedis(cfg.RedisURL)
+	if err != nil {
+		slog.Warn("Redis 不可用,权限不缓存", "err", err)
+		return base
+	}
+	slog.Info("权限服务启用 Redis 缓存(TTL 5m)")
+	return accounts.NewCachedPermissionService(base, c)
 }
 
 // Healthcheck 供容器 distroless 健康检查子命令使用。
@@ -128,6 +137,10 @@ func Healthcheck(_ context.Context) error {
 
 // Migrate 占位:后续接入 golang-migrate(//go:embed 增量 SQL,161 Django 迁移为 baseline 不重放)。
 func Migrate(_ context.Context) error {
-	fmt.Println("migrate: 占位(待接入 golang-migrate 增量;见 docs/go-rewrite/30-migration-plan.md)")
+	cfg := config.Load()
+	if err := migratepkg.Up(cfg); err != nil {
+		return err
+	}
+	fmt.Println("migrate: 增量迁移完成")
 	return nil
 }
