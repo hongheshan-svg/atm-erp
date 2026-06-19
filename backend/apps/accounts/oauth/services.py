@@ -45,10 +45,12 @@ def consume_code_once(platform: str, code: str) -> bool:
     return cache.add(key, 1, 300)
 
 
-def build_redirect_uri(platform: str) -> str:
-    """前端回调地址(含 base path /erp/)。后端自拼,不取自请求,防开放重定向/SSRF。"""
+def build_redirect_uri(platform: str, mode: str = 'login') -> str:
+    """前端回调地址(含 base path /erp/)。后端自拼,不取自请求,防开放重定向/SSRF。
+    mode=bind 时附带标记,前端回调页据此走「鉴权态绑定」而非「登录」。"""
     base = settings.FRONTEND_URL.rstrip('/')
-    return f'{base}/erp/login/callback?platform={platform}'
+    suffix = '&mode=bind' if mode == 'bind' else ''
+    return f'{base}/erp/login/callback?platform={platform}{suffix}'
 
 
 # ── 用户匹配 / 建号 ─────────────────────────────────────────────────────────
@@ -175,6 +177,36 @@ def _find_or_create(platform: str, identity: OAuthIdentity):
         if not _domain_allowed(identity.email):
             return None, False
         return _auto_create(platform, id_field, identity), True
+
+
+def bind_identity_to_user(user, platform: str, identity: OAuthIdentity) -> None:
+    """鉴权态自助绑定:把已登录用户与其 IM 身份绑定。
+
+    用户已登录(证明拥有该 ERP 账号)+ 完成 OAuth(证明拥有该 IM 账号),双向自证,无需字段匹配
+    —— 这正是安全评审推荐的「由已认证用户显式绑定」路径,不存在账号接管。仅拒绝「该 IM 身份已绑到别的账号」。
+    """
+    id_field = PROVIDER_ID_FIELD[platform]
+    ext = identity.external_id
+    with transaction.atomic():
+        other = (
+            User.objects.select_for_update()
+            .filter(is_deleted=False, **{id_field: ext})
+            .exclude(pk=user.pk)
+            .exclude(**{id_field: ''})
+            .first()
+        )
+        if other:
+            raise OAuthError('该企业 IM 账号已绑定到其他 ERP 账号,请联系管理员')
+        setattr(user, id_field, ext)
+        user.save(update_fields=[id_field])
+
+
+def unbind_platform(user, platform: str) -> None:
+    """解绑:清空当前用户在该平台的绑定 ID。"""
+    id_field = PROVIDER_ID_FIELD[platform]
+    if getattr(user, id_field, ''):
+        setattr(user, id_field, '')
+        user.save(update_fields=[id_field])
 
 
 def find_or_create_user(platform: str, identity: OAuthIdentity):

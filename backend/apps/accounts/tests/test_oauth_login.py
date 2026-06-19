@@ -2,6 +2,7 @@
 from unittest.mock import patch
 
 from django.test import TestCase, override_settings
+from rest_framework.test import APIClient
 
 from apps.accounts.models import Role, User
 from apps.accounts.oauth.base import OAuthError, OAuthIdentity
@@ -144,3 +145,60 @@ class OAuthCallbackHTTPTests(TestCase):
             r2 = self.client.post(CALLBACK, {'code': 'SAME', 'state': s2})
         self.assertEqual(r1.status_code, 200, r1.content)
         self.assertEqual(r2.status_code, 400)  # 同 code 重放被拒
+
+
+@override_settings(WECHAT_WORK_CORP_ID='corp', WECHAT_WORK_CORP_SECRET='secret', LOGIN_THROTTLE_ENABLED=False)
+class OAuthBindHTTPTests(TestCase):
+    """鉴权态自助绑定/解绑/状态(已登录用户把自己的 IM 身份绑定到本账号)。"""
+
+    BIND = '/api/auth/oauth/wecom/bind'
+    BINDINGS = '/api/auth/oauth/bindings'
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='self', employee_id='S001', phone='13911110000')
+        self.client = APIClient()
+
+    def _bind(self, identity, authed=True):
+        state = issue_state('wecom')
+        if authed:
+            self.client.force_authenticate(self.user)
+        self.client.cookies[STATE_COOKIE] = state
+        with patch.object(WeComProvider, 'resolve_identity', return_value=identity):
+            return self.client.post(self.BIND, {'code': 'C_%s' % identity.external_id, 'state': state})
+
+    def test_bind_requires_auth(self):
+        resp = self._bind(OAuthIdentity(external_id='wx_self'), authed=False)
+        self.assertIn(resp.status_code, (401, 403))
+
+    def test_bind_binds_to_current_user(self):
+        resp = self._bind(OAuthIdentity(external_id='wx_self'))
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.wechat_work_id, 'wx_self')
+
+    def test_bind_conflict_if_bound_elsewhere(self):
+        User.objects.create_user(username='other', employee_id='O001', wechat_work_id='wx_taken')
+        resp = self._bind(OAuthIdentity(external_id='wx_taken'))
+        self.assertEqual(resp.status_code, 409)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.wechat_work_id, '')  # 未误绑
+
+    def test_unbind_clears(self):
+        self.user.wechat_work_id = 'wx_self'
+        self.user.save(update_fields=['wechat_work_id'])
+        self.client.force_authenticate(self.user)
+        resp = self.client.delete(self.BIND)
+        self.assertEqual(resp.status_code, 204)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.wechat_work_id, '')
+
+    def test_bindings_list(self):
+        self.user.wechat_work_id = 'wx_self'
+        self.user.save(update_fields=['wechat_work_id'])
+        self.client.force_authenticate(self.user)
+        resp = self.client.get(self.BINDINGS)
+        self.assertEqual(resp.status_code, 200)
+        data = {b['platform']: b for b in resp.json()}
+        self.assertTrue(data['wecom']['enabled'])
+        self.assertTrue(data['wecom']['bound'])
+        self.assertFalse(data['feishu']['bound'])
