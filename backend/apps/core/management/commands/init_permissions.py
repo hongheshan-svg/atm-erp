@@ -170,7 +170,8 @@ def build_permission_tree():
     tree.append(menu('system:dict', '数据字典', 5, route_path='/system/data-dictionary', parent_code='system'))
     tree.append(menu('system:config', '系统配置', 6, route_path='/system/config', parent_code='system'))
     tree.append(menu('system:audit', '审计日志', 7, route_path='/system/audit-log', parent_code='system'))
-    tree.append(menu('system:upgrade', '系统升级', 8, route_path='/system/upgrade', parent_code='system'))
+    # 注:软件升级不再作为独立菜单/页面，已收进左上角版本徽标(VersionBadge)。
+    # 升级权限沿用 hasPermission 的祖先通配:超管('*')或持有 'system' 菜单者即可在徽标里升级/回滚。
 
     return tree
 

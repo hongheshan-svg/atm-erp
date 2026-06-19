@@ -19,6 +19,10 @@
         </transition>
       </div>
 
+      <div class="version-badge-wrap">
+        <VersionBadge :collapsed="isCollapse" />
+      </div>
+
       <el-menu
         :default-active="$route.path"
         class="sidebar-menu"
@@ -101,6 +105,7 @@ import { usePermissionStore } from '@/stores/permission'
 import { APP_VERSION } from '@/config/version'
 import { useCompanyConfig } from '@/stores/companyConfig'
 import DynamicMenu from '@/components/DynamicMenu.vue'
+import VersionBadge from '@/components/VersionBadge.vue'
 
 const router = useRouter()
 const userStore = useUserStore()

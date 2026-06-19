@@ -1291,12 +1291,6 @@ const routes = [
         component: () => import('@/views/system/BackupManagement.vue'),
         meta: { title: '数据备份', icon: 'FolderOpened', menuId: 'system:backup' }
       },
-      {
-        path: 'system/upgrade',
-        name: 'SystemUpgrade',
-        component: () => import('@/views/system/Upgrade.vue'),
-        meta: { title: '系统升级', icon: 'Upload', permission: 'system:upgrade' }
-      },
 
       // ====== Public Pages (no menuId permission check) ======
       {
