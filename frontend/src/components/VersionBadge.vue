@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Download, Check, Close, RefreshRight, TopRight } from '@element-plus/icons-vue'
 import { usePermissionStore } from '@/stores/permission'
+import { setUpgrading } from '@/utils/request'
 import {
   getSystemVersion,
   checkUpdate,
@@ -44,12 +45,9 @@ const etaText = computed(() => {
   if (s <= 0) return ''
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${String(s % 60).padStart(2, '0')}s`
 })
-const currentStep = computed(() => {
-  const steps = job.value?.steps
-  if (!steps?.length) return '准备中…'
-  const last = steps[steps.length - 1]
-  return last.message || last.stage || '处理中…'
-})
+
+// 升级期间让请求层静默失败(后端在重建,避免满屏错误提示/跳登录)
+watch(busy, (v) => setUpgrading(v))
 
 function startEta() {
   etaRemain.value = UPGRADE_ETA
@@ -183,6 +181,7 @@ onBeforeUnmount(() => {
   if (checkTimer) clearInterval(checkTimer)
   if (cdTimer) clearInterval(cdTimer)
   if (etaTimer) clearInterval(etaTimer)
+  setUpgrading(false)
 })
 </script>
 
@@ -224,7 +223,7 @@ onBeforeUnmount(() => {
           </span>
         </div>
 
-        <!-- 升级进行中:倒计时(预计剩余),倒到 0 显示「即将完成」,完成由后端轮询决定 -->
+        <!-- 升级进行中:只显示倒计时(预计剩余),倒到 0 显示「即将完成」,完成由后端轮询决定 -->
         <template v-if="busy">
           <div class="vb-alert blue">
             <span class="vb-spinner"></span>
@@ -232,15 +231,9 @@ onBeforeUnmount(() => {
               <p class="vb-alert-title">
                 正在升级<template v-if="etaRemain > 0"> · 预计剩余 <span class="vb-timer">{{ etaText }}</span></template>
               </p>
-              <p class="vb-alert-desc">{{ etaRemain > 0 ? currentStep : '即将完成,请稍候…' }}</p>
+              <p class="vb-alert-desc">{{ etaRemain > 0 ? '完成后将自动刷新,请勿关闭页面' : '即将完成,请稍候…' }}</p>
             </div>
           </div>
-          <div v-if="job?.steps?.length" class="vb-steps">
-            <div v-for="(s, i) in job.steps" :key="i" class="vb-step" :class="s.level">
-              {{ s.stage }} · {{ s.message }}
-            </div>
-          </div>
-          <p class="vb-hint">完成后将自动刷新,请勿关闭页面</p>
         </template>
 
         <!-- 升级成功 + 刷新倒计时 -->
@@ -291,8 +284,8 @@ onBeforeUnmount(() => {
           </a>
         </template>
 
-        <!-- 已是最新:查看发布 + 回滚 -->
-        <template v-if="!hasUpdate && !job">
+        <!-- 已是最新:查看发布 + 回滚(升级/回滚进行中不显示) -->
+        <template v-if="!hasUpdate && !job && !busy">
           <a
             v-if="releaseUrl"
             :href="releaseUrl"
@@ -522,29 +515,6 @@ onBeforeUnmount(() => {
 .vb-timer {
   font-variant-numeric: tabular-nums;
   font-weight: 700;
-}
-.vb-hint {
-  margin: 10px 0 0;
-  text-align: center;
-  font-size: 11px;
-  color: var(--el-text-color-placeholder);
-}
-
-.vb-steps {
-  margin-top: 8px;
-  max-height: 120px;
-  overflow-y: auto;
-}
-.vb-step {
-  font-size: 11px;
-  padding: 2px 0;
-  color: var(--el-text-color-secondary);
-}
-.vb-step.error {
-  color: var(--el-color-danger);
-}
-.vb-step.warning {
-  color: var(--el-color-warning);
 }
 
 .vb-changelog {
