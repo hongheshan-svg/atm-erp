@@ -103,6 +103,9 @@ class CheckUpdateCacheTest(TestCase):
     def setUp(self):
         cache.clear()
 
+    def tearDown(self):
+        cache.clear()  # cache 走共享 redis,清掉以免污染本地运行栈/其他用例
+
     @mock.patch('apps.core.upgrade_service.get_deploy_mode', return_value='docker')
     @mock.patch('apps.core.upgrade_service.get_app_version', return_value='0.2.0')
     @mock.patch('apps.core.upgrade_service.fetch_manifest')
@@ -111,6 +114,20 @@ class CheckUpdateCacheTest(TestCase):
         svc.check_update(force=True)
         info = svc.check_update(force=False)
         self.assertTrue(info['cached'])
+
+    @mock.patch('apps.core.upgrade_service.get_deploy_mode', return_value='docker')
+    @mock.patch('apps.core.upgrade_service.fetch_manifest')
+    def test_cached_reflects_live_version_after_upgrade(self, fetch, _m):
+        """升级后走缓存:current_version/has_update 按实时版本重算,不复用旧缓存值。"""
+        fetch.return_value = _manifest('0.3.0')
+        with mock.patch('apps.core.upgrade_service.get_app_version', return_value='0.2.0'):
+            svc.check_update(force=True)  # 落缓存:current 0.2.0 / has_update True
+        # 升级到 0.3.0 后再走缓存(force=False)
+        with mock.patch('apps.core.upgrade_service.get_app_version', return_value='0.3.0'):
+            info = svc.check_update(force=False)
+        self.assertTrue(info['cached'])
+        self.assertEqual(info['current_version'], '0.3.0')
+        self.assertFalse(info['has_update'])
 
     @mock.patch('apps.core.upgrade_service.get_deploy_mode', return_value='docker')
     @mock.patch('apps.core.upgrade_service.get_app_version', return_value='0.2.0')
