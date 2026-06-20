@@ -76,7 +76,12 @@ def check_update(force: bool = False) -> dict:
     if not force:
         cached = cache.get(CACHE_KEY)
         if cached:
+            # 缓存只复用 manifest 部分;current_version/has_update 按实时运行版本重算,
+            # 否则升级成功后 20min(CACHE_TTL)内仍显示旧版本 + 幻影"有新版本",像没升级成功。
+            cached = dict(cached)
             cached['cached'] = True
+            cached['current_version'] = current
+            cached['has_update'] = compare_versions(current, cached.get('latest_version', current)) < 0
             return cached
     try:
         m = fetch_manifest(MANIFEST_URL)
