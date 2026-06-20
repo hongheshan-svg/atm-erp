@@ -140,7 +140,9 @@ class Agent:
         self._run(['docker', 'compose', *args], cwd=PROJECT_DIR)
 
     def _apply_docker(self, job: dict, backup: str) -> None:
-        new_tag = job['manifest']['docker']['image_tag']
+        # 目标镜像 tag 即目标版本(image_tag==版本号);升级取 latest、回滚取上一版,
+        # 二者都在 job['target_version'],故统一用它(回滚 payload 无 manifest.docker)。
+        new_tag = job.get('target_version') or job['manifest']['docker']['image_tag']
         env_path = os.path.join(PROJECT_DIR, '.env')
         self.report(job, 'apply', f'set IMAGE_TAG={new_tag}; compose pull/up 应用服务(排除 updater 自身)')
         if self.dry_run:

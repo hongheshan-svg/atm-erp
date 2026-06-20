@@ -55,6 +55,24 @@ def test_docker_apply_excludes_updater_service(monkeypatch):
     assert any(' app' in f for f in flat)              # 明确重建 app 服务
 
 
+def test_docker_apply_rollback_uses_target_version(monkeypatch):
+    """回滚 job 的 payload 无 manifest.docker;_apply_docker 应改用 target_version 作镜像 tag,
+    而非读 manifest.docker.image_tag(否则 KeyError 'docker',回滚按钮形同虚设)。"""
+    r = fakeredis.FakeStrictRedis()
+    calls = []
+    captured = {}
+    job = {'id': 'rb1', 'action': 'rollback', 'mode': 'docker', 'target_version': '0.2.1',
+           'from_version': '0.2.2', 'manifest': {'rollback_to': '0.2.1'}}
+    ag = Agent(r, dry_run=False)
+    monkeypatch.setattr(ag, '_run', lambda cmd, **kw: calls.append(cmd))
+    monkeypatch.setattr('deploy.updater.agent.set_env_image_tag',
+                        lambda path, tag: captured.__setitem__('tag', tag) or '0.2.2')
+    ag._apply_docker(job, '/tmp/b.sql')  # 不应抛 KeyError
+    assert captured['tag'] == '0.2.1'           # 用 target_version 作新 tag
+    assert job['_expected_version'] == '0.2.1'  # 健康门按回滚目标版本校验
+    assert any('compose up' in ' '.join(c) for c in calls)
+
+
 def test_rollback_docker_dry_run_emits_step():
     r = fakeredis.FakeStrictRedis()
     job = {'id': 'd3', 'action': 'upgrade', 'mode': 'docker', 'target_version': '0.3.0',
