@@ -21,16 +21,47 @@ const hasUpdate = ref(false)
 const releaseUrl = ref('') // GitHub 发布页,点击自行查看更新内容
 const checking = ref(false)
 
+// 升级预计耗时(秒):用于「正在升级」阶段的倒计时显示。仅估算,真正完成/失败由后端轮询决定;
+// 倒到 0 仍未完成则显示「即将完成」,不会提前刷新。
+const UPGRADE_ETA = 90
+
 const busy = ref(false) // 升级/回滚进行中
 const job = ref<any>(null)
-const countdown = ref(0)
+const countdown = ref(0) // 升级成功后刷新倒计时
+const etaRemain = ref(0) // 正在升级预计剩余秒数(倒计时)
+const upgradeError = ref('') // 启动升级失败(如锁冲突/网络),用于展示「升级失败」
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let checkTimer: ReturnType<typeof setInterval> | null = null
 let cdTimer: ReturnType<typeof setInterval> | null = null
+let etaTimer: ReturnType<typeof setInterval> | null = null
 
 const jobStatus = computed<string>(() => job.value?.status || '')
-const jobFailed = computed(() => ['failed', 'rolled_back'].includes(jobStatus.value))
+const jobFailed = computed(() => !!upgradeError.value || ['failed', 'rolled_back'].includes(jobStatus.value))
+
+const etaText = computed(() => {
+  const s = etaRemain.value
+  if (s <= 0) return ''
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${String(s % 60).padStart(2, '0')}s`
+})
+const currentStep = computed(() => {
+  const steps = job.value?.steps
+  if (!steps?.length) return '准备中…'
+  const last = steps[steps.length - 1]
+  return last.message || last.stage || '处理中…'
+})
+
+function startEta() {
+  etaRemain.value = UPGRADE_ETA
+  if (etaTimer) clearInterval(etaTimer)
+  etaTimer = setInterval(() => {
+    if (etaRemain.value > 0) etaRemain.value--
+  }, 1000)
+}
+function stopEta() {
+  if (etaTimer) clearInterval(etaTimer)
+  etaTimer = null
+}
 
 function pick(res: any, ...keys: string[]) {
   for (const k of keys) if (res && res[k]) return res[k]
@@ -70,6 +101,7 @@ async function pollJob(id: string | number) {
       if (pollTimer) clearInterval(pollTimer)
       pollTimer = null
       busy.value = false
+      stopEta()
       if (data.status === 'success') startCountdownReload()
     }
   } catch {
@@ -77,27 +109,39 @@ async function pollJob(id: string | number) {
   }
 }
 
+function errMsg(e: any, fallback: string): string {
+  return e?.response?.data?.detail || e?.message || fallback
+}
+
 async function onUpgrade() {
   if (busy.value) return
+  upgradeError.value = ''
   busy.value = true
   job.value = null
+  startEta()
   try {
     const data: any = await performUpgrade()
     pollTimer = setInterval(() => pollJob(data.job_id), 4000)
-  } catch {
+  } catch (e: any) {
     busy.value = false
+    stopEta()
+    upgradeError.value = errMsg(e, '无法启动升级') // 触发「升级失败」展示
   }
 }
 
 async function onRollback() {
   if (busy.value) return
+  upgradeError.value = ''
   busy.value = true
   job.value = null
+  startEta()
   try {
     const data: any = await rollbackUpgrade()
     pollTimer = setInterval(() => pollJob(data.job_id), 4000)
-  } catch {
+  } catch (e: any) {
     busy.value = false
+    stopEta()
+    upgradeError.value = errMsg(e, '无法启动回滚')
   }
 }
 
@@ -138,6 +182,7 @@ onBeforeUnmount(() => {
   if (pollTimer) clearInterval(pollTimer)
   if (checkTimer) clearInterval(checkTimer)
   if (cdTimer) clearInterval(cdTimer)
+  if (etaTimer) clearInterval(etaTimer)
 })
 </script>
 
@@ -173,19 +218,21 @@ onBeforeUnmount(() => {
         <!-- 居中大版本号 -->
         <div class="vb-vcenter">
           <span class="vb-vnum">v{{ currentVersion || '—' }}</span>
-          <span v-if="!hasUpdate && !job" class="vb-ok"><el-icon><Check /></el-icon></span>
+          <span v-if="!hasUpdate && !job && !busy && !upgradeError" class="vb-ok"><el-icon><Check /></el-icon></span>
         </div>
         <p class="vb-sub">
-          {{ hasUpdate ? `最新版本 v${latestVersion}` : (job ? '' : '已是最新版本') }}
+          {{ hasUpdate ? `最新版本 v${latestVersion}` : (busy || job || upgradeError ? '' : '已是最新版本') }}
         </p>
 
-        <!-- 升级进行中 -->
+        <!-- 升级进行中:倒计时(预计剩余),倒到 0 显示「即将完成」,完成由后端轮询决定 -->
         <template v-if="busy">
           <div class="vb-alert blue">
             <span class="vb-spinner"></span>
             <div class="vb-alert-main">
-              <p class="vb-alert-title">正在升级…</p>
-              <p class="vb-alert-desc">{{ job?.steps?.length ? job.steps[job.steps.length - 1].stage : '准备中' }}</p>
+              <p class="vb-alert-title">
+                正在升级<template v-if="etaRemain > 0"> · 预计剩余 <span class="vb-timer">{{ etaText }}</span></template>
+              </p>
+              <p class="vb-alert-desc">{{ etaRemain > 0 ? currentStep : '即将完成,请稍候…' }}</p>
             </div>
           </div>
           <div v-if="job?.steps?.length" class="vb-steps">
@@ -193,15 +240,16 @@ onBeforeUnmount(() => {
               {{ s.stage }} · {{ s.message }}
             </div>
           </div>
+          <p class="vb-hint">完成后将自动刷新,请勿关闭页面</p>
         </template>
 
-        <!-- 升级成功 + 倒计时 -->
+        <!-- 升级成功 + 刷新倒计时 -->
         <template v-else-if="jobStatus === 'success'">
           <div class="vb-alert green">
             <el-icon class="vb-alert-ico"><Check /></el-icon>
             <div class="vb-alert-main">
               <p class="vb-alert-title">升级完成</p>
-              <p class="vb-alert-desc">{{ countdown }}s 后自动刷新…</p>
+              <p class="vb-alert-desc"><span class="vb-timer">{{ countdown }}s</span> 后自动刷新…</p>
             </div>
           </div>
         </template>
@@ -212,10 +260,10 @@ onBeforeUnmount(() => {
             <el-icon class="vb-alert-ico"><Close /></el-icon>
             <div class="vb-alert-main">
               <p class="vb-alert-title">{{ jobStatus === 'rolled_back' ? '已回滚' : '升级失败' }}</p>
-              <p class="vb-alert-desc">已恢复到原版本</p>
+              <p class="vb-alert-desc">{{ upgradeError || '已恢复到原版本' }}</p>
             </div>
           </div>
-          <button v-if="hasUpdate" type="button" class="vb-btn primary" @click="onUpgrade">
+          <button type="button" class="vb-btn primary" @click="onUpgrade">
             <el-icon><RefreshRight /></el-icon> 重试
           </button>
         </template>
@@ -471,6 +519,16 @@ onBeforeUnmount(() => {
   border: 2.5px solid var(--el-color-primary-light-7);
   border-top-color: var(--el-color-primary);
   animation: vb-spin 0.8s linear infinite;
+}
+.vb-timer {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.vb-hint {
+  margin: 10px 0 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--el-text-color-placeholder);
 }
 
 .vb-steps {
