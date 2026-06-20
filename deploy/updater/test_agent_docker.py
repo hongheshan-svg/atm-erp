@@ -38,6 +38,23 @@ def test_docker_apply_dry_run_sets_old_tag_placeholder():
     assert '_old_tag' in job
 
 
+def test_docker_apply_excludes_updater_service(monkeypatch):
+    """升级时 compose pull/up 必须排除 erp-updater 自身(否则重建会杀掉 agent)。"""
+    r = fakeredis.FakeStrictRedis()
+    calls = []
+    job = {'id': 'd4', 'action': 'upgrade', 'mode': 'docker', 'target_version': '0.3.0',
+           'from_version': '0.2.0', 'manifest': {'docker': {'image_tag': '0.3.0'}}}
+    ag = Agent(r, dry_run=False)
+    monkeypatch.setattr(ag, '_run', lambda cmd, **kw: calls.append(cmd))
+    monkeypatch.setattr('deploy.updater.agent.set_env_image_tag', lambda *a, **k: '0.2.0')
+    ag._apply_docker(job, '/tmp/b.sql')
+    flat = [' '.join(c) for c in calls]
+    assert any('compose pull' in f for f in flat)
+    assert any('compose up' in f for f in flat)
+    assert all('erp-updater' not in f for f in flat)  # 不重建自身
+    assert any(' app' in f for f in flat)              # 明确重建 app 服务
+
+
 def test_rollback_docker_dry_run_emits_step():
     r = fakeredis.FakeStrictRedis()
     job = {'id': 'd3', 'action': 'upgrade', 'mode': 'docker', 'target_version': '0.3.0',

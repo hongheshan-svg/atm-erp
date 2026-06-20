@@ -1,5 +1,8 @@
-# ATM-ERP 基础编排（可移植，三平台一致）
-# 镜像来自 GHCR；本地构建用 docker-compose.build.yml override
+# ATM-ERP 精简编排:4 个服务(postgres + redis + app[全合一] + updater)。
+# app = Django(Daphne) + Celery(worker+beat) + 升级进度中转 + 前端静态 + Nginx(由 supervisord 统一拉起)。
+# 镜像来自 GHCR;本地构建用 docker-compose.build.yml override。
+name: ${COMPOSE_PROJECT_NAME:-atm-erp}
+
 services:
   postgres:
     image: postgres:15-alpine
@@ -35,40 +38,20 @@ services:
     networks:
       - erp-network
 
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.16
-    container_name: erp-elasticsearch
+  app:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-hongheshan-svg}/atm-erp-app:${IMAGE_TAG:-latest}
+    container_name: erp-app
     restart: unless-stopped
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-      - bootstrap.memory_lock=true
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-      nofile:
-        soft: 65536
-        hard: 65536
-    volumes:
-      - elasticsearch_data:/usr/share/elasticsearch/data
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-    networks:
-      - erp-network
-
-  backend:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-hongheshan-svg}/atm-erp-backend:${IMAGE_TAG:-latest}
-    container_name: erp-backend
-    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
     environment:
       - DEBUG=${DEBUG:-False}
       - SECRET_KEY=${SECRET_KEY:-django-insecure-change-this-in-production-123456}
-      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1,backend}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1,app}
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=${DB_NAME:-erp_db}
@@ -78,7 +61,8 @@ services:
       - REDIS_URL=redis://redis:6379/1
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - ELASTICSEARCH_HOST=elasticsearch:9200
+      # 搜索降级:不部署 Elasticsearch,全局搜索退化为数据库查询(已有 try/except 兜底)
+      - ELASTICSEARCH_HOST=${ELASTICSEARCH_HOST:-}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1}
       - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-http://localhost,http://127.0.0.1}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost}
@@ -96,105 +80,23 @@ services:
       - static_files:/app/staticfiles
       - media_files:/app/uploads
       - backend_logs:/app/logs
+      - ./docker/ssl:/etc/nginx/ssl:ro
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/health/ || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost/api/v1/health/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-      # 首次启动需跑迁移+初始化(权限/角色/widget/工作流),可达数分钟;
-      # 放宽 start_period 避免被判 unhealthy 导致 celery/celery-beat 依赖中止
+      # 首启需迁移 + 初始化(权限/角色/widget/工作流),可达数分钟
       start_period: 600s
     networks:
       - erp-network
 
-  celery:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-hongheshan-svg}/atm-erp-backend:${IMAGE_TAG:-latest}
-    container_name: erp-celery
-    restart: unless-stopped
-    command: celery -A config worker -l info --concurrency=2
-    environment:
-      - DEBUG=${DEBUG:-False}
-      - SECRET_KEY=${SECRET_KEY:-django-insecure-change-this-in-production-123456}
-      - RUN_BOOTSTRAP=0
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-erp_db}
-      - DB_USER=${DB_USER:-erp_user}
-      - DB_PASSWORD=${DB_PASSWORD:-erp_password}
-      - REDIS_HOST=redis
-      - REDIS_URL=redis://redis:6379/1
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - ELASTICSEARCH_HOST=elasticsearch:9200
-      - WECHAT_WORK_WEBHOOK_URL=${WECHAT_WORK_WEBHOOK_URL:-}
-      - WECHAT_WORK_CORP_ID=${WECHAT_WORK_CORP_ID:-}
-      - WECHAT_WORK_CORP_SECRET=${WECHAT_WORK_CORP_SECRET:-}
-      - WECHAT_WORK_AGENT_ID=${WECHAT_WORK_AGENT_ID:-}
-    volumes:
-      - media_files:/app/uploads
-      - backend_logs:/app/logs
-    depends_on:
-      backend:
-        condition: service_healthy
-    networks:
-      - erp-network
-
-  celery-beat:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-hongheshan-svg}/atm-erp-backend:${IMAGE_TAG:-latest}
-    container_name: erp-celery-beat
-    restart: unless-stopped
-    command: celery -A config beat -l info
-    environment:
-      - DEBUG=${DEBUG:-False}
-      - SECRET_KEY=${SECRET_KEY:-django-insecure-change-this-in-production-123456}
-      - RUN_BOOTSTRAP=0
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-erp_db}
-      - DB_USER=${DB_USER:-erp_user}
-      - DB_PASSWORD=${DB_PASSWORD:-erp_password}
-      - REDIS_HOST=redis
-      - REDIS_URL=redis://redis:6379/1
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - WECHAT_WORK_WEBHOOK_URL=${WECHAT_WORK_WEBHOOK_URL:-}
-      - WECHAT_WORK_CORP_ID=${WECHAT_WORK_CORP_ID:-}
-      - WECHAT_WORK_CORP_SECRET=${WECHAT_WORK_CORP_SECRET:-}
-      - WECHAT_WORK_AGENT_ID=${WECHAT_WORK_AGENT_ID:-}
-    depends_on:
-      backend:
-        condition: service_healthy
-    networks:
-      - erp-network
-
-  nginx:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-hongheshan-svg}/atm-erp-frontend:${IMAGE_TAG:-latest}
-    container_name: erp-nginx
-    restart: unless-stopped
-    ports:
-      - "${HTTP_PORT:-80}:80"
-      - "${HTTPS_PORT:-443}:443"
-    volumes:
-      - static_files:/app/staticfiles:ro
-      - media_files:/app/uploads:ro
-      - nginx_logs:/var/log/nginx
-      - ./docker/ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - backend
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    networks:
-      - erp-network
-
+  # 升级代理:唯一持有 docker.sock 的最小服务,平时空转,升级时重建 app 容器。
   erp-updater:
     build:
       context: .
@@ -204,8 +106,9 @@ services:
     restart: unless-stopped
     environment:
       - REDIS_URL=redis://redis:6379/1
-      - ERP_HEALTH_URL=http://nginx/api/v1/health/
-      - ERP_PROJECT_DIR=/project
+      - ERP_HEALTH_URL=http://app/api/v1/health/
+      # 用宿主真实绝对路径,使 app 容器的相对 bind mount(如 ./docker/ssl)在重建时解析正确
+      - ERP_PROJECT_DIR=${ERP_HOST_DIR:-/project}
       - PGHOST=postgres
       - PGUSER=${DB_USER:-erp_user}
       - PGPASSWORD=${DB_PASSWORD:-erp_password}
@@ -214,41 +117,20 @@ services:
       - DEPLOY_MODE=docker
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - .:/project
+      # 把宿主部署目录挂到容器内**同一绝对路径**(配合 ERP_PROJECT_DIR),修复 bind mount 路径错位
+      - ${ERP_HOST_DIR:-.}:${ERP_HOST_DIR:-/project}
       - backend_logs:/var/backups/erp
     depends_on:
       - redis
     networks:
       - erp-network
 
-  erp-upgrade-relay:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-hongheshan-svg}/atm-erp-backend:${IMAGE_TAG:-latest}
-    container_name: erp-upgrade-relay
-    restart: unless-stopped
-    command: python manage.py upgrade_progress_relay
-    environment:
-      - RUN_BOOTSTRAP=0
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-erp_db}
-      - DB_USER=${DB_USER:-erp_user}
-      - DB_PASSWORD=${DB_PASSWORD:-erp_password}
-      - REDIS_URL=redis://redis:6379/1
-      - SECRET_KEY=${SECRET_KEY:-django-insecure-change-this-in-production-123456}
-    depends_on:
-      - redis
-      - postgres
-    networks:
-      - erp-network
-
 volumes:
   postgres_data:
   redis_data:
-  elasticsearch_data:
   static_files:
   media_files:
   backend_logs:
-  nginx_logs:
 
 networks:
   erp-network:

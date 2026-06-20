@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from django.conf import settings
 from django.core.cache import cache
@@ -44,6 +45,21 @@ def _release_lock() -> None:
     _redis().delete(LOCK_KEY)
 
 
+def release_url(version: str = '') -> str:
+    """从 manifest URL 推导 GitHub 发布页链接(供前端「查看更新内容」点击自行查看)。
+
+    manifest 形如 https://raw.githubusercontent.com/<owner>/<repo>/<branch>/manifest.json,
+    带版本时给 tag 页,否则给 releases 列表页;非 GitHub 源返回空串。
+    """
+    m = re.match(r'https?://raw\.githubusercontent\.com/([^/]+)/([^/]+)/', MANIFEST_URL) or \
+        re.match(r'https?://github\.com/([^/]+)/([^/]+)', MANIFEST_URL)
+    if not m:
+        return ''
+    base = f'https://github.com/{m.group(1)}/{m.group(2)}/releases'
+    v = (version or '').lstrip('v')
+    return f'{base}/tag/v{v}' if v else base
+
+
 def _enqueue(job: UpgradeJob, manifest_raw: dict) -> None:
     payload = {
         'id': str(job.id), 'action': job.action, 'mode': job.mode,
@@ -65,13 +81,14 @@ def check_update(force: bool = False) -> dict:
     except ManifestError as exc:
         return {
             'current_version': current, 'latest_version': current, 'has_update': False,
-            'deploy_mode': get_deploy_mode(), 'release_notes_md': '',
+            'deploy_mode': get_deploy_mode(), 'release_notes_md': '', 'release_url': release_url(),
             'min_upgradable_from': '', 'cached': False, 'warning': str(exc),
         }
     info = {
         'current_version': current, 'latest_version': m.latest_version,
         'has_update': compare_versions(current, m.latest_version) < 0,
         'deploy_mode': get_deploy_mode(), 'release_notes_md': m.release_notes_md,
+        'release_url': release_url(m.latest_version),
         'min_upgradable_from': m.min_upgradable_from, 'cached': False, 'warning': '',
     }
     cache.set(CACHE_KEY, info, CACHE_TTL)

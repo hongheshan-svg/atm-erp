@@ -1,8 +1,8 @@
 <template>
   <el-container v-if="userStore.profileReady" class="layout-container">
     <el-aside :width="isCollapse ? '64px' : '240px'" class="sidebar">
-      <div class="logo" @click="$router.push('/')">
-        <div class="logo-icon">
+      <div class="logo">
+        <div class="logo-icon" @click="$router.push('/')">
           <svg :width="isCollapse ? 24 : 20" :height="isCollapse ? 24 : 20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect x="5" y="7" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/>
             <rect x="9" y="3" width="6" height="4" rx="1" stroke="currentColor" stroke-width="1.8" fill="none"/>
@@ -15,7 +15,12 @@
           </svg>
         </div>
         <transition name="logo-text">
-          <span v-if="!isCollapse" class="logo-title">{{ companyShortName || 'ERP' }}</span>
+          <div v-if="!isCollapse" class="logo-meta">
+            <span class="logo-title" @click="$router.push('/')">{{ companyShortName || 'ERP' }}</span>
+            <div class="logo-version" @click.stop>
+              <VersionBadge />
+            </div>
+          </div>
         </transition>
       </div>
 
@@ -82,7 +87,6 @@
 
       <el-footer class="footer" height="36px">
         <span>© {{ new Date().getFullYear() }} {{ companyName || '深圳市奥特迈智能装备有限公司' }}</span>
-        <span class="version">v{{ appVersion }}</span>
       </el-footer>
     </el-container>
   </el-container>
@@ -98,9 +102,9 @@ import { ElMessageBox } from 'element-plus'
 import { Fold, Expand, User, Lock, SwitchButton, FullScreen, ArrowDown } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { usePermissionStore } from '@/stores/permission'
-import { APP_VERSION } from '@/config/version'
 import { useCompanyConfig } from '@/stores/companyConfig'
 import DynamicMenu from '@/components/DynamicMenu.vue'
+import VersionBadge from '@/components/VersionBadge.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -108,7 +112,6 @@ const permissionStore = usePermissionStore()
 const { companyName, companyShortName, loadCompanyConfig } = useCompanyConfig()
 
 const isCollapse = ref(false)
-const appVersion = APP_VERSION
 
 const toggleCollapse = () => {
   isCollapse.value = !isCollapse.value
@@ -160,12 +163,11 @@ onMounted(async () => {
 }
 
 .logo {
-  height: 56px;
+  height: 64px;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 0 16px;
-  cursor: pointer;
   flex-shrink: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
@@ -180,14 +182,29 @@ onMounted(async () => {
   border-radius: var(--radius-sm);
   color: #fff;
   flex-shrink: 0;
+  cursor: pointer;
+}
+
+.logo-meta {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
 }
 
 .logo-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: #f1f5f9;
   white-space: nowrap;
   letter-spacing: 0.02em;
+  line-height: 1.1;
+  cursor: pointer;
+}
+
+.logo-version {
+  line-height: 1;
 }
 
 .logo-text-enter-active,

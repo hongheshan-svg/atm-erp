@@ -25,10 +25,10 @@ jobs:
     strategy:
       matrix:
         include:
-          - name: backend
-            dockerfile: docker/backend/Dockerfile
-          - name: frontend
-            dockerfile: docker/frontend/Dockerfile
+          - name: app
+            dockerfile: docker/app/Dockerfile
+          - name: updater
+            dockerfile: docker/updater/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
@@ -121,16 +121,16 @@ jobs:
           set -euo pipefail
           VER="${GITHUB_REF_NAME#v}"
           REG="${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}"
-          BACKEND_DIGEST=$(docker buildx imagetools inspect "$REG/atm-erp-backend:$VER" --format '{{.Manifest.Digest}}')
-          FRONTEND_DIGEST=$(docker buildx imagetools inspect "$REG/atm-erp-frontend:$VER" --format '{{.Manifest.Digest}}')
-          case "${BACKEND_DIGEST}${FRONTEND_DIGEST}" in
+          APP_DIGEST=$(docker buildx imagetools inspect "$REG/atm-erp-app:$VER" --format '{{.Manifest.Digest}}')
+          UPDATER_DIGEST=$(docker buildx imagetools inspect "$REG/atm-erp-updater:$VER" --format '{{.Manifest.Digest}}')
+          case "${APP_DIGEST}${UPDATER_DIGEST}" in
             *sha256:*) ;;
             *) echo "::error::failed to resolve image digests"; exit 1;;
           esac
           {
             echo "ver=$VER"
-            echo "backend=$BACKEND_DIGEST"
-            echo "frontend=$FRONTEND_DIGEST"
+            echo "app=$APP_DIGEST"
+            echo "updater=$UPDATER_DIGEST"
           } >> "$GITHUB_OUTPUT"
 
       - name: Build manifest.json
@@ -151,8 +151,8 @@ jobs:
             --arg notes "$NOTES" \
             --arg minfrom "$MINFROM" \
             --arg owner "${{ env.IMAGE_OWNER }}" \
-            --arg bdig "${{ steps.meta.outputs.backend }}" \
-            --arg fdig "${{ steps.meta.outputs.frontend }}" \
+            --arg adig "${{ steps.meta.outputs.app }}" \
+            --arg udig "${{ steps.meta.outputs.updater }}" \
             '{
                latest_version: $ver,
                published_at: $pub,
@@ -162,7 +162,7 @@ jobs:
                  registry: "ghcr.io",
                  owner: $owner,
                  image_tag: $ver,
-                 digests: { backend: $bdig, frontend: $fdig }
+                 digests: { app: $adig, updater: $udig }
                },
                native: null
              }' > manifest.json

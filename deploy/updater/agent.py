@@ -47,6 +47,11 @@ HEALTH_URL = os.environ.get('ERP_HEALTH_URL', 'http://localhost/api/v1/health/')
 HEALTH_TIMEOUT = int(os.environ.get('ERP_HEALTH_TIMEOUT', '600'))
 PROJECT_DIR = os.environ.get('ERP_PROJECT_DIR', '/app')
 
+# 升级时重建的应用服务。全合一后应用即单个 `app` 服务(Daphne+Celery+beat+relay+nginx)。
+# **刻意排除 erp-updater 自身**——否则 `compose up -d` 会按新 tag 重建本容器、杀掉正在执行升级的 agent
+# (健康门/回滚跑不到、还可能半升级)。基础设施(postgres/redis)不随版本变更、作为依赖保持运行,无需列出。
+APP_SERVICES = ('app',)
+
 
 class Agent:
     RELEASES_DIR = os.environ.get('ERP_RELEASES_DIR', '/opt/erp/releases')
@@ -137,15 +142,16 @@ class Agent:
     def _apply_docker(self, job: dict, backup: str) -> None:
         new_tag = job['manifest']['docker']['image_tag']
         env_path = os.path.join(PROJECT_DIR, '.env')
-        self.report(job, 'apply', f'set IMAGE_TAG={new_tag}; docker compose pull && up -d')
+        self.report(job, 'apply', f'set IMAGE_TAG={new_tag}; compose pull/up 应用服务(排除 updater 自身)')
         if self.dry_run:
             job['_old_tag'] = '0.0.0'
             job['_expected_version'] = new_tag
             return
         job['_old_tag'] = set_env_image_tag(env_path, new_tag)
         job['_expected_version'] = new_tag
-        self._compose('pull')
-        self._compose('up', '-d')
+        # 只 pull/重建应用服务,排除 erp-updater 自身(见 APP_SERVICES 注释)
+        self._compose('pull', *APP_SERVICES)
+        self._compose('up', '-d', *APP_SERVICES)
 
     def _apply_native(self, job: dict, backup: str) -> None:
         target = job['target_version']
@@ -190,7 +196,7 @@ class Agent:
         if job['mode'] == 'docker':
             old = job.get('_old_tag') or job.get('from_version')
             set_env_image_tag(os.path.join(PROJECT_DIR, '.env'), old)
-            self._compose('up', '-d')
+            self._compose('up', '-d', *APP_SERVICES)  # 同样排除 updater 自身
         else:
             self._rollback_native(job, backup)
 
