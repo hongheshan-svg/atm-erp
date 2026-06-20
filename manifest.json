@@ -1,15 +1,15 @@
 {
-  "latest_version": "0.2.2",
-  "published_at": "2026-06-20T14:48:27Z",
-  "release_notes_md": "## v0.2.2 — 修复升级后徽标仍显示旧版本\n\n### 修复\n- **检查更新结果按实时版本重算**:`check_update` 把结果缓存 20 分钟,其中 `current_version` 为升级前旧值;升级成功后徽标命中旧缓存,会显示旧版本 + 幻影\"有新版本\",令成功的升级看起来没生效(需等缓存过期或手动强制检查)。现走缓存时仅复用 manifest 部分,当前版本/是否有更新按实时运行版本重算,升级完成后立即正确显示新版本。\n\n### 说明\n- 配合 v0.2.1 的\"升级进度兜底对账\",一键升级现可完整走通:升级中 → 完成 → 自动刷新 → 徽标正确显示新版本。\n- 应用功能同 v0.2.0/0.2.1(4 服务部署 + 左上角版本徽标/一键升级)。\n- `min_upgradable_from` = `0.2.0`(0.1.x 旧架构请用 `install.sh` 重新部署)。\n- 已在 v0.2.x 部署的实例可在左上角徽标直接一键升级到本版。\n\nDocker 一键安装 / 远程升级见 `docs/REMOTE_UPGRADE.md`。",
+  "latest_version": "0.2.3",
+  "published_at": "2026-06-20T15:18:28Z",
+  "release_notes_md": "## v0.2.3 — 升级体验优化 + 修复回滚\n\n### 升级体验\n- **升级过程中只显示倒计时**:去掉冗长的步骤 log,卡片仅保留\"预计剩余 / 即将完成 + 完成后自动刷新\"。\n- **升级期间静默后台请求失败**:后端容器重建时,dashboard/通知等后台轮询会短暂失败;现升级/回滚进行中不再弹\"网络错误/请求失败\"提示、也不会误跳登录(完成后自动刷新)。\n\n### 修复\n- **「回滚到上一版本」实际不生效**:回滚任务此前因 agent 读取 `manifest.docker.image_tag`(回滚 payload 无此键)报错,回到原版却报告\"已回滚\"。现回滚改用目标版本号作镜像 tag,可真正回滚到上一版本。\n  - ⚠️ 该修复在 **erp-updater 镜像**中,而一键升级刻意排除 updater 自身。**已部署实例**需手动更新升级器才生效:`docker compose pull erp-updater && docker compose up -d erp-updater`;**全新安装**自带。\n\n### 说明\n- 应用功能同 v0.2.x(4 服务部署 + 左上角版本徽标/一键升级)。\n- `min_upgradable_from` = `0.2.0`(0.1.x 旧架构请用 `install.sh` 重新部署)。\n\nDocker 一键安装 / 远程升级见 `docs/REMOTE_UPGRADE.md`。",
   "min_upgradable_from": "0.2.0",
   "docker": {
     "registry": "ghcr.io",
     "owner": "hongheshan-svg",
-    "image_tag": "0.2.2",
+    "image_tag": "0.2.3",
     "digests": {
-      "app": "sha256:62b3cee483070ec7cd819987b54b2e7f2b2821971e6105b7ab7aef5db6993f7b",
-      "updater": "sha256:4c24a31b2ca06667c4bf63dc575b8a7e634d0ca58461b2ed11f93a045a739dfd"
+      "app": "sha256:ff0eb8a2f02e12f8a1ae684ef0d9819af3c15ea8aca8ecb3cb6ededc5dfaf5ec",
+      "updater": "sha256:11c6b996355001d20f99e4a886d56c5456d634ad691cfe0c070f510bfaba231e"
     }
   },
   "native": null
