@@ -2,7 +2,7 @@
   "latest_version": "0.2.0",
   "published_at": "2026-06-20T00:55:52Z",
   "release_notes_md": "## v0.2.0 — 部署瘦身到 4 服务 + 左上角版本徽标/一键升级\n\n### 部署架构\n- **9 服务 → 4 服务**:`postgres` + `redis` + `app`(全合一) + `erp-updater`,去掉 Elasticsearch(搜索降级)。\n- **app 全合一镜像**:单镜像内由 supervisord 托管 `daphne`(ASGI) + `celery worker` + `celery beat` + `upgrade-relay` + `nginx`;前端 dist 由容器内 nginx 直服。\n- 运维可进容器用 `supervisorctl status/restart <进程>` 单独查看/重启各进程(unix socket)。\n\n### 升级体验\n- 左上角**版本徽标**:显示后端运行版本,有新版本时琥珀红点闪烁;点开卡片可一键升级 / 回滚 / 查看 GitHub 发布说明。\n- 升级**进度倒计时**(预计剩余,估算 60s)+ 成功后健康轮询自动刷新;失败自动回滚并提示。\n- 删除独立「软件升级」页,升级入口统一收进左上角徽标。\n\n### 升级器(updater)修复\n- updater 镜像补装 docker compose v2 插件;`compose pull/up` 仅作用于 `app`、排除 updater 自身,避免重建自身中断升级。\n- bind mount 用宿主真实绝对路径、`COMPOSE_PROJECT_NAME` 宿主与 updater 共用,项目名一致。\n\n### 升级兼容性\n- `min_upgradable_from` 保持 `0.1.0`。**注意**:本版部署拓扑(compose 结构)较 0.1.x 有重大变化,0.1.x 实例的一键升级会因旧 compose 无 `app` 服务而失败并自动回滚——跨架构请用 `install.sh` 重新部署。\n\nDocker 一键安装 / 远程升级见 `docs/REMOTE_UPGRADE.md`。",
-  "min_upgradable_from": "0.1.0",
+  "min_upgradable_from": "0.2.0",
   "docker": {
     "registry": "ghcr.io",
     "owner": "hongheshan-svg",

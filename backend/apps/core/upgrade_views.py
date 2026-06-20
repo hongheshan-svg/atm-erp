@@ -138,6 +138,8 @@ class UpgradeJobDetailView(APIView):
         job = upgrade_service.get_job(job_id)
         if job is None:
             return Response({'detail': 'not found'}, status=status.HTTP_404_NOT_FOUND)
+        # 兜底:升级会重建 app(relay 在其中),可能漏掉重建后的进度事件,以 redis 进度键对账
+        job = upgrade_service.reconcile_job(job)
         return Response(_job_dict(job))
 
 
@@ -148,4 +150,5 @@ class UpgradeJobListView(APIView):
 
     def get(self, request):
         _check_upgrade_permission(request)
-        return Response([_job_dict(j) for j in upgrade_service.list_jobs()])
+        jobs = [upgrade_service.reconcile_job(j) for j in upgrade_service.list_jobs()]
+        return Response([_job_dict(j) for j in jobs])

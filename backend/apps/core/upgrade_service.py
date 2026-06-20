@@ -19,6 +19,8 @@ CACHE_TTL = 1200  # 20min
 QUEUE_KEY = 'erp:upgrade:queue'
 LOCK_KEY = 'erp:upgrade:lock'
 LOCK_TTL = 3600  # 安全上限,避免死锁
+PROGRESS_PREFIX = 'erp:upgrade:progress:'  # agent 直写的进度键(不依赖 pub/sub,用于兜底对账)
+TERMINAL_STATUSES = (UpgradeJob.STATUS_SUCCESS, UpgradeJob.STATUS_FAILED, UpgradeJob.STATUS_ROLLED_BACK)
 
 
 class UpgradeBusy(Exception):
@@ -154,6 +156,41 @@ def perform_rollback(user) -> UpgradeJob:
 
 def get_job(job_id):
     return UpgradeJob.objects.filter(id=job_id).first()
+
+
+def reconcile_job(job):
+    """以 agent 直写的 redis 进度键为准,兜底对账非终态的 DB job。
+
+    进度落库由 upgrade_progress_relay(跑在 app 容器内)订阅 pub/sub 完成,但升级会重建 app →
+    relay 随之重启,期间 agent 在重建后 publish 的 healthcheck/success 事件会丢失,使 DB job
+    停在 running。agent 同时把完整状态写入 ``erp:upgrade:progress:<id>``(不依赖订阅),故读取
+    job 时若 DB 仍为非终态,以该键回填 steps/status,保证前端轮询能看到真正结果。
+    """
+    if job is None or job.status in TERMINAL_STATUSES:
+        return job
+    raw = _redis().get(PROGRESS_PREFIX + str(job.id))
+    if not raw:
+        return job
+    try:
+        state = json.loads(raw)
+    except (ValueError, TypeError):
+        return job
+    changed = False
+    steps = state.get('steps')
+    if steps is not None and steps != job.steps:
+        job.steps = steps
+        changed = True
+    new_status = state.get('status')
+    if new_status and new_status != job.status:
+        job.status = new_status
+        changed = True
+    if changed:
+        fields = ['status', 'steps', 'updated_at']
+        if job.status in TERMINAL_STATUSES and not job.finished_at:
+            job.finished_at = timezone.now()
+            fields.append('finished_at')
+        job.save(update_fields=fields)
+    return job
 
 
 def list_jobs(limit: int = 20):
