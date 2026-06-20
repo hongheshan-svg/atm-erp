@@ -15,6 +15,13 @@ const service = axios.create({
 let isRefreshing = false
 let failedQueue: QueueItem[] = []
 
+// 升级中:后端容器正在重建,各类后台轮询会短暂 502/网络失败。此开关打开时,
+// 响应拦截器静默失败(不弹错误提示、不跳登录),避免升级过程中满屏报错。
+let upgrading = false
+export function setUpgrading(v: boolean): void {
+  upgrading = v
+}
+
 const syncUserProfile = async (accessToken: string): Promise<void> => {
   try {
     const response = await axios.get('/api/auth/users/profile/', {
@@ -73,6 +80,11 @@ service.interceptors.response.use(
   },
   async error => {
     const originalRequest = error.config
+
+    // 升级中:后端在重建,静默失败(不弹错误、不跳登录),升级完成会自动刷新页面
+    if (upgrading) {
+      return Promise.reject(error)
+    }
 
     if (error.response) {
       const { status, data } = error.response
