@@ -1,15 +1,15 @@
 {
-  "latest_version": "0.2.1",
-  "published_at": "2026-06-20T14:14:14Z",
-  "release_notes_md": "## v0.2.1 — 修复一键升级进度不落库\n\n### 修复\n- **升级进度兜底对账**:负责把进度写库的 `upgrade_progress_relay` 进程跑在 app 容器内,而升级会重建 app;agent 在重建后上报的 `healthcheck`/`success` 事件会撞上 relay 重启空窗(redis pub/sub 不持久)而丢失,导致升级虽已成功、但前端一直显示\"正在升级\"、不触发完成自动刷新。现读取升级任务时,若数据库仍为非终态,则以 agent 直写的 redis 进度键(`erp:upgrade:progress:<id>`)兜底对账,保证前端能看到真实结果并自动刷新。\n\n### 升级兼容性\n- `min_upgradable_from` = `0.2.0`:0.2.0 起为 4 服务新架构,0.1.x(旧 9 服务部署)的一键升级会失败,后端据此直接拒绝其升级请求;0.1.x 跨架构升级请用 `install.sh` 重新部署。\n\n### 说明\n- 应用功能同 v0.2.0(4 服务部署 + 左上角版本徽标/一键升级)。\n- 已在 v0.2.0 部署的实例可在左上角徽标直接一键升级到本版。\n\nDocker 一键安装 / 远程升级见 `docs/REMOTE_UPGRADE.md`。",
+  "latest_version": "0.2.2",
+  "published_at": "2026-06-20T14:48:27Z",
+  "release_notes_md": "## v0.2.2 — 修复升级后徽标仍显示旧版本\n\n### 修复\n- **检查更新结果按实时版本重算**:`check_update` 把结果缓存 20 分钟,其中 `current_version` 为升级前旧值;升级成功后徽标命中旧缓存,会显示旧版本 + 幻影\"有新版本\",令成功的升级看起来没生效(需等缓存过期或手动强制检查)。现走缓存时仅复用 manifest 部分,当前版本/是否有更新按实时运行版本重算,升级完成后立即正确显示新版本。\n\n### 说明\n- 配合 v0.2.1 的\"升级进度兜底对账\",一键升级现可完整走通:升级中 → 完成 → 自动刷新 → 徽标正确显示新版本。\n- 应用功能同 v0.2.0/0.2.1(4 服务部署 + 左上角版本徽标/一键升级)。\n- `min_upgradable_from` = `0.2.0`(0.1.x 旧架构请用 `install.sh` 重新部署)。\n- 已在 v0.2.x 部署的实例可在左上角徽标直接一键升级到本版。\n\nDocker 一键安装 / 远程升级见 `docs/REMOTE_UPGRADE.md`。",
   "min_upgradable_from": "0.2.0",
   "docker": {
     "registry": "ghcr.io",
     "owner": "hongheshan-svg",
-    "image_tag": "0.2.1",
+    "image_tag": "0.2.2",
     "digests": {
-      "app": "sha256:b5be4646c24fcacab52169c2ebeb5daec9ddd87bd9f9f9709a9a2c17016a21e3",
-      "updater": "sha256:9b11f89105a8594cd6077dc3563c47f3c917928d8cc2d3569350dcb5031b25ee"
+      "app": "sha256:62b3cee483070ec7cd819987b54b2e7f2b2821971e6105b7ab7aef5db6993f7b",
+      "updater": "sha256:4c24a31b2ca06667c4bf63dc575b8a7e634d0ca58461b2ed11f93a045a739dfd"
     }
   },
   "native": null
