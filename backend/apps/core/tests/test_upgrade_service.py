@@ -1,3 +1,4 @@
+import json
 from unittest import mock
 from django.core.cache import cache
 from django.test import TestCase
@@ -120,3 +121,44 @@ class CheckUpdateCacheTest(TestCase):
         info = svc.check_update(force=True)
         self.assertFalse(info['has_update'])
         self.assertTrue(info['warning'])
+
+
+class ReconcileJobTest(TestCase):
+    """升级会重建 app(relay 在其中),漏掉的进度事件以 redis 进度键兜底对账。"""
+
+    def setUp(self):
+        self.user = User.objects.create(username='admin', employee_id='A1')
+
+    def _job(self, status):
+        return UpgradeJob.objects.create(
+            action=UpgradeJob.ACTION_UPGRADE, mode=UpgradeJob.MODE_DOCKER,
+            from_version='0.1.0', target_version='0.2.0',
+            status=status, triggered_by=self.user,
+        )
+
+    @mock.patch('apps.core.upgrade_service._redis')
+    def test_reconciles_running_to_success(self, redis):
+        job = self._job(UpgradeJob.STATUS_RUNNING)
+        state = {'id': str(job.id), 'status': 'success',
+                 'steps': [{'stage': 'done', 'message': 'health OK', 'level': 'info'}]}
+        redis.return_value.get.return_value = json.dumps(state).encode()
+        out = svc.reconcile_job(job)
+        out.refresh_from_db()
+        self.assertEqual(out.status, UpgradeJob.STATUS_SUCCESS)
+        self.assertEqual(len(out.steps), 1)
+        self.assertIsNotNone(out.finished_at)
+
+    @mock.patch('apps.core.upgrade_service._redis')
+    def test_terminal_job_not_touched(self, redis):
+        job = self._job(UpgradeJob.STATUS_FAILED)
+        svc.reconcile_job(job)
+        redis.assert_not_called()  # 终态短路,不查 redis
+        job.refresh_from_db()
+        self.assertEqual(job.status, UpgradeJob.STATUS_FAILED)
+
+    @mock.patch('apps.core.upgrade_service._redis')
+    def test_no_progress_key_keeps_status(self, redis):
+        job = self._job(UpgradeJob.STATUS_RUNNING)
+        redis.return_value.get.return_value = None
+        out = svc.reconcile_job(job)
+        self.assertEqual(out.status, UpgradeJob.STATUS_RUNNING)
