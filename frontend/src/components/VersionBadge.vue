@@ -21,9 +21,9 @@ const hasUpdate = ref(false)
 const releaseUrl = ref('') // GitHub 发布页,点击自行查看更新内容
 const checking = ref(false)
 
-// 升级预计耗时(秒):用于「正在升级」阶段的倒计时显示。仅估算,真正完成/失败由后端轮询决定;
-// 倒到 0 仍未完成则显示「即将完成」,不会提前刷新。
-const UPGRADE_ETA = 90
+// 升级预计耗时(秒):用于「正在升级」阶段的倒计时显示。仅估算(真实耗时主要看镜像拉取速度),
+// 真正完成/失败由后端轮询决定;倒到 0 仍未完成则显示「即将完成」,不会提前刷新。
+const UPGRADE_ETA = 60
 
 const busy = ref(false) // 升级/回滚进行中
 const job = ref<any>(null)
@@ -215,14 +215,14 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="vb-body">
-        <!-- 居中大版本号 -->
-        <div class="vb-vcenter">
-          <span class="vb-vnum">v{{ currentVersion || '—' }}</span>
-          <span v-if="!hasUpdate && !job && !busy && !upgradeError" class="vb-ok"><el-icon><Check /></el-icon></span>
+        <!-- 紧凑版本行(不再居中大字号占据界面中间) -->
+        <div class="vb-row">
+          <span class="vb-row-k">当前版本</span>
+          <span class="vb-row-v">
+            v{{ currentVersion || '—' }}
+            <span v-if="!hasUpdate && !job && !busy && !upgradeError" class="vb-chip ok">已是最新</span>
+          </span>
         </div>
-        <p class="vb-sub">
-          {{ hasUpdate ? `最新版本 v${latestVersion}` : (busy || job || upgradeError ? '' : '已是最新版本') }}
-        </p>
 
         <!-- 升级进行中:倒计时(预计剩余),倒到 0 显示「即将完成」,完成由后端轮询决定 -->
         <template v-if="busy">
@@ -417,34 +417,33 @@ onBeforeUnmount(() => {
 .vb-body {
   padding: 14px;
 }
-.vb-vcenter {
+.vb-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  justify-content: space-between;
 }
-.vb-vnum {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--el-text-color-primary);
-  letter-spacing: 0.01em;
-}
-.vb-ok {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--el-color-success-light-8);
-  color: var(--el-color-success);
-  font-size: 13px;
-}
-.vb-sub {
-  margin: 4px 0 0;
-  text-align: center;
+.vb-row-k {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+.vb-row-v {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+  font-variant-numeric: tabular-nums;
+}
+.vb-chip {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+.vb-chip.ok {
+  background: var(--el-color-success-light-9);
+  color: var(--el-color-success);
 }
 
 /* 状态卡 */
