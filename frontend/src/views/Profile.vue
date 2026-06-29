@@ -60,16 +60,96 @@
         </el-form-item>
       </el-form>
     </el-card>
+
+    <el-card v-if="enabledBindings.length" shadow="never" class="bind-card">
+      <template #header>
+        <div class="card-header">企业 IM 绑定</div>
+      </template>
+      <p class="bind-tip">绑定后即可用企业微信 / 钉钉 / 飞书扫码登录本账号(更安全:由你本人登录后绑定)。</p>
+      <div v-for="b in enabledBindings" :key="b.platform" class="bind-row">
+        <span class="bind-name">{{ b.name }}</span>
+        <el-tag :type="b.bound ? 'success' : 'info'" size="small">{{ b.bound ? '已绑定' : '未绑定' }}</el-tag>
+        <el-button
+          v-if="b.bound"
+          type="danger"
+          link
+          @click="handleUnbind(b)"
+        >
+          解绑
+        </el-button>
+        <el-button
+          v-else
+          type="primary"
+          link
+          :loading="bindBusy === b.platform"
+          @click="handleBind(b.platform)"
+        >
+          扫码绑定
+        </el-button>
+      </div>
+    </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { getUserProfile, updateProfile } from '@/api/auth'
+import { ref, reactive, onMounted, computed } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  getUserProfile,
+  updateProfile,
+  getOAuthBindings,
+  getOAuthLoginUrl,
+  oauthUnbind,
+  type OAuthBinding
+} from '@/api/auth'
 
 const formRef = ref(null)
 const loading = ref(false)
+
+// 企业 IM 绑定(自助:登录后扫码绑定自己的企业微信/钉钉/飞书)
+const bindings = ref<OAuthBinding[]>([])
+const bindBusy = ref('')
+const enabledBindings = computed(() => bindings.value.filter((b) => b.enabled))
+
+async function fetchBindings() {
+  try {
+    const res: any = await getOAuthBindings()
+    bindings.value = Array.isArray(res) ? res : []
+  } catch {
+    bindings.value = []
+  }
+}
+
+async function handleBind(platform: string) {
+  bindBusy.value = platform
+  try {
+    const data: any = await getOAuthLoginUrl(platform, 'bind')
+    if (data?.auth_url) {
+      window.location.href = data.auth_url // 跳授权页 → 回调页(mode=bind)绑定到当前账号
+    } else {
+      ElMessage.error('获取绑定链接失败')
+      bindBusy.value = ''
+    }
+  } catch {
+    bindBusy.value = ''
+  }
+}
+
+async function handleUnbind(b: OAuthBinding) {
+  const ok = await ElMessageBox.confirm(`确认解绑${b.name}?解绑后将无法用该方式扫码登录。`, '提示', {
+    type: 'warning'
+  })
+    .then(() => true)
+    .catch(() => false)
+  if (!ok) return
+  try {
+    await oauthUnbind(b.platform)
+    ElMessage.success('已解绑')
+    await fetchBindings()
+  } catch {
+    /* 拦截器已提示 */
+  }
+}
 
 const form = reactive({
   username: '',
@@ -122,6 +202,7 @@ const handleSave = async () => {
 
 onMounted(() => {
   fetchProfile()
+  fetchBindings()
 })
 </script>
 
@@ -133,6 +214,29 @@ onMounted(() => {
 .card-header {
   font-size: 16px;
   font-weight: 600;
+}
+
+.bind-card {
+  margin-top: 16px;
+}
+
+.bind-tip {
+  color: #909399;
+  font-size: 13px;
+  margin: 0 0 16px;
+}
+
+.bind-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
+.bind-name {
+  width: 80px;
+  font-weight: 500;
 }
 </style>
 

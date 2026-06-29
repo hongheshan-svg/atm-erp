@@ -12,6 +12,48 @@ export function getUserProfile() {
   return request({ url: '/auth/users/profile/', method: 'get' })
 }
 
+// ===== 企业 IM 扫码登录(企业微信/钉钉/飞书)=====
+
+export interface OAuthProvider {
+  platform: 'wecom' | 'dingtalk' | 'feishu'
+  name: string
+  enabled: boolean
+}
+
+export interface OAuthBinding {
+  platform: 'wecom' | 'dingtalk' | 'feishu'
+  name: string
+  enabled: boolean
+  bound: boolean
+}
+
+export function getOAuthProviders() {
+  return request({ url: '/auth/oauth/providers', method: 'get' })
+}
+
+// mode='bind' 用于「鉴权态自助绑定」(回调走绑定而非登录);默认登录。
+export function getOAuthLoginUrl(platform: string, mode: 'login' | 'bind' = 'login') {
+  return request({ url: `/auth/oauth/${platform}/login-url`, method: 'get', params: mode === 'bind' ? { mode } : {} })
+}
+
+export function oauthCallback(platform: string, data: { code: string; state: string }) {
+  return request({ url: `/auth/oauth/${platform}/callback`, method: 'post', data })
+}
+
+// ===== 自助绑定(需登录)=====
+
+export function getOAuthBindings() {
+  return request({ url: '/auth/oauth/bindings', method: 'get' })
+}
+
+export function oauthBind(platform: string, data: { code: string; state: string }) {
+  return request({ url: `/auth/oauth/${platform}/bind`, method: 'post', data })
+}
+
+export function oauthUnbind(platform: string) {
+  return request({ url: `/auth/oauth/${platform}/bind`, method: 'delete' })
+}
+
 export function updateProfile(data: any) {
   return request({ url: '/auth/users/update_profile/', method: 'put', data })
 }
