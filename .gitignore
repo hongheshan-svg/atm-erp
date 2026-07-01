@@ -30,6 +30,9 @@ db.sqlite3-journal
 
 # Environment
 .env
+.env.*
+!.env.example
+!.env.docker.example
 .env.local
 .env.docker
 .venv
