@@ -98,9 +98,15 @@ CHANNEL_LAYERS = {
 }
 
 # Elasticsearch configuration
+_elasticsearch_host = config('ELASTICSEARCH_HOST', default='elasticsearch:9200')
 ELASTICSEARCH_DSL = {
-    'default': {'hosts': config('ELASTICSEARCH_HOST', default='elasticsearch:9200')},
+    'default': {'hosts': _elasticsearch_host or 'localhost:9200'},
 }
+# 未部署 ES(ELASTICSEARCH_HOST 为空)时禁用实时索引信号,避免创建/编辑
+# 客户、供应商、物料、项目等被 ES Document 索引的模型时因连不上 ES 抛
+# TypeError 导致 API 500;全局搜索已降级为数据库查询,不依赖索引。
+if not _elasticsearch_host:
+    ELASTICSEARCH_DSL_AUTOSYNC = False
 
 # Database
 DATABASES = {
