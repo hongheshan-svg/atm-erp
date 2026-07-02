@@ -148,6 +148,18 @@ class BankStatement(BaseModel):
             return self.debit_amount
         return self.credit_amount
 
+    @staticmethod
+    def _normalize_name(name):
+        """匹配用名称归一化:统一全角/半角括号（）()、去除空白。
+
+        银行导出的对方单位名与主数据常因括号全半角、空格差异无法精确匹配，
+        归一化后再比较可避免「考泰斯（长春）」匹配不到「考泰斯(长春)」。
+        """
+        s = (name or '').strip()
+        for full, half in (('（', '('), ('）', ')'), ('　', ''), (' ', '')):
+            s = s.replace(full, half)
+        return s
+
     def auto_match_supplier(self):
         """
         Automatically match supplier based on counterparty name.
@@ -161,6 +173,12 @@ class BankStatement(BaseModel):
 
         if exact_supplier:
             return exact_supplier, 100.0
+
+        # Normalized exact match (全角/半角括号、空格归一后精确相等)
+        target = self._normalize_name(self.counterparty_name)
+        for supplier in Supplier.objects.filter(is_deleted=False):
+            if self._normalize_name(supplier.name) == target:
+                return supplier, 100.0
 
         # Partial match (contains)
         partial_suppliers = Supplier.objects.filter(name__icontains=self.counterparty_name, is_deleted=False)
@@ -210,6 +228,12 @@ class BankStatement(BaseModel):
 
         if exact_customer:
             return exact_customer, 100.0
+
+        # Normalized exact match (全角/半角括号、空格归一后精确相等)
+        target = self._normalize_name(self.counterparty_name)
+        for customer in Customer.objects.filter(is_deleted=False):
+            if self._normalize_name(customer.name) == target:
+                return customer, 100.0
 
         # Partial match
         partial_customers = Customer.objects.filter(name__icontains=self.counterparty_name, is_deleted=False)
