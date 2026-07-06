@@ -157,3 +157,116 @@ class ContractPaymentAdapterTest(TestCase):
         PAYABLE_SOURCES['contract_payment'].write_back(pr, item)
         pr.execution.refresh_from_db()
         self.assertEqual(pr.execution.paid_amount, Decimal('2000.00'))
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class MatchCandidatesTest(TestCase):
+    def test_scores_supplier_and_amount(self):
+        from apps.finance.models import BankStatement
+        from apps.finance.payable_models import PayableItem
+        from apps.finance.payable_service import match_candidates
+
+        good = PayableItem.objects.create(
+            source_type='ap', source_id=1, source_no='AP1', category='采购',
+            payee_name='考泰斯(长春)塑料技术有限公司', amount_due=Decimal('1000.00'),
+        )
+        PayableItem.objects.create(
+            source_type='ap', source_id=2, source_no='AP2', category='采购',
+            payee_name='无关公司', amount_due=Decimal('50.00'),
+        )
+        bs = BankStatement(
+            transaction_type='DEBIT', debit_amount=Decimal('1000.00'),
+            counterparty_name='考泰斯（长春）塑料技术有限公司', transaction_time='2026-07-02 00:00:00+00',
+        )
+        bs.save()
+
+        cands = match_candidates(bs)
+
+        self.assertEqual(cands[0]['payable_item'].pk, good.pk)
+        self.assertGreaterEqual(cands[0]['score'], 90)
+        # 无关公司名称与金额均不匹配,不应进入候选列表
+        self.assertEqual(len(cands), 1)
+
+    def test_excludes_paid_and_cancelled_and_respects_limit(self):
+        from apps.finance.models import BankStatement
+        from apps.finance.payable_models import PayableItem
+        from apps.finance.payable_service import match_candidates
+
+        paid = PayableItem.objects.create(
+            source_type='ap', source_id=11, source_no='AP11', category='采购',
+            payee_name='已付公司', amount_due=Decimal('1000.00'), amount_paid=Decimal('1000.00'),
+            status=PayableItem.STATUS_PAID,
+        )
+        cancelled = PayableItem.objects.create(
+            source_type='ap', source_id=12, source_no='AP12', category='采购',
+            payee_name='已付公司', amount_due=Decimal('1000.00'), status=PayableItem.STATUS_CANCELLED,
+        )
+        for i in range(3):
+            PayableItem.objects.create(
+                source_type='ap', source_id=100 + i, source_no=f'AP1{i}', category='采购',
+                payee_name='已付公司', amount_due=Decimal('1000.00'),
+            )
+        bs = BankStatement(
+            transaction_type='DEBIT', debit_amount=Decimal('1000.00'),
+            counterparty_name='已付公司', transaction_time='2026-07-02 00:00:00+00',
+        )
+        bs.save()
+
+        cands = match_candidates(bs, limit=2)
+
+        self.assertEqual(len(cands), 2)
+        matched_pks = {c['payable_item'].pk for c in cands}
+        self.assertNotIn(paid.pk, matched_pks)
+        self.assertNotIn(cancelled.pk, matched_pks)
+        for c in cands:
+            self.assertGreaterEqual(c['score'], 90)
+            self.assertIn('收款方一致', c['reasons'])
+            self.assertIn('金额等于剩余', c['reasons'])
+
+    def test_partial_amount_and_due_date_scoring(self):
+        from apps.finance.models import BankStatement
+        from apps.finance.payable_models import PayableItem
+        from apps.finance.payable_service import match_candidates
+
+        item = PayableItem.objects.create(
+            source_type='ap', source_id=21, source_no='AP21', category='采购',
+            payee_name='部分匹配公司', amount_due=Decimal('1000.00'), amount_paid=Decimal('200.00'),
+            status=PayableItem.STATUS_PARTIAL, due_date='2026-07-05',
+        )
+        bs = BankStatement(
+            transaction_type='DEBIT', debit_amount=Decimal('500.00'),
+            counterparty_name='部分匹配公司', transaction_time='2026-07-02 00:00:00+00',
+        )
+        bs.save()
+
+        cands = match_candidates(bs)
+
+        self.assertEqual(len(cands), 1)
+        cand = cands[0]
+        self.assertEqual(cand['payable_item'].pk, item.pk)
+        # 收款方一致(+50) + 金额不超剩余(+15) + 应付日期临近(+10) = 75
+        self.assertEqual(cand['score'], 75)
+        self.assertIn('收款方一致', cand['reasons'])
+        self.assertIn('金额不超剩余', cand['reasons'])
+        self.assertIn('应付日期临近', cand['reasons'])
+
+    def test_unrelated_item_not_included(self):
+        from apps.finance.models import BankStatement
+        from apps.finance.payable_models import PayableItem
+        from apps.finance.payable_service import match_candidates
+
+        # 名称不匹配、金额远超剩余(不满足"等于"也不满足"不超过")、应付日期相差远超 7 天,
+        # 三项打分规则均不命中,score 应为 0 而被排除在候选之外。
+        PayableItem.objects.create(
+            source_type='ap', source_id=31, source_no='AP31', category='采购',
+            payee_name='完全无关的公司', amount_due=Decimal('10.00'), due_date='2020-01-01',
+        )
+        bs = BankStatement(
+            transaction_type='DEBIT', debit_amount=Decimal('1000.00'),
+            counterparty_name='考泰斯(长春)塑料技术有限公司', transaction_time='2026-07-02 00:00:00+00',
+        )
+        bs.save()
+
+        cands = match_candidates(bs)
+
+        self.assertEqual(cands, [])
