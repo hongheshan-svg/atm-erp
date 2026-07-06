@@ -3,7 +3,7 @@ Finance models for expenses, receivables, and payables.
 
 注意: 使用字符串引用替代直接导入以避免循环依赖
 """
-from django.db import models
+from django.db import models, transaction
 from apps.core.models import BaseModel
 
 
@@ -448,10 +448,11 @@ class Payment(BaseModel):
                 )
             elif self.payable_item_id:
                 from apps.finance.payable_models import PayableItem
-                item = PayableItem.objects.select_for_update().get(pk=self.payable_item_id)
-                item.amount_paid = item.amount_paid + self.amount
-                item.recalc_status()
-                item.save(update_fields=['amount_paid', 'status', 'updated_at'])
+                with transaction.atomic():
+                    item = PayableItem.objects.select_for_update().get(pk=self.payable_item_id)
+                    item.amount_paid = item.amount_paid + self.amount
+                    item.recalc_status()
+                    item.save(update_fields=['amount_paid', 'status', 'updated_at'])
 
 
 class PaymentSchedule(BaseModel):
