@@ -1396,3 +1396,6 @@ from .tax_management import (
     TaxType, TaxRate, TaxPeriod,
     TaxDeclaration, TaxDeclarationItem, TaxInvoice
 )
+
+# Import payable ledger models (payable_models.py) for Django discovery
+from .payable_models import PayableItem, PayableSettlement  # noqa: E402,F401
