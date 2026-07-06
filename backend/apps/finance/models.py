@@ -338,13 +338,17 @@ class AccountPayable(BaseModel):
             else:
                 new_seq = 1
             self.ap_no = f'AP{date_str}{new_seq:04d}'
-        
+
         # Update status based on payment
         if self.amount_paid >= self.amount_due:
             self.status = 'PAID'
         elif self.amount_paid > 0:
             self.status = 'PARTIAL'
-        
+        elif self.status in ('PAID', 'PARTIAL'):
+            # 已付金额被回退到 0(如反核销):从付款派生状态退回 PENDING,
+            # 不影响 OVERDUE/CANCELLED 等非付款派生状态。
+            self.status = 'PENDING'
+
         super().save(*args, **kwargs)
 
 

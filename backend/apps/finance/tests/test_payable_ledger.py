@@ -309,3 +309,30 @@ class SettleTest(TestCase):
         bs = self._bs(Decimal('500.00'))
         with self.assertRaises(ValueError):
             settle(bs, [{'payable_item_id': item.pk, 'amount': Decimal('300.00')}], u)
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class UnsettleTest(TestCase):
+    def test_unsettle_reverts_ledger_and_ap(self):
+        from apps.masterdata.models import Supplier
+        from apps.finance.models import AccountPayable
+        from apps.finance.payable_adapters import register_payable
+        from apps.finance.payable_service import settle, unsettle
+        from apps.finance.models import BankStatement
+        from apps.accounts.models import User
+        u = User.objects.create(username='op3', employee_id='OP3')
+        sup = Supplier.objects.create(code='S1', name='供应商甲')
+        ap = AccountPayable.objects.create(supplier=sup, invoice_date='2026-06-01',
+                                           due_date='2026-07-01', amount_due=Decimal('1000.00'))
+        item = register_payable(ap, 'ap')
+        bs = BankStatement(transaction_type='DEBIT', debit_amount=Decimal('1000.00'),
+                           counterparty_name='供应商甲', transaction_time='2026-07-02 00:00:00+00')
+        bs.save()
+        s = settle(bs, [{'payable_item_id': item.pk, 'amount': Decimal('1000.00')}], u)[0]
+
+        unsettle(s, u)
+        item.refresh_from_db(); ap.refresh_from_db(); bs.refresh_from_db()
+        self.assertEqual(item.amount_paid, Decimal('0'))
+        self.assertEqual(item.status, 'PENDING')
+        self.assertEqual(ap.amount_paid, Decimal('0'))
+        self.assertEqual(bs.status, 'PENDING')

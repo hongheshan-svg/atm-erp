@@ -119,3 +119,35 @@ def _load_source_obj(item):
     from apps.purchase.contract_execution import PaymentRecord
     model = {'ap': AccountPayable, 'expense': Expense, 'contract_payment': PaymentRecord}.get(item.source_type)
     return model.objects.filter(pk=item.source_id).first() if model else None
+
+
+@transaction.atomic
+def unsettle(settlement, user):
+    """反核销一条核销记录:回退台账已付、软删 Payment 与核销记录、经适配器回写源单据、
+    重算银行流水状态。幂等(已软删的 settlement 再次调用直接返回)。"""
+    if settlement.is_deleted:
+        return
+    item = PayableItem.objects.select_for_update().get(pk=settlement.payable_item_id)
+    item.amount_paid = item.amount_paid - settlement.amount
+    if item.amount_paid < 0:
+        item.amount_paid = Decimal('0')
+    item.recalc_status()
+    item.save(update_fields=['amount_paid', 'status', 'updated_at'])
+
+    if settlement.payment_id:
+        pay = Payment.objects.filter(pk=settlement.payment_id).first()
+        if pay:
+            pay.soft_delete()
+
+    bs = settlement.bank_statement
+    settlement.soft_delete()
+
+    source = PAYABLE_SOURCES.get(item.source_type)
+    if source:
+        obj = _load_source_obj(item)
+        if obj is not None:
+            source.write_back(obj, item)
+
+    remaining_total = sum((s.amount for s in bs.payable_settlements.all()), Decimal('0'))
+    bs.status = 'PENDING' if remaining_total == 0 else 'PARTIAL'
+    bs.save(update_fields=['status', 'updated_at'])
