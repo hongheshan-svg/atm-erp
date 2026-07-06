@@ -87,3 +87,33 @@ class ExpensePayableSource(PayableSource):
             if not obj.reimbursement_date:
                 obj.reimbursement_date = timezone.now().date()
             obj.save(update_fields=['status', 'reimbursement_date', 'updated_at'])
+
+
+@register_source
+class ContractPaymentSource(PayableSource):
+    source_type = 'contract_payment'
+    category = '合同付款'
+
+    def to_payable(self, obj) -> dict:
+        contract = obj.execution.contract
+        supplier = getattr(contract, 'supplier', None)
+        return {
+            'source_no': obj.payment_no,
+            'payee_name': supplier.name if supplier else '',
+            'supplier_id': supplier.id if supplier else None,
+            'amount_due': obj.amount,
+            'currency_id': None,
+            'due_date': obj.planned_date,
+            'project_id': None,
+        }
+
+    def write_back(self, obj, item) -> None:
+        from django.db.models import F
+        from django.utils import timezone
+        if item.status == item.STATUS_PAID:
+            obj.status = 'PAID'
+            if not obj.actual_date:
+                obj.actual_date = timezone.now().date()
+            obj.save(update_fields=['status', 'actual_date', 'updated_at'])
+            type(obj.execution).objects.filter(pk=obj.execution_id).update(
+                paid_amount=F('paid_amount') + item.amount_paid)

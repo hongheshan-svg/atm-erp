@@ -115,3 +115,40 @@ class ExpenseAdapterTest(TestCase):
         exp.refresh_from_db()
         self.assertEqual(exp.status, 'PAID')
         self.assertIsNotNone(exp.reimbursement_date)
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ContractPaymentAdapterTest(TestCase):
+    def _make_payment_record(self):
+        from apps.masterdata.models import Supplier
+        from apps.purchase.models import PurchaseContract, PurchaseOrder
+        from apps.purchase.contract_execution import ContractExecution, PaymentRecord
+        sup = Supplier.objects.create(code='S3', name='外协丙')
+        # PurchaseContract 必填 po(FK→PurchaseOrder,PROTECT)与 contract_date(无默认值);
+        # PurchaseOrder 必填 supplier 与 delivery_date(无默认值)。均按真实模型补齐。
+        po = PurchaseOrder.objects.create(supplier=sup, delivery_date='2026-07-20')
+        contract = PurchaseContract.objects.create(
+            po=po, supplier=sup, contract_no='PC001', title='外协合同',
+            contract_date='2026-06-01', total_amount=Decimal('5000'),
+        )
+        ex = ContractExecution.objects.create(contract=contract, contract_amount=Decimal('5000'))
+        return PaymentRecord.objects.create(execution=ex, payment_no='CPR001',
+                                            planned_date='2026-07-10', amount=Decimal('2000.00'), status='APPROVED')
+
+    def test_contract_payment_register_and_writeback(self):
+        from apps.finance.payable_adapters import register_payable, PAYABLE_SOURCES
+        pr = self._make_payment_record()
+        item = register_payable(pr, 'contract_payment')
+        self.assertEqual(item.payee_name, '外协丙')
+        self.assertEqual(item.supplier_id, pr.execution.contract.supplier_id)
+        self.assertEqual(item.amount_due, Decimal('2000.00'))
+        self.assertEqual(item.source_no, 'CPR001')
+        self.assertIsNone(item.currency_id)
+        self.assertIsNone(item.project_id)
+
+        item.amount_paid = Decimal('2000.00'); item.recalc_status(); item.save()
+        PAYABLE_SOURCES['contract_payment'].write_back(pr, item)
+        pr.refresh_from_db(); pr.execution.refresh_from_db()
+        self.assertEqual(pr.status, 'PAID')
+        self.assertIsNotNone(pr.actual_date)
+        self.assertEqual(pr.execution.paid_amount, Decimal('2000.00'))
