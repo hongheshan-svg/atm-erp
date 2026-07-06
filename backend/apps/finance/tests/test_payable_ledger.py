@@ -459,3 +459,34 @@ class PayableApiTest(TestCase):
             'allocations': [{'payable_item_id': item.pk, 'amount': '9999.00'}],
         }, format='json')
         self.assertEqual(resp.status_code, 400)
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class BackfillTest(TestCase):
+    def test_backfill_creates_payable_for_open_ap(self):
+        from django.core.management import call_command
+        from apps.masterdata.models import Supplier
+        from apps.finance.models import AccountPayable
+        sup = Supplier.objects.create(code='S1', name='供应商甲')
+        ap = AccountPayable.objects.create(supplier=sup, invoice_date='2026-06-01', due_date='2026-07-01',
+                                           amount_due=Decimal('1000.00'), amount_paid=Decimal('300.00'))
+        # 已结清的 AP 不应回填
+        paid = AccountPayable.objects.create(supplier=sup, invoice_date='2026-06-01', due_date='2026-07-01',
+                                             amount_due=Decimal('500.00'), amount_paid=Decimal('500.00'))
+        call_command('backfill_payables')
+        item = PayableItem.objects.get(source_type='ap', source_id=ap.pk)
+        self.assertEqual(item.amount_due, Decimal('1000.00'))
+        self.assertEqual(item.amount_paid, Decimal('300.00'))
+        self.assertEqual(item.status, 'PARTIAL')
+        self.assertFalse(PayableItem.objects.filter(source_type='ap', source_id=paid.pk).exists())
+
+    def test_backfill_is_idempotent(self):
+        from django.core.management import call_command
+        from apps.masterdata.models import Supplier
+        from apps.finance.models import AccountPayable
+        sup = Supplier.objects.create(code='S2', name='供应商乙')
+        ap = AccountPayable.objects.create(supplier=sup, invoice_date='2026-06-01', due_date='2026-07-01',
+                                           amount_due=Decimal('800.00'))
+        call_command('backfill_payables')
+        call_command('backfill_payables')
+        self.assertEqual(PayableItem.objects.filter(source_type='ap', source_id=ap.pk).count(), 1)
