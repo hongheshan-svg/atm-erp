@@ -90,3 +90,28 @@ class APAdapterTest(TestCase):
         ap.refresh_from_db()
         self.assertEqual(ap.amount_paid, Decimal('1000.00'))
         self.assertEqual(ap.status, 'PAID')
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ExpenseAdapterTest(TestCase):
+    def test_expense_register_and_full_writeback(self):
+        from apps.accounts.models import User
+        from apps.finance.models import Expense
+        from apps.finance.payable_adapters import register_payable, PAYABLE_SOURCES
+
+        # apps.accounts.models.User 无 real_name 字段;姓名由 first_name/last_name
+        # 经 get_full_name() 拼接('张'+'三' -> '张三'),该方法自身在为空时回退到 username。
+        u = User.objects.create(username='zs', employee_id='E9', first_name='三', last_name='张')
+        exp = Expense.objects.create(expense_no='EXP200', user=u, expense_date='2026-07-01',
+                                     category='TRAVEL', amount=Decimal('800.00'), status='APPROVED')
+        item = register_payable(exp, 'expense')
+        self.assertIsNone(item.supplier_id)
+        self.assertEqual(item.amount_due, Decimal('800.00'))
+        self.assertEqual(item.source_no, 'EXP200')
+        self.assertEqual(item.payee_name, '张三')
+
+        item.amount_paid = Decimal('800.00'); item.recalc_status(); item.save()
+        PAYABLE_SOURCES['expense'].write_back(exp, item)
+        exp.refresh_from_db()
+        self.assertEqual(exp.status, 'PAID')
+        self.assertIsNotNone(exp.reimbursement_date)
