@@ -62,3 +62,31 @@ class AdapterRegistryTest(TestCase):
         self.addCleanup(lambda: PAYABLE_SOURCES.pop('demo', None))
         self.assertIn('demo', PAYABLE_SOURCES)
         self.assertEqual(PAYABLE_SOURCES['demo'].category, '演示')
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class APAdapterTest(TestCase):
+    def _make_ap(self):
+        from apps.masterdata.models import Supplier
+        from apps.finance.models import AccountPayable
+        sup = Supplier.objects.create(code='S1', name='供应商甲')
+        return AccountPayable.objects.create(
+            supplier=sup, invoice_date='2026-06-01', due_date='2026-07-01',
+            amount_due=Decimal('1000.00'),
+        )
+
+    def test_ap_register_and_writeback(self):
+        from apps.finance.payable_adapters import register_payable
+        from apps.finance.payable_models import PayableItem
+        ap = self._make_ap()
+        item = register_payable(ap, 'ap')
+        self.assertEqual(item.payee_name, '供应商甲')
+        self.assertEqual(item.supplier_id, ap.supplier_id)
+        self.assertEqual(item.amount_due, Decimal('1000.00'))
+        self.assertEqual(item.source_no, ap.ap_no)
+
+        item.amount_paid = Decimal('1000.00'); item.recalc_status(); item.save()
+        PAYABLE_SOURCES['ap'].write_back(ap, item)
+        ap.refresh_from_db()
+        self.assertEqual(ap.amount_paid, Decimal('1000.00'))
+        self.assertEqual(ap.status, 'PAID')

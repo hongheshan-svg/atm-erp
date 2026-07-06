@@ -37,3 +37,24 @@ def cancel_payable(obj, source_type: str) -> None:
     if item and item.amount_paid == 0:
         item.status = PayableItem.STATUS_CANCELLED
         item.save(update_fields=['status', 'updated_at'])
+
+
+@register_source
+class APPayableSource(PayableSource):
+    source_type = 'ap'
+    category = '采购'
+
+    def to_payable(self, obj) -> dict:
+        return {
+            'source_no': obj.ap_no,
+            'payee_name': obj.supplier.name if obj.supplier_id else '',
+            'supplier_id': obj.supplier_id,
+            'amount_due': obj.amount_due,
+            'currency_id': obj.currency_id,
+            'due_date': obj.due_date,
+            'project_id': obj.project_id,
+        }
+
+    def write_back(self, obj, item) -> None:
+        obj.amount_paid = item.amount_paid
+        obj.save()  # AccountPayable.save() 自动算 status
