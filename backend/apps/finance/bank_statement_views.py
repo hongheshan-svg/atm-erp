@@ -649,6 +649,30 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
+    @action(detail=True, methods=['get'], url_path='payable-candidates')
+    def payable_candidates(self, request, pk=None):
+        """返回该条银行流水的待付款项台账核销候选(按供应商/金额/日期打分)。"""
+        from apps.finance.payable_service import match_candidates
+
+        statement = self.get_object()
+        candidates = match_candidates(statement)
+        data = [
+            {
+                'payable_item_id': c['payable_item'].id,
+                'source_type': c['payable_item'].source_type,
+                'source_no': c['payable_item'].source_no,
+                'category': c['payable_item'].category,
+                'payee_name': c['payable_item'].payee_name,
+                'amount_due': c['payable_item'].amount_due,
+                'remaining': c['payable_item'].remaining,
+                'due_date': c['payable_item'].due_date,
+                'score': c['score'],
+                'reasons': c['reasons'],
+            }
+            for c in candidates
+        ]
+        return Response(data)
+
     @action(detail=True, methods=['post'])
     def match(self, request, pk=None):
         """

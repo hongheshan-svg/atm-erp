@@ -393,3 +393,69 @@ class ContractUnsettleTest(TestCase):
         self.assertEqual(pr.status, 'APPROVED')
         self.assertIsNone(pr.actual_date)
         self.assertEqual(ex.paid_amount, Decimal('0'))
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class PayableApiTest(TestCase):
+    def setUp(self):
+        from rest_framework.test import APIClient
+        from apps.accounts.models import User
+        self.user = User.objects.create(username='apiadmin', employee_id='API1',
+                                        is_staff=True, is_superuser=True)
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def _make_ap_and_bs(self):
+        from apps.masterdata.models import Supplier
+        from apps.finance.models import AccountPayable, BankStatement
+        from apps.finance.payable_adapters import register_payable
+        sup = Supplier.objects.create(code='S1', name='供应商甲')
+        ap = AccountPayable.objects.create(supplier=sup, invoice_date='2026-06-01',
+                                           due_date='2026-07-01', amount_due=Decimal('1000.00'))
+        item = register_payable(ap, 'ap')
+        bs = BankStatement(transaction_type='DEBIT', debit_amount=Decimal('1000.00'),
+                           counterparty_name='供应商甲', transaction_time='2026-07-02 00:00:00+00')
+        bs.save()
+        return ap, item, bs
+
+    def test_payable_items_list(self):
+        self._make_ap_and_bs()
+        resp = self.client.get('/api/finance/payable-items/')
+        self.assertEqual(resp.status_code, 200)
+        results = resp.data['results'] if isinstance(resp.data, dict) else resp.data
+        self.assertGreaterEqual(len(results), 1)
+
+    def test_candidates_endpoint(self):
+        ap, item, bs = self._make_ap_and_bs()
+        resp = self.client.get(f'/api/finance/bank-statements/{bs.id}/payable-candidates/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertGreaterEqual(len(resp.data), 1)
+        self.assertEqual(resp.data[0]['payable_item_id'], item.pk)
+        self.assertGreater(resp.data[0]['score'], 0)
+
+    def test_settle_and_unsettle_endpoints(self):
+        ap, item, bs = self._make_ap_and_bs()
+        resp = self.client.post('/api/finance/payable-reconcile/settle/', {
+            'bank_statement_id': bs.id,
+            'allocations': [{'payable_item_id': item.pk, 'amount': '1000.00'}],
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        item.refresh_from_db(); bs.refresh_from_db()
+        self.assertEqual(item.status, 'PAID')
+        self.assertEqual(bs.status, 'MATCHED')
+        settlement_id = resp.data['settlement_ids'][0]
+        resp2 = self.client.post('/api/finance/payable-reconcile/unsettle/', {
+            'settlement_id': settlement_id,
+        }, format='json')
+        self.assertEqual(resp2.status_code, 200, resp2.data)
+        item.refresh_from_db(); bs.refresh_from_db()
+        self.assertEqual(item.status, 'PENDING')
+        self.assertEqual(bs.status, 'PENDING')
+
+    def test_settle_over_allocation_returns_400(self):
+        ap, item, bs = self._make_ap_and_bs()
+        resp = self.client.post('/api/finance/payable-reconcile/settle/', {
+            'bank_statement_id': bs.id,
+            'allocations': [{'payable_item_id': item.pk, 'amount': '9999.00'}],
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
