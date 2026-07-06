@@ -1,6 +1,7 @@
 from decimal import Decimal
 from django.test import TestCase, override_settings
 from apps.finance.payable_models import PayableItem
+from apps.finance.models import Payment
 
 
 @override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
@@ -29,3 +30,18 @@ class PayableItemModelTest(TestCase):
         with self.assertRaises(IntegrityError):
             PayableItem.objects.create(source_type='ap', source_id=1, source_no='AP001',
                                        category='采购', payee_name='A', amount_due=Decimal('1'))
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class PaymentBackfillPayableTest(TestCase):
+    def test_payment_backfills_payable_amount_paid(self):
+        item = PayableItem.objects.create(source_type='expense', source_id=9, source_no='EXP9',
+                                          category='报销', payee_name='张三', amount_due=Decimal('300.00'))
+        Payment.objects.create(
+            payment_type='PAYABLE', payable_item=item,
+            payment_date='2026-07-02', payment_method='BANK_TRANSFER',
+            amount=Decimal('120.00'),
+        )
+        item.refresh_from_db()
+        self.assertEqual(item.amount_paid, Decimal('120.00'))
+        self.assertEqual(item.status, PayableItem.STATUS_PARTIAL)

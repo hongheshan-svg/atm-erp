@@ -353,6 +353,7 @@ class Payment(BaseModel):
     PAYMENT_TYPE_CHOICES = [
         ('AR', '应收款'),
         ('AP', '应付款'),
+        ('PAYABLE', '待付款项'),
     ]
     
     PAYMENT_METHOD_CHOICES = [
@@ -380,6 +381,14 @@ class Payment(BaseModel):
         blank=True,
         related_name='payments',
         verbose_name='应付账款'
+    )
+    payable_item = models.ForeignKey(
+        'finance.PayableItem',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='payments',
+        verbose_name='待付款项',
     )
     payment_date = models.DateField(verbose_name='付款日期')
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, verbose_name='付款方式')
@@ -437,6 +446,12 @@ class Payment(BaseModel):
                 AccountPayable.objects.filter(pk=self.ap_id).update(
                     amount_paid=F('amount_paid') + self.amount
                 )
+            elif self.payable_item_id:
+                from apps.finance.payable_models import PayableItem
+                item = PayableItem.objects.select_for_update().get(pk=self.payable_item_id)
+                item.amount_paid = item.amount_paid + self.amount
+                item.recalc_status()
+                item.save(update_fields=['amount_paid', 'status', 'updated_at'])
 
 
 class PaymentSchedule(BaseModel):
