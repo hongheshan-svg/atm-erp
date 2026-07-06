@@ -87,6 +87,11 @@ class ExpensePayableSource(PayableSource):
             if not obj.reimbursement_date:
                 obj.reimbursement_date = timezone.now().date()
             obj.save(update_fields=['status', 'reimbursement_date', 'updated_at'])
+        elif obj.status == 'PAID':
+            # 反核销:台账退回未结清,报销单从 PAID 退回 APPROVED、清报销日期。
+            obj.status = 'APPROVED'
+            obj.reimbursement_date = None
+            obj.save(update_fields=['status', 'reimbursement_date', 'updated_at'])
 
 
 @register_source
@@ -108,15 +113,21 @@ class ContractPaymentSource(PayableSource):
         }
 
     def write_back(self, obj, item) -> None:
-        from django.db.models import F
+        from decimal import Decimal
+        from django.db.models import Sum
         from django.utils import timezone
-        # 幂等守卫:已 PAID 的记录不重复回写累加(下游 settle/unsettle 重试等
-        # 可能对同一 item 再次调用 write_back)。与本方法内 actual_date 的
-        # `if not obj.actual_date` 幂等风格一致。
         if item.status == item.STATUS_PAID and obj.status != 'PAID':
             obj.status = 'PAID'
             if not obj.actual_date:
                 obj.actual_date = timezone.now().date()
             obj.save(update_fields=['status', 'actual_date', 'updated_at'])
-            type(obj.execution).objects.filter(pk=obj.execution_id).update(
-                paid_amount=F('paid_amount') + item.amount_paid)
+        elif item.status != item.STATUS_PAID and obj.status == 'PAID':
+            # 反核销:合同付款记录从 PAID 退回 APPROVED、清实际付款日期。
+            obj.status = 'APPROVED'
+            obj.actual_date = None
+            obj.save(update_fields=['status', 'actual_date', 'updated_at'])
+        # execution.paid_amount 按该合同所有 PAID 付款记录重算(幂等,settle/unsettle
+        # 双向正确;避免 F() 增量在反核销时无法扣减导致的 paid_amount 永久漂移)。
+        execution = obj.execution
+        paid = execution.payments.filter(status='PAID').aggregate(s=Sum('amount'))['s'] or Decimal('0')
+        type(execution).objects.filter(pk=execution.pk).update(paid_amount=paid)

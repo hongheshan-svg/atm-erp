@@ -335,4 +335,61 @@ class UnsettleTest(TestCase):
         self.assertEqual(item.amount_paid, Decimal('0'))
         self.assertEqual(item.status, 'PENDING')
         self.assertEqual(ap.amount_paid, Decimal('0'))
+        self.assertEqual(ap.status, 'PENDING')
         self.assertEqual(bs.status, 'PENDING')
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ExpenseUnsettleTest(TestCase):
+    def test_unsettle_reverts_expense_status(self):
+        from apps.accounts.models import User
+        from apps.finance.models import BankStatement, Expense
+        from apps.finance.payable_adapters import register_payable
+        from apps.finance.payable_service import settle, unsettle
+        u = User.objects.create(username='eu', employee_id='EU1')
+        exp = Expense.objects.create(expense_no='EXPU1', user=u, expense_date='2026-07-01',
+                                     category='TRAVEL', amount=Decimal('500.00'), status='APPROVED')
+        item = register_payable(exp, 'expense')
+        bs = BankStatement(transaction_type='DEBIT', debit_amount=Decimal('500.00'),
+                           counterparty_name='报销', transaction_time='2026-07-02 00:00:00+00')
+        bs.save()
+        s = settle(bs, [{'payable_item_id': item.pk, 'amount': Decimal('500.00')}], u)[0]
+        exp.refresh_from_db()
+        self.assertEqual(exp.status, 'PAID')
+        unsettle(s, u)
+        exp.refresh_from_db()
+        self.assertEqual(exp.status, 'APPROVED')
+        self.assertIsNone(exp.reimbursement_date)
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ContractUnsettleTest(TestCase):
+    def test_unsettle_reverts_contract_payment_and_execution(self):
+        from apps.accounts.models import User
+        from apps.finance.models import BankStatement
+        from apps.finance.payable_adapters import register_payable
+        from apps.finance.payable_service import settle, unsettle
+        from apps.masterdata.models import Supplier
+        from apps.purchase.contract_execution import ContractExecution, PaymentRecord
+        from apps.purchase.models import PurchaseContract, PurchaseOrder
+        u = User.objects.create(username='cu', employee_id='CU1')
+        sup = Supplier.objects.create(code='SC', name='外协')
+        po = PurchaseOrder.objects.create(supplier=sup, delivery_date='2026-07-20')
+        contract = PurchaseContract.objects.create(po=po, supplier=sup, contract_no='PCU1',
+                                                   title='c', contract_date='2026-06-01', total_amount=Decimal('3000'))
+        ex = ContractExecution.objects.create(contract=contract, contract_amount=Decimal('3000'))
+        pr = PaymentRecord.objects.create(execution=ex, payment_no='CPRU1', planned_date='2026-07-10',
+                                          amount=Decimal('3000.00'), status='APPROVED')
+        item = register_payable(pr, 'contract_payment')
+        bs = BankStatement(transaction_type='DEBIT', debit_amount=Decimal('3000.00'),
+                           counterparty_name='外协', transaction_time='2026-07-02 00:00:00+00')
+        bs.save()
+        s = settle(bs, [{'payable_item_id': item.pk, 'amount': Decimal('3000.00')}], u)[0]
+        pr.refresh_from_db(); ex.refresh_from_db()
+        self.assertEqual(pr.status, 'PAID')
+        self.assertEqual(ex.paid_amount, Decimal('3000.00'))
+        unsettle(s, u)
+        pr.refresh_from_db(); ex.refresh_from_db()
+        self.assertEqual(pr.status, 'APPROVED')
+        self.assertIsNone(pr.actual_date)
+        self.assertEqual(ex.paid_amount, Decimal('0'))
