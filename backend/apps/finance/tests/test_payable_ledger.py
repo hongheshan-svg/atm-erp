@@ -2,6 +2,7 @@ from decimal import Decimal
 from django.test import TestCase, override_settings
 from apps.finance.payable_models import PayableItem
 from apps.finance.models import Payment
+from apps.finance.payable_adapters import PayableSource, register_source, PAYABLE_SOURCES
 
 
 @override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
@@ -45,3 +46,19 @@ class PaymentBackfillPayableTest(TestCase):
         item.refresh_from_db()
         self.assertEqual(item.amount_paid, Decimal('120.00'))
         self.assertEqual(item.status, PayableItem.STATUS_PARTIAL)
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class AdapterRegistryTest(TestCase):
+    def test_register_source_populates_registry(self):
+        @register_source
+        class _S(PayableSource):
+            source_type = 'demo'
+            category = '演示'
+            def to_payable(self, obj):
+                return {}
+            def write_back(self, obj, item):
+                pass
+        self.addCleanup(lambda: PAYABLE_SOURCES.pop('demo', None))
+        self.assertIn('demo', PAYABLE_SOURCES)
+        self.assertEqual(PAYABLE_SOURCES['demo'].category, '演示')
