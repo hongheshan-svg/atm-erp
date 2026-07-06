@@ -110,7 +110,10 @@ class ContractPaymentSource(PayableSource):
     def write_back(self, obj, item) -> None:
         from django.db.models import F
         from django.utils import timezone
-        if item.status == item.STATUS_PAID:
+        # 幂等守卫:已 PAID 的记录不重复回写累加(下游 settle/unsettle 重试等
+        # 可能对同一 item 再次调用 write_back)。与本方法内 actual_date 的
+        # `if not obj.actual_date` 幂等风格一致。
+        if item.status == item.STATUS_PAID and obj.status != 'PAID':
             obj.status = 'PAID'
             if not obj.actual_date:
                 obj.actual_date = timezone.now().date()

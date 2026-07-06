@@ -152,3 +152,8 @@ class ContractPaymentAdapterTest(TestCase):
         self.assertEqual(pr.status, 'PAID')
         self.assertIsNotNone(pr.actual_date)
         self.assertEqual(pr.execution.paid_amount, Decimal('2000.00'))
+
+        # 幂等:对已 PAID 的记录再次 write_back 不应重复累加 execution.paid_amount
+        PAYABLE_SOURCES['contract_payment'].write_back(pr, item)
+        pr.execution.refresh_from_db()
+        self.assertEqual(pr.execution.paid_amount, Decimal('2000.00'))
