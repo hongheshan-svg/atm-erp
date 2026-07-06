@@ -270,3 +270,42 @@ class MatchCandidatesTest(TestCase):
         cands = match_candidates(bs)
 
         self.assertEqual(cands, [])
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class SettleTest(TestCase):
+    def _bs(self, amt):
+        from apps.finance.models import BankStatement
+        bs = BankStatement(transaction_type='DEBIT', debit_amount=amt,
+                           counterparty_name='供应商甲', transaction_time='2026-07-02 00:00:00+00')
+        bs.save(); return bs
+
+    def test_full_settlement_marks_matched_and_writes_back_ap(self):
+        from apps.masterdata.models import Supplier
+        from apps.finance.models import AccountPayable
+        from apps.finance.payable_adapters import register_payable
+        from apps.finance.payable_service import settle
+        from apps.accounts.models import User
+        u = User.objects.create(username='op', employee_id='OP1')
+        sup = Supplier.objects.create(code='S1', name='供应商甲')
+        ap = AccountPayable.objects.create(supplier=sup, invoice_date='2026-06-01',
+                                           due_date='2026-07-01', amount_due=Decimal('1000.00'))
+        item = register_payable(ap, 'ap')
+        bs = self._bs(Decimal('1000.00'))
+        settle(bs, [{'payable_item_id': item.pk, 'amount': Decimal('1000.00')}], u)
+        item.refresh_from_db(); ap.refresh_from_db(); bs.refresh_from_db()
+        self.assertEqual(item.status, 'PAID')
+        self.assertEqual(ap.amount_paid, Decimal('1000.00'))
+        self.assertEqual(ap.status, 'PAID')
+        self.assertEqual(bs.status, 'MATCHED')
+
+    def test_over_allocation_rejected(self):
+        from apps.finance.payable_models import PayableItem
+        from apps.finance.payable_service import settle
+        from apps.accounts.models import User
+        u = User.objects.create(username='op2', employee_id='OP2')
+        item = PayableItem.objects.create(source_type='ap', source_id=99, source_no='AP99',
+                                          category='采购', payee_name='甲', amount_due=Decimal('100.00'))
+        bs = self._bs(Decimal('500.00'))
+        with self.assertRaises(ValueError):
+            settle(bs, [{'payable_item_id': item.pk, 'amount': Decimal('300.00')}], u)

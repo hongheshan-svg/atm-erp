@@ -23,6 +23,7 @@ class BankStatement(BaseModel):
     STATUS_CHOICES = [
         ('PENDING', '待匹配'),
         ('MATCHED', '已匹配'),
+        ('PARTIAL', '部分核销'),
         ('IGNORED', '已忽略'),
         ('ERROR', '匹配错误'),
     ]
