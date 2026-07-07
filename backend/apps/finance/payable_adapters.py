@@ -224,3 +224,38 @@ class TaxPayableSource(PayableSource):
             obj.paid_amount = Decimal('0')
             obj.paid_at = None
             obj.save(update_fields=['status', 'paid_amount', 'paid_at', 'updated_at'])
+
+
+@register_source
+class PaymentRequestPayableSource(PayableSource):
+    """付款申请:PaymentRequest 已有干净的"已付"语义(status='PAID' + paid_at + payment FK),
+    直接复用,不新增字段。"""
+    source_type = 'payment_request'
+    category = '付款申请'
+
+    def to_payable(self, obj) -> dict:
+        return {
+            'source_no': obj.request_no,
+            'payee_name': obj.supplier.name if obj.supplier_id else '',
+            'supplier_id': obj.supplier_id,
+            'amount_due': obj.amount,
+            'currency_id': obj.currency_id,
+            'due_date': obj.expected_date,
+            'project_id': obj.project_id,
+        }
+
+    def write_back(self, obj, item) -> None:
+        from django.utils import timezone
+        if item.status == item.STATUS_PAID and obj.status != 'PAID':
+            obj.status = 'PAID'
+            if not obj.paid_at:
+                obj.paid_at = timezone.now()
+            # 关联本次核销产生的付款记录(取该台账项下最新一条未被软删的 Payment)。
+            obj.payment = item.payments.order_by('-id').first()
+            obj.save(update_fields=['status', 'paid_at', 'payment', 'updated_at'])
+        elif item.status != item.STATUS_PAID and obj.status == 'PAID':
+            # 反核销:付款申请从 PAID 退回 APPROVED,清付款时间与关联付款记录。
+            obj.status = 'APPROVED'
+            obj.paid_at = None
+            obj.payment = None
+            obj.save(update_fields=['status', 'paid_at', 'payment', 'updated_at'])

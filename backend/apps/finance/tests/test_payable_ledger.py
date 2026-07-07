@@ -789,3 +789,56 @@ class TaxAdapterTest(TestCase):
         self.assertEqual(td.status, 'DECLARED')
         self.assertEqual(td.paid_amount, Decimal('0'))
         self.assertIsNone(td.paid_at)
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class PaymentRequestAdapterTest(TestCase):
+    def _make_request(self):
+        from apps.accounts.models import User
+        from apps.finance.models import PaymentRequest
+        from apps.masterdata.models import Supplier
+        sup = Supplier.objects.create(code='PRQ1', name='供应商丁')
+        applicant = User.objects.create(username='pra1', employee_id='PRA10')
+        return PaymentRequest.objects.create(
+            request_no='PRQ001', title='进度款申请', supplier=sup, amount=Decimal('3000.00'),
+            expected_date='2026-07-15', reason='项目进度款', applicant=applicant, status='APPROVED',
+        )
+
+    def test_payment_request_register_and_full_writeback(self):
+        from apps.finance.payable_adapters import PAYABLE_SOURCES, register_payable
+        pr = self._make_request()
+        item = register_payable(pr, 'payment_request')
+        self.assertEqual(item.payee_name, '供应商丁')
+        self.assertEqual(item.supplier_id, pr.supplier_id)
+        self.assertEqual(item.amount_due, Decimal('3000.00'))
+        self.assertEqual(item.source_no, 'PRQ001')
+
+        item.amount_paid = Decimal('3000.00')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['payment_request'].write_back(pr, item)
+        pr.refresh_from_db()
+        self.assertEqual(pr.status, 'PAID')
+        self.assertIsNotNone(pr.paid_at)
+
+    def test_payment_request_writeback_reverses_on_unsettle(self):
+        from apps.accounts.models import User
+        from apps.finance.models import BankStatement
+        from apps.finance.payable_adapters import register_payable
+        from apps.finance.payable_service import settle, unsettle
+        u = User.objects.create(username='prqop', employee_id='PRQOP1')
+        pr = self._make_request()
+        item = register_payable(pr, 'payment_request')
+        bs = BankStatement(transaction_type='DEBIT', debit_amount=Decimal('3000.00'),
+                           counterparty_name='供应商丁', transaction_time='2026-07-02 00:00:00+00')
+        bs.save()
+        s = settle(bs, [{'payable_item_id': item.pk, 'amount': Decimal('3000.00')}], u)[0]
+        pr.refresh_from_db()
+        self.assertEqual(pr.status, 'PAID')
+        self.assertIsNotNone(pr.payment_id)
+
+        unsettle(s, u)
+        pr.refresh_from_db()
+        self.assertEqual(pr.status, 'APPROVED')
+        self.assertIsNone(pr.paid_at)
+        self.assertIsNone(pr.payment_id)
