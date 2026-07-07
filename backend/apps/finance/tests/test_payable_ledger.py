@@ -1499,6 +1499,33 @@ class TaxDeclarationSignalTest(TestCase):
         self.assertEqual(td.status, 'DECLARED')
         self.assertTrue(PayableItem.objects.filter(source_type='tax', source_id=td.pk).exists())
 
+    def test_cancelled_transition_cancels_payable_item(self):
+        """G5:register_tax_payable 目前没有实际操作入口能把 DECLARED 变成
+        CANCELLED(TaxDeclaration.STATUS_CHOICES 里也没有这个取值),但信号本身要
+        为将来预留的 CANCELLED 分支做好——直接置状态验证信号行为,不依赖视图。"""
+        td = self._make_declaration(code='TDSIG3', status='DECLARED')
+        item = PayableItem.objects.get(source_type='tax', source_id=td.pk)
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+        td.status = 'CANCELLED'
+        td.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+    def test_cancelled_transition_does_not_touch_paid_item(self):
+        """已核销(amount_paid>0)的台账项不应被误冲——与 cancel_payable 的通用守卫
+        语义一致。"""
+        td = self._make_declaration(code='TDSIG4', status='DECLARED')
+        item = PayableItem.objects.get(source_type='tax', source_id=td.pk)
+        item.amount_paid = item.amount_due
+        item.recalc_status()
+        item.save()
+
+        td.status = 'CANCELLED'
+        td.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_PAID)
+
 
 @override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class PaymentRequestSignalTest(TestCase):
