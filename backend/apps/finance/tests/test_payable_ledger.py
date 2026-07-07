@@ -1280,3 +1280,78 @@ class PaymentRequestAdapterTest(TestCase):
         self.assertEqual(pr.status, 'APPROVED')
         self.assertIsNone(pr.paid_at)
         self.assertIsNone(pr.payment_id)
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class AssetMaintenanceAdapterTest(TestCase):
+    """资产维护:AssetMaintenance.status 是处理进度机(PENDING/IN_PROGRESS/COMPLETED/
+    CANCELLED),无付款语义,write_back 为 no-op(付款事实由统一台账维护),同 Outsource/
+    SharedExpense 断言不破坏其状态机。"""
+
+    def _make_maintenance(self):
+        from apps.accounts.models import User
+        from apps.oa.asset import Asset, AssetMaintenance
+        reporter = User.objects.create(username='amrep', employee_id='AMREP1')
+        asset = Asset.objects.create(asset_no='AST-AM1', name='测试台架', status='REPAIR')
+        return AssetMaintenance.objects.create(
+            maintenance_no='AM001', asset=asset, maintenance_type='REPAIR',
+            reporter=reporter, fault_description='电机异响',
+            start_date='2026-07-01', end_date='2026-07-03',
+            cost=Decimal('800.00'), status='COMPLETED',
+        )
+
+    def test_asset_maintenance_register_and_writeback_is_noop(self):
+        from apps.finance.payable_adapters import PAYABLE_SOURCES, register_payable
+        m = self._make_maintenance()
+        item = register_payable(m, 'asset_maintenance')
+        self.assertIsNone(item.supplier_id)
+        self.assertEqual(item.payee_name, '')
+        self.assertEqual(item.amount_due, Decimal('800.00'))
+        self.assertEqual(item.source_no, 'AM001')
+
+        item.amount_paid = Decimal('800.00')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['asset_maintenance'].write_back(m, item)
+        m.refresh_from_db()
+        self.assertEqual(m.status, 'COMPLETED')  # no-op:处理进度机不受付款影响
+
+        # 反核销(台账退回未结清),no-op 仍不应改动源单据状态。
+        item.amount_paid = Decimal('0')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['asset_maintenance'].write_back(m, item)
+        m.refresh_from_db()
+        self.assertEqual(m.status, 'COMPLETED')
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class VehicleMaintenanceAdapterTest(TestCase):
+    """车辆维护:VehicleMaintenance 无 status/付款字段,write_back 为 no-op(付款事实由
+    统一台账维护);payee_name 取服务商 vendor,source_no 用 VM<pk>。"""
+
+    def _make_maintenance(self):
+        from apps.oa.vehicle import Vehicle, VehicleMaintenance
+        vehicle = Vehicle.objects.create(plate_number='沪A12345', brand='测试品牌', model='X1')
+        return VehicleMaintenance.objects.create(
+            vehicle=vehicle, maintenance_type='REPAIR', maintenance_date='2026-07-02',
+            description='更换刹车片', cost=Decimal('1200.00'), vendor='城东4S店',
+        )
+
+    def test_vehicle_maintenance_register_and_writeback_is_noop(self):
+        from apps.finance.payable_adapters import PAYABLE_SOURCES, register_payable
+        m = self._make_maintenance()
+        item = register_payable(m, 'vehicle_maintenance')
+        self.assertIsNone(item.supplier_id)
+        self.assertEqual(item.payee_name, '城东4S店')
+        self.assertEqual(item.amount_due, Decimal('1200.00'))
+        self.assertEqual(item.source_no, f'VM{m.pk}')
+
+        # write_back no-op:不改动源单据、不报错。
+        item.amount_paid = Decimal('1200.00')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['vehicle_maintenance'].write_back(m, item)
+        m.refresh_from_db()
+        self.assertEqual(m.cost, Decimal('1200.00'))
+        self.assertEqual(m.vendor, '城东4S店')
