@@ -459,6 +459,8 @@ class PayableApiTest(TestCase):
         self.assertEqual(item.status, 'PAID')
         self.assertEqual(bs.status, 'MATCHED')
         settlement_id = resp.data['settlement_ids'][0]
+        self.assertEqual(len(resp.data['payment_nos']), 1)
+        self.assertTrue(resp.data['payment_nos'][0])
         resp2 = self.client.post('/api/finance/payable-reconcile/unsettle/', {
             'settlement_id': settlement_id,
         }, format='json')
