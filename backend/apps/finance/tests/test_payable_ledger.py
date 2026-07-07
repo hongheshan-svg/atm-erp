@@ -857,3 +857,111 @@ class PaymentReconciliationPermissionSeedTest(TestCase):
         parent = perm.parent
         self.assertIsNotNone(parent)
         self.assertEqual(parent.code, 'finance')
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ContractPaymentSignalFailureAlertTest(TestCase):
+    """问题 I-2:register_payable 抛异常时,信号不能让 PaymentRecord.save() 失败,
+    且要留下可观测的告警(SystemNotification),而不是仅静默 logger.error。"""
+
+    def _make_execution(self, code='SGF1'):
+        from apps.masterdata.models import Supplier
+        from apps.purchase.contract_execution import ContractExecution
+        from apps.purchase.models import PurchaseContract, PurchaseOrder
+        sup = Supplier.objects.create(code=code, name=f'外协{code}')
+        po = PurchaseOrder.objects.create(supplier=sup, delivery_date='2026-07-20')
+        contract = PurchaseContract.objects.create(po=po, supplier=sup, contract_no=f'PC{code}',
+                                                   title='c', contract_date='2026-06-01',
+                                                   total_amount=Decimal('3000'))
+        return ContractExecution.objects.create(contract=contract, contract_amount=Decimal('3000'))
+
+    def test_register_payable_failure_creates_alert_and_does_not_raise(self):
+        from unittest.mock import patch
+        from apps.accounts.models import User
+        from apps.core.models import SystemNotification
+        from apps.purchase.contract_execution import PaymentRecord
+
+        admin = User.objects.create(username='fadmin1', employee_id='FADM1', is_superuser=True, is_active=True)
+        ex = self._make_execution()
+
+        with patch('apps.finance.payable_adapters.register_payable', side_effect=RuntimeError('boom')):
+            # 不应抛异常冒泡到调用方,PaymentRecord 必须能正常保存成功。
+            pr = PaymentRecord.objects.create(
+                execution=ex, payment_no='SIGF1', planned_date='2026-07-10',
+                amount=Decimal('2000.00'), status='APPROVED',
+            )
+
+        pr.refresh_from_db()
+        self.assertEqual(pr.status, 'APPROVED')
+        # 台账项因 mock 未真正登记
+        self.assertFalse(PayableItem.objects.filter(source_type='contract_payment', source_id=pr.pk).exists())
+        # 但应留下告警通知给财务管理员(超管)
+        notif = SystemNotification.objects.filter(user=admin, type='ERROR', title='合同付款台账同步失败').first()
+        self.assertIsNotNone(notif)
+        self.assertIn('SIGF1', notif.message)
+
+    def test_cancel_payable_failure_creates_alert_and_does_not_raise(self):
+        from unittest.mock import patch
+        from apps.accounts.models import User
+        from apps.core.models import SystemNotification
+        from apps.purchase.contract_execution import PaymentRecord
+
+        admin = User.objects.create(username='fadmin2', employee_id='FADM2', is_superuser=True, is_active=True)
+        ex = self._make_execution(code='SGF2')
+        pr = PaymentRecord.objects.create(
+            execution=ex, payment_no='SIGF2', planned_date='2026-07-10',
+            amount=Decimal('900.00'), status='APPROVED',
+        )
+        SystemNotification.objects.all().delete()
+
+        with patch('apps.finance.payable_adapters.cancel_payable', side_effect=RuntimeError('boom')):
+            pr.status = 'CANCELLED'
+            pr.save()
+
+        pr.refresh_from_db()
+        self.assertEqual(pr.status, 'CANCELLED')
+        notif = SystemNotification.objects.filter(user=admin, type='ERROR', title='合同付款台账同步失败').first()
+        self.assertIsNotNone(notif)
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class BackfillPayablesSafetyNetTaskTest(TestCase):
+    """问题 I-2 定时兜底:celery 任务应重跑两条 backfill 命令,补齐信号静默失败漏登记的台账项。"""
+
+    def test_task_calls_both_backfill_commands(self):
+        from unittest.mock import patch
+        from apps.finance.tasks import backfill_payables_safety_net
+
+        with patch('apps.finance.tasks.call_command') as mock_call:
+            result = backfill_payables_safety_net()
+
+        mock_call.assert_any_call('backfill_payables')
+        mock_call.assert_any_call('backfill_contract_payables')
+        self.assertEqual(mock_call.call_count, 2)
+        self.assertIn('backfill', result)
+
+    def test_task_backfills_payable_missed_by_failed_signal(self):
+        from unittest.mock import patch
+        from apps.masterdata.models import Supplier
+        from apps.purchase.contract_execution import ContractExecution, PaymentRecord
+        from apps.purchase.models import PurchaseContract, PurchaseOrder
+        from apps.finance.tasks import backfill_payables_safety_net
+
+        sup = Supplier.objects.create(code='SGF3', name='外协SGF3')
+        po = PurchaseOrder.objects.create(supplier=sup, delivery_date='2026-07-20')
+        contract = PurchaseContract.objects.create(po=po, supplier=sup, contract_no='PCSGF3',
+                                                   title='c', contract_date='2026-06-01',
+                                                   total_amount=Decimal('3000'))
+        ex = ContractExecution.objects.create(contract=contract, contract_amount=Decimal('3000'))
+
+        # 模拟信号静默失败:register_payable 抛异常,PaymentRecord 仍落 APPROVED,但无台账项。
+        with patch('apps.finance.payable_adapters.register_payable', side_effect=RuntimeError('boom')):
+            pr = PaymentRecord.objects.create(
+                execution=ex, payment_no='SIGF3', planned_date='2026-07-10',
+                amount=Decimal('700.00'), status='APPROVED',
+            )
+        self.assertFalse(PayableItem.objects.filter(source_type='contract_payment', source_id=pr.pk).exists())
+
+        # 定时兜底任务重跑后应补齐台账项。
+        backfill_payables_safety_net()
+        self.assertTrue(PayableItem.objects.filter(source_type='contract_payment', source_id=pr.pk).exists())
