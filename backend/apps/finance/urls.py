@@ -22,6 +22,7 @@ from .asset import (
     FixedAssetViewSet,
 )
 from .bank_statement_views import BankStatementImportLogViewSet, BankStatementViewSet
+from .payable_views import PayableItemViewSet, PayableReconcileViewSet
 from .collection_views import (
     CollectionMilestoneViewSet,
     CollectionPlanViewSet,
@@ -66,6 +67,10 @@ router.register(r'invoice-reconciliations', InvoiceReconciliationViewSet, basena
 # 银行流水
 router.register(r'bank-statements', BankStatementViewSet, basename='bank-statement')
 router.register(r'bank-statement-logs', BankStatementImportLogViewSet, basename='bank-statement-log')
+
+# 统一核销台账(工作台)
+router.register(r'payable-items', PayableItemViewSet, basename='payable-item')
+router.register(r'payable-reconcile', PayableReconcileViewSet, basename='payable-reconcile')
 
 # 付款计划
 router.register(r'payment-schedules', PaymentScheduleViewSet, basename='payment-schedule')

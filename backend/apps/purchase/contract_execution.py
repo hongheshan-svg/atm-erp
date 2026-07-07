@@ -308,7 +308,7 @@ class PaymentRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaymentRecord
         fields = '__all__'
-        read_only_fields = ['created_by', 'updated_by', 'approver', 'approved_at']
+        read_only_fields = ['created_by', 'updated_by', 'approver', 'approved_at', 'status', 'actual_date']
 
 
 class ContractIssueSerializer(serializers.ModelSerializer):
@@ -339,7 +339,7 @@ class ContractExecutionSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContractExecution
         fields = '__all__'
-        read_only_fields = ['created_by', 'updated_by']
+        read_only_fields = ['created_by', 'updated_by', 'paid_amount']
 
 
 class ContractExecutionListSerializer(serializers.ModelSerializer):
@@ -663,22 +663,15 @@ class PaymentRecordViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDelete
 
     @action(detail=True, methods=['post'])
     def pay(self, request, pk=None):
-        """付款"""
-        payment = self.get_object()
+        """已停用:合同付款统一由银行流水核销完成(付款核销工作台)。
 
-        if payment.status != 'APPROVED':
-            return Response({'error': '需要先审批才能付款'}, status=400)
-
-        payment.status = 'PAID'
-        payment.actual_date = request.data.get('actual_date', date.today().isoformat())
-        payment.save()
-
-        # 更新执行记录
-        execution = payment.execution
-        execution.paid_amount = execution.payments.filter(status='PAID').aggregate(total=Sum('amount'))['total'] or 0
-        execution.save()
-
-        return Response(self.get_serializer(payment).data)
+        历史上 pay() 直接把记录标 PAID 并重算 execution.paid_amount,绕过核销台账,
+        与统一核销"两套并存"。收口后合同付款 →PAID 只经 settle→write_back 驱动。
+        """
+        return Response(
+            {'error': '合同付款已统一由银行流水核销完成:请在「付款核销工作台」核销对应银行流水。此接口已停用。'},
+            status=409,
+        )
 
 
 class ContractIssueViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):

@@ -151,6 +151,8 @@ def build_permission_tree():
     tree.append(menu('finance:asset', '固定资产', 6, route_path='/finance/assets', parent_code='finance'))
     tree.append(menu('finance:collection', '收款计划', 7, route_path='/finance/collection-plans', parent_code='finance'))
     tree.append(menu('finance:reconciliation', '对账管理', 8, route_path='/finance/purchase-reconciliation', parent_code='finance'))
+    tree.append(menu('finance:payment_reconciliation', '付款核销工作台', 9, route_path='/finance/payment-reconciliation', parent_code='finance'))
+    tree.extend(ops('finance:payment_reconciliation', 'payable_item'))
 
     # ===================== 办公协同 =====================
     tree.append(menu('oa', '办公协同', 70, icon='ChatDotSquare', route_path='/oa'))

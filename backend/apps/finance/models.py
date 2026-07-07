@@ -3,7 +3,7 @@ Finance models for expenses, receivables, and payables.
 
 注意: 使用字符串引用替代直接导入以避免循环依赖
 """
-from django.db import models
+from django.db import models, transaction
 from apps.core.models import BaseModel
 
 
@@ -338,13 +338,17 @@ class AccountPayable(BaseModel):
             else:
                 new_seq = 1
             self.ap_no = f'AP{date_str}{new_seq:04d}'
-        
+
         # Update status based on payment
         if self.amount_paid >= self.amount_due:
             self.status = 'PAID'
         elif self.amount_paid > 0:
             self.status = 'PARTIAL'
-        
+        elif self.status in ('PAID', 'PARTIAL'):
+            # 已付金额被回退到 0(如反核销):从付款派生状态退回 PENDING,
+            # 不影响 OVERDUE/CANCELLED 等非付款派生状态。
+            self.status = 'PENDING'
+
         super().save(*args, **kwargs)
 
 
@@ -353,6 +357,7 @@ class Payment(BaseModel):
     PAYMENT_TYPE_CHOICES = [
         ('AR', '应收款'),
         ('AP', '应付款'),
+        ('PAYABLE', '待付款项'),
     ]
     
     PAYMENT_METHOD_CHOICES = [
@@ -380,6 +385,14 @@ class Payment(BaseModel):
         blank=True,
         related_name='payments',
         verbose_name='应付账款'
+    )
+    payable_item = models.ForeignKey(
+        'finance.PayableItem',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='payments',
+        verbose_name='待付款项',
     )
     payment_date = models.DateField(verbose_name='付款日期')
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, verbose_name='付款方式')
@@ -437,6 +450,13 @@ class Payment(BaseModel):
                 AccountPayable.objects.filter(pk=self.ap_id).update(
                     amount_paid=F('amount_paid') + self.amount
                 )
+            elif self.payable_item_id:
+                from apps.finance.payable_models import PayableItem
+                with transaction.atomic():
+                    item = PayableItem.objects.select_for_update().get(pk=self.payable_item_id)
+                    item.amount_paid = item.amount_paid + self.amount
+                    item.recalc_status()
+                    item.save(update_fields=['amount_paid', 'status', 'updated_at'])
 
 
 class PaymentSchedule(BaseModel):
@@ -1396,3 +1416,6 @@ from .tax_management import (
     TaxType, TaxRate, TaxPeriod,
     TaxDeclaration, TaxDeclarationItem, TaxInvoice
 )
+
+# Import payable ledger models (payable_models.py) for Django discovery
+from .payable_models import PayableItem, PayableSettlement  # noqa: E402,F401

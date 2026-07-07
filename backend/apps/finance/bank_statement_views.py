@@ -649,6 +649,58 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
+    @action(detail=True, methods=['get'], url_path='payable-candidates')
+    def payable_candidates(self, request, pk=None):
+        """返回该条银行流水的待付款项台账核销候选(按供应商/金额/日期打分)。"""
+        from apps.finance.payable_service import match_candidates
+
+        statement = self.get_object()
+        candidates = match_candidates(statement)
+        data = [
+            {
+                'payable_item_id': c['payable_item'].id,
+                'source_type': c['payable_item'].source_type,
+                'source_no': c['payable_item'].source_no,
+                'category': c['payable_item'].category,
+                'payee_name': c['payable_item'].payee_name,
+                'amount_due': c['payable_item'].amount_due,
+                'remaining': c['payable_item'].remaining,
+                'due_date': c['payable_item'].due_date,
+                'score': c['score'],
+                'reasons': c['reasons'],
+            }
+            for c in candidates
+        ]
+        return Response(data)
+
+    @action(detail=True, methods=['get'], url_path='settlements')
+    def settlements(self, request, pk=None):
+        """返回该条银行流水已产生的核销记录明细(核销工作台"已核销展开"+反核销用)。
+
+        只返回未软删的核销记录(经默认 `objects` 管理器);字段含反核销所需
+        `settlement_id`、来源台账项摘要、本次核销额、关联付款单号。
+        """
+        statement = self.get_object()
+        qs = statement.payable_settlements.select_related('payable_item', 'payment').order_by('-created_at')
+        data = [
+            {
+                'settlement_id': s.id,
+                'payable_item': {
+                    'id': s.payable_item_id,
+                    'source_type': s.payable_item.source_type,
+                    'source_no': s.payable_item.source_no,
+                    'category': s.payable_item.category,
+                    'payee_name': s.payable_item.payee_name,
+                    'amount_due': s.payable_item.amount_due,
+                },
+                'amount': s.amount,
+                'payment_no': s.payment.payment_no if s.payment_id else '',
+                'created_at': s.created_at,
+            }
+            for s in qs
+        ]
+        return Response(data)
+
     @action(detail=True, methods=['post'])
     def match(self, request, pk=None):
         """
