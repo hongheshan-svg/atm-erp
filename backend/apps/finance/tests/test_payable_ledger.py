@@ -1404,3 +1404,146 @@ class APBankStatementMatchRetiredTest(TestCase):
         self.assertEqual(ar.status, 'PAID')
         self.assertEqual(bs.status, 'MATCHED')
         self.assertTrue(Payment.objects.filter(ar=ar).exists())
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class SharedExpenseSignalTest(TestCase):
+    """R2:公共费用分摊完成(ALLOCATED)自动登记台账;撤销分摊回收未核销台账项。"""
+
+    def _make_expense(self, code='SESIG1', status='PENDING'):
+        from apps.finance.models import SharedExpense
+        return SharedExpense.objects.create(
+            expense_no=code, name=f'办公费用-{code}', category='ADMIN',
+            expense_date='2026-07-01', period_start='2026-07-01', period_end='2026-07-31',
+            amount=Decimal('2400.00'), status=status,
+        )
+
+    def test_allocate_transition_registers_payable_item(self):
+        exp = self._make_expense()
+        self.assertFalse(PayableItem.objects.filter(source_type='shared_expense', source_id=exp.pk).exists())
+        exp.status = 'ALLOCATED'
+        exp.allocated_at = None
+        exp.save()
+        item = PayableItem.objects.get(source_type='shared_expense', source_id=exp.pk)
+        self.assertEqual(item.amount_due, Decimal('2400.00'))
+        self.assertEqual(item.payee_name, exp.name)
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+    def test_cancel_allocation_reverts_to_pending_cancels_item(self):
+        exp = self._make_expense(code='SESIG2', status='ALLOCATED')
+        item = PayableItem.objects.get(source_type='shared_expense', source_id=exp.pk)
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+        exp.status = 'PENDING'
+        exp.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+    def test_allocate_action_registers_via_api(self):
+        from rest_framework.test import APIClient
+        from apps.accounts.models import User
+        from apps.masterdata.models import Customer
+        from apps.projects.models import Project
+
+        exp = self._make_expense(code='SESIG3')
+        customer = Customer.objects.create(code='CUSESIG3', name='分摊测试客户')
+        user = User.objects.create(username='seadmin', employee_id='SEA1', is_staff=True, is_superuser=True)
+        project = Project.objects.create(code='PJSESIG3', name='分摊测试项目', customer=customer,
+                                         manager=user, start_date='2026-07-01', end_date='2026-12-31')
+        client = APIClient(); client.force_authenticate(user)
+        resp = client.post(f'/api/finance/shared-expenses/{exp.pk}/allocate/',
+                           {'project_ids': [project.pk]}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        exp.refresh_from_db()
+        self.assertEqual(exp.status, 'ALLOCATED')
+        self.assertTrue(PayableItem.objects.filter(source_type='shared_expense', source_id=exp.pk).exists())
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class TaxDeclarationSignalTest(TestCase):
+    """R2:税务申报确认申报(DECLARED)自动登记台账。"""
+
+    def _make_declaration(self, code='TDSIG1', status='APPROVED', tax_amount='2000.00'):
+        from apps.finance.tax_management import TaxDeclaration, TaxPeriod, TaxType
+        tt, _ = TaxType.objects.get_or_create(code='VATSIG', defaults={'name': '增值税(信号测试)'})
+        tp = TaxPeriod.objects.create(period_type='MONTHLY', year=2026, period=8,
+                                      start_date='2026-08-01', end_date='2026-08-31',
+                                      declare_deadline='2026-09-15')
+        return TaxDeclaration.objects.create(
+            declaration_no=code, tax_period=tp, tax_type=tt,
+            declaration_type='VAT', status=status, tax_amount=Decimal(tax_amount),
+        )
+
+    def test_declare_transition_registers_payable_item(self):
+        td = self._make_declaration()
+        self.assertFalse(PayableItem.objects.filter(source_type='tax', source_id=td.pk).exists())
+        td.status = 'DECLARED'
+        td.save()
+        item = PayableItem.objects.get(source_type='tax', source_id=td.pk)
+        self.assertEqual(item.amount_due, Decimal('2000.00'))
+        self.assertEqual(item.payee_name, '税务局')
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+    def test_declare_action_registers_via_api(self):
+        from rest_framework.test import APIClient
+        from apps.accounts.models import User
+
+        td = self._make_declaration(code='TDSIG2')
+        user = User.objects.create(username='taxadmin', employee_id='TXA1', is_staff=True, is_superuser=True)
+        client = APIClient(); client.force_authenticate(user)
+        resp = client.post(f'/api/finance/tax-declarations/{td.pk}/declare/', {}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        td.refresh_from_db()
+        self.assertEqual(td.status, 'DECLARED')
+        self.assertTrue(PayableItem.objects.filter(source_type='tax', source_id=td.pk).exists())
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class PaymentRequestSignalTest(TestCase):
+    """R2:独立付款申请(无挂靠 AP)审批通过(APPROVED)自动登记台账;取消则作废。
+    有挂靠 AP 的付款申请跳过登记,避免与该 AP 的 source_type='ap' 台账项双记。"""
+
+    def _make_request(self, code='PRSIG1', status='PENDING', ap=None, amount='1800.00'):
+        from apps.accounts.models import User
+        from apps.finance.models import PaymentRequest
+        from apps.masterdata.models import Supplier
+        sup = Supplier.objects.create(code=code, name=f'供应商{code}')
+        applicant = User.objects.create(username=f'app{code}'.lower(), employee_id=f'APP{code}')
+        return PaymentRequest.objects.create(
+            request_no=code, title='预付款申请', supplier=sup, amount=Decimal(amount),
+            expected_date='2026-08-01', reason='测试', applicant=applicant, status=status, ap=ap,
+        )
+
+    def test_approve_transition_registers_when_no_ap(self):
+        pr = self._make_request()
+        self.assertFalse(PayableItem.objects.filter(source_type='payment_request', source_id=pr.pk).exists())
+        pr.status = 'APPROVED'
+        pr.save()
+        item = PayableItem.objects.get(source_type='payment_request', source_id=pr.pk)
+        self.assertEqual(item.amount_due, Decimal('1800.00'))
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+    def test_approve_skips_registration_when_ap_linked(self):
+        # 通过挂靠一张已存在的 AP 来验证不重复登记(该 AP 自身经 register_ap_payable
+        # 已登记为 source_type='ap')。
+        from apps.masterdata.models import Supplier
+        from apps.finance.models import AccountPayable
+        sup = Supplier.objects.create(code='PRSIG2AP', name='供应商PRSIG2AP')
+        ap = AccountPayable.objects.create(supplier=sup, invoice_date='2026-07-01',
+                                           due_date='2026-08-01', amount_due=Decimal('1800.00'))
+        self.assertTrue(PayableItem.objects.filter(source_type='ap', source_id=ap.pk).exists())
+
+        pr = self._make_request(code='PRSIG2', ap=ap)
+        pr.status = 'APPROVED'
+        pr.save()
+        self.assertFalse(PayableItem.objects.filter(source_type='payment_request', source_id=pr.pk).exists())
+
+    def test_cancel_cancels_item(self):
+        pr = self._make_request(code='PRSIG3', status='APPROVED')
+        item = PayableItem.objects.get(source_type='payment_request', source_id=pr.pk)
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+        pr.status = 'CANCELLED'
+        pr.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
