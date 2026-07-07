@@ -134,7 +134,7 @@ def inherit_bom_properties(sender, instance, **kwargs):
 
 @receiver(post_save, sender=PaymentRecord)
 def register_contract_payment_payable(sender, instance, **kwargs):
-    """合同付款审批通过 → 登记待付款项台账;取消 → 台账项作废。
+    """合同付款审批通过 → 登记待付款项台账;取消/撤回(PENDING)→ 台账项作废;撤回后重新审批 → 复活。
 
     覆盖三条审批到达路径(直接 approve / submit 自动通过 / 工作流引擎完成),
     因它们最终都经 PaymentRecord.save() 落状态。register_payable/cancel_payable
@@ -151,15 +151,27 @@ def register_contract_payment_payable(sender, instance, **kwargs):
     from apps.finance.payable_adapters import cancel_payable, register_payable
 
     if instance.status == 'APPROVED':
-        _safe_sync_payable(register_payable, instance, 'contract_payment', action='登记')
+        item = _safe_sync_payable(register_payable, instance, 'contract_payment', action='登记')
+        # 撤回后重新审批通过:register_payable 的 update_or_create 不含 status,不会把撤回时
+        # 置为 CANCELLED 的台账项复活,这里显式置回 PENDING(与 item5 撤回回收配套)。
+        if item is not None and item.status == item.STATUS_CANCELLED and item.amount_paid == 0:
+            item.status = item.STATUS_PENDING
+            item.recalc_status()
+            item.save(update_fields=['status', 'updated_at'])
     elif instance.status == 'CANCELLED':
         _safe_sync_payable(cancel_payable, instance, 'contract_payment', action='作废')
+    elif instance.status == 'PENDING':
+        # 工作流"撤回"把 PaymentRecord 打回 PENDING:回收已登记且未核销的台账项,避免误核销。
+        # cancel_payable 对"新建未登记"与"已核销"场景均为安全 no-op。
+        _safe_sync_payable(cancel_payable, instance, 'contract_payment', action='撤回作废')
 
 
 def _safe_sync_payable(func, instance, source_type, *, action):
-    """执行 register_payable/cancel_payable,失败时记日志 + 发系统通知给财务管理员,不冒泡。"""
+    """执行 register_payable/cancel_payable,失败时记日志 + 发系统通知给财务管理员,不冒泡。
+
+    成功时返回底层函数结果(register_payable 返回 PayableItem,供撤回后复活判断);失败返回 None。"""
     try:
-        func(instance, source_type)
+        return func(instance, source_type)
     except Exception:
         logger.exception(
             '合同付款 %s 台账%s失败(payment_id=%s, status=%s),需人工核查或等待定时兜底任务',
