@@ -645,3 +645,160 @@ class ContractPayPatchBypassTest(TestCase):
         self.assertIn(resp.status_code, (200, 202))
         ex.refresh_from_db()
         self.assertEqual(ex.paid_amount, Decimal('0'))  # 未被 PATCH 改
+
+
+# ---------------------------------------------------------------------------
+# Item 1: AP(应付账款) Payment.ap 旧付款路径收口 —— 第一批(登记 + 只读守卫 + 双记
+# bug 修复)。是否退役 record_payment / bank-statements match / payment-requests
+# pay 这三条"直接创建 Payment(payment_type=AP)"的旧入口,设计文档已列为待用户拍板
+# 事项(见 docs/superpowers/specs/2026-07-07-ap-payment-consolidation-design.md),
+# 本批只覆盖已确认无争议的部分。
+# ---------------------------------------------------------------------------
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class APPayableSignalTest(TestCase):
+    def _make_ap(self, code, status=None, amount_paid=Decimal('0')):
+        from apps.masterdata.models import Supplier
+        from apps.finance.models import AccountPayable
+        sup = Supplier.objects.create(code=code, name=f'供应商{code}')
+        kwargs = dict(supplier=sup, invoice_date='2026-06-01', due_date='2026-07-01',
+                     amount_due=Decimal('1000.00'), amount_paid=amount_paid)
+        if status:
+            kwargs['status'] = status
+        return AccountPayable.objects.create(**kwargs)
+
+    def test_create_registers_payable_item(self):
+        ap = self._make_ap('SA1')
+        item = PayableItem.objects.get(source_type='ap', source_id=ap.pk)
+        self.assertEqual(item.amount_due, Decimal('1000.00'))
+        self.assertEqual(item.payee_name, ap.supplier.name)
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+    def test_paid_ap_not_registered(self):
+        # amount_paid>=amount_due 时 AccountPayable.save() 自动把 status 推成 PAID,
+        # 已结清无需核销,不应污染核销候选(同合同付款"已付跳过"口径)。
+        ap = self._make_ap('SA2', amount_paid=Decimal('1000.00'))
+        self.assertEqual(ap.status, 'PAID')
+        self.assertFalse(PayableItem.objects.filter(source_type='ap', source_id=ap.pk).exists())
+
+    def test_cancelled_ap_cancels_existing_item(self):
+        ap = self._make_ap('SA3')
+        self.assertTrue(PayableItem.objects.filter(source_type='ap', source_id=ap.pk).exists())
+        ap.status = 'CANCELLED'
+        ap.save()
+        item = PayableItem.objects.get(source_type='ap', source_id=ap.pk)
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+    def test_resave_is_idempotent_and_keeps_settlement_progress(self):
+        ap = self._make_ap('SA4')
+        item = PayableItem.objects.get(source_type='ap', source_id=ap.pk)
+        item.amount_paid = Decimal('300.00')
+        item.recalc_status()
+        item.save(update_fields=['amount_paid', 'status', 'updated_at'])
+
+        ap.due_date = '2026-08-01'
+        ap.save()  # 重入信号:defaults 不含 amount_paid/status,不应覆盖上面手工核销的进度
+
+        self.assertEqual(PayableItem.objects.filter(source_type='ap', source_id=ap.pk).count(), 1)
+        item.refresh_from_db()
+        self.assertEqual(item.amount_paid, Decimal('300.00'))
+        self.assertEqual(item.due_date.isoformat(), '2026-08-01')
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class APStatusPatchBypassTest(TestCase):
+    def setUp(self):
+        from rest_framework.test import APIClient
+        from apps.accounts.models import User
+        self.user = User.objects.create(username='apstatus', employee_id='APS1', is_staff=True, is_superuser=True)
+        self.client = APIClient(); self.client.force_authenticate(self.user)
+
+    def test_patch_cannot_set_status_paid(self):
+        from apps.masterdata.models import Supplier
+        from apps.finance.models import AccountPayable
+        sup = Supplier.objects.create(code='APS', name='供应商APS')
+        ap = AccountPayable.objects.create(supplier=sup, invoice_date='2026-06-01',
+                                           due_date='2026-07-01', amount_due=Decimal('1000.00'))
+        resp = self.client.patch(f'/api/finance/payables/{ap.pk}/', {'status': 'PAID'}, format='json')
+        self.assertIn(resp.status_code, (200, 202))
+        ap.refresh_from_db()
+        self.assertEqual(ap.status, 'PENDING')  # 未被 PATCH 改成 PAID
+        self.assertEqual(ap.amount_paid, Decimal('0'))  # amount_paid 早已只读,一并回归
+
+    def test_patch_cannot_set_amount_paid(self):
+        from apps.masterdata.models import Supplier
+        from apps.finance.models import AccountPayable
+        sup = Supplier.objects.create(code='APS2', name='供应商APS2')
+        ap = AccountPayable.objects.create(supplier=sup, invoice_date='2026-06-01',
+                                           due_date='2026-07-01', amount_due=Decimal('1000.00'))
+        resp = self.client.patch(f'/api/finance/payables/{ap.pk}/', {'amount_paid': '999.00'}, format='json')
+        self.assertIn(resp.status_code, (200, 202))
+        ap.refresh_from_db()
+        self.assertEqual(ap.amount_paid, Decimal('0'))
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class PaymentApDirectCreateBlockedTest(TestCase):
+    """通用 /api/finance/payments/ 不再允许直接创建 payment_type='AP' 的付款记录,
+    防止绕过待付款项台账核销、重演 Payment.ap 双轨记账。"""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+        from apps.accounts.models import User
+        self.user = User.objects.create(username='payblk', employee_id='PBK1', is_staff=True, is_superuser=True)
+        self.client = APIClient(); self.client.force_authenticate(self.user)
+
+    def test_generic_payment_create_rejects_ap_type(self):
+        from apps.masterdata.models import Supplier
+        from apps.finance.models import AccountPayable
+        sup = Supplier.objects.create(code='PBK', name='供应商PBK')
+        ap = AccountPayable.objects.create(supplier=sup, invoice_date='2026-06-01',
+                                           due_date='2026-07-01', amount_due=Decimal('1000.00'))
+        resp = self.client.post('/api/finance/payments/', {
+            'payment_type': 'AP', 'ap': ap.pk, 'amount': '500.00',
+            'payment_date': '2026-07-05', 'payment_method': 'BANK_TRANSFER',
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
+        ap.refresh_from_db()
+        self.assertEqual(ap.amount_paid, Decimal('0'))  # 未被这条本应拒绝的请求污染
+        self.assertFalse(Payment.objects.filter(ap=ap).exists())
+
+    def test_generic_payment_create_still_allows_payable_type(self):
+        # 台账内部核销走 ORM 直连不经此序列化器,但也确认本次校验没有误伤
+        # payment_type='PAYABLE' 这条正常类型的通用创建(如有其它合法调用方)。
+        item = PayableItem.objects.create(source_type='expense', source_id=777, source_no='EXP777',
+                                          category='报销', payee_name='张三', amount_due=Decimal('200.00'))
+        resp = self.client.post('/api/finance/payments/', {
+            'payment_type': 'PAYABLE', 'payable_item': item.pk, 'amount': '50.00',
+            'payment_date': '2026-07-05', 'payment_method': 'BANK_TRANSFER',
+        }, format='json')
+        self.assertEqual(resp.status_code, 201, resp.data)
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class PaymentRequestPayNoDoubleCountTest(TestCase):
+    """回归:PaymentRequestViewSet.pay() 历史上在 Payment.save() 已做 F() 递增之后,
+    又对同一笔付款额外做了一次 F() 递增,导致 ap.amount_paid 被双记。"""
+
+    def test_pay_increments_ap_amount_paid_exactly_once(self):
+        from rest_framework.test import APIClient
+        from apps.accounts.models import User
+        from apps.masterdata.models import Supplier
+        from apps.finance.models import AccountPayable, PaymentRequest
+        sup = Supplier.objects.create(code='PRQ', name='供应商PRQ')
+        ap = AccountPayable.objects.create(supplier=sup, invoice_date='2026-06-01',
+                                           due_date='2026-07-01', amount_due=Decimal('1000.00'))
+        applicant = User.objects.create(username='prqapplicant', employee_id='PRQA1')
+        pr = PaymentRequest.objects.create(
+            title='付款申请PRQ', supplier=sup, ap=ap, amount=Decimal('400.00'),
+            reason='测试', applicant=applicant, status='APPROVED',
+        )
+        approver = User.objects.create(username='prqapprover', employee_id='PRQP1',
+                                       is_staff=True, is_superuser=True)
+        client = APIClient(); client.force_authenticate(approver)
+        resp = client.post(f'/api/finance/payment-requests/{pr.pk}/pay/', {}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        ap.refresh_from_db()
+        self.assertEqual(ap.amount_paid, Decimal('400.00'))  # 而非曾经的双记 800
+        self.assertEqual(ap.status, 'PARTIAL')
