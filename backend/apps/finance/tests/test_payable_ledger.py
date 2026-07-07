@@ -2349,3 +2349,152 @@ class ServiceExpenseBackfillCommandTest(TestCase):
         self.assertEqual(
             PayableItem.objects.filter(source_type='service_expense', source_id=exp.pk).count(), 1
         )
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class AssetMaintenanceSignalTest(TestCase):
+    """资产维修完成(COMPLETED)且费用>0 → 自动登记台账;取消(CANCELLED)→ 台账项作废。"""
+
+    def _make_maintenance(self, code, cost=Decimal('500.00'), status='PENDING'):
+        from apps.accounts.models import User
+        from apps.oa.asset import Asset, AssetMaintenance
+        asset = Asset.objects.create(name=f'测试设备{code}')
+        reporter = User.objects.create(username=f'amsig{code}', employee_id=f'AMSIG{code}')
+        return AssetMaintenance.objects.create(asset=asset, reporter=reporter, cost=cost, status=status)
+
+    def test_completed_with_cost_registers_payable(self):
+        m = self._make_maintenance('C1', cost=Decimal('800.00'))
+        self.assertFalse(PayableItem.objects.filter(source_type='asset_maintenance', source_id=m.pk).exists())
+
+        m.status = 'COMPLETED'
+        m.save()
+
+        item = PayableItem.objects.get(source_type='asset_maintenance', source_id=m.pk)
+        self.assertEqual(item.amount_due, Decimal('800.00'))
+        self.assertEqual(item.source_no, m.maintenance_no)
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+    def test_completed_with_zero_cost_not_registered(self):
+        """完成但 cost=0(保养/自行处理无实际支出)不应登记空台账项。"""
+        m = self._make_maintenance('C2', cost=Decimal('0'), status='COMPLETED')
+        self.assertFalse(PayableItem.objects.filter(source_type='asset_maintenance', source_id=m.pk).exists())
+
+    def test_cancelled_cancels_existing_item(self):
+        m = self._make_maintenance('C3', cost=Decimal('300.00'), status='COMPLETED')
+        self.assertTrue(PayableItem.objects.filter(source_type='asset_maintenance', source_id=m.pk).exists())
+
+        m.status = 'CANCELLED'
+        m.save()
+
+        item = PayableItem.objects.get(source_type='asset_maintenance', source_id=m.pk)
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+    def test_cancelled_without_existing_item_is_noop(self):
+        """尚未登记(如 PENDING 直接被取消)时,取消分支的 cancel_payable 应是安全的 no-op。"""
+        m = self._make_maintenance('C4', cost=Decimal('100.00'), status='PENDING')
+        m.status = 'CANCELLED'
+        m.save()
+        self.assertFalse(PayableItem.objects.filter(source_type='asset_maintenance', source_id=m.pk).exists())
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class VehicleMaintenanceSignalTest(TestCase):
+    """车辆维护记录创建时费用>0 → 自动登记台账(无 status 字段,创建即是既成事实)。"""
+
+    def _make_vehicle(self, code):
+        from apps.oa.vehicle import Vehicle
+        return Vehicle.objects.create(plate_number=f'京B{code}', brand='测试', model='测试型号')
+
+    def test_create_with_cost_registers_payable(self):
+        from apps.oa.vehicle import VehicleMaintenance
+        vehicle = self._make_vehicle('S1')
+        m = VehicleMaintenance.objects.create(
+            vehicle=vehicle, maintenance_date='2026-07-01', cost=Decimal('450.00'), vendor='某维修厂',
+        )
+        item = PayableItem.objects.get(source_type='vehicle_maintenance', source_id=m.pk)
+        self.assertEqual(item.amount_due, Decimal('450.00'))
+        self.assertEqual(item.payee_name, '某维修厂')
+        self.assertEqual(item.source_no, f'VM{m.pk}')
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+    def test_create_with_zero_cost_not_registered(self):
+        from apps.oa.vehicle import VehicleMaintenance
+        vehicle = self._make_vehicle('S2')
+        m = VehicleMaintenance.objects.create(
+            vehicle=vehicle, maintenance_date='2026-07-01', cost=Decimal('0'),
+        )
+        self.assertFalse(PayableItem.objects.filter(source_type='vehicle_maintenance', source_id=m.pk).exists())
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class OaMaintenanceBackfillTest(TestCase):
+    """backfill_oa_maintenance_payables 回填存量已完成资产维护(cost>0)+ 全部车辆维护(cost>0)。"""
+
+    def test_backfill_asset_and_vehicle_maintenance(self):
+        from django.core.management import call_command
+        from apps.accounts.models import User
+        from apps.oa.asset import Asset, AssetMaintenance
+        from apps.oa.vehicle import Vehicle, VehicleMaintenance
+
+        asset = Asset.objects.create(name='存量设备')
+        reporter = User.objects.create(username='bfreporter', employee_id='BFREP1')
+        completed = AssetMaintenance.objects.create(
+            asset=asset, reporter=reporter, cost=Decimal('700.00'), status='COMPLETED',
+        )
+        pending = AssetMaintenance.objects.create(
+            asset=asset, reporter=reporter, cost=Decimal('200.00'), status='PENDING',
+        )
+        zero_cost_completed = AssetMaintenance.objects.create(
+            asset=asset, reporter=reporter, cost=Decimal('0'), status='COMPLETED',
+        )
+        cancelled = AssetMaintenance.objects.create(
+            asset=asset, reporter=reporter, cost=Decimal('400.00'), status='CANCELLED',
+        )
+
+        vehicle = Vehicle.objects.create(plate_number='京C12345', brand='测试', model='测试型号')
+        vm = VehicleMaintenance.objects.create(
+            vehicle=vehicle, maintenance_date='2026-07-01', cost=Decimal('300.00'),
+        )
+        vm_zero = VehicleMaintenance.objects.create(
+            vehicle=vehicle, maintenance_date='2026-07-01', cost=Decimal('0'),
+        )
+
+        # 清空信号在 create/save 时已登记的项,模拟"存量未登记"(如信号历史静默失败场景)
+        PayableItem.objects.all().delete()
+
+        call_command('backfill_oa_maintenance_payables')
+
+        self.assertTrue(
+            PayableItem.objects.filter(source_type='asset_maintenance', source_id=completed.pk).exists()
+        )
+        self.assertFalse(
+            PayableItem.objects.filter(source_type='asset_maintenance', source_id=pending.pk).exists()
+        )
+        self.assertFalse(
+            PayableItem.objects.filter(source_type='asset_maintenance', source_id=zero_cost_completed.pk).exists()
+        )
+        self.assertFalse(
+            PayableItem.objects.filter(source_type='asset_maintenance', source_id=cancelled.pk).exists()
+        )
+        self.assertTrue(
+            PayableItem.objects.filter(source_type='vehicle_maintenance', source_id=vm.pk).exists()
+        )
+        self.assertFalse(
+            PayableItem.objects.filter(source_type='vehicle_maintenance', source_id=vm_zero.pk).exists()
+        )
+
+    def test_backfill_is_idempotent(self):
+        from django.core.management import call_command
+        from apps.accounts.models import User
+        from apps.oa.asset import Asset, AssetMaintenance
+
+        asset = Asset.objects.create(name='存量设备2')
+        reporter = User.objects.create(username='bfreporter2', employee_id='BFREP2')
+        completed = AssetMaintenance.objects.create(
+            asset=asset, reporter=reporter, cost=Decimal('500.00'), status='COMPLETED',
+        )
+        call_command('backfill_oa_maintenance_payables')
+        call_command('backfill_oa_maintenance_payables')
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='asset_maintenance', source_id=completed.pk).count(), 1
+        )
