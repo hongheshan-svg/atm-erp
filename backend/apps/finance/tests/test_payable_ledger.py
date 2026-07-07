@@ -551,3 +551,27 @@ class ContractPaymentSignalTest(TestCase):
         pr.refresh_from_db()
         self.assertEqual(pr.status, 'APPROVED')
         self.assertTrue(PayableItem.objects.filter(source_type='contract_payment', source_id=pr.pk).exists())
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ContractPayRetiredTest(TestCase):
+    def test_pay_endpoint_retired_returns_409_and_no_side_effect(self):
+        from rest_framework.test import APIClient
+        from apps.accounts.models import User
+        from apps.masterdata.models import Supplier
+        from apps.purchase.contract_execution import ContractExecution, PaymentRecord
+        from apps.purchase.models import PurchaseContract, PurchaseOrder
+        sup = Supplier.objects.create(code='PR1', name='外协戊')
+        po = PurchaseOrder.objects.create(supplier=sup, delivery_date='2026-07-20')
+        contract = PurchaseContract.objects.create(po=po, supplier=sup, contract_no='PCPR1',
+                                                   title='c', contract_date='2026-06-01', total_amount=Decimal('3000'))
+        ex = ContractExecution.objects.create(contract=contract, contract_amount=Decimal('3000'))
+        pr = PaymentRecord.objects.create(execution=ex, payment_no='PAYR1', planned_date='2026-07-10',
+                                          amount=Decimal('3000.00'), status='APPROVED')
+        user = User.objects.create(username='payadmin', employee_id='PAY1', is_staff=True, is_superuser=True)
+        client = APIClient(); client.force_authenticate(user)
+        resp = client.post(f'/api/purchase/payment-records/{pr.pk}/pay/', {}, format='json')
+        self.assertEqual(resp.status_code, 409)
+        pr.refresh_from_db(); ex.refresh_from_db()
+        self.assertEqual(pr.status, 'APPROVED')          # 未被标 PAID
+        self.assertEqual(ex.paid_amount, Decimal('0'))   # execution.paid_amount 未被改
