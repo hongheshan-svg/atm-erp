@@ -181,7 +181,9 @@ class AccountPayableSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['ap_no', 'amount_paid', 'created_at', 'updated_at']
+        # status 由付款派生(AccountPayable.save()/核销 write_back 计算),不经通用 PATCH 直改,
+        # 避免绕过待付款项台账核销把 status 和实际已付金额改得不一致(同合同付款收口口径)。
+        read_only_fields = ['ap_no', 'amount_paid', 'status', 'created_at', 'updated_at']
 
     def get_project_name(self, obj):
         if obj.po and obj.po.project:
@@ -220,6 +222,21 @@ class PaymentSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = ['payment_no', 'created_at', 'updated_at']
+
+    def validate(self, attrs):
+        # 应付账款(AP)付款已收口到待付款项台账核销(settle);通用付款接口不再允许
+        # 直接登记 payment_type='AP'(会绕过 PayableItem/PayableSettlement,重演双轨记账)。
+        # 台账内部核销(payable_service.settle)与 record_payment/match 等既有旧路径都经
+        # ORM Payment.objects.create() 直连,不经本序列化器,不受此校验影响。
+        payment_type = attrs.get('payment_type') or (self.instance.payment_type if self.instance else None)
+        if payment_type == 'AP':
+            raise serializers.ValidationError({
+                'payment_type': (
+                    '应付账款付款已收口到待付款项核销台账,请通过「付款核销工作台」核销银行流水'
+                    '(POST /api/finance/payable-reconcile/settle/)登记,不支持直接创建该类型付款记录。'
+                )
+            })
+        return attrs
 
 
 class InvoiceItemSerializer(serializers.ModelSerializer):
