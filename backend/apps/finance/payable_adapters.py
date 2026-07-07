@@ -188,3 +188,39 @@ class SharedExpensePayableSource(PayableSource):
 
     def write_back(self, obj, item) -> None:
         pass
+
+
+@register_source
+class TaxPayableSource(PayableSource):
+    """缴税:TaxDeclaration 本身已有干净的"已付"语义(status='PAID' + paid_amount/paid_at),
+    直接复用,不新增字段。收款方固定为"税务局"(无对应供应商实体)。"""
+    source_type = 'tax'
+    category = '税务'
+
+    def to_payable(self, obj) -> dict:
+        due_date = obj.tax_period.declare_deadline if obj.tax_period_id else None
+        return {
+            'source_no': obj.declaration_no,
+            'payee_name': '税务局',
+            'supplier_id': None,
+            'amount_due': obj.payable_amount,
+            'currency_id': None,
+            'due_date': due_date,
+            'project_id': None,
+        }
+
+    def write_back(self, obj, item) -> None:
+        from decimal import Decimal
+        from django.utils import timezone
+        if item.status == item.STATUS_PAID and obj.status != 'PAID':
+            obj.status = 'PAID'
+            obj.paid_amount = item.amount_paid
+            if not obj.paid_at:
+                obj.paid_at = timezone.now()
+            obj.save(update_fields=['status', 'paid_amount', 'paid_at', 'updated_at'])
+        elif item.status != item.STATUS_PAID and obj.status == 'PAID':
+            # 反核销:申报单从 PAID 退回 DECLARED(已申报未缴款),清缴款额与缴款时间。
+            obj.status = 'DECLARED'
+            obj.paid_amount = Decimal('0')
+            obj.paid_at = None
+            obj.save(update_fields=['status', 'paid_amount', 'paid_at', 'updated_at'])

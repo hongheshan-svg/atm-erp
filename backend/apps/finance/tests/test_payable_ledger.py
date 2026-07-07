@@ -723,3 +723,69 @@ class SharedExpenseAdapterTest(TestCase):
         PAYABLE_SOURCES['shared_expense'].write_back(exp, item)
         exp.refresh_from_db()
         self.assertEqual(exp.status, 'ALLOCATED')
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class TaxAdapterTest(TestCase):
+    def _make_declaration(self):
+        from apps.finance.tax_management import TaxDeclaration, TaxPeriod, TaxType
+        tt = TaxType.objects.create(code='VAT', name='增值税')
+        tp = TaxPeriod.objects.create(period_type='MONTHLY', year=2026, period=7,
+                                      start_date='2026-07-01', end_date='2026-07-31',
+                                      declare_deadline='2026-08-15')
+        # TaxDeclaration.save() 每次都会用 payable_amount = tax_amount - deductible_amount
+        # 重新计算并覆盖显式传入的 payable_amount,所以这里通过 tax_amount 间接控制应缴税额。
+        return TaxDeclaration.objects.create(
+            declaration_no='TD001', tax_period=tp, tax_type=tt,
+            declaration_type='VAT', status='DECLARED', tax_amount=Decimal('1500.00'),
+        )
+
+    def test_tax_register_and_full_writeback(self):
+        from apps.finance.payable_adapters import PAYABLE_SOURCES, register_payable
+        td = self._make_declaration()
+        item = register_payable(td, 'tax')
+        self.assertIsNone(item.supplier_id)
+        self.assertEqual(item.payee_name, '税务局')
+        self.assertEqual(item.amount_due, Decimal('1500.00'))
+        self.assertEqual(item.source_no, 'TD001')
+        # register_payable 返回的是 update_or_create 的内存态对象,DateField 赋的原始
+        # 字符串不会像从数据库读回那样被反序列化(同 match_candidates 里 transaction_time
+        # 的既有量),需 refresh_from_db 后才能拿到真正的 date 对象。
+        item.refresh_from_db()
+        self.assertEqual(item.due_date.isoformat(), '2026-08-15')
+
+        item.amount_paid = Decimal('1500.00')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['tax'].write_back(td, item)
+        td.refresh_from_db()
+        self.assertEqual(td.status, 'PAID')
+        self.assertEqual(td.paid_amount, Decimal('1500.00'))
+        self.assertIsNotNone(td.paid_at)
+
+        # 幂等:对已 PAID 的申报单再次 write_back,不应重复改写缴款时间。
+        first_paid_at = td.paid_at
+        PAYABLE_SOURCES['tax'].write_back(td, item)
+        td.refresh_from_db()
+        self.assertEqual(td.paid_at, first_paid_at)
+
+    def test_tax_writeback_reverses_on_unsettle(self):
+        from apps.accounts.models import User
+        from apps.finance.models import BankStatement
+        from apps.finance.payable_adapters import register_payable
+        from apps.finance.payable_service import settle, unsettle
+        u = User.objects.create(username='taxop', employee_id='TAX1')
+        td = self._make_declaration()
+        item = register_payable(td, 'tax')
+        bs = BankStatement(transaction_type='DEBIT', debit_amount=Decimal('1500.00'),
+                           counterparty_name='税务局', transaction_time='2026-07-02 00:00:00+00')
+        bs.save()
+        s = settle(bs, [{'payable_item_id': item.pk, 'amount': Decimal('1500.00')}], u)[0]
+        td.refresh_from_db()
+        self.assertEqual(td.status, 'PAID')
+
+        unsettle(s, u)
+        td.refresh_from_db()
+        self.assertEqual(td.status, 'DECLARED')
+        self.assertEqual(td.paid_amount, Decimal('0'))
+        self.assertIsNone(td.paid_at)
