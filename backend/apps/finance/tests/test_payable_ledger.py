@@ -575,3 +575,37 @@ class ContractPayRetiredTest(TestCase):
         pr.refresh_from_db(); ex.refresh_from_db()
         self.assertEqual(pr.status, 'APPROVED')          # 未被标 PAID
         self.assertEqual(ex.paid_amount, Decimal('0'))   # execution.paid_amount 未被改
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ContractBackfillTest(TestCase):
+    def _make_pr(self, no, status, code):
+        from apps.masterdata.models import Supplier
+        from apps.purchase.contract_execution import ContractExecution, PaymentRecord
+        from apps.purchase.models import PurchaseContract, PurchaseOrder
+        sup = Supplier.objects.create(code=code, name=f'外协{code}')
+        po = PurchaseOrder.objects.create(supplier=sup, delivery_date='2026-07-20')
+        contract = PurchaseContract.objects.create(po=po, supplier=sup, contract_no=f'PC{code}',
+                                                   title='c', contract_date='2026-06-01', total_amount=Decimal('3000'))
+        ex = ContractExecution.objects.create(contract=contract, contract_amount=Decimal('3000'))
+        return PaymentRecord.objects.create(execution=ex, payment_no=no, planned_date='2026-07-10',
+                                            amount=Decimal('1000.00'), status=status)
+
+    def test_backfill_registers_only_approved(self):
+        from django.core.management import call_command
+        approved = self._make_pr('BF1', 'APPROVED', 'BFA')
+        paid = self._make_pr('BF2', 'PAID', 'BFP')
+        # 清掉信号在 create 时可能登记的项,模拟"存量未登记"
+        PayableItem.objects.all().delete()
+        call_command('backfill_contract_payables')
+        self.assertTrue(PayableItem.objects.filter(source_type='contract_payment', source_id=approved.pk).exists())
+        self.assertFalse(PayableItem.objects.filter(source_type='contract_payment', source_id=paid.pk).exists())
+
+    def test_backfill_is_idempotent(self):
+        from django.core.management import call_command
+        approved = self._make_pr('BF3', 'APPROVED', 'BFI')
+        PayableItem.objects.all().delete()
+        call_command('backfill_contract_payables')
+        call_command('backfill_contract_payables')
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='contract_payment', source_id=approved.pk).count(), 1)
