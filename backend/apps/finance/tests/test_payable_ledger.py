@@ -802,3 +802,19 @@ class PaymentRequestPayNoDoubleCountTest(TestCase):
         ap.refresh_from_db()
         self.assertEqual(ap.amount_paid, Decimal('400.00'))  # 而非曾经的双记 800
         self.assertEqual(ap.status, 'PARTIAL')
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class PaymentReconciliationPermissionSeedTest(TestCase):
+    def test_init_permissions_creates_payment_reconciliation_menu(self):
+        from django.core.management import call_command
+        from apps.core.permission_models_new import Permission
+        call_command('init_permissions')
+        perm = Permission.objects.get(code='finance:payment_reconciliation')
+        self.assertEqual(perm.name, '付款核销工作台')
+        self.assertEqual(perm.type, 'menu')
+        self.assertEqual(perm.route_path, '/finance/payment-reconciliation')
+        self.assertEqual(perm.sort_order, 9)
+        parent = perm.parent
+        self.assertIsNotNone(parent)
+        self.assertEqual(parent.code, 'finance')
