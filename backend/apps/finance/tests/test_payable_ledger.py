@@ -609,3 +609,39 @@ class ContractBackfillTest(TestCase):
         call_command('backfill_contract_payables')
         self.assertEqual(
             PayableItem.objects.filter(source_type='contract_payment', source_id=approved.pk).count(), 1)
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ContractPayPatchBypassTest(TestCase):
+    def setUp(self):
+        from rest_framework.test import APIClient
+        from apps.accounts.models import User
+        self.user = User.objects.create(username='pbadmin', employee_id='PB1', is_staff=True, is_superuser=True)
+        self.client = APIClient(); self.client.force_authenticate(self.user)
+
+    def _make(self):
+        from apps.masterdata.models import Supplier
+        from apps.purchase.contract_execution import ContractExecution, PaymentRecord
+        from apps.purchase.models import PurchaseContract, PurchaseOrder
+        sup = Supplier.objects.create(code='PB', name='外协PB')
+        po = PurchaseOrder.objects.create(supplier=sup, delivery_date='2026-07-20')
+        contract = PurchaseContract.objects.create(po=po, supplier=sup, contract_no='PCPB',
+                                                   title='c', contract_date='2026-06-01', total_amount=Decimal('3000'))
+        ex = ContractExecution.objects.create(contract=contract, contract_amount=Decimal('3000'))
+        pr = PaymentRecord.objects.create(execution=ex, payment_no='PBP1', planned_date='2026-07-10',
+                                          amount=Decimal('3000.00'), status='APPROVED')
+        return ex, pr
+
+    def test_patch_cannot_set_payment_status_paid(self):
+        ex, pr = self._make()
+        resp = self.client.patch(f'/api/purchase/payment-records/{pr.pk}/', {'status': 'PAID'}, format='json')
+        self.assertIn(resp.status_code, (200, 202))
+        pr.refresh_from_db()
+        self.assertEqual(pr.status, 'APPROVED')  # 未被 PATCH 改成 PAID
+
+    def test_patch_cannot_set_execution_paid_amount(self):
+        ex, pr = self._make()
+        resp = self.client.patch(f'/api/purchase/contract-executions/{ex.pk}/', {'paid_amount': '9999.00'}, format='json')
+        self.assertIn(resp.status_code, (200, 202))
+        ex.refresh_from_db()
+        self.assertEqual(ex.paid_amount, Decimal('0'))  # 未被 PATCH 改

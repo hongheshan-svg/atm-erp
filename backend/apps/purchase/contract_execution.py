@@ -308,7 +308,7 @@ class PaymentRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaymentRecord
         fields = '__all__'
-        read_only_fields = ['created_by', 'updated_by', 'approver', 'approved_at']
+        read_only_fields = ['created_by', 'updated_by', 'approver', 'approved_at', 'status', 'actual_date']
 
 
 class ContractIssueSerializer(serializers.ModelSerializer):
@@ -339,7 +339,7 @@ class ContractExecutionSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContractExecution
         fields = '__all__'
-        read_only_fields = ['created_by', 'updated_by']
+        read_only_fields = ['created_by', 'updated_by', 'paid_amount']
 
 
 class ContractExecutionListSerializer(serializers.ModelSerializer):
