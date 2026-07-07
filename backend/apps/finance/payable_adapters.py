@@ -259,3 +259,54 @@ class PaymentRequestPayableSource(PayableSource):
             obj.paid_at = None
             obj.payment = None
             obj.save(update_fields=['status', 'paid_at', 'payment', 'updated_at'])
+
+
+@register_source
+class AssetMaintenancePayableSource(PayableSource):
+    """资产维护:AssetMaintenance.status 是处理进度机(PENDING/IN_PROGRESS/COMPLETED/
+    CANCELLED,AssetMaintenanceViewSet.assign()/complete() 依赖它推进维修流程),不含任何
+    付款语义、无 amount_paid/paid_at 等字段。统一台账 PayableItem 是该来源付款事实的
+    唯一来源,write_back 为 no-op,不回写/不新增字段,避免污染源单据既有的进度状态机
+    (settle/unsettle 对源单据均无副作用)。
+    该模型本身无供应商/服务商字段(处理人 handler 是内部员工,非外部维修商),
+    payee_name 留空,人工核对时以 source_no(维修单号)定位。"""
+    source_type = 'asset_maintenance'
+    category = '资产维护'
+
+    def to_payable(self, obj) -> dict:
+        return {
+            'source_no': obj.maintenance_no,
+            'payee_name': '',
+            'supplier_id': None,
+            'amount_due': obj.cost,
+            'currency_id': None,
+            'due_date': obj.end_date,
+            'project_id': None,
+        }
+
+    def write_back(self, obj, item) -> None:
+        pass
+
+
+@register_source
+class VehicleMaintenancePayableSource(PayableSource):
+    """车辆维护:VehicleMaintenance 仅是维护记录(vehicle/maintenance_date/cost/vendor),
+    无 status、无 amount_paid/paid 等付款字段,也无审批状态机。统一台账 PayableItem 是
+    该来源付款事实的唯一来源,write_back 为 no-op,不回写/不新增字段(settle/unsettle
+    对源单据均无副作用)。payee_name 取服务商 vendor;该模型无维护单号,source_no 用 VM<pk>。"""
+    source_type = 'vehicle_maintenance'
+    category = '车辆维护'
+
+    def to_payable(self, obj) -> dict:
+        return {
+            'source_no': f'VM{obj.pk}',
+            'payee_name': obj.vendor or '',
+            'supplier_id': None,
+            'amount_due': obj.cost,
+            'currency_id': None,
+            'due_date': obj.maintenance_date,
+            'project_id': None,
+        }
+
+    def write_back(self, obj, item) -> None:
+        pass
