@@ -645,3 +645,81 @@ class ContractPayPatchBypassTest(TestCase):
         self.assertIn(resp.status_code, (200, 202))
         ex.refresh_from_db()
         self.assertEqual(ex.paid_amount, Decimal('0'))  # 未被 PATCH 改
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class OutsourceAdapterTest(TestCase):
+    """委外加工:OutsourceOrder.status 是收货/加工进度机,无付款语义,write_back 为
+    no-op(付款事实由统一台账维护)。这里断言 register 取数正确,以及 write_back 无论
+    正向核销/反核销都不改动源单据既有的进度状态(不破坏其状态机)。"""
+
+    def _make_order(self):
+        from apps.masterdata.models import Supplier
+        from apps.purchase.outsource_models import OutsourceOrder
+        sup = Supplier.objects.create(code='OS1', name='外协商甲')
+        return OutsourceOrder.objects.create(
+            supplier=sup, required_date='2026-07-20', status='CONFIRMED',
+            total_amount=Decimal('4000.00'), tax_amount=Decimal('520.00'),
+            total_with_tax=Decimal('4520.00'),
+        )
+
+    def test_outsource_register_and_writeback_is_noop(self):
+        from apps.finance.payable_adapters import PAYABLE_SOURCES, register_payable
+        order = self._make_order()
+        item = register_payable(order, 'outsource')
+        self.assertEqual(item.payee_name, '外协商甲')
+        self.assertEqual(item.supplier_id, order.supplier_id)
+        self.assertEqual(item.amount_due, Decimal('4520.00'))
+        self.assertEqual(item.source_no, order.order_no)
+
+        item.amount_paid = Decimal('4520.00')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['outsource'].write_back(order, item)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'CONFIRMED')  # no-op:进度状态机不受付款影响
+
+        # 反核销(台账退回未结清),no-op 仍不应改动源单据状态。
+        item.amount_paid = Decimal('0')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['outsource'].write_back(order, item)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'CONFIRMED')
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class SharedExpenseAdapterTest(TestCase):
+    """公共费用:SharedExpense.status 是分摊进度机(allocate() 依赖 status=='ALLOCATED'
+    拒绝重复分摊),无付款语义,write_back 为 no-op,同上断言不破坏其状态机。"""
+
+    def _make_expense(self):
+        from apps.finance.models import SharedExpense
+        return SharedExpense.objects.create(
+            expense_no='SE001', name='办公室房租-2026年7月', category='RENT',
+            expense_date='2026-07-01', period_start='2026-07-01', period_end='2026-07-31',
+            amount=Decimal('6000.00'), status='ALLOCATED',
+        )
+
+    def test_shared_expense_register_and_writeback_is_noop(self):
+        from apps.finance.payable_adapters import PAYABLE_SOURCES, register_payable
+        exp = self._make_expense()
+        item = register_payable(exp, 'shared_expense')
+        self.assertIsNone(item.supplier_id)
+        self.assertEqual(item.amount_due, Decimal('6000.00'))
+        self.assertEqual(item.source_no, 'SE001')
+        self.assertEqual(item.payee_name, '办公室房租-2026年7月')
+
+        item.amount_paid = Decimal('6000.00')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['shared_expense'].write_back(exp, item)
+        exp.refresh_from_db()
+        self.assertEqual(exp.status, 'ALLOCATED')  # no-op:分摊状态机不受付款影响
+
+        item.amount_paid = Decimal('0')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['shared_expense'].write_back(exp, item)
+        exp.refresh_from_db()
+        self.assertEqual(exp.status, 'ALLOCATED')

@@ -137,3 +137,54 @@ class ContractPaymentSource(PayableSource):
         execution = obj.execution
         paid = execution.payments.filter(status='PAID').aggregate(s=Sum('amount'))['s'] or Decimal('0')
         type(execution).objects.filter(pk=execution.pk).update(paid_amount=paid)
+
+
+@register_source
+class OutsourcePayableSource(PayableSource):
+    """委外加工:OutsourceOrder.status 是收货/加工进度机(DRAFT/CONFIRMED/PROCESSING/
+    PARTIAL/COMPLETED/CANCELLED,outsource_views.py 里有基于它的状态机守卫),不含任何
+    付款语义、也无 amount_paid 等字段。统一台账 PayableItem 是该来源付款事实的唯一来源,
+    PayableSettlement 已完整记账,故 write_back 为 no-op,不回写/不新增字段,避免污染
+    源单据既有的进度状态机(settle/unsettle 对源单据均无副作用)。"""
+    source_type = 'outsource'
+    category = '委外加工'
+
+    def to_payable(self, obj) -> dict:
+        return {
+            'source_no': obj.order_no,
+            'payee_name': obj.supplier.name if obj.supplier_id else '',
+            'supplier_id': obj.supplier_id,
+            'amount_due': obj.total_with_tax,
+            'currency_id': None,
+            'due_date': obj.required_date,
+            'project_id': obj.project_id,
+        }
+
+    def write_back(self, obj, item) -> None:
+        pass
+
+
+@register_source
+class SharedExpensePayableSource(PayableSource):
+    """公共费用:SharedExpense.status 是分摊进度机(DRAFT/PENDING/ALLOCATED/CANCELLED,
+    views.py 的 allocate() 依赖 status=='ALLOCATED' 判断"已分摊"并拒绝重复分摊),不含
+    付款语义。统一台账 PayableItem 是该来源付款事实的唯一来源,write_back 为 no-op,
+    不回写/不新增字段,避免破坏分摊状态机(settle/unsettle 对源单据均无副作用)。"""
+    source_type = 'shared_expense'
+    category = '公共费用'
+
+    def to_payable(self, obj) -> dict:
+        # SharedExpense 无供应商字段(房租/水电等一般无供应商主数据),payee_name 用
+        # 费用名称(如"办公室房租-2026年7月")便于人工核对/核销台账检索。
+        return {
+            'source_no': obj.expense_no,
+            'payee_name': obj.name,
+            'supplier_id': None,
+            'amount_due': obj.amount,
+            'currency_id': None,
+            'due_date': obj.expense_date,
+            'project_id': None,
+        }
+
+    def write_back(self, obj, item) -> None:
+        pass

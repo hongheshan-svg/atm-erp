@@ -115,9 +115,16 @@ def settle(bank_statement, allocations, user):
 
 def _load_source_obj(item):
     """按 PayableItem.source_type 映射回真实来源单据对象,供适配器 write_back 使用。"""
-    from apps.finance.models import AccountPayable, Expense
+    from apps.finance.models import AccountPayable, Expense, SharedExpense
     from apps.purchase.contract_execution import PaymentRecord
-    model = {'ap': AccountPayable, 'expense': Expense, 'contract_payment': PaymentRecord}.get(item.source_type)
+    from apps.purchase.outsource_models import OutsourceOrder
+    model = {
+        'ap': AccountPayable,
+        'expense': Expense,
+        'contract_payment': PaymentRecord,
+        'outsource': OutsourceOrder,
+        'shared_expense': SharedExpense,
+    }.get(item.source_type)
     return model.objects.filter(pk=item.source_id).first() if model else None
 
 
