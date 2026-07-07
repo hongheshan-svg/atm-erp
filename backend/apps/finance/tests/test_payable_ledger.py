@@ -425,6 +425,21 @@ class PayableApiTest(TestCase):
         results = resp.data['results'] if isinstance(resp.data, dict) else resp.data
         self.assertGreaterEqual(len(results), 1)
 
+    def test_payable_items_list_filters_by_amount_and_due_date_range(self):
+        self._make_ap_and_bs()  # amount_due=1000.00, due_date=2026-07-01
+        resp_in_range = self.client.get('/api/finance/payable-items/', {
+            'amount_due__gte': '500', 'amount_due__lte': '1500',
+            'due_date__gte': '2026-06-01', 'due_date__lte': '2026-07-31',
+        })
+        self.assertEqual(resp_in_range.status_code, 200)
+        results_in = resp_in_range.data['results'] if isinstance(resp_in_range.data, dict) else resp_in_range.data
+        self.assertGreaterEqual(len(results_in), 1)
+
+        resp_out_of_range = self.client.get('/api/finance/payable-items/', {'amount_due__gte': '2000'})
+        self.assertEqual(resp_out_of_range.status_code, 200)
+        results_out = resp_out_of_range.data['results'] if isinstance(resp_out_of_range.data, dict) else resp_out_of_range.data
+        self.assertEqual(len(results_out), 0)
+
     def test_candidates_endpoint(self):
         ap, item, bs = self._make_ap_and_bs()
         resp = self.client.get(f'/api/finance/bank-statements/{bs.id}/payable-candidates/')
