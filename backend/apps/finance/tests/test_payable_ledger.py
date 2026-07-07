@@ -1931,3 +1931,270 @@ class Phase2BackfillCommandTest(TestCase):
 
         # 验证总共3条台账项
         self.assertEqual(PayableItem.objects.count(), 3)
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ServiceExpenseAdapterTest(TestCase):
+    """现场服务费报销:ServiceExpense.status 是审批进度机(PENDING/APPROVED/REJECTED),
+    旧逻辑(approve())只把已批准费用汇总进 ServiceOrder.actual_cost(成本口径统计),
+    从未创建 AccountPayable,是完全游离于 finance 之外的费用来源。write_back 为
+    no-op(付款事实由统一台账维护),同 Outsource/SharedExpense 断言不破坏其审批
+    状态机。payee_name 优先取该笔费用挂靠的派工记录(dispatch)的技术人员姓名,
+    未挂靠派工记录时回退到费用提交人 created_by。"""
+
+    def _make_order(self, code='SVCEXP1', with_project=True):
+        from apps.masterdata.models import Customer
+        from apps.projects.field_service import ServiceOrder
+
+        customer = Customer.objects.create(code=f'CUS{code}', name=f'客户{code}')
+        project = None
+        if with_project:
+            from apps.accounts.models import User
+            from apps.projects.models import Project
+
+            manager = User.objects.create(username=f'mgr{code}'.lower(), employee_id=f'MGR{code}')
+            project = Project.objects.create(
+                code=f'PJ{code}', name=f'项目{code}', customer=customer, manager=manager,
+                start_date='2026-07-01', end_date='2026-12-31',
+            )
+        return ServiceOrder.objects.create(
+            order_no=code, service_type='MAINTENANCE', title=f'服务-{code}',
+            customer=customer, project=project,
+            service_address='测试地址', contact_name='张三', contact_phone='13800000000',
+        )
+
+    def test_register_payee_name_from_dispatch_technician(self):
+        from apps.accounts.models import User
+        from apps.finance.payable_adapters import register_payable
+        from apps.projects.field_service import ServiceDispatch, ServiceExpense
+
+        order = self._make_order()
+        tech = User.objects.create(
+            username='techsvc1', employee_id='TECHSVC1', first_name='强', last_name='王'
+        )
+        dispatch = ServiceDispatch.objects.create(
+            service_order=order, technician=tech,
+            planned_start='2026-07-05', planned_end='2026-07-08',
+        )
+        expense = ServiceExpense.objects.create(
+            service_order=order, dispatch=dispatch, expense_type='TRAVEL',
+            description='高铁往返', amount=Decimal('560.00'), expense_date='2026-07-06',
+            status='APPROVED',
+        )
+        item = register_payable(expense, 'service_expense')
+        self.assertEqual(item.source_no, f'SE{expense.pk}')
+        self.assertEqual(item.payee_name, tech.get_full_name())
+        self.assertEqual(item.amount_due, Decimal('560.00'))
+        self.assertIsNone(item.supplier_id)
+        # register_payable 返回的是 update_or_create 的内存态对象,DateField 赋的原始
+        # 字符串不会像从数据库读回那样被反序列化,需 refresh_from_db 后才能拿到真正的
+        # date 对象(同 TaxAdapterTest.test_tax_register_and_full_writeback)。
+        item.refresh_from_db()
+        self.assertEqual(item.due_date.isoformat(), '2026-07-06')
+        self.assertEqual(item.project_id, order.project_id)
+
+    def test_register_payee_name_falls_back_to_created_by_without_dispatch(self):
+        from apps.accounts.models import User
+        from apps.finance.payable_adapters import register_payable
+        from apps.projects.field_service import ServiceExpense
+
+        order = self._make_order(code='SVCEXP2', with_project=False)
+        submitter = User.objects.create(
+            username='submitter1', employee_id='SUB1', first_name='芳', last_name='李'
+        )
+        expense = ServiceExpense.objects.create(
+            service_order=order, expense_type='MATERIAL',
+            description='现场耗材', amount=Decimal('200.00'), expense_date='2026-07-07',
+            status='APPROVED', created_by=submitter,
+        )
+        item = register_payable(expense, 'service_expense')
+        self.assertEqual(item.payee_name, submitter.get_full_name())
+        self.assertIsNone(item.project_id)
+
+    def test_register_payee_name_blank_without_dispatch_or_created_by(self):
+        from apps.finance.payable_adapters import register_payable
+        from apps.projects.field_service import ServiceExpense
+
+        order = self._make_order(code='SVCEXP5', with_project=False)
+        expense = ServiceExpense.objects.create(
+            service_order=order, expense_type='OTHER',
+            description='无人提交', amount=Decimal('10.00'), expense_date='2026-07-07',
+            status='APPROVED',
+        )
+        item = register_payable(expense, 'service_expense')
+        self.assertEqual(item.payee_name, '')
+
+    def test_writeback_is_noop(self):
+        from apps.finance.payable_adapters import PAYABLE_SOURCES, register_payable
+        from apps.projects.field_service import ServiceExpense
+
+        order = self._make_order(code='SVCEXP3', with_project=False)
+        expense = ServiceExpense.objects.create(
+            service_order=order, expense_type='OTHER',
+            description='杂费', amount=Decimal('100.00'), expense_date='2026-07-08',
+            status='APPROVED',
+        )
+        item = register_payable(expense, 'service_expense')
+        item.amount_paid = Decimal('100.00')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['service_expense'].write_back(expense, item)
+        expense.refresh_from_db()
+        self.assertEqual(expense.status, 'APPROVED')  # no-op:审批状态机不受付款影响
+
+        # 反核销(台账退回未结清),no-op 仍不应改动源单据状态。
+        item.amount_paid = Decimal('0')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['service_expense'].write_back(expense, item)
+        expense.refresh_from_db()
+        self.assertEqual(expense.status, 'APPROVED')
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ServiceExpenseSignalTest(TestCase):
+    """现场服务费:审批通过(APPROVED)自动登记台账;拒绝(REJECTED)作废对应台账项;
+    拒绝后重新审批通过 → 复活(与合同付款撤回复活原则一致)。"""
+
+    def _make_order(self, code='SESIG1'):
+        from apps.masterdata.models import Customer
+        from apps.projects.field_service import ServiceOrder
+
+        customer = Customer.objects.create(code=f'CUS{code}', name=f'客户{code}')
+        return ServiceOrder.objects.create(
+            order_no=code, service_type='REPAIR', title=f'服务-{code}',
+            customer=customer, service_address='测试地址',
+            contact_name='张三', contact_phone='13800000001',
+        )
+
+    def _make_expense(self, code='SESIG1', status='PENDING', amount='300.00'):
+        from apps.projects.field_service import ServiceExpense
+
+        order = self._make_order(code)
+        return ServiceExpense.objects.create(
+            service_order=order, expense_type='TRANSPORT',
+            description='打车费', amount=Decimal(amount), expense_date='2026-07-05',
+            status=status,
+        )
+
+    def test_approve_transition_registers_payable_item(self):
+        exp = self._make_expense()
+        self.assertFalse(PayableItem.objects.filter(source_type='service_expense', source_id=exp.pk).exists())
+        exp.status = 'APPROVED'
+        exp.save()
+        item = PayableItem.objects.get(source_type='service_expense', source_id=exp.pk)
+        self.assertEqual(item.amount_due, Decimal('300.00'))
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+    def test_reject_after_approve_cancels_item(self):
+        exp = self._make_expense(code='SESIG2', status='APPROVED')
+        item = PayableItem.objects.get(source_type='service_expense', source_id=exp.pk)
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+        exp.status = 'REJECTED'
+        exp.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+    def test_reject_without_prior_registration_is_safe_noop(self):
+        exp = self._make_expense(code='SESIG5', status='PENDING')
+        exp.status = 'REJECTED'
+        exp.save()  # 从未登记过,cancel_payable 应安全跳过、不报错
+        self.assertFalse(PayableItem.objects.filter(source_type='service_expense', source_id=exp.pk).exists())
+
+    def test_reapprove_after_reject_revives_item(self):
+        exp = self._make_expense(code='SESIG3', status='APPROVED')
+        item = PayableItem.objects.get(source_type='service_expense', source_id=exp.pk)
+
+        exp.status = 'REJECTED'
+        exp.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+        exp.status = 'APPROVED'
+        exp.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+    def test_approve_action_registers_via_api(self):
+        from rest_framework.test import APIClient
+
+        from apps.accounts.models import User
+
+        exp = self._make_expense(code='SESIG4')
+        user = User.objects.create(
+            username='seapprover', employee_id='SEAPP1', is_staff=True, is_superuser=True
+        )
+        client = APIClient()
+        client.force_authenticate(user)
+        resp = client.post(f'/api/projects/service-expenses/{exp.pk}/approve/', {}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        exp.refresh_from_db()
+        self.assertEqual(exp.status, 'APPROVED')
+        self.assertTrue(PayableItem.objects.filter(source_type='service_expense', source_id=exp.pk).exists())
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ServiceExpenseBackfillCommandTest(TestCase):
+    """backfill_service_expense_payables:回填 APPROVED 的现场服务费报销;
+    PENDING/REJECTED 跳过;重复运行幂等。"""
+
+    def _make_order(self, code):
+        from apps.masterdata.models import Customer
+        from apps.projects.field_service import ServiceOrder
+
+        customer = Customer.objects.create(code=f'CUS{code}', name=f'客户{code}')
+        return ServiceOrder.objects.create(
+            order_no=code, service_type='REPAIR', title=f'服务-{code}',
+            customer=customer, service_address='测试地址',
+            contact_name='张三', contact_phone='13800000002',
+        )
+
+    def _run_backfill_command(self):
+        from django.core.management import call_command
+        call_command('backfill_service_expense_payables')
+
+    def test_backfill_only_approved(self):
+        from apps.projects.field_service import ServiceExpense
+
+        approved = ServiceExpense.objects.create(
+            service_order=self._make_order('BKSE1'), expense_type='TRAVEL',
+            description='差旅', amount=Decimal('400.00'), expense_date='2026-07-01',
+            status='APPROVED',
+        )
+        pending = ServiceExpense.objects.create(
+            service_order=self._make_order('BKSE2'), expense_type='MEAL',
+            description='餐费', amount=Decimal('80.00'), expense_date='2026-07-01',
+            status='PENDING',
+        )
+        rejected = ServiceExpense.objects.create(
+            service_order=self._make_order('BKSE3'), expense_type='OTHER',
+            description='其他', amount=Decimal('50.00'), expense_date='2026-07-01',
+            status='REJECTED',
+        )
+
+        self._run_backfill_command()
+
+        self.assertTrue(
+            PayableItem.objects.filter(source_type='service_expense', source_id=approved.pk).exists()
+        )
+        self.assertFalse(
+            PayableItem.objects.filter(source_type='service_expense', source_id=pending.pk).exists()
+        )
+        self.assertFalse(
+            PayableItem.objects.filter(source_type='service_expense', source_id=rejected.pk).exists()
+        )
+
+    def test_backfill_idempotent(self):
+        from apps.projects.field_service import ServiceExpense
+
+        exp = ServiceExpense.objects.create(
+            service_order=self._make_order('BKSE4'), expense_type='TOOL',
+            description='工具', amount=Decimal('120.00'), expense_date='2026-07-01',
+            status='APPROVED',
+        )
+        self._run_backfill_command()
+        self._run_backfill_command()
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='service_expense', source_id=exp.pk).count(), 1
+        )
