@@ -1280,3 +1280,321 @@ class PaymentRequestAdapterTest(TestCase):
         self.assertEqual(pr.status, 'APPROVED')
         self.assertIsNone(pr.paid_at)
         self.assertIsNone(pr.payment_id)
+
+
+# ==============================================================================
+# Phase 2 Backfill 命令测试 - 三来源回填与幂等性
+#
+# R2 协调决定:
+# - OutsourceOrder: 不回填(内联创建AP已被 backfill_payables 覆盖)
+# - PaymentRequest: 仅回填 ap__isnull=True 的独立申请
+# - TaxDeclaration: 正常回填 DECLARED 状态
+# - SharedExpense: 正常回填 ALLOCATED 状态
+# ==============================================================================
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class Phase2BackfillCommandTest(TestCase):
+    """测试 backfill_phase2_payables 命令:
+    1. tax/shared_expense 全量应付状态回填
+    2. payment_request 仅回填独立申请(ap=null)
+    3. outsource 不回填(其应付已随AP回填)
+    4. 幂等性:重复运行不重复建项
+    """
+
+    def setUp(self):
+        from apps.masterdata.models import Supplier
+        from apps.accounts.models import User
+        self.supplier = Supplier.objects.create(code='BKFILL', name='回填供应商')
+        self.user = User.objects.create(username='bkfill_op', employee_id='BKFILL1')
+
+    def _run_backfill_command(self):
+        from django.core.management import call_command
+        call_command('backfill_phase2_payables')
+
+    # --------- SharedExpense (公共费用) ---------
+
+    def test_backfill_shared_expense_only_allocated(self):
+        """回填 ALLOCATED 的公共费用，跳过 DRAFT/PENDING/CANCELLED"""
+        from apps.finance.models import SharedExpense
+        from apps.finance.payable_models import PayableItem
+
+        # 应付:ALLOCATED
+        allocated = SharedExpense.objects.create(
+            name='房租-2026年7月', category='RENT',
+            expense_date='2026-07-01', period_start='2026-07-01', period_end='2026-07-31',
+            amount=Decimal('10000'), status='ALLOCATED',
+        )
+
+        # 不应付:DRAFT/PENDING/CANCELLED
+        draft = SharedExpense.objects.create(
+            name='水电-2026年7月', category='UTILITIES',
+            expense_date='2026-07-01', period_start='2026-07-01', period_end='2026-07-31',
+            amount=Decimal('5000'), status='DRAFT',
+        )
+        pending = SharedExpense.objects.create(
+            name='物业-2026年7月', category='ADMIN',
+            expense_date='2026-07-01', period_start='2026-07-01', period_end='2026-07-31',
+            amount=Decimal('3000'), status='PENDING',
+        )
+        cancelled = SharedExpense.objects.create(
+            name='维修-2026年7月', category='OTHER',
+            expense_date='2026-07-01', period_start='2026-07-01', period_end='2026-07-31',
+            amount=Decimal('2000'), status='CANCELLED',
+        )
+
+        self._run_backfill_command()
+
+        # 应付的应被回填
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='shared_expense', source_id=allocated.pk).count(), 1
+        )
+
+        # 不应付的不应被回填
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='shared_expense', source_id=draft.pk).count(), 0
+        )
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='shared_expense', source_id=pending.pk).count(), 0
+        )
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='shared_expense', source_id=cancelled.pk).count(), 0
+        )
+
+    def test_backfill_shared_expense_idempotent(self):
+        """回填命令幂等性:重复运行同一费用只生成1条台账项"""
+        from apps.finance.models import SharedExpense
+        from apps.finance.payable_models import PayableItem
+
+        exp = SharedExpense.objects.create(
+            name='房租-2026年7月', category='RENT',
+            expense_date='2026-07-01', period_start='2026-07-01', period_end='2026-07-31',
+            amount=Decimal('10000'), status='ALLOCATED',
+        )
+
+        self._run_backfill_command()
+        count_after_first = PayableItem.objects.filter(source_type='shared_expense', source_id=exp.pk).count()
+        self.assertEqual(count_after_first, 1)
+
+        # 再运行一次
+        self._run_backfill_command()
+        count_after_second = PayableItem.objects.filter(source_type='shared_expense', source_id=exp.pk).count()
+        self.assertEqual(count_after_second, 1)
+
+    # --------- TaxDeclaration (缴税) ---------
+
+    def test_backfill_tax_only_declared(self):
+        """回填 DECLARED 的申报单，跳过 DRAFT/SUBMITTED/PAID/REJECTED"""
+        from apps.finance.tax_management import TaxDeclaration, TaxPeriod, TaxType
+        from apps.finance.payable_models import PayableItem
+
+        tt = TaxType.objects.create(code='VAT', name='增值税')
+        tp = TaxPeriod.objects.create(
+            period_type='MONTHLY', year=2026, period=7,
+            start_date='2026-07-01', end_date='2026-07-31',
+            declare_deadline='2026-08-15',
+        )
+
+        # 应付:DECLARED
+        declared = TaxDeclaration.objects.create(
+            tax_period=tp, tax_type=tt, declaration_type='VAT',
+            status='DECLARED', tax_amount=Decimal('5000'),
+        )
+
+        # 不应付:DRAFT/SUBMITTED/PAID/REJECTED
+        draft = TaxDeclaration.objects.create(
+            tax_period=tp, tax_type=tt, declaration_type='VAT',
+            status='DRAFT', tax_amount=Decimal('2000'),
+        )
+        submitted = TaxDeclaration.objects.create(
+            tax_period=tp, tax_type=tt, declaration_type='VAT',
+            status='SUBMITTED', tax_amount=Decimal('1500'),
+        )
+        paid = TaxDeclaration.objects.create(
+            tax_period=tp, tax_type=tt, declaration_type='VAT',
+            status='PAID', tax_amount=Decimal('3000'),
+        )
+        rejected = TaxDeclaration.objects.create(
+            tax_period=tp, tax_type=tt, declaration_type='VAT',
+            status='REJECTED', tax_amount=Decimal('1000'),
+        )
+
+        self._run_backfill_command()
+
+        # 应付的应被回填
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='tax', source_id=declared.pk).count(), 1
+        )
+
+        # 不应付的不应被回填
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='tax', source_id=draft.pk).count(), 0
+        )
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='tax', source_id=submitted.pk).count(), 0
+        )
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='tax', source_id=paid.pk).count(), 0
+        )
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='tax', source_id=rejected.pk).count(), 0
+        )
+
+    def test_backfill_tax_idempotent(self):
+        """回填命令幂等性:重复运行同一申报单只生成1条台账项"""
+        from apps.finance.tax_management import TaxDeclaration, TaxPeriod, TaxType
+        from apps.finance.payable_models import PayableItem
+
+        tt = TaxType.objects.create(code='VAT', name='增值税')
+        tp = TaxPeriod.objects.create(
+            period_type='MONTHLY', year=2026, period=7,
+            start_date='2026-07-01', end_date='2026-07-31',
+            declare_deadline='2026-08-15',
+        )
+        td = TaxDeclaration.objects.create(
+            tax_period=tp, tax_type=tt, declaration_type='VAT',
+            status='DECLARED', tax_amount=Decimal('5000'),
+        )
+
+        self._run_backfill_command()
+        count_after_first = PayableItem.objects.filter(source_type='tax', source_id=td.pk).count()
+        self.assertEqual(count_after_first, 1)
+
+        # 再运行一次
+        self._run_backfill_command()
+        count_after_second = PayableItem.objects.filter(source_type='tax', source_id=td.pk).count()
+        self.assertEqual(count_after_second, 1)
+
+    # --------- PaymentRequest (付款申请) ---------
+
+    def test_backfill_payment_request_only_independent_approved(self):
+        """仅回填 APPROVED 且 ap=null 的独立申请，跳过:
+        1. 其他状态(DRAFT/PENDING/PAID/等)
+        2. 关联 AP 的申请(ap 不为null)
+        """
+        from apps.finance.models import PaymentRequest, AccountPayable
+        from apps.finance.payable_models import PayableItem
+        from apps.accounts.models import User
+        from apps.masterdata.models import Supplier
+
+        applicant = User.objects.create(username='applicant', employee_id='APP1')
+        supplier2 = Supplier.objects.create(code='S2', name='供应商2')
+
+        # 独立申请 APPROVED (应回填)
+        independent_approved = PaymentRequest.objects.create(
+            title='原料采购款', supplier=self.supplier, amount=Decimal('50000'),
+            expected_date='2026-07-20', reason='原料', applicant=applicant,
+            status='APPROVED', ap=None,
+        )
+
+        # 关联 AP 的申请 APPROVED (不回填，该AP已被backfill_payables覆盖)
+        ap = AccountPayable.objects.create(
+            supplier=supplier2, invoice_date='2026-07-01', due_date='2026-08-01',
+            amount_due=Decimal('30000'),
+        )
+        related_approved = PaymentRequest.objects.create(
+            title='进度款', supplier=supplier2, amount=Decimal('30000'),
+            expected_date='2026-07-20', reason='进度', applicant=applicant,
+            status='APPROVED', ap=ap,
+        )
+
+        # 独立申请 DRAFT (不回填，非应付状态)
+        independent_draft = PaymentRequest.objects.create(
+            title='运费', supplier=self.supplier, amount=Decimal('10000'),
+            expected_date='2026-07-20', reason='运输', applicant=applicant,
+            status='DRAFT', ap=None,
+        )
+
+        # 独立申请 PAID (不回填，已支付)
+        independent_paid = PaymentRequest.objects.create(
+            title='设备款', supplier=self.supplier, amount=Decimal('20000'),
+            expected_date='2026-07-20', reason='设备', applicant=applicant,
+            status='PAID', ap=None,
+        )
+
+        self._run_backfill_command()
+
+        # 仅独立APPROVED应被回填
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='payment_request', source_id=independent_approved.pk).count(), 1
+        )
+
+        # 其他都不应被回填
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='payment_request', source_id=related_approved.pk).count(), 0,
+            '关联AP的申请不应回填'
+        )
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='payment_request', source_id=independent_draft.pk).count(), 0
+        )
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='payment_request', source_id=independent_paid.pk).count(), 0
+        )
+
+    def test_backfill_payment_request_idempotent(self):
+        """回填命令幂等性:重复运行同一请求只生成1条台账项"""
+        from apps.finance.models import PaymentRequest
+        from apps.finance.payable_models import PayableItem
+        from apps.accounts.models import User
+
+        applicant = User.objects.create(username='applicant2', employee_id='APP2')
+        pr = PaymentRequest.objects.create(
+            title='采购款', supplier=self.supplier, amount=Decimal('50000'),
+            expected_date='2026-07-20', reason='原料采购', applicant=applicant,
+            status='APPROVED', ap=None,
+        )
+
+        self._run_backfill_command()
+        count_after_first = PayableItem.objects.filter(source_type='payment_request', source_id=pr.pk).count()
+        self.assertEqual(count_after_first, 1)
+
+        # 再运行一次
+        self._run_backfill_command()
+        count_after_second = PayableItem.objects.filter(source_type='payment_request', source_id=pr.pk).count()
+        self.assertEqual(count_after_second, 1)
+
+    def test_backfill_three_sources_together(self):
+        """综合测试:三来源(shared_expense/tax/独立payment_request)混合回填"""
+        from apps.finance.models import SharedExpense, PaymentRequest
+        from apps.finance.tax_management import TaxDeclaration, TaxPeriod, TaxType
+        from apps.finance.payable_models import PayableItem
+        from apps.accounts.models import User
+
+        # 创建各来源的应付单据
+        exp = SharedExpense.objects.create(
+            name='房租', category='RENT',
+            expense_date='2026-07-01', period_start='2026-07-01', period_end='2026-07-31',
+            amount=Decimal('10000'), status='ALLOCATED',
+        )
+        tt = TaxType.objects.create(code='VAT3', name='增值税')
+        tp = TaxPeriod.objects.create(
+            period_type='MONTHLY', year=2026, period=7,
+            start_date='2026-07-01', end_date='2026-07-31',
+            declare_deadline='2026-08-15',
+        )
+        td = TaxDeclaration.objects.create(
+            tax_period=tp, tax_type=tt, declaration_type='VAT',
+            status='DECLARED', tax_amount=Decimal('5000'),
+        )
+        applicant = User.objects.create(username='app', employee_id='APPX')
+        pr = PaymentRequest.objects.create(
+            title='采购', supplier=self.supplier, amount=Decimal('50000'),
+            expected_date='2026-07-20', reason='采购款', applicant=applicant,
+            status='APPROVED', ap=None,  # 独立申请
+        )
+
+        self._run_backfill_command()
+
+        # 验证三个来源都被回填
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='shared_expense', source_id=exp.pk).count(), 1
+        )
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='tax', source_id=td.pk).count(), 1
+        )
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='payment_request', source_id=pr.pk).count(), 1
+        )
+
+        # 验证总共3条台账项
+        self.assertEqual(PayableItem.objects.count(), 3)
