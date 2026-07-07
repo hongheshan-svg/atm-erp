@@ -425,6 +425,21 @@ class PayableApiTest(TestCase):
         results = resp.data['results'] if isinstance(resp.data, dict) else resp.data
         self.assertGreaterEqual(len(results), 1)
 
+    def test_payable_items_list_filters_by_amount_and_due_date_range(self):
+        self._make_ap_and_bs()  # amount_due=1000.00, due_date=2026-07-01
+        resp_in_range = self.client.get('/api/finance/payable-items/', {
+            'amount_due__gte': '500', 'amount_due__lte': '1500',
+            'due_date__gte': '2026-06-01', 'due_date__lte': '2026-07-31',
+        })
+        self.assertEqual(resp_in_range.status_code, 200)
+        results_in = resp_in_range.data['results'] if isinstance(resp_in_range.data, dict) else resp_in_range.data
+        self.assertGreaterEqual(len(results_in), 1)
+
+        resp_out_of_range = self.client.get('/api/finance/payable-items/', {'amount_due__gte': '2000'})
+        self.assertEqual(resp_out_of_range.status_code, 200)
+        results_out = resp_out_of_range.data['results'] if isinstance(resp_out_of_range.data, dict) else resp_out_of_range.data
+        self.assertEqual(len(results_out), 0)
+
     def test_candidates_endpoint(self):
         ap, item, bs = self._make_ap_and_bs()
         resp = self.client.get(f'/api/finance/bank-statements/{bs.id}/payable-candidates/')
@@ -451,6 +466,30 @@ class PayableApiTest(TestCase):
         item.refresh_from_db(); bs.refresh_from_db()
         self.assertEqual(item.status, 'PENDING')
         self.assertEqual(bs.status, 'PENDING')
+
+    def test_settlements_endpoint_lists_and_excludes_unsettled(self):
+        ap, item, bs = self._make_ap_and_bs()
+        resp = self.client.post('/api/finance/payable-reconcile/settle/', {
+            'bank_statement_id': bs.id,
+            'allocations': [{'payable_item_id': item.pk, 'amount': '1000.00'}],
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        settlement_id = resp.data['settlement_ids'][0]
+
+        list_resp = self.client.get(f'/api/finance/bank-statements/{bs.id}/settlements/')
+        self.assertEqual(list_resp.status_code, 200)
+        self.assertEqual(len(list_resp.data), 1)
+        row = list_resp.data[0]
+        self.assertEqual(row['settlement_id'], settlement_id)
+        self.assertEqual(row['payable_item']['id'], item.pk)
+        self.assertEqual(row['payable_item']['source_type'], 'ap')
+        self.assertEqual(Decimal(str(row['amount'])), Decimal('1000.00'))
+        self.assertTrue(row['payment_no'])
+
+        self.client.post('/api/finance/payable-reconcile/unsettle/', {'settlement_id': settlement_id}, format='json')
+        list_resp2 = self.client.get(f'/api/finance/bank-statements/{bs.id}/settlements/')
+        self.assertEqual(list_resp2.status_code, 200)
+        self.assertEqual(len(list_resp2.data), 0)
 
     def test_settle_over_allocation_returns_400(self):
         ap, item, bs = self._make_ap_and_bs()

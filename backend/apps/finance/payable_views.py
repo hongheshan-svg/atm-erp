@@ -28,7 +28,15 @@ class PayableItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
     skip_data_scope = True
     queryset = PayableItem.objects.select_related('supplier', 'currency', 'project').all()
     serializer_class = PayableItemSerializer
-    filterset_fields = ['status', 'supplier', 'category', 'source_type']
+    # 工作台右侧台账筛选:状态/供应商/类别/来源精确匹配,应付日期/应付金额支持区间(gte/lte)。
+    filterset_fields = {
+        'status': ['exact'],
+        'supplier': ['exact'],
+        'category': ['exact'],
+        'source_type': ['exact'],
+        'due_date': ['gte', 'lte'],
+        'amount_due': ['gte', 'lte'],
+    }
     search_fields = ['source_no', 'payee_name']
     ordering_fields = ['due_date', 'amount_due', 'created_at']
 

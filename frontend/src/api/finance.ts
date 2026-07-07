@@ -366,6 +366,26 @@ export function bulkDeleteBankStatements(data: any) {
   return request({ url: '/finance/bank-statements/bulk_delete/', method: 'post', data })
 }
 
+// ========== 付款核销工作台(待付款项台账 / 银行流水核销) ==========
+export function getPayableItems(params?: Record<string, any>) {
+  return request({ url: '/finance/payable-items/', method: 'get', params })
+}
+export function getPayableItem(id: number) {
+  return request({ url: `/finance/payable-items/${id}/`, method: 'get' })
+}
+export function getBankStatementPayableCandidates(bankStatementId: number) {
+  return request({ url: `/finance/bank-statements/${bankStatementId}/payable-candidates/`, method: 'get' })
+}
+export function getBankStatementSettlements(bankStatementId: number) {
+  return request({ url: `/finance/bank-statements/${bankStatementId}/settlements/`, method: 'get' })
+}
+export function settlePayableReconcile(data: { bank_statement_id: number; allocations: Array<{ payable_item_id: number; amount: number | string }> }) {
+  return request({ url: '/finance/payable-reconcile/settle/', method: 'post', data })
+}
+export function unsettlePayableReconcile(data: { settlement_id: number }) {
+  return request({ url: '/finance/payable-reconcile/unsettle/', method: 'post', data })
+}
+
 // ========== 固定资产 ==========
 export function getFixedAssets(params?: Record<string, any>) {
   return request({ url: '/finance/fixed-assets/', method: 'get', params })
