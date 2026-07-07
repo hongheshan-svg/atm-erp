@@ -373,53 +373,17 @@ class AccountPayableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
     
     @action(detail=True, methods=['post'])
     def record_payment(self, request, pk=None):
-        """Record a payment.
+        """已停用:应付账款(AP)付款统一由银行流水核销完成(付款核销工作台)。
 
-        创建 Payment 记录并由 Payment.save() 统一更新 amount_paid，
-        保证与对账（按 Payment 取付款明细）口径一致，避免重复记账。
+        历史上 record_payment 直接创建 Payment(payment_type='AP') 并手动重算
+        amount_paid/status,绕过统一待付款项核销台账(PayableItem/PayableSettlement),
+        与核销台账"两套并存"。收口后 AP 付款 →PAID 只经「付款核销工作台」的
+        settle→write_back 驱动,此接口已停用,不再产生任何副作用。
         """
-        payment_amount = request.data.get('amount')
-
-        if not payment_amount or float(payment_amount) <= 0:
-            return Response(
-                {'error': '请提供有效的付款金额'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        from decimal import Decimal as D
-
-        payment_amount = D(str(payment_amount))
-
-        with transaction.atomic():
-            ap = AccountPayable.objects.select_for_update().get(pk=pk)
-            if ap.amount_paid + payment_amount > ap.amount_due:
-                return Response(
-                    {'error': '付款金额超过应付金额'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # 创建付款记录，Payment.save() 会原子更新 ap.amount_paid
-            Payment.objects.create(
-                payment_type='AP',
-                ap=ap,
-                payment_date=request.data.get('payment_date') or timezone.now().date(),
-                payment_method=_normalize_payment_method(request.data.get('payment_method')),
-                amount=payment_amount,
-                currency=ap.currency,
-                exchange_rate=ap.exchange_rate,
-                notes=request.data.get('notes', ''),
-                created_by=request.user,
-                updated_by=request.user,
-            )
-
-            ap.refresh_from_db(fields=['amount_paid'])
-            if ap.amount_paid >= ap.amount_due:
-                ap.status = 'PAID'
-            elif ap.amount_paid > 0:
-                ap.status = 'PARTIAL'
-            ap.save(update_fields=['status'])
-
-        return Response(AccountPayableSerializer(ap).data)
+        return Response(
+            {'error': '应付账款付款已统一由银行流水核销完成:请在「付款核销工作台」核销对应银行流水。此接口已停用。'},
+            status=409,
+        )
     
     @action(detail=False, methods=['get'])
     def overdue(self, request):

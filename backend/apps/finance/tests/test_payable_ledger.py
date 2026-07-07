@@ -1280,3 +1280,127 @@ class PaymentRequestAdapterTest(TestCase):
         self.assertEqual(pr.status, 'APPROVED')
         self.assertIsNone(pr.paid_at)
         self.assertIsNone(pr.payment_id)
+
+
+# ---------------------------------------------------------------------------
+# R1: AP(应付账款)旧付款入口退役——用户已拍板方案 A:record_payment 与
+# BankStatementViewSet.match 的 AP 分支全部改受控 409,AP 付款自此只经
+# 「付款核销工作台」(payable-reconcile/settle)完成。AR 一侧(record_payment(AR)、
+# match 的 AR 分支)不在本次范围内,须验证其继续正常工作。
+# ---------------------------------------------------------------------------
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class APRecordPaymentRetiredTest(TestCase):
+    """AccountPayableViewSet.record_payment 已停用,不再创建 Payment / 改动 AP。"""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+
+        from apps.accounts.models import User
+
+        self.user = User.objects.create(username='apretire', employee_id='APR1', is_staff=True, is_superuser=True)
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def test_record_payment_returns_409_and_no_side_effect(self):
+        from apps.finance.models import AccountPayable
+        from apps.masterdata.models import Supplier
+
+        sup = Supplier.objects.create(code='APR', name='供应商APR')
+        ap = AccountPayable.objects.create(
+            supplier=sup, invoice_date='2026-06-01', due_date='2026-07-01', amount_due=Decimal('1000.00')
+        )
+        resp = self.client.post(
+            f'/api/finance/payables/{ap.pk}/record_payment/',
+            {
+                'amount': '500.00',
+                'payment_date': '2026-07-05',
+                'payment_method': 'BANK',
+            },
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 409)
+        ap.refresh_from_db()
+        self.assertEqual(ap.amount_paid, Decimal('0'))  # 未被这条已停用的请求改动
+        self.assertEqual(ap.status, 'PENDING')
+        self.assertFalse(Payment.objects.filter(ap=ap).exists())
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class APBankStatementMatchRetiredTest(TestCase):
+    """BankStatementViewSet.match 的 AP 分支已停用(409);AR 分支保留原逻辑不受影响。"""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+
+        from apps.accounts.models import User
+
+        self.user = User.objects.create(username='apmatchretire', employee_id='APM1', is_staff=True, is_superuser=True)
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def test_match_ap_returns_409_and_no_side_effect(self):
+        from apps.finance.models import AccountPayable, BankStatement
+        from apps.masterdata.models import Supplier
+
+        sup = Supplier.objects.create(code='APM', name='供应商APM')
+        ap = AccountPayable.objects.create(
+            supplier=sup, invoice_date='2026-06-01', due_date='2026-07-01', amount_due=Decimal('1000.00')
+        )
+        bs = BankStatement(
+            transaction_type='DEBIT',
+            debit_amount=Decimal('1000.00'),
+            counterparty_name='供应商APM',
+            transaction_time='2026-07-02 00:00:00+00',
+        )
+        bs.save()
+        resp = self.client.post(
+            f'/api/finance/bank-statements/{bs.pk}/match/',
+            {
+                'match_type': 'AP',
+                'supplier_id': sup.pk,
+                'ap_id': ap.pk,
+            },
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 409)
+        ap.refresh_from_db()
+        bs.refresh_from_db()
+        self.assertEqual(ap.amount_paid, Decimal('0'))
+        self.assertEqual(ap.status, 'PENDING')
+        self.assertEqual(bs.status, 'PENDING')  # 未被标记 MATCHED
+        self.assertIsNone(bs.related_ap_id)  # 未被关联
+        self.assertFalse(Payment.objects.filter(ap=ap).exists())
+
+    def test_match_ar_still_works(self):
+        from apps.finance.models import AccountReceivable, BankStatement
+        from apps.masterdata.models import Customer
+
+        cust = Customer.objects.create(code='ARM', name='客户ARM')
+        ar = AccountReceivable.objects.create(
+            customer=cust, invoice_date='2026-06-01', due_date='2026-07-01', amount_due=Decimal('800.00')
+        )
+        bs = BankStatement(
+            transaction_type='CREDIT',
+            credit_amount=Decimal('800.00'),
+            counterparty_name='客户ARM',
+            transaction_time='2026-07-02 00:00:00+00',
+        )
+        bs.save()
+        resp = self.client.post(
+            f'/api/finance/bank-statements/{bs.pk}/match/',
+            {
+                'match_type': 'AR',
+                'customer_id': cust.pk,
+                'ar_id': ar.pk,
+            },
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        ar.refresh_from_db()
+        bs.refresh_from_db()
+        self.assertEqual(ar.amount_paid, Decimal('800.00'))
+        self.assertEqual(ar.status, 'PAID')
+        self.assertEqual(bs.status, 'MATCHED')
+        self.assertTrue(Payment.objects.filter(ar=ar).exists())
