@@ -26,6 +26,12 @@ def register_payable(obj, source_type: str) -> PayableItem:
     adapter = PAYABLE_SOURCES[source_type]
     data = adapter.to_payable(obj)
     defaults = {'category': adapter.category, **data}
+    # 不变量:此处 defaults 绝不能含核销进度字段(status / amount_paid)。register_payable
+    # 是可重入的——合同付款经 post_save 信号在每次 save(APPROVED) 时重登记,反核销
+    # (unsettle→write_back 把源单据从 PAID 退回 APPROVED→save)也会再次触发它。因
+    # to_payable() 只返回单据静态属性(收款方/应付额/日期等)、从不返回 status/amount_paid,
+    # update_or_create 的重复调用只刷新静态字段、不会覆盖已由核销/反核销正确维护的核销进度。
+    # 若将来往任何 to_payable() 里加 status/amount_paid,会在反核销场景悄悄复位台账,务必避免。
     item, _ = PayableItem.objects.update_or_create(
         source_type=source_type, source_id=obj.pk, defaults=defaults,
     )

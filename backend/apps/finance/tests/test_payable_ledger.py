@@ -542,7 +542,8 @@ class ContractPaymentSignalTest(TestCase):
         ex = self._make_execution(name='外协丁', code='SG4')
         pr = PaymentRecord.objects.create(execution=ex, payment_no='SIGP4', planned_date='2026-07-10',
                                           amount=Decimal('1200.00'), status='PENDING')
-        PayableItem.objects.filter(source_type='contract_payment', source_id=pr.pk).delete()
+        # 以 PENDING 创建,信号不登记;approve 后才应出现台账项。
+        self.assertFalse(PayableItem.objects.filter(source_type='contract_payment', source_id=pr.pk).exists())
         user = User.objects.create(username='pradmin', employee_id='PRA1', is_staff=True, is_superuser=True)
         client = APIClient(); client.force_authenticate(user)
         resp = client.post(f'/api/purchase/payment-records/{pr.pk}/approve/', {}, format='json')
