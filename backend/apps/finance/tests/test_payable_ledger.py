@@ -645,3 +645,121 @@ class ContractPayPatchBypassTest(TestCase):
         self.assertIn(resp.status_code, (200, 202))
         ex.refresh_from_db()
         self.assertEqual(ex.paid_amount, Decimal('0'))  # 未被 PATCH 改
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ContractPaymentWithdrawRecoverTest(TestCase):
+    """工作流"撤回"把 PaymentRecord 从 APPROVED 打回 PENDING 时,已登记的台账项
+    应被回收(作废),避免继续留在核销候选池里被误核销;若撤回后又重新审批通过,
+    台账项应从 CANCELLED 复活回 PENDING,而不是永久卡死在已作废状态。
+    """
+
+    def _make_execution(self, code='WD1'):
+        from apps.masterdata.models import Supplier
+        from apps.purchase.contract_execution import ContractExecution
+        from apps.purchase.models import PurchaseContract, PurchaseOrder
+        sup = Supplier.objects.create(code=code, name=f'外协{code}')
+        po = PurchaseOrder.objects.create(supplier=sup, delivery_date='2026-07-20')
+        contract = PurchaseContract.objects.create(po=po, supplier=sup, contract_no=f'PC{code}',
+                                                   title='c', contract_date='2026-06-01',
+                                                   total_amount=Decimal('3000'))
+        return ContractExecution.objects.create(contract=contract, contract_amount=Decimal('3000'))
+
+    def test_withdraw_cancels_registered_payable_item(self):
+        from apps.purchase.contract_execution import PaymentRecord
+        ex = self._make_execution(code='WD1')
+        pr = PaymentRecord.objects.create(execution=ex, payment_no='WDP1', planned_date='2026-07-10',
+                                          amount=Decimal('1000.00'), status='APPROVED')
+        item = PayableItem.objects.get(source_type='contract_payment', source_id=pr.pk)
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+        # 模拟工作流"撤回":WITHDRAWN → PaymentRecord.status = 'PENDING'
+        pr.status = 'PENDING'
+        pr.save()
+
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+    def test_withdraw_then_reapprove_revives_payable_item(self):
+        from apps.purchase.contract_execution import PaymentRecord
+        ex = self._make_execution(code='WD2')
+        pr = PaymentRecord.objects.create(execution=ex, payment_no='WDP2', planned_date='2026-07-10',
+                                          amount=Decimal('1000.00'), status='APPROVED')
+        item = PayableItem.objects.get(source_type='contract_payment', source_id=pr.pk)
+
+        pr.status = 'PENDING'
+        pr.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+        # 重新审批通过:台账项应从 CANCELLED 复活回 PENDING,而不是保持作废
+        pr.status = 'APPROVED'
+        pr.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+        self.assertEqual(item.amount_paid, Decimal('0'))
+
+    def test_withdraw_is_noop_when_new_and_unsubmitted(self):
+        """PENDING 同时也是"新建未提交"的初始态:此时尚无台账项,撤回分支的
+        cancel_payable 调用应是安全的 no-op,不应报错也不应凭空创建台账项。"""
+        from apps.purchase.contract_execution import PaymentRecord
+        ex = self._make_execution(code='WD3')
+        pr = PaymentRecord.objects.create(execution=ex, payment_no='WDP3', planned_date='2026-07-10',
+                                          amount=Decimal('1000.00'), status='PENDING')
+        pr.status = 'PENDING'
+        pr.save()
+        self.assertFalse(PayableItem.objects.filter(source_type='contract_payment', source_id=pr.pk).exists())
+
+    def test_withdraw_does_not_touch_settled_payable_item(self):
+        """若台账项已被核销(amount_paid>0),撤回不应作废它——cancel_payable 本身
+        只对 amount_paid==0 的项生效,这里显式验证该不变量在撤回路径上也成立。"""
+        from apps.purchase.contract_execution import PaymentRecord
+        ex = self._make_execution(code='WD4')
+        pr = PaymentRecord.objects.create(execution=ex, payment_no='WDP4', planned_date='2026-07-10',
+                                          amount=Decimal('1000.00'), status='APPROVED')
+        item = PayableItem.objects.get(source_type='contract_payment', source_id=pr.pk)
+        item.amount_paid = Decimal('1000.00')
+        item.recalc_status()
+        item.save()
+        self.assertEqual(item.status, PayableItem.STATUS_PAID)
+
+        pr.status = 'PENDING'
+        pr.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_PAID)  # 未被误作废
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ContractPaymentSubmitAutoApproveTest(TestCase):
+    """submit action 在未配置审批工作流时应自动批准(WorkflowEnforcementMixin.
+    start_workflow_or_auto_approve),端到端覆盖"审批到达路径三"之一:
+    经 submit → 自动批准 → 信号登记台账。"""
+
+    def test_submit_auto_approves_and_registers_payable(self):
+        from rest_framework.test import APIClient
+        from apps.accounts.models import User
+        from apps.masterdata.models import Supplier
+        from apps.purchase.contract_execution import ContractExecution, PaymentRecord
+        from apps.purchase.models import PurchaseContract, PurchaseOrder
+
+        sup = Supplier.objects.create(code='SUB1', name='外协提交测试')
+        po = PurchaseOrder.objects.create(supplier=sup, delivery_date='2026-07-20')
+        contract = PurchaseContract.objects.create(po=po, supplier=sup, contract_no='PCSUB1',
+                                                   title='c', contract_date='2026-06-01',
+                                                   total_amount=Decimal('3000'))
+        ex = ContractExecution.objects.create(contract=contract, contract_amount=Decimal('3000'))
+        pr = PaymentRecord.objects.create(execution=ex, payment_no='SUBP1', planned_date='2026-07-10',
+                                          amount=Decimal('900.00'), status='PENDING')
+        self.assertFalse(PayableItem.objects.filter(source_type='contract_payment', source_id=pr.pk).exists())
+
+        user = User.objects.create(username='subadmin', employee_id='SUB1', is_staff=True, is_superuser=True)
+        client = APIClient(); client.force_authenticate(user)
+        resp = client.post(f'/api/purchase/payment-records/{pr.pk}/submit/', {}, format='json')
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertTrue(resp.data.get('workflow_started') is False)
+        pr.refresh_from_db()
+        self.assertEqual(pr.status, 'APPROVED')
+        item = PayableItem.objects.get(source_type='contract_payment', source_id=pr.pk)
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+        self.assertEqual(item.amount_due, Decimal('900.00'))
