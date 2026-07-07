@@ -103,18 +103,28 @@ def register_expense_payable(sender, instance, **kwargs):
 
 @receiver(post_save, sender=TaxDeclaration)
 def register_tax_payable(sender, instance, **kwargs):
-    """税务申报确认申报(DECLARED)→ 登记台账。
+    """税务申报确认申报(DECLARED)→ 登记台账;CANCELLED → 台账项作废。
 
     DRAFT/SUBMITTED/APPROVED 都还在申报流程内,应缴税额(payable_amount)在此之前
     可能因抵扣调整而变化,不适合提前登记;declare() 落 DECLARED 后才是"已申报待缴"
     的确认应付事实,与 `TaxPayableSource.write_back` 反核销时退回的状态一致
     (见 payable_adapters.py:223)。REJECTED 只发生在 SUBMITTED 阶段(早于登记时点),
-    且当前没有 DECLARED 之后撤回的操作入口,故无需 cancel 分支。
+    无需处理。
+
+    `TaxDeclaration.STATUS_CHOICES` 目前没有 CANCELLED 取值,
+    `TaxDeclarationViewSet` 也没有 DECLARED 之后的撤回/作废操作入口——即下面的
+    elif 分支在当前代码里是死代码。之所以仍然加上,是为了和其它来源信号
+    (register_ap_payable/register_shared_expense_payable/
+    register_payment_request_payable 均有对应的 CANCELLED/撤回分支)保持一致,
+    并为未来一旦接入"撤回申报"之类的操作预留钩子,避免重蹈申报 DECLARED 之后
+    被撤销、AP/台账却无人处理导致"幽灵应付"的覆辙。
     """
-    from apps.finance.payable_adapters import register_payable
+    from apps.finance.payable_adapters import cancel_payable, register_payable
 
     if instance.status == 'DECLARED':
         _safe_sync_payable(register_payable, instance, 'tax', action='登记')
+    elif instance.status == 'CANCELLED':
+        _safe_sync_payable(cancel_payable, instance, 'tax', action='作废')
 
 
 @receiver(post_save, sender=PaymentRequest)
