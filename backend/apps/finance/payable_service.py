@@ -120,7 +120,7 @@ def _load_source_obj(item):
     from apps.purchase.contract_execution import PaymentRecord
     from apps.purchase.outsource_models import OutsourceOrder
     from apps.oa.asset import AssetMaintenance
-    from apps.oa.vehicle import VehicleMaintenance
+    from apps.oa.vehicle import VehicleMaintenance, VehicleRequest
     from apps.projects.field_service import ServiceExpense
     model = {
         'ap': AccountPayable,
@@ -133,6 +133,7 @@ def _load_source_obj(item):
         'asset_maintenance': AssetMaintenance,
         'vehicle_maintenance': VehicleMaintenance,
         'service_expense': ServiceExpense,
+        'vehicle_request': VehicleRequest,
     }.get(item.source_type)
     return model.objects.filter(pk=item.source_id).first() if model else None
 

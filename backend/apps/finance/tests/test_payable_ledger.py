@@ -2498,3 +2498,230 @@ class OaMaintenanceBackfillTest(TestCase):
         self.assertEqual(
             PayableItem.objects.filter(source_type='asset_maintenance', source_id=completed.pk).count(), 1
         )
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class VehicleRequestAdapterTest(TestCase):
+    """用车行程费:VehicleRequest.status 是用车流程进度机(DRAFT/PENDING/APPROVED/
+    REJECTED/IN_USE/RETURNED/CANCELLED),不含付款语义,write_back 为 no-op(付款事实
+    由统一台账维护),同 Outsource/AssetMaintenance 断言不破坏其状态机。"""
+
+    def _make_applicant(self, username, employee_id, first_name='伟', last_name='王'):
+        from apps.accounts.models import User
+        return User.objects.create(username=username, employee_id=employee_id,
+                                   first_name=first_name, last_name=last_name)
+
+    def _make_request(self, applicant, **kwargs):
+        from apps.oa.vehicle import VehicleRequest
+        defaults = dict(
+            applicant=applicant,
+            start_time='2026-07-01 08:00:00+00', end_time='2026-07-01 18:00:00+00',
+            departure='公司', destination='客户现场',
+        )
+        defaults.update(kwargs)
+        return VehicleRequest.objects.create(**defaults)
+
+    def test_vehicle_request_register_and_writeback_is_noop(self):
+        from apps.finance.payable_adapters import PAYABLE_SOURCES, register_payable
+        applicant = self._make_applicant('vradp1', 'VRADP1')
+        req = self._make_request(
+            applicant, status='RETURNED', actual_end_time='2026-07-01 18:30:00+00',
+            fuel_cost=Decimal('200.00'), toll_cost=Decimal('50.00'),
+            parking_cost=Decimal('20.00'), other_cost=Decimal('10.00'),
+        )
+        item = register_payable(req, 'vehicle_request')
+        self.assertIsNone(item.supplier_id)
+        self.assertEqual(item.payee_name, '王伟')
+        self.assertEqual(item.amount_due, Decimal('280.00'))
+        self.assertEqual(item.source_no, req.request_no)
+        self.assertIsNone(item.currency_id)
+        self.assertIsNone(item.project_id)
+        self.assertEqual(item.due_date.isoformat(), '2026-07-01')
+
+        # write_back no-op:不改动源单据的用车状态机、不报错。
+        item.amount_paid = Decimal('280.00')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['vehicle_request'].write_back(req, item)
+        req.refresh_from_db()
+        self.assertEqual(req.status, 'RETURNED')
+
+        # 反核销(台账退回未结清),no-op 仍不应改动源单据状态。
+        item.amount_paid = Decimal('0')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['vehicle_request'].write_back(req, item)
+        req.refresh_from_db()
+        self.assertEqual(req.status, 'RETURNED')
+
+    def test_no_due_date_when_actual_end_time_missing(self):
+        """理论上 actual_end_time 应总是随 RETURNED 一起写入,但适配器仍需在缺失时
+        安全回退到 None,不抛异常。"""
+        from apps.finance.payable_adapters import register_payable
+        applicant = self._make_applicant('vradp2', 'VRADP2')
+        req = self._make_request(applicant, status='RETURNED', fuel_cost=Decimal('30.00'))
+        item = register_payable(req, 'vehicle_request')
+        self.assertIsNone(item.due_date)
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class VehicleRequestSignalTest(TestCase):
+    """post_save 信号(apps.oa.signals.register_vehicle_request_payable)覆盖:
+    归还结算(RETURNED)且行程费>0 时登记;金额为 0 不登记(或撤回已登记项);
+    取消/驳回时作废;已核销项不被误伤。"""
+
+    def _make_applicant(self, username, employee_id):
+        from apps.accounts.models import User
+        return User.objects.create(username=username, employee_id=employee_id, first_name='三', last_name='张')
+
+    def _make_request(self, applicant, status='APPROVED', **kwargs):
+        from apps.oa.vehicle import VehicleRequest
+        defaults = dict(
+            applicant=applicant, status=status,
+            start_time='2026-07-01 08:00:00+00', end_time='2026-07-01 18:00:00+00',
+            departure='公司', destination='客户现场',
+        )
+        defaults.update(kwargs)
+        return VehicleRequest.objects.create(**defaults)
+
+    def test_return_with_cost_registers_payable(self):
+        applicant = self._make_applicant('vrsig1', 'VRSIG1')
+        req = self._make_request(applicant, status='RETURNED', actual_end_time='2026-07-01 18:30:00+00',
+                                 fuel_cost=Decimal('100.00'))
+        item = PayableItem.objects.get(source_type='vehicle_request', source_id=req.pk)
+        self.assertEqual(item.amount_due, Decimal('100.00'))
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+    def test_zero_cost_returned_not_registered(self):
+        applicant = self._make_applicant('vrsig2', 'VRSIG2')
+        req = self._make_request(applicant, status='RETURNED', actual_end_time='2026-07-01 18:30:00+00')
+        self.assertFalse(PayableItem.objects.filter(source_type='vehicle_request', source_id=req.pk).exists())
+
+    def test_cost_corrected_to_zero_cancels_registered_item(self):
+        applicant = self._make_applicant('vrsig3', 'VRSIG3')
+        req = self._make_request(applicant, status='RETURNED', actual_end_time='2026-07-01 18:30:00+00',
+                                 fuel_cost=Decimal('50.00'))
+        item = PayableItem.objects.get(source_type='vehicle_request', source_id=req.pk)
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+        req.fuel_cost = Decimal('0')
+        req.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+    def test_cancelled_cancels_registered_item(self):
+        applicant = self._make_applicant('vrsig4', 'VRSIG4')
+        req = self._make_request(applicant, status='RETURNED', actual_end_time='2026-07-01 18:30:00+00',
+                                 fuel_cost=Decimal('60.00'))
+        item = PayableItem.objects.get(source_type='vehicle_request', source_id=req.pk)
+        req.status = 'CANCELLED'
+        req.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+    def test_rejected_is_noop_when_never_registered(self):
+        """REJECTED 目前审批流程只在 PENDING 阶段触发(早于归还登记时点),此时尚无
+        台账项;cancel_payable 对"新建未登记"场景是安全 no-op,不报错也不凭空建项。"""
+        applicant = self._make_applicant('vrsig5', 'VRSIG5')
+        req = self._make_request(applicant, status='PENDING')
+        req.status = 'REJECTED'
+        req.save()
+        self.assertFalse(PayableItem.objects.filter(source_type='vehicle_request', source_id=req.pk).exists())
+
+    def test_settled_item_not_cancelled_on_cost_correction(self):
+        """反核销保护:已核销(amount_paid>0)的台账项不应被误作废——cancel_payable
+        内部已守卫仅 amount_paid==0 时才允许作废,这里显式验证该不变量在本来源上也成立。"""
+        applicant = self._make_applicant('vrsig6', 'VRSIG6')
+        req = self._make_request(applicant, status='RETURNED', actual_end_time='2026-07-01 18:30:00+00',
+                                 fuel_cost=Decimal('80.00'))
+        item = PayableItem.objects.get(source_type='vehicle_request', source_id=req.pk)
+        item.amount_paid = Decimal('80.00')
+        item.recalc_status()
+        item.save()
+        self.assertEqual(item.status, PayableItem.STATUS_PAID)
+
+        req.fuel_cost = Decimal('0')
+        req.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_PAID)  # 未被误伤作废
+
+    def test_return_vehicle_api_action_registers_payable(self):
+        from rest_framework.test import APIClient
+        from apps.oa.vehicle import Vehicle
+        applicant = self._make_applicant('vrsig7', 'VRSIG7')
+        applicant.is_staff = True
+        applicant.is_superuser = True
+        applicant.save()
+        vehicle = Vehicle.objects.create(plate_number='京VR00007', brand='测试', model='Y1', status='IN_USE')
+        req = self._make_request(applicant, status='IN_USE', vehicle=vehicle, start_mileage=1000)
+        client = APIClient()
+        client.force_authenticate(applicant)
+        resp = client.post(f'/api/oa/vehicle-requests/{req.pk}/return_vehicle/', {
+            'end_mileage': 1100, 'fuel_cost': '150.00', 'toll_cost': '30.00',
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        req.refresh_from_db()
+        self.assertEqual(req.status, 'RETURNED')
+        item = PayableItem.objects.get(source_type='vehicle_request', source_id=req.pk)
+        self.assertEqual(item.amount_due, Decimal('180.00'))
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class VehicleRequestBackfillCommandTest(TestCase):
+    """backfill_vehicle_request_payables:回填存量已归还结算(RETURNED)且行程费>0
+    的用车申请;跳过 0 元与非 RETURNED 状态;幂等。"""
+
+    def _make_applicant(self, username, employee_id):
+        from apps.accounts.models import User
+        return User.objects.create(username=username, employee_id=employee_id, first_name='四', last_name='李')
+
+    def _make_request(self, applicant, status='RETURNED', **kwargs):
+        from apps.oa.vehicle import VehicleRequest
+        defaults = dict(
+            applicant=applicant, status=status,
+            start_time='2026-07-01 08:00:00+00', end_time='2026-07-01 18:00:00+00',
+            departure='公司', destination='客户现场',
+        )
+        defaults.update(kwargs)
+        return VehicleRequest.objects.create(**defaults)
+
+    def _run_backfill_command(self):
+        from django.core.management import call_command
+        call_command('backfill_vehicle_request_payables')
+
+    def test_backfill_creates_for_returned_with_cost_and_skips_others(self):
+        applicant = self._make_applicant('vrbk1', 'VRBK1')
+        returned_with_cost = self._make_request(
+            applicant, status='RETURNED', actual_end_time='2026-07-02 18:00:00+00',
+            fuel_cost=Decimal('120.00'),
+        )
+        returned_zero = self._make_request(
+            applicant, status='RETURNED', actual_end_time='2026-07-02 18:00:00+00',
+        )
+        in_use = self._make_request(applicant, status='IN_USE')
+        # 清掉信号在创建时已登记的项,模拟"存量未登记"(信号覆盖新增数据,本命令回填历史存量)
+        PayableItem.objects.all().delete()
+
+        self._run_backfill_command()
+
+        self.assertTrue(
+            PayableItem.objects.filter(source_type='vehicle_request', source_id=returned_with_cost.pk).exists()
+        )
+        self.assertFalse(
+            PayableItem.objects.filter(source_type='vehicle_request', source_id=returned_zero.pk).exists()
+        )
+        self.assertFalse(
+            PayableItem.objects.filter(source_type='vehicle_request', source_id=in_use.pk).exists()
+        )
+
+    def test_backfill_is_idempotent(self):
+        applicant = self._make_applicant('vrbk2', 'VRBK2')
+        req = self._make_request(
+            applicant, status='RETURNED', actual_end_time='2026-07-02 18:00:00+00',
+            toll_cost=Decimal('40.00'),
+        )
+        self._run_backfill_command()
+        self._run_backfill_command()
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='vehicle_request', source_id=req.pk).count(), 1
+        )

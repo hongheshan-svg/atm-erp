@@ -165,6 +165,43 @@ class OutsourcePayableSource(PayableSource):
 
 
 @register_source
+class VehicleRequestPayableSource(PayableSource):
+    """用车行程费:VehicleRequest.status 是用车流程进度机(DRAFT/PENDING/APPROVED/
+    REJECTED/IN_USE/RETURNED/CANCELLED,VehicleRequestViewSet 的 submit/approve/
+    pickup/return_vehicle 依赖它推进流程),不含任何付款语义、也无 amount_paid 等字段。
+    统一台账 PayableItem 是该来源付款事实的唯一来源,write_back 为 no-op,不回写/不
+    新增字段,避免污染源单据既有的用车状态机(settle/unsettle 对源单据均无副作用)。
+    行程费由 return_vehicle() 归还时一次性写入 fuel_cost/toll_cost/parking_cost/
+    other_cost 四项,amount_due 取 total_cost(四项之和);该模型无供应商/项目字段,
+    payee_name 用申请人姓名(报销对象是内部员工),due_date 取实际归还时间
+    (actual_end_time)当天。"""
+    source_type = 'vehicle_request'
+    category = '用车行程费'
+
+    def to_payable(self, obj) -> dict:
+        from django.utils.dateparse import parse_datetime
+        payee_name = obj.applicant.get_full_name() if obj.applicant_id else ''
+        # actual_end_time 在实例未经数据库往返读取时可能仍是原始字符串(Django 仅在从
+        # 数据库读回时才反序列化为 datetime),与 payable_service 里对 transaction_time
+        # 的处理一致,取 date 前先归一。
+        actual_end = obj.actual_end_time
+        if isinstance(actual_end, str):
+            actual_end = parse_datetime(actual_end)
+        return {
+            'source_no': obj.request_no,
+            'payee_name': payee_name,
+            'supplier_id': None,
+            'amount_due': obj.total_cost,
+            'currency_id': None,
+            'due_date': actual_end.date() if actual_end else None,
+            'project_id': None,
+        }
+
+    def write_back(self, obj, item) -> None:
+        pass
+
+
+@register_source
 class SharedExpensePayableSource(PayableSource):
     """公共费用:SharedExpense.status 是分摊进度机(DRAFT/PENDING/ALLOCATED/CANCELLED,
     views.py 的 allocate() 依赖 status=='ALLOCATED' 判断"已分摊"并拒绝重复分摊),不含

@@ -23,7 +23,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 from apps.oa.asset import AssetMaintenance
-from apps.oa.vehicle import VehicleMaintenance
+from apps.oa.vehicle import VehicleMaintenance, VehicleRequest
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,30 @@ def register_vehicle_maintenance_payable(sender, instance, **kwargs):
 
     if instance.cost and instance.cost > 0:
         _safe_sync_payable(register_payable, instance, 'vehicle_maintenance', action='登记')
+
+
+@receiver(post_save, sender=VehicleRequest)
+def register_vehicle_request_payable(sender, instance, **kwargs):
+    """用车归还结算(RETURNED)且行程费合计 > 0 → 登记台账;取消/驳回,或结算金额被
+    修正为 0 → 台账项作废。
+
+    VehicleRequestViewSet.return_vehicle() 在同一次 save() 里把 status 置为 RETURNED
+    并一并写入 fuel_cost/toll_cost/parking_cost/other_cost,本信号触发时四项费用已是
+    归还时的最终值,VehicleRequestPayableSource.to_payable 取 total_cost(四项之和)
+    作为 amount_due。纯公务用车未产生任何费用(total_cost == 0)不构成应付事实,不
+    登记,避免核销工作台里出现一堆金额为 0 的噪音候选;若此前已登记但费用被人工修正
+    为 0,则作废该台账项。CANCELLED/REJECTED 一并作废(防御性,应对将来"取消已归还
+    申请"之类入口)。
+    """
+    from apps.finance.payable_adapters import cancel_payable, register_payable
+
+    if instance.status == 'RETURNED':
+        if instance.total_cost and instance.total_cost > 0:
+            _safe_sync_payable(register_payable, instance, 'vehicle_request', action='登记')
+        else:
+            _safe_sync_payable(cancel_payable, instance, 'vehicle_request', action='作废')
+    elif instance.status in ('CANCELLED', 'REJECTED'):
+        _safe_sync_payable(cancel_payable, instance, 'vehicle_request', action='作废')
 
 
 def _safe_sync_payable(func, instance, source_type, *, action):
