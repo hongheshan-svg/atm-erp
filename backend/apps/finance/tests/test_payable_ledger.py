@@ -490,3 +490,63 @@ class BackfillTest(TestCase):
         call_command('backfill_payables')
         call_command('backfill_payables')
         self.assertEqual(PayableItem.objects.filter(source_type='ap', source_id=ap.pk).count(), 1)
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ContractPaymentSignalTest(TestCase):
+    def _make_execution(self, name='外协甲', code='SG1', amount='5000'):
+        from apps.masterdata.models import Supplier
+        from apps.purchase.contract_execution import ContractExecution
+        from apps.purchase.models import PurchaseContract, PurchaseOrder
+        sup = Supplier.objects.create(code=code, name=name)
+        po = PurchaseOrder.objects.create(supplier=sup, delivery_date='2026-07-20')
+        contract = PurchaseContract.objects.create(po=po, supplier=sup, contract_no=f'PC{code}',
+                                                   title='c', contract_date='2026-06-01',
+                                                   total_amount=Decimal(amount))
+        return ContractExecution.objects.create(contract=contract, contract_amount=Decimal(amount))
+
+    def test_signal_registers_on_create_approved(self):
+        from apps.purchase.contract_execution import PaymentRecord
+        ex = self._make_execution()
+        pr = PaymentRecord.objects.create(execution=ex, payment_no='SIGP1', planned_date='2026-07-10',
+                                          amount=Decimal('2000.00'), status='APPROVED')
+        item = PayableItem.objects.get(source_type='contract_payment', source_id=pr.pk)
+        self.assertEqual(item.amount_due, Decimal('2000.00'))
+        self.assertEqual(item.payee_name, '外协甲')
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+    def test_signal_registers_on_transition_to_approved(self):
+        from apps.purchase.contract_execution import PaymentRecord
+        ex = self._make_execution(name='外协乙', code='SG2')
+        pr = PaymentRecord.objects.create(execution=ex, payment_no='SIGP2', planned_date='2026-07-10',
+                                          amount=Decimal('1500.00'), status='PENDING')
+        self.assertFalse(PayableItem.objects.filter(source_type='contract_payment', source_id=pr.pk).exists())
+        pr.status = 'APPROVED'
+        pr.save()
+        self.assertTrue(PayableItem.objects.filter(source_type='contract_payment', source_id=pr.pk).exists())
+
+    def test_signal_cancels_on_cancelled(self):
+        from apps.purchase.contract_execution import PaymentRecord
+        ex = self._make_execution(name='外协丙', code='SG3')
+        pr = PaymentRecord.objects.create(execution=ex, payment_no='SIGP3', planned_date='2026-07-10',
+                                          amount=Decimal('800.00'), status='APPROVED')
+        pr.status = 'CANCELLED'
+        pr.save()
+        item = PayableItem.objects.get(source_type='contract_payment', source_id=pr.pk)
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+    def test_approve_action_registers(self):
+        from rest_framework.test import APIClient
+        from apps.accounts.models import User
+        from apps.purchase.contract_execution import PaymentRecord
+        ex = self._make_execution(name='外协丁', code='SG4')
+        pr = PaymentRecord.objects.create(execution=ex, payment_no='SIGP4', planned_date='2026-07-10',
+                                          amount=Decimal('1200.00'), status='PENDING')
+        PayableItem.objects.filter(source_type='contract_payment', source_id=pr.pk).delete()
+        user = User.objects.create(username='pradmin', employee_id='PRA1', is_staff=True, is_superuser=True)
+        client = APIClient(); client.force_authenticate(user)
+        resp = client.post(f'/api/purchase/payment-records/{pr.pk}/approve/', {}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        pr.refresh_from_db()
+        self.assertEqual(pr.status, 'APPROVED')
+        self.assertTrue(PayableItem.objects.filter(source_type='contract_payment', source_id=pr.pk).exists())

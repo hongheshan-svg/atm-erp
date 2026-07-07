@@ -10,6 +10,7 @@ from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
 from .models import GoodsReceipt, PurchaseOrder, PurchaseOrderLine
+from .contract_execution import PaymentRecord
 
 
 @receiver(post_save, sender=PurchaseOrder)
@@ -125,3 +126,19 @@ def inherit_bom_properties(sender, instance, **kwargs):
         # 继承技术要求
         if not instance.technical_requirement:
             instance.technical_requirement = bom.technical_requirement or ''
+
+
+@receiver(post_save, sender=PaymentRecord)
+def register_contract_payment_payable(sender, instance, **kwargs):
+    """合同付款审批通过 → 登记待付款项台账;取消 → 台账项作废。
+
+    覆盖三条审批到达路径(直接 approve / submit 自动通过 / 工作流引擎完成),
+    因它们最终都经 PaymentRecord.save() 落状态。register_payable/cancel_payable
+    惰性 import,避免 app 加载期与 finance 的循环依赖。
+    """
+    from apps.finance.payable_adapters import cancel_payable, register_payable
+
+    if instance.status == 'APPROVED':
+        register_payable(instance, 'contract_payment')
+    elif instance.status == 'CANCELLED':
+        cancel_payable(instance, 'contract_payment')
