@@ -1931,3 +1931,127 @@ class Phase2BackfillCommandTest(TestCase):
 
         # 验证总共3条台账项
         self.assertEqual(PayableItem.objects.count(), 3)
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ExpenseSignalTest(TestCase):
+    """G1:员工费用报销审批通过(APPROVED)自动登记台账;驳回(REJECTED)/工作流撤回
+    退回草稿(DRAFT)作废未核销台账项。Expense 无供应商、不创建 AccountPayable,
+    不存在与 register_ap_payable 双记的问题,可直接登记。"""
+
+    def _make_expense(self, code, status='SUBMITTED', amount='600.00'):
+        from apps.accounts.models import User
+        from apps.finance.models import Expense
+        user = User.objects.create(username=f'u{code}'.lower(), employee_id=f'U{code}')
+        return Expense.objects.create(
+            expense_no=code, user=user, expense_date='2026-07-01',
+            category='TRAVEL', amount=Decimal(amount), status=status,
+        )
+
+    def test_approve_transition_registers_payable_item(self):
+        exp = self._make_expense('EXPSIG1', status='SUBMITTED')
+        self.assertFalse(PayableItem.objects.filter(source_type='expense', source_id=exp.pk).exists())
+
+        exp.status = 'APPROVED'
+        exp.save()
+
+        item = PayableItem.objects.get(source_type='expense', source_id=exp.pk)
+        self.assertEqual(item.amount_due, Decimal('600.00'))
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+    def test_reject_cancels_unsettled_item(self):
+        exp = self._make_expense('EXPSIG2', status='APPROVED')
+        item = PayableItem.objects.get(source_type='expense', source_id=exp.pk)
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+        exp.status = 'REJECTED'
+        exp.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+    def test_withdraw_to_draft_cancels_unsettled_item(self):
+        """`WorkflowService.withdraw_workflow` 会把 EXPENSE 从 APPROVED 退回 DRAFT
+        (见 apps.core.workflow.services._on_workflow_complete),此时应回收台账项。"""
+        exp = self._make_expense('EXPSIG3', status='APPROVED')
+        item = PayableItem.objects.get(source_type='expense', source_id=exp.pk)
+
+        exp.status = 'DRAFT'
+        exp.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+    def test_cancel_does_not_touch_settled_item(self):
+        exp = self._make_expense('EXPSIG4', status='APPROVED')
+        item = PayableItem.objects.get(source_type='expense', source_id=exp.pk)
+        item.amount_paid = item.amount_due
+        item.recalc_status()
+        item.save()
+        self.assertEqual(item.status, PayableItem.STATUS_PAID)
+
+        exp.status = 'REJECTED'
+        exp.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_PAID)
+
+    def test_approve_action_registers_via_api(self):
+        from rest_framework.test import APIClient
+        from apps.accounts.models import User
+
+        exp = self._make_expense('EXPSIG5', status='SUBMITTED')
+        admin = User.objects.create(username='expsigadmin', employee_id='EXPSIGA1',
+                                    is_staff=True, is_superuser=True)
+        client = APIClient(); client.force_authenticate(admin)
+        resp = client.post(f'/api/finance/expenses/{exp.pk}/approve/', {}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        exp.refresh_from_db()
+        self.assertEqual(exp.status, 'APPROVED')
+        self.assertTrue(PayableItem.objects.filter(source_type='expense', source_id=exp.pk).exists())
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ExpenseBackfillCommandTest(TestCase):
+    """测试 backfill_expense_payables 命令:只回填 APPROVED,幂等。"""
+
+    def _run_backfill_command(self):
+        from django.core.management import call_command
+        call_command('backfill_expense_payables')
+
+    def test_backfill_only_approved(self):
+        from apps.accounts.models import User
+        from apps.finance.models import Expense
+
+        user = User.objects.create(username='expbkfuser', employee_id='EXPBKF0')
+        approved = Expense.objects.create(expense_no='EXPBKF1', user=user, expense_date='2026-07-01',
+                                          category='TRAVEL', amount=Decimal('900.00'), status='APPROVED')
+        draft = Expense.objects.create(expense_no='EXPBKF2', user=user, expense_date='2026-07-01',
+                                       category='MEAL', amount=Decimal('100.00'), status='DRAFT')
+        submitted = Expense.objects.create(expense_no='EXPBKF3', user=user, expense_date='2026-07-01',
+                                           category='OFFICE', amount=Decimal('200.00'), status='SUBMITTED')
+        rejected = Expense.objects.create(expense_no='EXPBKF4', user=user, expense_date='2026-07-01',
+                                          category='OTHER', amount=Decimal('300.00'), status='REJECTED')
+        paid = Expense.objects.create(expense_no='EXPBKF5', user=user, expense_date='2026-07-01',
+                                      category='OTHER', amount=Decimal('400.00'), status='PAID')
+
+        self._run_backfill_command()
+
+        self.assertEqual(PayableItem.objects.filter(source_type='expense', source_id=approved.pk).count(), 1)
+        self.assertEqual(PayableItem.objects.filter(source_type='expense', source_id=draft.pk).count(), 0)
+        self.assertEqual(PayableItem.objects.filter(source_type='expense', source_id=submitted.pk).count(), 0)
+        self.assertEqual(PayableItem.objects.filter(source_type='expense', source_id=rejected.pk).count(), 0)
+        self.assertEqual(PayableItem.objects.filter(source_type='expense', source_id=paid.pk).count(), 0)
+
+    def test_backfill_idempotent(self):
+        from apps.accounts.models import User
+        from apps.finance.models import Expense
+
+        user = User.objects.create(username='expbkfuser2', employee_id='EXPBKF01')
+        exp = Expense.objects.create(expense_no='EXPBKF6', user=user, expense_date='2026-07-01',
+                                     category='TRAVEL', amount=Decimal('500.00'), status='APPROVED')
+
+        self._run_backfill_command()
+        count_after_first = PayableItem.objects.filter(source_type='expense', source_id=exp.pk).count()
+        self.assertEqual(count_after_first, 1)
+
+        self._run_backfill_command()
+        count_after_second = PayableItem.objects.filter(source_type='expense', source_id=exp.pk).count()
+        self.assertEqual(count_after_second, 1)

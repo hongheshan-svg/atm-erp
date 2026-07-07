@@ -10,6 +10,12 @@
   OutsourceOrder.confirm() 里内联创建 AccountPayable)整体跳过;付款申请
   (PaymentRequest)仅当 `ap` 为空(不挂靠任何已有 AP 的独立申请,如预付款)时才
   登记为 source_type='payment_request'。
+- 员工费用报销(Expense)审批通过(APPROVED)登记台账;驳回(REJECTED)或工作流撤回
+  退回草稿(DRAFT)时作废对应台账项(withdraw_workflow 会把 EXPENSE 退回 DRAFT,
+  见 apps.core.workflow.services._on_workflow_complete)。Expense 无供应商、
+  不创建 AccountPayable,不存在双记风险,可直接登记。reimburse() 目前仍直接把
+  Expense 置 PAID(绕过核销台账),是否收口为「只能由银行流水核销触发 PAID」留待
+  后续设计决策,本信号只负责让 APPROVED 的报销单进入台账、可被核销。
 
 登记/作废失败均不冒泡(用 `_safe_sync_payable` 包裹),避免台账同步问题打断审批
 事务;失败只记日志 + 通知财务管理员,真正的数据补齐留给人工核查或未来的
@@ -21,7 +27,7 @@ import logging
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from apps.finance.models import AccountPayable, PaymentRequest, SharedExpense
+from apps.finance.models import AccountPayable, Expense, PaymentRequest, SharedExpense
 from apps.finance.tax_management import TaxDeclaration
 
 logger = logging.getLogger(__name__)
@@ -67,6 +73,32 @@ def register_shared_expense_payable(sender, instance, **kwargs):
         _safe_sync_payable(register_payable, instance, 'shared_expense', action='登记')
     elif instance.status in ('PENDING', 'CANCELLED'):
         _safe_sync_payable(cancel_payable, instance, 'shared_expense', action='作废')
+
+
+@receiver(post_save, sender=Expense)
+def register_expense_payable(sender, instance, **kwargs):
+    """费用报销审批通过(APPROVED)→ 登记台账;驳回(REJECTED)或撤回退回草稿(DRAFT)
+    → 台账项作废。
+
+    ExpenseViewSet.submit()(未配置审批流的直接批准)与工作流引擎
+    `_on_workflow_complete` business_type='EXPENSE' 分支都会把状态落到 APPROVED,
+    两者都经 Expense.save() 触发本信号。REJECTED 由 approve/reject 直接操作或工作流
+    拒绝产生;DRAFT 由 `withdraw_workflow` 把已提交的报销单撤回产生——两者发生时
+    若之前已登记过台账项(理论上只有 APPROVED 之后才会登记,REJECTED/DRAFT 本身不会
+    触发登记),`cancel_payable` 会回收未核销的台账项,避免误核销;`cancel_payable`
+    内部已守卫仅当台账项 `amount_paid==0` 时才允许作废,已核销的不会被误伤。
+
+    Expense 无供应商、不创建 AccountPayable,不存在与 AP 双记的问题,可直接登记。
+    reimburse() 目前仍直接把 Expense 置为 PAID(绕过核销台账),是否收口为「只能由
+    银行流水核销触发 PAID」是需要产品/用户拍板的行为变更,本信号先只保证 APPROVED
+    的报销单能进入台账、可被核销工作台核销。
+    """
+    from apps.finance.payable_adapters import cancel_payable, register_payable
+
+    if instance.status == 'APPROVED':
+        _safe_sync_payable(register_payable, instance, 'expense', action='登记')
+    elif instance.status in ('REJECTED', 'DRAFT'):
+        _safe_sync_payable(cancel_payable, instance, 'expense', action='作废')
 
 
 @receiver(post_save, sender=TaxDeclaration)
