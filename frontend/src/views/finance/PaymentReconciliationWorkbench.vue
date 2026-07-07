@@ -151,6 +151,11 @@
                     <el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id" />
                   </el-select>
                 </el-form-item>
+                <el-form-item label="费用类别">
+                  <el-select v-model="rightFilters.category" placeholder="全部" clearable filterable style="width: 130px" @change="handleLedgerSearch">
+                    <el-option v-for="c in CATEGORY_OPTIONS" :key="c" :label="c" :value="c" />
+                  </el-select>
+                </el-form-item>
                 <el-form-item label="状态">
                   <el-select v-model="rightFilters.status" placeholder="全部" clearable style="width: 100px" @change="handleLedgerSearch">
                     <el-option label="待付" value="PENDING" />
@@ -418,6 +423,7 @@ const candidates = ref<any[]>([])
 const rightFilters = reactive({
   source_type: '',
   supplier: undefined as number | undefined,
+  category: '',
   status: '',
   amount_min: '',
   amount_max: ''
@@ -434,6 +440,9 @@ const SOURCE_TYPE_LABEL: Record<string, string> = {
   contract_payment: '合同付款'
 }
 const sourceTypeLabel = (t: string) => SOURCE_TYPE_LABEL[t] || t || '-'
+
+// 与后端各来源适配器 category 取值保持一致(apps/finance/payable_adapters.py)
+const CATEGORY_OPTIONS = ['采购', '报销', '合同付款', '委外加工', '公共费用', '税务', '付款申请']
 
 const ITEM_STATUS_TEXT: Record<string, string> = {
   PENDING: '待付',
@@ -476,6 +485,7 @@ async function loadLedger() {
       status: rightFilters.status || undefined,
       source_type: rightFilters.source_type || undefined,
       supplier: rightFilters.supplier || undefined,
+      category: rightFilters.category || undefined,
       amount_due__gte: rightFilters.amount_min || undefined,
       amount_due__lte: rightFilters.amount_max || undefined
     }
@@ -500,6 +510,7 @@ function handleLedgerSearch() {
 function resetLedgerFilters() {
   rightFilters.source_type = ''
   rightFilters.supplier = undefined
+  rightFilters.category = ''
   rightFilters.status = ''
   rightFilters.amount_min = ''
   rightFilters.amount_max = ''
@@ -573,7 +584,9 @@ async function confirmSettle() {
   try {
     const allocations = selectedList.value.map((s) => ({ payable_item_id: s.item.id, amount: s.amount }))
     const res = await settlePayableReconcile({ bank_statement_id: selectedStatement.value.id, allocations })
-    ElMessage.success(`核销成功，生成 ${res?.settlement_ids?.length || 0} 条核销记录`)
+    const paymentNos = (res?.payment_nos || []).filter(Boolean)
+    const paymentNoText = paymentNos.length ? `，付款单号：${paymentNos.join('、')}` : ''
+    ElMessage.success(`核销成功，生成 ${res?.settlement_ids?.length || 0} 条核销记录${paymentNoText}`)
     settleDialogVisible.value = false
     const statementId = selectedStatement.value.id
     clearSelection()
