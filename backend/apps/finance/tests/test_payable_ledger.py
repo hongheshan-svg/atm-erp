@@ -1083,3 +1083,200 @@ class ContractPaymentSubmitAutoApproveTest(TestCase):
         item = PayableItem.objects.get(source_type='contract_payment', source_id=pr.pk)
         self.assertEqual(item.status, PayableItem.STATUS_PENDING)
         self.assertEqual(item.amount_due, Decimal('900.00'))
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class OutsourceAdapterTest(TestCase):
+    """委外加工:OutsourceOrder.status 是收货/加工进度机,无付款语义,write_back 为
+    no-op(付款事实由统一台账维护)。这里断言 register 取数正确,以及 write_back 无论
+    正向核销/反核销都不改动源单据既有的进度状态(不破坏其状态机)。"""
+
+    def _make_order(self):
+        from apps.masterdata.models import Supplier
+        from apps.purchase.outsource_models import OutsourceOrder
+        sup = Supplier.objects.create(code='OS1', name='外协商甲')
+        return OutsourceOrder.objects.create(
+            supplier=sup, required_date='2026-07-20', status='CONFIRMED',
+            total_amount=Decimal('4000.00'), tax_amount=Decimal('520.00'),
+            total_with_tax=Decimal('4520.00'),
+        )
+
+    def test_outsource_register_and_writeback_is_noop(self):
+        from apps.finance.payable_adapters import PAYABLE_SOURCES, register_payable
+        order = self._make_order()
+        item = register_payable(order, 'outsource')
+        self.assertEqual(item.payee_name, '外协商甲')
+        self.assertEqual(item.supplier_id, order.supplier_id)
+        self.assertEqual(item.amount_due, Decimal('4520.00'))
+        self.assertEqual(item.source_no, order.order_no)
+
+        item.amount_paid = Decimal('4520.00')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['outsource'].write_back(order, item)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'CONFIRMED')  # no-op:进度状态机不受付款影响
+
+        # 反核销(台账退回未结清),no-op 仍不应改动源单据状态。
+        item.amount_paid = Decimal('0')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['outsource'].write_back(order, item)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'CONFIRMED')
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class SharedExpenseAdapterTest(TestCase):
+    """公共费用:SharedExpense.status 是分摊进度机(allocate() 依赖 status=='ALLOCATED'
+    拒绝重复分摊),无付款语义,write_back 为 no-op,同上断言不破坏其状态机。"""
+
+    def _make_expense(self):
+        from apps.finance.models import SharedExpense
+        return SharedExpense.objects.create(
+            expense_no='SE001', name='办公室房租-2026年7月', category='RENT',
+            expense_date='2026-07-01', period_start='2026-07-01', period_end='2026-07-31',
+            amount=Decimal('6000.00'), status='ALLOCATED',
+        )
+
+    def test_shared_expense_register_and_writeback_is_noop(self):
+        from apps.finance.payable_adapters import PAYABLE_SOURCES, register_payable
+        exp = self._make_expense()
+        item = register_payable(exp, 'shared_expense')
+        self.assertIsNone(item.supplier_id)
+        self.assertEqual(item.amount_due, Decimal('6000.00'))
+        self.assertEqual(item.source_no, 'SE001')
+        self.assertEqual(item.payee_name, '办公室房租-2026年7月')
+
+        item.amount_paid = Decimal('6000.00')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['shared_expense'].write_back(exp, item)
+        exp.refresh_from_db()
+        self.assertEqual(exp.status, 'ALLOCATED')  # no-op:分摊状态机不受付款影响
+
+        item.amount_paid = Decimal('0')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['shared_expense'].write_back(exp, item)
+        exp.refresh_from_db()
+        self.assertEqual(exp.status, 'ALLOCATED')
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class TaxAdapterTest(TestCase):
+    def _make_declaration(self):
+        from apps.finance.tax_management import TaxDeclaration, TaxPeriod, TaxType
+        tt = TaxType.objects.create(code='VAT', name='增值税')
+        tp = TaxPeriod.objects.create(period_type='MONTHLY', year=2026, period=7,
+                                      start_date='2026-07-01', end_date='2026-07-31',
+                                      declare_deadline='2026-08-15')
+        # TaxDeclaration.save() 每次都会用 payable_amount = tax_amount - deductible_amount
+        # 重新计算并覆盖显式传入的 payable_amount,所以这里通过 tax_amount 间接控制应缴税额。
+        return TaxDeclaration.objects.create(
+            declaration_no='TD001', tax_period=tp, tax_type=tt,
+            declaration_type='VAT', status='DECLARED', tax_amount=Decimal('1500.00'),
+        )
+
+    def test_tax_register_and_full_writeback(self):
+        from apps.finance.payable_adapters import PAYABLE_SOURCES, register_payable
+        td = self._make_declaration()
+        item = register_payable(td, 'tax')
+        self.assertIsNone(item.supplier_id)
+        self.assertEqual(item.payee_name, '税务局')
+        self.assertEqual(item.amount_due, Decimal('1500.00'))
+        self.assertEqual(item.source_no, 'TD001')
+        # register_payable 返回的是 update_or_create 的内存态对象,DateField 赋的原始
+        # 字符串不会像从数据库读回那样被反序列化(同 match_candidates 里 transaction_time
+        # 的既有量),需 refresh_from_db 后才能拿到真正的 date 对象。
+        item.refresh_from_db()
+        self.assertEqual(item.due_date.isoformat(), '2026-08-15')
+
+        item.amount_paid = Decimal('1500.00')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['tax'].write_back(td, item)
+        td.refresh_from_db()
+        self.assertEqual(td.status, 'PAID')
+        self.assertEqual(td.paid_amount, Decimal('1500.00'))
+        self.assertIsNotNone(td.paid_at)
+
+        # 幂等:对已 PAID 的申报单再次 write_back,不应重复改写缴款时间。
+        first_paid_at = td.paid_at
+        PAYABLE_SOURCES['tax'].write_back(td, item)
+        td.refresh_from_db()
+        self.assertEqual(td.paid_at, first_paid_at)
+
+    def test_tax_writeback_reverses_on_unsettle(self):
+        from apps.accounts.models import User
+        from apps.finance.models import BankStatement
+        from apps.finance.payable_adapters import register_payable
+        from apps.finance.payable_service import settle, unsettle
+        u = User.objects.create(username='taxop', employee_id='TAX1')
+        td = self._make_declaration()
+        item = register_payable(td, 'tax')
+        bs = BankStatement(transaction_type='DEBIT', debit_amount=Decimal('1500.00'),
+                           counterparty_name='税务局', transaction_time='2026-07-02 00:00:00+00')
+        bs.save()
+        s = settle(bs, [{'payable_item_id': item.pk, 'amount': Decimal('1500.00')}], u)[0]
+        td.refresh_from_db()
+        self.assertEqual(td.status, 'PAID')
+
+        unsettle(s, u)
+        td.refresh_from_db()
+        self.assertEqual(td.status, 'DECLARED')
+        self.assertEqual(td.paid_amount, Decimal('0'))
+        self.assertIsNone(td.paid_at)
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class PaymentRequestAdapterTest(TestCase):
+    def _make_request(self):
+        from apps.accounts.models import User
+        from apps.finance.models import PaymentRequest
+        from apps.masterdata.models import Supplier
+        sup = Supplier.objects.create(code='PRQ1', name='供应商丁')
+        applicant = User.objects.create(username='pra1', employee_id='PRA10')
+        return PaymentRequest.objects.create(
+            request_no='PRQ001', title='进度款申请', supplier=sup, amount=Decimal('3000.00'),
+            expected_date='2026-07-15', reason='项目进度款', applicant=applicant, status='APPROVED',
+        )
+
+    def test_payment_request_register_and_full_writeback(self):
+        from apps.finance.payable_adapters import PAYABLE_SOURCES, register_payable
+        pr = self._make_request()
+        item = register_payable(pr, 'payment_request')
+        self.assertEqual(item.payee_name, '供应商丁')
+        self.assertEqual(item.supplier_id, pr.supplier_id)
+        self.assertEqual(item.amount_due, Decimal('3000.00'))
+        self.assertEqual(item.source_no, 'PRQ001')
+
+        item.amount_paid = Decimal('3000.00')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['payment_request'].write_back(pr, item)
+        pr.refresh_from_db()
+        self.assertEqual(pr.status, 'PAID')
+        self.assertIsNotNone(pr.paid_at)
+
+    def test_payment_request_writeback_reverses_on_unsettle(self):
+        from apps.accounts.models import User
+        from apps.finance.models import BankStatement
+        from apps.finance.payable_adapters import register_payable
+        from apps.finance.payable_service import settle, unsettle
+        u = User.objects.create(username='prqop', employee_id='PRQOP1')
+        pr = self._make_request()
+        item = register_payable(pr, 'payment_request')
+        bs = BankStatement(transaction_type='DEBIT', debit_amount=Decimal('3000.00'),
+                           counterparty_name='供应商丁', transaction_time='2026-07-02 00:00:00+00')
+        bs.save()
+        s = settle(bs, [{'payable_item_id': item.pk, 'amount': Decimal('3000.00')}], u)[0]
+        pr.refresh_from_db()
+        self.assertEqual(pr.status, 'PAID')
+        self.assertIsNotNone(pr.payment_id)
+
+        unsettle(s, u)
+        pr.refresh_from_db()
+        self.assertEqual(pr.status, 'APPROVED')
+        self.assertIsNone(pr.paid_at)
+        self.assertIsNone(pr.payment_id)

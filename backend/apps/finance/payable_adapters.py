@@ -137,3 +137,125 @@ class ContractPaymentSource(PayableSource):
         execution = obj.execution
         paid = execution.payments.filter(status='PAID').aggregate(s=Sum('amount'))['s'] or Decimal('0')
         type(execution).objects.filter(pk=execution.pk).update(paid_amount=paid)
+
+
+@register_source
+class OutsourcePayableSource(PayableSource):
+    """委外加工:OutsourceOrder.status 是收货/加工进度机(DRAFT/CONFIRMED/PROCESSING/
+    PARTIAL/COMPLETED/CANCELLED,outsource_views.py 里有基于它的状态机守卫),不含任何
+    付款语义、也无 amount_paid 等字段。统一台账 PayableItem 是该来源付款事实的唯一来源,
+    PayableSettlement 已完整记账,故 write_back 为 no-op,不回写/不新增字段,避免污染
+    源单据既有的进度状态机(settle/unsettle 对源单据均无副作用)。"""
+    source_type = 'outsource'
+    category = '委外加工'
+
+    def to_payable(self, obj) -> dict:
+        return {
+            'source_no': obj.order_no,
+            'payee_name': obj.supplier.name if obj.supplier_id else '',
+            'supplier_id': obj.supplier_id,
+            'amount_due': obj.total_with_tax,
+            'currency_id': None,
+            'due_date': obj.required_date,
+            'project_id': obj.project_id,
+        }
+
+    def write_back(self, obj, item) -> None:
+        pass
+
+
+@register_source
+class SharedExpensePayableSource(PayableSource):
+    """公共费用:SharedExpense.status 是分摊进度机(DRAFT/PENDING/ALLOCATED/CANCELLED,
+    views.py 的 allocate() 依赖 status=='ALLOCATED' 判断"已分摊"并拒绝重复分摊),不含
+    付款语义。统一台账 PayableItem 是该来源付款事实的唯一来源,write_back 为 no-op,
+    不回写/不新增字段,避免破坏分摊状态机(settle/unsettle 对源单据均无副作用)。"""
+    source_type = 'shared_expense'
+    category = '公共费用'
+
+    def to_payable(self, obj) -> dict:
+        # SharedExpense 无供应商字段(房租/水电等一般无供应商主数据),payee_name 用
+        # 费用名称(如"办公室房租-2026年7月")便于人工核对/核销台账检索。
+        return {
+            'source_no': obj.expense_no,
+            'payee_name': obj.name,
+            'supplier_id': None,
+            'amount_due': obj.amount,
+            'currency_id': None,
+            'due_date': obj.expense_date,
+            'project_id': None,
+        }
+
+    def write_back(self, obj, item) -> None:
+        pass
+
+
+@register_source
+class TaxPayableSource(PayableSource):
+    """缴税:TaxDeclaration 本身已有干净的"已付"语义(status='PAID' + paid_amount/paid_at),
+    直接复用,不新增字段。收款方固定为"税务局"(无对应供应商实体)。"""
+    source_type = 'tax'
+    category = '税务'
+
+    def to_payable(self, obj) -> dict:
+        due_date = obj.tax_period.declare_deadline if obj.tax_period_id else None
+        return {
+            'source_no': obj.declaration_no,
+            'payee_name': '税务局',
+            'supplier_id': None,
+            'amount_due': obj.payable_amount,
+            'currency_id': None,
+            'due_date': due_date,
+            'project_id': None,
+        }
+
+    def write_back(self, obj, item) -> None:
+        from decimal import Decimal
+        from django.utils import timezone
+        if item.status == item.STATUS_PAID and obj.status != 'PAID':
+            obj.status = 'PAID'
+            obj.paid_amount = item.amount_paid
+            if not obj.paid_at:
+                obj.paid_at = timezone.now()
+            obj.save(update_fields=['status', 'paid_amount', 'paid_at', 'updated_at'])
+        elif item.status != item.STATUS_PAID and obj.status == 'PAID':
+            # 反核销:申报单从 PAID 退回 DECLARED(已申报未缴款),清缴款额与缴款时间。
+            obj.status = 'DECLARED'
+            obj.paid_amount = Decimal('0')
+            obj.paid_at = None
+            obj.save(update_fields=['status', 'paid_amount', 'paid_at', 'updated_at'])
+
+
+@register_source
+class PaymentRequestPayableSource(PayableSource):
+    """付款申请:PaymentRequest 已有干净的"已付"语义(status='PAID' + paid_at + payment FK),
+    直接复用,不新增字段。"""
+    source_type = 'payment_request'
+    category = '付款申请'
+
+    def to_payable(self, obj) -> dict:
+        return {
+            'source_no': obj.request_no,
+            'payee_name': obj.supplier.name if obj.supplier_id else '',
+            'supplier_id': obj.supplier_id,
+            'amount_due': obj.amount,
+            'currency_id': obj.currency_id,
+            'due_date': obj.expected_date,
+            'project_id': obj.project_id,
+        }
+
+    def write_back(self, obj, item) -> None:
+        from django.utils import timezone
+        if item.status == item.STATUS_PAID and obj.status != 'PAID':
+            obj.status = 'PAID'
+            if not obj.paid_at:
+                obj.paid_at = timezone.now()
+            # 关联本次核销产生的付款记录(取该台账项下最新一条未被软删的 Payment)。
+            obj.payment = item.payments.order_by('-id').first()
+            obj.save(update_fields=['status', 'paid_at', 'payment', 'updated_at'])
+        elif item.status != item.STATUS_PAID and obj.status == 'PAID':
+            # 反核销:付款申请从 PAID 退回 APPROVED,清付款时间与关联付款记录。
+            obj.status = 'APPROVED'
+            obj.paid_at = None
+            obj.payment = None
+            obj.save(update_fields=['status', 'paid_at', 'payment', 'updated_at'])
