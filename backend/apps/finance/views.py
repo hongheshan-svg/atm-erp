@@ -2243,17 +2243,13 @@ class PaymentRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
             payment_req.payment = payment
             payment_req.save()
             
-            # 更新应付账款
+            # 更新应付账款:上面 Payment.objects.create(payment_type='AP', ap=...) 已经过
+            # Payment.save() 原子 F() 递增了 ap.amount_paid 一次;这里不再重复递增
+            # (历史 bug:曾在此处对同一笔付款再手动 F() 一次,导致 amount_paid 被双记,
+            # 见 apps.finance.tests.test_payable_ledger.PaymentRequestPayNoDoubleCountTest),
+            # 只需刷新后让 AccountPayable.save() 按最新 amount_paid 重算 status。
             if payment_req.ap:
-                from django.db.models import F
-                AccountPayable.objects.filter(pk=payment_req.ap.pk).update(
-                    amount_paid=F('amount_paid') + payment_req.amount
-                )
-                payment_req.ap.refresh_from_db()
-                if payment_req.ap.amount_paid >= payment_req.ap.amount_due:
-                    payment_req.ap.status = 'PAID'
-                else:
-                    payment_req.ap.status = 'PARTIAL'
+                payment_req.ap.refresh_from_db(fields=['amount_paid'])
                 payment_req.ap.save(update_fields=['status'])
         
         return Response({
