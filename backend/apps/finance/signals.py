@@ -1,14 +1,30 @@
 """apps.finance 模型的 post_save 信号处理器。
 
-目前只有一个:AccountPayable(AP)创建/变更后自动登记/作废统一待付款项台账
-(PayableItem),避免每次都要人工重跑 backfill_payables 管理命令才能让新
-产生的 AP 出现在核销工作台候选里。
+- AccountPayable(AP)创建/变更后自动登记/作废统一待付款项台账(PayableItem),
+  避免每次都要人工重跑 backfill_payables 管理命令才能让新产生的 AP 出现在核销
+  工作台候选里。
+- 二期来源(公共费用分摊/税务申报/独立付款申请)审批到达各自"确认应付"状态时
+  同样自动登记;取消/撤回时作废对应台账项。通用规则:一个来源若已经通过创建/
+  引用 AccountPayable 间接进了台账(经 register_ap_payable 登记为 source_type=
+  'ap'),就不再挂独立信号,避免同一笔应付被双记——据此,委外加工(outsource,
+  OutsourceOrder.confirm() 里内联创建 AccountPayable)整体跳过;付款申请
+  (PaymentRequest)仅当 `ap` 为空(不挂靠任何已有 AP 的独立申请,如预付款)时才
+  登记为 source_type='payment_request'。
+
+登记/作废失败均不冒泡(用 `_safe_sync_payable` 包裹),避免台账同步问题打断审批
+事务;失败只记日志 + 通知财务管理员,真正的数据补齐留给人工核查或未来的
+backfill 命令兜底。
 """
+
+import logging
 
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from apps.finance.models import AccountPayable
+from apps.finance.models import AccountPayable, PaymentRequest, SharedExpense
+from apps.finance.tax_management import TaxDeclaration
+
+logger = logging.getLogger(__name__)
 
 
 @receiver(post_save, sender=AccountPayable)
@@ -33,3 +49,100 @@ def register_ap_payable(sender, instance, **kwargs):
         register_payable(instance, 'ap')
     elif instance.status == 'CANCELLED':
         cancel_payable(instance, 'ap')
+
+
+@receiver(post_save, sender=SharedExpense)
+def register_shared_expense_payable(sender, instance, **kwargs):
+    """公共费用完成分摊(ALLOCATED)→ 登记台账;撤销分摊退回 PENDING 或取消 → 台账项作废。
+
+    SharedExpenseViewSet.allocate() 把 status 置为 ALLOCATED 时才产生"确认应付"事实
+    (分摊前的 DRAFT/PENDING 只是费用登记草稿,金额可能还会调整);
+    cancel_allocation() 会把 ALLOCATED 退回 PENDING,此时应回收已登记且未核销的台账项,
+    避免误核销(同合同付款撤回场景的处理方式)。CANCELLED 目前代码里无入口触发,
+    与 cancel_payable 一样一并处理以防将来接入。
+    """
+    from apps.finance.payable_adapters import cancel_payable, register_payable
+
+    if instance.status == 'ALLOCATED':
+        _safe_sync_payable(register_payable, instance, 'shared_expense', action='登记')
+    elif instance.status in ('PENDING', 'CANCELLED'):
+        _safe_sync_payable(cancel_payable, instance, 'shared_expense', action='作废')
+
+
+@receiver(post_save, sender=TaxDeclaration)
+def register_tax_payable(sender, instance, **kwargs):
+    """税务申报确认申报(DECLARED)→ 登记台账。
+
+    DRAFT/SUBMITTED/APPROVED 都还在申报流程内,应缴税额(payable_amount)在此之前
+    可能因抵扣调整而变化,不适合提前登记;declare() 落 DECLARED 后才是"已申报待缴"
+    的确认应付事实,与 `TaxPayableSource.write_back` 反核销时退回的状态一致
+    (见 payable_adapters.py:223)。REJECTED 只发生在 SUBMITTED 阶段(早于登记时点),
+    且当前没有 DECLARED 之后撤回的操作入口,故无需 cancel 分支。
+    """
+    from apps.finance.payable_adapters import register_payable
+
+    if instance.status == 'DECLARED':
+        _safe_sync_payable(register_payable, instance, 'tax', action='登记')
+
+
+@receiver(post_save, sender=PaymentRequest)
+def register_payment_request_payable(sender, instance, **kwargs):
+    """付款申请审批通过(APPROVED)→ 登记台账;取消(CANCELLED)→ 台账项作废。
+
+    覆盖两条到达 APPROVED 的路径(PaymentRequestViewSet.submit() 未配置审批流时的
+    直接批准、以及工作流引擎 `_on_workflow_complete` business_type='PAYMENT' 分支),
+    两者都经 PaymentRequest.save() 落状态。REJECTED/WITHDRAWN 都退回 DRAFT,早于登记
+    时点,无需处理;PAID 由 `PaymentRequestPayableSource.write_back` 或 pay() 视图直接
+    置位,不需要这里额外处理。
+
+    只登记 `ap` 为空的独立付款申请(如 PREPAY 预付款,尚无对应发票/AP)。若申请挂了
+    `ap` FK(申请支付某张已存在的 AccountPayable),该 AP 只要处于开放状态就已经由
+    `register_ap_payable` 登记为 source_type='ap';这里若再登记 source_type=
+    'payment_request' 会对同一笔应付双记,故显式跳过(与 outsource 的处理原则一致)。
+    """
+    from apps.finance.payable_adapters import cancel_payable, register_payable
+
+    if instance.ap_id is not None:
+        return
+
+    if instance.status == 'APPROVED':
+        _safe_sync_payable(register_payable, instance, 'payment_request', action='登记')
+    elif instance.status == 'CANCELLED':
+        _safe_sync_payable(cancel_payable, instance, 'payment_request', action='作废')
+
+
+def _safe_sync_payable(func, instance, source_type, *, action):
+    """执行 register_payable/cancel_payable,失败时记日志 + 发系统通知给财务管理员,不冒泡。
+
+    与 apps.purchase.signals 里的同名函数逻辑一致(未跨 app 复用私有辅助函数,各自
+    保留一份简单实现,避免引入不必要的 app 间耦合)。成功时返回底层函数结果,失败
+    返回 None。
+    """
+    try:
+        return func(instance, source_type)
+    except Exception:
+        logger.exception(
+            '%s(id=%s, status=%s)台账%s失败,需人工核查',
+            source_type, instance.pk, getattr(instance, 'status', ''), action,
+        )
+        _notify_finance_admins_of_payable_sync_failure(instance, source_type, action)
+
+
+def _notify_finance_admins_of_payable_sync_failure(instance, source_type, action):
+    """台账登记/作废失败的兜底告警:创建系统通知给财务管理员(超管兜底)。"""
+    try:
+        from apps.accounts.models import User
+        from apps.core.models import SystemNotification
+
+        recipients = User.objects.filter(is_active=True, is_deleted=False, is_superuser=True)
+        source_no = getattr(instance, 'source_no', None) or getattr(instance, 'pk', '')
+        title = '待付款项台账同步失败'
+        message = (
+            f'{source_type} 单据 {source_no} (id={instance.pk}) 的待付款项台账{action}失败,'
+            f'请人工核查。'
+        )
+        SystemNotification.objects.bulk_create(
+            [SystemNotification(user=user, type='ERROR', title=title, message=message) for user in recipients]
+        )
+    except Exception:
+        logger.exception('发送待付款项台账同步失败告警通知时出错(source_type=%s, id=%s)', source_type, instance.pk)
