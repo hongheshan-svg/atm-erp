@@ -3,11 +3,11 @@ Workflow service for managing approval processes.
 """
 import logging
 from datetime import timedelta
-from django.utils import timezone
-from django.db import transaction
-from django.db.models import Q
 
-from .models import WorkflowDefinition, WorkflowStep, WorkflowInstance, WorkflowTask
+from django.db import transaction
+from django.utils import timezone
+
+from .models import WorkflowDefinition, WorkflowInstance, WorkflowTask
 
 logger = logging.getLogger(__name__)
 
@@ -107,10 +107,13 @@ class WorkflowService:
             cls._on_workflow_complete(instance, 'APPROVED')
             return None
         
-        # Determine assignee
-        assignee = cls._get_step_assignee(current_step, instance)
-        
-        if not assignee:
+        # Determine assignee(s). A COUNTERSIGN (会签) or OR_SIGN (或签) step
+        # resolves to MULTIPLE assignees (e.g. every active user of a role);
+        # every other action type keeps the single-approver behavior (exactly
+        # one assignee).
+        assignees = cls._get_step_assignees(current_step, instance)
+
+        if not assignees:
             logger.warning(f"No assignee found for step {current_step.id}")
             # Skip this step and try next (with depth guard to avoid infinite recursion)
             instance.current_step = current_step.step_order + 1
@@ -123,24 +126,64 @@ class WorkflowService:
                 cls._on_workflow_complete(instance, 'APPROVED')
                 return None
             return cls._create_next_task(instance)
-        
+
         # Calculate deadline
         deadline = timezone.now() + timedelta(hours=current_step.timeout_hours)
-        
-        task = WorkflowTask.objects.create(
-            instance=instance,
-            step=current_step,
-            assignee=assignee,
-            status='PENDING',
-            deadline=deadline,
-            created_by=instance.submitter
-        )
-        
-        # Send notification
-        cls._notify_assignee(task)
-        
-        return task
+
+        # Create one PENDING task per resolved assignee. For a single-approver
+        # step this is exactly one task (unchanged); for a COUNTERSIGN or
+        # OR_SIGN step it fans out to one concurrent task per candidate approver.
+        tasks = []
+        for assignee in assignees:
+            task = WorkflowTask.objects.create(
+                instance=instance,
+                step=current_step,
+                assignee=assignee,
+                status='PENDING',
+                deadline=deadline,
+                created_by=instance.submitter
+            )
+            # Send notification
+            cls._notify_assignee(task)
+            tasks.append(task)
+
+        # Return the first task for backward compatibility with callers.
+        return tasks[0] if tasks else None
     
+    @classmethod
+    def _get_step_assignees(cls, step, instance):
+        """
+        Resolve the list of assignees for a workflow step.
+
+        For a multi-assignee step whose approver is a ROLE — COUNTERSIGN (会签,
+        all must approve) or OR_SIGN (或签, any one suffices) — this returns
+        EVERY active user holding that role, so the engine can create one
+        concurrent approval task per candidate approver. In every other case it
+        returns a single-element list using the standard single-assignee
+        resolution, preserving the legacy single-approver behavior.
+
+        Note: explicit multi-user countersign/or-sign is not representable today
+        because WorkflowStep only carries a single ``approver_user`` FK; ROLE
+        membership is the supported multi-assignee source (see residual risk /
+        follow-up).
+        """
+        from apps.accounts.models import User
+
+        if step.action_type in ('COUNTERSIGN', 'OR_SIGN') and step.approver_type == 'ROLE' and step.approver_role:
+            users = list(
+                User.objects.filter(
+                    roles=step.approver_role,
+                    is_active=True,
+                    is_deleted=False,
+                ).distinct()
+            )
+            if users:
+                return users
+            # Role has no members -> fall back to single-assignee resolution below.
+
+        assignee = cls._get_step_assignee(step, instance)
+        return [assignee] if assignee else []
+
     @classmethod
     def _get_step_assignee(cls, step, instance):
         """
@@ -298,28 +341,79 @@ class WorkflowService:
         Args:
             skip_assignee_check: When True, skip the assignee verification.
                 Used by business ViewSets that have their own permission checks.
+
+        For a COUNTERSIGN (会签) step the instance advances to the next step
+        only once EVERY sibling task of the step is approved; an approval that
+        still leaves pending countersigners returns success but keeps the
+        instance on the current step.
+
+        For an OR_SIGN (或签) step the FIRST approval satisfies the step: it
+        advances the instance and auto-closes (marks SKIPPED) the sibling
+        PENDING tasks so they don't linger. The instance-row lock plus the
+        refresh_from_db re-check serialize concurrent approvals so only the
+        first one advances.
         """
         if task.status != 'PENDING':
             return False, "该任务已处理"
-        
+
         if not skip_assignee_check and task.assignee != user and not user.is_superuser:
             return False, "您没有权限处理此任务"
-        
+
         with transaction.atomic():
+            # Lock the instance so concurrent countersign approvals serialize and
+            # the "all approved?" check below cannot race into a double advance
+            # or a stuck step.
+            instance = WorkflowInstance.objects.select_for_update().get(id=task.instance_id)
+
+            # Re-read task status under the lock to avoid double-processing.
+            task.refresh_from_db()
+            if task.status != 'PENDING':
+                return False, "该任务已处理"
+
             task.status = 'APPROVED'
             task.action_time = timezone.now()
             task.comment = comment
             task.updated_by = user
             task.save()
-            
-            # Move to next step
-            instance = task.instance
-            instance.current_step = task.step.step_order + 1
+
+            step = task.step
+
+            # COUNTERSIGN (会签): the step is satisfied only when ALL of its
+            # sibling tasks are approved. If any sibling is still pending, hold
+            # the instance on the current step and wait.
+            if step.action_type == 'COUNTERSIGN':
+                has_pending_sibling = instance.tasks.filter(
+                    step=step,
+                    status='PENDING',
+                    is_deleted=False,
+                ).exists()
+                if has_pending_sibling:
+                    return True, "会签通过，等待其他会签人审批"
+
+            # OR_SIGN (或签): the FIRST approval satisfies the step. Auto-close
+            # the sibling PENDING tasks (mark SKIPPED) so they don't linger, then
+            # advance below. The instance-row select_for_update lock and the
+            # refresh_from_db re-check above guarantee only the first approval
+            # reaches here; a concurrent approval on a sibling task will find its
+            # own task already SKIPPED and bail out with "该任务已处理".
+            elif step.action_type == 'OR_SIGN':
+                instance.tasks.filter(
+                    step=step,
+                    status='PENDING',
+                    is_deleted=False,
+                ).exclude(id=task.id).update(
+                    status='SKIPPED',
+                    action_time=timezone.now(),
+                )
+
+            # Move to next step (single-approver step, last countersigner, or
+            # the first or-signer).
+            instance.current_step = step.step_order + 1
             instance.save()
-            
+
             # Create next task or complete workflow
             cls._create_next_task(instance)
-        
+
         return True, "审批通过"
     
     @classmethod
@@ -330,28 +424,76 @@ class WorkflowService:
         Args:
             skip_assignee_check: When True, skip the assignee verification.
                 Used by business ViewSets that have their own permission checks.
+
+        For a single-approver step, or a COUNTERSIGN (会签) step, a single
+        rejection rejects the whole instance: any one countersigner's rejection
+        fails the step, and the remaining pending sibling tasks are cancelled
+        (marked SKIPPED).
+
+        For an OR_SIGN (或签) step the semantics are the mirror image: a single
+        rejection does NOT fail the step while other approvers can still
+        approve. Only that one task is marked REJECTED and its sibling PENDING
+        tasks are left untouched. The instance is rejected only once EVERY
+        assignee has rejected — i.e. when the last PENDING sibling is rejected
+        and no pending sibling remains.
         """
         if task.status != 'PENDING':
             return False, "该任务已处理"
-        
+
         if not skip_assignee_check and task.assignee != user and not user.is_superuser:
             return False, "您没有权限处理此任务"
-        
+
         with transaction.atomic():
+            # Lock the instance so a concurrent approval cannot advance the step
+            # while we are rejecting it.
+            instance = WorkflowInstance.objects.select_for_update().get(id=task.instance_id)
+
+            # Re-read task status under the lock to avoid double-processing.
+            task.refresh_from_db()
+            if task.status != 'PENDING':
+                return False, "该任务已处理"
+
             task.status = 'REJECTED'
             task.action_time = timezone.now()
             task.comment = comment
             task.updated_by = user
             task.save()
-            
+
+            step = task.step
+
+            # OR_SIGN (或签): a single rejection does NOT fail the step while
+            # other approvers can still approve. Leave the sibling PENDING tasks
+            # untouched and keep the instance on the current step. Only when the
+            # LAST pending sibling is rejected (no PENDING sibling remains, i.e.
+            # every assignee rejected) does the step/instance fail — in which
+            # case we fall through to the rejection block below (the SKIPPED
+            # update is then a no-op since no sibling is still pending).
+            if step.action_type == 'OR_SIGN':
+                has_pending_sibling = instance.tasks.filter(
+                    step=step,
+                    status='PENDING',
+                    is_deleted=False,
+                ).exists()
+                if has_pending_sibling:
+                    return True, "已拒绝，等待其他审批人处理"
+
+            # Cancel any still-pending sibling tasks (e.g. the other
+            # countersigners of this step) so they don't linger.
+            instance.tasks.filter(
+                status='PENDING',
+                is_deleted=False,
+            ).exclude(id=task.id).update(
+                status='SKIPPED',
+                action_time=timezone.now(),
+            )
+
             # Reject the entire workflow
-            instance = task.instance
             instance.status = 'REJECTED'
             instance.completed_at = timezone.now()
             instance.save()
-            
+
             cls._on_workflow_complete(instance, 'REJECTED')
-        
+
         return True, "已拒绝"
     
     @classmethod
@@ -435,15 +577,26 @@ class WorkflowService:
                 from apps.sales.models import SalesOrder
                 so = SalesOrder.objects.get(id=instance.business_id)
                 if result == 'APPROVED':
-                    so.status = 'CONFIRMED'  # 审批通过后确认订单
-                    so.save()
-                    # 与直接确认路径一致：生成应收账款与付款计划，避免审批确认的订单漏记 AR
-                    try:
-                        from apps.sales.services import create_sales_order_receivables
-                        create_sales_order_receivables(so, getattr(instance, 'submitter', None) or so.created_by)
-                    except Exception as e:
-                        logger.error(f"销售订单 {so.order_no} 审批通过后创建应收/付款计划失败: {e}")
-                    logger.info(f"Sales order {so.order_no} approved, status changed to CONFIRMED")
+                    # 与直接确认路径 (_do_confirm) 一致的信用/客户状态校验：
+                    # 停用、冻结、黑名单、超额时不得确认订单，避免审批确认绕过信用管控。
+                    from apps.masterdata.credit_management import check_customer_credit_for_order
+                    order_amount = so.total_with_tax or so.total_amount or 0
+                    passed, message = check_customer_credit_for_order(so.customer, order_amount)
+                    if not passed:
+                        # 校验未过：订单保持待审批状态、不生成应收账款，记录失败原因
+                        logger.error(
+                            f"销售订单 {so.order_no} 审批通过但信用校验未过，未确认订单/未生成应收: {message}"
+                        )
+                    else:
+                        so.status = 'CONFIRMED'  # 审批通过后确认订单
+                        so.save()
+                        # 与直接确认路径一致：生成应收账款与付款计划，避免审批确认的订单漏记 AR
+                        try:
+                            from apps.sales.services import create_sales_order_receivables
+                            create_sales_order_receivables(so, getattr(instance, 'submitter', None) or so.created_by)
+                        except Exception as e:
+                            logger.error(f"销售订单 {so.order_no} 审批通过后创建应收/付款计划失败: {e}")
+                        logger.info(f"Sales order {so.order_no} approved, status changed to CONFIRMED")
                 elif result == 'REJECTED':
                     so.status = 'REJECTED'
                     so.save()
