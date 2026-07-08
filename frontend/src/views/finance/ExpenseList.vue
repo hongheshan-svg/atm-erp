@@ -228,9 +228,10 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Upload } from '@element-plus/icons-vue'
-import { getExpenses, createExpense, updateExpense, submitExpense, approveExpense, rejectExpense, reimburseExpense } from '@/api/finance'
+import { getExpenses, createExpense, updateExpense, submitExpense, approveExpense, rejectExpense } from '@/api/finance'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
@@ -238,6 +239,8 @@ import { usePermissionStore } from '@/stores/permission'
 import { getDepartments } from '@/api/auth'
 import { batchUploadAttachments } from '@/api/core'
 import { getProjectList } from '@/api/projects/project'
+
+const router = useRouter()
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -560,17 +563,9 @@ const handleReject = async (row) => {
   }
 }
 
-const handleReimburse = async (row) => {
-  try {
-    await ElMessageBox.confirm('确定要标记该费用为已报销吗？', '报销确认', { type: 'warning' })
-    await reimburseExpense(row.id)
-    ElMessage.success('已报销')
-    loadExpenses()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('操作失败')
-    }
-  }
+const handleReimburse = (_row?: any) => {
+  ElMessage.info('报销付款已统一至「付款核销工作台」核销银行流水完成，请在工作台中办理')
+  router.push('/finance/payment-reconciliation')
 }
 
 // handleDelete 已被 useBatchDelete 的 deleteRow 替代

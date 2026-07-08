@@ -237,18 +237,17 @@ class ExpenseViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin,
     
     @action(detail=True, methods=['post'])
     def reimburse(self, request, pk=None):
-        """Mark expense as reimbursed."""
-        expense = self.get_object()
-        if expense.status != 'APPROVED':
-            return Response(
-                {'error': '只能报销已批准的费用'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        expense.status = 'PAID'
-        expense.reimbursement_date = timezone.now().date()
-        expense.save()
-        return Response(ExpenseSerializer(expense).data)
+        """已停用:报销付款统一由银行流水核销完成(付款核销工作台)。
+
+        历史上 reimburse() 直接把报销单标 PAID、写报销日期,绕过统一核销台账,与
+        合同付款 pay()、AP record_payment() 是同一类"双轨"问题。收口后员工报销
+        →PAID 只经 settle→ExpensePayableSource.write_back 驱动(审批通过即经
+        register_expense_payable 信号进台账候选)。
+        """
+        return Response(
+            {'error': '报销付款已统一由银行流水核销完成:请在「付款核销工作台」核销对应银行流水。此接口已停用。'},
+            status=status.HTTP_409_CONFLICT,
+        )
 
 
 class AccountReceivableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):

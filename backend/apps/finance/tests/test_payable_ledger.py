@@ -2725,3 +2725,37 @@ class VehicleRequestBackfillCommandTest(TestCase):
         self.assertEqual(
             PayableItem.objects.filter(source_type='vehicle_request', source_id=req.pk).count(), 1
         )
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ExpenseReimburseRetiredTest(TestCase):
+    """报销 reimburse() 退役:不再直接标 PAID,改由银行流水核销驱动;PATCH 也不能直接改 status。"""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+        from apps.accounts.models import User
+        self.admin = User.objects.create(username='expadmin', employee_id='EXA1', is_staff=True, is_superuser=True)
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+
+    def _make_expense(self, code='EMP1', no='EXPR1'):
+        from apps.accounts.models import User
+        from apps.finance.models import Expense
+        u = User.objects.create(username=f'emp{code}', employee_id=code)
+        return Expense.objects.create(expense_no=no, user=u, expense_date='2026-07-01',
+                                      category='TRAVEL', amount=Decimal('500.00'), status='APPROVED')
+
+    def test_reimburse_endpoint_retired_409_no_side_effect(self):
+        exp = self._make_expense()
+        resp = self.client.post(f'/api/finance/expenses/{exp.pk}/reimburse/', {}, format='json')
+        self.assertEqual(resp.status_code, 409)
+        exp.refresh_from_db()
+        self.assertEqual(exp.status, 'APPROVED')      # 未被标 PAID
+        self.assertIsNone(exp.reimbursement_date)     # 未写报销日期
+
+    def test_patch_cannot_set_status_paid(self):
+        exp = self._make_expense(code='EMP2', no='EXPR2')
+        resp = self.client.patch(f'/api/finance/expenses/{exp.pk}/', {'status': 'PAID'}, format='json')
+        self.assertIn(resp.status_code, (200, 202))
+        exp.refresh_from_db()
+        self.assertEqual(exp.status, 'APPROVED')      # PATCH 改 status 无效
