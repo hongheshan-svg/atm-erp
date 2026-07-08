@@ -556,7 +556,10 @@ class PurchasePaymentScheduleSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['schedule_no', 'created_at', 'updated_at']
+        # amount_paid/status/actual_paid_date 由所属 AP 的核销进度派生(sync_purchase_schedules_from_ap),
+        # 不经通用 PATCH——设为只读,堵住绕过核销台账直接改里程碑已付/状态的旁路。
+        read_only_fields = ['schedule_no', 'created_at', 'updated_at',
+                            'amount_paid', 'status', 'actual_paid_date']
 
 
 class PaymentRequestSerializer(serializers.ModelSerializer):

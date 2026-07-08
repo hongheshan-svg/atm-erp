@@ -1975,35 +1975,18 @@ class PurchasePaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrack
     
     @action(detail=True, methods=['post'])
     def record_payment(self, request, pk=None):
-        """Record a payment against this schedule."""
-        schedule = self.get_object()
-        amount = request.data.get('amount')
-        payment_date = request.data.get('payment_date', timezone.now().date())
-        
-        if not amount:
-            return Response({'error': '请提供付款金额'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            amount = Decimal(str(amount))
-        except:
-            return Response({'error': '金额格式错误'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        from django.db.models import F as DbF
-        from django.db import transaction
-        with transaction.atomic():
-            PurchasePaymentSchedule.objects.filter(pk=schedule.pk).update(
-                amount_paid=DbF('amount_paid') + amount
-            )
-            schedule.refresh_from_db()
-            if schedule.amount_paid >= schedule.amount_due:
-                schedule.status = 'PAID'
-                schedule.actual_paid_date = payment_date
-                schedule.reminder_status = 'PAID'
-            elif schedule.amount_paid > 0:
-                schedule.status = 'PARTIAL'
-            schedule.save(update_fields=['status', 'actual_paid_date', 'reminder_status'])
+        """已停用:采购付款计划的里程碑付款统一由银行流水核销驱动。
 
-        return Response(PurchasePaymentScheduleSerializer(schedule).data)
+        历史上本 action 直接对里程碑 amount_paid 累加,是绕过统一核销台账、且不回写
+        所属 AP 的"双轨"付款(与合同 pay()、AP record_payment、报销 reimburse 同类)。
+        收口后:一个 PO 只有一张 AccountPayable(真实应付,已在核销台账),里程碑的
+        已付/进度改由该 AP 的核销额按 milestone_order 顺序自动派生(见 finance/signals.py
+        的 sync_purchase_schedules_from_ap),付款计划回归"计划 + 催付 + 进度展示"职能。
+        """
+        return Response(
+            {'error': '采购付款已统一由银行流水核销完成:请在「付款核销工作台」核销对应银行流水。此接口已停用。'},
+            status=status.HTTP_409_CONFLICT,
+        )
     
     @action(detail=False, methods=['get'])
     def reminders(self, request):

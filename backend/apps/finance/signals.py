@@ -59,6 +59,51 @@ def register_ap_payable(sender, instance, **kwargs):
         cancel_payable(instance, 'ap')
 
 
+@receiver(post_save, sender=AccountPayable)
+def sync_purchase_schedules_from_ap(sender, instance, **kwargs):
+    """AP 已付额变化时,按里程碑顺序把已付额分摊到该 PO 的采购付款计划,派生每个里程碑的
+    amount_paid/status/actual_paid_date。
+
+    一个 PO 只有一张 AccountPayable(真实应付,已在核销台账),里程碑是其计划拆分。收口
+    掉里程碑自己的 record_payment(双轨)后,里程碑进度由 AP 核销唯一驱动(settle 增付、
+    unsettle 退付双向正确):按 milestone_order 顺序填充,先满足靠前的节点。反核销使 AP
+    已付额回退时,这里同步把付款派生态(PARTIAL/PAID)退回 PENDING,不动 OVERDUE/CANCELLED
+    等非付款派生状态。幂等:每次都从 instance.amount_paid 全量重算,不累加。
+    """
+    if not instance.po_id:
+        return
+    from decimal import Decimal
+
+    from django.utils import timezone
+
+    from apps.finance.models import PurchasePaymentSchedule
+
+    schedules = list(
+        PurchasePaymentSchedule.objects.filter(purchase_order_id=instance.po_id, is_deleted=False)
+        .order_by('milestone_order', 'id')
+    )
+    if not schedules:
+        return
+    remaining = instance.amount_paid or Decimal('0')
+    for s in schedules:
+        alloc = min(remaining, s.amount_due) if remaining > 0 else Decimal('0')
+        remaining -= alloc
+        if alloc >= s.amount_due:
+            new_status = 'PAID'
+        elif alloc > 0:
+            new_status = 'PARTIAL'
+        elif s.status in ('PARTIAL', 'PAID'):
+            new_status = 'PENDING'
+        else:
+            new_status = s.status
+        new_date = timezone.now().date() if new_status == 'PAID' else None
+        if s.amount_paid != alloc or s.status != new_status or s.actual_paid_date != new_date:
+            s.amount_paid = alloc
+            s.status = new_status
+            s.actual_paid_date = new_date
+            s.save(update_fields=['amount_paid', 'status', 'actual_paid_date', 'updated_at'])
+
+
 @receiver(post_save, sender=SharedExpense)
 def register_shared_expense_payable(sender, instance, **kwargs):
     """公共费用完成分摊(ALLOCATED)→ 登记台账;撤销分摊退回 PENDING 或取消 → 台账项作废。

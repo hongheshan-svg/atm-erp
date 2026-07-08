@@ -2759,3 +2759,61 @@ class ExpenseReimburseRetiredTest(TestCase):
         self.assertIn(resp.status_code, (200, 202))
         exp.refresh_from_db()
         self.assertEqual(exp.status, 'APPROVED')      # PATCH 改 status 无效
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class PurchaseScheduleConsolidationTest(TestCase):
+    """采购付款计划里程碑收口:退役 record_payment(双轨),里程碑进度改由所属 PO 的 AP 核销派生。"""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+        from apps.accounts.models import User
+        self.admin = User.objects.create(username='psadmin', employee_id='PSA1', is_staff=True, is_superuser=True)
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+
+    def _make(self, code='PS'):
+        from datetime import date
+        from apps.masterdata.models import Supplier
+        from apps.purchase.models import PurchaseOrder
+        from apps.finance.models import AccountPayable, PurchasePaymentSchedule
+        sup = Supplier.objects.create(code=code, name=f'供应商{code}')
+        po = PurchaseOrder.objects.create(supplier=sup, delivery_date=date(2026, 7, 20), total_amount=Decimal('1000'))
+        sched = PurchasePaymentSchedule.objects.create(
+            schedule_no=f'PPS{code}', purchase_order=po, milestone_type='FINAL',
+            milestone_name='月结', milestone_order=1, percentage=Decimal('100'),
+            amount_due=Decimal('1000.00'), due_date=date(2026, 12, 1))
+        ap = AccountPayable.objects.create(supplier=sup, po=po, invoice_date=date(2026, 6, 1),
+                                           due_date=date(2026, 7, 1), amount_due=Decimal('1000.00'))
+        sched.refresh_from_db()
+        return po, ap, sched
+
+    def test_record_payment_retired_409(self):
+        po, ap, sched = self._make('PSA')
+        resp = self.client.post(f'/api/finance/purchase-payment-schedules/{sched.pk}/record_payment/',
+                                {'amount': '500'}, format='json')
+        self.assertEqual(resp.status_code, 409)
+        sched.refresh_from_db()
+        self.assertEqual(sched.amount_paid, Decimal('0'))
+
+    def test_patch_cannot_set_amount_paid(self):
+        po, ap, sched = self._make('PSB')
+        resp = self.client.patch(f'/api/finance/purchase-payment-schedules/{sched.pk}/',
+                                 {'amount_paid': '999'}, format='json')
+        self.assertIn(resp.status_code, (200, 202))
+        sched.refresh_from_db()
+        self.assertEqual(sched.amount_paid, Decimal('0'))
+
+    def test_ap_payment_derives_schedule_progress(self):
+        po, ap, sched = self._make('PSC')
+        ap.amount_paid = Decimal('1000.00')
+        ap.save()
+        sched.refresh_from_db()
+        self.assertEqual(sched.amount_paid, Decimal('1000.00'))
+        self.assertEqual(sched.status, 'PAID')
+        # 反核销:AP 退回 0 → 里程碑回退 PENDING
+        ap.amount_paid = Decimal('0')
+        ap.save()
+        sched.refresh_from_db()
+        self.assertEqual(sched.amount_paid, Decimal('0'))
+        self.assertEqual(sched.status, 'PENDING')
