@@ -492,7 +492,7 @@ class ReconciliationService:
     @classmethod
     def create_session(cls, session_type, warehouse_id, start_date, end_date, user):
         """创建对账会话"""
-        from apps.core.models import CodeRule
+        from apps.core.code_rule_models import CodeRule
 
         session_no = CodeRule.generate_code('RECONCILE')
 
