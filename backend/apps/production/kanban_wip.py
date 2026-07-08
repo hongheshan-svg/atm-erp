@@ -57,19 +57,16 @@ class KanbanWIPService:
 
     @staticmethod
     def check_wip_status():
+        from apps.production.aps import APSScheduleTask
+
         rules = KanbanWIPRule.objects.filter(is_deleted=False, is_active=True)
         statuses = []
         for rule in rules:
-            try:
-                from apps.production.models import ProductionOrder
-
-                current_wip = ProductionOrder.objects.filter(
-                    process_name=rule.process_name,
-                    status='in_progress',
-                    is_deleted=False,
-                ).count()
-            except Exception:
-                current_wip = 0
+            current_wip = APSScheduleTask.objects.filter(
+                process_name=rule.process_name,
+                status='IN_PROGRESS',
+                is_deleted=False,
+            ).count()
 
             utilization = (current_wip / rule.wip_limit * 100) if rule.wip_limit > 0 else 0
             if current_wip >= rule.wip_limit:
