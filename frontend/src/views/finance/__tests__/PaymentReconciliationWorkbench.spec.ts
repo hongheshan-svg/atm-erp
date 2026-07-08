@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { ElMessage } from 'element-plus'
 import PaymentReconciliationWorkbench from '../PaymentReconciliationWorkbench.vue'
 
 const getBankStatements = vi.fn()
@@ -58,5 +59,43 @@ describe('PaymentReconciliationWorkbench', () => {
     const wrapper = mount(PaymentReconciliationWorkbench)
     await flushPromises()
     expect(wrapper.text()).toContain('请先在左侧选择一条待核销的银行流水')
+  })
+
+  it('选择费用类别筛选后查询台账带上 category 参数', async () => {
+    // 注:el-form/el-select/el-option 在全局测试配置里被整体 stub(true),不渲染任何插槽
+    // 内容(见 src/test-setup.ts),因此无法通过真实 DOM 交互模拟下拉选择;此处直接驱动
+    // rightFilters.category + handleLedgerSearch() 校验新增筛选项到查询参数的拼装逻辑,
+    // 这也是本次改动唯一新增的业务逻辑(模板里的 v-model 绑定与既有 source_type/supplier/status
+    // 筛选项写法一致,非本次新引入的风险点)。
+    const wrapper = mount(PaymentReconciliationWorkbench)
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.rightFilters.category = '委外加工'
+    await vm.handleLedgerSearch()
+    await flushPromises()
+    expect(getPayableItems).toHaveBeenCalledWith(expect.objectContaining({ category: '委外加工' }))
+  })
+
+  it('核销成功提示信息包含本次生成的付款单号', async () => {
+    const wrapper = mount(PaymentReconciliationWorkbench)
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.selectedStatement = { id: 1, amount: 500, debit_amount: 500, counterparty_name: '测试供应商' }
+    vm.selection[10] = { item: { id: 10, source_no: 'AP-0001', remaining: 500 }, amount: 500 }
+    settlePayableReconcile.mockResolvedValue({
+      ok: true,
+      settlement_ids: [99],
+      payment_nos: ['PAY202607070001'],
+      bank_statement_status: 'MATCHED'
+    })
+
+    await vm.confirmSettle()
+    await flushPromises()
+
+    expect(settlePayableReconcile).toHaveBeenCalledWith({
+      bank_statement_id: 1,
+      allocations: [{ payable_item_id: 10, amount: 500 }]
+    })
+    expect(ElMessage.success).toHaveBeenCalledWith(expect.stringContaining('PAY202607070001'))
   })
 })

@@ -459,6 +459,8 @@ class PayableApiTest(TestCase):
         self.assertEqual(item.status, 'PAID')
         self.assertEqual(bs.status, 'MATCHED')
         settlement_id = resp.data['settlement_ids'][0]
+        self.assertEqual(len(resp.data['payment_nos']), 1)
+        self.assertTrue(resp.data['payment_nos'][0])
         resp2 = self.client.post('/api/finance/payable-reconcile/unsettle/', {
             'settlement_id': settlement_id,
         }, format='json')
@@ -1280,3 +1282,1480 @@ class PaymentRequestAdapterTest(TestCase):
         self.assertEqual(pr.status, 'APPROVED')
         self.assertIsNone(pr.paid_at)
         self.assertIsNone(pr.payment_id)
+
+
+# ---------------------------------------------------------------------------
+# R1: AP(应付账款)旧付款入口退役——用户已拍板方案 A:record_payment 与
+# BankStatementViewSet.match 的 AP 分支全部改受控 409,AP 付款自此只经
+# 「付款核销工作台」(payable-reconcile/settle)完成。AR 一侧(record_payment(AR)、
+# match 的 AR 分支)不在本次范围内,须验证其继续正常工作。
+# ---------------------------------------------------------------------------
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class APRecordPaymentRetiredTest(TestCase):
+    """AccountPayableViewSet.record_payment 已停用,不再创建 Payment / 改动 AP。"""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+
+        from apps.accounts.models import User
+
+        self.user = User.objects.create(username='apretire', employee_id='APR1', is_staff=True, is_superuser=True)
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def test_record_payment_returns_409_and_no_side_effect(self):
+        from apps.finance.models import AccountPayable
+        from apps.masterdata.models import Supplier
+
+        sup = Supplier.objects.create(code='APR', name='供应商APR')
+        ap = AccountPayable.objects.create(
+            supplier=sup, invoice_date='2026-06-01', due_date='2026-07-01', amount_due=Decimal('1000.00')
+        )
+        resp = self.client.post(
+            f'/api/finance/payables/{ap.pk}/record_payment/',
+            {
+                'amount': '500.00',
+                'payment_date': '2026-07-05',
+                'payment_method': 'BANK',
+            },
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 409)
+        ap.refresh_from_db()
+        self.assertEqual(ap.amount_paid, Decimal('0'))  # 未被这条已停用的请求改动
+        self.assertEqual(ap.status, 'PENDING')
+        self.assertFalse(Payment.objects.filter(ap=ap).exists())
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class APBankStatementMatchRetiredTest(TestCase):
+    """BankStatementViewSet.match 的 AP 分支已停用(409);AR 分支保留原逻辑不受影响。"""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+
+        from apps.accounts.models import User
+
+        self.user = User.objects.create(username='apmatchretire', employee_id='APM1', is_staff=True, is_superuser=True)
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def test_match_ap_returns_409_and_no_side_effect(self):
+        from apps.finance.models import AccountPayable, BankStatement
+        from apps.masterdata.models import Supplier
+
+        sup = Supplier.objects.create(code='APM', name='供应商APM')
+        ap = AccountPayable.objects.create(
+            supplier=sup, invoice_date='2026-06-01', due_date='2026-07-01', amount_due=Decimal('1000.00')
+        )
+        bs = BankStatement(
+            transaction_type='DEBIT',
+            debit_amount=Decimal('1000.00'),
+            counterparty_name='供应商APM',
+            transaction_time='2026-07-02 00:00:00+00',
+        )
+        bs.save()
+        resp = self.client.post(
+            f'/api/finance/bank-statements/{bs.pk}/match/',
+            {
+                'match_type': 'AP',
+                'supplier_id': sup.pk,
+                'ap_id': ap.pk,
+            },
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 409)
+        ap.refresh_from_db()
+        bs.refresh_from_db()
+        self.assertEqual(ap.amount_paid, Decimal('0'))
+        self.assertEqual(ap.status, 'PENDING')
+        self.assertEqual(bs.status, 'PENDING')  # 未被标记 MATCHED
+        self.assertIsNone(bs.related_ap_id)  # 未被关联
+        self.assertFalse(Payment.objects.filter(ap=ap).exists())
+
+    def test_match_ar_still_works(self):
+        from apps.finance.models import AccountReceivable, BankStatement
+        from apps.masterdata.models import Customer
+
+        cust = Customer.objects.create(code='ARM', name='客户ARM')
+        ar = AccountReceivable.objects.create(
+            customer=cust, invoice_date='2026-06-01', due_date='2026-07-01', amount_due=Decimal('800.00')
+        )
+        bs = BankStatement(
+            transaction_type='CREDIT',
+            credit_amount=Decimal('800.00'),
+            counterparty_name='客户ARM',
+            transaction_time='2026-07-02 00:00:00+00',
+        )
+        bs.save()
+        resp = self.client.post(
+            f'/api/finance/bank-statements/{bs.pk}/match/',
+            {
+                'match_type': 'AR',
+                'customer_id': cust.pk,
+                'ar_id': ar.pk,
+            },
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        ar.refresh_from_db()
+        bs.refresh_from_db()
+        self.assertEqual(ar.amount_paid, Decimal('800.00'))
+        self.assertEqual(ar.status, 'PAID')
+        self.assertEqual(bs.status, 'MATCHED')
+        self.assertTrue(Payment.objects.filter(ar=ar).exists())
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class SharedExpenseSignalTest(TestCase):
+    """R2:公共费用分摊完成(ALLOCATED)自动登记台账;撤销分摊回收未核销台账项。"""
+
+    def _make_expense(self, code='SESIG1', status='PENDING'):
+        from apps.finance.models import SharedExpense
+        return SharedExpense.objects.create(
+            expense_no=code, name=f'办公费用-{code}', category='ADMIN',
+            expense_date='2026-07-01', period_start='2026-07-01', period_end='2026-07-31',
+            amount=Decimal('2400.00'), status=status,
+        )
+
+    def test_allocate_transition_registers_payable_item(self):
+        exp = self._make_expense()
+        self.assertFalse(PayableItem.objects.filter(source_type='shared_expense', source_id=exp.pk).exists())
+        exp.status = 'ALLOCATED'
+        exp.allocated_at = None
+        exp.save()
+        item = PayableItem.objects.get(source_type='shared_expense', source_id=exp.pk)
+        self.assertEqual(item.amount_due, Decimal('2400.00'))
+        self.assertEqual(item.payee_name, exp.name)
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+    def test_cancel_allocation_reverts_to_pending_cancels_item(self):
+        exp = self._make_expense(code='SESIG2', status='ALLOCATED')
+        item = PayableItem.objects.get(source_type='shared_expense', source_id=exp.pk)
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+        exp.status = 'PENDING'
+        exp.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+    def test_allocate_action_registers_via_api(self):
+        from rest_framework.test import APIClient
+        from apps.accounts.models import User
+        from apps.masterdata.models import Customer
+        from apps.projects.models import Project
+
+        exp = self._make_expense(code='SESIG3')
+        customer = Customer.objects.create(code='CUSESIG3', name='分摊测试客户')
+        user = User.objects.create(username='seadmin', employee_id='SEA1', is_staff=True, is_superuser=True)
+        project = Project.objects.create(code='PJSESIG3', name='分摊测试项目', customer=customer,
+                                         manager=user, start_date='2026-07-01', end_date='2026-12-31')
+        client = APIClient(); client.force_authenticate(user)
+        resp = client.post(f'/api/finance/shared-expenses/{exp.pk}/allocate/',
+                           {'project_ids': [project.pk]}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        exp.refresh_from_db()
+        self.assertEqual(exp.status, 'ALLOCATED')
+        self.assertTrue(PayableItem.objects.filter(source_type='shared_expense', source_id=exp.pk).exists())
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class TaxDeclarationSignalTest(TestCase):
+    """R2:税务申报确认申报(DECLARED)自动登记台账。"""
+
+    def _make_declaration(self, code='TDSIG1', status='APPROVED', tax_amount='2000.00'):
+        from apps.finance.tax_management import TaxDeclaration, TaxPeriod, TaxType
+        tt, _ = TaxType.objects.get_or_create(code='VATSIG', defaults={'name': '增值税(信号测试)'})
+        tp = TaxPeriod.objects.create(period_type='MONTHLY', year=2026, period=8,
+                                      start_date='2026-08-01', end_date='2026-08-31',
+                                      declare_deadline='2026-09-15')
+        return TaxDeclaration.objects.create(
+            declaration_no=code, tax_period=tp, tax_type=tt,
+            declaration_type='VAT', status=status, tax_amount=Decimal(tax_amount),
+        )
+
+    def test_declare_transition_registers_payable_item(self):
+        td = self._make_declaration()
+        self.assertFalse(PayableItem.objects.filter(source_type='tax', source_id=td.pk).exists())
+        td.status = 'DECLARED'
+        td.save()
+        item = PayableItem.objects.get(source_type='tax', source_id=td.pk)
+        self.assertEqual(item.amount_due, Decimal('2000.00'))
+        self.assertEqual(item.payee_name, '税务局')
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+    def test_declare_action_registers_via_api(self):
+        from rest_framework.test import APIClient
+        from apps.accounts.models import User
+
+        td = self._make_declaration(code='TDSIG2')
+        user = User.objects.create(username='taxadmin', employee_id='TXA1', is_staff=True, is_superuser=True)
+        client = APIClient(); client.force_authenticate(user)
+        resp = client.post(f'/api/finance/tax-declarations/{td.pk}/declare/', {}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        td.refresh_from_db()
+        self.assertEqual(td.status, 'DECLARED')
+        self.assertTrue(PayableItem.objects.filter(source_type='tax', source_id=td.pk).exists())
+
+    def test_cancelled_transition_cancels_payable_item(self):
+        """G5:register_tax_payable 目前没有实际操作入口能把 DECLARED 变成
+        CANCELLED(TaxDeclaration.STATUS_CHOICES 里也没有这个取值),但信号本身要
+        为将来预留的 CANCELLED 分支做好——直接置状态验证信号行为,不依赖视图。"""
+        td = self._make_declaration(code='TDSIG3', status='DECLARED')
+        item = PayableItem.objects.get(source_type='tax', source_id=td.pk)
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+        td.status = 'CANCELLED'
+        td.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+    def test_cancelled_transition_does_not_touch_paid_item(self):
+        """已核销(amount_paid>0)的台账项不应被误冲——与 cancel_payable 的通用守卫
+        语义一致。"""
+        td = self._make_declaration(code='TDSIG4', status='DECLARED')
+        item = PayableItem.objects.get(source_type='tax', source_id=td.pk)
+        item.amount_paid = item.amount_due
+        item.recalc_status()
+        item.save()
+
+        td.status = 'CANCELLED'
+        td.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_PAID)
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class PaymentRequestSignalTest(TestCase):
+    """R2:独立付款申请(无挂靠 AP)审批通过(APPROVED)自动登记台账;取消则作废。
+    有挂靠 AP 的付款申请跳过登记,避免与该 AP 的 source_type='ap' 台账项双记。"""
+
+    def _make_request(self, code='PRSIG1', status='PENDING', ap=None, amount='1800.00'):
+        from apps.accounts.models import User
+        from apps.finance.models import PaymentRequest
+        from apps.masterdata.models import Supplier
+        sup = Supplier.objects.create(code=code, name=f'供应商{code}')
+        applicant = User.objects.create(username=f'app{code}'.lower(), employee_id=f'APP{code}')
+        return PaymentRequest.objects.create(
+            request_no=code, title='预付款申请', supplier=sup, amount=Decimal(amount),
+            expected_date='2026-08-01', reason='测试', applicant=applicant, status=status, ap=ap,
+        )
+
+    def test_approve_transition_registers_when_no_ap(self):
+        pr = self._make_request()
+        self.assertFalse(PayableItem.objects.filter(source_type='payment_request', source_id=pr.pk).exists())
+        pr.status = 'APPROVED'
+        pr.save()
+        item = PayableItem.objects.get(source_type='payment_request', source_id=pr.pk)
+        self.assertEqual(item.amount_due, Decimal('1800.00'))
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+    def test_approve_skips_registration_when_ap_linked(self):
+        # 通过挂靠一张已存在的 AP 来验证不重复登记(该 AP 自身经 register_ap_payable
+        # 已登记为 source_type='ap')。
+        from apps.masterdata.models import Supplier
+        from apps.finance.models import AccountPayable
+        sup = Supplier.objects.create(code='PRSIG2AP', name='供应商PRSIG2AP')
+        ap = AccountPayable.objects.create(supplier=sup, invoice_date='2026-07-01',
+                                           due_date='2026-08-01', amount_due=Decimal('1800.00'))
+        self.assertTrue(PayableItem.objects.filter(source_type='ap', source_id=ap.pk).exists())
+
+        pr = self._make_request(code='PRSIG2', ap=ap)
+        pr.status = 'APPROVED'
+        pr.save()
+        self.assertFalse(PayableItem.objects.filter(source_type='payment_request', source_id=pr.pk).exists())
+
+    def test_cancel_cancels_item(self):
+        pr = self._make_request(code='PRSIG3', status='APPROVED')
+        item = PayableItem.objects.get(source_type='payment_request', source_id=pr.pk)
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+        pr.status = 'CANCELLED'
+        pr.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class AssetMaintenanceAdapterTest(TestCase):
+    """资产维护:AssetMaintenance.status 是处理进度机(PENDING/IN_PROGRESS/COMPLETED/
+    CANCELLED),无付款语义,write_back 为 no-op(付款事实由统一台账维护),同 Outsource/
+    SharedExpense 断言不破坏其状态机。"""
+
+    def _make_maintenance(self):
+        from apps.accounts.models import User
+        from apps.oa.asset import Asset, AssetMaintenance
+        reporter = User.objects.create(username='amrep', employee_id='AMREP1')
+        asset = Asset.objects.create(asset_no='AST-AM1', name='测试台架', status='REPAIR')
+        return AssetMaintenance.objects.create(
+            maintenance_no='AM001', asset=asset, maintenance_type='REPAIR',
+            reporter=reporter, fault_description='电机异响',
+            start_date='2026-07-01', end_date='2026-07-03',
+            cost=Decimal('800.00'), status='COMPLETED',
+        )
+
+    def test_asset_maintenance_register_and_writeback_is_noop(self):
+        from apps.finance.payable_adapters import PAYABLE_SOURCES, register_payable
+        m = self._make_maintenance()
+        item = register_payable(m, 'asset_maintenance')
+        self.assertIsNone(item.supplier_id)
+        self.assertEqual(item.payee_name, '')
+        self.assertEqual(item.amount_due, Decimal('800.00'))
+        self.assertEqual(item.source_no, 'AM001')
+
+        item.amount_paid = Decimal('800.00')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['asset_maintenance'].write_back(m, item)
+        m.refresh_from_db()
+        self.assertEqual(m.status, 'COMPLETED')  # no-op:处理进度机不受付款影响
+
+        # 反核销(台账退回未结清),no-op 仍不应改动源单据状态。
+        item.amount_paid = Decimal('0')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['asset_maintenance'].write_back(m, item)
+        m.refresh_from_db()
+        self.assertEqual(m.status, 'COMPLETED')
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class VehicleMaintenanceAdapterTest(TestCase):
+    """车辆维护:VehicleMaintenance 无 status/付款字段,write_back 为 no-op(付款事实由
+    统一台账维护);payee_name 取服务商 vendor,source_no 用 VM<pk>。"""
+
+    def _make_maintenance(self):
+        from apps.oa.vehicle import Vehicle, VehicleMaintenance
+        vehicle = Vehicle.objects.create(plate_number='沪A12345', brand='测试品牌', model='X1')
+        return VehicleMaintenance.objects.create(
+            vehicle=vehicle, maintenance_type='REPAIR', maintenance_date='2026-07-02',
+            description='更换刹车片', cost=Decimal('1200.00'), vendor='城东4S店',
+        )
+
+    def test_vehicle_maintenance_register_and_writeback_is_noop(self):
+        from apps.finance.payable_adapters import PAYABLE_SOURCES, register_payable
+        m = self._make_maintenance()
+        item = register_payable(m, 'vehicle_maintenance')
+        self.assertIsNone(item.supplier_id)
+        self.assertEqual(item.payee_name, '城东4S店')
+        self.assertEqual(item.amount_due, Decimal('1200.00'))
+        self.assertEqual(item.source_no, f'VM{m.pk}')
+
+        # write_back no-op:不改动源单据、不报错。
+        item.amount_paid = Decimal('1200.00')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['vehicle_maintenance'].write_back(m, item)
+        m.refresh_from_db()
+        self.assertEqual(m.cost, Decimal('1200.00'))
+        self.assertEqual(m.vendor, '城东4S店')
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class Phase2BackfillCommandTest(TestCase):
+    """测试 backfill_phase2_payables 命令:
+    1. tax/shared_expense 全量应付状态回填
+    2. payment_request 仅回填独立申请(ap=null)
+    3. outsource 不回填(其应付已随AP回填)
+    4. 幂等性:重复运行不重复建项
+    """
+
+    def setUp(self):
+        from apps.masterdata.models import Supplier
+        from apps.accounts.models import User
+        self.supplier = Supplier.objects.create(code='BKFILL', name='回填供应商')
+        self.user = User.objects.create(username='bkfill_op', employee_id='BKFILL1')
+
+    def _run_backfill_command(self):
+        from django.core.management import call_command
+        call_command('backfill_phase2_payables')
+
+    # --------- SharedExpense (公共费用) ---------
+
+    def test_backfill_shared_expense_only_allocated(self):
+        """回填 ALLOCATED 的公共费用，跳过 DRAFT/PENDING/CANCELLED"""
+        from apps.finance.models import SharedExpense
+        from apps.finance.payable_models import PayableItem
+
+        # 应付:ALLOCATED
+        allocated = SharedExpense.objects.create(
+            name='房租-2026年7月', category='RENT',
+            expense_date='2026-07-01', period_start='2026-07-01', period_end='2026-07-31',
+            amount=Decimal('10000'), status='ALLOCATED',
+        )
+
+        # 不应付:DRAFT/PENDING/CANCELLED
+        draft = SharedExpense.objects.create(
+            name='水电-2026年7月', category='UTILITIES',
+            expense_date='2026-07-01', period_start='2026-07-01', period_end='2026-07-31',
+            amount=Decimal('5000'), status='DRAFT',
+        )
+        pending = SharedExpense.objects.create(
+            name='物业-2026年7月', category='ADMIN',
+            expense_date='2026-07-01', period_start='2026-07-01', period_end='2026-07-31',
+            amount=Decimal('3000'), status='PENDING',
+        )
+        cancelled = SharedExpense.objects.create(
+            name='维修-2026年7月', category='OTHER',
+            expense_date='2026-07-01', period_start='2026-07-01', period_end='2026-07-31',
+            amount=Decimal('2000'), status='CANCELLED',
+        )
+
+        self._run_backfill_command()
+
+        # 应付的应被回填
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='shared_expense', source_id=allocated.pk).count(), 1
+        )
+
+        # 不应付的不应被回填
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='shared_expense', source_id=draft.pk).count(), 0
+        )
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='shared_expense', source_id=pending.pk).count(), 0
+        )
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='shared_expense', source_id=cancelled.pk).count(), 0
+        )
+
+    def test_backfill_shared_expense_idempotent(self):
+        """回填命令幂等性:重复运行同一费用只生成1条台账项"""
+        from apps.finance.models import SharedExpense
+        from apps.finance.payable_models import PayableItem
+
+        exp = SharedExpense.objects.create(
+            name='房租-2026年7月', category='RENT',
+            expense_date='2026-07-01', period_start='2026-07-01', period_end='2026-07-31',
+            amount=Decimal('10000'), status='ALLOCATED',
+        )
+
+        self._run_backfill_command()
+        count_after_first = PayableItem.objects.filter(source_type='shared_expense', source_id=exp.pk).count()
+        self.assertEqual(count_after_first, 1)
+
+        # 再运行一次
+        self._run_backfill_command()
+        count_after_second = PayableItem.objects.filter(source_type='shared_expense', source_id=exp.pk).count()
+        self.assertEqual(count_after_second, 1)
+
+    # --------- TaxDeclaration (缴税) ---------
+
+    def test_backfill_tax_only_declared(self):
+        """回填 DECLARED 的申报单，跳过 DRAFT/SUBMITTED/PAID/REJECTED"""
+        from apps.finance.tax_management import TaxDeclaration, TaxPeriod, TaxType
+        from apps.finance.payable_models import PayableItem
+
+        tt = TaxType.objects.create(code='VAT', name='增值税')
+        tp = TaxPeriod.objects.create(
+            period_type='MONTHLY', year=2026, period=7,
+            start_date='2026-07-01', end_date='2026-07-31',
+            declare_deadline='2026-08-15',
+        )
+
+        # 应付:DECLARED
+        declared = TaxDeclaration.objects.create(
+            tax_period=tp, tax_type=tt, declaration_type='VAT',
+            status='DECLARED', tax_amount=Decimal('5000'),
+        )
+
+        # 不应付:DRAFT/SUBMITTED/PAID/REJECTED
+        draft = TaxDeclaration.objects.create(
+            tax_period=tp, tax_type=tt, declaration_type='VAT',
+            status='DRAFT', tax_amount=Decimal('2000'),
+        )
+        submitted = TaxDeclaration.objects.create(
+            tax_period=tp, tax_type=tt, declaration_type='VAT',
+            status='SUBMITTED', tax_amount=Decimal('1500'),
+        )
+        paid = TaxDeclaration.objects.create(
+            tax_period=tp, tax_type=tt, declaration_type='VAT',
+            status='PAID', tax_amount=Decimal('3000'),
+        )
+        rejected = TaxDeclaration.objects.create(
+            tax_period=tp, tax_type=tt, declaration_type='VAT',
+            status='REJECTED', tax_amount=Decimal('1000'),
+        )
+
+        self._run_backfill_command()
+
+        # 应付的应被回填
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='tax', source_id=declared.pk).count(), 1
+        )
+
+        # 不应付的不应被回填
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='tax', source_id=draft.pk).count(), 0
+        )
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='tax', source_id=submitted.pk).count(), 0
+        )
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='tax', source_id=paid.pk).count(), 0
+        )
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='tax', source_id=rejected.pk).count(), 0
+        )
+
+    def test_backfill_tax_idempotent(self):
+        """回填命令幂等性:重复运行同一申报单只生成1条台账项"""
+        from apps.finance.tax_management import TaxDeclaration, TaxPeriod, TaxType
+        from apps.finance.payable_models import PayableItem
+
+        tt = TaxType.objects.create(code='VAT', name='增值税')
+        tp = TaxPeriod.objects.create(
+            period_type='MONTHLY', year=2026, period=7,
+            start_date='2026-07-01', end_date='2026-07-31',
+            declare_deadline='2026-08-15',
+        )
+        td = TaxDeclaration.objects.create(
+            tax_period=tp, tax_type=tt, declaration_type='VAT',
+            status='DECLARED', tax_amount=Decimal('5000'),
+        )
+
+        self._run_backfill_command()
+        count_after_first = PayableItem.objects.filter(source_type='tax', source_id=td.pk).count()
+        self.assertEqual(count_after_first, 1)
+
+        # 再运行一次
+        self._run_backfill_command()
+        count_after_second = PayableItem.objects.filter(source_type='tax', source_id=td.pk).count()
+        self.assertEqual(count_after_second, 1)
+
+    # --------- PaymentRequest (付款申请) ---------
+
+    def test_backfill_payment_request_only_independent_approved(self):
+        """仅回填 APPROVED 且 ap=null 的独立申请，跳过:
+        1. 其他状态(DRAFT/PENDING/PAID/等)
+        2. 关联 AP 的申请(ap 不为null)
+        """
+        from apps.finance.models import PaymentRequest, AccountPayable
+        from apps.finance.payable_models import PayableItem
+        from apps.accounts.models import User
+        from apps.masterdata.models import Supplier
+
+        applicant = User.objects.create(username='applicant', employee_id='APP1')
+        supplier2 = Supplier.objects.create(code='S2', name='供应商2')
+
+        # 独立申请 APPROVED (应回填)
+        independent_approved = PaymentRequest.objects.create(
+            title='原料采购款', supplier=self.supplier, amount=Decimal('50000'),
+            expected_date='2026-07-20', reason='原料', applicant=applicant,
+            status='APPROVED', ap=None,
+        )
+
+        # 关联 AP 的申请 APPROVED (不回填，该AP已被backfill_payables覆盖)
+        ap = AccountPayable.objects.create(
+            supplier=supplier2, invoice_date='2026-07-01', due_date='2026-08-01',
+            amount_due=Decimal('30000'),
+        )
+        related_approved = PaymentRequest.objects.create(
+            title='进度款', supplier=supplier2, amount=Decimal('30000'),
+            expected_date='2026-07-20', reason='进度', applicant=applicant,
+            status='APPROVED', ap=ap,
+        )
+
+        # 独立申请 DRAFT (不回填，非应付状态)
+        independent_draft = PaymentRequest.objects.create(
+            title='运费', supplier=self.supplier, amount=Decimal('10000'),
+            expected_date='2026-07-20', reason='运输', applicant=applicant,
+            status='DRAFT', ap=None,
+        )
+
+        # 独立申请 PAID (不回填，已支付)
+        independent_paid = PaymentRequest.objects.create(
+            title='设备款', supplier=self.supplier, amount=Decimal('20000'),
+            expected_date='2026-07-20', reason='设备', applicant=applicant,
+            status='PAID', ap=None,
+        )
+
+        self._run_backfill_command()
+
+        # 仅独立APPROVED应被回填
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='payment_request', source_id=independent_approved.pk).count(), 1
+        )
+
+        # 其他都不应被回填
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='payment_request', source_id=related_approved.pk).count(), 0,
+            '关联AP的申请不应回填'
+        )
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='payment_request', source_id=independent_draft.pk).count(), 0
+        )
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='payment_request', source_id=independent_paid.pk).count(), 0
+        )
+
+    def test_backfill_payment_request_idempotent(self):
+        """回填命令幂等性:重复运行同一请求只生成1条台账项"""
+        from apps.finance.models import PaymentRequest
+        from apps.finance.payable_models import PayableItem
+        from apps.accounts.models import User
+
+        applicant = User.objects.create(username='applicant2', employee_id='APP2')
+        pr = PaymentRequest.objects.create(
+            title='采购款', supplier=self.supplier, amount=Decimal('50000'),
+            expected_date='2026-07-20', reason='原料采购', applicant=applicant,
+            status='APPROVED', ap=None,
+        )
+
+        self._run_backfill_command()
+        count_after_first = PayableItem.objects.filter(source_type='payment_request', source_id=pr.pk).count()
+        self.assertEqual(count_after_first, 1)
+
+        # 再运行一次
+        self._run_backfill_command()
+        count_after_second = PayableItem.objects.filter(source_type='payment_request', source_id=pr.pk).count()
+        self.assertEqual(count_after_second, 1)
+
+    def test_backfill_three_sources_together(self):
+        """综合测试:三来源(shared_expense/tax/独立payment_request)混合回填"""
+        from apps.finance.models import SharedExpense, PaymentRequest
+        from apps.finance.tax_management import TaxDeclaration, TaxPeriod, TaxType
+        from apps.finance.payable_models import PayableItem
+        from apps.accounts.models import User
+
+        # 创建各来源的应付单据
+        exp = SharedExpense.objects.create(
+            name='房租', category='RENT',
+            expense_date='2026-07-01', period_start='2026-07-01', period_end='2026-07-31',
+            amount=Decimal('10000'), status='ALLOCATED',
+        )
+        tt = TaxType.objects.create(code='VAT3', name='增值税')
+        tp = TaxPeriod.objects.create(
+            period_type='MONTHLY', year=2026, period=7,
+            start_date='2026-07-01', end_date='2026-07-31',
+            declare_deadline='2026-08-15',
+        )
+        td = TaxDeclaration.objects.create(
+            tax_period=tp, tax_type=tt, declaration_type='VAT',
+            status='DECLARED', tax_amount=Decimal('5000'),
+        )
+        applicant = User.objects.create(username='app', employee_id='APPX')
+        pr = PaymentRequest.objects.create(
+            title='采购', supplier=self.supplier, amount=Decimal('50000'),
+            expected_date='2026-07-20', reason='采购款', applicant=applicant,
+            status='APPROVED', ap=None,  # 独立申请
+        )
+
+        self._run_backfill_command()
+
+        # 验证三个来源都被回填
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='shared_expense', source_id=exp.pk).count(), 1
+        )
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='tax', source_id=td.pk).count(), 1
+        )
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='payment_request', source_id=pr.pk).count(), 1
+        )
+
+        # 验证总共3条台账项
+        self.assertEqual(PayableItem.objects.count(), 3)
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ExpenseSignalTest(TestCase):
+    """G1:员工费用报销审批通过(APPROVED)自动登记台账;驳回(REJECTED)/工作流撤回
+    退回草稿(DRAFT)作废未核销台账项。Expense 无供应商、不创建 AccountPayable,
+    不存在与 register_ap_payable 双记的问题,可直接登记。"""
+
+    def _make_expense(self, code, status='SUBMITTED', amount='600.00'):
+        from apps.accounts.models import User
+        from apps.finance.models import Expense
+        user = User.objects.create(username=f'u{code}'.lower(), employee_id=f'U{code}')
+        return Expense.objects.create(
+            expense_no=code, user=user, expense_date='2026-07-01',
+            category='TRAVEL', amount=Decimal(amount), status=status,
+        )
+
+    def test_approve_transition_registers_payable_item(self):
+        exp = self._make_expense('EXPSIG1', status='SUBMITTED')
+        self.assertFalse(PayableItem.objects.filter(source_type='expense', source_id=exp.pk).exists())
+
+        exp.status = 'APPROVED'
+        exp.save()
+
+        item = PayableItem.objects.get(source_type='expense', source_id=exp.pk)
+        self.assertEqual(item.amount_due, Decimal('600.00'))
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+    def test_reject_cancels_unsettled_item(self):
+        exp = self._make_expense('EXPSIG2', status='APPROVED')
+        item = PayableItem.objects.get(source_type='expense', source_id=exp.pk)
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+        exp.status = 'REJECTED'
+        exp.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+    def test_withdraw_to_draft_cancels_unsettled_item(self):
+        """`WorkflowService.withdraw_workflow` 会把 EXPENSE 从 APPROVED 退回 DRAFT
+        (见 apps.core.workflow.services._on_workflow_complete),此时应回收台账项。"""
+        exp = self._make_expense('EXPSIG3', status='APPROVED')
+        item = PayableItem.objects.get(source_type='expense', source_id=exp.pk)
+
+        exp.status = 'DRAFT'
+        exp.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+    def test_cancel_does_not_touch_settled_item(self):
+        exp = self._make_expense('EXPSIG4', status='APPROVED')
+        item = PayableItem.objects.get(source_type='expense', source_id=exp.pk)
+        item.amount_paid = item.amount_due
+        item.recalc_status()
+        item.save()
+        self.assertEqual(item.status, PayableItem.STATUS_PAID)
+
+        exp.status = 'REJECTED'
+        exp.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_PAID)
+
+    def test_approve_action_registers_via_api(self):
+        from rest_framework.test import APIClient
+        from apps.accounts.models import User
+
+        exp = self._make_expense('EXPSIG5', status='SUBMITTED')
+        admin = User.objects.create(username='expsigadmin', employee_id='EXPSIGA1',
+                                    is_staff=True, is_superuser=True)
+        client = APIClient(); client.force_authenticate(admin)
+        resp = client.post(f'/api/finance/expenses/{exp.pk}/approve/', {}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        exp.refresh_from_db()
+        self.assertEqual(exp.status, 'APPROVED')
+        self.assertTrue(PayableItem.objects.filter(source_type='expense', source_id=exp.pk).exists())
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ExpenseBackfillCommandTest(TestCase):
+    """测试 backfill_expense_payables 命令:只回填 APPROVED,幂等。"""
+
+    def _run_backfill_command(self):
+        from django.core.management import call_command
+        call_command('backfill_expense_payables')
+
+    def test_backfill_only_approved(self):
+        from apps.accounts.models import User
+        from apps.finance.models import Expense
+
+        user = User.objects.create(username='expbkfuser', employee_id='EXPBKF0')
+        approved = Expense.objects.create(expense_no='EXPBKF1', user=user, expense_date='2026-07-01',
+                                          category='TRAVEL', amount=Decimal('900.00'), status='APPROVED')
+        draft = Expense.objects.create(expense_no='EXPBKF2', user=user, expense_date='2026-07-01',
+                                       category='MEAL', amount=Decimal('100.00'), status='DRAFT')
+        submitted = Expense.objects.create(expense_no='EXPBKF3', user=user, expense_date='2026-07-01',
+                                           category='OFFICE', amount=Decimal('200.00'), status='SUBMITTED')
+        rejected = Expense.objects.create(expense_no='EXPBKF4', user=user, expense_date='2026-07-01',
+                                          category='OTHER', amount=Decimal('300.00'), status='REJECTED')
+        paid = Expense.objects.create(expense_no='EXPBKF5', user=user, expense_date='2026-07-01',
+                                      category='OTHER', amount=Decimal('400.00'), status='PAID')
+
+        self._run_backfill_command()
+
+        self.assertEqual(PayableItem.objects.filter(source_type='expense', source_id=approved.pk).count(), 1)
+        self.assertEqual(PayableItem.objects.filter(source_type='expense', source_id=draft.pk).count(), 0)
+        self.assertEqual(PayableItem.objects.filter(source_type='expense', source_id=submitted.pk).count(), 0)
+        self.assertEqual(PayableItem.objects.filter(source_type='expense', source_id=rejected.pk).count(), 0)
+        self.assertEqual(PayableItem.objects.filter(source_type='expense', source_id=paid.pk).count(), 0)
+
+    def test_backfill_idempotent(self):
+        from apps.accounts.models import User
+        from apps.finance.models import Expense
+
+        user = User.objects.create(username='expbkfuser2', employee_id='EXPBKF01')
+        exp = Expense.objects.create(expense_no='EXPBKF6', user=user, expense_date='2026-07-01',
+                                     category='TRAVEL', amount=Decimal('500.00'), status='APPROVED')
+
+        self._run_backfill_command()
+        count_after_first = PayableItem.objects.filter(source_type='expense', source_id=exp.pk).count()
+        self.assertEqual(count_after_first, 1)
+
+        self._run_backfill_command()
+        count_after_second = PayableItem.objects.filter(source_type='expense', source_id=exp.pk).count()
+        self.assertEqual(count_after_second, 1)
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ServiceExpenseAdapterTest(TestCase):
+    """现场服务费报销:ServiceExpense.status 是审批进度机(PENDING/APPROVED/REJECTED),
+    旧逻辑(approve())只把已批准费用汇总进 ServiceOrder.actual_cost(成本口径统计),
+    从未创建 AccountPayable,是完全游离于 finance 之外的费用来源。write_back 为
+    no-op(付款事实由统一台账维护),同 Outsource/SharedExpense 断言不破坏其审批
+    状态机。payee_name 优先取该笔费用挂靠的派工记录(dispatch)的技术人员姓名,
+    未挂靠派工记录时回退到费用提交人 created_by。"""
+
+    def _make_order(self, code='SVCEXP1', with_project=True):
+        from apps.masterdata.models import Customer
+        from apps.projects.field_service import ServiceOrder
+
+        customer = Customer.objects.create(code=f'CUS{code}', name=f'客户{code}')
+        project = None
+        if with_project:
+            from apps.accounts.models import User
+            from apps.projects.models import Project
+
+            manager = User.objects.create(username=f'mgr{code}'.lower(), employee_id=f'MGR{code}')
+            project = Project.objects.create(
+                code=f'PJ{code}', name=f'项目{code}', customer=customer, manager=manager,
+                start_date='2026-07-01', end_date='2026-12-31',
+            )
+        return ServiceOrder.objects.create(
+            order_no=code, service_type='MAINTENANCE', title=f'服务-{code}',
+            customer=customer, project=project,
+            service_address='测试地址', contact_name='张三', contact_phone='13800000000',
+        )
+
+    def test_register_payee_name_from_dispatch_technician(self):
+        from apps.accounts.models import User
+        from apps.finance.payable_adapters import register_payable
+        from apps.projects.field_service import ServiceDispatch, ServiceExpense
+
+        order = self._make_order()
+        tech = User.objects.create(
+            username='techsvc1', employee_id='TECHSVC1', first_name='强', last_name='王'
+        )
+        dispatch = ServiceDispatch.objects.create(
+            service_order=order, technician=tech,
+            planned_start='2026-07-05', planned_end='2026-07-08',
+        )
+        expense = ServiceExpense.objects.create(
+            service_order=order, dispatch=dispatch, expense_type='TRAVEL',
+            description='高铁往返', amount=Decimal('560.00'), expense_date='2026-07-06',
+            status='APPROVED',
+        )
+        item = register_payable(expense, 'service_expense')
+        self.assertEqual(item.source_no, f'SE{expense.pk}')
+        self.assertEqual(item.payee_name, tech.get_full_name())
+        self.assertEqual(item.amount_due, Decimal('560.00'))
+        self.assertIsNone(item.supplier_id)
+        # register_payable 返回的是 update_or_create 的内存态对象,DateField 赋的原始
+        # 字符串不会像从数据库读回那样被反序列化,需 refresh_from_db 后才能拿到真正的
+        # date 对象(同 TaxAdapterTest.test_tax_register_and_full_writeback)。
+        item.refresh_from_db()
+        self.assertEqual(item.due_date.isoformat(), '2026-07-06')
+        self.assertEqual(item.project_id, order.project_id)
+
+    def test_register_payee_name_falls_back_to_created_by_without_dispatch(self):
+        from apps.accounts.models import User
+        from apps.finance.payable_adapters import register_payable
+        from apps.projects.field_service import ServiceExpense
+
+        order = self._make_order(code='SVCEXP2', with_project=False)
+        submitter = User.objects.create(
+            username='submitter1', employee_id='SUB1', first_name='芳', last_name='李'
+        )
+        expense = ServiceExpense.objects.create(
+            service_order=order, expense_type='MATERIAL',
+            description='现场耗材', amount=Decimal('200.00'), expense_date='2026-07-07',
+            status='APPROVED', created_by=submitter,
+        )
+        item = register_payable(expense, 'service_expense')
+        self.assertEqual(item.payee_name, submitter.get_full_name())
+        self.assertIsNone(item.project_id)
+
+    def test_register_payee_name_blank_without_dispatch_or_created_by(self):
+        from apps.finance.payable_adapters import register_payable
+        from apps.projects.field_service import ServiceExpense
+
+        order = self._make_order(code='SVCEXP5', with_project=False)
+        expense = ServiceExpense.objects.create(
+            service_order=order, expense_type='OTHER',
+            description='无人提交', amount=Decimal('10.00'), expense_date='2026-07-07',
+            status='APPROVED',
+        )
+        item = register_payable(expense, 'service_expense')
+        self.assertEqual(item.payee_name, '')
+
+    def test_writeback_is_noop(self):
+        from apps.finance.payable_adapters import PAYABLE_SOURCES, register_payable
+        from apps.projects.field_service import ServiceExpense
+
+        order = self._make_order(code='SVCEXP3', with_project=False)
+        expense = ServiceExpense.objects.create(
+            service_order=order, expense_type='OTHER',
+            description='杂费', amount=Decimal('100.00'), expense_date='2026-07-08',
+            status='APPROVED',
+        )
+        item = register_payable(expense, 'service_expense')
+        item.amount_paid = Decimal('100.00')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['service_expense'].write_back(expense, item)
+        expense.refresh_from_db()
+        self.assertEqual(expense.status, 'APPROVED')  # no-op:审批状态机不受付款影响
+
+        # 反核销(台账退回未结清),no-op 仍不应改动源单据状态。
+        item.amount_paid = Decimal('0')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['service_expense'].write_back(expense, item)
+        expense.refresh_from_db()
+        self.assertEqual(expense.status, 'APPROVED')
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ServiceExpenseSignalTest(TestCase):
+    """现场服务费:审批通过(APPROVED)自动登记台账;拒绝(REJECTED)作废对应台账项;
+    拒绝后重新审批通过 → 复活(与合同付款撤回复活原则一致)。"""
+
+    def _make_order(self, code='SESIG1'):
+        from apps.masterdata.models import Customer
+        from apps.projects.field_service import ServiceOrder
+
+        customer = Customer.objects.create(code=f'CUS{code}', name=f'客户{code}')
+        return ServiceOrder.objects.create(
+            order_no=code, service_type='REPAIR', title=f'服务-{code}',
+            customer=customer, service_address='测试地址',
+            contact_name='张三', contact_phone='13800000001',
+        )
+
+    def _make_expense(self, code='SESIG1', status='PENDING', amount='300.00'):
+        from apps.projects.field_service import ServiceExpense
+
+        order = self._make_order(code)
+        return ServiceExpense.objects.create(
+            service_order=order, expense_type='TRANSPORT',
+            description='打车费', amount=Decimal(amount), expense_date='2026-07-05',
+            status=status,
+        )
+
+    def test_approve_transition_registers_payable_item(self):
+        exp = self._make_expense()
+        self.assertFalse(PayableItem.objects.filter(source_type='service_expense', source_id=exp.pk).exists())
+        exp.status = 'APPROVED'
+        exp.save()
+        item = PayableItem.objects.get(source_type='service_expense', source_id=exp.pk)
+        self.assertEqual(item.amount_due, Decimal('300.00'))
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+    def test_reject_after_approve_cancels_item(self):
+        exp = self._make_expense(code='SESIG2', status='APPROVED')
+        item = PayableItem.objects.get(source_type='service_expense', source_id=exp.pk)
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+        exp.status = 'REJECTED'
+        exp.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+    def test_reject_without_prior_registration_is_safe_noop(self):
+        exp = self._make_expense(code='SESIG5', status='PENDING')
+        exp.status = 'REJECTED'
+        exp.save()  # 从未登记过,cancel_payable 应安全跳过、不报错
+        self.assertFalse(PayableItem.objects.filter(source_type='service_expense', source_id=exp.pk).exists())
+
+    def test_reapprove_after_reject_revives_item(self):
+        exp = self._make_expense(code='SESIG3', status='APPROVED')
+        item = PayableItem.objects.get(source_type='service_expense', source_id=exp.pk)
+
+        exp.status = 'REJECTED'
+        exp.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+        exp.status = 'APPROVED'
+        exp.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+    def test_approve_action_registers_via_api(self):
+        from rest_framework.test import APIClient
+
+        from apps.accounts.models import User
+
+        exp = self._make_expense(code='SESIG4')
+        user = User.objects.create(
+            username='seapprover', employee_id='SEAPP1', is_staff=True, is_superuser=True
+        )
+        client = APIClient()
+        client.force_authenticate(user)
+        resp = client.post(f'/api/projects/service-expenses/{exp.pk}/approve/', {}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        exp.refresh_from_db()
+        self.assertEqual(exp.status, 'APPROVED')
+        self.assertTrue(PayableItem.objects.filter(source_type='service_expense', source_id=exp.pk).exists())
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ServiceExpenseBackfillCommandTest(TestCase):
+    """backfill_service_expense_payables:回填 APPROVED 的现场服务费报销;
+    PENDING/REJECTED 跳过;重复运行幂等。"""
+
+    def _make_order(self, code):
+        from apps.masterdata.models import Customer
+        from apps.projects.field_service import ServiceOrder
+
+        customer = Customer.objects.create(code=f'CUS{code}', name=f'客户{code}')
+        return ServiceOrder.objects.create(
+            order_no=code, service_type='REPAIR', title=f'服务-{code}',
+            customer=customer, service_address='测试地址',
+            contact_name='张三', contact_phone='13800000002',
+        )
+
+    def _run_backfill_command(self):
+        from django.core.management import call_command
+        call_command('backfill_service_expense_payables')
+
+    def test_backfill_only_approved(self):
+        from apps.projects.field_service import ServiceExpense
+
+        approved = ServiceExpense.objects.create(
+            service_order=self._make_order('BKSE1'), expense_type='TRAVEL',
+            description='差旅', amount=Decimal('400.00'), expense_date='2026-07-01',
+            status='APPROVED',
+        )
+        pending = ServiceExpense.objects.create(
+            service_order=self._make_order('BKSE2'), expense_type='MEAL',
+            description='餐费', amount=Decimal('80.00'), expense_date='2026-07-01',
+            status='PENDING',
+        )
+        rejected = ServiceExpense.objects.create(
+            service_order=self._make_order('BKSE3'), expense_type='OTHER',
+            description='其他', amount=Decimal('50.00'), expense_date='2026-07-01',
+            status='REJECTED',
+        )
+
+        self._run_backfill_command()
+
+        self.assertTrue(
+            PayableItem.objects.filter(source_type='service_expense', source_id=approved.pk).exists()
+        )
+        self.assertFalse(
+            PayableItem.objects.filter(source_type='service_expense', source_id=pending.pk).exists()
+        )
+        self.assertFalse(
+            PayableItem.objects.filter(source_type='service_expense', source_id=rejected.pk).exists()
+        )
+
+    def test_backfill_idempotent(self):
+        from apps.projects.field_service import ServiceExpense
+
+        exp = ServiceExpense.objects.create(
+            service_order=self._make_order('BKSE4'), expense_type='TOOL',
+            description='工具', amount=Decimal('120.00'), expense_date='2026-07-01',
+            status='APPROVED',
+        )
+        self._run_backfill_command()
+        self._run_backfill_command()
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='service_expense', source_id=exp.pk).count(), 1
+        )
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class AssetMaintenanceSignalTest(TestCase):
+    """资产维修完成(COMPLETED)且费用>0 → 自动登记台账;取消(CANCELLED)→ 台账项作废。"""
+
+    def _make_maintenance(self, code, cost=Decimal('500.00'), status='PENDING'):
+        from apps.accounts.models import User
+        from apps.oa.asset import Asset, AssetMaintenance
+        asset = Asset.objects.create(name=f'测试设备{code}')
+        reporter = User.objects.create(username=f'amsig{code}', employee_id=f'AMSIG{code}')
+        return AssetMaintenance.objects.create(asset=asset, reporter=reporter, cost=cost, status=status)
+
+    def test_completed_with_cost_registers_payable(self):
+        m = self._make_maintenance('C1', cost=Decimal('800.00'))
+        self.assertFalse(PayableItem.objects.filter(source_type='asset_maintenance', source_id=m.pk).exists())
+
+        m.status = 'COMPLETED'
+        m.save()
+
+        item = PayableItem.objects.get(source_type='asset_maintenance', source_id=m.pk)
+        self.assertEqual(item.amount_due, Decimal('800.00'))
+        self.assertEqual(item.source_no, m.maintenance_no)
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+    def test_completed_with_zero_cost_not_registered(self):
+        """完成但 cost=0(保养/自行处理无实际支出)不应登记空台账项。"""
+        m = self._make_maintenance('C2', cost=Decimal('0'), status='COMPLETED')
+        self.assertFalse(PayableItem.objects.filter(source_type='asset_maintenance', source_id=m.pk).exists())
+
+    def test_cancelled_cancels_existing_item(self):
+        m = self._make_maintenance('C3', cost=Decimal('300.00'), status='COMPLETED')
+        self.assertTrue(PayableItem.objects.filter(source_type='asset_maintenance', source_id=m.pk).exists())
+
+        m.status = 'CANCELLED'
+        m.save()
+
+        item = PayableItem.objects.get(source_type='asset_maintenance', source_id=m.pk)
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+    def test_cancelled_without_existing_item_is_noop(self):
+        """尚未登记(如 PENDING 直接被取消)时,取消分支的 cancel_payable 应是安全的 no-op。"""
+        m = self._make_maintenance('C4', cost=Decimal('100.00'), status='PENDING')
+        m.status = 'CANCELLED'
+        m.save()
+        self.assertFalse(PayableItem.objects.filter(source_type='asset_maintenance', source_id=m.pk).exists())
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class VehicleMaintenanceSignalTest(TestCase):
+    """车辆维护记录创建时费用>0 → 自动登记台账(无 status 字段,创建即是既成事实)。"""
+
+    def _make_vehicle(self, code):
+        from apps.oa.vehicle import Vehicle
+        return Vehicle.objects.create(plate_number=f'京B{code}', brand='测试', model='测试型号')
+
+    def test_create_with_cost_registers_payable(self):
+        from apps.oa.vehicle import VehicleMaintenance
+        vehicle = self._make_vehicle('S1')
+        m = VehicleMaintenance.objects.create(
+            vehicle=vehicle, maintenance_date='2026-07-01', cost=Decimal('450.00'), vendor='某维修厂',
+        )
+        item = PayableItem.objects.get(source_type='vehicle_maintenance', source_id=m.pk)
+        self.assertEqual(item.amount_due, Decimal('450.00'))
+        self.assertEqual(item.payee_name, '某维修厂')
+        self.assertEqual(item.source_no, f'VM{m.pk}')
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+    def test_create_with_zero_cost_not_registered(self):
+        from apps.oa.vehicle import VehicleMaintenance
+        vehicle = self._make_vehicle('S2')
+        m = VehicleMaintenance.objects.create(
+            vehicle=vehicle, maintenance_date='2026-07-01', cost=Decimal('0'),
+        )
+        self.assertFalse(PayableItem.objects.filter(source_type='vehicle_maintenance', source_id=m.pk).exists())
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class OaMaintenanceBackfillTest(TestCase):
+    """backfill_oa_maintenance_payables 回填存量已完成资产维护(cost>0)+ 全部车辆维护(cost>0)。"""
+
+    def test_backfill_asset_and_vehicle_maintenance(self):
+        from django.core.management import call_command
+        from apps.accounts.models import User
+        from apps.oa.asset import Asset, AssetMaintenance
+        from apps.oa.vehicle import Vehicle, VehicleMaintenance
+
+        asset = Asset.objects.create(name='存量设备')
+        reporter = User.objects.create(username='bfreporter', employee_id='BFREP1')
+        completed = AssetMaintenance.objects.create(
+            asset=asset, reporter=reporter, cost=Decimal('700.00'), status='COMPLETED',
+        )
+        pending = AssetMaintenance.objects.create(
+            asset=asset, reporter=reporter, cost=Decimal('200.00'), status='PENDING',
+        )
+        zero_cost_completed = AssetMaintenance.objects.create(
+            asset=asset, reporter=reporter, cost=Decimal('0'), status='COMPLETED',
+        )
+        cancelled = AssetMaintenance.objects.create(
+            asset=asset, reporter=reporter, cost=Decimal('400.00'), status='CANCELLED',
+        )
+
+        vehicle = Vehicle.objects.create(plate_number='京C12345', brand='测试', model='测试型号')
+        vm = VehicleMaintenance.objects.create(
+            vehicle=vehicle, maintenance_date='2026-07-01', cost=Decimal('300.00'),
+        )
+        vm_zero = VehicleMaintenance.objects.create(
+            vehicle=vehicle, maintenance_date='2026-07-01', cost=Decimal('0'),
+        )
+
+        # 清空信号在 create/save 时已登记的项,模拟"存量未登记"(如信号历史静默失败场景)
+        PayableItem.objects.all().delete()
+
+        call_command('backfill_oa_maintenance_payables')
+
+        self.assertTrue(
+            PayableItem.objects.filter(source_type='asset_maintenance', source_id=completed.pk).exists()
+        )
+        self.assertFalse(
+            PayableItem.objects.filter(source_type='asset_maintenance', source_id=pending.pk).exists()
+        )
+        self.assertFalse(
+            PayableItem.objects.filter(source_type='asset_maintenance', source_id=zero_cost_completed.pk).exists()
+        )
+        self.assertFalse(
+            PayableItem.objects.filter(source_type='asset_maintenance', source_id=cancelled.pk).exists()
+        )
+        self.assertTrue(
+            PayableItem.objects.filter(source_type='vehicle_maintenance', source_id=vm.pk).exists()
+        )
+        self.assertFalse(
+            PayableItem.objects.filter(source_type='vehicle_maintenance', source_id=vm_zero.pk).exists()
+        )
+
+    def test_backfill_is_idempotent(self):
+        from django.core.management import call_command
+        from apps.accounts.models import User
+        from apps.oa.asset import Asset, AssetMaintenance
+
+        asset = Asset.objects.create(name='存量设备2')
+        reporter = User.objects.create(username='bfreporter2', employee_id='BFREP2')
+        completed = AssetMaintenance.objects.create(
+            asset=asset, reporter=reporter, cost=Decimal('500.00'), status='COMPLETED',
+        )
+        call_command('backfill_oa_maintenance_payables')
+        call_command('backfill_oa_maintenance_payables')
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='asset_maintenance', source_id=completed.pk).count(), 1
+        )
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class VehicleRequestAdapterTest(TestCase):
+    """用车行程费:VehicleRequest.status 是用车流程进度机(DRAFT/PENDING/APPROVED/
+    REJECTED/IN_USE/RETURNED/CANCELLED),不含付款语义,write_back 为 no-op(付款事实
+    由统一台账维护),同 Outsource/AssetMaintenance 断言不破坏其状态机。"""
+
+    def _make_applicant(self, username, employee_id, first_name='伟', last_name='王'):
+        from apps.accounts.models import User
+        return User.objects.create(username=username, employee_id=employee_id,
+                                   first_name=first_name, last_name=last_name)
+
+    def _make_request(self, applicant, **kwargs):
+        from apps.oa.vehicle import VehicleRequest
+        defaults = dict(
+            applicant=applicant,
+            start_time='2026-07-01 08:00:00+00', end_time='2026-07-01 18:00:00+00',
+            departure='公司', destination='客户现场',
+        )
+        defaults.update(kwargs)
+        return VehicleRequest.objects.create(**defaults)
+
+    def test_vehicle_request_register_and_writeback_is_noop(self):
+        from apps.finance.payable_adapters import PAYABLE_SOURCES, register_payable
+        applicant = self._make_applicant('vradp1', 'VRADP1')
+        req = self._make_request(
+            applicant, status='RETURNED', actual_end_time='2026-07-01 18:30:00+00',
+            fuel_cost=Decimal('200.00'), toll_cost=Decimal('50.00'),
+            parking_cost=Decimal('20.00'), other_cost=Decimal('10.00'),
+        )
+        item = register_payable(req, 'vehicle_request')
+        self.assertIsNone(item.supplier_id)
+        self.assertEqual(item.payee_name, '王伟')
+        self.assertEqual(item.amount_due, Decimal('280.00'))
+        self.assertEqual(item.source_no, req.request_no)
+        self.assertIsNone(item.currency_id)
+        self.assertIsNone(item.project_id)
+        self.assertEqual(item.due_date.isoformat(), '2026-07-01')
+
+        # write_back no-op:不改动源单据的用车状态机、不报错。
+        item.amount_paid = Decimal('280.00')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['vehicle_request'].write_back(req, item)
+        req.refresh_from_db()
+        self.assertEqual(req.status, 'RETURNED')
+
+        # 反核销(台账退回未结清),no-op 仍不应改动源单据状态。
+        item.amount_paid = Decimal('0')
+        item.recalc_status()
+        item.save()
+        PAYABLE_SOURCES['vehicle_request'].write_back(req, item)
+        req.refresh_from_db()
+        self.assertEqual(req.status, 'RETURNED')
+
+    def test_no_due_date_when_actual_end_time_missing(self):
+        """理论上 actual_end_time 应总是随 RETURNED 一起写入,但适配器仍需在缺失时
+        安全回退到 None,不抛异常。"""
+        from apps.finance.payable_adapters import register_payable
+        applicant = self._make_applicant('vradp2', 'VRADP2')
+        req = self._make_request(applicant, status='RETURNED', fuel_cost=Decimal('30.00'))
+        item = register_payable(req, 'vehicle_request')
+        self.assertIsNone(item.due_date)
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class VehicleRequestSignalTest(TestCase):
+    """post_save 信号(apps.oa.signals.register_vehicle_request_payable)覆盖:
+    归还结算(RETURNED)且行程费>0 时登记;金额为 0 不登记(或撤回已登记项);
+    取消/驳回时作废;已核销项不被误伤。"""
+
+    def _make_applicant(self, username, employee_id):
+        from apps.accounts.models import User
+        return User.objects.create(username=username, employee_id=employee_id, first_name='三', last_name='张')
+
+    def _make_request(self, applicant, status='APPROVED', **kwargs):
+        from apps.oa.vehicle import VehicleRequest
+        defaults = dict(
+            applicant=applicant, status=status,
+            start_time='2026-07-01 08:00:00+00', end_time='2026-07-01 18:00:00+00',
+            departure='公司', destination='客户现场',
+        )
+        defaults.update(kwargs)
+        return VehicleRequest.objects.create(**defaults)
+
+    def test_return_with_cost_registers_payable(self):
+        applicant = self._make_applicant('vrsig1', 'VRSIG1')
+        req = self._make_request(applicant, status='RETURNED', actual_end_time='2026-07-01 18:30:00+00',
+                                 fuel_cost=Decimal('100.00'))
+        item = PayableItem.objects.get(source_type='vehicle_request', source_id=req.pk)
+        self.assertEqual(item.amount_due, Decimal('100.00'))
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+    def test_zero_cost_returned_not_registered(self):
+        applicant = self._make_applicant('vrsig2', 'VRSIG2')
+        req = self._make_request(applicant, status='RETURNED', actual_end_time='2026-07-01 18:30:00+00')
+        self.assertFalse(PayableItem.objects.filter(source_type='vehicle_request', source_id=req.pk).exists())
+
+    def test_cost_corrected_to_zero_cancels_registered_item(self):
+        applicant = self._make_applicant('vrsig3', 'VRSIG3')
+        req = self._make_request(applicant, status='RETURNED', actual_end_time='2026-07-01 18:30:00+00',
+                                 fuel_cost=Decimal('50.00'))
+        item = PayableItem.objects.get(source_type='vehicle_request', source_id=req.pk)
+        self.assertEqual(item.status, PayableItem.STATUS_PENDING)
+
+        req.fuel_cost = Decimal('0')
+        req.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+    def test_cancelled_cancels_registered_item(self):
+        applicant = self._make_applicant('vrsig4', 'VRSIG4')
+        req = self._make_request(applicant, status='RETURNED', actual_end_time='2026-07-01 18:30:00+00',
+                                 fuel_cost=Decimal('60.00'))
+        item = PayableItem.objects.get(source_type='vehicle_request', source_id=req.pk)
+        req.status = 'CANCELLED'
+        req.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_CANCELLED)
+
+    def test_rejected_is_noop_when_never_registered(self):
+        """REJECTED 目前审批流程只在 PENDING 阶段触发(早于归还登记时点),此时尚无
+        台账项;cancel_payable 对"新建未登记"场景是安全 no-op,不报错也不凭空建项。"""
+        applicant = self._make_applicant('vrsig5', 'VRSIG5')
+        req = self._make_request(applicant, status='PENDING')
+        req.status = 'REJECTED'
+        req.save()
+        self.assertFalse(PayableItem.objects.filter(source_type='vehicle_request', source_id=req.pk).exists())
+
+    def test_settled_item_not_cancelled_on_cost_correction(self):
+        """反核销保护:已核销(amount_paid>0)的台账项不应被误作废——cancel_payable
+        内部已守卫仅 amount_paid==0 时才允许作废,这里显式验证该不变量在本来源上也成立。"""
+        applicant = self._make_applicant('vrsig6', 'VRSIG6')
+        req = self._make_request(applicant, status='RETURNED', actual_end_time='2026-07-01 18:30:00+00',
+                                 fuel_cost=Decimal('80.00'))
+        item = PayableItem.objects.get(source_type='vehicle_request', source_id=req.pk)
+        item.amount_paid = Decimal('80.00')
+        item.recalc_status()
+        item.save()
+        self.assertEqual(item.status, PayableItem.STATUS_PAID)
+
+        req.fuel_cost = Decimal('0')
+        req.save()
+        item.refresh_from_db()
+        self.assertEqual(item.status, PayableItem.STATUS_PAID)  # 未被误伤作废
+
+    def test_return_vehicle_api_action_registers_payable(self):
+        from rest_framework.test import APIClient
+        from apps.oa.vehicle import Vehicle
+        applicant = self._make_applicant('vrsig7', 'VRSIG7')
+        applicant.is_staff = True
+        applicant.is_superuser = True
+        applicant.save()
+        vehicle = Vehicle.objects.create(plate_number='京VR00007', brand='测试', model='Y1', status='IN_USE')
+        req = self._make_request(applicant, status='IN_USE', vehicle=vehicle, start_mileage=1000)
+        client = APIClient()
+        client.force_authenticate(applicant)
+        resp = client.post(f'/api/oa/vehicle-requests/{req.pk}/return_vehicle/', {
+            'end_mileage': 1100, 'fuel_cost': '150.00', 'toll_cost': '30.00',
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        req.refresh_from_db()
+        self.assertEqual(req.status, 'RETURNED')
+        item = PayableItem.objects.get(source_type='vehicle_request', source_id=req.pk)
+        self.assertEqual(item.amount_due, Decimal('180.00'))
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class VehicleRequestBackfillCommandTest(TestCase):
+    """backfill_vehicle_request_payables:回填存量已归还结算(RETURNED)且行程费>0
+    的用车申请;跳过 0 元与非 RETURNED 状态;幂等。"""
+
+    def _make_applicant(self, username, employee_id):
+        from apps.accounts.models import User
+        return User.objects.create(username=username, employee_id=employee_id, first_name='四', last_name='李')
+
+    def _make_request(self, applicant, status='RETURNED', **kwargs):
+        from apps.oa.vehicle import VehicleRequest
+        defaults = dict(
+            applicant=applicant, status=status,
+            start_time='2026-07-01 08:00:00+00', end_time='2026-07-01 18:00:00+00',
+            departure='公司', destination='客户现场',
+        )
+        defaults.update(kwargs)
+        return VehicleRequest.objects.create(**defaults)
+
+    def _run_backfill_command(self):
+        from django.core.management import call_command
+        call_command('backfill_vehicle_request_payables')
+
+    def test_backfill_creates_for_returned_with_cost_and_skips_others(self):
+        applicant = self._make_applicant('vrbk1', 'VRBK1')
+        returned_with_cost = self._make_request(
+            applicant, status='RETURNED', actual_end_time='2026-07-02 18:00:00+00',
+            fuel_cost=Decimal('120.00'),
+        )
+        returned_zero = self._make_request(
+            applicant, status='RETURNED', actual_end_time='2026-07-02 18:00:00+00',
+        )
+        in_use = self._make_request(applicant, status='IN_USE')
+        # 清掉信号在创建时已登记的项,模拟"存量未登记"(信号覆盖新增数据,本命令回填历史存量)
+        PayableItem.objects.all().delete()
+
+        self._run_backfill_command()
+
+        self.assertTrue(
+            PayableItem.objects.filter(source_type='vehicle_request', source_id=returned_with_cost.pk).exists()
+        )
+        self.assertFalse(
+            PayableItem.objects.filter(source_type='vehicle_request', source_id=returned_zero.pk).exists()
+        )
+        self.assertFalse(
+            PayableItem.objects.filter(source_type='vehicle_request', source_id=in_use.pk).exists()
+        )
+
+    def test_backfill_is_idempotent(self):
+        applicant = self._make_applicant('vrbk2', 'VRBK2')
+        req = self._make_request(
+            applicant, status='RETURNED', actual_end_time='2026-07-02 18:00:00+00',
+            toll_cost=Decimal('40.00'),
+        )
+        self._run_backfill_command()
+        self._run_backfill_command()
+        self.assertEqual(
+            PayableItem.objects.filter(source_type='vehicle_request', source_id=req.pk).count(), 1
+        )
+
+
+@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
+class ExpenseReimburseRetiredTest(TestCase):
+    """报销 reimburse() 退役:不再直接标 PAID,改由银行流水核销驱动;PATCH 也不能直接改 status。"""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+        from apps.accounts.models import User
+        self.admin = User.objects.create(username='expadmin', employee_id='EXA1', is_staff=True, is_superuser=True)
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+
+    def _make_expense(self, code='EMP1', no='EXPR1'):
+        from apps.accounts.models import User
+        from apps.finance.models import Expense
+        u = User.objects.create(username=f'emp{code}', employee_id=code)
+        return Expense.objects.create(expense_no=no, user=u, expense_date='2026-07-01',
+                                      category='TRAVEL', amount=Decimal('500.00'), status='APPROVED')
+
+    def test_reimburse_endpoint_retired_409_no_side_effect(self):
+        exp = self._make_expense()
+        resp = self.client.post(f'/api/finance/expenses/{exp.pk}/reimburse/', {}, format='json')
+        self.assertEqual(resp.status_code, 409)
+        exp.refresh_from_db()
+        self.assertEqual(exp.status, 'APPROVED')      # 未被标 PAID
+        self.assertIsNone(exp.reimbursement_date)     # 未写报销日期
+
+    def test_patch_cannot_set_status_paid(self):
+        exp = self._make_expense(code='EMP2', no='EXPR2')
+        resp = self.client.patch(f'/api/finance/expenses/{exp.pk}/', {'status': 'PAID'}, format='json')
+        self.assertIn(resp.status_code, (200, 202))
+        exp.refresh_from_db()
+        self.assertEqual(exp.status, 'APPROVED')      # PATCH 改 status 无效

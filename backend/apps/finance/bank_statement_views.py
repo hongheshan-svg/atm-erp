@@ -15,8 +15,8 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.permission_mixin import PermissionMixin
-from apps.masterdata.models import Supplier, Customer
-from .models import AccountPayable, AccountReceivable, Payment
+from apps.masterdata.models import Customer
+from .models import AccountReceivable, Payment
 from .bank_statement_models import BankStatement, BankStatementImportLog
 from .bank_statement_serializers import (
     BankStatementSerializer,
@@ -705,13 +705,24 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
     def match(self, request, pk=None):
         """
         Manually match a bank statement to supplier/customer and AP/AR.
+
+        AP 分支已停用:应付账款匹配银行流水历史上直接创建 Payment(payment_type='AP')
+        绕开待付款项核销台账(PayableItem/PayableSettlement),与统一核销台账"两套并存"。
+        收口后 AP 匹配 → 已付款只经「付款核销工作台」(payable-reconcile/settle)完成,
+        本分支不再执行、不产生任何副作用。AR 分支不受影响,继续走原逻辑。
         """
+        if request.data.get('match_type') == 'AP':
+            return Response(
+                {'error': '应付账款流水匹配已统一由核销台账完成:请在「付款核销工作台」核销该流水。此分支已停用。'},
+                status=409,
+            )
+
         statement = self.get_object()
         serializer = BankStatementMatchSerializer(data=request.data)
-        
+
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
         data = serializer.validated_data
         match_type = data.get('match_type')
 
@@ -719,19 +730,7 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
             statement.match_type = match_type
             statement.match_notes = data.get('notes', '')
 
-            if match_type == 'AP':
-                supplier_id = data.get('supplier_id')
-                if supplier_id:
-                    statement.supplier = Supplier.objects.get(id=supplier_id)
-
-                ap_id = data.get('ap_id')
-                if ap_id:
-                    statement.related_ap = AccountPayable.objects.get(id=ap_id)
-
-                statement.customer = None
-                statement.related_ar = None
-
-            elif match_type == 'AR':
+            if match_type == 'AR':
                 customer_id = data.get('customer_id')
                 if customer_id:
                     statement.customer = Customer.objects.get(id=customer_id)
@@ -764,7 +763,12 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         return Response(BankStatementSerializer(statement).data)
 
     def _apply_statement_payment(self, statement, user):
-        """匹配到具体 AR/AP 时生成 Payment，更新已收/已付金额并重算状态。"""
+        """匹配到具体 AR 时生成 Payment，更新已收金额并重算状态。
+
+        AP 分支已随 match() 的 AP 停用一并移除:match() 现在对 match_type='AP' 直接
+        409 短路,不会再走到这里;AP 付款只经「付款核销工作台」(payable-reconcile/settle)
+        完成,不再由本方法直接创建 Payment(payment_type='AP')。
+        """
         amount = statement.amount or Decimal('0')
         if amount <= 0:
             return
@@ -796,30 +800,6 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
             ar.status = 'PAID' if ar.amount_paid >= ar.amount_due else 'PARTIAL'
             ar.save(update_fields=['status'])
 
-        elif statement.match_type == 'AP' and statement.related_ap_id:
-            ap = AccountPayable.objects.select_for_update().get(pk=statement.related_ap_id)
-            if Payment.objects.filter(ap=ap, notes__contains=marker).exists():
-                return
-            remaining = ap.amount_due - ap.amount_paid
-            pay_amount = min(amount, remaining)
-            if pay_amount <= 0:
-                return
-            Payment.objects.create(
-                payment_type='AP',
-                ap=ap,
-                payment_date=statement.transaction_time.date(),
-                payment_method='BANK_TRANSFER',
-                amount=pay_amount,
-                currency=ap.currency,
-                exchange_rate=ap.exchange_rate,
-                notes=f'{marker} 银行流水匹配',
-                created_by=user,
-                updated_by=user,
-            )
-            ap.refresh_from_db(fields=['amount_paid'])
-            ap.status = 'PAID' if ap.amount_paid >= ap.amount_due else 'PARTIAL'
-            ap.save(update_fields=['status'])
-    
     @action(detail=True, methods=['post'])
     def ignore(self, request, pk=None):
         """Mark a bank statement as ignored."""

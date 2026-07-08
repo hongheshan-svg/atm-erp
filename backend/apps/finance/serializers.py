@@ -88,7 +88,10 @@ class ExpenseSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['expense_no', 'base_amount', 'created_at', 'updated_at']
+        # status 只经 submit/approve/reject/工作流 与 核销 write_back 流转,reimbursement_date
+        # 由核销回写,均不经通用 PATCH——设为只读,堵住绕过核销台账直接标 PAID 的旁路。
+        read_only_fields = ['expense_no', 'base_amount', 'created_at', 'updated_at',
+                            'status', 'reimbursement_date']
 
 
 class AccountReceivableSerializer(serializers.ModelSerializer):

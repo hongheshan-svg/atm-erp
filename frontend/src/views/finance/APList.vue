@@ -252,38 +252,6 @@
       </el-descriptions>
     </el-dialog>
 
-    <!-- 付款登记对话框 -->
-    <el-dialog v-model="paymentVisible" title="登记付款" width="450px">
-      <el-form :model="paymentForm" label-width="90px" v-if="currentRow">
-        <el-form-item label="供应商">
-          <el-input :value="currentRow.supplier_name" disabled />
-        </el-form-item>
-        <el-form-item label="待付金额">
-          <el-input :value="'¥' + formatNumber(getRemaining(currentRow))" disabled />
-        </el-form-item>
-        <el-form-item label="本次付款" required>
-          <el-input-number v-model="paymentForm.amount" :min="0" :max="getRemaining(currentRow)" :precision="2" style="width: 100%" />
-        </el-form-item>
-        <el-form-item label="付款日期" required>
-          <el-date-picker v-model="paymentForm.payment_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
-        </el-form-item>
-        <el-form-item label="付款方式">
-          <el-select v-model="paymentForm.payment_method" style="width: 100%">
-            <el-option label="银行转账" value="BANK" />
-            <el-option label="现金" value="CASH" />
-            <el-option label="支票" value="CHECK" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input v-model="paymentForm.notes" type="textarea" :rows="2" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="paymentVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitPayment" :loading="submitting">确定</el-button>
-      </template>
-    </el-dialog>
-
     <!-- 银行流水详情对话框 -->
     <el-dialog v-model="bankDetailVisible" title="银行流水详情" width="650px">
       <el-descriptions :column="2" border v-if="currentBankStatement">
@@ -304,45 +272,6 @@
         <el-descriptions-item label="匹配供应商">{{ currentBankStatement.supplier_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="关联采购单">{{ currentBankStatement.related_order_no || '-' }}</el-descriptions-item>
       </el-descriptions>
-    </el-dialog>
-
-    <!-- 银行流水匹配对话框 -->
-    <el-dialog v-model="bankMatchVisible" title="匹配银行流水" width="550px">
-      <el-form :model="bankMatchForm" label-width="100px" v-if="currentBankStatement">
-        <el-form-item label="对方单位">
-          <span style="font-weight: bold;">{{ currentBankStatement.counterparty_name }}</span>
-        </el-form-item>
-        <el-form-item label="金额">
-          <span class="text-danger" style="font-weight: bold; font-size: 16px;">¥{{ formatNumber(currentBankStatement.amount) }}</span>
-        </el-form-item>
-        <el-form-item label="选择供应商" required>
-          <el-select v-model="bankMatchForm.supplier_id" placeholder="请选择供应商" filterable style="width: 100%;" @change="onMatchSupplierChange">
-            <el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="关联应付单">
-          <el-select v-model="bankMatchForm.ap_id" placeholder="可选关联应付单（关联后自动核销）" filterable clearable style="width: 100%;">
-            <el-option
-              v-for="ap in matchablePayables"
-              :key="ap.id"
-              :label="`${ap.ap_no} 待付¥${formatNumber(getRemaining(ap))}`"
-              :value="ap.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="关联采购订单">
-          <el-select v-model="bankMatchForm.purchase_order_id" placeholder="可选关联订单" filterable clearable style="width: 100%;">
-            <el-option v-for="o in purchaseOrders" :key="o.id" :label="o.order_no" :value="o.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input v-model="bankMatchForm.notes" type="textarea" :rows="2" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="bankMatchVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitBankMatch" :loading="matching">确定匹配</el-button>
-      </template>
     </el-dialog>
 
     <!-- 导入结果对话框 -->
@@ -368,36 +297,30 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Download, Connection } from '@element-plus/icons-vue'
-import { getPayables, getBankStatements, recordPayablePayment, bulkDeleteBankStatements, ignoreBankStatement, matchBankStatement, autoMatchAllBankStatements } from '@/api/finance'
-import { usePermissionStore } from '@/stores/permission'
+import { getPayables, getBankStatements, bulkDeleteBankStatements, ignoreBankStatement, autoMatchAllBankStatements } from '@/api/finance'
 import { exportAPReport } from '@/api/core'
 import { getSupplierList } from '@/api/masterdata'
-import { getPurchaseOrders } from '@/api/purchase'
+
+const router = useRouter()
 
 const loading = ref(false)
 const bankLoading = ref(false)
-const submitting = ref(false)
 const autoMatching = ref(false)
-const matching = ref(false)
 const activeTab = ref('payables')
-const permissionStore = usePermissionStore()
 
 const dataList = ref<any[]>([])
 const bankStatements = ref<any[]>([])
 const selectedBankStatements = ref<any[]>([])
 const suppliers = ref<any[]>([])
-const purchaseOrders = ref<any[]>([])
-const purchaseOrdersLoaded = ref(false)
 const currentRow = ref(null)
 const currentBankStatement = ref(null)
 const importResult = ref(null)
 
 const viewVisible = ref(false)
-const paymentVisible = ref(false)
 const bankDetailVisible = ref(false)
-const bankMatchVisible = ref(false)
 const importResultVisible = ref(false)
 
 const summary = reactive({ total_due: 0, total_paid: 0, total_remaining: 0, overdue_amount: 0 })
@@ -405,9 +328,6 @@ const searchForm = reactive({ supplier: null, status: null })
 const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
 const bankSearchForm = reactive({ status: null, supplier: null })
 const bankPagination = reactive({ page: 1, pageSize: 20, total: 0 })
-const paymentForm = reactive({ amount: 0, payment_date: new Date().toISOString().split('T')[0], payment_method: 'BANK', notes: '' })
-const bankMatchForm = reactive({ supplier_id: null, ap_id: null, purchase_order_id: null, notes: '' })
-const matchablePayables = ref<any[]>([])
 
 // Upload configuration
 const uploadUrl = computed(() => {
@@ -482,60 +402,13 @@ const loadSuppliers = async () => {
   }
 }
 
-const loadPurchaseOrders = async () => {
-  if (purchaseOrdersLoaded.value) {
-    return true
-  }
-
-  try {
-    const res = await getPurchaseOrders({ page_size: 500 })
-    purchaseOrders.value = res.results || res || []
-    purchaseOrdersLoaded.value = true
-    return true
-  } catch (error) {
-    if (error?.response?.status !== 403) {
-      console.error('加载采购订单失败')
-    }
-    return false
-  }
-}
-
-const ensurePurchaseOrdersLoaded = async () => {
-  if (!permissionStore.hasPermission('purchase:orders')) {
-    purchaseOrders.value = []
-    purchaseOrdersLoaded.value = false
-    return false
-  }
-
-  return loadPurchaseOrders()
-}
-
 const resetSearch = () => { searchForm.supplier = null; searchForm.status = null; pagination.page = 1; loadData() }
 const resetBankSearch = () => { bankSearchForm.status = null; bankSearchForm.supplier = null; bankPagination.page = 1; loadBankStatements() }
 
 const handleView = (row) => { currentRow.value = row; viewVisible.value = true }
-const handlePayment = (row) => {
-  currentRow.value = row
-  paymentForm.amount = getRemaining(row)
-  paymentForm.payment_date = new Date().toISOString().split('T')[0]
-  paymentForm.payment_method = 'BANK'
-  paymentForm.notes = ''
-  paymentVisible.value = true
-}
-
-const submitPayment = async () => {
-  if (!paymentForm.amount || paymentForm.amount <= 0) return ElMessage.warning('请输入付款金额')
-  submitting.value = true
-  try {
-    await recordPayablePayment(currentRow.value.id, paymentForm)
-    ElMessage.success('付款登记成功')
-    paymentVisible.value = false
-    loadData()
-  } catch (error) {
-    ElMessage.error('付款登记失败')
-  } finally {
-    submitting.value = false
-  }
+const handlePayment = (_row?: any) => {
+  ElMessage.info('付款已统一由「付款核销工作台」核销银行流水完成，请在工作台中办理')
+  router.push('/finance/payment-reconciliation')
 }
 
 const exportData = async () => {
@@ -589,33 +462,9 @@ const handleBatchDelete = async () => {
 
 const handleViewBank = (row) => { currentBankStatement.value = row; bankDetailVisible.value = true }
 
-const handleMatchBank = async (row) => {
-  await ensurePurchaseOrdersLoaded()
-  currentBankStatement.value = row
-  bankMatchForm.supplier_id = row.supplier || null
-  bankMatchForm.ap_id = null
-  bankMatchForm.purchase_order_id = null
-  bankMatchForm.notes = ''
-  matchablePayables.value = []
-  bankMatchVisible.value = true
-  if (bankMatchForm.supplier_id) loadMatchablePayables(bankMatchForm.supplier_id)
-}
-
-const loadMatchablePayables = async (supplierId) => {
-  if (!supplierId) { matchablePayables.value = []; return }
-  try {
-    const res = await getPayables({ supplier: supplierId, page_size: 200 })
-    const list = res.results || res || []
-    matchablePayables.value = list.filter((ap) => getRemaining(ap) > 0)
-  } catch (error) {
-    console.error('APList loadMatchablePayables error:', error)
-    matchablePayables.value = []
-  }
-}
-
-const onMatchSupplierChange = (supplierId) => {
-  bankMatchForm.ap_id = null
-  loadMatchablePayables(supplierId)
+const handleMatchBank = (_row?: any) => {
+  ElMessage.info('银行流水核销已统一至「付款核销工作台」办理，请在工作台中匹配')
+  router.push('/finance/payment-reconciliation')
 }
 
 const handleIgnoreBank = async (row) => {
@@ -629,25 +478,6 @@ const handleIgnoreBank = async (row) => {
       ElMessage.error('操作失败')
       console.error('APList handleIgnoreBank error:', error)
     }
-  }
-}
-
-const submitBankMatch = async () => {
-  if (!bankMatchForm.supplier_id) return ElMessage.warning('请选择供应商')
-  matching.value = true
-  try {
-    await matchBankStatement(currentBankStatement.value.id, {
-      match_type: 'AP',
-      ...bankMatchForm
-    })
-    ElMessage.success('匹配成功')
-    bankMatchVisible.value = false
-    loadBankStatements()
-    loadData()
-  } catch (error) {
-    ElMessage.error('匹配失败: ' + (error.response?.data?.error || error.message))
-  } finally {
-    matching.value = false
   }
 }
 

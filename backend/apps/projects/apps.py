@@ -5,3 +5,7 @@ class ProjectsConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'apps.projects'
     verbose_name = '项目管理'
+
+    def ready(self):
+        """导入信号处理器"""
+        from . import signals  # noqa
