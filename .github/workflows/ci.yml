@@ -50,7 +50,9 @@ jobs:
       DB_HOST: localhost
       DB_PORT: '5432'
       REDIS_URL: redis://localhost:6379/0
-      ELASTICSEARCH_ENABLED: 'False'
+      # Empty host triggers settings.py's degraded mode: ELASTICSEARCH_DSL_AUTOSYNC=False,
+      # so model saves don't fire real-time ES index signals (no ES service in CI).
+      ELASTICSEARCH_HOST: ''
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -65,7 +67,9 @@ jobs:
       - name: Migration drift check (hard gate)
         run: python manage.py makemigrations --check --dry-run
       - name: Run tests (hard gate)
-        run: python manage.py test --verbosity=2
+        # Scope to the apps package: tests/integration/ are pytest-based (fixtures,
+        # pytestmark) and are run separately via pytest, not the Django test runner.
+        run: python manage.py test apps --verbosity=2
       - name: Ruff lint (advisory — repo has legacy debt)
         continue-on-error: true
         run: ruff check .

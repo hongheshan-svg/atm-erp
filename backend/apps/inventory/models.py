@@ -273,44 +273,57 @@ class StockMove(BaseModel):
         """
         if warehouse is None:
             return
+        import logging
+
+        from django.db import transaction
+
         from .cost_accounting import CostCalculationService, InventoryCostConfig
 
-        if not InventoryCostConfig.objects.filter(is_active=True, is_deleted=False).exists():
-            return
+        try:
+            if not InventoryCostConfig.objects.filter(is_active=True, is_deleted=False).exists():
+                return
 
-        txn_type = self._COST_TXN_TYPE.get((self.move_type, direction))
-        if not txn_type:
-            txn_type = 'ADJUST_IN' if direction == 'IN' else 'ADJUST_OUT'
+            txn_type = self._COST_TXN_TYPE.get((self.move_type, direction))
+            if not txn_type:
+                txn_type = 'ADJUST_IN' if direction == 'IN' else 'ADJUST_OUT'
 
-        service = CostCalculationService()
-        actor = self.updated_by or self.created_by
-        if direction == 'IN':
-            service.process_inbound(
-                item_id=self.item_id,
-                warehouse_id=warehouse.id,
-                quantity=qty,
-                unit_cost=unit_cost,
-                transaction_type=txn_type,
-                reference_no=self.move_no,
-                reference_id=self.reference_id,
-                transaction_date=self.move_date,
-                user=actor,
-            )
-        else:
-            # 出库单价:仅在本移动带有真实单价时显式传入(FIFO 分层实耗成本 / 已计价移动);
-            # 为 0/未计价的普通出库(如 OUT_SALES 发货)传 None,由成本账按结存加权成本派生,
-            # 避免把出库成本错记为 0。
-            out_unit_cost = unit_cost if (unit_cost and unit_cost > 0) else None
-            service.process_outbound(
-                item_id=self.item_id,
-                warehouse_id=warehouse.id,
-                quantity=qty,
-                transaction_type=txn_type,
-                reference_no=self.move_no,
-                reference_id=self.reference_id,
-                transaction_date=self.move_date,
-                user=actor,
-                unit_cost=out_unit_cost,
+            service = CostCalculationService()
+            actor = self.updated_by or self.created_by
+            # 成本账是派生副作用:置于独立 savepoint,登记失败仅回滚本次登记(不使外层事务进入
+            # aborted 状态),绝不破坏库存移动主流程本身(兑现上文 docstring 承诺)。
+            with transaction.atomic():
+                if direction == 'IN':
+                    service.process_inbound(
+                        item_id=self.item_id,
+                        warehouse_id=warehouse.id,
+                        quantity=qty,
+                        unit_cost=unit_cost,
+                        transaction_type=txn_type,
+                        reference_no=self.move_no,
+                        reference_id=self.reference_id,
+                        transaction_date=self.move_date,
+                        user=actor,
+                    )
+                else:
+                    # 出库单价:仅在本移动带有真实单价时显式传入(FIFO 分层实耗成本 / 已计价移动);
+                    # 为 0/未计价的普通出库(如 OUT_SALES 发货)传 None,由成本账按结存加权成本派生,
+                    # 避免把出库成本错记为 0。
+                    out_unit_cost = unit_cost if (unit_cost and unit_cost > 0) else None
+                    service.process_outbound(
+                        item_id=self.item_id,
+                        warehouse_id=warehouse.id,
+                        quantity=qty,
+                        transaction_type=txn_type,
+                        reference_no=self.move_no,
+                        reference_id=self.reference_id,
+                        transaction_date=self.move_date,
+                        user=actor,
+                        unit_cost=out_unit_cost,
+                    )
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                '成本账登记失败(move_no=%s, dir=%s),已跳过,不影响库存移动: %s',
+                self.move_no, direction, exc,
             )
 
 
