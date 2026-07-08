@@ -50,6 +50,9 @@ jobs:
       DB_HOST: localhost
       DB_PORT: '5432'
       REDIS_URL: redis://localhost:6379/0
+      # Channels layer + cache read REDIS_HOST (default 'redis'); point at the CI service
+      # so progress-relay / websocket group tests can reach a real channel layer.
+      REDIS_HOST: localhost
       # Empty host triggers settings.py's degraded mode: ELASTICSEARCH_DSL_AUTOSYNC=False,
       # so model saves don't fire real-time ES index signals (no ES service in CI).
       ELASTICSEARCH_HOST: ''
