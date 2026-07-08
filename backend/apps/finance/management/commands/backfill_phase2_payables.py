@@ -1,8 +1,11 @@
 """把存量已应付(未付)的二期来源单据回填到统一待付款项台账。
 
-R2判断(含两期协调):
-1. OutsourceOrder (委外加工) - 不回填。OutsourceOrderViewSet.confirm() 内联创建了
-   AccountPayable,外协应付已随 AP 经 backfill_payables 回填,无需重复回填。
+来源判断(含 G5 委外修复后的订正):
+1. OutsourceOrder (委外加工) - 回填 status in CONFIRMED/PROCESSING/PARTIAL/COMPLETED
+   的委外单为 source_type='outsource'。历史上 confirm() 试图内联建 AccountPayable,
+   但 AccountPayable 无 notes 字段致每次 500、从未成功建过 AP;现 confirm()/cancel()
+   已改为直接登记/作废 outsource 台账项(见 outsource_views.py 与 OutsourcePayableSource),
+   故委外应付以 'outsource' 为唯一来源、需在此回填存量已确认单。
 
 2. PaymentRequest (付款申请) - 仅回填 ap__isnull=True 的独立申请(status=APPROVED)。
    大多数 PaymentRequest 关联既存 AP(付款申请→针对某 AP)，该 AP 已被 backfill_payables 覆盖。
@@ -22,6 +25,7 @@ from django.core.management.base import BaseCommand
 from apps.finance.payable_adapters import register_payable
 from apps.finance.models import SharedExpense, PaymentRequest
 from apps.finance.tax_management import TaxDeclaration
+from apps.purchase.outsource_models import OutsourceOrder
 
 
 class Command(BaseCommand):
@@ -29,6 +33,17 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         count = 0
+
+        # 0. 委外加工：已确认(且未取消)的委外单,以 source_type='outsource' 回填
+        outsource_qs = OutsourceOrder.objects.filter(
+            status__in=['CONFIRMED', 'PROCESSING', 'PARTIAL', 'COMPLETED']
+        )
+        for order in outsource_qs:
+            register_payable(order, 'outsource')
+            count += 1
+        self.stdout.write(
+            self.style.SUCCESS(f'  ✓ 回填 {outsource_qs.count()} 条委外加工(已确认)到台账')
+        )
 
         # 1. 公共费用：已分摊的公共费用(独立于AP，直接回填)
         shared_expense_qs = SharedExpense.objects.filter(status='ALLOCATED')
@@ -60,10 +75,4 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.SUCCESS(f'\n✓ 总计回填 {count} 条二期来源应付单据到台账')
-        )
-        self.stdout.write(
-            self.style.WARNING(
-                '⊘ 说明:委外订单(OutsourceOrder)不回填。其应付已随内联创建的AP'
-                '通过 backfill_payables 回填。'
-            )
         )

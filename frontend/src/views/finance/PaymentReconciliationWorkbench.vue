@@ -442,7 +442,7 @@ const SOURCE_TYPE_LABEL: Record<string, string> = {
 const sourceTypeLabel = (t: string) => SOURCE_TYPE_LABEL[t] || t || '-'
 
 // 与后端各来源适配器 category 取值保持一致(apps/finance/payable_adapters.py)
-const CATEGORY_OPTIONS = ['采购', '报销', '合同付款', '委外加工', '公共费用', '税务', '付款申请']
+const CATEGORY_OPTIONS = ['采购', '报销', '合同付款', '委外加工', '公共费用', '税务', '付款申请', '资产维护', '车辆维护', '用车行程费', '服务费报销']
 
 const ITEM_STATUS_TEXT: Record<string, string> = {
   PENDING: '待付',

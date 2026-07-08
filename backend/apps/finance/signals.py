@@ -6,10 +6,12 @@
 - 二期来源(公共费用分摊/税务申报/独立付款申请)审批到达各自"确认应付"状态时
   同样自动登记;取消/撤回时作废对应台账项。通用规则:一个来源若已经通过创建/
   引用 AccountPayable 间接进了台账(经 register_ap_payable 登记为 source_type=
-  'ap'),就不再挂独立信号,避免同一笔应付被双记——据此,委外加工(outsource,
-  OutsourceOrder.confirm() 里内联创建 AccountPayable)整体跳过;付款申请
-  (PaymentRequest)仅当 `ap` 为空(不挂靠任何已有 AP 的独立申请,如预付款)时才
-  登记为 source_type='payment_request'。
+  'ap'),就不再挂独立信号,避免同一笔应付被双记——据此,付款申请(PaymentRequest)
+  仅当 `ap` 为空(不挂靠任何已有 AP 的独立申请,如预付款)时才登记为
+  source_type='payment_request'。委外加工(OutsourceOrder)不在此处挂信号:其
+  确认/取消由 outsource_views.py 的 confirm()/cancel() 直接登记/作废 source_type=
+  'outsource' 台账项(历史上 confirm() 试图内联建 AccountPayable 但因该模型无 notes
+  字段一直 500、从未成功,G5 修复时改为直连 outsource 适配器)。
 - 员工费用报销(Expense)审批通过(APPROVED)登记台账;驳回(REJECTED)或工作流撤回
   退回草稿(DRAFT)时作废对应台账项(withdraw_workflow 会把 EXPENSE 退回 DRAFT,
   见 apps.core.workflow.services._on_workflow_complete)。Expense 无供应商、

@@ -406,7 +406,7 @@ const resetSearch = () => { searchForm.supplier = null; searchForm.status = null
 const resetBankSearch = () => { bankSearchForm.status = null; bankSearchForm.supplier = null; bankPagination.page = 1; loadBankStatements() }
 
 const handleView = (row) => { currentRow.value = row; viewVisible.value = true }
-const handlePayment = () => {
+const handlePayment = (_row?: any) => {
   ElMessage.info('付款已统一由「付款核销工作台」核销银行流水完成，请在工作台中办理')
   router.push('/finance/payment-reconciliation')
 }
@@ -462,7 +462,7 @@ const handleBatchDelete = async () => {
 
 const handleViewBank = (row) => { currentBankStatement.value = row; bankDetailVisible.value = true }
 
-const handleMatchBank = () => {
+const handleMatchBank = (_row?: any) => {
   ElMessage.info('银行流水核销已统一至「付款核销工作台」办理，请在工作台中匹配')
   router.push('/finance/payment-reconciliation')
 }
