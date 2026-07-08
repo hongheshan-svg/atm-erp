@@ -206,6 +206,10 @@ class SystemNotification(models.Model):
         verbose_name = '系统通知'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
+        # 收件箱按 用户+已读 高频查询(审计 P1 索引缺失)
+        indexes = [
+            models.Index(fields=['user', 'is_read']),
+        ]
 
     def __str__(self):
         return f'{self.user} - {self.title}'

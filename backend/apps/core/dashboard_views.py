@@ -2,13 +2,15 @@
 仪表盘组件视图
 Dashboard Widget Views
 """
-from rest_framework import viewsets, status
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import serializers
-from apps.core.permission_mixin import PermissionMixin
 
-from .dashboard_config import DashboardWidget, UserDashboard, DashboardDataService
+from apps.core.permission_mixin import PermissionMixin
+from apps.core.permissions import IsSystemAdminOrReadOnly
+
+from .dashboard_config import DashboardDataService, DashboardWidget, UserDashboard
 
 
 class DashboardWidgetSerializer(serializers.ModelSerializer):
@@ -31,9 +33,16 @@ class UserDashboardSerializer(serializers.ModelSerializer):
 
 
 class DashboardWidgetViewSet(PermissionMixin, viewsets.ModelViewSet):
-    """仪表盘组件管理"""
+    """仪表盘组件管理
+
+    组件可携带 data_source='custom_sql' 的自定义查询（custom_query），
+    执行时能 SELECT 任意表（含用户密码哈希）。因此**编辑（增删改）**必须
+    收紧到系统管理员；普通用户仅可读取/取用已有组件（IsSystemAdminOrReadOnly，
+    读走 SAFE_METHODS + PermissionMixin 菜单兜底，与 DictType 等只写门槛一致）。
+    """
     permission_module = 'system'
     permission_resource = 'dashboard_widget'
+    permission_classes = [IsAuthenticated, IsSystemAdminOrReadOnly]
     queryset = DashboardWidget.objects.all()
     serializer_class = DashboardWidgetSerializer
     filterset_fields = ['widget_type', 'data_source', 'is_active']

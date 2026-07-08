@@ -56,6 +56,11 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # 安全响应头(CSP / Referrer-Policy / Permissions-Policy / nosniff 等)。
+    # 仅 process_response，放在靠前位置以覆盖所有下游响应；被动加头，不拦截请求，
+    # 因此不影响既有 DRF 限流/鉴权与测试。RateLimit/SQLi/XSS 等主动拦截中间件
+    # 依赖 Redis 且与 DRF 限流职责重叠，暂不在此启用（见 security_middleware.py）。
+    'apps.core.security_middleware.SecurityHeadersMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -192,9 +197,26 @@ REST_FRAMEWORK = {
 }
 
 # JWT Settings
+def _jwt_lifetime(token_name, legacy_name, default):
+    """Read a JWT lifetime accepting both the documented `*_TOKEN_LIFETIME_*`
+    name (used by .env.prod.example) and the legacy `*_LIFETIME_*` name, so a
+    prod env that sets the documented variable no longer silently falls back to
+    the default. Empty/invalid values fall back to `default`.
+    """
+    raw = config(token_name, default='') or config(legacy_name, default='')
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=config('JWT_ACCESS_LIFETIME_MINUTES', default=120, cast=int)),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=config('JWT_REFRESH_LIFETIME_DAYS', default=7, cast=int)),
+    'ACCESS_TOKEN_LIFETIME': timedelta(
+        minutes=_jwt_lifetime('JWT_ACCESS_TOKEN_LIFETIME_MINUTES', 'JWT_ACCESS_LIFETIME_MINUTES', 120)
+    ),
+    'REFRESH_TOKEN_LIFETIME': timedelta(
+        days=_jwt_lifetime('JWT_REFRESH_TOKEN_LIFETIME_DAYS', 'JWT_REFRESH_LIFETIME_DAYS', 7)
+    ),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,  # Enable token blacklist for security
     'UPDATE_LAST_LOGIN': True,
@@ -352,3 +374,11 @@ PASSWORD_EXPIRY_DAYS = config('PASSWORD_EXPIRY_DAYS', default=90, cast=int)
 # Login Security
 MAX_LOGIN_ATTEMPTS = config('MAX_LOGIN_ATTEMPTS', default=5, cast=int)
 LOCKOUT_DURATION_MINUTES = config('LOCKOUT_DURATION_MINUTES', default=30, cast=int)
+
+# =============================================================================
+# Backup Encryption
+# =============================================================================
+# 数据库备份加密密钥（Fernet key）。留空则备份仅 gzip 压缩（明文，兼容本地开发）。
+# 生产环境应设置一个由以下命令生成的密钥，使备份落盘即为 AES-128-CBC+HMAC 加密：
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+BACKUP_ENCRYPTION_KEY = config('BACKUP_ENCRYPTION_KEY', default='')
