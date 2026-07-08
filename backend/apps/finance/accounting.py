@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Sum
 from django.utils import timezone
 from rest_framework import serializers, status, viewsets
@@ -510,7 +510,7 @@ class FiscalPeriodViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
 
     @action(detail=True, methods=['post'])
     def close(self, request, pk=None):
-        """关闭期间"""
+        """关闭期间,并把本期期末余额结转为下期期初余额。"""
         period = self.get_object()
         if period.status != 'OPEN':
             return Response({'error': '只有开放期间可以关闭'}, status=400)
@@ -520,12 +520,68 @@ class FiscalPeriodViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
         if pending_vouchers > 0:
             return Response({'error': f'有{pending_vouchers}张凭证未审核'}, status=400)
 
-        period.status = 'CLOSED'
-        period.closed_at = timezone.now()
-        period.closed_by = request.user
-        period.save()
+        with transaction.atomic():
+            # 结转期末余额 -> 下期期初(否则下期 opening_* 恒为 0,试算平衡期初永远为 0)
+            self._carry_forward_opening_balances(period, request.user)
+
+            period.status = 'CLOSED'
+            period.closed_at = timezone.now()
+            period.closed_by = request.user
+            period.save()
 
         return Response(self.get_serializer(period).data)
+
+    @staticmethod
+    def _next_period(period):
+        """返回下一会计期间(1-12 循环,第 12 期跨年到次年第 1 期);不存在则返回 None。"""
+        if period.period < 12:
+            year, nxt = period.year, period.period + 1
+        else:
+            year, nxt = period.year + 1, 1
+        return FiscalPeriod.objects.filter(year=year, period=nxt, is_deleted=False).first()
+
+    @classmethod
+    def _carry_forward_opening_balances(cls, period, user):
+        """把本期各科目期末净额按余额方向结转为下期期初余额。
+
+        期末净额 = 期初净额 +/- 本期发生净额,取号方向遵循科目 ``balance_direction``:
+        - 借方科目:net = (期初借 - 期初贷) + (本期借 - 本期贷),net>=0 落借方,否则落贷方;
+        - 贷方科目:net = (期初贷 - 期初借) + (本期贷 - 本期借),net>=0 落贷方,否则落借方。
+
+        仅结转到已存在的下期(不凭空创建期间)。仅做科目余额结转,不做
+        损益结转-留存收益的年末结账(属更大范围任务,列为遗留 residual)。
+        """
+        next_period = cls._next_period(period)
+        if not next_period:
+            return
+
+        balances = AccountBalance.objects.filter(fiscal_period=period, is_deleted=False).select_related('account')
+
+        for bal in balances:
+            opening_dr = bal.opening_debit or Decimal('0')
+            opening_cr = bal.opening_credit or Decimal('0')
+            period_dr = bal.period_debit or Decimal('0')
+            period_cr = bal.period_credit or Decimal('0')
+
+            if bal.account.balance_direction == 'CREDIT':
+                net = (opening_cr - opening_dr) + (period_cr - period_dr)
+                next_open_dr = Decimal('0') if net >= 0 else -net
+                next_open_cr = net if net >= 0 else Decimal('0')
+            else:  # DEBIT(默认)
+                net = (opening_dr - opening_cr) + (period_dr - period_cr)
+                next_open_dr = net if net >= 0 else Decimal('0')
+                next_open_cr = Decimal('0') if net >= 0 else -net
+
+            nb, _ = AccountBalance.objects.get_or_create(
+                account=bal.account,
+                fiscal_period=next_period,
+                defaults={'created_by': user},
+            )
+            nb.opening_debit = next_open_dr
+            nb.opening_credit = next_open_cr
+            nb.closing_debit = nb.opening_debit + (nb.period_debit or Decimal('0'))
+            nb.closing_credit = nb.opening_credit + (nb.period_credit or Decimal('0'))
+            nb.save()
 
     @action(detail=False, methods=['post'])
     def generate_year(self, request):
@@ -564,8 +620,8 @@ class JournalVoucherViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
     def add_line(self, request, pk=None):
         """添加分录"""
         voucher = self.get_object()
-        if voucher.status not in ['DRAFT', 'PENDING']:
-            return Response({'error': '只有草稿或待审核凭证可以添加分录'}, status=400)
+        if voucher.status != 'DRAFT':
+            return Response({'error': '只有草稿凭证可以添加分录'}, status=400)
 
         max_line = voucher.lines.aggregate(max_no=models.Max('line_no'))['max_no'] or 0
 
@@ -607,6 +663,9 @@ class JournalVoucherViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
         if voucher.status != 'PENDING':
             return Response({'error': '只有待审核凭证可以审核'}, status=400)
 
+        if not voucher.is_balanced or voucher.debit_total == 0:
+            return Response({'error': '借贷不平衡或凭证金额为零，无法审核'}, status=400)
+
         voucher.status = 'APPROVED'
         voucher.reviewer = request.user
         voucher.reviewed_at = timezone.now()
@@ -620,6 +679,12 @@ class JournalVoucherViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
         voucher = self.get_object()
         if voucher.status != 'APPROVED':
             return Response({'error': '只有已审核凭证可以过账'}, status=400)
+
+        if not voucher.is_balanced or voucher.debit_total == 0:
+            return Response({'error': '借贷不平衡或凭证金额为零，无法过账'}, status=400)
+
+        if voucher.fiscal_period.status != 'OPEN':
+            return Response({'error': '会计期间未开放，无法过账'}, status=400)
 
         # 更新科目余额
         for line in voucher.lines.filter(is_deleted=False):

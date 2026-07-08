@@ -85,7 +85,7 @@ class CollectionPlan(BaseModel):
 
     def save(self, *args, **kwargs):
         if not self.plan_no:
-            from apps.core.models import CodeRule
+            from apps.core.code_rule_models import CodeRule
 
             self.plan_no = CodeRule.generate_code('COLLECTION_PLAN')
         super().save(*args, **kwargs)
@@ -248,34 +248,76 @@ class CollectionRecord(BaseModel):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
+        self._recompute_milestone_and_plan(self.milestone)
 
-        # 更新节点已收金额
+    def soft_delete(self):
+        """软删除收款记录后,按"仅已确认"口径回算节点/计划已收金额(反向核销)。
+
+        幂等:已软删除的记录不会再次被计入聚合,重复调用安全。
+        """
+        if self.is_deleted:
+            return
         milestone = self.milestone
-        total_collected = milestone.records.aggregate(total=models.Sum('amount'))['total'] or 0
-        milestone.collected_amount = total_collected
+        super().soft_delete()
+        self._recompute_milestone_and_plan(milestone)
 
-        # 更新节点状态
-        if milestone.collected_amount >= milestone.planned_amount:
+    def delete(self, *args, **kwargs):
+        """硬删除同样触发回算,保证节点/计划已收金额与剩余记录一致。"""
+        milestone = self.milestone
+        result = super().delete(*args, **kwargs)
+        self._recompute_milestone_and_plan(milestone)
+        return result
+
+    @staticmethod
+    def _recompute_milestone_and_plan(milestone):
+        """按"仅 confirmed=True 且未软删"的收款记录整体重算节点与计划的已收金额与状态。
+
+        - 只统计已确认记录:修复"未确认(草稿)收款被当作已收"导致三条应收口径漂移。
+        - 幂等:每次都从聚合值整体重算(而非增量累加),重复保存 / 反确认 / 删除都能自愈,
+          不会重复计入,天然满足"reverse on delete/unconfirm"。
+        - 默认管理器已过滤 is_deleted=False,软删除记录自动被排除。
+        """
+        from decimal import Decimal
+
+        # 节点级:仅统计已确认记录
+        milestone_collected = (
+            milestone.records.filter(confirmed=True).aggregate(total=models.Sum('amount'))['total'] or Decimal('0')
+        )
+        milestone.collected_amount = milestone_collected
+
+        if milestone.planned_amount and milestone_collected >= milestone.planned_amount:
             milestone.status = 'COLLECTED'
             if not milestone.actual_date:
-                milestone.actual_date = self.collection_date
-        elif milestone.collected_amount > 0:
+                latest = milestone.records.filter(confirmed=True).order_by('-collection_date').first()
+                if latest:
+                    milestone.actual_date = latest.collection_date
+        elif milestone_collected > 0:
             milestone.status = 'PARTIAL'
+        elif milestone.status != 'CANCELLED':
+            # 已确认金额回落到 0(反确认 / 删除):从收款派生状态退回待收款,
+            # 不影响 CANCELLED 等非收款派生状态。
+            milestone.status = 'PENDING'
 
         milestone.save()
 
-        # 更新计划已收金额
+        # 计划级:同样仅统计已确认记录
         plan = milestone.plan
         plan_collected = (
-            CollectionRecord.objects.filter(milestone__plan=plan).aggregate(total=models.Sum('amount'))['total'] or 0
+            CollectionRecord.objects.filter(milestone__plan=plan, confirmed=True).aggregate(
+                total=models.Sum('amount')
+            )['total']
+            or Decimal('0')
         )
         plan.collected_amount = plan_collected
 
-        # 检查计划是否完成
-        if plan.collected_amount >= plan.total_amount:
+        if plan.total_amount and plan_collected >= plan.total_amount:
             plan.status = 'COMPLETED'
-        elif plan.status == 'DRAFT':
-            plan.status = 'IN_PROGRESS'
+        elif plan_collected > 0:
+            if plan.status in ('DRAFT', 'COMPLETED'):
+                plan.status = 'IN_PROGRESS'
+        elif plan.status in ('IN_PROGRESS', 'COMPLETED'):
+            # 已确认金额回落到 0:从执行/完成态退回草稿,保留 CONFIRMED/CANCELLED。
+            plan.status = 'DRAFT'
 
         plan.save()
 

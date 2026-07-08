@@ -6,8 +6,8 @@ from django.db import transaction
 from django.utils.dateparse import parse_datetime
 
 from apps.finance.models import BankStatement, Payment
-from apps.finance.payable_models import PayableItem, PayableSettlement
 from apps.finance.payable_adapters import PAYABLE_SOURCES
+from apps.finance.payable_models import PayableItem, PayableSettlement
 
 
 def match_candidates(bank_statement, limit=10):
@@ -117,11 +117,11 @@ def _load_source_obj(item):
     """按 PayableItem.source_type 映射回真实来源单据对象,供适配器 write_back 使用。"""
     from apps.finance.models import AccountPayable, Expense, PaymentRequest, SharedExpense
     from apps.finance.tax_management import TaxDeclaration
-    from apps.purchase.contract_execution import PaymentRecord
-    from apps.purchase.outsource_models import OutsourceOrder
     from apps.oa.asset import AssetMaintenance
     from apps.oa.vehicle import VehicleMaintenance, VehicleRequest
     from apps.projects.field_service import ServiceExpense
+    from apps.purchase.contract_execution import PaymentRecord
+    from apps.purchase.outsource_models import OutsourceOrder
     model = {
         'ap': AccountPayable,
         'expense': Expense,
@@ -145,16 +145,21 @@ def unsettle(settlement, user):
     if settlement.is_deleted:
         return
     item = PayableItem.objects.select_for_update().get(pk=settlement.payable_item_id)
-    item.amount_paid = item.amount_paid - settlement.amount
-    if item.amount_paid < 0:
-        item.amount_paid = Decimal('0')
-    item.recalc_status()
-    item.save(update_fields=['amount_paid', 'status', 'updated_at'])
 
+    # 台账已付金额的回退统一由 Payment.soft_delete -> _reverse_target 单次完成,
+    # 此处不再手工回退(否则与 Payment 反核销叠加,amount_paid 变负)。
     if settlement.payment_id:
-        pay = Payment.objects.filter(pk=settlement.payment_id).first()
-        if pay:
-            pay.soft_delete()
+        pay = Payment.all_objects.filter(pk=settlement.payment_id).first()
+        if pay and not pay.is_deleted:
+            pay.soft_delete()  # -> _reverse_target 回退台账已付并重算状态
+        item.refresh_from_db()
+    else:
+        # 历史遗留:无关联 Payment 的核销记录,退化为手工回退
+        item.amount_paid = item.amount_paid - settlement.amount
+        if item.amount_paid < 0:
+            item.amount_paid = Decimal('0')
+        item.recalc_status()
+        item.save(update_fields=['amount_paid', 'status', 'updated_at'])
 
     bs = settlement.bank_statement
     settlement.soft_delete()
