@@ -142,7 +142,7 @@ class Fixture(BaseModel):
     def save(self, *args, **kwargs):
         # 自动生成工装编号
         if not self.fixture_no:
-            from apps.core.models import CodeRule
+            from apps.core.code_rule_models import CodeRule
 
             self.fixture_no = CodeRule.generate_code('FIXTURE')
 

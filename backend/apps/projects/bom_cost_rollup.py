@@ -91,7 +91,7 @@ class BOMCostRollupService:
 
     @staticmethod
     def calculate_rollup(project_id, version_label, user):
-        from apps.projects.models import BOM
+        from apps.projects.models import ProjectBOM
 
         snapshot = BOMCostSnapshot.objects.create(
             project_id=project_id,
@@ -104,13 +104,11 @@ class BOMCostRollupService:
         total_overhead = Decimal('0.00')
         total_outsource = Decimal('0.00')
 
-        bom_items = BOM.objects.filter(project_id=project_id, is_deleted=False).select_related('material')
+        bom_items = ProjectBOM.objects.filter(project_id=project_id, is_deleted=False).select_related('item', 'parent')
 
         for item in bom_items:
-            qty = getattr(item, 'quantity', Decimal('1'))
-            unit_cost = Decimal('0.00')
-            if hasattr(item, 'material') and item.material:
-                unit_cost = getattr(item.material, 'unit_price', Decimal('0.00')) or Decimal('0.00')
+            qty = item.planned_qty or Decimal('0')
+            unit_cost = item.estimated_cost or Decimal('0.00')
             ext_cost = qty * unit_cost
             labor = Decimal('0.00')
             overhead = ext_cost * Decimal('0.10')
@@ -119,10 +117,10 @@ class BOMCostRollupService:
 
             BOMCostDetail.objects.create(
                 snapshot=snapshot,
-                material_code=getattr(item, 'material_code', '') or getattr(item.material, 'code', ''),
-                material_name=getattr(item, 'material_name', '') or getattr(item.material, 'name', ''),
-                bom_level=getattr(item, 'level', 0),
-                parent_material_code=getattr(item, 'parent_material_code', ''),
+                material_code=item.item_code or (item.item.sku if item.item else ''),
+                material_name=item.item.name if item.item else '',
+                bom_level=item.level,
+                parent_material_code=item.parent.item_code if item.parent else '',
                 quantity=qty,
                 unit_material_cost=unit_cost,
                 extended_material_cost=ext_cost,

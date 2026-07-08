@@ -157,8 +157,8 @@ class BOMVersion(BaseModel):
                     'item_sku': item.item.sku if item.item else '',
                     'item_name': item.item.name if item.item else '',
                     'planned_qty': float(item.planned_qty),
-                    'unit_cost': float(item.unit_cost or 0),
-                    'total_cost': float(item.planned_qty * (item.unit_cost or 0)),
+                    'unit_cost': float(item.estimated_cost or 0),
+                    'total_cost': float(item.planned_qty * (item.estimated_cost or 0)),
                     'parent_id': item.parent_id,
                     'level': item.level,
                     'notes': item.notes or '',
@@ -516,7 +516,7 @@ class BOMCompareView(APIView):
                 'sku': item.item.sku if item.item else '',
                 'name': item.item.name if item.item else '',
                 'qty': float(item.planned_qty),
-                'cost': float(item.unit_cost or 0),
+                'cost': float(item.estimated_cost or 0),
             }
             for item in bom_a
         }
@@ -526,7 +526,7 @@ class BOMCompareView(APIView):
                 'sku': item.item.sku if item.item else '',
                 'name': item.item.name if item.item else '',
                 'qty': float(item.planned_qty),
-                'cost': float(item.unit_cost or 0),
+                'cost': float(item.estimated_cost or 0),
             }
             for item in bom_b
         }
