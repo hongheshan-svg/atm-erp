@@ -2,31 +2,40 @@
 Views for purchase app.
 """
 import logging
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
+
 from django.db import transaction
 from django.db.models import Sum
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
+
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.permission_mixin import PermissionMixin
 from apps.core.workflow.mixins import WorkflowEnforcementMixin
 from apps.core.workflow.services import WorkflowService
+from apps.inventory.cost_methods import FIFOCostingService
 from apps.projects.models import Project
-from apps.inventory.cost_methods import CostingMethodFactory, FIFOCostingService
+
+from .evaluation_models import SupplierBlacklist
 from .models import (
-    PurchaseRequest, PurchaseRequestLine,
-    PurchaseOrder, PurchaseOrderLine,
-    GoodsReceipt, GoodsReceiptLine,
-    PurchaseContract
+    GoodsReceipt,
+    GoodsReceiptLine,
+    PurchaseContract,
+    PurchaseOrder,
+    PurchaseOrderLine,
+    PurchaseRequest,
+    PurchaseRequestLine,
 )
 from .serializers import (
-    PurchaseRequestSerializer, PurchaseRequestLineSerializer,
-    PurchaseOrderSerializer, PurchaseOrderLineSerializer,
-    GoodsReceiptSerializer, GoodsReceiptLineSerializer,
-    PurchaseContractSerializer
+    GoodsReceiptLineSerializer,
+    GoodsReceiptSerializer,
+    PurchaseContractSerializer,
+    PurchaseOrderLineSerializer,
+    PurchaseOrderSerializer,
+    PurchaseRequestLineSerializer,
+    PurchaseRequestSerializer,
 )
 from .services import BudgetValidationService
-from .evaluation_models import SupplierBlacklist
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +97,7 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
     def perform_destroy(self, instance):
         """删除采购申请时回退BOM状态（仅允许草稿/已拒绝状态删除）"""
         from rest_framework.exceptions import ValidationError as DRFValidationError
+
         from apps.projects.models import ProjectBOM
 
         if instance.status not in ('DRAFT', 'REJECTED'):
@@ -446,10 +456,11 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
         支持按供应商自动拆分成多个采购申请
         增加项目校验：检查Excel中的项目号是否与用户选择的项目一致
         """
+
         import pandas as pd
-        from io import BytesIO
-        from apps.masterdata.models import Item, Supplier
         from django.db.models import Q
+
+        from apps.masterdata.models import Item, Supplier
         
         file = request.FILES.get('file')
         if not file:
@@ -735,8 +746,9 @@ class PurchaseRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDele
         """
         导出采购申请导入模板
         """
-        import pandas as pd
         from io import BytesIO
+
+        import pandas as pd
         from django.http import HttpResponse
         
         output = BytesIO()
@@ -962,6 +974,16 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
             po.status = 'CONFIRMED'
             po.save()
 
+            # 预算消费（幂等）：按订单实际承诺金额登记预算占用；无生效预算则安全跳过（返回 None）
+            from apps.purchase.budget import BudgetService
+            BudgetService.consume_for_reference(
+                project_id=po.project_id,
+                amount=po.total_with_tax or po.total_amount or 0,
+                reference_no=po.order_no,
+                reference_id=po.id,
+                user=user,
+            )
+
             # 更新BOM状态：PR_APPROVED -> ORDERED（订单确认时才真正"已下单"）
             from apps.projects.models import ProjectBOM
             if po.project:
@@ -1045,6 +1067,15 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
         with transaction.atomic():
             po.status = 'CANCELLED'
             po.save()
+
+            # 释放该订单占用的预算（幂等）；无生效预算安全跳过
+            from apps.purchase.budget import BudgetService
+            BudgetService.release_for_reference(
+                project_id=po.project_id,
+                reference_no=po.order_no,
+                reference_id=po.id,
+                user=request.user,
+            )
 
             # 撤销关联的应付账款与付款计划（与 withdraw 一致），避免取消后财务仍全额挂账
             from apps.finance.models import AccountPayable, PurchasePaymentSchedule
@@ -1136,10 +1167,19 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
             )
         
         with transaction.atomic():
+            # 释放该订单占用的预算（幂等）；无生效预算安全跳过
+            from apps.purchase.budget import BudgetService
+            BudgetService.release_for_reference(
+                project_id=po.project_id,
+                reference_no=po.order_no,
+                reference_id=po.id,
+                user=request.user,
+            )
+
             # 删除关联的应付账款
             from apps.finance.models import AccountPayable, PurchasePaymentSchedule
             AccountPayable.objects.filter(po=po, is_deleted=False).update(is_deleted=True)
-            
+
             # 删除付款计划
             PurchasePaymentSchedule.objects.filter(purchase_order=po, is_deleted=False).update(is_deleted=True)
             
@@ -1219,9 +1259,10 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
             )
 
         with transaction.atomic():
+            from django.conf import settings
+
             from apps.inventory.models import StockMove
             from apps.projects.models import ProjectBOM
-            from django.conf import settings
 
             costing_method = getattr(settings, 'INVENTORY_COSTING_METHOD', 'WEIGHTED_AVG')
             po = receipt.po
@@ -1268,6 +1309,7 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
                 
                 # Update received qty on PO line (F() for concurrency safety)
                 from django.db.models import F as DbF
+
                 from apps.purchase.models import PurchaseOrderLine
                 PurchaseOrderLine.objects.filter(pk=line.po_line_id).update(
                     received_qty=DbF('received_qty') + line.qty
@@ -1329,9 +1371,10 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
             )
         
         with transaction.atomic():
-            from apps.projects.models import ProjectBOM
-            from apps.inventory.models import StockMove
             from django.db.models import F as DbF
+
+            from apps.inventory.models import StockMove
+            from apps.projects.models import ProjectBOM
 
             po = receipt.po
             returned_count = 0
