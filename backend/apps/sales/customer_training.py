@@ -182,7 +182,7 @@ class TrainingPlan(BaseModel):
 
     def save(self, *args, **kwargs):
         if not self.plan_no:
-            from apps.core.models import CodeRule
+            from apps.core.code_rule_models import CodeRule
 
             self.plan_no = CodeRule.generate_code('TRAIN')
         super().save(*args, **kwargs)

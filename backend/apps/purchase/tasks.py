@@ -16,7 +16,7 @@ def build_personal_arrival_reminders(overdue_orders, upcoming_orders, today):
     has_unassigned = False
     for order in list(overdue_orders) + list(upcoming_orders):
         if getattr(order, 'created_by', None):
-            d = (today - order.expected_delivery_date).days
+            d = (today - order.delivery_date).days
             tag = f'逾期{d}天' if d > 0 else f'{-d}天后到货'
             lines[order.created_by].append(
                 f'- {order.order_no} | {order.supplier.name} | ¥{order.total_amount:,.2f} | {tag}'
@@ -48,14 +48,14 @@ def check_delivery_reminders():
 
     # Find orders with overdue delivery
     overdue_orders = PurchaseOrder.objects.filter(
-        expected_delivery_date__lt=today, status__in=['CONFIRMED', 'PARTIAL_RECEIVED'], is_deleted=False
+        delivery_date__lt=today, status__in=['CONFIRMED', 'PARTIAL'], is_deleted=False
     ).select_related('supplier', 'project', 'created_by')
 
     # Find orders due within 3 days
     upcoming_orders = PurchaseOrder.objects.filter(
-        expected_delivery_date__gte=today,
-        expected_delivery_date__lte=warning_date,
-        status__in=['CONFIRMED', 'PARTIAL_RECEIVED'],
+        delivery_date__gte=today,
+        delivery_date__lte=warning_date,
+        status__in=['CONFIRMED', 'PARTIAL'],
         is_deleted=False,
     ).select_related('supplier', 'project', 'created_by')
 
@@ -70,7 +70,7 @@ def check_delivery_reminders():
     if overdue_orders.exists():
         message_lines.append('\n【已逾期】')
         for order in overdue_orders[:10]:
-            days_overdue = (today - order.expected_delivery_date).days
+            days_overdue = (today - order.delivery_date).days
             message_lines.append(
                 f'- {order.order_no} | {order.supplier.name} | ' f'¥{order.total_amount:,.2f} | 逾期{days_overdue}天'
             )
@@ -86,7 +86,7 @@ def check_delivery_reminders():
     if upcoming_orders.exists():
         message_lines.append('\n【即将到货】')
         for order in upcoming_orders[:10]:
-            days_until = (order.expected_delivery_date - today).days
+            days_until = (order.delivery_date - today).days
             message_lines.append(
                 f'- {order.order_no} | {order.supplier.name} | ' f'¥{order.total_amount:,.2f} | {days_until}天后到货'
             )

@@ -3,10 +3,56 @@ Middleware for audit logging
 """
 
 import json
+import logging
 
 from django.utils.deprecation import MiddlewareMixin
 
 from .models import AuditLog
+
+logger = logging.getLogger(__name__)
+
+# 需在审计日志中脱敏的键（精确匹配，小写）。
+SENSITIVE_KEYS = {
+    'password',
+    'new_password',
+    'old_password',
+    'password_confirm',
+    'new_password_confirm',
+    'token',
+    'access',
+    'refresh',
+    'secret',
+    'authorization',
+    'api_key',
+    'apikey',
+}
+
+# 只要键名包含这些词根即视为敏感（覆盖 user_password / access_token / client_secret 等变体）。
+SENSITIVE_KEY_STEMS = ('password', 'secret', 'token', 'api_key', 'apikey')
+
+MASK = '***'
+
+
+def _is_sensitive_key(key):
+    if not isinstance(key, str):
+        return False
+    lowered = key.lower()
+    if lowered in SENSITIVE_KEYS:
+        return True
+    return any(stem in lowered for stem in SENSITIVE_KEY_STEMS)
+
+
+def mask_sensitive(value):
+    """递归地对 dict/list 中的敏感字段值做脱敏，返回脱敏后的副本。
+
+    审计日志的 changes 直接来自请求体（POST/PUT/PATCH），若原样入库会把
+    创建用户、改密、重置密码等接口里的明文密码/令牌永久留在库中。
+    """
+    if isinstance(value, dict):
+        return {k: (MASK if _is_sensitive_key(k) else mask_sensitive(v)) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [mask_sensitive(item) for item in value]
+    return value
 
 
 class AuditLogMiddleware(MiddlewareMixin):
@@ -42,13 +88,13 @@ class AuditLogMiddleware(MiddlewareMixin):
             # Get user agent
             user_agent = request.META.get('HTTP_USER_AGENT', '')
 
-            # Try to extract changes
+            # Try to extract changes（脱敏后再入库，绝不保存明文密码/令牌）
             changes = None
             if request.method in ['POST', 'PUT', 'PATCH']:
                 try:
                     if hasattr(request, 'body'):
-                        changes = json.loads(request.body.decode('utf-8'))
-                except:
+                        changes = mask_sensitive(json.loads(request.body.decode('utf-8')))
+                except (ValueError, UnicodeDecodeError):
                     pass
 
             # Create audit log
@@ -63,7 +109,7 @@ class AuditLogMiddleware(MiddlewareMixin):
             )
         except Exception as e:
             # Don't break the request if audit logging fails
-            print(f'Audit logging error: {e}')
+            logger.warning('Audit logging error: %s', e)
 
         return response
 

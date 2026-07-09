@@ -2,7 +2,7 @@
 Inventory management models - Stock, StockMove, Adjustment.
 """
 from django.db import models
-from django.db.models import Sum, F
+
 from apps.core.models import BaseModel
 from apps.core.utils import generate_code
 
@@ -149,6 +149,13 @@ class StockMove(BaseModel):
         verbose_name = '库存移动'
         verbose_name_plural = verbose_name
         ordering = ['-move_date', '-created_at']
+        # 热表:库存流水按日期排序、按状态/类型/来源单据高频过滤(审计 P1 索引缺失)
+        indexes = [
+            models.Index(fields=['-move_date']),
+            models.Index(fields=['status', 'move_type']),
+            models.Index(fields=['reference_type', 'reference_id']),
+            models.Index(fields=['item', '-move_date']),
+        ]
     
     def __str__(self):
         return f"{self.move_no} - {self.item.sku}"
@@ -221,6 +228,9 @@ class StockMove(BaseModel):
             stock.qty_on_hand = new_qty
             stock.save(update_fields=['qty_on_hand', 'weighted_avg_cost'])
 
+            # 同步登记物料成本账（入库）——与 Stock 更新同事务，见 _record_cost_ledger。
+            self._record_cost_ledger(warehouse, qty, cost, 'IN')
+
     def _update_stock_out(self, warehouse, qty):
         """Update stock for outgoing movement."""
         from django.db import transaction
@@ -233,8 +243,88 @@ class StockMove(BaseModel):
                     )
                 stock.qty_on_hand -= qty
                 stock.save(update_fields=['qty_on_hand'])
+                # 同步登记物料成本账（出库）——出库单价用本移动的 unit_cost
+                # （加权平均时=Stock 加权成本；FIFO 时=领料环节写入的分层实耗成本）。
+                self._record_cost_ledger(warehouse, qty, self.unit_cost, 'OUT')
             except Stock.DoesNotExist:
                 pass
+
+    # move_type + 方向 -> ItemCostRecord.transaction_type（成本账交易类型）
+    _COST_TXN_TYPE = {
+        ('IN_PURCHASE', 'IN'): 'PURCHASE_IN',
+        ('OUT_SALES', 'OUT'): 'SALES_OUT',
+        ('OUT_PROJECT', 'OUT'): 'PRODUCTION_OUT',
+        ('TRANSFER', 'IN'): 'TRANSFER_IN',
+        ('TRANSFER', 'OUT'): 'TRANSFER_OUT',
+        ('ADJUSTMENT', 'IN'): 'ADJUST_IN',
+        ('ADJUSTMENT', 'OUT'): 'ADJUST_OUT',
+    }
+
+    def _record_cost_ledger(self, warehouse, qty, unit_cost, direction):
+        """在库存移动完成时同步登记物料成本账 (ItemCostRecord)。
+
+        这是成本账的唯一写入点：入库(_update_stock_in)/出库(_update_stock_out) 各调用一次，
+        保证每笔移动只登记一次、且与 Stock 数量更新处于同一 transaction.atomic（外层 save()
+        以 was_completed 去重，转 COMPLETED 仅触发一次）。TRANSFER 会入/出各记一笔，构成对偶。
+
+        仅当已配置启用的库存成本核算(InventoryCostConfig)时才登记，否则静默跳过——避免在
+        未启用成本核算的环境凭空写账、以及首笔落库与历史 Stock 结存不一致。任何异常都不应
+        破坏库存移动主流程本身。
+        """
+        if warehouse is None:
+            return
+        import logging
+
+        from django.db import transaction
+
+        from .cost_accounting import CostCalculationService, InventoryCostConfig
+
+        try:
+            if not InventoryCostConfig.objects.filter(is_active=True, is_deleted=False).exists():
+                return
+
+            txn_type = self._COST_TXN_TYPE.get((self.move_type, direction))
+            if not txn_type:
+                txn_type = 'ADJUST_IN' if direction == 'IN' else 'ADJUST_OUT'
+
+            service = CostCalculationService()
+            actor = self.updated_by or self.created_by
+            # 成本账是派生副作用:置于独立 savepoint,登记失败仅回滚本次登记(不使外层事务进入
+            # aborted 状态),绝不破坏库存移动主流程本身(兑现上文 docstring 承诺)。
+            with transaction.atomic():
+                if direction == 'IN':
+                    service.process_inbound(
+                        item_id=self.item_id,
+                        warehouse_id=warehouse.id,
+                        quantity=qty,
+                        unit_cost=unit_cost,
+                        transaction_type=txn_type,
+                        reference_no=self.move_no,
+                        reference_id=self.reference_id,
+                        transaction_date=self.move_date,
+                        user=actor,
+                    )
+                else:
+                    # 出库单价:仅在本移动带有真实单价时显式传入(FIFO 分层实耗成本 / 已计价移动);
+                    # 为 0/未计价的普通出库(如 OUT_SALES 发货)传 None,由成本账按结存加权成本派生,
+                    # 避免把出库成本错记为 0。
+                    out_unit_cost = unit_cost if (unit_cost and unit_cost > 0) else None
+                    service.process_outbound(
+                        item_id=self.item_id,
+                        warehouse_id=warehouse.id,
+                        quantity=qty,
+                        transaction_type=txn_type,
+                        reference_no=self.move_no,
+                        reference_id=self.reference_id,
+                        transaction_date=self.move_date,
+                        user=actor,
+                        unit_cost=out_unit_cost,
+                    )
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                '成本账登记失败(move_no=%s, dir=%s),已跳过,不影响库存移动: %s',
+                self.move_no, direction, exc,
+            )
 
 
 class StockAdjustment(BaseModel):
@@ -374,17 +464,22 @@ class StockAdjustmentLine(BaseModel):
         super().save(*args, **kwargs)
 
 
-# 导入领料/退料模型，使其可被迁移系统发现
-from .material_models import (
-    MaterialRequisition, MaterialRequisitionLine,
-    MaterialReturn, MaterialReturnLine
+# 导入领料/退料模型，使其可被迁移系统发现（注册 + 供 models.py 再导出）
+from .material_models import (  # noqa: E402, F401
+    MaterialRequisition,
+    MaterialRequisitionLine,
+    MaterialReturn,
+    MaterialReturnLine,
 )
+from .mrp import MRPLine, MRPPlan  # noqa: E402, F401
 
 # Import new improvement module models
 from .spare_parts import (  # noqa: E402, F401
-    SparePartCategory, SparePart, SparePartEquipmentRelation,
-    SparePartConsumption, SparePartForecast, SparePartAlert
+    SparePart,
+    SparePartAlert,
+    SparePartCategory,
+    SparePartConsumption,
+    SparePartEquipmentRelation,
+    SparePartForecast,
 )
-from .spare_parts_prediction import (  # noqa: E402, F401
-    SparePartLifecyclePrediction, PurchaseSuggestion
-)
+from .spare_parts_prediction import PurchaseSuggestion, SparePartLifecyclePrediction  # noqa: E402, F401

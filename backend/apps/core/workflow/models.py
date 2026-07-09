@@ -86,6 +86,7 @@ class WorkflowStep(BaseModel):
         ('APPROVE', '审批'),
         ('REVIEW', '审核'),
         ('COUNTERSIGN', '会签'),
+        ('OR_SIGN', '或签'),
     ]
 
     workflow = models.ForeignKey(

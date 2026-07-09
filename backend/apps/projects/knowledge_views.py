@@ -324,7 +324,7 @@ class StandardComponentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
 
     def perform_create(self, serializer):
         # 自动生成编码
-        from apps.core.models import CodeRule
+        from apps.core.code_rule_models import CodeRule
 
         code = CodeRule.generate_code('COMPONENT')
         serializer.save(code=code, maintainer=self.request.user)

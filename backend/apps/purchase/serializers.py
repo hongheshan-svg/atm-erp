@@ -192,25 +192,32 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
         """Create PR with lines."""
         lines_data = self.initial_data.get('lines', [])
 
+        # 预算事前控制：先汇总不含税总额，超项目材料预算则直接拒绝（raise ValidationError）。
+        # 在建单前拦截，避免生成又回滚的孤儿单号。
+        parsed_lines = []
+        total_amount = Decimal('0')
+        for line_data in lines_data:
+            if line_data.get('item') and line_data.get('qty'):
+                qty = _to_decimal(line_data['qty'])
+                estimated_price = _to_decimal(line_data.get('estimated_price', 0))
+                total_amount += qty * estimated_price
+                parsed_lines.append((line_data, qty, estimated_price))
+        BudgetValidationService.enforce_purchase_request(validated_data.get('project'), total_amount)
+
         with transaction.atomic():
             pr = PurchaseRequest.objects.create(**validated_data)
 
-            total_amount = 0
-            for line_data in lines_data:
-                if line_data.get('item') and line_data.get('qty'):
-                    qty = _to_decimal(line_data['qty'])
-                    estimated_price = _to_decimal(line_data.get('estimated_price', 0))
-                    line = PurchaseRequestLine.objects.create(
-                        pr=pr,
-                        item_id=line_data['item'],
-                        qty=qty,
-                        estimated_price=estimated_price,
-                        required_date=line_data.get('required_date'),
-                        project_id=line_data.get('project'),
-                        notes=line_data.get('notes', ''),
-                        created_by=pr.created_by,
-                    )
-                    total_amount += qty * estimated_price
+            for line_data, qty, estimated_price in parsed_lines:
+                PurchaseRequestLine.objects.create(
+                    pr=pr,
+                    item_id=line_data['item'],
+                    qty=qty,
+                    estimated_price=estimated_price,
+                    required_date=line_data.get('required_date'),
+                    project_id=line_data.get('project'),
+                    notes=line_data.get('notes', ''),
+                    created_by=pr.created_by,
+                )
 
             pr.total_amount = total_amount
             pr.tax_amount = total_amount * pr.tax_rate / 100
@@ -222,6 +229,15 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         """Update PR with lines."""
         lines_data = self.initial_data.get('lines', [])
+
+        # 预算事前控制：改单时同样按新明细汇总校验（排除本单已计入的用量）。
+        new_total = Decimal('0')
+        for line_data in lines_data:
+            if line_data.get('item') and line_data.get('qty'):
+                new_total += _to_decimal(line_data['qty']) * _to_decimal(line_data.get('estimated_price', 0))
+        BudgetValidationService.enforce_purchase_request(
+            validated_data.get('project', instance.project), new_total, exclude_pr_id=instance.id
+        )
 
         with transaction.atomic():
             # Update PR fields

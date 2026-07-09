@@ -1,0 +1,4 @@
+
+# local-only verification shim (do not commit)
+config/settings_localtest.py
+tools/field_check.py

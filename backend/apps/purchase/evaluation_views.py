@@ -2,6 +2,7 @@
 供应商评价管理视图
 """
 
+from django.db import transaction
 from django.db.models import Avg, Count
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -153,25 +154,30 @@ class SupplierEvaluationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
         if evaluation.status != 'SUBMITTED':
             return Response({'error': '只能审批已提交的评价'}, status=status.HTTP_400_BAD_REQUEST)
 
-        evaluation.status = 'APPROVED'
-        evaluation.approver = request.user
-        evaluation.approved_at = timezone.now()
-        evaluation.approval_comments = request.data.get('comments', '')
-        evaluation.save()
+        with transaction.atomic():
+            evaluation.status = 'APPROVED'
+            evaluation.approver = request.user
+            evaluation.approved_at = timezone.now()
+            evaluation.approval_comments = request.data.get('comments', '')
+            evaluation.save()
 
-        # 记录等级变更
-        supplier = evaluation.supplier
-        old_grade = getattr(supplier, 'current_grade', '') or ''
-        if old_grade != evaluation.grade:
-            SupplierGradeHistory.objects.create(
-                supplier=supplier,
-                evaluation=evaluation,
-                old_grade=old_grade,
-                new_grade=evaluation.grade,
-                change_date=timezone.now().date(),
-                reason=f'评价审批通过，评分 {evaluation.total_score}',
-                created_by=request.user,
-            )
+            # 等级落地：把评价计算出的等级回写到供应商权威字段 Supplier.grade，
+            # 仅当等级实际发生变化时才写库并记一条变更历史（避免每次审批都冗余建历史）。
+            supplier = evaluation.supplier
+            old_grade = supplier.grade or ''
+            new_grade = evaluation.grade or ''
+            if new_grade and old_grade != new_grade:
+                supplier.grade = new_grade
+                supplier.save(update_fields=['grade', 'updated_at'])
+                SupplierGradeHistory.objects.create(
+                    supplier=supplier,
+                    evaluation=evaluation,
+                    old_grade=old_grade,
+                    new_grade=new_grade,
+                    change_date=timezone.now().date(),
+                    reason=f'评价审批通过，评分 {evaluation.total_score}',
+                    created_by=request.user,
+                )
 
         return Response(self.get_serializer(evaluation).data)
 

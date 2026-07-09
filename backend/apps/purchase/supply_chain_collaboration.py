@@ -131,7 +131,7 @@ class RFQCollaboration(BaseModel):
 
     def save(self, *args, **kwargs):
         if not self.rfq_no:
-            from apps.core.models import CodeRule
+            from apps.core.code_rule_models import CodeRule
 
             self.rfq_no = CodeRule.generate_code('RFQ')
         super().save(*args, **kwargs)

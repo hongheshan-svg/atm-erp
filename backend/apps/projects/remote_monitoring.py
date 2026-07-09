@@ -305,7 +305,7 @@ class DiagnosticSession(BaseModel):
 
     def save(self, *args, **kwargs):
         if not self.session_no:
-            from apps.core.models import CodeRule
+            from apps.core.code_rule_models import CodeRule
 
             self.session_no = CodeRule.generate_code('DIAG')
         super().save(*args, **kwargs)

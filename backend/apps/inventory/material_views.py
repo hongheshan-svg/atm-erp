@@ -2,6 +2,9 @@
 生产领料/退料视图
 """
 
+from decimal import ROUND_HALF_UP, Decimal
+
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -12,6 +15,7 @@ from rest_framework.response import Response
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.permission_mixin import PermissionMixin
 
+from .cost_methods import FIFOCostingService
 from .material_models import MaterialRequisition, MaterialRequisitionLine, MaterialReturn, MaterialReturnLine
 from .material_serializers import (
     MaterialRequisitionLineSerializer,
@@ -154,66 +158,98 @@ class MaterialRequisitionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
         if not lines_data:
             return Response({'error': '请指定出库明细'}, status=status.HTTP_400_BAD_REQUEST)
 
-        with transaction.atomic():
-            all_issued = True
+        # 计价方法与采购收货建批次时保持同一来源（settings），确保 FIFO 出库消耗的批次
+        # 正是入库时建立的批次，不会出现“配置说 FIFO 但批次从未建立”的错配。
+        costing_method = getattr(settings, 'INVENTORY_COSTING_METHOD', 'WEIGHTED_AVG')
 
-            for line_data in lines_data:
-                line_id = line_data.get('id')
-                issued_qty = line_data.get('issued_qty', 0)
+        try:
+            with transaction.atomic():
+                all_issued = True
 
-                try:
-                    line = requisition.lines.get(id=line_id)
-                except MaterialRequisitionLine.DoesNotExist:
-                    continue
+                for line_data in lines_data:
+                    line_id = line_data.get('id')
+                    issued_qty = line_data.get('issued_qty', 0)
 
-                if issued_qty <= 0:
-                    continue
+                    try:
+                        line = requisition.lines.get(id=line_id)
+                    except MaterialRequisitionLine.DoesNotExist:
+                        continue
 
-                # 检查库存
-                try:
-                    stock = Stock.objects.get(warehouse=requisition.warehouse, item=line.item)
-                    if stock.qty_available < issued_qty:
-                        return Response({'error': f'物料 {line.item.sku} 库存不足'}, status=status.HTTP_400_BAD_REQUEST)
-                except Stock.DoesNotExist:
-                    return Response({'error': f'物料 {line.item.sku} 无库存记录'}, status=status.HTTP_400_BAD_REQUEST)
+                    if issued_qty <= 0:
+                        continue
 
-                # 更新已出库数量
-                line.issued_qty += issued_qty
-                line.unit_cost = stock.weighted_avg_cost
-                line.save()
+                    # 检查库存
+                    try:
+                        stock = Stock.objects.get(warehouse=requisition.warehouse, item=line.item)
+                        if stock.qty_available < issued_qty:
+                            return Response(
+                                {'error': f'物料 {line.item.sku} 库存不足'}, status=status.HTTP_400_BAD_REQUEST
+                            )
+                    except Stock.DoesNotExist:
+                        return Response(
+                            {'error': f'物料 {line.item.sku} 无库存记录'}, status=status.HTTP_400_BAD_REQUEST
+                        )
 
-                # 创建库存移动记录
-                StockMove.objects.create(
-                    item=line.item,
-                    warehouse_from=requisition.warehouse,
-                    qty=issued_qty,
-                    unit_cost=stock.weighted_avg_cost,
-                    move_type='OUT_PROJECT',
-                    reference_type='MaterialRequisition',
-                    reference_id=requisition.id,
-                    project=requisition.project,
-                    move_date=timezone.now(),
-                    status='COMPLETED',
-                    created_by=request.user,
-                )
+                    issued_qty_dec = Decimal(str(issued_qty))
 
-                # 更新库存
-                stock.qty_on_hand -= issued_qty
-                stock.save()
+                    # 出库单价：FIFO 时按批次分层实际消耗成本；否则用加权平均。
+                    if costing_method == 'FIFO':
+                        # 消耗 FIFO 批次账（oldest-first），返回真实分层成本。update_stock=False：
+                        # Stock 数量由下方 StockMove 独占维护，避免双重扣减；批次不足会抛
+                        # ValueError → 外层回滚，杜绝负批次/账实不符。
+                        total_cost, _consumptions = FIFOCostingService.consume_stock(
+                            warehouse=requisition.warehouse,
+                            item=line.item,
+                            qty=issued_qty_dec,
+                            project=requisition.project,
+                            update_stock=False,
+                        )
+                        unit_cost = (
+                            (total_cost / issued_qty_dec).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                            if issued_qty_dec
+                            else Decimal('0')
+                        )
+                    else:
+                        unit_cost = stock.weighted_avg_cost
 
-                # 检查是否全部出库
-                if line.issued_qty < line.qty:
-                    all_issued = False
+                    # 更新已出库数量
+                    line.issued_qty += issued_qty
+                    line.unit_cost = unit_cost
+                    line.save()
 
-            # 更新领料单状态
-            if all_issued and all(l.issued_qty >= l.qty for l in requisition.lines.all()):
-                requisition.status = 'ISSUED'
-            else:
-                requisition.status = 'PARTIAL'
+                    # 创建库存移动记录（Stock 数量与成本账 ItemCostRecord 均由
+                    # StockMove.save() -> _update_stock_out 统一维护，此处不再手动扣减）
+                    StockMove.objects.create(
+                        item=line.item,
+                        warehouse_from=requisition.warehouse,
+                        qty=issued_qty,
+                        unit_cost=unit_cost,
+                        move_type='OUT_PROJECT',
+                        reference_type='MaterialRequisition',
+                        reference_id=requisition.id,
+                        project=requisition.project,
+                        move_date=timezone.now(),
+                        status='COMPLETED',
+                        created_by=request.user,
+                    )
 
-            requisition.issue_date = timezone.now()
-            requisition.warehouse_operator = request.user
-            requisition.save()
+                    # 检查是否全部出库
+                    if line.issued_qty < line.qty:
+                        all_issued = False
+
+                # 更新领料单状态
+                if all_issued and all(l.issued_qty >= l.qty for l in requisition.lines.all()):
+                    requisition.status = 'ISSUED'
+                else:
+                    requisition.status = 'PARTIAL'
+
+                requisition.issue_date = timezone.now()
+                requisition.warehouse_operator = request.user
+                requisition.save()
+        except ValueError as e:
+            # FIFO 批次不足 / 出库超账（_update_stock_out）→ 整单回滚并返回 400，
+            # 不残留假移动、不产生负批次/负库存。
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(MaterialRequisitionSerializer(requisition).data)
 
@@ -378,15 +414,7 @@ class MaterialReturnViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
                         notes=f'退料入库 - {material_return.get_return_reason_display()}',
                         created_by=request.user,
                     )
-
-                    # 更新库存
-                    stock, created = Stock.objects.get_or_create(
-                        warehouse=material_return.warehouse,
-                        item=line.item,
-                        defaults={'qty_on_hand': 0, 'weighted_avg_cost': line.unit_cost},
-                    )
-                    stock.qty_on_hand += received_qty
-                    stock.save()
+                    # 库存数量与加权成本由 StockMove.save() -> _update_stock_in 统一更新，此处不再手动累加
 
                 # 检查是否全部入库
                 if line.received_qty < line.qty:

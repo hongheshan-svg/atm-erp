@@ -197,7 +197,7 @@ class QuoteEstimation(BaseModel):
 
     def save(self, *args, **kwargs):
         if not self.estimation_no:
-            from apps.core.models import CodeRule
+            from apps.core.code_rule_models import CodeRule
 
             self.estimation_no = CodeRule.generate_code('QUOTE_EST')
         super().save(*args, **kwargs)
@@ -768,11 +768,9 @@ class QuoteEstimationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
         # 创建报价单
         quotation = SalesQuotation.objects.create(
             customer=estimation.customer,
-            opportunity=estimation.opportunity,
-            project_name=estimation.name,
             total_amount=estimation.final_price or estimation.suggested_price,
             valid_until=date.today() + timedelta(days=30),
-            remarks=f'基于估算单 {estimation.estimation_no} 生成',
+            notes=f'{estimation.name} | 基于估算单 {estimation.estimation_no} 生成',
             created_by=request.user,
         )
 
@@ -781,7 +779,7 @@ class QuoteEstimationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
         estimation.save()
 
         return Response(
-            {'message': '报价单创建成功', 'quotation_id': quotation.id, 'quotation_no': quotation.quotation_no}
+            {'message': '报价单创建成功', 'quotation_id': quotation.id, 'quotation_no': quotation.quote_no}
         )
 
     @action(detail=False, methods=['get'])

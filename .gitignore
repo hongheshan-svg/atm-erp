@@ -92,3 +92,4 @@ reports_per_role/
 /test_buttons_report.json
 /test_batch1.json
 /test_v4.json
+backend/tools/baseline_failures.txt

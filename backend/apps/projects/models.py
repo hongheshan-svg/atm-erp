@@ -45,6 +45,9 @@ class Project(BaseModel):
     start_date = models.DateField(verbose_name='开始日期')
     end_date = models.DateField(verbose_name='结束日期')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', verbose_name='状态')
+    progress = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0, verbose_name='项目整体进度', help_text='项目整体进度%'
+    )
 
     # Budget fields
     budget_total = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='总预算')
@@ -1225,45 +1228,34 @@ class DrawingChangeNotice(BaseModel):
 
 
 # 导入设备和工装模型，使其成为 projects app 的一部分
-from .equipment_models import (  # noqa: E402, F401
-    Equipment, EquipmentShipment, EquipmentInstallation, EquipmentAcceptance,
-)
-from .equipment_archive import (  # noqa: E402, F401
-    EquipmentArchive, EquipmentMaintenancePlan, EquipmentMaintenanceRecord, EquipmentSparePart,
-)
-from .remote_monitoring import (  # noqa: E402, F401
-    EquipmentDataPoint, EquipmentConnection, EquipmentDataMapping,
-    EquipmentDataRecord, EquipmentAlarm,
-)
-from .equipment_oee import EquipmentShift, EquipmentOEERecord  # noqa: E402, F401
-
 # Import models from requirement_review
-
 # Import models from bom_advanced
-
 # Import models from cad_integration
-
 # Import models from field_service
-
 # Import models from equipment_archive
-
 # Import models from remote_monitoring
-
 # Import models from acceptance
-
 # Import models from technical_agreement
-
 # Import models from cost_tracking
-
 # Import models from advanced_cost_tracking
-
 # Import models from document_collaboration
-
 # Import models from creo_integration
-
 # Import new improvement module models
 from .bom_cost_rollup import BOMCostDetail, BOMCostSnapshot  # noqa: E402, F401
 from .drawing_version import DrawingAffectedPart, DrawingVersion  # noqa: E402, F401
+from .equipment_archive import (  # noqa: E402, F401
+    EquipmentArchive,
+    EquipmentMaintenancePlan,
+    EquipmentMaintenanceRecord,
+    EquipmentSparePart,
+)
+from .equipment_models import (  # noqa: E402, F401
+    Equipment,
+    EquipmentAcceptance,
+    EquipmentInstallation,
+    EquipmentShipment,
+)
+from .equipment_oee import EquipmentOEERecord, EquipmentShift  # noqa: E402, F401
 from .installation import (  # noqa: E402, F401
     CommissioningRecord,
     CustomerAcceptance,
@@ -1271,14 +1263,19 @@ from .installation import (  # noqa: E402, F401
     SiteIssue,
     SiteLog,
 )
+from .remote_monitoring import (  # noqa: E402, F401
+    EquipmentAlarm,
+    EquipmentConnection,
+    EquipmentDataMapping,
+    EquipmentDataPoint,
+    EquipmentDataRecord,
+)
 
 # Import requirement models
-from .requirement import (  # noqa: E402, F401
-    RequirementCategory, Requirement, RequirementChange, RequirementTrace
-)
+from .requirement import Requirement, RequirementCategory, RequirementChange, RequirementTrace  # noqa: E402, F401
 
 # Import requirement review models
 from .requirement_review import RequirementReview  # noqa: E402, F401
 
 # Import work dispatch models (WorkOrder, WorkDispatch, WorkLog)
-from .work_dispatch import WorkOrder, WorkDispatch, WorkLog  # noqa: E402, F401
+from .work_dispatch import WorkDispatch, WorkLog, WorkOrder  # noqa: E402, F401

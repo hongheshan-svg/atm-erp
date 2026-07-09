@@ -112,7 +112,7 @@ class Lead(BaseModel):
 
     def save(self, *args, **kwargs):
         if not self.lead_no:
-            from apps.core.models import CodeRule
+            from apps.core.code_rule_models import CodeRule
 
             self.lead_no = CodeRule.generate_code('LEAD')
         super().save(*args, **kwargs)
@@ -213,7 +213,7 @@ class Opportunity(BaseModel):
 
     def save(self, *args, **kwargs):
         if not self.opportunity_no:
-            from apps.core.models import CodeRule
+            from apps.core.code_rule_models import CodeRule
 
             self.opportunity_no = CodeRule.generate_code('OPPORTUNITY')
 
