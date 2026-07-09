@@ -78,6 +78,95 @@ def field_perm(parent_code, resource, field_name, name, sort_order=10):
     }
 
 
+# ===================================================================
+# 操作级 / 字段级权限（审计 C2 整改）
+#
+# 操作权限码规范 = {module}:{resource}:{action}，其中 module/resource 与对应 ViewSet 的
+# permission_module / permission_resource 完全一致（PermissionMixin 据此判断操作级限制）。
+# parent_menu 仅用于后台 RBAC 权限树的展示归类，不参与鉴权判定。
+#
+# 向后兼容的关键：这些操作权限被“可选启用（opt-in）”地执行——只有当某角色对某 resource
+# 已被授予部分 CRUD 却缺失某个 action 时才拒绝该 action；未被授予任何操作权限的角色回落到
+# 菜单级兜底，保持全 CRUD。为保证开箱即用行为不变，本命令随后会把每个 resource 的“全部
+# CRUD”一并授予“当前已能通过菜单访问该模块”的角色（见 Command._grant_defaults_to_roles）。
+# ===================================================================
+
+# (module, resource, parent_menu_code) —— 覆盖各模块关键 ViewSet
+OPERATION_RESOURCES = [
+    ('projects', 'project', 'projects:list', '项目'),
+    ('projects', 'task', 'projects:task', '任务'),
+    ('sales', 'quotation', 'sales:quotation', '技术报价'),
+    ('sales', 'order', 'sales:order', '销售订单'),
+    ('sales', 'contract', 'sales:contract', '销售合同'),
+    ('sales', 'delivery', 'sales:delivery', '发货单'),
+    ('masterdata', 'item', 'supply:stock', '物料'),
+    ('masterdata', 'customer', 'sales:customer', '客户'),
+    ('masterdata', 'supplier', 'supply:order', '供应商'),
+    ('inventory', 'stock', 'supply:stock', '库存'),
+    ('inventory', 'stock_move', 'supply:move', '库存移动'),
+    ('purchase', 'request', 'supply:request', '采购申请'),
+    ('purchase', 'purchase_order', 'supply:order', '采购订单'),
+    ('purchase', 'goods_receipt', 'supply:receipt', '到货验收'),
+    ('purchase', 'inspection', 'supply:receipt', '来料检验'),
+    ('finance', 'fixed_asset', 'finance:asset', '固定资产'),
+    ('finance', 'collection_plan', 'finance:collection', '收款计划'),
+    ('finance', 'journal_voucher', 'finance', '记账凭证'),
+    ('accounts', 'user', 'system:user', '用户'),
+    ('accounts', 'role', 'system:role', '角色'),
+    ('accounts', 'department', 'system:department', '部门'),
+]
+
+# 敏感字段（成本/价格/信用额度）—— 字段名均取自各模型真实字段。
+# (module, resource, parent_menu_code, [(field_name, label), ...])
+SENSITIVE_FIELDS = [
+    ('masterdata', 'item', 'supply:stock', [
+        ('standard_cost', '标准成本'),
+        ('purchase_price', '采购单价'),
+        ('last_purchase_price', '最近采购价'),
+        ('sale_price', '销售单价'),
+    ]),
+    ('masterdata', 'customer', 'sales:customer', [
+        ('credit_limit', '信用额度'),
+    ]),
+    ('inventory', 'stock', 'supply:stock', [
+        ('weighted_avg_cost', '加权平均成本'),
+    ]),
+    ('inventory', 'stock_move', 'supply:move', [
+        ('unit_cost', '移动单价'),
+    ]),
+]
+
+
+def build_operation_and_field_perms():
+    """构建操作级 + 字段级权限节点列表（供 build_permission_tree 追加）。"""
+    perms = []
+    for module, resource, parent_menu, label in OPERATION_RESOURCES:
+        prefix = f'{module}:{resource}'
+        for act, act_label, sort in CRUD_ACTIONS:
+            perms.append({
+                'code': f'{prefix}:{act}',
+                'name': f'{label}-{act_label}',
+                'type': 'operation',
+                'parent_code': parent_menu,
+                'resource': resource,
+                'sort_order': 100 + sort,
+            })
+    for module, resource, parent_menu, fields in SENSITIVE_FIELDS:
+        prefix = f'{module}:{resource}'
+        for i, (field_name, field_label) in enumerate(fields, start=1):
+            perms.append({
+                # code 用 :field: 段与操作码区分，get_hidden_fields 按 code 前缀 + field_name 匹配
+                'code': f'{prefix}:field:{field_name}',
+                'name': f'{field_label}(可见)',
+                'type': 'field',
+                'parent_code': parent_menu,
+                'resource': resource,
+                'field_name': field_name,
+                'sort_order': 200 + i,
+            })
+    return perms
+
+
 def build_permission_tree():
     """构建完整权限树 — 9大类菜单结构"""
     tree = []
@@ -175,6 +264,9 @@ def build_permission_tree():
     # 注:软件升级不再作为独立菜单/页面，已收进左上角版本徽标(VersionBadge)。
     # 升级权限沿用 hasPermission 的祖先通配:超管('*')或持有 'system' 菜单者即可在徽标里升级/回滚。
 
+    # 追加操作级 + 字段级权限节点（审计 C2 整改）
+    tree.extend(build_operation_and_field_perms())
+
     return tree
 
 
@@ -218,3 +310,84 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f'权限树初始化完成: 创建 {created_count} 条，更新 {updated_count} 条，总计 {created_count + updated_count} 条'
         ))
+
+        granted = self._grant_defaults_to_roles()
+        self.stdout.write(self.style.SUCCESS(
+            f'操作级/字段级权限默认授予完成: 新增角色-权限关联 {granted} 条（幂等）'
+        ))
+
+    def _grant_defaults_to_roles(self):
+        """
+        把每个 resource 的“全部 CRUD 操作权限 + 全部敏感字段权限”授予“当前已能通过菜单
+        访问该 module 的角色”，从而保证开箱即用行为不变（default = unchanged）：
+
+        - 仅授予“已可访问”的角色 —— 复用 PermissionMixin 运行期的两条放行路径
+          （菜单祖先通配 + MODULE_MENU_MAP 前缀），确保不产生任何越权（不会给无关角色发放
+          能触发 _has_module_menu_access 的权限码）。
+        - 对某 resource 一次性授予整套 CRUD/字段权限，绝不产生“部分授予”，因此操作级校验
+          对默认角色恒为放行；字段级脱敏对默认角色恒为不屏蔽。
+        - 幂等：使用 RolePermission.get_or_create，仅新增缺失关联，从不删除既有授权。
+
+        注意执行顺序：bootstrap 中 init_permissions 先于 init_roles 运行；首次全新初始化时
+        角色尚不存在，本步骤为空。init_roles 之后（或再次运行本命令）本步骤即补齐授权。
+        """
+        # 延迟导入，避免管理命令模块级依赖 accounts/mixin
+        from apps.accounts.models import Role
+        from apps.core.permission_mixin import MODULE_MENU_MAP
+        from apps.core.permission_models_new import RolePermission
+        from apps.core.permission_service import on_role_permission_change
+
+        def role_can_access(menu_codes, module, resource):
+            """镜像 PermissionMixin 的放行判定（基于角色所持菜单码）。"""
+            # (A) 菜单祖先通配：持有 module 或 module:resource
+            if module in menu_codes or f'{module}:{resource}' in menu_codes:
+                return True
+            # (B) MODULE_MENU_MAP 前缀映射
+            for prefix in MODULE_MENU_MAP.get(module, []):
+                for code in menu_codes:
+                    if code == prefix or code.startswith(prefix + ':'):
+                        return True
+            return False
+
+        # 预取所有已种子化的操作/字段权限对象，按 (module, resource) 归组
+        by_resource = {}
+        for module, resource, _parent, _label in OPERATION_RESOURCES:
+            by_resource.setdefault((module, resource), [])
+        for module, resource, _parent, _fields in SENSITIVE_FIELDS:
+            by_resource.setdefault((module, resource), [])
+
+        for (module, resource) in list(by_resource.keys()):
+            prefix = f'{module}:{resource}:'
+            perms = list(
+                Permission.objects.filter(
+                    type__in=('operation', 'field'),
+                    is_active=True,
+                    is_deleted=False,
+                    code__startswith=prefix,
+                )
+            )
+            by_resource[(module, resource)] = perms
+
+        granted_count = 0
+        for role in Role.objects.all():
+            # 角色当前所持“菜单码”集合（只看 type='menu'，避免用操作/字段码自我扩张）
+            menu_codes = set(
+                role.permissions_new.filter(type='menu').values_list('code', flat=True)
+            )
+            if not menu_codes:
+                continue
+            touched = False
+            for (module, resource), perms in by_resource.items():
+                if not perms:
+                    continue
+                if not role_can_access(menu_codes, module, resource):
+                    continue
+                for perm in perms:
+                    _, created = RolePermission.objects.get_or_create(role=role, permission=perm)
+                    if created:
+                        granted_count += 1
+                        touched = True
+            if touched:
+                on_role_permission_change(role)
+
+        return granted_count
