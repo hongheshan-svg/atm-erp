@@ -47,6 +47,7 @@ urlpatterns = [
     path('api/core/', include('apps.core.urls')),
     path('api/production/', include('apps.production.urls')),
     path('api/oa/', include('apps.oa.urls')),
+    path('api/ai/', include('apps.ai.urls')),
 ]
 
 if settings.DEBUG:
