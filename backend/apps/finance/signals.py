@@ -29,7 +29,7 @@ import logging
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from apps.finance.models import AccountPayable, Expense, PaymentRequest, SharedExpense
+from apps.finance.models import AccountPayable, AccountReceivable, Expense, Payment, PaymentRequest, SharedExpense
 from apps.finance.tax_management import TaxDeclaration
 
 logger = logging.getLogger(__name__)
@@ -235,3 +235,51 @@ def _notify_finance_admins_of_payable_sync_failure(instance, source_type, action
         )
     except Exception:
         logger.exception('发送待付款项台账同步失败告警通知时出错(source_type=%s, id=%s)', source_type, instance.pk)
+
+
+# ============================================================================
+# 总账自动过账(business document -> journal voucher)
+#
+# 与上面的"待付款项台账"信号相互独立、互不影响:台账信号服务于核销工作台,这里服务于
+# 会计总账。三个 handler 都只在**新建**时触发一次,把单据交给 posting.post_document——
+# 后者自身幂等(source_type+source_id 去重)且用保存点包裹全部写入、异常只记日志绝不
+# 冒泡,因此即便过账失败也不会打断应收/应付/付款单本身的保存事务。
+# post_document 惰性 import,避免与本模块顶层 import 之间的加载期耦合。
+# ============================================================================
+
+
+@receiver(post_save, sender=AccountReceivable)
+def auto_post_ar_invoice(sender, instance, created, **kwargs):
+    """应收账款新建 -> 借 1122 应收账款 / 贷 6001 主营业务收入(+ 贷 2221 销项税)。"""
+    if not created:
+        return
+    from apps.finance.posting import post_document
+
+    post_document('AR_INVOICE', instance)
+
+
+@receiver(post_save, sender=AccountPayable)
+def auto_post_ap_invoice(sender, instance, created, **kwargs):
+    """应付账款新建 -> 借 1405/6602(不含税)+ 借 2221 进项税 / 贷 2202 应付账款。"""
+    if not created:
+        return
+    from apps.finance.posting import post_document
+
+    post_document('AP_INVOICE', instance)
+
+
+@receiver(post_save, sender=Payment)
+def auto_post_payment(sender, instance, created, **kwargs):
+    """付款记录新建:核销 AR -> 收款凭证(借 1002/贷 1122);核销 AP -> 付款凭证(借 2202/贷 1002)。
+
+    仅挂靠 AR/AP 的付款进入总账;仅核销统一待付款项台账(payable_item,无 ar/ap)的付款不在
+    本引擎的总账过账范围(其会计处理随对应来源单据的应付确认凭证,避免重复入账),跳过。
+    """
+    if not created:
+        return
+    from apps.finance.posting import post_document
+
+    if instance.ar_id:
+        post_document('AR_RECEIPT', instance)
+    elif instance.ap_id:
+        post_document('AP_PAYMENT', instance)
