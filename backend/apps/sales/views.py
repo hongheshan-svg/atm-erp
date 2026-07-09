@@ -1514,29 +1514,62 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                 {'error': '当前状态不能进行项目确认'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         from django.utils import timezone
-        
-        delivery.status = 'COMPLETED'
-        delivery.actual_delivery_date = timezone.now().date()
-        delivery.save()
-        
-        # 更新销售订单状态
-        so = delivery.so
-        all_delivered = all(
-            line.delivered_qty >= line.qty
-            for line in so.lines.filter(is_deleted=False)
-        )
-        if all_delivered:
-            so.status = 'COMPLETED'
-        else:
-            so.status = 'PARTIAL'
-        so.save()
-        
+
+        with transaction.atomic():
+            delivery.status = 'COMPLETED'
+            delivery.actual_delivery_date = timezone.now().date()
+            delivery.save()
+
+            # 更新销售订单状态
+            so = delivery.so
+            all_delivered = all(
+                line.delivered_qty >= line.qty
+                for line in so.lines.filter(is_deleted=False)
+            )
+            if all_delivered:
+                so.status = 'COMPLETED'
+            else:
+                so.status = 'PARTIAL'
+            so.save()
+
+            # 事件驱动:发货完成触发开票草稿生成(发货→开票→应收 勾稽链)。
+            # 用 savepoint 保护:开票失败不回滚发货完成本身(财务异常不应阻断交付流程)。
+            try:
+                with transaction.atomic():
+                    from apps.finance.services import create_invoice_from_delivery
+                    create_invoice_from_delivery(delivery, request.user)
+            except Exception:
+                logger.exception('发货完成自动开票失败 delivery_no=%s', delivery.delivery_no)
+
         return Response({
             **DeliveryOrderSerializer(delivery).data,
             'message': '发货流程已完成'
         })
+
+    # 手动触发开票(幂等):补偿自动开票失败或历史发货单未开票的场景
+    @action(detail=True, methods=['post'])
+    def create_invoice(self, request, pk=None):
+        """从发货单手动生成销项发票草稿(幂等,已存在则直接返回)。"""
+        delivery = self.get_object()
+        from apps.finance.services import create_invoice_from_delivery
+
+        with transaction.atomic():
+            invoice = create_invoice_from_delivery(delivery, request.user)
+
+        if invoice is None:
+            return Response(
+                {'error': '发货单无有效明细，无法开票'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return Response({
+            'invoice_id': invoice.id,
+            'invoice_no': invoice.invoice_no,
+            'total_amount': str(invoice.total_amount),
+            'message': '开票草稿已生成'
+        })
+
     
     # 拒绝操作（可在任意审批环节拒绝）
     @action(detail=True, methods=['post'])

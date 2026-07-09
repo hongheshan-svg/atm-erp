@@ -1159,7 +1159,26 @@ class Invoice(BaseModel):
         related_name='invoices',
         verbose_name='关联项目'
     )
-    
+
+    # 勾稽关联 - 发货→开票→应收 事件驱动链路的单据勾稽(审计缺口:Invoice 与 SO/发货无勾稽)
+    # 结构化外键取代原先仅有的 reference_type/reference_id 弱关联,便于反查与幂等。
+    sales_order = models.ForeignKey(
+        'sales.SalesOrder',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='invoices',
+        verbose_name='关联销售订单'
+    )
+    delivery_order = models.ForeignKey(
+        'sales.DeliveryOrder',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='invoices',
+        verbose_name='关联发货单'
+    )
+
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='REGISTERED', verbose_name='状态')
     notes = models.TextField(blank=True, verbose_name='备注')
     

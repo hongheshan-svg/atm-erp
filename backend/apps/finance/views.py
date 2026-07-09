@@ -118,6 +118,19 @@ class PaymentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
     search_fields = ['payment_no']
     ordering_fields = ['payment_date', 'amount', 'created_at']
 
+    def perform_create(self, serializer):
+        """三单匹配超付阻断:仅在 THREE_WAY_MATCH_ENFORCE=True 时对'有采购订单的应付付款'
+        校验累计付款不超过已收货物可结算价值(默认关闭,避免影响未接三单匹配的存量付款/测试)。"""
+        from django.conf import settings
+        if getattr(settings, 'THREE_WAY_MATCH_ENFORCE', False):
+            data = serializer.validated_data
+            ap = data.get('ap')
+            if data.get('payment_type') == 'AP' and ap is not None and getattr(ap, 'po_id', None):
+                from apps.purchase.matching import assert_can_pay
+                cumulative = (ap.amount_paid or 0) + (data.get('amount') or 0)
+                assert_can_pay(ap.po, cumulative)
+        super().perform_create(serializer)
+
 
 class ExpenseViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
@@ -478,6 +491,22 @@ class InvoiceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
         invoice.save()
         return Response(InvoiceSerializer(invoice).data)
     
+    @action(detail=True, methods=['post'])
+    def issue(self, request, pk=None):
+        """开具销项发票：确认后事件驱动联动应收与'发货款'里程碑激活。"""
+        invoice = self.get_object()
+        if invoice.invoice_type != 'OUTPUT':
+            return Response({'error': '只有销项发票可开具'}, status=status.HTTP_400_BAD_REQUEST)
+        if invoice.status == 'VOID':
+            return Response({'error': '已作废的发票无法开具'}, status=status.HTTP_400_BAD_REQUEST)
+        with transaction.atomic():
+            invoice.status = 'NORMAL'
+            invoice.save(update_fields=['status', 'updated_at'])
+            # 发货→开票→应收 链条收口：应收登记 + 发货款里程碑按事件激活（服务内幂等、防御式）
+            from apps.finance.services import ensure_ar_and_activate_milestone
+            ensure_ar_and_activate_milestone(invoice, request.user)
+        return Response(InvoiceSerializer(invoice).data)
+
     @action(detail=False, methods=['post'])
     def auto_match(self, request):
         """自动匹配发票到销售订单/采购订单"""

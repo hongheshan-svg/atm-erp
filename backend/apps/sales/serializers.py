@@ -505,6 +505,12 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
     packaging_type_display = serializers.CharField(source='get_packaging_type_display', read_only=True)
     total_amount = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
     lines = DeliveryOrderLineSerializer(many=True, read_only=True)
+    invoice_no = serializers.SerializerMethodField()
+
+    def get_invoice_no(self, obj):
+        """勾稽展示：本发货单自动生成的销项发票号（无则 None）。"""
+        inv = obj.invoices.filter(is_deleted=False).order_by('-id').first()
+        return inv.invoice_no if inv else None
 
     class Meta:
         model = DeliveryOrder
@@ -553,6 +559,7 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
             'rejection_reason',
             'total_amount',
             'lines',
+            'invoice_no',
             'is_deleted',
             'created_at',
             'updated_at',
