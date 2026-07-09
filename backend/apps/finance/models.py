@@ -460,7 +460,11 @@ class Payment(BaseModel):
         if not self.payment_no:
             from django.utils import timezone
             date_str = timezone.now().strftime('%Y%m%d')
-            last_payment = Payment.objects.filter(payment_no__startswith=f'PAY{date_str}').order_by('-payment_no').first()
+            # 用 all_objects 计最大序号：payment_no 唯一约束含软删行,若只按未删行取最大,
+            # 软删后当日再建付款会复用序号触发 UNIQUE 冲突(如回款反核销后重新确认)。
+            last_payment = Payment.all_objects.filter(
+                payment_no__startswith=f'PAY{date_str}'
+            ).order_by('-payment_no').first()
             if last_payment:
                 last_seq = int(last_payment.payment_no[-4:])
                 new_seq = last_seq + 1
