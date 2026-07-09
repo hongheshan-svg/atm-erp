@@ -323,6 +323,19 @@ class WorkflowTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
             return Response({'message': message})
         return Response({'error': message}, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=True, methods=['post'])
+    def reject_to_step(self, request, pk=None):
+        """退回到指定的更早步骤（而非整单拒绝），实例保持 IN_PROGRESS 重新审批。"""
+        task = self.get_object()
+        target = request.data.get('target_step_order')
+        comment = request.data.get('comment', '')
+        if not comment:
+            return Response({'error': '退回时必须填写原因'}, status=status.HTTP_400_BAD_REQUEST)
+        success, message = WorkflowService.reject_to_step(task, target, request.user, comment)
+        if success:
+            return Response({'message': message})
+        return Response({'error': message}, status=status.HTTP_400_BAD_REQUEST)
+
     @action(detail=True, methods=['delete'])
     def admin_delete(self, request, pk=None):
         """Delete a workflow task (admin only)."""
