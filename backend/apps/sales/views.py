@@ -24,6 +24,8 @@ from .serializers import (
     DeliveryOrderSerializer, DeliveryOrderLineSerializer,
     SalesContractSerializer
 )
+# 销售订单变更单 ViewSet 定义在 change_order.py，此处再导出以便 urls.py 从 .views 导入
+from .change_order import SalesOrderChangeViewSet  # noqa: F401
 
 
 class SalesQuotationViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
@@ -47,34 +49,49 @@ class SalesQuotationViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
     
     @action(detail=True, methods=['post'])
     def create_new_version(self, request, pk=None):
-        """Create a new version of the quotation."""
+        """Create a new version of the quotation.
+
+        改版必须完整复制所有明细字段（含非标定制的 custom_name/custom_spec/custom_unit），
+        否则非标产品改版会丢失产品名称/规格/单位（审计：报价改版丢数据）。
+        同时记录版本谱系 parent_quote，并复制税率/备注以保证金额口径一致。
+        """
         old_quotation = self.get_object()
-        
+
         with transaction.atomic():
             new_quotation = SalesQuotation.objects.create(
                 customer=old_quotation.customer,
                 project=old_quotation.project,
                 valid_until=request.data.get('valid_until', old_quotation.valid_until),
                 version=old_quotation.version + 1,
+                parent_quote=old_quotation,  # 版本谱系：指向上一版
+                tax_rate=old_quotation.tax_rate,
+                notes=old_quotation.notes,
                 created_by=request.user
             )
-            
+
             for line in old_quotation.lines.filter(is_deleted=False):
                 SalesQuotationLine.objects.create(
                     quotation=new_quotation,
                     item=line.item,
+                    # 复制非标定制字段，避免改版丢失名称/规格/单位
+                    custom_name=line.custom_name,
+                    custom_spec=line.custom_spec,
+                    custom_unit=line.custom_unit,
                     qty=line.qty,
                     unit_price=line.unit_price,
                     notes=line.notes,
                     created_by=request.user
                 )
-            
-            # Update total
+
+            # 重算金额与税额（与序列化器口径一致）
+            from decimal import Decimal as D
             from django.db.models import Sum
-            total = new_quotation.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
+            total = new_quotation.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or D('0')
             new_quotation.total_amount = total
+            new_quotation.tax_amount = total * new_quotation.tax_rate / 100
+            new_quotation.total_with_tax = total + new_quotation.tax_amount
             new_quotation.save()
-        
+
         return Response(SalesQuotationSerializer(new_quotation).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'], url_path='create_version')

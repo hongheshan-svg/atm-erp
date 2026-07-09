@@ -53,7 +53,16 @@ class SalesQuotation(BaseModel):
         verbose_name='状态'
     )
     version = models.IntegerField(default=1, verbose_name='版本号')
-    
+    # 版本谱系：指向被改版的上一版报价单，形成版本链（create_new_version 时设置）
+    parent_quote = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='child_versions',
+        verbose_name='父版本报价',
+    )
+
     # 税率相关
     tax_rate = models.IntegerField(
         choices=TAX_RATE_CHOICES,
@@ -602,6 +611,9 @@ class SalesContract(BaseModel):
             self.contract_no = generate_code('SC', rule_type='SALES_CONTRACT')
         super().save(*args, **kwargs)
 
+
+# Import 销售订单变更单 (定义在 change_order.py，需在此导入以便 Django 注册模型)
+from .change_order import SalesOrderChange  # noqa: E402, F401
 
 # Import models from win_loss_analysis
 from .win_loss_analysis import WinLossReason, OpportunityCloseRecord

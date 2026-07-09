@@ -102,6 +102,7 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
             'status',
             'status_display',
             'version',
+            'parent_quote',
             'tax_rate',
             'tax_rate_display',
             'total_amount',
@@ -115,7 +116,7 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['quote_no', 'quote_date', 'tax_amount', 'total_with_tax', 'status', 'created_at', 'updated_at']
+        read_only_fields = ['quote_no', 'quote_date', 'parent_quote', 'tax_amount', 'total_with_tax', 'status', 'created_at', 'updated_at']
 
     def create(self, validated_data):
         """Create quotation with lines."""
