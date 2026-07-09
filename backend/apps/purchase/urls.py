@@ -12,6 +12,7 @@ from .contract_execution import (
     DeliveryRecordViewSet,
     PaymentRecordViewSet,
 )
+from .iqc import IncomingInspectionViewSet
 from .evaluation_views import (
     EvaluationCriteriaViewSet,
     EvaluationScoreItemViewSet,
@@ -86,6 +87,8 @@ router.register(r'order-lines', PurchaseOrderLineViewSet, basename='order-line')
 router.register(r'receipts', GoodsReceiptViewSet, basename='receipt')
 router.register(r'receipt-lines', GoodsReceiptLineViewSet, basename='receipt-line')
 router.register(r'contracts', PurchaseContractViewSet, basename='contract')
+# 来料检验 (IQC)
+router.register(r'incoming-inspections', IncomingInspectionViewSet, basename='incoming-inspection')
 # RFQ endpoints
 router.register(r'rfqs', RFQViewSet, basename='rfq')
 router.register(r'rfq-lines', RFQLineViewSet, basename='rfq-line')
