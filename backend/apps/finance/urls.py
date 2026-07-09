@@ -11,6 +11,7 @@ from .accounting import (
     AccountBalanceViewSet,
     AccountCategoryViewSet,
     ChartOfAccountViewSet,
+    FinancialStatementViewSet,
     FiscalPeriodViewSet,
     JournalVoucherViewSet,
 )
@@ -98,6 +99,9 @@ router.register(r'chart-of-accounts', ChartOfAccountViewSet, basename='chart-of-
 router.register(r'fiscal-periods', FiscalPeriodViewSet, basename='fiscal-period')
 router.register(r'journal-vouchers', JournalVoucherViewSet, basename='journal-voucher')
 router.register(r'account-balances', AccountBalanceViewSet, basename='account-balance')
+
+# 财务报表(资产负债表 / 利润表 / 现金流量表)+ 科目表种子
+router.register(r'financial-statements', FinancialStatementViewSet, basename='financial-statement')
 
 # 税务管理
 router.register(r'tax-types', TaxTypeViewSet, basename='tax-type')

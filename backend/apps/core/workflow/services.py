@@ -495,7 +495,107 @@ class WorkflowService:
             cls._on_workflow_complete(instance, 'REJECTED')
 
         return True, "已拒绝"
-    
+
+    @classmethod
+    def reject_to_step(cls, task, target_step_order, user, comment='', skip_assignee_check=False):
+        """
+        Return (退回) an approval task to an EARLIER step instead of rejecting
+        the whole instance.
+
+        Contrast with :meth:`reject_task`, which fails the entire instance
+        (``status='REJECTED'``, workflow ends). ``reject_to_step`` keeps the
+        instance IN PROGRESS (``status`` stays ``'PENDING'``) and merely rewinds
+        ``instance.current_step`` back to an earlier real step so that step is
+        re-approved:
+
+          * the current task is marked ``RETURNED`` with the comment;
+          * any still-pending sibling tasks of the current step (the other
+            countersigners / or-signers) are cancelled (``SKIPPED``) so they do
+            not linger after the rewind;
+          * fresh task(s) for the target step are created via the normal
+            ``_create_next_task`` assignee resolution, exactly as if the flow had
+            just arrived at that step.
+
+        Args:
+            target_step_order: the ``step_order`` to rewind to. Must be a real,
+                non-deleted step of the instance's workflow, ``>= 1`` and
+                strictly earlier than the task's current step (you can only send
+                a document backward, never sideways or forward).
+            skip_assignee_check: when True, skip the assignee verification (for
+                business ViewSets that run their own permission checks).
+
+        Returns:
+            tuple: (success: bool, message: str)
+        """
+        if task.status != 'PENDING':
+            return False, "该任务已处理"
+
+        if not skip_assignee_check and task.assignee != user and not user.is_superuser:
+            return False, "您没有权限处理此任务"
+
+        # Validate the target step number up front (cheap guards before locking).
+        try:
+            target_step_order = int(target_step_order)
+        except (TypeError, ValueError):
+            return False, "退回目标步骤无效"
+
+        if target_step_order < 1:
+            return False, "退回目标步骤无效"
+
+        current_order = task.step.step_order
+        if target_step_order >= current_order:
+            # Only backward: cannot return to the current step or a later one.
+            return False, "只能退回到当前步骤之前的步骤"
+
+        # The target must correspond to a real (non-deleted) step of this workflow.
+        target_step = task.instance.workflow.steps.filter(
+            step_order=target_step_order, is_deleted=False
+        ).first()
+        if not target_step:
+            return False, "退回目标步骤不存在"
+
+        with transaction.atomic():
+            # Lock the instance so a concurrent approve/reject cannot advance or
+            # fail the step while we rewind it (same discipline as countersign).
+            instance = WorkflowInstance.objects.select_for_update().get(id=task.instance_id)
+
+            # Only an in-progress instance can be returned.
+            if instance.status != 'PENDING':
+                return False, "该审批流程已结束，无法退回"
+
+            # Re-read task status under the lock to avoid double-processing.
+            task.refresh_from_db()
+            if task.status != 'PENDING':
+                return False, "该任务已处理"
+
+            # Mark the current task RETURNED (not REJECTED — the instance lives on).
+            task.status = 'RETURNED'
+            task.action_time = timezone.now()
+            task.comment = comment
+            task.updated_by = user
+            task.save()
+
+            # Cancel any still-pending sibling tasks (e.g. the other
+            # countersigners / or-signers of this step) so they don't linger
+            # after the rewind. Only current-step tasks are ever PENDING, so a
+            # broad PENDING filter is safe and mirrors reject_task.
+            instance.tasks.filter(
+                status='PENDING',
+                is_deleted=False,
+            ).exclude(id=task.id).update(
+                status='SKIPPED',
+                action_time=timezone.now(),
+            )
+
+            # Rewind to the target step; the instance stays IN PROGRESS
+            # (status PENDING, NOT REJECTED) and re-creates that step's task(s).
+            instance.current_step = target_step_order
+            instance.save()
+
+            cls._create_next_task(instance)
+
+        return True, f"已退回至第 {target_step_order} 步"
+
     @classmethod
     def withdraw_workflow(cls, instance, user):
         """

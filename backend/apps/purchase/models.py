@@ -426,5 +426,6 @@ class PurchaseContract(BaseModel):
 
 
 # Import new improvement module models
+from .iqc import IncomingInspection  # noqa: E402, F401
 from .outsource_tracking import OutsourceInspection  # noqa: E402, F401
 from .supply_chain_collaboration import RFQCollaboration  # noqa: E402, F401

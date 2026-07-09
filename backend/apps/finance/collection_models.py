@@ -223,6 +223,18 @@ class CollectionRecord(BaseModel):
         verbose_name='关联发票',
     )
 
+    # 经"单一写口"回写应收时自动生成的付款单(幂等去重锚点)。
+    # 确认收款记录后,经 Payment 唯一写口回写 AR.amount_paid;此外键保证不重复建单,
+    # 并在反确认 / 软删记录时用于反核销所联 Payment。SET_NULL 以防 Payment 被物理清理。
+    payment = models.ForeignKey(
+        'finance.Payment',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='source_collection_records',
+        verbose_name='生成的收款单',
+    )
+
     # 确认
     confirmed = models.BooleanField(default=False, verbose_name='已确认')
     confirmed_by = models.ForeignKey(
@@ -246,14 +258,28 @@ class CollectionRecord(BaseModel):
     def __str__(self):
         return f'{self.milestone.plan.plan_no} - {self.collection_date} - {self.amount}'
 
+    # 回款付款方式 -> Payment.payment_method 映射。
+    # Payment.payment_method 无默认值,建单时必须给出合法选项,避免落成空串。
+    _PAYMENT_METHOD_MAP = {
+        'BANK': 'BANK_TRANSFER',
+        'CHECK': 'CHECK',
+        'CASH': 'CASH',
+        'ACCEPTANCE': 'OTHER',  # 承兑汇票在 Payment 无对应枚举,归 OTHER
+        'OTHER': 'OTHER',
+    }
+
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
         self._recompute_milestone_and_plan(self.milestone)
+        # 聚合之后再经"单一写口"同步应收(仅已确认记录会真正建 Payment)。
+        self._sync_ar_payment()
 
     def soft_delete(self):
         """软删除收款记录后,按"仅已确认"口径回算节点/计划已收金额(反向核销)。
 
         幂等:已软删除的记录不会再次被计入聚合,重复调用安全。
+        应收侧:super().soft_delete() 会触发 save(),经 _sync_ar_payment 软删所联 Payment
+        从而反核销 AR(仍走单一写口,不直改 AR.amount_paid)。
         """
         if self.is_deleted:
             return
@@ -262,11 +288,96 @@ class CollectionRecord(BaseModel):
         self._recompute_milestone_and_plan(milestone)
 
     def delete(self, *args, **kwargs):
-        """硬删除同样触发回算,保证节点/计划已收金额与剩余记录一致。"""
+        """硬删除同样触发回算,保证节点/计划已收金额与剩余记录一致。
+
+        应收侧:物理删除不会再触发 save(),故此处先软删所联 Payment 反核销 AR,
+        保证"经单一写口回写应收"在硬删场景也不留悬挂账。
+        """
         milestone = self.milestone
+        linked_payment = self._linked_payment()
         result = super().delete(*args, **kwargs)
+        if linked_payment is not None and not linked_payment.is_deleted:
+            linked_payment.soft_delete()
         self._recompute_milestone_and_plan(milestone)
         return result
+
+    def _linked_payment(self):
+        """安全取回所联 Payment(含已软删),不存在或未关联时返回 None。
+
+        用 all_objects 直查主键,避免外键描述符在目标行缺失时抛 DoesNotExist,
+        也不受软删过滤影响(反核销需要能拿到已软删的付款单做幂等判断)。
+        """
+        if not self.payment_id:
+            return None
+        from apps.finance.models import Payment
+
+        return Payment.all_objects.filter(pk=self.payment_id).first()
+
+    def _resolve_ar(self):
+        """经回款计划关联的销售订单唯一定位一条未删除应收。
+
+        plan.sales_order -> AccountReceivable(so=..., is_deleted=False)。
+        无 SO / 无应收 / 多条应收(歧义)一律返回 None:此时只做聚合,不建 Payment。
+        """
+        plan = self.milestone.plan
+        if not plan.sales_order_id:
+            return None
+        from apps.finance.models import AccountReceivable
+
+        ars = list(AccountReceivable.objects.filter(so_id=plan.sales_order_id, is_deleted=False)[:2])
+        if len(ars) == 1:
+            return ars[0]
+        return None
+
+    def _sync_ar_payment(self):
+        """把"已确认收款记录"经 Payment 单一写口回写应收,保持三套口径一致。
+
+        设计要点(审计 P1:三套收款体系不统一,CollectionRecord 不回写 AR):
+        - 单一写口:只通过创建 / 软删 Payment 间接改动 AR.amount_paid(Payment.save/soft_delete
+          自带 select_for_update + 重算状态),绝不在此直写 AR,避免与 Payment 双写。
+        - 幂等去重:记录持有 payment 外键;已存在未软删 Payment 时直接跳过,不重复建单。
+        - 反向核销:记录被软删 / 反确认时,软删所联 Payment(Payment.soft_delete 反核销 AR)。
+        - 防御:无 SO / 无唯一应收 / 金额<=0 时只做聚合,不建 Payment(不崩溃)。
+        """
+        from django.db import transaction
+
+        from apps.finance.models import Payment
+
+        linked = self._linked_payment()
+
+        # 反向:记录已软删或反确认 -> 软删所联 Payment(Payment.soft_delete 幂等,已删则 no-op)
+        if self.is_deleted or not self.confirmed:
+            if linked is not None and not linked.is_deleted:
+                linked.soft_delete()
+            return
+
+        # 已确认且已有未软删 Payment -> 幂等跳过,绝不重复回写
+        if linked is not None and not linked.is_deleted:
+            return
+
+        # 金额缺失 / 非正:不建无意义付款单
+        if not self.amount or self.amount <= 0:
+            return
+
+        ar = self._resolve_ar()
+        if ar is None:
+            return
+
+        with transaction.atomic():
+            payment = Payment.objects.create(
+                payment_type='AR',
+                ar=ar,
+                amount=self.amount,
+                payment_date=self.collection_date,
+                payment_method=self._PAYMENT_METHOD_MAP.get(self.payment_method, 'OTHER'),
+                currency=ar.currency,
+                exchange_rate=ar.exchange_rate,
+                created_by=self.confirmed_by or self.created_by,
+                notes=f'回款记录#{self.pk} 自动生成(经单一写口回写应收 {ar.ar_no})',
+            )
+            # 只更新链接列,避免再次触发 save()->recompute/_sync 造成递归重入。
+            type(self).all_objects.filter(pk=self.pk).update(payment=payment)
+            self.payment = payment
 
     @staticmethod
     def _recompute_milestone_and_plan(milestone):

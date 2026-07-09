@@ -24,6 +24,8 @@ from .serializers import (
     DeliveryOrderSerializer, DeliveryOrderLineSerializer,
     SalesContractSerializer
 )
+# 销售订单变更单 ViewSet 定义在 change_order.py，此处再导出以便 urls.py 从 .views 导入
+from .change_order import SalesOrderChangeViewSet  # noqa: F401
 
 
 class SalesQuotationViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
@@ -47,34 +49,49 @@ class SalesQuotationViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
     
     @action(detail=True, methods=['post'])
     def create_new_version(self, request, pk=None):
-        """Create a new version of the quotation."""
+        """Create a new version of the quotation.
+
+        改版必须完整复制所有明细字段（含非标定制的 custom_name/custom_spec/custom_unit），
+        否则非标产品改版会丢失产品名称/规格/单位（审计：报价改版丢数据）。
+        同时记录版本谱系 parent_quote，并复制税率/备注以保证金额口径一致。
+        """
         old_quotation = self.get_object()
-        
+
         with transaction.atomic():
             new_quotation = SalesQuotation.objects.create(
                 customer=old_quotation.customer,
                 project=old_quotation.project,
                 valid_until=request.data.get('valid_until', old_quotation.valid_until),
                 version=old_quotation.version + 1,
+                parent_quote=old_quotation,  # 版本谱系：指向上一版
+                tax_rate=old_quotation.tax_rate,
+                notes=old_quotation.notes,
                 created_by=request.user
             )
-            
+
             for line in old_quotation.lines.filter(is_deleted=False):
                 SalesQuotationLine.objects.create(
                     quotation=new_quotation,
                     item=line.item,
+                    # 复制非标定制字段，避免改版丢失名称/规格/单位
+                    custom_name=line.custom_name,
+                    custom_spec=line.custom_spec,
+                    custom_unit=line.custom_unit,
                     qty=line.qty,
                     unit_price=line.unit_price,
                     notes=line.notes,
                     created_by=request.user
                 )
-            
-            # Update total
+
+            # 重算金额与税额（与序列化器口径一致）
+            from decimal import Decimal as D
             from django.db.models import Sum
-            total = new_quotation.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
+            total = new_quotation.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or D('0')
             new_quotation.total_amount = total
+            new_quotation.tax_amount = total * new_quotation.tax_rate / 100
+            new_quotation.total_with_tax = total + new_quotation.tax_amount
             new_quotation.save()
-        
+
         return Response(SalesQuotationSerializer(new_quotation).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'], url_path='create_version')
@@ -1514,29 +1531,62 @@ class DeliveryOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
                 {'error': '当前状态不能进行项目确认'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         from django.utils import timezone
-        
-        delivery.status = 'COMPLETED'
-        delivery.actual_delivery_date = timezone.now().date()
-        delivery.save()
-        
-        # 更新销售订单状态
-        so = delivery.so
-        all_delivered = all(
-            line.delivered_qty >= line.qty
-            for line in so.lines.filter(is_deleted=False)
-        )
-        if all_delivered:
-            so.status = 'COMPLETED'
-        else:
-            so.status = 'PARTIAL'
-        so.save()
-        
+
+        with transaction.atomic():
+            delivery.status = 'COMPLETED'
+            delivery.actual_delivery_date = timezone.now().date()
+            delivery.save()
+
+            # 更新销售订单状态
+            so = delivery.so
+            all_delivered = all(
+                line.delivered_qty >= line.qty
+                for line in so.lines.filter(is_deleted=False)
+            )
+            if all_delivered:
+                so.status = 'COMPLETED'
+            else:
+                so.status = 'PARTIAL'
+            so.save()
+
+            # 事件驱动:发货完成触发开票草稿生成(发货→开票→应收 勾稽链)。
+            # 用 savepoint 保护:开票失败不回滚发货完成本身(财务异常不应阻断交付流程)。
+            try:
+                with transaction.atomic():
+                    from apps.finance.services import create_invoice_from_delivery
+                    create_invoice_from_delivery(delivery, request.user)
+            except Exception:
+                logger.exception('发货完成自动开票失败 delivery_no=%s', delivery.delivery_no)
+
         return Response({
             **DeliveryOrderSerializer(delivery).data,
             'message': '发货流程已完成'
         })
+
+    # 手动触发开票(幂等):补偿自动开票失败或历史发货单未开票的场景
+    @action(detail=True, methods=['post'])
+    def create_invoice(self, request, pk=None):
+        """从发货单手动生成销项发票草稿(幂等,已存在则直接返回)。"""
+        delivery = self.get_object()
+        from apps.finance.services import create_invoice_from_delivery
+
+        with transaction.atomic():
+            invoice = create_invoice_from_delivery(delivery, request.user)
+
+        if invoice is None:
+            return Response(
+                {'error': '发货单无有效明细，无法开票'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return Response({
+            'invoice_id': invoice.id,
+            'invoice_no': invoice.invoice_no,
+            'total_amount': str(invoice.total_amount),
+            'message': '开票草稿已生成'
+        })
+
     
     # 拒绝操作（可在任意审批环节拒绝）
     @action(detail=True, methods=['post'])

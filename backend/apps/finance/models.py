@@ -460,7 +460,11 @@ class Payment(BaseModel):
         if not self.payment_no:
             from django.utils import timezone
             date_str = timezone.now().strftime('%Y%m%d')
-            last_payment = Payment.objects.filter(payment_no__startswith=f'PAY{date_str}').order_by('-payment_no').first()
+            # 用 all_objects 计最大序号：payment_no 唯一约束含软删行,若只按未删行取最大,
+            # 软删后当日再建付款会复用序号触发 UNIQUE 冲突(如回款反核销后重新确认)。
+            last_payment = Payment.all_objects.filter(
+                payment_no__startswith=f'PAY{date_str}'
+            ).order_by('-payment_no').first()
             if last_payment:
                 last_seq = int(last_payment.payment_no[-4:])
                 new_seq = last_seq + 1
@@ -1159,7 +1163,26 @@ class Invoice(BaseModel):
         related_name='invoices',
         verbose_name='关联项目'
     )
-    
+
+    # 勾稽关联 - 发货→开票→应收 事件驱动链路的单据勾稽(审计缺口:Invoice 与 SO/发货无勾稽)
+    # 结构化外键取代原先仅有的 reference_type/reference_id 弱关联,便于反查与幂等。
+    sales_order = models.ForeignKey(
+        'sales.SalesOrder',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='invoices',
+        verbose_name='关联销售订单'
+    )
+    delivery_order = models.ForeignKey(
+        'sales.DeliveryOrder',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='invoices',
+        verbose_name='关联发货单'
+    )
+
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='REGISTERED', verbose_name='状态')
     notes = models.TextField(blank=True, verbose_name='备注')
     

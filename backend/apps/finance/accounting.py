@@ -218,6 +218,12 @@ class JournalVoucher(BaseModel):
 
     notes = models.TextField(blank=True, verbose_name='备注')
 
+    # 自动过账来源追溯(业务单据 -> 凭证)。自动过账引擎(apps.finance.posting)据此保证
+    # 幂等:一张业务单据(source_type + source_id)最多生成一张凭证。手工录入的凭证这两个
+    # 字段留空/为 None,不参与幂等去重。
+    source_type = models.CharField(max_length=30, blank=True, db_index=True, verbose_name='来源单据类型')
+    source_id = models.IntegerField(null=True, blank=True, db_index=True, verbose_name='来源单据ID')
+
     class Meta:
         db_table = 'fin_journal_voucher'
         verbose_name = '记账凭证'
@@ -344,6 +350,42 @@ class AccountBalance(BaseModel):
 
 
 # =====================
+# 过账辅助 (posting-to-balance helper)
+# =====================
+
+
+def post_voucher_to_ledger(voucher, user=None):
+    """把一张(已平衡的)凭证过账到科目余额并落 ``POSTED`` 状态。
+
+    从 ``JournalVoucherViewSet.post_voucher`` 抽取为模块级函数,供手工过账 action 与
+    自动过账引擎(``apps.finance.posting.post_document``)共同复用,避免"分录发生额累加到
+    科目余额"这段逻辑在两处重复实现而走样。
+
+    约定:调用方负责全部前置校验(凭证状态、借贷平衡、会计期间开放);本函数只做两件事——
+      1. 每条分录的借/贷金额累加到 ``AccountBalance`` 的本期发生额,并按期初重算期末;
+      2. 凭证置 ``POSTED`` 并记录过账人/时间。
+
+    非幂等(余额为累加写入):同一张凭证只应过账一次,幂等性由调用方保证
+    (手工路径靠状态机 APPROVED->POSTED;自动路径靠 source_type+source_id 去重)。
+    """
+    for line in voucher.lines.filter(is_deleted=False):
+        balance, _ = AccountBalance.objects.get_or_create(
+            account=line.account, fiscal_period=voucher.fiscal_period, defaults={'created_by': user}
+        )
+        balance.period_debit += line.debit_amount
+        balance.period_credit += line.credit_amount
+        balance.closing_debit = balance.opening_debit + balance.period_debit
+        balance.closing_credit = balance.opening_credit + balance.period_credit
+        balance.save()
+
+    voucher.status = 'POSTED'
+    voucher.posted_at = timezone.now()
+    voucher.posted_by = user
+    voucher.save()
+    return voucher
+
+
+# =====================
 # Serializers
 # =====================
 
@@ -423,6 +465,8 @@ class JournalVoucherSerializer(serializers.ModelSerializer):
             'reviewed_at',
             'posted_at',
             'posted_by',
+            'source_type',
+            'source_id',
         ]
 
     def get_period_name(self, obj):
@@ -686,21 +730,9 @@ class JournalVoucherViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
         if voucher.fiscal_period.status != 'OPEN':
             return Response({'error': '会计期间未开放，无法过账'}, status=400)
 
-        # 更新科目余额
-        for line in voucher.lines.filter(is_deleted=False):
-            balance, _ = AccountBalance.objects.get_or_create(
-                account=line.account, fiscal_period=voucher.fiscal_period, defaults={'created_by': request.user}
-            )
-            balance.period_debit += line.debit_amount
-            balance.period_credit += line.credit_amount
-            balance.closing_debit = balance.opening_debit + balance.period_debit
-            balance.closing_credit = balance.opening_credit + balance.period_credit
-            balance.save()
-
-        voucher.status = 'POSTED'
-        voucher.posted_at = timezone.now()
-        voucher.posted_by = request.user
-        voucher.save()
+        # 余额结转 + 状态落地抽取到模块级 post_voucher_to_ledger,与自动过账引擎共用同一实现。
+        with transaction.atomic():
+            post_voucher_to_ledger(voucher, request.user)
 
         return Response(self.get_serializer(voucher).data)
 
@@ -762,3 +794,99 @@ class AccountBalanceViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
                 'is_balanced': totals['period_debit'] == totals['period_credit'],
             }
         )
+
+
+def _jsonify(value):
+    """把报表 service 返回的嵌套 dict/list 里的 Decimal 递归转 float,便于 JSON 序列化。
+
+    报表 service(financial_statements)按规范返回 Decimal,展示层在此统一转 float,
+    与 trial_balance 现有输出口径一致。
+    """
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, dict):
+        return {k: _jsonify(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonify(v) for v in value]
+    return value
+
+
+class FinancialStatementViewSet(PermissionMixin, viewsets.ViewSet):
+    permission_module = 'finance'
+    permission_resource = 'report'
+    """三大财务报表 + 科目表种子。
+
+    只读报表(GET):
+      - ``balance-sheet``   资产负债表(?period_id=)
+      - ``income-statement``利润表(?period_id= 或 ?start_date=&end_date=)
+      - ``cash-flow``       现金流量表(?start_date=&end_date=)
+    管理动作(POST,仅超管):
+      - ``seed-accounts``   幂等初始化标准科目表(科目类别 + 8 个常用一级科目)。
+
+    权限:``finance:report:*``,并受 MODULE_MENU_MAP 的 'finance' 菜单级兜底。
+    试算平衡表(trial-balance)已由 AccountBalanceViewSet 提供,此处不重复。
+    """
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request):
+        """报表清单(根路由),便于前端发现可用报表。"""
+        return Response(
+            {
+                'reports': ['balance-sheet', 'income-statement', 'cash-flow'],
+                'detail': '总账三大报表:资产负债表 / 利润表 / 现金流量表',
+            }
+        )
+
+    def _get_period(self, period_id):
+        return FiscalPeriod.objects.filter(pk=period_id, is_deleted=False).first()
+
+    @action(detail=False, methods=['get'], url_path='balance-sheet')
+    def balance_sheet(self, request):
+        """资产负债表:资产 = 负债 + 所有者权益(未结转损益并入权益)。"""
+        from apps.finance.financial_statements import balance_sheet
+
+        period_id = request.query_params.get('period_id')
+        if not period_id:
+            return Response({'error': '请指定会计期间 period_id'}, status=400)
+        period = self._get_period(period_id)
+        if not period:
+            return Response({'error': '会计期间不存在'}, status=404)
+        return Response(_jsonify(balance_sheet(period)))
+
+    @action(detail=False, methods=['get'], url_path='income-statement')
+    def income_statement(self, request):
+        """利润表:收入 - 费用 = 净利润。支持按会计期间或日期区间。"""
+        from apps.finance.financial_statements import income_statement
+
+        period_id = request.query_params.get('period_id')
+        start = request.query_params.get('start_date')
+        end = request.query_params.get('end_date')
+        if period_id:
+            period = self._get_period(period_id)
+            if not period:
+                return Response({'error': '会计期间不存在'}, status=404)
+            return Response(_jsonify(income_statement(period=period)))
+        if start and end:
+            return Response(_jsonify(income_statement(start_date=start, end_date=end)))
+        return Response({'error': '请指定 period_id 或 start_date + end_date'}, status=400)
+
+    @action(detail=False, methods=['get'], url_path='cash-flow')
+    def cash_flow(self, request):
+        """现金流量表(简化):现金/银行存款科目在区间内的净变动,全部归经营活动。"""
+        from apps.finance.financial_statements import cash_flow
+
+        start = request.query_params.get('start_date')
+        end = request.query_params.get('end_date')
+        if not (start and end):
+            return Response({'error': '请指定 start_date 和 end_date'}, status=400)
+        return Response(_jsonify(cash_flow(start, end)))
+
+    @action(detail=False, methods=['post'], url_path='seed-accounts')
+    def seed_accounts(self, request):
+        """初始化标准科目表(幂等)。仅超管可执行。"""
+        if not (request.user and request.user.is_superuser):
+            return Response({'error': '仅系统管理员可初始化科目表'}, status=403)
+        from apps.finance.posting import seed_standard_accounts
+
+        result = seed_standard_accounts(user=request.user)
+        return Response({'success': True, **result})

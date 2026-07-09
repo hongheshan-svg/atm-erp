@@ -1207,6 +1207,18 @@ class PurchaseOrderViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelete
             'message': '采购订单已撤回至草稿状态'
         })
 
+    @action(detail=True, methods=['get'])
+    def three_way_match(self, request, pk=None):
+        """三单匹配报告：逐行 订购 vs 已收，单据级 已挂账 vs 已收价值。
+
+        用于付款/挂账前核对与前端展示。over_received / over_invoiced 为超额信号，
+        ok=True 表示可安全结算。
+        """
+        po = self.get_object()
+        from apps.purchase.matching import three_way_match as _run_match
+        report = _run_match(po)
+        return Response(report)
+
 
 class PurchaseOrderLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
@@ -1278,9 +1290,26 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
                         status=status.HTTP_400_BAD_REQUEST
                     )
 
+            # IQC 来料检验门禁（写库前预检）：需检物料缺合格检验单时硬拦截整单确认。
+            # 默认 settings.IQC_ENFORCE_INSPECTION=False 不阻断既有流程；FAIL 检验单在下方按行跳过入库。
+            from apps.purchase.iqc import evaluate_line_inspection
+            for line in receipt.lines.filter(is_deleted=False):
+                if line.quality_status == 'FAILED':
+                    continue
+                decision, reason = evaluate_line_inspection(line)
+                if decision == 'MISSING_BLOCK':
+                    return Response({'error': reason}, status=status.HTTP_400_BAD_REQUEST)
+
             for line in receipt.lines.filter(is_deleted=False):
                 # 不合格品(FAILED)不入库、不计入已收数量，须走退货/让步流程处理
                 if line.quality_status == 'FAILED':
+                    continue
+                # IQC 门禁：已提交且判不合格(FAIL/REJECT)的检验单 -> 该行不入库，标记不合格走退货/让步
+                decision, _reason = evaluate_line_inspection(line)
+                if decision == 'FAIL_SKIP':
+                    if line.quality_status != 'FAILED':
+                        line.quality_status = 'FAILED'
+                        line.save(update_fields=['quality_status'])
                     continue
                 # Create stock move for receipt
                 StockMove.objects.create(
