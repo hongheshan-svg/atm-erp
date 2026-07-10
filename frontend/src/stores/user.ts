@@ -32,6 +32,21 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  // 扫码登录:后端回调返回体与密码登录一致({access, refresh, user}),复用同一套 store 写入。
+  function loginWithOAuthResult(data: { access: string; refresh: string; user: User }): void {
+    localStorage.setItem('access_token', data.access)
+    localStorage.setItem('refresh_token', data.refresh)
+
+    userInfo.value = data.user
+
+    const permissionStore = usePermissionStore()
+    permissionStore.setPermissions((data.user as any).permissions || [])
+    permissionStore.setMenus((data.user as any).menus || [])
+    permissionStore.setDataScopes((data.user as any).data_scopes || {})
+
+    profileReady.value = true
+  }
+
   function logout(): void {
     userInfo.value = null
     profileReady.value = false
@@ -61,6 +76,7 @@ export const useUserStore = defineStore('user', () => {
     userInfo,
     profileReady,
     login,
+    loginWithOAuthResult,
     logout,
     getProfile
   }

@@ -326,6 +326,29 @@ WECHAT_WORK_CORP_ID = config('WECHAT_WORK_CORP_ID', default='')
 WECHAT_WORK_CORP_SECRET = config('WECHAT_WORK_CORP_SECRET', default='')
 WECHAT_WORK_AGENT_ID = config('WECHAT_WORK_AGENT_ID', default='')
 
+# Feishu / Lark (飞书) Configuration
+FEISHU_APP_ID = config('FEISHU_APP_ID', default='')
+FEISHU_APP_SECRET = config('FEISHU_APP_SECRET', default='')
+
+# =============================================================================
+# 企业 IM 扫码登录 (OAuth) — 企业微信 / 钉钉 / 飞书
+# =============================================================================
+# 首登自动建号:组织成员扫码即在 ERP 自动建号(默认 employee 最小权限,管理员事后授权)。
+OAUTH_AUTO_CREATE = config('OAUTH_AUTO_CREATE', default=True, cast=bool)
+# 自动建号是否直接激活(False 则建号后需管理员激活才能登录)。
+OAUTH_NEW_USER_ACTIVE = config('OAUTH_NEW_USER_ACTIVE', default=True, cast=bool)
+# 可选:仅允许这些邮箱域名的成员自动建号(逗号分隔;空=不限)。
+OAUTH_ALLOWED_EMAIL_DOMAINS = config(
+    'OAUTH_ALLOWED_EMAIL_DOMAINS', default='',
+    cast=lambda v: [s.strip().lower() for s in v.split(',') if s.strip()],
+)
+# 自动建号默认角色编码(对齐 init_roles 的 employee,data_scope=SELF)。
+OAUTH_DEFAULT_ROLE_CODE = config('OAUTH_DEFAULT_ROLE_CODE', default='employee')
+# 是否允许「扫码时按手机号自动绑定到已存在的 ERP 账号」。默认 False(安全):
+# 首扫不静默绑定既有账号,避免账号接管;既有员工由管理员一次性绑定其 IM ID 即可扫码。
+# 设为 True 时,组织信任「IM 平台核验的手机号」,非特权既有账号可按手机号自动绑定(特权账号始终拒绝)。
+OAUTH_BIND_EXISTING_BY_PHONE = config('OAUTH_BIND_EXISTING_BY_PHONE', default=False, cast=bool)
+
 # Frontend URL for notification links
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost')
 
