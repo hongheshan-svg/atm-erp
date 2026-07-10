@@ -13,7 +13,7 @@ Project Operation Scheduling
 注：此模块已简化，适合项目型单件/小批量生产排程
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.db import models, transaction
@@ -181,71 +181,382 @@ class APSScheduleTask(BaseModel):
         ordering = ['order', 'sequence']
 
 
+# ---------------------------------------------------------------------------
+# 有限产能排程辅助（工作日历 + 工作中心日产能）
+#
+# 算法概述（启发式，非 OR 最优解）：
+#   - 每个工单的工时来自其工艺路线的各道工序，而非旧的 quantity×1。
+#     单件工时取工序 standard_hours，缺失时退化为 cycle_time/3600；
+#     工序工时 = setup_hours + 数量 × 单件工时。
+#   - 每道工序被前向排入其工序指定的工作中心，遵守该中心的有限日产能
+#     (capacity_per_day × efficiency) 与工作日历（默认跳过周末）。
+#   - 工单按优先级(数值小=优先) + 需求日期(早者先) 排序后依次占用产能，
+#     形成"先到先占"的有限产能日历；据此计算真实的各中心利用率。
+# ---------------------------------------------------------------------------
+
+# 工作班次名义开始时刻（把"日产能小时"落到具体的开始/结束时刻）
+WORK_DAY_START_HOUR = 8
+# 无工艺路线且无 planned_hours 时的兜底单件工时（保持与旧口径 quantity×1 一致）
+DEFAULT_HOURS_PER_UNIT = 1.0
+
+
+def _next_working_day(d):
+    """返回 d 当天或其后的第一个工作日（默认跳过周六/周日）。"""
+    while d.weekday() >= 5:
+        d += timedelta(days=1)
+    return d
+
+
+def _count_working_days(start, end):
+    """[start, end] 闭区间内的工作日数量（含端点，跳过周末）。"""
+    if end < start:
+        return 0
+    days = 0
+    cur = start
+    while cur <= end:
+        if cur.weekday() < 5:
+            days += 1
+        cur += timedelta(days=1)
+    return days
+
+
+def _effective_daily_hours(wc):
+    """工作中心有效日产能小时 = capacity_per_day × efficiency%。"""
+    cap = float(wc.capacity_per_day or 0)
+    eff = float(wc.efficiency if wc.efficiency is not None else 100) / 100.0
+    val = cap * eff
+    return val if val > 0 else 0.0
+
+
+def _work_day_start(d):
+    """某工作日的名义班次开始时刻（时区感知，与 USE_TZ=True 对齐）。"""
+    naive = datetime.combine(d, time(WORK_DAY_START_HOUR))
+    if timezone.is_naive(naive):
+        return timezone.make_aware(naive)
+    return naive
+
+
+def _allocate_operation(wc_id, run_hours, earliest_dt, cap_hours, day_used, horizon_guard=3660):
+    """把一道工序（run_hours 小时）前向排入工作中心 wc_id 的有限产能日历。
+
+    规则：
+    - 不早于 earliest_dt；跳过周末；遵守该中心每个工作日的有限产能 cap_hours。
+    - 工序若能在单个工作日的剩余产能内完成，则整段放入第一个有足够剩余产能的
+      工作日（不做跨夜拆分）——两个工单叠加超过日产能时，后者自然顺延到下一个
+      工作日；超过整日产能的大工序按工作日贪心填充、跨多个工作日。
+    - 就地累加 day_used[(wc_id, date)]，返回 (start_dt, end_dt)。
+    """
+    eps = 1e-6
+    if cap_hours <= 0:
+        # 退化：工作中心未配置产能，按连续时间直接排（不阻塞整体排程）
+        return earliest_dt, earliest_dt + timedelta(hours=run_hours)
+
+    day = _next_working_day(earliest_dt.date())
+
+    if run_hours <= cap_hours + eps:
+        guard = 0
+        while guard < horizon_guard:
+            guard += 1
+            day = _next_working_day(day)
+            used = day_used.get((wc_id, day), 0.0)
+            candidate = _work_day_start(day) + timedelta(hours=used)
+            if day == earliest_dt.date() and candidate < earliest_dt:
+                candidate = earliest_dt
+                used = (candidate - _work_day_start(day)).total_seconds() / 3600.0
+            if cap_hours - used >= run_hours - eps:
+                end = candidate + timedelta(hours=run_hours)
+                day_used[(wc_id, day)] = used + run_hours
+                return candidate, end
+            day = day + timedelta(days=1)
+        return earliest_dt, earliest_dt + timedelta(hours=run_hours)
+
+    # 大工序：跨工作日贪心填充
+    remaining = run_hours
+    op_start = None
+    seg_end = None
+    guard = 0
+    while remaining > eps and guard < horizon_guard:
+        guard += 1
+        day = _next_working_day(day)
+        used = day_used.get((wc_id, day), 0.0)
+        candidate = _work_day_start(day) + timedelta(hours=used)
+        if op_start is None and day == earliest_dt.date() and candidate < earliest_dt:
+            candidate = earliest_dt
+            used = (candidate - _work_day_start(day)).total_seconds() / 3600.0
+        free = cap_hours - used
+        if free <= eps:
+            day = day + timedelta(days=1)
+            continue
+        if op_start is None:
+            op_start = candidate
+        take = min(remaining, free)
+        seg_end = candidate + timedelta(hours=take)
+        day_used[(wc_id, day)] = used + take
+        remaining -= take
+        day = day + timedelta(days=1)
+    if op_start is None:
+        op_start = earliest_dt
+        seg_end = earliest_dt + timedelta(hours=run_hours)
+    return op_start, seg_end
+
+
 class APSService:
     """APS排程服务"""
 
     @staticmethod
-    def auto_schedule(orders=None, start_date=None):
-        """自动排程"""
+    def auto_schedule(orders=None, start_date=None, return_stats=False, create_tasks=False):
+        """有限产能自动排产。
+
+        从工艺路线推导每个工单的工序与工时（item RoutingTemplate 优先，其次
+        project ProjectRouting），把每道工序前向排入其工序指定的工作中心，遵守该
+        中心的有限日产能 (capacity_per_day × efficiency) 与工作日历（默认跳过周末），
+        按优先级(数值小=优先) + 需求日期(早者先) 排序占用产能。无工艺路线时回退到
+        planned_hours 或 数量 × 默认单件工时。
+
+        参数：
+        - orders：待排工单，默认取全部 PENDING。
+        - start_date：排程起始日期，默认今天。
+        - return_stats：True 时返回 dict（含真实各中心利用率）；False（默认）返回
+          已排产工单数(int)，与旧签名向后兼容。
+        - create_tasks：True 时按工序落地/刷新 APSScheduleTask（幂等：仅重建 PENDING
+          任务，保留已开始/完成的任务）。默认 False，保持旧行为不写子任务。
+        """
         if start_date is None:
             start_date = date.today()
 
         if orders is None:
-            orders = ScheduleOrder.objects.filter(status='PENDING', is_deleted=False).order_by(
-                'priority', 'required_date'
-            )
+            orders = ScheduleOrder.objects.filter(status='PENDING', is_deleted=False)
 
-        # 获取所有可用工作中心
-        work_centers = WorkCenter.objects.filter(is_active=True, is_deleted=False)
+        # 排序：优先级升序(1=最高) + 需求日期升序(早者先)
+        orders = sorted(orders, key=lambda o: (o.priority or 3, o.required_date or date.max))
 
-        # 工作中心可用时间表
-        wc_availability = {}
-        for wc in work_centers:
-            wc_availability[wc.id] = datetime.combine(start_date, datetime.min.time())
+        work_centers = list(WorkCenter.objects.filter(is_active=True, is_deleted=False))
+        cap_by_wc = {wc.id: _effective_daily_hours(wc) for wc in work_centers}
 
+        # 有限产能日历：{(work_center_id, date): 已占用小时}
+        day_used = {}
         scheduled_count = 0
 
         for order in orders:
-            # 估算工时
-            if order.planned_hours:
-                hours = float(order.planned_hours)
-            else:
-                # 默认每单位1小时
-                hours = float(order.quantity) * 1.0
+            specs = APSService._derive_operations(order)
+            if not specs:
+                # 回退：无工艺路线 -> 单一伪工序，工时取 planned_hours 或 数量×默认单件工时
+                if order.planned_hours:
+                    fb_hours = float(order.planned_hours)
+                else:
+                    fb_hours = float(order.quantity or 0) * DEFAULT_HOURS_PER_UNIT
+                if fb_hours <= 0:
+                    fb_hours = DEFAULT_HOURS_PER_UNIT
+                specs = [
+                    {
+                        'sequence': 1,
+                        'name': order.item.name if order.item else order.order_no,
+                        'work_center': None,
+                        'hours': fb_hours,
+                        'setup': 0.0,
+                    }
+                ]
 
-            # 选择最早可用的工作中心
-            best_wc = None
-            best_start = None
+            # 该工单的最早可开工时间（不早于 start_date）
+            base_date = order.earliest_start or start_date
+            if base_date < start_date:
+                base_date = start_date
+            op_cursor = _work_day_start(_next_working_day(base_date))
 
-            for wc in work_centers:
-                available = wc_availability[wc.id]
+            first_start = None
+            last_end = None
+            primary_wc = None
+            task_rows = []
 
-                # 考虑效率
-                actual_hours = hours / (float(wc.efficiency) / 100)
+            for spec in specs:
+                wc = spec['work_center']
+                if wc is None or wc.id not in cap_by_wc:
+                    wc = APSService._pick_fallback_wc(work_centers, day_used)
+                if wc is None:
+                    # 无任何可用工作中心，放弃该工单（保持 PENDING）
+                    break
 
-                if best_start is None or available < best_start:
-                    best_wc = wc
-                    best_start = available
+                cap_h = cap_by_wc.get(wc.id, _effective_daily_hours(wc))
+                run_h = spec['hours'] if spec['hours'] and spec['hours'] > 0 else (spec['setup'] or 0.0)
+                if run_h <= 0:
+                    run_h = DEFAULT_HOURS_PER_UNIT
 
-            if best_wc:
-                # 计算结束时间
-                actual_hours = hours / (float(best_wc.efficiency) / 100)
-                end_time = best_start + timedelta(hours=actual_hours)
+                s_dt, e_dt = _allocate_operation(wc.id, run_h, op_cursor, cap_h, day_used)
 
-                # 更新工单
-                order.work_center = best_wc
-                order.planned_start = best_start
-                order.planned_end = end_time
-                order.planned_hours = Decimal(str(actual_hours))
-                order.status = 'SCHEDULED'
-                order.save()
+                if first_start is None:
+                    first_start = s_dt
+                    primary_wc = wc
+                last_end = e_dt
+                op_cursor = e_dt  # 工序在订单内串行：下一道不早于本道结束
 
-                # 更新工作中心可用时间
-                wc_availability[best_wc.id] = end_time + timedelta(minutes=best_wc.setup_time)
+                task_rows.append(
+                    {
+                        'sequence': spec['sequence'],
+                        'name': spec['name'],
+                        'wc': wc,
+                        'start': s_dt,
+                        'end': e_dt,
+                        'hours': run_h,
+                    }
+                )
 
-                scheduled_count += 1
+            if first_start is None:
+                continue  # 未能排入任何工序（无工作中心）
 
-        return scheduled_count
+            total_hours = sum(row['hours'] for row in task_rows)
+            order.work_center = primary_wc
+            order.planned_start = first_start
+            order.planned_end = last_end
+            order.planned_hours = Decimal(str(round(total_hours, 2)))
+            order.status = 'SCHEDULED'
+            order.save()
+
+            if create_tasks:
+                APSService._regenerate_tasks(order, task_rows)
+
+            scheduled_count += 1
+
+        if not return_stats:
+            return scheduled_count
+
+        utilization = APSService._compute_utilization(work_centers, cap_by_wc, day_used, start_date)
+        return {
+            'scheduled_count': scheduled_count,
+            'utilization': {wc_id: round(pct, 1) for wc_id, pct in utilization.items()},
+            'work_centers': [
+                {
+                    'work_center_id': wc.id,
+                    'work_center_name': wc.name,
+                    'utilization': round(utilization.get(wc.id, 0.0), 1),
+                }
+                for wc in work_centers
+            ],
+        }
+
+    @staticmethod
+    def _derive_operations(order):
+        """从工艺路线推导工单的工序序列。
+
+        返回 [{'sequence', 'name', 'work_center'(obj|None), 'hours'(float), 'setup'(float)}]；
+        无工艺路线时返回 []（由调用方走兜底）。
+
+        来源优先级：
+        1) 物料工艺模板 RoutingTemplate（含 work_center / setup_hours / standard_hours /
+           cycle_time，最贴合本需求）：工时 = setup + 数量 × 单件工时；
+           单件工时取 standard_hours，缺失时用 cycle_time/3600。
+        2) 项目工艺路线 ProjectRouting（工序 work_center 取自 work_station.work_center，
+           工时取 planned_hours 或 standard_hours 作为该工序总工时）。
+        """
+        from .routing import ProjectRouting, RoutingTemplate
+
+        qty = float(order.quantity or 0)
+        if qty <= 0:
+            qty = 1.0
+
+        # 1) 物料工艺模板
+        if order.item_id:
+            template = (
+                RoutingTemplate.objects.filter(item_id=order.item_id, is_active=True, is_deleted=False)
+                .order_by('-is_current', '-created_at')
+                .first()
+            )
+            if template:
+                specs = []
+                for op in template.operations.filter(is_deleted=False).order_by('sequence'):
+                    setup = float(op.setup_hours or 0)
+                    per_piece = float(op.standard_hours or 0)
+                    if per_piece <= 0 and float(op.cycle_time or 0) > 0:
+                        per_piece = float(op.cycle_time) / 3600.0
+                    specs.append(
+                        {
+                            'sequence': op.sequence,
+                            'name': op.operation_name,
+                            'work_center': op.work_center,
+                            'hours': setup + qty * per_piece,
+                            'setup': setup,
+                        }
+                    )
+                if specs:
+                    return specs
+
+        # 2) 项目工艺路线
+        if order.project_id:
+            routing = (
+                ProjectRouting.objects.filter(project_id=order.project_id, is_deleted=False)
+                .order_by('-created_at')
+                .first()
+            )
+            if routing:
+                specs = []
+                for op in routing.operations.filter(is_deleted=False).order_by('sequence'):
+                    base = float(op.planned_hours or 0) or float(op.standard_hours or 0)
+                    wc = op.work_station.work_center if op.work_station_id else None
+                    specs.append(
+                        {
+                            'sequence': op.sequence,
+                            'name': op.operation_name,
+                            'work_center': wc,
+                            'hours': base,
+                            'setup': 0.0,
+                        }
+                    )
+                if specs:
+                    return specs
+
+        return []
+
+    @staticmethod
+    def _pick_fallback_wc(work_centers, day_used):
+        """工序未指定工作中心时的兜底选择：取当前累计占用最少（最空闲）的中心。"""
+        if not work_centers:
+            return None
+
+        def load(wc):
+            return sum(h for (wid, _d), h in day_used.items() if wid == wc.id)
+
+        return min(work_centers, key=lambda wc: (load(wc), wc.id))
+
+    @staticmethod
+    def _compute_utilization(work_centers, cap_by_wc, day_used, start_date):
+        """计算各工作中心真实利用率(%) = 已占用工时 / (有效日产能 × 排程窗口内工作日数)。
+
+        窗口取 [start_date, 该中心最后一个被占用的工作日]；结果被夹在 [0, 100]。
+        """
+        result = {}
+        for wc in work_centers:
+            cap_h = cap_by_wc.get(wc.id, 0.0)
+            busy = 0.0
+            last_date = None
+            for (wid, d), h in day_used.items():
+                if wid != wc.id:
+                    continue
+                busy += h
+                if last_date is None or d > last_date:
+                    last_date = d
+            if cap_h <= 0 or last_date is None:
+                result[wc.id] = 0.0
+                continue
+            working_days = _count_working_days(start_date, last_date)
+            available = cap_h * working_days
+            pct = (busy / available * 100.0) if available > 0 else 0.0
+            result[wc.id] = max(0.0, min(100.0, pct))
+        return result
+
+    @staticmethod
+    def _regenerate_tasks(order, task_rows):
+        """按工序幂等落地 APSScheduleTask：仅重建 PENDING 任务，保留已开始/完成的任务。"""
+        APSScheduleTask.objects.filter(order=order, status='PENDING', is_deleted=False).delete()
+        for row in task_rows:
+            APSScheduleTask.objects.create(
+                order=order,
+                sequence=row['sequence'],
+                process_name=row['name'],
+                work_center=row['wc'],
+                planned_start=row['start'],
+                planned_end=row['end'],
+                planned_hours=Decimal(str(round(row['hours'], 2))),
+                status='PENDING',
+            )
 
     @staticmethod
     def get_gantt_data(start_date=None, end_date=None):
@@ -515,8 +826,8 @@ class ScheduleOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         if start_date:
             start_date = date.fromisoformat(start_date)
 
-        count = APSService.auto_schedule(start_date=start_date)
-        return Response({'success': True, 'scheduled_count': count})
+        result = APSService.auto_schedule(start_date=start_date, return_stats=True, create_tasks=True)
+        return Response({'success': True, **result})
 
     @action(detail=True, methods=['post'])
     def start(self, request, pk=None):

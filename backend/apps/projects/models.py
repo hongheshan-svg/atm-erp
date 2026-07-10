@@ -543,6 +543,23 @@ class ProjectBOM(BaseModel):
     quote_date = models.DateField(null=True, blank=True, verbose_name='询价日期')
     quote_notes = models.TextField(blank=True, verbose_name='询价备注')
 
+    # ==================== BOM 类型(EBOM/MBOM 分离基础) ====================
+    # 设计BOM / 工程BOM(EBOM) / 制造BOM(MBOM)分离的基础字段。默认 ENGINEERING
+    # 保持既有全部 BOM 记录的语义不变(向后兼容)。完整的多类型结构化 BOM、
+    # EBOM->MBOM 转换与差异管理为后续里程碑。
+    BOM_TYPE_CHOICES = [
+        ('DESIGN', '设计BOM'),
+        ('ENGINEERING', '工程BOM(EBOM)'),
+        ('MANUFACTURING', '制造BOM(MBOM)'),
+    ]
+    bom_type = models.CharField(
+        max_length=20,
+        choices=BOM_TYPE_CHOICES,
+        default='ENGINEERING',
+        verbose_name='BOM类型',
+        help_text='EBOM/MBOM 分离基础;完整多类型结构化 BOM 与转换为后续里程碑',
+    )
+
     # ==================== 扩展字段 ====================
     extra_fields = models.JSONField(default=dict, blank=True, verbose_name='扩展字段', help_text='用户自定义的扩展字段')
 
@@ -1279,3 +1296,6 @@ from .requirement_review import RequirementReview  # noqa: E402, F401
 
 # Import work dispatch models (WorkOrder, WorkDispatch, WorkLog)
 from .work_dispatch import WorkDispatch, WorkLog, WorkOrder  # noqa: E402, F401
+
+# Import IPD stage gate models (阶段决策评审基础脚手架)
+from .stage_gate import StageGate  # noqa: E402, F401

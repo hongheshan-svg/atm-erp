@@ -52,6 +52,8 @@ INSTALLED_APPS = [
     'apps.analytics',
     'apps.production',
     'apps.oa',
+    # AI gateway (LLM 网关 + RAG 检索基础脚手架; 默认 provider 关闭)
+    'apps.ai',
 ]
 
 MIDDLEWARE = [
@@ -63,6 +65,10 @@ MIDDLEWARE = [
     'apps.core.security_middleware.SecurityHeadersMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    # i18n: 依据 Accept-Language / 会话 / cookie 激活语言(须在 SessionMiddleware 之后、
+    # CommonMiddleware 之前)。仅在启用了 USE_I18N 时生效,被动选择语言,不改变既有
+    # API 行为——未提供翻译目录时回落到 LANGUAGE_CODE(zh-hans)。
+    'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -146,6 +152,16 @@ LANGUAGE_CODE = 'zh-hans'
 TIME_ZONE = 'Asia/Shanghai'
 USE_I18N = True
 USE_TZ = True
+
+# 支持的语言(i18n 基础脚手架)。LocaleMiddleware 会据此在 zh-hans / en 之间协商;
+# 未提供 .po/.mo 翻译目录时 gettext 回落到源串(现为中文 verbose_name),行为不变。
+# 后续里程碑:用 gettext_lazy 包裹模型 verbose_name / 提示语并编译 locale/ 下的翻译。
+LANGUAGES = [
+    ('zh-hans', '简体中文'),
+    ('en', 'English'),
+]
+# 翻译文件搜索路径(makemessages/compilemessages 输出目录)。目录暂可为空,不影响运行。
+LOCALE_PATHS = [BASE_DIR / 'locale']
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
@@ -382,3 +398,16 @@ LOCKOUT_DURATION_MINUTES = config('LOCKOUT_DURATION_MINUTES', default=30, cast=i
 # 生产环境应设置一个由以下命令生成的密钥，使备份落盘即为 AES-128-CBC+HMAC 加密：
 #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 BACKUP_ENCRYPTION_KEY = config('BACKUP_ENCRYPTION_KEY', default='')
+
+# =============================================================================
+# AI Gateway (LLM 网关 + RAG 检索基础脚手架)
+# =============================================================================
+# 默认关闭(AI_PROVIDER 为空 -> LLMGateway 使用 NullProvider,返回“未配置”提示,
+# 不发起任何网络调用)。启用真实 provider 时设置 AI_PROVIDER(如 'anthropic')与
+# AI_API_KEY;真实 provider 采用惰性导入,未安装 SDK 时也不影响本模块 import/运行。
+AI_PROVIDER = config('AI_PROVIDER', default='')
+AI_API_KEY = config('AI_API_KEY', default='')
+AI_MODEL = config('AI_MODEL', default='claude-opus-4-8')
+# RAG 检索:优先复用 Elasticsearch 全局搜索(见 apps/core/search_views.py),
+# 未部署 ES 时回落到数据库 icontains 查询;二者均为“真实第一步”,完整向量 RAG 为后续。
+AI_RAG_TOP_K = config('AI_RAG_TOP_K', default=5, cast=int)

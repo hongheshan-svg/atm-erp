@@ -171,7 +171,7 @@ class JournalVoucher(BaseModel):
         ('GENERAL', '记账凭证'),
     ]
 
-    voucher_no = models.CharField(max_length=50, unique=True, verbose_name='凭证号')
+    voucher_no = models.CharField(max_length=50, verbose_name='凭证号')
     voucher_type = models.CharField(
         max_length=20, choices=VOUCHER_TYPE_CHOICES, default='GENERAL', verbose_name='凭证类型'
     )
@@ -229,6 +229,14 @@ class JournalVoucher(BaseModel):
         verbose_name = '记账凭证'
         verbose_name_plural = verbose_name
         ordering = ['-voucher_date', '-voucher_no']
+        # 凭证号条件唯一(软删后可复用),与其余单据编号口径一致
+        constraints = [
+            models.UniqueConstraint(
+                fields=['voucher_no'],
+                condition=models.Q(is_deleted=False),
+                name='uq_journal_voucher_voucher_no_active',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.voucher_no} - {self.summary}'

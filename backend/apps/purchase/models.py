@@ -30,7 +30,7 @@ class PurchaseRequest(BaseModel):
         (13, '13%'),
     ]
 
-    request_no = models.CharField(max_length=50, unique=True, verbose_name='申请单号')
+    request_no = models.CharField(max_length=50, verbose_name='申请单号')
     project = models.ForeignKey(
         'projects.Project',
         on_delete=models.SET_NULL,
@@ -66,6 +66,14 @@ class PurchaseRequest(BaseModel):
         verbose_name = '采购申请'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
+        # 条件唯一:仅未软删行内单号唯一,软删后可复用(审计 P1/P2)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['request_no'],
+                condition=models.Q(is_deleted=False),
+                name='uq_purchase_request_request_no_active',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.request_no}'
@@ -182,7 +190,7 @@ class PurchaseOrder(BaseModel):
         ('OTHER', '其他'),
     ]
 
-    order_no = models.CharField(max_length=50, unique=True, verbose_name='订单号')
+    order_no = models.CharField(max_length=50, verbose_name='订单号')
     supplier = models.ForeignKey(
         'masterdata.Supplier', on_delete=models.PROTECT, related_name='purchase_orders', verbose_name='供应商'
     )
@@ -219,6 +227,14 @@ class PurchaseOrder(BaseModel):
         verbose_name = '采购订单'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
+        # 条件唯一:仅未软删行内单号唯一,软删后可复用(审计 P1/P2)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['order_no'],
+                condition=models.Q(is_deleted=False),
+                name='uq_purchase_order_order_no_active',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.order_no}'
@@ -294,7 +310,7 @@ class GoodsReceipt(BaseModel):
         ('COMPLETED', '完成'),
     ]
 
-    receipt_no = models.CharField(max_length=50, unique=True, verbose_name='收货单号')
+    receipt_no = models.CharField(max_length=50, verbose_name='收货单号')
     po = models.ForeignKey(PurchaseOrder, on_delete=models.PROTECT, related_name='receipts', verbose_name='采购订单')
     warehouse = models.ForeignKey(
         'masterdata.Warehouse', on_delete=models.PROTECT, related_name='goods_receipts', verbose_name='收货仓库'
@@ -308,6 +324,14 @@ class GoodsReceipt(BaseModel):
         verbose_name = '收货单'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
+        # 条件唯一:仅未软删行内单号唯一,软删后可复用(审计 P1/P2)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['receipt_no'],
+                condition=models.Q(is_deleted=False),
+                name='uq_goods_receipt_receipt_no_active',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.receipt_no}'

@@ -91,7 +91,7 @@ class StockMove(BaseModel):
         ('CANCELLED', '已取消'),
     ]
     
-    move_no = models.CharField(max_length=50, unique=True, verbose_name='移动单号')
+    move_no = models.CharField(max_length=50, verbose_name='移动单号')
     item = models.ForeignKey(
         'masterdata.Item',
         on_delete=models.PROTECT,
@@ -156,7 +156,15 @@ class StockMove(BaseModel):
             models.Index(fields=['reference_type', 'reference_id']),
             models.Index(fields=['item', '-move_date']),
         ]
-    
+        # 条件唯一:仅未软删行内单号唯一,软删后可复用(审计 P1/P2)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['move_no'],
+                condition=models.Q(is_deleted=False),
+                name='uq_stock_move_move_no_active',
+            ),
+        ]
+
     def __str__(self):
         return f"{self.move_no} - {self.item.sku}"
     
@@ -341,7 +349,7 @@ class StockAdjustment(BaseModel):
         ('CONFIRMED', '已确认'),
     ]
     
-    adjustment_no = models.CharField(max_length=50, unique=True, verbose_name='调整单号')
+    adjustment_no = models.CharField(max_length=50, verbose_name='调整单号')
     warehouse = models.ForeignKey(
         'masterdata.Warehouse',
         on_delete=models.PROTECT,
@@ -363,7 +371,15 @@ class StockAdjustment(BaseModel):
         verbose_name = '库存调整'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+        # 条件唯一:仅未软删行内单号唯一,软删后可复用(审计 P1/P2)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['adjustment_no'],
+                condition=models.Q(is_deleted=False),
+                name='uq_stock_adjustment_adjustment_no_active',
+            ),
+        ]
+
     def __str__(self):
         return f"{self.adjustment_no}"
     

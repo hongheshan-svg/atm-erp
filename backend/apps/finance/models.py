@@ -204,7 +204,7 @@ class AccountReceivable(BaseModel):
         ('CANCELLED', '已取消'),
     ]
     
-    ar_no = models.CharField(max_length=50, unique=True, verbose_name='应收单号')
+    ar_no = models.CharField(max_length=50, verbose_name='应收单号')
     customer = models.ForeignKey(
         'masterdata.Customer',
         on_delete=models.PROTECT,
@@ -261,7 +261,15 @@ class AccountReceivable(BaseModel):
             models.Index(fields=['customer', 'status']),
             models.Index(fields=['-invoice_date']),
         ]
-    
+        # 条件唯一:仅未软删行内单号唯一,软删后可复用(审计 P1/P2)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['ar_no'],
+                condition=models.Q(is_deleted=False),
+                name='uq_account_receivable_ar_no_active',
+            ),
+        ]
+
     def __str__(self):
         return self.ar_no
     
@@ -299,7 +307,7 @@ class AccountPayable(BaseModel):
         ('CANCELLED', '已取消'),
     ]
     
-    ap_no = models.CharField(max_length=50, unique=True, verbose_name='应付单号')
+    ap_no = models.CharField(max_length=50, verbose_name='应付单号')
     supplier = models.ForeignKey(
         'masterdata.Supplier',
         on_delete=models.PROTECT,
@@ -356,7 +364,15 @@ class AccountPayable(BaseModel):
             models.Index(fields=['supplier', 'status']),
             models.Index(fields=['-invoice_date']),
         ]
-    
+        # 条件唯一:仅未软删行内单号唯一,软删后可复用(审计 P1/P2)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['ap_no'],
+                condition=models.Q(is_deleted=False),
+                name='uq_account_payable_ap_no_active',
+            ),
+        ]
+
     def __str__(self):
         return self.ap_no
     
@@ -398,7 +414,7 @@ class Payment(BaseModel):
         ('OTHER', '其他'),
     ]
     
-    payment_no = models.CharField(max_length=50, unique=True, verbose_name='付款单号')
+    payment_no = models.CharField(max_length=50, verbose_name='付款单号')
     payment_type = models.CharField(max_length=10, choices=PAYMENT_TYPE_CHOICES, verbose_name='付款类型')
     ar = models.ForeignKey(
         AccountReceivable,
@@ -450,7 +466,15 @@ class Payment(BaseModel):
         verbose_name = '付款记录'
         verbose_name_plural = verbose_name
         ordering = ['-payment_date']
-    
+        # 条件唯一:仅未软删行内单号唯一,软删后可复用(审计 P1/P2)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['payment_no'],
+                condition=models.Q(is_deleted=False),
+                name='uq_payment_payment_no_active',
+            ),
+        ]
+
     def __str__(self):
         return self.payment_no
     
@@ -1120,7 +1144,7 @@ class Invoice(BaseModel):
     ]
     
     invoice_type = models.CharField(max_length=10, choices=INVOICE_TYPE_CHOICES, verbose_name='发票类型')
-    invoice_no = models.CharField(max_length=50, unique=True, verbose_name='发票号')
+    invoice_no = models.CharField(max_length=50, verbose_name='发票号')
     invoice_code = models.CharField(max_length=50, blank=True, verbose_name='发票代码')
     digital_invoice_no = models.CharField(max_length=50, blank=True, verbose_name='数电发票号码')
     invoice_date = models.DateTimeField(verbose_name='开票日期')
@@ -1191,7 +1215,15 @@ class Invoice(BaseModel):
         verbose_name = '发票'
         verbose_name_plural = verbose_name
         ordering = ['-invoice_date', '-id']
-    
+        # 条件唯一:仅未软删行内单号唯一,软删后可复用(审计 P1/P2)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['invoice_no'],
+                condition=models.Q(is_deleted=False),
+                name='uq_invoice_invoice_no_active',
+            ),
+        ]
+
     def __str__(self):
         return f"{self.invoice_no}"
     

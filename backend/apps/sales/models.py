@@ -29,7 +29,7 @@ class SalesQuotation(BaseModel):
         (13, '13%'),
     ]
     
-    quote_no = models.CharField(max_length=50, unique=True, verbose_name='报价单号')
+    quote_no = models.CharField(max_length=50, verbose_name='报价单号')
     customer = models.ForeignKey(
         'masterdata.Customer',
         on_delete=models.PROTECT,
@@ -94,7 +94,15 @@ class SalesQuotation(BaseModel):
         verbose_name = '销售报价'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+        # 条件唯一:仅未软删行内单号唯一,软删后可复用(审计 P1/P2)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['quote_no'],
+                condition=models.Q(is_deleted=False),
+                name='uq_sales_quotation_quote_no_active',
+            ),
+        ]
+
     def __str__(self):
         return f"{self.quote_no}"
     
@@ -213,7 +221,7 @@ class SalesOrder(BaseModel):
         ('OTHER', '其他'),
     ]
     
-    order_no = models.CharField(max_length=50, unique=True, verbose_name='销售订单号')
+    order_no = models.CharField(max_length=50, verbose_name='销售订单号')
     customer_order_no = models.CharField(max_length=100, blank=True, default='', verbose_name='客户订单号')
     customer = models.ForeignKey(
         'masterdata.Customer',
@@ -284,7 +292,15 @@ class SalesOrder(BaseModel):
         verbose_name = '销售订单'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+        # 条件唯一:仅未软删行内单号唯一,软删后可复用(审计 P1/P2)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['order_no'],
+                condition=models.Q(is_deleted=False),
+                name='uq_sales_order_order_no_active',
+            ),
+        ]
+
     def __str__(self):
         return f"{self.order_no}"
     
@@ -402,7 +418,7 @@ class DeliveryOrder(BaseModel):
         ('CUSTOM', '特殊包装'),
     ]
     
-    delivery_no = models.CharField(max_length=50, unique=True, verbose_name='发货单号')
+    delivery_no = models.CharField(max_length=50, verbose_name='发货单号')
     so = models.ForeignKey(
         SalesOrder,
         on_delete=models.PROTECT,
@@ -473,7 +489,15 @@ class DeliveryOrder(BaseModel):
         verbose_name = '发货单'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+        # 条件唯一:仅未软删行内单号唯一,软删后可复用(审计 P1/P2)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['delivery_no'],
+                condition=models.Q(is_deleted=False),
+                name='uq_delivery_order_delivery_no_active',
+            ),
+        ]
+
     def __str__(self):
         return f"{self.delivery_no}"
     
@@ -544,7 +568,7 @@ class SalesContract(BaseModel):
         ('CANCELLED', '已取消'),
     ]
     
-    contract_no = models.CharField(max_length=50, unique=True, verbose_name='合同编号')
+    contract_no = models.CharField(max_length=50, verbose_name='合同编号')
     so = models.ForeignKey(
         SalesOrder,
         on_delete=models.PROTECT,
@@ -602,7 +626,15 @@ class SalesContract(BaseModel):
         verbose_name = '销售合同'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+        # 条件唯一:仅未软删行内单号唯一,软删后可复用(审计 P1/P2)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['contract_no'],
+                condition=models.Q(is_deleted=False),
+                name='uq_sales_contract_contract_no_active',
+            ),
+        ]
+
     def __str__(self):
         return f"{self.contract_no}"
     
