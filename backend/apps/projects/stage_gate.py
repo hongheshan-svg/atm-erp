@@ -133,7 +133,7 @@ class StageGateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
             return Response({'error': f'无效的决策值,应为 {sorted(valid)} 之一'}, status=400)
 
         gate.decision = decision
-        gate.decision_date = request.data.get('decision_date') or timezone.now().date()
+        gate.decision_date = request.data.get('decision_date') or timezone.localdate()
         if 'summary' in request.data:
             gate.summary = request.data.get('summary', '')
         gate.updated_by = request.user

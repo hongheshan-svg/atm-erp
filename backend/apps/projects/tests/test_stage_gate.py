@@ -4,9 +4,8 @@
 创建 Customer/Project 时关闭 ES 实时索引(override_settings)。
 """
 
-from datetime import date
-
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from apps.accounts.models import User
@@ -57,7 +56,7 @@ class StageGateTest(TestCase):
         self.assertEqual(response.status_code, 200, getattr(response, 'data', None))
         gate.refresh_from_db()
         self.assertEqual(gate.decision, 'GO')
-        self.assertEqual(gate.decision_date, date.today())
+        self.assertEqual(gate.decision_date, timezone.localdate())
         self.assertEqual(gate.summary, '通过')
 
     def test_decide_rejects_invalid_decision(self):
