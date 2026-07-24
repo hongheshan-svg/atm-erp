@@ -118,6 +118,19 @@ class PaymentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
     search_fields = ['payment_no']
     ordering_fields = ['payment_date', 'amount', 'created_at']
 
+    def perform_create(self, serializer):
+        """三单匹配超付阻断:仅在 THREE_WAY_MATCH_ENFORCE=True 时对'有采购订单的应付付款'
+        校验累计付款不超过已收货物可结算价值(默认关闭,避免影响未接三单匹配的存量付款/测试)。"""
+        from django.conf import settings
+        if getattr(settings, 'THREE_WAY_MATCH_ENFORCE', False):
+            data = serializer.validated_data
+            ap = data.get('ap')
+            if data.get('payment_type') == 'AP' and ap is not None and getattr(ap, 'po_id', None):
+                from apps.purchase.matching import assert_can_pay
+                cumulative = (ap.amount_paid or 0) + (data.get('amount') or 0)
+                assert_can_pay(ap.po, cumulative)
+        super().perform_create(serializer)
+
 
 class ExpenseViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
@@ -237,18 +250,17 @@ class ExpenseViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin,
     
     @action(detail=True, methods=['post'])
     def reimburse(self, request, pk=None):
-        """Mark expense as reimbursed."""
-        expense = self.get_object()
-        if expense.status != 'APPROVED':
-            return Response(
-                {'error': '只能报销已批准的费用'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        expense.status = 'PAID'
-        expense.reimbursement_date = timezone.now().date()
-        expense.save()
-        return Response(ExpenseSerializer(expense).data)
+        """已停用:报销付款统一由银行流水核销完成(付款核销工作台)。
+
+        历史上 reimburse() 直接把报销单标 PAID、写报销日期,绕过统一核销台账,与
+        合同付款 pay()、AP record_payment() 是同一类"双轨"问题。收口后员工报销
+        →PAID 只经 settle→ExpensePayableSource.write_back 驱动(审批通过即经
+        register_expense_payable 信号进台账候选)。
+        """
+        return Response(
+            {'error': '报销付款已统一由银行流水核销完成:请在「付款核销工作台」核销对应银行流水。此接口已停用。'},
+            status=status.HTTP_409_CONFLICT,
+        )
 
 
 class AccountReceivableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
@@ -373,53 +385,17 @@ class AccountPayableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
     
     @action(detail=True, methods=['post'])
     def record_payment(self, request, pk=None):
-        """Record a payment.
+        """已停用:应付账款(AP)付款统一由银行流水核销完成(付款核销工作台)。
 
-        创建 Payment 记录并由 Payment.save() 统一更新 amount_paid，
-        保证与对账（按 Payment 取付款明细）口径一致，避免重复记账。
+        历史上 record_payment 直接创建 Payment(payment_type='AP') 并手动重算
+        amount_paid/status,绕过统一待付款项核销台账(PayableItem/PayableSettlement),
+        与核销台账"两套并存"。收口后 AP 付款 →PAID 只经「付款核销工作台」的
+        settle→write_back 驱动,此接口已停用,不再产生任何副作用。
         """
-        payment_amount = request.data.get('amount')
-
-        if not payment_amount or float(payment_amount) <= 0:
-            return Response(
-                {'error': '请提供有效的付款金额'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        from decimal import Decimal as D
-
-        payment_amount = D(str(payment_amount))
-
-        with transaction.atomic():
-            ap = AccountPayable.objects.select_for_update().get(pk=pk)
-            if ap.amount_paid + payment_amount > ap.amount_due:
-                return Response(
-                    {'error': '付款金额超过应付金额'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # 创建付款记录，Payment.save() 会原子更新 ap.amount_paid
-            Payment.objects.create(
-                payment_type='AP',
-                ap=ap,
-                payment_date=request.data.get('payment_date') or timezone.now().date(),
-                payment_method=_normalize_payment_method(request.data.get('payment_method')),
-                amount=payment_amount,
-                currency=ap.currency,
-                exchange_rate=ap.exchange_rate,
-                notes=request.data.get('notes', ''),
-                created_by=request.user,
-                updated_by=request.user,
-            )
-
-            ap.refresh_from_db(fields=['amount_paid'])
-            if ap.amount_paid >= ap.amount_due:
-                ap.status = 'PAID'
-            elif ap.amount_paid > 0:
-                ap.status = 'PARTIAL'
-            ap.save(update_fields=['status'])
-
-        return Response(AccountPayableSerializer(ap).data)
+        return Response(
+            {'error': '应付账款付款已统一由银行流水核销完成:请在「付款核销工作台」核销对应银行流水。此接口已停用。'},
+            status=409,
+        )
     
     @action(detail=False, methods=['get'])
     def overdue(self, request):
@@ -515,6 +491,22 @@ class InvoiceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
         invoice.save()
         return Response(InvoiceSerializer(invoice).data)
     
+    @action(detail=True, methods=['post'])
+    def issue(self, request, pk=None):
+        """开具销项发票：确认后事件驱动联动应收与'发货款'里程碑激活。"""
+        invoice = self.get_object()
+        if invoice.invoice_type != 'OUTPUT':
+            return Response({'error': '只有销项发票可开具'}, status=status.HTTP_400_BAD_REQUEST)
+        if invoice.status == 'VOID':
+            return Response({'error': '已作废的发票无法开具'}, status=status.HTTP_400_BAD_REQUEST)
+        with transaction.atomic():
+            invoice.status = 'NORMAL'
+            invoice.save(update_fields=['status', 'updated_at'])
+            # 发货→开票→应收 链条收口：应收登记 + 发货款里程碑按事件激活（服务内幂等、防御式）
+            from apps.finance.services import ensure_ar_and_activate_milestone
+            ensure_ar_and_activate_milestone(invoice, request.user)
+        return Response(InvoiceSerializer(invoice).data)
+
     @action(detail=False, methods=['post'])
     def auto_match(self, request):
         """自动匹配发票到销售订单/采购订单"""
@@ -2012,35 +2004,18 @@ class PurchasePaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrack
     
     @action(detail=True, methods=['post'])
     def record_payment(self, request, pk=None):
-        """Record a payment against this schedule."""
-        schedule = self.get_object()
-        amount = request.data.get('amount')
-        payment_date = request.data.get('payment_date', timezone.now().date())
-        
-        if not amount:
-            return Response({'error': '请提供付款金额'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            amount = Decimal(str(amount))
-        except:
-            return Response({'error': '金额格式错误'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        from django.db.models import F as DbF
-        from django.db import transaction
-        with transaction.atomic():
-            PurchasePaymentSchedule.objects.filter(pk=schedule.pk).update(
-                amount_paid=DbF('amount_paid') + amount
-            )
-            schedule.refresh_from_db()
-            if schedule.amount_paid >= schedule.amount_due:
-                schedule.status = 'PAID'
-                schedule.actual_paid_date = payment_date
-                schedule.reminder_status = 'PAID'
-            elif schedule.amount_paid > 0:
-                schedule.status = 'PARTIAL'
-            schedule.save(update_fields=['status', 'actual_paid_date', 'reminder_status'])
+        """已停用:采购付款计划的里程碑付款统一由银行流水核销驱动。
 
-        return Response(PurchasePaymentScheduleSerializer(schedule).data)
+        历史上本 action 直接对里程碑 amount_paid 累加,是绕过统一核销台账、且不回写
+        所属 AP 的"双轨"付款(与合同 pay()、AP record_payment、报销 reimburse 同类)。
+        收口后:一个 PO 只有一张 AccountPayable(真实应付,已在核销台账),里程碑的
+        已付/进度改由该 AP 的核销额按 milestone_order 顺序自动派生(见 finance/signals.py
+        的 sync_purchase_schedules_from_ap),付款计划回归"计划 + 催付 + 进度展示"职能。
+        """
+        return Response(
+            {'error': '采购付款已统一由银行流水核销完成:请在「付款核销工作台」核销对应银行流水。此接口已停用。'},
+            status=status.HTTP_409_CONFLICT,
+        )
     
     @action(detail=False, methods=['get'])
     def reminders(self, request):
@@ -2243,17 +2218,13 @@ class PaymentRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
             payment_req.payment = payment
             payment_req.save()
             
-            # 更新应付账款
+            # 更新应付账款:上面 Payment.objects.create(payment_type='AP', ap=...) 已经过
+            # Payment.save() 原子 F() 递增了 ap.amount_paid 一次;这里不再重复递增
+            # (历史 bug:曾在此处对同一笔付款再手动 F() 一次,导致 amount_paid 被双记,
+            # 见 apps.finance.tests.test_payable_ledger.PaymentRequestPayNoDoubleCountTest),
+            # 只需刷新后让 AccountPayable.save() 按最新 amount_paid 重算 status。
             if payment_req.ap:
-                from django.db.models import F
-                AccountPayable.objects.filter(pk=payment_req.ap.pk).update(
-                    amount_paid=F('amount_paid') + payment_req.amount
-                )
-                payment_req.ap.refresh_from_db()
-                if payment_req.ap.amount_paid >= payment_req.ap.amount_due:
-                    payment_req.ap.status = 'PAID'
-                else:
-                    payment_req.ap.status = 'PARTIAL'
+                payment_req.ap.refresh_from_db(fields=['amount_paid'])
                 payment_req.ap.save(update_fields=['status'])
         
         return Response({

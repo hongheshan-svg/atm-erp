@@ -10,6 +10,7 @@ Vehicle Management
 """
 import logging
 from datetime import date, datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from django.db import models, transaction
 from django.utils import timezone
 from rest_framework import viewsets, serializers, status
@@ -548,14 +549,24 @@ class VehicleRequestViewSet(PermissionMixin, WorkflowEnforcementMixin, SoftDelet
 
         end_mileage = request.data.get('end_mileage', req.vehicle.current_mileage)
 
+        # 行程费统一归一为 Decimal:请求体里的费用可能是字符串('150.00')或数字,若原样
+        # 赋给 DecimalField、在 save() 后 refresh 前访问 total_cost(如 post_save 信号
+        # 登记待付款项台账时)会因 str+int 混合相加而报错。此处显式转 Decimal,既修掉该
+        # 隐患,也让台账登记信号读到正确的行程费合计。
+        def _to_decimal(value):
+            try:
+                return Decimal(str(value if value not in (None, '') else 0))
+            except (InvalidOperation, TypeError, ValueError):
+                return Decimal('0')
+
         with transaction.atomic():
             req.status = 'RETURNED'
             req.actual_end_time = timezone.now()
             req.end_mileage = end_mileage
-            req.fuel_cost = request.data.get('fuel_cost', 0)
-            req.toll_cost = request.data.get('toll_cost', 0)
-            req.parking_cost = request.data.get('parking_cost', 0)
-            req.other_cost = request.data.get('other_cost', 0)
+            req.fuel_cost = _to_decimal(request.data.get('fuel_cost', 0))
+            req.toll_cost = _to_decimal(request.data.get('toll_cost', 0))
+            req.parking_cost = _to_decimal(request.data.get('parking_cost', 0))
+            req.other_cost = _to_decimal(request.data.get('other_cost', 0))
             req.save()
 
             req.vehicle.current_mileage = end_mileage

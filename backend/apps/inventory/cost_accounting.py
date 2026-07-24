@@ -223,7 +223,7 @@ class CostCalculationService:
         # 没有记录时，从采购历史获取平均价
         from apps.purchase.models import PurchaseOrderLine
 
-        avg_price = PurchaseOrderLine.objects.filter(item_id=item_id, order__status='COMPLETED').aggregate(
+        avg_price = PurchaseOrderLine.objects.filter(item_id=item_id, po__status='COMPLETED').aggregate(
             avg_price=Avg('unit_price')
         )['avg_price']
 
@@ -297,8 +297,13 @@ class CostCalculationService:
         reference_id: int = None,
         transaction_date: date = None,
         user=None,
+        unit_cost: Decimal = None,
     ) -> ItemCostRecord:
-        """处理出库成本"""
+        """处理出库成本
+
+        unit_cost: 出库单价。调用方显式传入时（如 FIFO 分层实耗成本，或库存移动的实际
+        加权成本）优先采用；为 None 时回退到成本账结存单价（加权平均法）。
+        """
         transaction_date = transaction_date or date.today()
 
         # 获取当前结存
@@ -311,11 +316,14 @@ class CostCalculationService:
         if last_record:
             prev_qty = last_record.balance_qty
             prev_cost = last_record.balance_cost
-            unit_cost = last_record.balance_unit_cost
+            ledger_unit_cost = last_record.balance_unit_cost
         else:
             prev_qty = Decimal('0')
             prev_cost = Decimal('0')
-            unit_cost = Decimal('0')
+            ledger_unit_cost = Decimal('0')
+
+        # 显式单价优先（FIFO 分层成本 / 移动实际成本），否则用结存单价（加权平均）
+        unit_cost = ledger_unit_cost if unit_cost is None else Decimal(str(unit_cost))
 
         total_cost = (quantity * unit_cost).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 

@@ -56,6 +56,7 @@ from .quote_prediction import (
     QuoteVersionViewSet,
 )
 from .quote_templates import QuoteHistoryViewSet, QuoteTemplateViewSet
+from .change_order import SalesOrderChangeViewSet
 from .views import (
     DeliveryOrderLineViewSet,
     DeliveryOrderViewSet,
@@ -77,6 +78,7 @@ router.register(r'quotations', SalesQuotationViewSet, basename='quotation')
 router.register(r'quotation-lines', SalesQuotationLineViewSet, basename='quotation-line')
 router.register(r'orders', SalesOrderViewSet, basename='order')
 router.register(r'order-lines', SalesOrderLineViewSet, basename='order-line')
+router.register(r'order-changes', SalesOrderChangeViewSet, basename='order-change')
 router.register(r'deliveries', DeliveryOrderViewSet, basename='delivery')
 router.register(r'delivery-lines', DeliveryOrderLineViewSet, basename='delivery-line')
 router.register(r'contracts', SalesContractViewSet, basename='contract')

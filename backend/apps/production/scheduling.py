@@ -266,13 +266,18 @@ class KanbanView(APIView):
                 }
             )
 
-        # 质量概况
+        # 质量概况 —— 真实聚合（口径与 apps/production/kanban.py 的 ProductionKanbanView 一致）
+        today_inspections = QualityInspection.objects.filter(inspection_date=today, is_deleted=False)
+        inspections_today = today_inspections.count()
+        passed_today = today_inspections.filter(result='PASS').count()
+        # 今日缺陷数 = 今日 result='FAIL' 的真实质检数（RESULT_CHOICES 为 PASS/FAIL/CONDITIONAL）
+        defects_today = today_inspections.filter(result='FAIL').count()
+        decided_today = passed_today + defects_today
         quality_stats = {
-            'inspections_today': QualityInspection.objects.filter(inspection_date=today, is_deleted=False).count()
-            if hasattr(QualityInspection, 'inspection_date')
-            else 0,
-            'pass_rate': 98.5,  # 示例数据
-            'defects_today': 2,  # 示例数据
+            'inspections_today': inspections_today,
+            # 合格率 = 合格 /（合格 + 不合格），仅计入已判定(PASS/FAIL)的检验；无已判定数据时为 0
+            'pass_rate': round(passed_today / decided_today * 100, 1) if decided_today > 0 else 0,
+            'defects_today': defects_today,
         }
 
         # 今日排程列表

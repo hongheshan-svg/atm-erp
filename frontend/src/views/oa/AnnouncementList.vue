@@ -88,7 +88,8 @@
           <span class="meta-item">浏览: {{ currentItem?.view_count }}</span>
         </div>
         <el-divider />
-        <div class="detail-content" v-html="currentItem?.content"></div>
+        <!-- Sanitized to prevent stored XSS from announcement content -->
+        <div class="detail-content" v-html="sanitizedContent"></div>
       </div>
     </el-dialog>
     
@@ -146,6 +147,7 @@ import { ElMessage } from 'element-plus'
 import { Plus, Check, View } from '@element-plus/icons-vue'
 import { getPublishedAnnouncements, createAnnouncement, publishAnnouncement, readAnnouncement, markAllAnnouncementsRead } from '@/api/oa'
 import { useUserStore } from '@/stores/user'
+import { sanitizeHtml } from '@/utils/sanitize'
 
 const userStore = useUserStore()
 const isAdmin = computed(() => userStore.userInfo?.is_superuser || userStore.userInfo?.is_staff)
@@ -156,8 +158,11 @@ const markingRead = ref(false)
 const list = ref<any[]>([])
 const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
-const currentItem = ref(null)
+const currentItem = ref<any>(null)
 const formRef = ref(null)
+
+// Announcement body is rendered with v-html; always sanitize first.
+const sanitizedContent = computed(() => sanitizeHtml(currentItem.value?.content))
 
 const searchForm = reactive({
   announcement_type: ''

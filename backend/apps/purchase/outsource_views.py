@@ -46,7 +46,20 @@ class OutsourceOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
-        """确认外协单"""
+        """确认外协单,并把该外协单登记进统一待付款项台账。
+
+        历史实现在这里内联 `AccountPayable.objects.create(..., notes=...)`,但
+        AccountPayable 根本没有 notes 字段——该调用一直抛 TypeError 使 confirm()
+        整体 500 回滚,外协确认其实从未成功建过应付,更谈不上"幽灵应付"。且
+        AccountPayable 与 OutsourceOrder 之间无任何可靠关联(无 FK,notes 又不存在),
+        取消时无从反查冲销。
+
+        改为直接走已存在但此前无生产者的 `OutsourcePayableSource` 适配器
+        (source_type='outsource'),把外协单登记为统一台账 PayableItem——与
+        公共费用/税务申报等来源一致:台账项经 source_id=order.pk 与外协单可靠关联,
+        取消时据此作废,无需新增 FK/迁移。register_payable 的 update_or_create 幂等,
+        重复确认只刷新静态字段。
+        """
         order = self.get_object()
         if order.status != 'DRAFT':
             return Response({'error': '只能确认草稿状态的外协单'}, status=status.HTTP_400_BAD_REQUEST)
@@ -56,27 +69,27 @@ class OutsourceOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
             return Response({'error': '请添加加工明细'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
+            # 依据当前明细重算含税总额,作为台账应付金额(避免登记时金额为陈旧值/0)。
+            order.update_totals()
             order.status = 'CONFIRMED'
             order.save()
 
-            # 创建应付账款
-            from apps.finance.models import AccountPayable
+            from apps.finance.payable_adapters import register_payable
 
-            AccountPayable.objects.create(
-                supplier=order.supplier,
-                project=order.project,
-                invoice_date=order.order_date,
-                amount_due=order.total_with_tax,
-                due_date=order.required_date,
-                notes=f'外协加工单: {order.order_no}',
-                created_by=request.user,
-            )
+            register_payable(order, 'outsource')
 
         return Response(OutsourceOrderSerializer(order).data)
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
-        """取消外协单"""
+        """取消外协单,并作废其在统一待付款项台账中的待付项。
+
+        confirm() 已把外协单登记为 PayableItem(source_type='outsource',
+        source_id=order.pk)。取消时经 cancel_payable 据 source_id 精确定位并作废
+        该台账项,避免外协单取消后台账里残留"幽灵应付"。cancel_payable 内部守卫
+        amount_paid==0——已发生实际核销/付款的台账项不会被误冲为 CANCELLED;
+        从未确认(无台账项)的草稿单取消时 cancel_payable 为安全 no-op。
+        """
         order = self.get_object()
         if order.status in ['COMPLETED', 'CANCELLED']:
             return Response({'error': '无法取消已完成或已取消的外协单'}, status=status.HTTP_400_BAD_REQUEST)
@@ -85,8 +98,14 @@ class OutsourceOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
         if order.lines.filter(sent_qty__gt=0).exists():
             return Response({'error': '已有发料记录，无法取消'}, status=status.HTTP_400_BAD_REQUEST)
 
-        order.status = 'CANCELLED'
-        order.save()
+        with transaction.atomic():
+            order.status = 'CANCELLED'
+            order.save()
+
+            from apps.finance.payable_adapters import cancel_payable
+
+            cancel_payable(order, 'outsource')
+
         return Response(OutsourceOrderSerializer(order).data)
 
     @action(detail=True, methods=['get'])

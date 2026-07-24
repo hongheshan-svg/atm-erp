@@ -102,7 +102,7 @@ class Equipment(BaseModel):
     def save(self, *args, **kwargs):
         # 自动生成设备编号
         if not self.equipment_no:
-            from apps.core.models import CodeRule
+            from apps.core.code_rule_models import CodeRule
 
             self.equipment_no = CodeRule.generate_code('EQUIPMENT')
 

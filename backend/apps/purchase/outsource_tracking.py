@@ -373,7 +373,7 @@ class OutsourceInspectionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
     filterset_fields = ['outsource_order', 'result']
 
     def perform_create(self, serializer):
-        from apps.core.models import CodeRule
+        from apps.core.code_rule_models import CodeRule
 
         inspection_no = CodeRule.generate_code('OSINSP')
         serializer.save(inspection_no=inspection_no, inspector=self.request.user)
@@ -390,7 +390,7 @@ class OutsourceClaimViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
     filterset_fields = ['outsource_order', 'claim_type', 'status']
 
     def perform_create(self, serializer):
-        from apps.core.models import CodeRule
+        from apps.core.code_rule_models import CodeRule
 
         claim_no = CodeRule.generate_code('OSCLAIM')
         serializer.save(claim_no=claim_no)

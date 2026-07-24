@@ -16,13 +16,23 @@ Provides:
 
 from rest_framework.exceptions import PermissionDenied
 
-from apps.core.permission_service import apply_scope_filter, get_hidden_fields, has_permission, resolve_data_scope
+from apps.core.permission_service import (
+    apply_scope_filter,
+    get_hidden_fields,
+    has_operation_permission,
+    has_permission,
+    resolve_data_scope,
+)
 
 # 后端 permission_module 到前端菜单权限码的映射。
 # 当用户持有右侧任一菜单前缀（精确相等或 `prefix:` 开头）时，_has_module_menu_access
-# 即认为其有权访问左侧后端模块——这是“菜单级粒度”授权：本系统未种子化操作级权限
-# （审计 C2，详见 get_serializer 与 permission_service.get_hidden_fields 的说明），
-# 故同一菜单授权下的 view/create/edit/delete 不做区分。
+# 即认为其有权访问左侧后端模块——这是“菜单级粒度”兜底授权。
+#
+# 操作级细粒度（审计 C2 整改）：check_permissions 现在会先调用
+# permission_service.has_operation_permission 做“可选启用”的操作级校验——仅当某角色对该
+# resource 已被种子化操作权限、却缺失当前 action 时才拒绝；未配置操作权限的角色（历史默认）
+# 回落到此菜单兜底，view/create/edit/delete 一律放行，保持向后兼容。字段级脱敏同理由
+# get_serializer + get_hidden_fields 在种子化字段权限后生效。
 #
 # 安全注意（审计 C1）：'accounts' 故意只映射到具体的用户/角色/部门菜单码，而不是宽泛的
 # 'system'。否则任何持有 'system:report' 的角色（几乎所有 manager 都有）都会因前缀
@@ -180,6 +190,26 @@ class PermissionMixin:
             if request.method in ('GET', 'HEAD', 'OPTIONS'):
                 return
 
+        # Operation-level enforcement (additive, opt-in, backward-compatible).
+        #
+        # has_operation_permission is tri-state:
+        #   False -> the user's roles have operation permissions seeded for THIS
+        #            resource but are MISSING this action -> an explicit restriction
+        #            is configured; deny even though menu access might otherwise allow.
+        #   True  -> the action is explicitly granted -> allow.
+        #   None  -> no operation permissions configured for this (user, resource)
+        #            (the historical default) -> fall through to the menu-level checks
+        #            below, so menu-only roles keep full CRUD exactly as before.
+        op_result = has_operation_permission(
+            request.user, self.permission_module, self.permission_resource, permission_action
+        )
+        if op_result is False:
+            raise PermissionDenied(
+                f'You do not have permission to {permission_action} {self.permission_resource}'
+            )
+        if op_result is True:
+            return
+
         # Build permission code: module:resource:action
         permission_code = f'{self.permission_module}:{self.permission_resource}:{permission_action}'
 
@@ -188,8 +218,8 @@ class PermissionMixin:
             return
 
         # Fallback: menu-level access to this module grants full access to its
-        # resources. Applied to ALL methods because the permission tree only has
-        # menu-level codes — there's no action-level granularity to check against.
+        # resources. This is the default grant path for roles without operation-level
+        # permissions configured (op_result is None above).
         if self._has_module_menu_access(request):
             return
 
@@ -262,14 +292,14 @@ class PermissionMixin:
         Get serializer with sensitive fields filtered.
 
         Returns:
-            Serializer instance with hidden fields removed
+            Serializer instance with hidden (de-sensitized) fields removed
 
-        Note (审计 C2 — 字段级脱敏当前为 inert by design):
-            字段隐藏依赖 type='field' 的 Permission 记录，而 init_permissions 只种子化了
-            菜单节点、从不调用 field_perm()，因此 get_hidden_fields 恒返回空、本方法不剔除
-            任何字段。本系统采用“菜单级粒度”授权（见 MODULE_MENU_MAP），未启用字段级脱敏。
-            若将来需要真正屏蔽敏感字段（如薪资/成本/银行账号），需先在 init_permissions 中
-            为相应 resource 调用 field_perm() 种子化字段权限并分配给角色。
+        字段级脱敏（审计 C2 整改）：
+            get_hidden_fields 返回“该用户角色被拒绝可见”的字段名集合（即 module:resource
+            已种子化 type='field' 权限、但用户角色未被授予者），本方法据此从序列化器中剔除
+            这些字段。向后兼容：若某 resource 未种子化任何字段权限，get_hidden_fields 返回空，
+            不剔除任何字段——与历史行为一致。init_permissions 负责种子化敏感字段（成本/价格/
+            信用额度等）并授予有权查看的角色；从角色移除某字段权限即对其屏蔽该字段。
         """
         serializer = super().get_serializer(*args, **kwargs)
 

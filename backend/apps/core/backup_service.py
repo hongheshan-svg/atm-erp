@@ -25,6 +25,53 @@ class BackupService:
     """数据库备份服务"""
 
     @staticmethod
+    def _get_fernet():
+        """返回配置了 BACKUP_ENCRYPTION_KEY 的 Fernet 实例；未配置则返回 None。
+
+        使用 cryptography 的 Fernet（AES-128-CBC + HMAC-SHA256，带认证），
+        这是真正的对称加密，而非用 hashlib 自制的弱方案。密钥必须是合法的
+        Fernet key（44 字符 urlsafe-base64），由运维用
+        `Fernet.generate_key()` 生成，避免从口令派生弱密钥。
+        """
+        key = (getattr(settings, 'BACKUP_ENCRYPTION_KEY', '') or '').strip()
+        if not key:
+            return None
+        try:
+            from cryptography.fernet import Fernet
+        except ImportError as exc:  # pragma: no cover - cryptography 已随环境安装
+            raise RuntimeError('已配置 BACKUP_ENCRYPTION_KEY 但缺少 cryptography 依赖，无法加密备份') from exc
+        try:
+            return Fernet(key.encode() if isinstance(key, str) else key)
+        except Exception as exc:
+            raise RuntimeError(
+                'BACKUP_ENCRYPTION_KEY 不是合法的 Fernet 密钥，请用 '
+                '`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` 生成'
+            ) from exc
+
+    @classmethod
+    def _encrypt_file(cls, fernet, path):
+        """加密 path 处的文件为 `<path>.enc`，删除明文原件，返回加密文件路径。"""
+        enc_path = f'{path}.enc'
+        with open(path, 'rb') as src:
+            token = fernet.encrypt(src.read())
+        with open(enc_path, 'wb') as dst:
+            dst.write(token)
+        os.remove(path)
+        return enc_path
+
+    @classmethod
+    def _decrypt_file(cls, fernet, path):
+        """解密 `<name>.enc` 为去掉 .enc 的文件，返回解密后路径。"""
+        if not path.endswith('.enc'):
+            return path
+        dec_path = path[:-4]  # 去掉 .enc
+        with open(path, 'rb') as src:
+            data = fernet.decrypt(src.read())
+        with open(dec_path, 'wb') as dst:
+            dst.write(data)
+        return dec_path
+
+    @staticmethod
     def get_db_config():
         """获取数据库配置"""
         db_settings = settings.DATABASES['default']
@@ -93,15 +140,24 @@ class BackupService:
             compressed_file = f'{backup_file}.gz'
             subprocess.run(['gzip', '-f', backup_file], check=True)
 
+            result_name = f'{backup_name}.sql.gz'
+
+            # 可选：加密压缩包（配置了 BACKUP_ENCRYPTION_KEY 时），落盘即密文
+            fernet = cls._get_fernet()
+            if fernet is not None:
+                compressed_file = cls._encrypt_file(fernet, compressed_file)
+                result_name = f'{result_name}.enc'
+
             # 获取文件大小
             file_size = os.path.getsize(compressed_file)
 
-            logger.info(f'Backup created: {compressed_file}, size: {file_size} bytes')
+            logger.info(f'Backup created: {compressed_file}, size: {file_size} bytes, encrypted: {fernet is not None}')
 
             return {
                 'file': compressed_file,
-                'name': f'{backup_name}.sql.gz',
+                'name': result_name,
                 'size': file_size,
+                'encrypted': fernet is not None,
                 'created_at': datetime.now().isoformat(),
             }
 
@@ -126,6 +182,13 @@ class BackupService:
         # 设置环境变量
         env = os.environ.copy()
         env['PGPASSWORD'] = db_config['password']
+
+        # 如果是加密文件，先解密为 .gz
+        if backup_file.endswith('.enc'):
+            fernet = cls._get_fernet()
+            if fernet is None:
+                raise Exception('该备份已加密，但未配置 BACKUP_ENCRYPTION_KEY，无法恢复')
+            backup_file = cls._decrypt_file(fernet, backup_file)
 
         # 如果是压缩文件，先解压
         if backup_file.endswith('.gz'):
@@ -173,7 +236,7 @@ class BackupService:
             return backups
 
         for filename in os.listdir(BACKUP_DIR):
-            if filename.endswith('.sql.gz') or filename.endswith('.sql'):
+            if filename.endswith('.sql.gz.enc') or filename.endswith('.sql.gz') or filename.endswith('.sql'):
                 filepath = os.path.join(BACKUP_DIR, filename)
                 stat = os.stat(filepath)
                 backups.append(

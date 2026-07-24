@@ -186,6 +186,39 @@ class RFQViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.M
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=False, methods=['post'])
+    def create_from_pr(self, request):
+        """从已审批的采购申请(PR)创建询价单，打通采购申请→询价比价链路"""
+        from .models import PurchaseRequest
+
+        pr_id = request.data.get('purchase_request_id')
+        if not pr_id:
+            return Response(
+                {'error': '请指定采购申请(purchase_request_id)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            pr = PurchaseRequest.objects.get(id=pr_id, is_deleted=False)
+        except PurchaseRequest.DoesNotExist:
+            return Response({'error': '采购申请不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        options = {
+            'rfq_type': request.data.get('rfq_type', 'NORMAL'),
+            'priority': request.data.get('priority', 'NORMAL'),
+            'deadline_days': request.data.get('deadline_days', 7),
+        }
+
+        try:
+            rfq = BatchRFQService.create_rfq_from_purchase_request(
+                pr, request.user,
+                supplier_ids=request.data.get('supplier_ids', []),
+                options=options,
+            )
+            return Response(RFQSerializer(rfq).data, status=status.HTTP_201_CREATED)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'])
     def batch_send(self, request):
         """批量发送询价单"""
         rfq_ids = request.data.get('rfq_ids', [])

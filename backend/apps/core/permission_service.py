@@ -50,6 +50,11 @@ SCOPE_PRIORITY = {
     'self': 2,
 }
 
+# The CRUD actions that operation-level enforcement understands. Only these are
+# ever restricted by has_operation_permission; any other (custom @action) verb is
+# left to the existing menu-level fallback so bespoke endpoints never regress.
+STANDARD_OPERATION_ACTIONS = ('view', 'create', 'edit', 'delete')
+
 
 def normalize_scope_type(scope_type: str, target: str = 'public') -> str:
     canonical = SCOPE_ALIAS_TO_PUBLIC.get(scope_type, scope_type)
@@ -168,6 +173,66 @@ def has_permission(user, permission_code: str) -> bool:
             return True
 
     return False
+
+
+def get_configured_operations(user, module: str, resource: str) -> Set[str]:
+    """
+    Return the subset of STANDARD_OPERATION_ACTIONS that the user's roles explicitly
+    hold as operation-level permissions for ``{module}:{resource}``.
+
+    Reads only from the cached permission-code set (get_user_permissions), so it adds
+    no database queries beyond the already-cached lookup.
+
+    A non-empty result means operation-level control is *configured* for this
+    (user, resource): the caller should enforce it. An empty result means no
+    operation permissions are seeded/assigned for this resource, which is the
+    historical default and signals "fall back to menu-level access".
+    """
+    if user is None or not user.is_authenticated:
+        return set()
+    perms = get_user_permissions(user)
+    prefix = f'{module}:{resource}:'
+    return {action for action in STANDARD_OPERATION_ACTIONS if prefix + action in perms}
+
+
+def has_operation_permission(user, module: str, resource: str, action: str):
+    """
+    Opt-in, additive operation-level permission check.
+
+    This is a tri-state helper that layers a *restriction* on top of the existing
+    menu-level authorization WITHOUT ever granting access the menu check wouldn't:
+
+    Returns:
+        True  -> the user's roles explicitly hold ``{module}:{resource}:{action}``
+                 (operation is allowed).
+        False -> operation-level control IS configured for this resource (the roles
+                 hold at least one CRUD operation permission for it) but NOT this
+                 specific action -> an explicit restriction is in force; the caller
+                 MUST deny even if menu-level access would otherwise allow.
+        None  -> no operation-level control is configured for this (user, resource),
+                 OR the action is not a standard CRUD verb, OR the user is anonymous.
+                 The caller falls back to the existing menu-level checks. This is the
+                 backward-compatible default: menu-only roles keep full CRUD.
+
+    Superusers always return True.
+
+    Enforcement is opt-in *per resource*: it only bites once a role has been given
+    operation permissions for that exact resource and then had a specific action
+    removed. init_permissions seeds these permissions and grants the full CRUD set
+    to every role that already has menu access, so out-of-the-box behavior is
+    unchanged; removing one action from a role is what activates a restriction.
+    """
+    if user is None or not user.is_authenticated:
+        return None
+    if user.is_superuser:
+        return True
+    if action not in STANDARD_OPERATION_ACTIONS:
+        return None
+
+    configured = get_configured_operations(user, module, resource)
+    if not configured:
+        return None
+    return action in configured
 
 
 def _get_role_user_ids(role) -> set:
@@ -400,28 +465,34 @@ def collect_permission_ids(selected_codes: List[str]) -> List[int]:
 
 def get_hidden_fields(user, module: str, resource: str) -> List[str]:
     """
-    Get list of field names that should be hidden for the user.
+    Return the field names that must be masked from this user for ``module:resource``.
+
+    A field is hidden when a field-level Permission (``type='field'``) is seeded for
+    this ``module:resource`` but NONE of the user's active roles hold it. This is the
+    field-level de-sensitization enforcement point consumed by
+    ``PermissionMixin.get_serializer`` (which drops the field from the serializer).
 
     Args:
         user: User instance
-        module: Module name (e.g., 'projects', 'sales')
-        resource: Resource identifier (e.g., 'purchase_order', 'project')
+        module: Module name (e.g., 'masterdata', 'inventory')
+        resource: Resource identifier (e.g., 'item', 'stock_move')
 
     Returns:
-        List of field names that should be hidden
+        List of field names to hide (empty means "show everything").
 
-    Notes:
-        - Returns empty list for superusers
-        - Checks field-level permissions for all user's roles
-        - Only returns fields where user does NOT have permission
+    Backward compatibility:
+        - Superusers and anonymous users -> [] (superuser sees all; anonymous is
+          denied earlier by the auth layer).
+        - If NO field permissions are seeded for this ``module:resource``, returns []
+          (no masking) — identical to the historical behavior. Field-level masking is
+          therefore inert until init_permissions seeds field permissions and grants
+          them to the roles allowed to see the field; removing a field permission from
+          a role is what masks that field for the role's users.
 
-    审计 C2 — 当前恒返回空列表（inert by design）：
-        本函数依赖 type='field' 的 Permission 记录，但 init_permissions 从不调用
-        field_perm()（详见该命令中的说明），数据库中没有任何字段权限，故下方查询恒为空，
-        字段脱敏在全系统不生效。本系统采用菜单级粒度授权；若将来要真正屏蔽敏感字段，需先
-        种子化字段权限并分配给角色，此函数无需改动即会随之生效。
+    Field permissions are matched by code prefix ``{module}:{resource}:`` so that
+    identically named resources in different modules do not cross-contaminate.
     """
-    # Handle None/unauthenticated user - hide all fields
+    # Handle None/unauthenticated user
     if user is None or not user.is_authenticated:
         return []
 
@@ -429,35 +500,35 @@ def get_hidden_fields(user, module: str, resource: str) -> List[str]:
     if user.is_superuser:
         return []
 
-    # Get user's roles (兼容旧 role FK 和新 roles M2M)
-    user_roles = get_active_user_roles(user)
-    if not user_roles.exists():
+    prefix = f'{module}:{resource}:'
+
+    # All field-level permissions seeded for this module:resource
+    defined_field_names = {
+        f
+        for f in Permission.objects.filter(
+            type='field', is_active=True, is_deleted=False, code__startswith=prefix
+        ).values_list('field_name', flat=True)
+        if f
+    }
+
+    # Backward compat: nothing configured -> no masking (current behavior)
+    if not defined_field_names:
         return []
 
-    # Get all field permissions for this resource
-    field_permissions = Permission.objects.filter(
-        type='field',
-        resource=resource,
-        is_active=True,
-        is_deleted=False
-    )
+    # Field permissions actually granted to the user's roles
+    user_roles = get_active_user_roles(user)
+    granted_field_names = set()
+    if user_roles.exists():
+        granted_field_names = set(
+            Permission.objects.filter(
+                role_permissions__role__in=user_roles,
+                type='field',
+                is_active=True,
+                is_deleted=False,
+                code__startswith=prefix,
+            ).values_list('field_name', flat=True)
+        )
 
-    # Get user's field permissions from all roles
-    user_field_permissions = set(
-        Permission.objects.filter(
-            role_permissions__role__in=user_roles,
-            type='field',
-            resource=resource,
-            is_active=True,
-            is_deleted=False
-        ).values_list('field_name', flat=True)
-    )
-
-    # Fields that user does NOT have permission to see
-    hidden_fields = []
-    for perm in field_permissions:
-        if perm.field_name and perm.field_name not in user_field_permissions:
-            hidden_fields.append(perm.field_name)
-
-    return hidden_fields
+    # Hide every configured field the user's roles were NOT granted
+    return [f for f in defined_field_names if f not in granted_field_names]
 

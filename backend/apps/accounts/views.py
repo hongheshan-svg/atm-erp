@@ -1,37 +1,87 @@
 """
 Views for accounts app.
 """
-from django.db import models
+import logging
+
 from django.conf import settings
-from rest_framework import viewsets, status, permissions
-from rest_framework.throttling import ScopedRateThrottle
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import update_session_auth_hash
+from django.db import models
+from rest_framework import permissions, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView
+
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.permission_mixin import PermissionMixin
 from apps.core.permission_service import has_permission
 from apps.core.permissions import IsSystemAdminOrReadOnly
-from .models import User, Role, Department
+from apps.core.security import PasswordPolicy, SecurityService
+
+from .models import Department, Role, User
 from .serializers import (
-    UserSerializer, UserCreateSerializer, UserUpdateSerializer,
-    RoleSerializer, DepartmentSerializer, ChangePasswordSerializer,
-    UserProfileSerializer, ProfileSelfUpdateSerializer
+    ChangePasswordSerializer,
+    DepartmentSerializer,
+    ProfileSelfUpdateSerializer,
+    RoleSerializer,
+    UserCreateSerializer,
+    UserProfileSerializer,
+    UserSerializer,
+    UserUpdateSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
-    """Custom JWT token serializer with user info."""
-    
+    """Custom JWT token serializer with user info, login logging and lockout.
+
+    安全加固：登录前先检查账户锁定（连续失败达阈值后锁定一段时间），
+    再交由父类做认证；成功/失败/锁定均写入 LoginLog 供安全审计。
+    失败信息统一为「用户名或密码错误」，不泄露具体是哪一项出错（防用户名枚举）。
+    锁定阈值/时长复用 apps.core.security 中既有的 PasswordPolicy（受 settings 配置）。
+    """
+
+    def _safe_log_login(self, username, status, failure_reason='', user=None):
+        """写登录日志，任何异常都不得中断登录流程本身。"""
+        request = self.context.get('request')
+        if request is None:
+            return
+        try:
+            SecurityService.log_login(
+                request, username, status, failure_reason=failure_reason, user=user
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning('登录日志写入失败: %s', exc)
+
     def validate(self, attrs):
-        data = super().validate(attrs)
-        
+        username = attrs.get(self.username_field, '') or ''
+
+        # 1) 认证前先检查是否已被锁定
+        is_locked, remaining = PasswordPolicy.check_account_lockout(username)
+        if is_locked:
+            self._safe_log_login(
+                username, 'LOCKED', failure_reason=f'账户锁定，剩余 {remaining} 分钟'
+            )
+            raise AuthenticationFailed(f'账户已锁定，请 {remaining} 分钟后重试', 'account_locked')
+
+        # 2) 交由父类做真正的认证
+        try:
+            data = super().validate(attrs)
+        except AuthenticationFailed:
+            self._safe_log_login(username, 'FAILED', failure_reason='用户名或密码错误')
+            # 统一失败信息，避免泄露具体失败原因（用户名不存在 vs 密码错误）
+            raise AuthenticationFailed('用户名或密码错误', 'no_active_account')
+
+        # 3) 认证成功
+        self._safe_log_login(username, 'SUCCESS', user=self.user)
+
         # Add user info to token response
         serializer = UserProfileSerializer(self.user)
         data['user'] = serializer.data
-        
+
         return data
 
 
@@ -253,7 +303,7 @@ class UserViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
         user.save(update_fields=['wechat_work_id'])
         
         return Response({
-            'message': f'企业微信ID已更新',
+            'message': '企业微信ID已更新',
             'wechat_work_id': user.wechat_work_id
         })
     
@@ -270,9 +320,9 @@ class UserViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        from django.conf import settings
+
         import requests
-        import time
+        from django.conf import settings
         
         corp_id = getattr(settings, 'WECHAT_WORK_CORP_ID', '')
         corp_secret = getattr(settings, 'WECHAT_WORK_CORP_SECRET', '')

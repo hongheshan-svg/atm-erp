@@ -282,6 +282,15 @@ class ProductionLogViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
             progress_percent=log.progress_percent,
         )
 
+        # 报工 -> 人工成本：按 工时 × 工种费率 生成人工成本明细
+        # 幂等 + 事务保护（savepoint），成本登记失败不影响报工主流程
+        from .labor_cost import post_labor_cost, resolve_work_type
+        process = getattr(plan_process, 'process', None)
+        plan = getattr(plan_process, 'plan', None)
+        project = getattr(plan, 'project', None)
+        work_type = resolve_work_type(getattr(process, 'process_type', None))
+        post_labor_cost(log, log.work_hours, work_type, self.request.user, project)
+
 
 class DebugRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """

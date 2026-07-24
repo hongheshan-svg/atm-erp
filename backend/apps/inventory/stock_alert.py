@@ -17,7 +17,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.db import models
-from django.db.models import Count, Sum
+from django.db.models import Count, F, Sum
 from django.utils import timezone
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
@@ -365,6 +365,121 @@ class StockAlertService:
             description=description,
             current_qty=current_qty,
             threshold_value=threshold_value,
+        )
+
+
+class ABCClassificationService:
+    """ABC 库存分类服务（按“年消耗金额”的 80/15/5 累计价值法）。
+
+    非标自动化行业用途：识别高价值物料(A)以重点管控库存/采购/盘点，低价值物料(C)可粗放管理。
+
+    - 消耗金额 = 期间内出库数量 × 出库单价（复用 StockMove 出库流水，Decimal 金额）。
+      仅统计已完成(status=COMPLETED)的消耗类出库(OUT_SALES / OUT_PROJECT)。
+    - 分级规则（经典 80/15/5）：按消耗金额降序累计，累计占比 ≤80% 为 A，≤95% 为 B，其余为 C。
+    - 结果为“计算派生”，默认不落库；如需持久化可写入既有字段 masterdata.Item.abc_class
+      （该字段已存在，无需迁移）。本服务不主动写库以保持无副作用、便于报表/其他模块调用。
+    """
+
+    # 累计价值分界：A ≤ 80%，B ≤ 95%，其余为 C
+    A_THRESHOLD = Decimal('0.80')
+    B_THRESHOLD = Decimal('0.95')
+
+    # 计入消耗的出库类型（销售出库、项目领料）
+    CONSUMPTION_MOVE_TYPES = ['OUT_SALES', 'OUT_PROJECT']
+
+    @staticmethod
+    def _consumption_queryset(period_days=365, warehouse_id=None, as_of=None):
+        from apps.inventory.models import StockMove
+
+        as_of = as_of or timezone.localdate()
+        start = as_of - timedelta(days=period_days)
+        qs = StockMove.objects.filter(
+            move_type__in=ABCClassificationService.CONSUMPTION_MOVE_TYPES,
+            status='COMPLETED',
+            move_date__gte=start,
+            move_date__lte=as_of,
+            is_deleted=False,
+        )
+        if warehouse_id:
+            qs = qs.filter(warehouse_from_id=warehouse_id)
+        return qs
+
+    @staticmethod
+    def compute(period_days=365, warehouse_id=None, as_of=None):
+        """返回按年消耗金额降序、并标注 A/B/C 的物料列表。
+
+        每项：{item_id, sku, name, annual_qty, annual_value, cumulative_ratio, abc_class}。
+        无消耗（金额 ≤ 0）的物料不参与分级（视为低价值/呆滞，调用方可默认按 C 处理）。
+        """
+        qs = ABCClassificationService._consumption_queryset(period_days, warehouse_id, as_of)
+        agg = (
+            qs.values('item_id', 'item__sku', 'item__name')
+            .annotate(annual_qty=Sum('qty'), annual_value=Sum(F('qty') * F('unit_cost')))
+            .order_by('-annual_value')
+        )
+
+        rows = [r for r in agg if (r['annual_value'] or Decimal('0')) > 0]
+        total_value = sum((r['annual_value'] for r in rows), Decimal('0'))
+
+        results = []
+        cumulative = Decimal('0')
+        for r in rows:
+            value = r['annual_value'] or Decimal('0')
+            cumulative += value
+            ratio = (cumulative / total_value) if total_value > 0 else Decimal('0')
+            if ratio <= ABCClassificationService.A_THRESHOLD:
+                abc = 'A'
+            elif ratio <= ABCClassificationService.B_THRESHOLD:
+                abc = 'B'
+            else:
+                abc = 'C'
+            results.append(
+                {
+                    'item_id': r['item_id'],
+                    'sku': r['item__sku'],
+                    'name': r['item__name'],
+                    'annual_qty': r['annual_qty'] or Decimal('0'),
+                    'annual_value': value,
+                    'cumulative_ratio': ratio,
+                    'abc_class': abc,
+                }
+            )
+        return results
+
+    @staticmethod
+    def classify(period_days=365, warehouse_id=None, as_of=None):
+        """返回 {item_id: 'A'/'B'/'C'} 映射，便于其他代码/报表直接引用。"""
+        return {
+            row['item_id']: row['abc_class']
+            for row in ABCClassificationService.compute(period_days, warehouse_id, as_of)
+        }
+
+    @staticmethod
+    def annotate_consumption_value(item_queryset, period_days=365, warehouse_id=None, as_of=None):
+        """给 Item 查询集标注期间消耗金额 consumption_value（便于报表按价值排序/筛选）。
+
+        说明：ABC 分级依赖跨物料的累计占比，无法用单条 SQL 注解完成，分级仍走 compute()；
+        本方法只提供“单物料消耗金额”注解这一轻量能力。
+        """
+        from django.db.models import DecimalField, OuterRef, Subquery
+
+        from apps.inventory.models import StockMove
+
+        as_of = as_of or timezone.localdate()
+        start = as_of - timedelta(days=period_days)
+        moves = StockMove.objects.filter(
+            item_id=OuterRef('pk'),
+            move_type__in=ABCClassificationService.CONSUMPTION_MOVE_TYPES,
+            status='COMPLETED',
+            move_date__gte=start,
+            move_date__lte=as_of,
+            is_deleted=False,
+        )
+        if warehouse_id:
+            moves = moves.filter(warehouse_from_id=warehouse_id)
+        value_sq = moves.values('item_id').annotate(v=Sum(F('qty') * F('unit_cost'))).values('v')
+        return item_queryset.annotate(
+            consumption_value=Subquery(value_sq, output_field=DecimalField(max_digits=18, decimal_places=2))
         )
 
 

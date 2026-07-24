@@ -306,6 +306,89 @@ class BatchRFQService:
         return rfq
 
     @classmethod
+    def create_rfq_from_purchase_request(cls, pr, user, supplier_ids: List[int] = None, options: Dict = None) -> RFQ:
+        """
+        从已审批的采购申请(PR)创建询价单(RFQ)，打通"采购申请→询价比价"链路。
+
+        规则:
+        - 仅允许 pr.status == 'APPROVED' 的采购申请转询价(否则 raise ValueError)。
+        - 每条未删除的采购申请明细生成一条 RFQLine，携带 item/qty/需求日期/规格说明/BOM关联。
+        - RFQ.project 继承自 pr.project；rfq_no 由 RFQ.save() 自动生成(与 create_rfq_from_bom 一致)。
+        - 可选 supplier_ids 作为受邀供应商写入 RFQSupplier。
+        - 非幂等: 允许对同一 PR 多次转询价(每次生成新的 RFQ)，由调用方按需控制。
+
+        Args:
+            pr: PurchaseRequest 实例
+            user: 当前用户
+            supplier_ids: 受邀供应商ID列表(可选)
+            options: 选项 {'rfq_type', 'priority', 'deadline_days'}
+
+        Returns:
+            新建的 RFQ 实例
+        """
+        options = options or {}
+        supplier_ids = supplier_ids or []
+
+        if pr.status != 'APPROVED':
+            raise ValueError('仅已审批(APPROVED)的采购申请可转询价')
+
+        pr_lines = list(pr.lines.filter(is_deleted=False).select_related('item', 'bom_item'))
+        if not pr_lines:
+            raise ValueError('采购申请无有效明细')
+
+        # 默认需求日期: 优先取 PR 明细/主表需求日期，否则 30 天后
+        fallback_required_date = pr.required_date or date.today() + timedelta(days=30)
+
+        with transaction.atomic():
+            rfq = RFQ.objects.create(
+                project=pr.project,
+                rfq_type=options.get('rfq_type', 'NORMAL'),
+                priority=options.get('priority', 'NORMAL'),
+                response_deadline=date.today() + timedelta(days=options.get('deadline_days', 7)),
+                notes=f'由采购申请 {pr.request_no} 转询价' + (f'\n{pr.notes}' if pr.notes else ''),
+                created_by=user,
+            )
+
+            for line in pr_lines:
+                # 从明细提取结构化技术规格(功能模块等)
+                technical_specs = {}
+                if line.function_module:
+                    technical_specs['功能模块'] = line.function_module
+
+                # 获取历史价格(可选参考)
+                last_price_record = (
+                    ItemPriceHistory.objects.filter(item=line.item, is_deleted=False)
+                    .order_by('-price_date')
+                    .first()
+                )
+
+                RFQLine.objects.create(
+                    rfq=rfq,
+                    item=line.item,
+                    qty=line.qty,
+                    required_date=line.required_date or fallback_required_date,
+                    specifications=line.notes or '',
+                    bom_item=line.bom_item,
+                    technical_specs=technical_specs,
+                    is_critical=line.is_critical,
+                    is_long_lead=line.is_long_lead,
+                    target_price=line.estimated_price if line.estimated_price else None,
+                    last_supplier_id=last_price_record.supplier_id if last_price_record else None,
+                    last_price=last_price_record.unit_price if last_price_record else None,
+                    created_by=user,
+                )
+
+            # 受邀供应商(去重)
+            for supplier_id in dict.fromkeys(supplier_ids):
+                RFQSupplier.objects.get_or_create(
+                    rfq=rfq, supplier_id=supplier_id, defaults={'created_by': user}
+                )
+
+            logger.info(f'Created RFQ {rfq.rfq_no} from purchase request {pr.request_no} with {len(pr_lines)} lines')
+
+        return rfq
+
+    @classmethod
     def _extract_technical_specs(cls, bom) -> Dict:
         """从BOM项提取技术规格"""
         specs = {}

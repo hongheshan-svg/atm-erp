@@ -937,6 +937,17 @@ const routes = [
         meta: { title: '银行流水', icon: 'CreditCard', menuId: 'finance:bank_statement' }
       },
       {
+        path: 'finance/payment-reconciliation',
+        name: 'PaymentReconciliationWorkbench',
+        component: () => import('@/views/finance/PaymentReconciliationWorkbench.vue'),
+        meta: {
+          title: '付款核销工作台',
+          icon: 'Connection',
+          permission: 'finance:payable_item:view',
+          menuId: 'finance:payment_reconciliation'
+        }
+      },
+      {
         path: 'finance/invoices',
         name: 'InvoiceList',
         component: () => import('@/views/finance/InvoiceList.vue'),

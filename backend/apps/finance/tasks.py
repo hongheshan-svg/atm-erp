@@ -8,6 +8,7 @@ from decimal import Decimal
 from celery import shared_task
 from django.conf import settings
 from django.core.mail import send_mail
+from django.core.management import call_command
 from django.utils import timezone
 
 
@@ -622,3 +623,21 @@ def check_purchase_payment_schedule_reminders():
     return (
         f'Sent purchase payment schedule reminders for {len(schedules_to_remind)} items, total: ¥{total_remaining:,.2f}'
     )
+
+
+@shared_task
+def backfill_payables_safety_net():
+    """
+    每日定时兜底:重跑 backfill_payables / backfill_contract_payables。
+
+    背景(问题 I-2):合同付款审批经工作流引擎完成时,apps.core.workflow.services
+    ._on_workflow_complete 外层 try/except 会吞掉 register_payable 抛出的异常、
+    仅 logger.error,可能导致 PaymentRecord 已 APPROVED 但待付款项台账静默缺失。
+    apps.purchase.signals 已加了失败告警通知,但告警只是"知道出了问题",本任务
+    才是真正的数据补齐兜底——两条 backfill 命令均为幂等(register_payable 走
+    update_or_create),重复执行不会产生重复台账项或覆盖已核销进度。
+    """
+    call_command('backfill_payables')
+    call_command('backfill_contract_payables')
+
+    return 'Ran backfill_payables and backfill_contract_payables safety net'

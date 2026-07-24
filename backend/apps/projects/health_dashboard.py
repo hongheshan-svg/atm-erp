@@ -134,18 +134,18 @@ class ProjectHealthService:
             return score, details
 
         # 完成率
-        details['completed_tasks'] = tasks.filter(status='DONE').count()
+        details['completed_tasks'] = tasks.filter(status='COMPLETED').count()
         details['completion_rate'] = round(details['completed_tasks'] / details['total_tasks'] * 100, 1)
 
         # 逾期任务
-        details['overdue_tasks'] = tasks.filter(status__in=['TODO', 'IN_PROGRESS'], due_date__lt=today).count()
+        details['overdue_tasks'] = tasks.filter(status__in=['TODO', 'IN_PROGRESS'], end_date__lt=today).count()
 
         # 进度偏差
         if project.end_date and project.start_date:
             total_days = (project.end_date - project.start_date).days or 1
             elapsed_days = (today - project.start_date).days
             expected_progress = min(100, elapsed_days / total_days * 100)
-            actual_progress = project.progress or 0
+            actual_progress = float(project.progress or 0)
             details['schedule_variance'] = actual_progress - expected_progress
 
         # 计算得分
@@ -185,7 +185,7 @@ class ProjectHealthService:
             details['budget_usage'] = round(details['actual_cost'] / details['budget_total'] * 100, 1)
 
             # 基于进度的预期成本
-            progress = project.progress or 0
+            progress = float(project.progress or 0)
             expected_cost = details['budget_total'] * progress / 100 if progress > 0 else 0
 
             if expected_cost > 0:
@@ -269,7 +269,7 @@ class ProjectHealthService:
         from apps.projects.models import Milestone
 
         details['overdue_milestones'] = Milestone.objects.filter(
-            project=project, is_deleted=False, status__in=['PENDING', 'IN_PROGRESS'], due_date__lt=today
+            project=project, is_deleted=False, status__in=['PENDING', 'IN_PROGRESS'], planned_date__lt=today
         ).count()
 
         # 计算得分

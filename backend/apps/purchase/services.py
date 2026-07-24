@@ -118,6 +118,23 @@ class BudgetValidationService:
         }
 
     @classmethod
+    def enforce_purchase_request(cls, project, request_amount, exclude_pr_id=None):
+        """事前预算控制（真正拦截）。
+
+        对项目材料预算做校验：超预算时抛 DRF ValidationError 直接拒绝申请，
+        而不是仅在只读字段里展示。无关联项目 / 未设材料预算 / 预算充足均放行。
+
+        返回 validate_purchase_request 的结果 dict（供调用方需要时读取余额等信息）。
+        """
+        result = cls.validate_purchase_request(project, request_amount, exclude_pr_id=exclude_pr_id)
+        if not result.get('valid', True):
+            # 局部导入，避免 services 模块与 DRF 的强耦合
+            from rest_framework import serializers as drf_serializers
+
+            raise drf_serializers.ValidationError({'budget': result['message']})
+        return result
+
+    @classmethod
     def get_project_budget_summary(cls, project):
         """
         Get a complete budget summary for a project.

@@ -183,11 +183,86 @@ class MRPLine(BaseModel):
 class MRPService:
     """MRP计算服务"""
 
+    # BOM 多级递归展开的最大层级保护，防止异常/环状数据造成的深链或死循环
+    _MAX_BOM_DEPTH = 50
+
+    @staticmethod
+    def _collect_requirements(project_ids, default_required_date):
+        """按项目汇总物料毛需求，支持多级 BOM（parent→children）递归展开。
+
+        本系统的多级 BOM 以 ProjectBOM 自关联(parent/children)表达，且每个节点的
+        planned_qty 均为“该项目所需的绝对数量”（与 BOMCostRollupService、Creo/CAD 导入
+        写入方式一致）。因此展开时对每个 BOM 行的 planned_qty 只累加一次，即得到完整的
+        多级毛需求；不能再乘 unit_qty，否则会与既有的绝对数量约定冲突而重复计数。
+
+        安全性：visited 集合防止环路、_MAX_BOM_DEPTH 限制递归深度；父级已软删/跨项目的
+        “孤儿行”作为根节点纳入，环路导致无根的行由末尾安全网补计，确保每行恰好计一次、
+        既不漏计也不重复。
+        """
+        from apps.projects.models import ProjectBOM
+
+        bom_rows = list(
+            ProjectBOM.objects.filter(project_id__in=project_ids, is_deleted=False).select_related(
+                'item', 'project', 'parent'
+            )
+        )
+        rows_by_id = {row.id: row for row in bom_rows}
+        children_map = {}
+        for row in bom_rows:
+            children_map.setdefault(row.parent_id, []).append(row)
+
+        requirements = {}
+        visited = set()
+
+        def _accumulate(row):
+            if not row.item:
+                return
+            item_id = row.item_id
+            if item_id not in requirements:
+                requirements[item_id] = {
+                    'item': row.item,
+                    'gross_qty': Decimal('0'),
+                    'required_date': default_required_date,
+                    'sources': [],
+                }
+            requirements[item_id]['gross_qty'] += row.planned_qty or Decimal('0')
+            requirements[item_id]['sources'].append(
+                {
+                    'project_id': row.project_id,
+                    'project_name': row.project.name if row.project else '',
+                    'bom_id': row.id,
+                    'qty': row.planned_qty,
+                }
+            )
+            # 使用最早的需求日期
+            if row.required_date and row.required_date < requirements[item_id]['required_date']:
+                requirements[item_id]['required_date'] = row.required_date
+
+        def _walk(row, depth):
+            if row.id in visited or depth > MRPService._MAX_BOM_DEPTH:
+                return
+            visited.add(row.id)
+            _accumulate(row)
+            for child in children_map.get(row.id, []):
+                _walk(child, depth + 1)
+
+        # 根节点：无父级，或父级不在本次集合内（跨项目 / 父级已软删）
+        for row in bom_rows:
+            if row.parent_id is None or row.parent_id not in rows_by_id:
+                _walk(row, 0)
+
+        # 安全网：环路导致“无根”的行仍逐一纳入（visited 去重，保证每行只计一次）
+        for row in bom_rows:
+            if row.id not in visited:
+                _walk(row, 0)
+
+        return requirements
+
     @staticmethod
     def calculate_plan(plan: MRPPlan):
         """计算MRP计划"""
         from apps.inventory.models import Stock
-        from apps.projects.models import Project, ProjectBOM
+        from apps.projects.models import Project
         from apps.purchase.models import PurchaseOrderLine
 
         # 清除旧的计算结果
@@ -205,39 +280,8 @@ class MRPService:
             )
             project_ids = list(projects.values_list('id', flat=True))
 
-        # 汇总BOM需求
-        requirements = {}
-
-        bom_items = ProjectBOM.objects.filter(project_id__in=project_ids, is_deleted=False).select_related(
-            'item', 'project'
-        )
-
-        for bom in bom_items:
-            if not bom.item:
-                continue
-
-            item_id = bom.item_id
-            if item_id not in requirements:
-                requirements[item_id] = {
-                    'item': bom.item,
-                    'gross_qty': Decimal('0'),
-                    'required_date': plan.end_date,
-                    'sources': [],
-                }
-
-            requirements[item_id]['gross_qty'] += bom.planned_qty or Decimal('0')
-            requirements[item_id]['sources'].append(
-                {
-                    'project_id': bom.project_id,
-                    'project_name': bom.project.name if bom.project else '',
-                    'bom_id': bom.id,
-                    'qty': bom.planned_qty,
-                }
-            )
-
-            # 使用最早的需求日期
-            if bom.required_date and bom.required_date < requirements[item_id]['required_date']:
-                requirements[item_id]['required_date'] = bom.required_date
+        # 汇总BOM需求（多级展开：沿 ProjectBOM.parent→children 递归，带环路/深度保护）
+        requirements = MRPService._collect_requirements(project_ids, default_required_date=plan.end_date)
 
         # 获取库存和在途信息
         lines_to_create = []
@@ -247,10 +291,19 @@ class MRPService:
         for item_id, req in requirements.items():
             item = req['item']
 
-            # 获取在库数量
-            on_hand = Stock.objects.filter(item_id=item_id, is_deleted=False).aggregate(total=Sum('qty_on_hand'))[
-                'total'
-            ] or Decimal('0')
+            # 获取在库数量与已预留量。
+            # 专料专用（审计 gap a）：已预留给其他项目/订单的库存（qty_reserved）不计入本计划
+            # 可用量，否则会把别处预留的料当作本项目可用，导致缺口被低估。可用在库 = 在库 - 预留，
+            # 与 masterdata/projects 现有 “可用 = Sum(qty_on_hand) - Sum(qty_reserved)” 约定一致。
+            # 残留：Stock 维度为 warehouse+item，无 project 维度；MRPPlan 亦无目标仓库字段，
+            # 因此真正的“按项目/按仓库库存隔离”需要 schema 变更（Stock 增 project 或 MRPPlan 增
+            # 目标仓库）。此处以可表达的“预留扣减”实现，剩余隔离作为残留风险记录。
+            stock_agg = Stock.objects.filter(item_id=item_id, is_deleted=False).aggregate(
+                on_hand=Sum('qty_on_hand'), reserved=Sum('qty_reserved')
+            )
+            on_hand = stock_agg['on_hand'] or Decimal('0')
+            reserved = stock_agg['reserved'] or Decimal('0')
+            on_hand_available = on_hand - reserved
 
             # 获取已分配数量（已提交但未完成出库的领料申请）
             # 领料单审批后状态置为 PENDING（待备料），不会出现 APPROVED；
@@ -269,11 +322,13 @@ class MRPService:
                 item_id=item_id, po__status__in=['APPROVED', 'CONFIRMED', 'PARTIAL'], is_deleted=False
             ).aggregate(total=Sum(F('qty') - F('received_qty')))['total'] or Decimal('0')
 
-            # 安全库存
-            safety_stock = (item.safety_stock or Decimal('0')) * plan.safety_stock_factor
+            # 安全库存（safety_stock_factor 可能是 float，须转 Decimal 避免 Decimal*float 报错）
+            factor = plan.safety_stock_factor
+            factor = Decimal(str(factor)) if factor is not None else Decimal('1')
+            safety_stock = (item.safety_stock or Decimal('0')) * factor
 
-            # 计算净需求
-            available = on_hand - allocated + on_order
+            # 计算净需求（可用在库已扣除预留量）
+            available = on_hand_available - allocated + on_order
             net_requirement = req['gross_qty'] + safety_stock - available
             net_requirement = max(net_requirement, Decimal('0'))
 
@@ -287,6 +342,11 @@ class MRPService:
             # 建议日期（考虑提前期）
             lead_time = item.lead_time or 7
             suggested_date = req['required_date'] - timedelta(days=int(lead_time * float(plan.lead_time_factor)))
+            # 建议日期不得早于今天：需求日期临近或已过期时，按提前期倒推可能落到过去，
+            # 生成过去日期的采购建议无意义（审计指出的历史问题）——下限收敛到今天。
+            today = timezone.localdate()
+            if suggested_date < today:
+                suggested_date = today
 
             # 单价和金额
             unit_price = item.purchase_price or Decimal('0')
@@ -301,7 +361,9 @@ class MRPService:
                 required_date=req['required_date'],
                 gross_requirement=req['gross_qty'],
                 on_hand_qty=on_hand,
-                allocated_qty=allocated,
+                # allocated_qty 记录“已被占用而不可用”的总量 = 领料在途(allocated) + 库存预留(reserved)，
+                # 使明细口径与净需求一致：可用 = on_hand_qty - allocated_qty + on_order_qty。
+                allocated_qty=allocated + reserved,
                 on_order_qty=on_order,
                 safety_stock=safety_stock,
                 net_requirement=net_requirement,

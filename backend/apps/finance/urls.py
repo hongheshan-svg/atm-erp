@@ -11,6 +11,7 @@ from .accounting import (
     AccountBalanceViewSet,
     AccountCategoryViewSet,
     ChartOfAccountViewSet,
+    FinancialStatementViewSet,
     FiscalPeriodViewSet,
     JournalVoucherViewSet,
 )
@@ -22,6 +23,7 @@ from .asset import (
     FixedAssetViewSet,
 )
 from .bank_statement_views import BankStatementImportLogViewSet, BankStatementViewSet
+from .payable_views import PayableItemViewSet, PayableReconcileViewSet
 from .collection_views import (
     CollectionMilestoneViewSet,
     CollectionPlanViewSet,
@@ -67,6 +69,10 @@ router.register(r'invoice-reconciliations', InvoiceReconciliationViewSet, basena
 router.register(r'bank-statements', BankStatementViewSet, basename='bank-statement')
 router.register(r'bank-statement-logs', BankStatementImportLogViewSet, basename='bank-statement-log')
 
+# 统一核销台账(工作台)
+router.register(r'payable-items', PayableItemViewSet, basename='payable-item')
+router.register(r'payable-reconcile', PayableReconcileViewSet, basename='payable-reconcile')
+
 # 付款计划
 router.register(r'payment-schedules', PaymentScheduleViewSet, basename='payment-schedule')
 router.register(r'purchase-payment-schedules', PurchasePaymentScheduleViewSet, basename='purchase-payment-schedule')
@@ -93,6 +99,9 @@ router.register(r'chart-of-accounts', ChartOfAccountViewSet, basename='chart-of-
 router.register(r'fiscal-periods', FiscalPeriodViewSet, basename='fiscal-period')
 router.register(r'journal-vouchers', JournalVoucherViewSet, basename='journal-voucher')
 router.register(r'account-balances', AccountBalanceViewSet, basename='account-balance')
+
+# 财务报表(资产负债表 / 利润表 / 现金流量表)+ 科目表种子
+router.register(r'financial-statements', FinancialStatementViewSet, basename='financial-statement')
 
 # 税务管理
 router.register(r'tax-types', TaxTypeViewSet, basename='tax-type')

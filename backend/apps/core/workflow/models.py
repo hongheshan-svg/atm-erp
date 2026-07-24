@@ -86,6 +86,7 @@ class WorkflowStep(BaseModel):
         ('APPROVE', '审批'),
         ('REVIEW', '审核'),
         ('COUNTERSIGN', '会签'),
+        ('OR_SIGN', '或签'),
     ]
 
     workflow = models.ForeignKey(
@@ -220,6 +221,9 @@ class WorkflowTask(BaseModel):
         ('PENDING', '待处理'),
         ('APPROVED', '已通过'),
         ('REJECTED', '已拒绝'),
+        # 退回指定步 (退回): 区别于 REJECTED(整单拒绝)。当审批人把单据退回到更早的
+        # 步骤重审时，当前任务标记为 RETURNED，实例保持审批中 (PENDING) 而非整单结束。
+        ('RETURNED', '已退回'),
         ('SKIPPED', '已跳过'),
         ('TIMEOUT', '已超时'),
     ]

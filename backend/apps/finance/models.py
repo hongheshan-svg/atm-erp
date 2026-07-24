@@ -3,8 +3,38 @@ Finance models for expenses, receivables, and payables.
 
 注意: 使用字符串引用替代直接导入以避免循环依赖
 """
-from django.db import models
+from django.db import models, transaction
+
 from apps.core.models import BaseModel
+
+
+def _generate_dated_sequence_no(prefix, rule_type, rule_name):
+    """并发安全地生成 "前缀 + YYYYMMDD + 4 位日流水" 格式的业务单号。
+
+    复用 core 的 CodeRule 生成器(内部 ``select_for_update`` 锁定单一计数行,天然抗
+    并发),取代原先 "查询当前 max + 1" 的无锁写法——后者在并发创建时会读到同一个
+    max,拼出相同单号,撞 ``unique`` 约束抛 IntegrityError。
+
+    首次调用按与历史完全一致的格式参数(固定前缀 / YYYYMMDD / 4 位 / 每日重置 /
+    无分隔符)自动建规则,因此产出与旧逻辑 ``f'{prefix}{YYYYMMDD}{seq:04d}'`` 完全
+    同形(如 ``AR202607080001``),不改变既有编号格式。
+    """
+    from apps.core.code_rule_models import CodeRule
+    from apps.core.utils import generate_code
+
+    CodeRule.objects.get_or_create(
+        rule_type=rule_type,
+        defaults={
+            'rule_name': rule_name,
+            'prefix': prefix,
+            'date_format': 'YYYYMMDD',
+            'seq_length': 4,
+            'seq_start': 1,
+            'reset_mode': 'DAILY',
+            'separator': '',
+        },
+    )
+    return generate_code(prefix, rule_type=rule_type)
 
 
 class Currency(BaseModel):
@@ -174,7 +204,7 @@ class AccountReceivable(BaseModel):
         ('CANCELLED', '已取消'),
     ]
     
-    ar_no = models.CharField(max_length=50, unique=True, verbose_name='应收单号')
+    ar_no = models.CharField(max_length=50, verbose_name='应收单号')
     customer = models.ForeignKey(
         'masterdata.Customer',
         on_delete=models.PROTECT,
@@ -225,7 +255,21 @@ class AccountReceivable(BaseModel):
         verbose_name = '应收账款'
         verbose_name_plural = verbose_name
         ordering = ['-invoice_date']
-    
+        # 逾期扫描(status+due_date)、客户账龄、发票日期排序为高频查询(审计 P1 索引缺失)
+        indexes = [
+            models.Index(fields=['status', 'due_date']),
+            models.Index(fields=['customer', 'status']),
+            models.Index(fields=['-invoice_date']),
+        ]
+        # 条件唯一:仅未软删行内单号唯一,软删后可复用(审计 P1/P2)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['ar_no'],
+                condition=models.Q(is_deleted=False),
+                name='uq_account_receivable_ar_no_active',
+            ),
+        ]
+
     def __str__(self):
         return self.ar_no
     
@@ -234,24 +278,20 @@ class AccountReceivable(BaseModel):
         return self.amount_due - self.amount_paid
     
     def save(self, *args, **kwargs):
-        # Auto-generate ar_no
+        # Auto-generate ar_no(并发安全:走 CodeRule 锁定计数行,格式保持不变)
         if not self.ar_no:
-            from django.utils import timezone
-            date_str = timezone.now().strftime('%Y%m%d')
-            last_ar = AccountReceivable.objects.filter(ar_no__startswith=f'AR{date_str}').order_by('-ar_no').first()
-            if last_ar:
-                last_seq = int(last_ar.ar_no[-4:])
-                new_seq = last_seq + 1
-            else:
-                new_seq = 1
-            self.ar_no = f'AR{date_str}{new_seq:04d}'
-        
+            self.ar_no = _generate_dated_sequence_no('AR', 'ACCOUNT_RECEIVABLE', '应收单号')
+
         # Update status based on payment
         if self.amount_paid >= self.amount_due:
             self.status = 'PAID'
         elif self.amount_paid > 0:
             self.status = 'PARTIAL'
-        
+        elif self.status in ('PAID', 'PARTIAL'):
+            # 已收金额被回退到 0(如付款删除/反核销):从付款派生状态退回 PENDING,
+            # 不影响 OVERDUE/CANCELLED 等非付款派生状态。
+            self.status = 'PENDING'
+
         super().save(*args, **kwargs)
 
 
@@ -267,7 +307,7 @@ class AccountPayable(BaseModel):
         ('CANCELLED', '已取消'),
     ]
     
-    ap_no = models.CharField(max_length=50, unique=True, verbose_name='应付单号')
+    ap_no = models.CharField(max_length=50, verbose_name='应付单号')
     supplier = models.ForeignKey(
         'masterdata.Supplier',
         on_delete=models.PROTECT,
@@ -318,7 +358,21 @@ class AccountPayable(BaseModel):
         verbose_name = '应付账款'
         verbose_name_plural = verbose_name
         ordering = ['-invoice_date']
-    
+        # 逾期扫描(status+due_date)、供应商账龄、发票日期排序为高频查询(审计 P1 索引缺失)
+        indexes = [
+            models.Index(fields=['status', 'due_date']),
+            models.Index(fields=['supplier', 'status']),
+            models.Index(fields=['-invoice_date']),
+        ]
+        # 条件唯一:仅未软删行内单号唯一,软删后可复用(审计 P1/P2)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['ap_no'],
+                condition=models.Q(is_deleted=False),
+                name='uq_account_payable_ap_no_active',
+            ),
+        ]
+
     def __str__(self):
         return self.ap_no
     
@@ -327,24 +381,20 @@ class AccountPayable(BaseModel):
         return self.amount_due - self.amount_paid
     
     def save(self, *args, **kwargs):
-        # Auto-generate ap_no
+        # Auto-generate ap_no(并发安全:走 CodeRule 锁定计数行,格式保持不变)
         if not self.ap_no:
-            from django.utils import timezone
-            date_str = timezone.now().strftime('%Y%m%d')
-            last_ap = AccountPayable.objects.filter(ap_no__startswith=f'AP{date_str}').order_by('-ap_no').first()
-            if last_ap:
-                last_seq = int(last_ap.ap_no[-4:])
-                new_seq = last_seq + 1
-            else:
-                new_seq = 1
-            self.ap_no = f'AP{date_str}{new_seq:04d}'
-        
+            self.ap_no = _generate_dated_sequence_no('AP', 'ACCOUNT_PAYABLE', '应付单号')
+
         # Update status based on payment
         if self.amount_paid >= self.amount_due:
             self.status = 'PAID'
         elif self.amount_paid > 0:
             self.status = 'PARTIAL'
-        
+        elif self.status in ('PAID', 'PARTIAL'):
+            # 已付金额被回退到 0(如反核销):从付款派生状态退回 PENDING,
+            # 不影响 OVERDUE/CANCELLED 等非付款派生状态。
+            self.status = 'PENDING'
+
         super().save(*args, **kwargs)
 
 
@@ -353,6 +403,7 @@ class Payment(BaseModel):
     PAYMENT_TYPE_CHOICES = [
         ('AR', '应收款'),
         ('AP', '应付款'),
+        ('PAYABLE', '待付款项'),
     ]
     
     PAYMENT_METHOD_CHOICES = [
@@ -363,7 +414,7 @@ class Payment(BaseModel):
         ('OTHER', '其他'),
     ]
     
-    payment_no = models.CharField(max_length=50, unique=True, verbose_name='付款单号')
+    payment_no = models.CharField(max_length=50, verbose_name='付款单号')
     payment_type = models.CharField(max_length=10, choices=PAYMENT_TYPE_CHOICES, verbose_name='付款类型')
     ar = models.ForeignKey(
         AccountReceivable,
@@ -380,6 +431,14 @@ class Payment(BaseModel):
         blank=True,
         related_name='payments',
         verbose_name='应付账款'
+    )
+    payable_item = models.ForeignKey(
+        'finance.PayableItem',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='payments',
+        verbose_name='待付款项',
     )
     payment_date = models.DateField(verbose_name='付款日期')
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, verbose_name='付款方式')
@@ -407,7 +466,15 @@ class Payment(BaseModel):
         verbose_name = '付款记录'
         verbose_name_plural = verbose_name
         ordering = ['-payment_date']
-    
+        # 条件唯一:仅未软删行内单号唯一,软删后可复用(审计 P1/P2)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['payment_no'],
+                condition=models.Q(is_deleted=False),
+                name='uq_payment_payment_no_active',
+            ),
+        ]
+
     def __str__(self):
         return self.payment_no
     
@@ -417,7 +484,11 @@ class Payment(BaseModel):
         if not self.payment_no:
             from django.utils import timezone
             date_str = timezone.now().strftime('%Y%m%d')
-            last_payment = Payment.objects.filter(payment_no__startswith=f'PAY{date_str}').order_by('-payment_no').first()
+            # 用 all_objects 计最大序号：payment_no 唯一约束含软删行,若只按未删行取最大,
+            # 软删后当日再建付款会复用序号触发 UNIQUE 冲突(如回款反核销后重新确认)。
+            last_payment = Payment.all_objects.filter(
+                payment_no__startswith=f'PAY{date_str}'
+            ).order_by('-payment_no').first()
             if last_payment:
                 last_seq = int(last_payment.payment_no[-4:])
                 new_seq = last_seq + 1
@@ -428,15 +499,64 @@ class Payment(BaseModel):
         super().save(*args, **kwargs)
 
         if is_new:
-            from django.db.models import F
+            # 与 _reverse_target 对称:加锁读改写并经 save() 重算目标单据状态
+            # （原实现用 .update(F()) 只加金额、不重算 status，导致部分付款后单据仍停留 PENDING）。
             if self.ar_id:
-                AccountReceivable.objects.filter(pk=self.ar_id).update(
-                    amount_paid=F('amount_paid') + self.amount
-                )
+                with transaction.atomic():
+                    ar = AccountReceivable.objects.select_for_update().get(pk=self.ar_id)
+                    ar.amount_paid = ar.amount_paid + self.amount
+                    ar.save(update_fields=['amount_paid', 'status', 'updated_at'])
             elif self.ap_id:
-                AccountPayable.objects.filter(pk=self.ap_id).update(
-                    amount_paid=F('amount_paid') + self.amount
-                )
+                with transaction.atomic():
+                    ap = AccountPayable.objects.select_for_update().get(pk=self.ap_id)
+                    ap.amount_paid = ap.amount_paid + self.amount
+                    ap.save(update_fields=['amount_paid', 'status', 'updated_at'])
+            elif self.payable_item_id:
+                from apps.finance.payable_models import PayableItem
+                with transaction.atomic():
+                    item = PayableItem.objects.select_for_update().get(pk=self.payable_item_id)
+                    item.amount_paid = item.amount_paid + self.amount
+                    item.recalc_status()
+                    item.save(update_fields=['amount_paid', 'status', 'updated_at'])
+
+    def _reverse_target(self):
+        """回退本付款记录对目标 AR/AP/待付款项 已收(付)金额的累加,并重算状态。
+
+        与 save() 中新建付款时的 F() 累加对称。须在 transaction.atomic 内调用,
+        对目标行加锁 (select_for_update) 后再改写,保证并发安全。
+        """
+        if self.ar_id:
+            ar = AccountReceivable.objects.select_for_update().get(pk=self.ar_id)
+            ar.amount_paid = ar.amount_paid - self.amount
+            ar.save(update_fields=['amount_paid', 'status', 'updated_at'])
+        elif self.ap_id:
+            ap = AccountPayable.objects.select_for_update().get(pk=self.ap_id)
+            ap.amount_paid = ap.amount_paid - self.amount
+            ap.save(update_fields=['amount_paid', 'status', 'updated_at'])
+        elif self.payable_item_id:
+            from apps.finance.payable_models import PayableItem
+            item = PayableItem.objects.select_for_update().get(pk=self.payable_item_id)
+            item.amount_paid = item.amount_paid - self.amount
+            item.recalc_status()
+            item.save(update_fields=['amount_paid', 'status', 'updated_at'])
+
+    def soft_delete(self):
+        """软删除付款记录时回退目标账款金额并重算状态。
+
+        幂等:已软删除的记录金额已被回退,直接返回,绝不重复回退。
+        """
+        if self.is_deleted:
+            return
+        with transaction.atomic():
+            self._reverse_target()
+            super().soft_delete()
+
+    def delete(self, *args, **kwargs):
+        """硬删除同样回退目标账款金额;若此前已软删除则金额已回退,不再重复回退。"""
+        with transaction.atomic():
+            if not self.is_deleted:
+                self._reverse_target()
+            return super().delete(*args, **kwargs)
 
 
 class PaymentSchedule(BaseModel):
@@ -622,9 +742,10 @@ class PaymentSchedule(BaseModel):
         """
         根据销售订单的付款条款自动生成付款计划。
         """
-        from django.utils import timezone
-        from decimal import Decimal
         from datetime import timedelta
+        from decimal import Decimal
+
+        from django.utils import timezone
         
         # 付款条款到付款计划的映射
         PAYMENT_TERMS_MAP = {
@@ -681,7 +802,6 @@ class PaymentSchedule(BaseModel):
         }
         
         # 软删除旧的付款计划
-        from django.utils import timezone
         cls.objects.filter(sales_order=sales_order, is_deleted=False).update(
             is_deleted=True, deleted_at=timezone.now()
         )
@@ -912,9 +1032,10 @@ class PurchasePaymentSchedule(BaseModel):
         """
         根据采购订单的付款条款自动生成付款计划。
         """
-        from django.utils import timezone
-        from decimal import Decimal
         from datetime import timedelta
+        from decimal import Decimal
+
+        from django.utils import timezone
         
         # 付款条款到付款计划的映射
         PAYMENT_TERMS_MAP = {
@@ -945,7 +1066,6 @@ class PurchasePaymentSchedule(BaseModel):
         }
         
         # 软删除旧的付款计划
-        from django.utils import timezone
         cls.objects.filter(purchase_order=purchase_order, is_deleted=False).update(
             is_deleted=True, deleted_at=timezone.now()
         )
@@ -1024,7 +1144,7 @@ class Invoice(BaseModel):
     ]
     
     invoice_type = models.CharField(max_length=10, choices=INVOICE_TYPE_CHOICES, verbose_name='发票类型')
-    invoice_no = models.CharField(max_length=50, unique=True, verbose_name='发票号')
+    invoice_no = models.CharField(max_length=50, verbose_name='发票号')
     invoice_code = models.CharField(max_length=50, blank=True, verbose_name='发票代码')
     digital_invoice_no = models.CharField(max_length=50, blank=True, verbose_name='数电发票号码')
     invoice_date = models.DateTimeField(verbose_name='开票日期')
@@ -1067,7 +1187,26 @@ class Invoice(BaseModel):
         related_name='invoices',
         verbose_name='关联项目'
     )
-    
+
+    # 勾稽关联 - 发货→开票→应收 事件驱动链路的单据勾稽(审计缺口:Invoice 与 SO/发货无勾稽)
+    # 结构化外键取代原先仅有的 reference_type/reference_id 弱关联,便于反查与幂等。
+    sales_order = models.ForeignKey(
+        'sales.SalesOrder',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='invoices',
+        verbose_name='关联销售订单'
+    )
+    delivery_order = models.ForeignKey(
+        'sales.DeliveryOrder',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='invoices',
+        verbose_name='关联发货单'
+    )
+
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='REGISTERED', verbose_name='状态')
     notes = models.TextField(blank=True, verbose_name='备注')
     
@@ -1076,7 +1215,15 @@ class Invoice(BaseModel):
         verbose_name = '发票'
         verbose_name_plural = verbose_name
         ordering = ['-invoice_date', '-id']
-    
+        # 条件唯一:仅未软删行内单号唯一,软删后可复用(审计 P1/P2)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['invoice_no'],
+                condition=models.Q(is_deleted=False),
+                name='uq_invoice_invoice_no_active',
+            ),
+        ]
+
     def __str__(self):
         return f"{self.invoice_no}"
     
@@ -1377,22 +1524,36 @@ class PaymentRequest(BaseModel):
 
 
 # Import additional models for Django discovery
+# Import models from accounting
 from .bank_statement_models import BankStatement, BankStatementImportLog  # noqa: E402, F401
+
+# Import payable ledger models (payable_models.py) for Django discovery
+from .payable_models import PayableItem, PayableSettlement  # noqa: E402,F401
 from .reconciliation_models import (  # noqa: E402, F401
-    PurchaseReconciliation, PurchaseReconciliationLine,
-    SalesReconciliation, SalesReconciliationLine,
-    InvoiceReconciliation, InvoiceReconciliationLine
+    InvoiceReconciliation,
+    InvoiceReconciliationLine,
+    PurchaseReconciliation,
+    PurchaseReconciliationLine,
+    SalesReconciliation,
+    SalesReconciliationLine,
 )
 
-
-# Import models from accounting
-from .accounting import (
-    AccountCategory, ChartOfAccount, FiscalPeriod,
-    JournalVoucher, VoucherLine, AccountBalance
+# Import models from accounting (registration + re-export for Django discovery)
+from .accounting import (  # noqa: E402, F401
+    AccountBalance,
+    AccountCategory,
+    ChartOfAccount,
+    FiscalPeriod,
+    JournalVoucher,
+    VoucherLine,
 )
 
 # Import models from tax_management
-from .tax_management import (
-    TaxType, TaxRate, TaxPeriod,
-    TaxDeclaration, TaxDeclarationItem, TaxInvoice
+from .tax_management import (  # noqa: E402, F401
+    TaxDeclaration,
+    TaxDeclarationItem,
+    TaxInvoice,
+    TaxPeriod,
+    TaxRate,
+    TaxType,
 )

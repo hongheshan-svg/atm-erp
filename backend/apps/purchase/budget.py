@@ -6,7 +6,7 @@ Purchase Budget Management
 
 from decimal import Decimal
 
-from django.db import models
+from django.db import models, transaction
 from django.db.models import F, Sum
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
@@ -206,34 +206,42 @@ class BudgetUsageRecord(BaseModel):
 
 
 class BudgetService:
-    """预算服务"""
+    """预算服务
+
+    消费/预留/释放三个动作均：
+    - 用 select_for_update() 锁住预算行，把「检查余额 + 落记录 + 累加金额」放进一个事务，
+      消除审计里指出的 check->use TOCTOU（两笔并发申请同时通过检查后双双消费）。
+    - 幂等：以 (usage_type, reference_no, reference_id, is_reserved) 归一，重复调用不会二次消费，
+      因此可安全地挂在「订单确认/取消」这类可能被重复触发的钩子上。
+    """
 
     @staticmethod
-    def check_budget(
-        project_id: int = None, department_id: int = None, amount: Decimal = 0, category: str = None
-    ) -> dict:
-        """
-        检查预算
-        返回：{available: bool, message: str, budget: Budget, available_amount: Decimal}
-        """
+    def _find_active_budget(project_id: int = None, department_id: int = None):
+        """查找当前生效（APPROVED/ACTIVE 且在有效期内）的采购预算。"""
         from datetime import date
 
         today = date.today()
-
-        # 查找适用的预算
         filters = {
             'status__in': ['APPROVED', 'ACTIVE'],
             'start_date__lte': today,
             'end_date__gte': today,
             'is_deleted': False,
         }
-
         if project_id:
             filters['project_id'] = project_id
         if department_id:
             filters['department_id'] = department_id
+        return PurchaseBudget.objects.filter(**filters).first()
 
-        budget = PurchaseBudget.objects.filter(**filters).first()
+    @classmethod
+    def check_budget(
+        cls, project_id: int = None, department_id: int = None, amount: Decimal = 0, category: str = None
+    ) -> dict:
+        """
+        检查预算
+        返回：{available: bool, message: str, budget: Budget, available_amount: Decimal}
+        """
+        budget = cls._find_active_budget(project_id, department_id)
 
         if not budget:
             return {'available': True, 'message': '无适用预算，跳过预算检查', 'budget': None, 'available_amount': None}
@@ -260,7 +268,68 @@ class BudgetService:
         return {'available': True, 'message': '预算充足', 'budget': budget, 'available_amount': available}
 
     @staticmethod
+    def consume_budget(
+        budget_id: int,
+        amount: Decimal,
+        usage_type: str = 'PURCHASE_ORDER',
+        reference_no: str = '',
+        reference_id: int = None,
+        budget_line_id: int = None,
+        description: str = '',
+        user=None,
+        enforce: bool = False,
+    ) -> BudgetUsageRecord:
+        """原子消费预算（check + use 合一，select_for_update 锁行避免 TOCTOU）。
+
+        幂等：同一 (usage_type, reference_no, reference_id, 非预留) 只消费一次。
+        enforce=True 且余额不足时抛 ValueError（用于需要硬拦截的场景）。
+        """
+        amount = Decimal(str(amount))
+        with transaction.atomic():
+            budget = PurchaseBudget.objects.select_for_update().get(id=budget_id)
+
+            existing = BudgetUsageRecord.objects.filter(
+                budget=budget,
+                usage_type=usage_type,
+                reference_no=reference_no,
+                reference_id=reference_id,
+                is_reserved=False,
+                is_deleted=False,
+            ).first()
+            if existing:
+                return existing
+
+            if enforce and amount > budget.available_amount:
+                raise ValueError(f'预算不足，可用金额：{budget.available_amount}，申请金额：{amount}')
+
+            record = BudgetUsageRecord.objects.create(
+                budget=budget,
+                budget_line_id=budget_line_id,
+                usage_type=usage_type,
+                reference_no=reference_no,
+                reference_id=reference_id,
+                amount=amount,
+                is_reserved=False,
+                description=description,
+                created_by=user,
+            )
+
+            budget.used_amount = F('used_amount') + amount
+            budget.save()
+            budget.refresh_from_db()
+
+            if budget.is_exceeded and budget.status != 'EXCEEDED':
+                budget.status = 'EXCEEDED'
+                budget.save()
+
+            if budget_line_id:
+                BudgetLine.objects.filter(id=budget_line_id).update(used_amount=F('used_amount') + amount)
+
+        return record
+
+    @classmethod
     def use_budget(
+        cls,
         budget_id: int,
         amount: Decimal,
         usage_type: str,
@@ -270,76 +339,188 @@ class BudgetService:
         description: str = '',
         user=None,
     ) -> BudgetUsageRecord:
-        """使用预算"""
-        budget = PurchaseBudget.objects.get(id=budget_id)
-
-        record = BudgetUsageRecord.objects.create(
-            budget=budget,
-            budget_line_id=budget_line_id,
+        """使用预算（向后兼容包装，委托 consume_budget，默认不硬拦截仅记账）。"""
+        return cls.consume_budget(
+            budget_id,
+            amount,
             usage_type=usage_type,
             reference_no=reference_no,
             reference_id=reference_id,
-            amount=amount,
+            budget_line_id=budget_line_id,
             description=description,
-            created_by=user,
+            user=user,
+            enforce=False,
         )
-
-        # 更新预算已使用金额
-        budget.used_amount = F('used_amount') + amount
-        budget.save()
-        budget.refresh_from_db()
-
-        # 检查是否超支
-        if budget.is_exceeded:
-            budget.status = 'EXCEEDED'
-            budget.save()
-
-        # 更新明细行
-        if budget_line_id:
-            BudgetLine.objects.filter(id=budget_line_id).update(used_amount=F('used_amount') + amount)
-
-        return record
 
     @staticmethod
     def reserve_budget(
-        budget_id: int, amount: Decimal, reference_no: str, reference_id: int = None, description: str = '', user=None
+        budget_id: int,
+        amount: Decimal,
+        reference_no: str,
+        reference_id: int = None,
+        description: str = '',
+        user=None,
+        usage_type: str = 'PURCHASE_REQUEST',
     ) -> BudgetUsageRecord:
-        """预留预算"""
-        budget = PurchaseBudget.objects.get(id=budget_id)
+        """预留预算（锁行 + 幂等）。用于采购申请批准时的资金占用。"""
+        amount = Decimal(str(amount))
+        with transaction.atomic():
+            budget = PurchaseBudget.objects.select_for_update().get(id=budget_id)
 
-        record = BudgetUsageRecord.objects.create(
-            budget=budget,
-            usage_type='PURCHASE_REQUEST',
-            reference_no=reference_no,
-            reference_id=reference_id,
-            amount=amount,
-            is_reserved=True,
-            description=description,
-            created_by=user,
-        )
+            existing = (
+                BudgetUsageRecord.objects.filter(
+                    budget=budget,
+                    reference_no=reference_no,
+                    reference_id=reference_id,
+                    is_reserved=True,
+                    is_deleted=False,
+                )
+                .exclude(usage_type='RELEASE')
+                .first()
+            )
+            if existing:
+                return existing
 
-        budget.reserved_amount = F('reserved_amount') + amount
-        budget.save()
+            record = BudgetUsageRecord.objects.create(
+                budget=budget,
+                usage_type=usage_type,
+                reference_no=reference_no,
+                reference_id=reference_id,
+                amount=amount,
+                is_reserved=True,
+                description=description,
+                created_by=user,
+            )
+
+            budget.reserved_amount = F('reserved_amount') + amount
+            budget.save()
+            budget.refresh_from_db()
 
         return record
 
     @staticmethod
-    def release_reserve(budget_id: int, amount: Decimal, reference_no: str, user=None):
-        """释放预留"""
-        budget = PurchaseBudget.objects.get(id=budget_id)
+    def release_budget(budget_id: int, reference_no: str, reference_id: int = None, user=None):
+        """释放某引用占用的预算（预留和/或消费一并释放），幂等：已释放则不重复。
 
-        BudgetUsageRecord.objects.create(
-            budget=budget,
-            usage_type='RELEASE',
+        用于订单取消/撤回时回退占用。返回 True 表示本次有实际释放，None 表示无占用或已释放。
+        """
+        with transaction.atomic():
+            budget = PurchaseBudget.objects.select_for_update().get(id=budget_id)
+
+            # 幂等：该引用已有 RELEASE 记录则视为已释放
+            if BudgetUsageRecord.objects.filter(
+                budget=budget,
+                usage_type='RELEASE',
+                reference_no=reference_no,
+                reference_id=reference_id,
+                is_deleted=False,
+            ).exists():
+                return None
+
+            occupations = BudgetUsageRecord.objects.filter(
+                budget=budget,
+                reference_no=reference_no,
+                reference_id=reference_id,
+                is_deleted=False,
+            ).exclude(usage_type='RELEASE')
+
+            reserved_total = sum((r.amount for r in occupations if r.is_reserved), Decimal('0'))
+            used_total = sum((r.amount for r in occupations if not r.is_reserved), Decimal('0'))
+
+            if reserved_total == 0 and used_total == 0:
+                return None
+
+            if reserved_total:
+                budget.reserved_amount = F('reserved_amount') - reserved_total
+            if used_total:
+                budget.used_amount = F('used_amount') - used_total
+            budget.save()
+            budget.refresh_from_db()
+
+            # 释放后若不再超支则从 EXCEEDED 恢复为 ACTIVE
+            if budget.status == 'EXCEEDED' and not budget.is_exceeded:
+                budget.status = 'ACTIVE'
+                budget.save()
+
+            BudgetUsageRecord.objects.create(
+                budget=budget,
+                usage_type='RELEASE',
+                reference_no=reference_no,
+                reference_id=reference_id,
+                amount=-(reserved_total + used_total),
+                is_reserved=bool(reserved_total),
+                description='释放预算占用',
+                created_by=user,
+            )
+
+        return True
+
+    @classmethod
+    def release_reserve(cls, budget_id: int, amount: Decimal, reference_no: str, reference_id: int = None, user=None):
+        """向后兼容：释放预留（委托 release_budget，按引用整笔释放）。"""
+        return cls.release_budget(budget_id, reference_no, reference_id=reference_id, user=user)
+
+    # ===== 高层便捷方法：按项目/部门自动定位生效预算，供 views.py 一行挂钩 =====
+
+    @classmethod
+    def consume_for_reference(
+        cls,
+        *,
+        project_id: int = None,
+        department_id: int = None,
+        amount: Decimal,
+        reference_no: str,
+        reference_id: int = None,
+        usage_type: str = 'PURCHASE_ORDER',
+        user=None,
+        enforce: bool = False,
+    ):
+        """定位生效预算并消费（幂等）。无生效预算返回 None（不阻断业务）。"""
+        budget = cls._find_active_budget(project_id, department_id)
+        if not budget:
+            return None
+        return cls.consume_budget(
+            budget.id,
+            amount,
+            usage_type=usage_type,
             reference_no=reference_no,
-            amount=-amount,
-            is_reserved=True,
-            description='释放预留',
-            created_by=user,
+            reference_id=reference_id,
+            user=user,
+            enforce=enforce,
         )
 
-        budget.reserved_amount = F('reserved_amount') - amount
-        budget.save()
+    @classmethod
+    def reserve_for_reference(
+        cls,
+        *,
+        project_id: int = None,
+        department_id: int = None,
+        amount: Decimal,
+        reference_no: str,
+        reference_id: int = None,
+        user=None,
+    ):
+        """定位生效预算并预留（幂等）。无生效预算返回 None。"""
+        budget = cls._find_active_budget(project_id, department_id)
+        if not budget:
+            return None
+        return cls.reserve_budget(budget.id, amount, reference_no, reference_id=reference_id, user=user)
+
+    @classmethod
+    def release_for_reference(
+        cls,
+        *,
+        project_id: int = None,
+        department_id: int = None,
+        reference_no: str,
+        reference_id: int = None,
+        user=None,
+    ):
+        """定位生效预算并释放该引用的占用（幂等）。无生效预算返回 None。"""
+        budget = cls._find_active_budget(project_id, department_id)
+        if not budget:
+            return None
+        return cls.release_budget(budget.id, reference_no, reference_id=reference_id, user=user)
 
 
 # =====================

@@ -77,6 +77,11 @@ app.conf.beat_schedule = {
         'task': 'apps.finance.tasks.generate_daily_finance_summary',
         'schedule': crontab(hour=18, minute=0),
     },
+    # 待付款项台账兜底回填(应对信号静默失败场景) - 每天凌晨 2:30
+    'backfill-payables-safety-net-daily': {
+        'task': 'apps.finance.tasks.backfill_payables_safety_net',
+        'schedule': crontab(hour=2, minute=30),
+    },
     # Project cost recalculation at 2 AM
     'recalculate-project-costs-nightly': {
         'task': 'apps.reports.tasks.calculate_all_project_costs',

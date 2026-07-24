@@ -16,7 +16,7 @@ def _order(no, created_by, ddate, sup='供应商A', amt=2000):
     return SimpleNamespace(
         order_no=no,
         created_by=created_by,
-        expected_delivery_date=ddate,
+        delivery_date=ddate,
         supplier=SimpleNamespace(name=sup),
         total_amount=amt,
     )

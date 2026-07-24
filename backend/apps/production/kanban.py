@@ -129,8 +129,8 @@ class ProductionKanbanView(APIView):
 
         quality_data = {
             'total': today_inspections.count(),
-            'passed': today_inspections.filter(result='PASSED').count(),
-            'failed': today_inspections.filter(result='FAILED').count(),
+            'passed': today_inspections.filter(result='PASS').count(),
+            'failed': today_inspections.filter(result='FAIL').count(),
             'pass_rate': 0,
         }
         if quality_data['total'] > 0:
@@ -316,7 +316,7 @@ class AndonAlertView(APIView):
         from apps.production.models import QualityInspection
 
         failed_inspections = QualityInspection.objects.filter(
-            inspection_date=today, result='FAILED', is_deleted=False
+            inspection_date=today, result='FAIL', is_deleted=False
         ).order_by('-created_at')[:5]
 
         for insp in failed_inspections:

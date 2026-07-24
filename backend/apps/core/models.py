@@ -206,6 +206,10 @@ class SystemNotification(models.Model):
         verbose_name = '系统通知'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
+        # 收件箱按 用户+已读 高频查询(审计 P1 索引缺失)
+        indexes = [
+            models.Index(fields=['user', 'is_read']),
+        ]
 
     def __str__(self):
         return f'{self.user} - {self.title}'
@@ -321,3 +325,8 @@ class UpgradeJob(BaseModel):
         entry = {'ts': timezone.now().isoformat(), 'stage': stage, 'message': message, 'level': level}
         self.steps = (self.steps or []) + [entry]
         self.save(update_fields=['steps', 'updated_at'])
+
+
+# 导入多组织 / 多法人模型(平台基础脚手架),使其可被迁移系统发现。
+# CompanyScopedManager 默认不做公司过滤,接入前后行为一致(见 organization.py)。
+from apps.core.organization import Company, Organization  # noqa: E402, F401

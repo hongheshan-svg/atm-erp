@@ -281,7 +281,7 @@ class ServiceOrder(BaseModel):
 
     def save(self, *args, **kwargs):
         if not self.order_no:
-            from apps.core.models import CodeRule
+            from apps.core.code_rule_models import CodeRule
 
             self.order_no = CodeRule.generate_code('SERVICE')
         super().save(*args, **kwargs)

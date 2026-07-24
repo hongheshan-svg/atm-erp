@@ -1,9 +1,10 @@
 <template>
   <div class="global-search">
     <el-autocomplete
+      ref="searchRef"
       v-model="searchQuery"
       :fetch-suggestions="fetchSuggestions"
-      placeholder="搜索物料、客户、项目..."
+      placeholder="搜索物料、客户、项目...  (Ctrl+K)"
       :trigger-on-focus="false"
       clearable
       size="large"
@@ -108,17 +109,36 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Search, Box, Avatar, Management, ShoppingCart } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 
 const router = useRouter()
+const searchRef = ref<any>(null)
 const searchQuery = ref('')
 const resultsVisible = ref(false)
 const loading = ref(false)
 const activeTab = ref('all')
 const results = ref<Record<string, any>>({})
+
+// Global keyboard shortcut: Ctrl+K (Windows/Linux) / Cmd+K (macOS)
+// focuses the global search box from anywhere in the app.
+const handleGlobalKeydown = (e: KeyboardEvent): void => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+    e.preventDefault()
+    // el-autocomplete exposes focus(); guard in case the ref isn't ready.
+    searchRef.value?.focus?.()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleGlobalKeydown)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleGlobalKeydown)
+})
 
 const totalHits = computed(() => {
   return Object.values(results.value).reduce((sum, r) => sum + (r.total || 0), 0)

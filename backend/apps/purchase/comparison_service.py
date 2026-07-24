@@ -310,7 +310,7 @@ class QuotationComparisonService:
 
             # 获取该供应商的历史订单
             historical_pos = PurchaseOrder.objects.filter(
-                supplier=supplier, status__in=['RECEIVED', 'PARTIAL_RECEIVED', 'COMPLETED'], is_deleted=False
+                supplier=supplier, status__in=['COMPLETED', 'PARTIAL'], is_deleted=False
             ).order_by('-order_date')[:20]  # 最近20单
 
             if not historical_pos:
@@ -324,11 +324,20 @@ class QuotationComparisonService:
 
             for po in historical_pos:
                 # 检查是否按时交货
-                if po.actual_delivery_date and po.delivery_date:
-                    if po.actual_delivery_date <= po.delivery_date:
+                # 实际到货日期来自已确认/完成的收货单（GoodsReceipt.receipt_date），
+                # 取最新一次收货日期与订单交货日期比较；无收货记录则跳过（视为中等）
+                actual_receipt_date = (
+                    po.receipts.filter(status__in=['CONFIRMED', 'COMPLETED'], is_deleted=False)
+                    .order_by('-receipt_date')
+                    .values_list('receipt_date', flat=True)
+                    .first()
+                )
+                delivery_date = getattr(po, 'delivery_date', None)
+                if actual_receipt_date and delivery_date:
+                    if actual_receipt_date <= delivery_date:
                         on_time_count += 1
                 else:
-                    on_time_count += 0.5  # 无数据假设中等
+                    on_time_count += 0.5  # 无收货数据假设中等
 
                 # 检查质量（简化：如果没有退货就算合格）
                 # TODO: 集成质量检验数据
@@ -872,11 +881,27 @@ class QuotationComparisonService:
 
         quotation = comparison.recommended_quotation
         rfq = comparison.rfq
+        supplier = quotation.rfq_supplier.supplier
+
+        # 与 purchase/views.py 的 PO 创建路径一致：黑名单供应商准入闸，不得下单
+        from .evaluation_models import SupplierBlacklist
+
+        if SupplierBlacklist.is_blacklisted(supplier):
+            raise ValueError('该供应商已被列入黑名单，不能转换为采购订单')
+
+        # 事前预算控制：按项目材料预算校验拟建 PO 的不含税总额（与采购申请闸口口径一致），超预算拒绝
+        from .services import BudgetValidationService
+
+        quot_lines = list(quotation.lines.filter(is_deleted=False))
+        projected_total = sum((ql.qty * ql.unit_price for ql in quot_lines), Decimal('0'))
+        budget_check = BudgetValidationService.validate_purchase_request(rfq.project, projected_total)
+        if not budget_check.get('valid', True):
+            raise ValueError(budget_check['message'])
 
         with transaction.atomic():
             # 创建采购订单
             po = PurchaseOrder.objects.create(
-                supplier=quotation.rfq_supplier.supplier,
+                supplier=supplier,
                 project=rfq.project,
                 delivery_date=timezone.now().date(),
                 payment_terms=quotation.payment_terms,
@@ -886,12 +911,18 @@ class QuotationComparisonService:
 
             # 创建订单明细
             total_amount = Decimal('0')
-            for quot_line in quotation.lines.filter(is_deleted=False):
+            for quot_line in quot_lines:
+                rfq_line = quot_line.rfq_line
                 line = PurchaseOrderLine.objects.create(
                     po=po,
-                    item=quot_line.rfq_line.item,
+                    item=rfq_line.item,
                     qty=quot_line.qty,
                     unit_price=quot_line.unit_price,
+                    # 透传 BOM 关联：让订单确认时 sync_bom_on_po_confirm 信号（要求 bom_item__isnull=False）能触发回写
+                    bom_item=rfq_line.bom_item,
+                    is_critical=rfq_line.is_critical,
+                    is_long_lead=rfq_line.is_long_lead,
+                    drawing_no=rfq_line.drawing_no or '',
                     created_by=user,
                 )
                 total_amount += line.line_amount

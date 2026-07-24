@@ -163,18 +163,20 @@
           <span class="publisher">{{ viewAnnouncement?.publisher_name }}</span>
           <span class="time">{{ formatDateTime(viewAnnouncement?.publish_time) }}</span>
         </div>
-        <div class="content" v-html="viewAnnouncement?.content?.replace(/\n/g, '<br/>')"></div>
+        <!-- Sanitized to prevent stored XSS from announcement content -->
+        <div class="content" v-html="sanitizedViewContent"></div>
       </div>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Top } from '@element-plus/icons-vue'
 import { getAnnouncementList, createAnnouncement, updateAnnouncement, deleteAnnouncement, publishAnnouncement, withdrawAnnouncement } from '@/api/system'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { sanitizeHtml } from '@/utils/sanitize'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/core/announcements/', { onSuccess: () => fetchList() })
 
@@ -199,7 +201,12 @@ const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref(null)
-const viewAnnouncement = ref(null)
+const viewAnnouncement = ref<any>(null)
+
+// Preserve line breaks, then sanitize before rendering with v-html.
+const sanitizedViewContent = computed(() =>
+  sanitizeHtml((viewAnnouncement.value?.content || '').replace(/\n/g, '<br/>'))
+)
 
 const formData = reactive({
   id: null,

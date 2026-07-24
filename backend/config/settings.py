@@ -52,12 +52,23 @@ INSTALLED_APPS = [
     'apps.analytics',
     'apps.production',
     'apps.oa',
+    # AI gateway (LLM 网关 + RAG 检索基础脚手架; 默认 provider 关闭)
+    'apps.ai',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # 安全响应头(CSP / Referrer-Policy / Permissions-Policy / nosniff 等)。
+    # 仅 process_response，放在靠前位置以覆盖所有下游响应；被动加头，不拦截请求，
+    # 因此不影响既有 DRF 限流/鉴权与测试。RateLimit/SQLi/XSS 等主动拦截中间件
+    # 依赖 Redis 且与 DRF 限流职责重叠，暂不在此启用（见 security_middleware.py）。
+    'apps.core.security_middleware.SecurityHeadersMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    # i18n: 依据 Accept-Language / 会话 / cookie 激活语言(须在 SessionMiddleware 之后、
+    # CommonMiddleware 之前)。仅在启用了 USE_I18N 时生效,被动选择语言,不改变既有
+    # API 行为——未提供翻译目录时回落到 LANGUAGE_CODE(zh-hans)。
+    'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -98,9 +109,15 @@ CHANNEL_LAYERS = {
 }
 
 # Elasticsearch configuration
+_elasticsearch_host = config('ELASTICSEARCH_HOST', default='elasticsearch:9200')
 ELASTICSEARCH_DSL = {
-    'default': {'hosts': config('ELASTICSEARCH_HOST', default='elasticsearch:9200')},
+    'default': {'hosts': _elasticsearch_host or 'localhost:9200'},
 }
+# 未部署 ES(ELASTICSEARCH_HOST 为空)时禁用实时索引信号,避免创建/编辑
+# 客户、供应商、物料、项目等被 ES Document 索引的模型时因连不上 ES 抛
+# TypeError 导致 API 500;全局搜索已降级为数据库查询,不依赖索引。
+if not _elasticsearch_host:
+    ELASTICSEARCH_DSL_AUTOSYNC = False
 
 # Database
 DATABASES = {
@@ -135,6 +152,16 @@ LANGUAGE_CODE = 'zh-hans'
 TIME_ZONE = 'Asia/Shanghai'
 USE_I18N = True
 USE_TZ = True
+
+# 支持的语言(i18n 基础脚手架)。LocaleMiddleware 会据此在 zh-hans / en 之间协商;
+# 未提供 .po/.mo 翻译目录时 gettext 回落到源串(现为中文 verbose_name),行为不变。
+# 后续里程碑:用 gettext_lazy 包裹模型 verbose_name / 提示语并编译 locale/ 下的翻译。
+LANGUAGES = [
+    ('zh-hans', '简体中文'),
+    ('en', 'English'),
+]
+# 翻译文件搜索路径(makemessages/compilemessages 输出目录)。目录暂可为空,不影响运行。
+LOCALE_PATHS = [BASE_DIR / 'locale']
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
@@ -186,9 +213,26 @@ REST_FRAMEWORK = {
 }
 
 # JWT Settings
+def _jwt_lifetime(token_name, legacy_name, default):
+    """Read a JWT lifetime accepting both the documented `*_TOKEN_LIFETIME_*`
+    name (used by .env.prod.example) and the legacy `*_LIFETIME_*` name, so a
+    prod env that sets the documented variable no longer silently falls back to
+    the default. Empty/invalid values fall back to `default`.
+    """
+    raw = config(token_name, default='') or config(legacy_name, default='')
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=config('JWT_ACCESS_LIFETIME_MINUTES', default=120, cast=int)),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=config('JWT_REFRESH_LIFETIME_DAYS', default=7, cast=int)),
+    'ACCESS_TOKEN_LIFETIME': timedelta(
+        minutes=_jwt_lifetime('JWT_ACCESS_TOKEN_LIFETIME_MINUTES', 'JWT_ACCESS_LIFETIME_MINUTES', 120)
+    ),
+    'REFRESH_TOKEN_LIFETIME': timedelta(
+        days=_jwt_lifetime('JWT_REFRESH_TOKEN_LIFETIME_DAYS', 'JWT_REFRESH_LIFETIME_DAYS', 7)
+    ),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,  # Enable token blacklist for security
     'UPDATE_LAST_LOGIN': True,
@@ -346,3 +390,24 @@ PASSWORD_EXPIRY_DAYS = config('PASSWORD_EXPIRY_DAYS', default=90, cast=int)
 # Login Security
 MAX_LOGIN_ATTEMPTS = config('MAX_LOGIN_ATTEMPTS', default=5, cast=int)
 LOCKOUT_DURATION_MINUTES = config('LOCKOUT_DURATION_MINUTES', default=30, cast=int)
+
+# =============================================================================
+# Backup Encryption
+# =============================================================================
+# 数据库备份加密密钥（Fernet key）。留空则备份仅 gzip 压缩（明文，兼容本地开发）。
+# 生产环境应设置一个由以下命令生成的密钥，使备份落盘即为 AES-128-CBC+HMAC 加密：
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+BACKUP_ENCRYPTION_KEY = config('BACKUP_ENCRYPTION_KEY', default='')
+
+# =============================================================================
+# AI Gateway (LLM 网关 + RAG 检索基础脚手架)
+# =============================================================================
+# 默认关闭(AI_PROVIDER 为空 -> LLMGateway 使用 NullProvider,返回“未配置”提示,
+# 不发起任何网络调用)。启用真实 provider 时设置 AI_PROVIDER(如 'anthropic')与
+# AI_API_KEY;真实 provider 采用惰性导入,未安装 SDK 时也不影响本模块 import/运行。
+AI_PROVIDER = config('AI_PROVIDER', default='')
+AI_API_KEY = config('AI_API_KEY', default='')
+AI_MODEL = config('AI_MODEL', default='claude-opus-4-8')
+# RAG 检索:优先复用 Elasticsearch 全局搜索(见 apps/core/search_views.py),
+# 未部署 ES 时回落到数据库 icontains 查询;二者均为“真实第一步”,完整向量 RAG 为后续。
+AI_RAG_TOP_K = config('AI_RAG_TOP_K', default=5, cast=int)

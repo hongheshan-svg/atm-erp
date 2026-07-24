@@ -53,6 +53,10 @@
         </div>
 
         <div class="header-right">
+          <GlobalSearch />
+          <el-tooltip content="切换主题" placement="bottom">
+            <el-icon class="header-action" @click="toggleTheme"><Moon v-if="!isDark" /><Sunny v-else /></el-icon>
+          </el-tooltip>
           <el-tooltip content="全屏" placement="bottom">
             <el-icon class="header-action" @click="toggleFullscreen"><FullScreen /></el-icon>
           </el-tooltip>
@@ -99,8 +103,12 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
-import { Fold, Expand, User, Lock, SwitchButton, FullScreen, ArrowDown } from '@element-plus/icons-vue'
+import { Fold, Expand, User, Lock, SwitchButton, FullScreen, ArrowDown, Moon, Sunny } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import GlobalSearch from '@/components/GlobalSearch.vue'
+import { useTheme } from '@/utils/theme'
+
+const { isDark, toggleTheme } = useTheme()
 import { usePermissionStore } from '@/stores/permission'
 import { useCompanyConfig } from '@/stores/companyConfig'
 import DynamicMenu from '@/components/DynamicMenu.vue'

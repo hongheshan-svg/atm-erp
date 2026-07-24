@@ -9,11 +9,18 @@ export const useWebSocketStore = defineStore('websocket', () => {
   const notifications = ref<Notification[]>([])
   const unreadCount = ref(0)
   const dashboardData = ref<any>(null)
+  // Guard so a repeated global connect() does not register duplicate listeners.
+  const subscribed = ref(false)
 
   const isConnected = computed(() => connected.value)
   const hasUnread = computed(() => unreadCount.value > 0)
 
   function connect(): void {
+    if (subscribed.value) {
+      return
+    }
+    subscribed.value = true
+
     wsService.connect('notifications')
 
     wsService.on('connection', handleConnection)
@@ -36,6 +43,7 @@ export const useWebSocketStore = defineStore('websocket', () => {
     wsService.off('alert', handleAlert)
     wsService.off('error', handleError)
     connected.value = false
+    subscribed.value = false
   }
 
   function handleConnection(data: { status: string }): void {

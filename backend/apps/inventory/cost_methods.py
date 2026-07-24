@@ -53,7 +53,7 @@ class FIFOCostingService:
         return lot
 
     @classmethod
-    def consume_stock(cls, warehouse, item, qty, project=None):
+    def consume_stock(cls, warehouse, item, qty, project=None, update_stock=True, raise_on_shortage=True):
         """
         Consume stock using FIFO method.
         Uses oldest lots first.
@@ -63,22 +63,32 @@ class FIFOCostingService:
             item: Item instance
             qty: Quantity to consume
             project: Optional project for cost tracking
+            update_stock: 消耗后是否按批次结存回写 Stock。领料出库场景下 Stock 数量由
+                StockMove 独占维护（P0：StockMove 为库存数量唯一真源），此时应传
+                update_stock=False，仅更新批次账 + 返回分层成本，避免与 _update_stock_out
+                双重扣减 Stock。
+            raise_on_shortage: 批次余量不足时是否抛 ValueError（默认 True）。抛出会使外层
+                事务回滚，杜绝“少消耗批次却照常出库”造成的负批次/账实不符。
 
         Returns:
             tuple: (total_cost, list of consumption details)
         """
         from .batch_models import InventoryLot, LotConsumption
 
-        # Get available lots ordered by receipt date (oldest first)
-        lots = InventoryLot.objects.filter(
-            warehouse=warehouse, item=item, remaining_qty__gt=0, is_deleted=False
-        ).order_by('receipt_date', 'id')
-
         remaining_qty = Decimal(str(qty))
         total_cost = Decimal('0')
         consumptions = []
 
         with transaction.atomic():
+            # Get available lots ordered by receipt date (oldest first)。
+            # select_for_update 锁定批次行，防止并发出库对同一批次重复消耗（惰性求值，
+            # 在本 atomic 块内迭代时执行，锁生效）。
+            lots = (
+                InventoryLot.objects.select_for_update()
+                .filter(warehouse=warehouse, item=item, remaining_qty__gt=0, is_deleted=False)
+                .order_by('receipt_date', 'id')
+            )
+
             for lot in lots:
                 if remaining_qty <= 0:
                     break
@@ -88,7 +98,7 @@ class FIFOCostingService:
                 consume_cost = consume_qty * lot.unit_cost
 
                 # Record consumption
-                consumption = LotConsumption.objects.create(
+                LotConsumption.objects.create(
                     lot=lot, qty=consume_qty, unit_cost=lot.unit_cost, total_cost=consume_cost, project=project
                 )
 
@@ -110,14 +120,17 @@ class FIFOCostingService:
                 )
 
             if remaining_qty > 0:
-                logger.warning(
-                    f'Insufficient stock for FIFO consumption: '
-                    f'item={item.sku}, warehouse={warehouse.code}, '
+                msg = (
+                    f'FIFO 批次库存不足: item={item.sku}, warehouse={warehouse.code}, '
                     f'requested={qty}, shortage={remaining_qty}'
                 )
+                if raise_on_shortage:
+                    raise ValueError(msg)
+                logger.warning(msg)
 
-            # Update stock record
-            cls._update_stock(warehouse, item)
+            # Update stock record（仅当调用方要求；见 update_stock 参数说明）
+            if update_stock:
+                cls._update_stock(warehouse, item)
 
         return total_cost, consumptions
 

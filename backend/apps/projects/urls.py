@@ -122,6 +122,7 @@ from .remote_monitoring import (
 )
 from .requirement import RequirementCategoryViewSet, RequirementChangeViewSet, RequirementViewSet
 from .requirement_review import RequirementReviewViewSet, ReviewActionItemViewSet, ReviewTemplateViewSet
+from .stage_gate import StageGateViewSet
 from .technical_agreement import (
     TechnicalAgreementChangeViewSet,
     TechnicalAgreementTemplateViewSet,
@@ -236,6 +237,7 @@ router.register(r'proposal-documents', ProposalDocumentViewSet, basename='propos
 # PLM - 需求评审
 router.register(r'review-templates', ReviewTemplateViewSet, basename='review-template')
 router.register(r'requirement-reviews', RequirementReviewViewSet, basename='requirement-review')
+router.register(r'stage-gates', StageGateViewSet, basename='stage-gate')
 router.register(r'review-action-items', ReviewActionItemViewSet, basename='review-action-item')
 
 # PLM - BOM高级功能

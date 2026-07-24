@@ -2,10 +2,11 @@
 APS Finite Capacity Scheduling
 """
 
+from collections import defaultdict
+from datetime import timedelta
 from decimal import Decimal
 
 from django.db import models
-from django.utils import timezone
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -85,7 +86,33 @@ class ScheduledTask(BaseModel):
 
 
 class FiniteCapacityScheduler:
-    """Basic finite capacity scheduling engine."""
+    """有限产能排程引擎（启发式，无外部求解器依赖）。
+
+    与旧版相比：
+    - scheduling_strategy 真正生效，决定任务的排入顺序：
+        earliest_start  最早开始：按请求开始时间升序（早者先占用产能）。
+        latest_start    最迟开始：按请求开始时间降序（晚者先占用产能）。
+        bottleneck_first瓶颈优先：先排负载最重(加工分钟合计最大)的资源上的任务。
+        priority_based  优先级：按 sequence 升序（序号小=优先）。
+    - 每个资源上前向排程，禁止重叠；consider_setup_time 时在相邻任务间计入换型时间。
+    - avg_utilization 用真实数据计算：各资源(加工分钟 / 活动跨度) 的均值，夹在 [0,100]。
+    """
+
+    @staticmethod
+    def _order_tasks(tasks, strategy):
+        """按排程策略返回任务的排入顺序（不改变数据库，仅决定处理次序）。"""
+        tasks = list(tasks)
+        if strategy == 'latest_start':
+            return sorted(tasks, key=lambda t: (t.start_time, t.sequence), reverse=True)
+        if strategy == 'priority_based':
+            return sorted(tasks, key=lambda t: (t.sequence, t.start_time))
+        if strategy == 'bottleneck_first':
+            load = defaultdict(float)
+            for t in tasks:
+                load[t.resource] += float(t.processing_time_minutes or 0)
+            return sorted(tasks, key=lambda t: (-load[t.resource], t.resource, t.sequence, t.start_time))
+        # earliest_start（默认）
+        return sorted(tasks, key=lambda t: (t.start_time, t.sequence))
 
     @staticmethod
     def run_schedule(plan_id):
@@ -94,27 +121,54 @@ class FiniteCapacityScheduler:
         plan.save(update_fields=['status'])
 
         try:
-            tasks = ScheduledTask.objects.filter(plan=plan, is_deleted=False).order_by('sequence')
+            tasks = ScheduledTask.objects.filter(plan=plan, is_deleted=False)
+            ordered = FiniteCapacityScheduler._order_tasks(tasks, plan.scheduling_strategy)
 
-            resource_end_times = {}
-            for task in tasks:
+            resource_end = {}
+            busy_minutes = defaultdict(float)
+            res_min_start = {}
+            res_max_end = {}
+
+            for seq, task in enumerate(ordered, start=1):
                 resource_key = task.resource
-                current_end = resource_end_times.get(resource_key)
+                proc = task.processing_time_minutes or 0
+                setup = task.setup_time_minutes or 0
 
-                if current_end and current_end > task.start_time:
-                    offset = current_end - task.start_time
-                    task.start_time = current_end
-                    if plan.consider_setup_time:
-                        task.start_time += timezone.timedelta(minutes=task.setup_time_minutes)
-                    task.end_time = task.start_time + timezone.timedelta(minutes=task.processing_time_minutes)
+                start = task.start_time
+                prev_end = resource_end.get(resource_key)
+                if prev_end is not None and prev_end > start:
+                    start = prev_end
+                # 换型时间仅在与前一任务衔接时计入（首个任务不计）
+                if plan.consider_setup_time and prev_end is not None and setup:
+                    start = start + timedelta(minutes=setup)
+                end = start + timedelta(minutes=proc)
 
+                task.start_time = start
+                task.end_time = end
+                # 记录策略决定的排入次序，便于甘特图/前端稳定排序
+                task.sequence = seq
                 task.status = 'scheduled'
                 task.save()
-                resource_end_times[resource_key] = task.end_time
 
-            plan.total_tasks = tasks.count()
+                resource_end[resource_key] = end
+                busy_minutes[resource_key] += float(proc)
+                if resource_key not in res_min_start or start < res_min_start[resource_key]:
+                    res_min_start[resource_key] = start
+                if resource_key not in res_max_end or end > res_max_end[resource_key]:
+                    res_max_end[resource_key] = end
+
+            # 真实平均利用率：各资源 busy / span 的均值（span 含换型与空闲）
+            utils = []
+            for resource_key, busy in busy_minutes.items():
+                span = (res_max_end[resource_key] - res_min_start[resource_key]).total_seconds() / 60.0
+                pct = (busy / span * 100.0) if span > 0 else 0.0
+                utils.append(max(0.0, min(100.0, pct)))
+            avg_util = sum(utils) / len(utils) if utils else 0.0
+
+            plan.total_tasks = len(ordered)
+            plan.avg_utilization = Decimal(str(round(avg_util, 2)))
             plan.status = 'completed'
-            plan.save(update_fields=['total_tasks', 'status'])
+            plan.save(update_fields=['total_tasks', 'avg_utilization', 'status'])
         except Exception as e:
             plan.status = 'failed'
             plan.save(update_fields=['status'])

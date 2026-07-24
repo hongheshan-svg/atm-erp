@@ -1,0 +1,102 @@
+name: CI
+
+# Regression gate the audit flagged as missing. Hard gates (fail the build):
+#   - backend migration-drift check
+#   - backend test suite on real Postgres/Redis
+# Advisory (report-only, do not fail the build) until the repo's pre-existing
+# lint/type/lockfile debt is paid down separately:
+#   - ruff (repo carries legacy import-order debt in untouched files)
+#   - frontend typecheck/lint/test (and a stale package-lock.json that breaks `npm ci`)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: erp_db
+          POSTGRES_USER: erp_user
+          POSTGRES_PASSWORD: erp_password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U erp_user" --health-interval 10s
+          --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings
+      SECRET_KEY: ci-only-secret-not-for-prod
+      DEBUG: 'False'
+      DB_NAME: erp_db
+      DB_USER: erp_user
+      DB_PASSWORD: erp_password
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      REDIS_URL: redis://localhost:6379/0
+      # Channels layer + cache read REDIS_HOST (default 'redis'); point at the CI service
+      # so progress-relay / websocket group tests can reach a real channel layer.
+      REDIS_HOST: localhost
+      # Empty host triggers settings.py's degraded mode: ELASTICSEARCH_DSL_AUTOSYNC=False,
+      # so model saves don't fire real-time ES index signals (no ES service in CI).
+      ELASTICSEARCH_HOST: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff
+      - name: Migration drift check (hard gate)
+        run: python manage.py makemigrations --check --dry-run
+      - name: Run tests (hard gate)
+        # Scope to the apps package: tests/integration/ are pytest-based (fixtures,
+        # pytestmark) and are run separately via pytest, not the Django test runner.
+        run: python manage.py test apps --verbosity=2
+      - name: Ruff lint (advisory — repo has legacy debt)
+        continue-on-error: true
+        run: ruff check .
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # `npm ci` requires a lock in sync with package.json; the repo's lock is
+      # stale (pre-existing), so use `npm install` here until it's regenerated.
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Type check (advisory)
+        continue-on-error: true
+        run: npm run typecheck
+      - name: Lint (advisory)
+        continue-on-error: true
+        run: npm run lint
+      - name: Unit tests (advisory)
+        continue-on-error: true
+        run: npm run test
