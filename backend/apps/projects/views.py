@@ -848,6 +848,10 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # 规范化列头为字符串：合并单元格/标题行错位/数值或日期表头会让列名不是 str，
+        # 后续 `'物料编码' in col` / `col.upper()` 会抛 TypeError 导致整个请求 500。
+        df.columns = ['' if pd.isna(col) else str(col).strip() for col in df.columns]
+
         # Find SKU column (support multiple names)
         sku_column = None
         for col in df.columns:
@@ -1083,9 +1087,10 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                     description = str(row[description_column])
             
                 # 版本/品牌：始终以物料主数据为准，忽略文件中的差异
+                # brand+model 最长可达 201 字符，而字段 max_length=100，需切分避免写入时 500。
                 brand = item.brand or ''
                 model = getattr(item, 'model', '') or ''
-                version_brand = f"{brand}/{model}".strip('/ ')
+                version_brand = f"{brand}/{model}".strip('/ ')[:100]
             
                 # Get has_drawing (optional)
                 has_drawing = 'PENDING'
@@ -3538,6 +3543,9 @@ class DrawingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
         except Exception as e:
             return Response({'error': f'Excel读取失败: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
         
+        # 规范化列头为字符串：非字符串表头(数值/日期/合并单元格NaN)会让 `kw in col` 抛 TypeError → 500。
+        df.columns = ['' if pd.isna(col) else str(col).strip() for col in df.columns]
+
         # 查找列
         def find_column(keywords):
             for col in df.columns:

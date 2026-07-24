@@ -73,6 +73,16 @@ jobs:
         # Scope to the apps package: tests/integration/ are pytest-based (fixtures,
         # pytestmark) and are run separately via pytest, not the Django test runner.
         run: python manage.py test apps --verbosity=2
+      - name: Install dev dependencies (pytest)
+        run: pip install -r requirements-dev.txt
+      - name: Import regression tests (hard gate)
+        # tests/integration/ are pytest-based, so the Django runner above skips them.
+        # Scope to the self-contained Excel-import regressions: their fixtures build
+        # their own users/projects/items (superuser bypasses RBAC), so they need no
+        # init_roles/init_permissions bootstrap — unlike the RBAC/workflow suites here.
+        # Guards the non-string-header 500 (numeric/date/NaN column names) on
+        # /projects/bom/ and /projects/drawings/ import_excel.
+        run: pytest tests/integration/test_bom_import.py tests/integration/test_drawing_import.py -v
       - name: Ruff lint (advisory — repo has legacy debt)
         continue-on-error: true
         run: ruff check .
