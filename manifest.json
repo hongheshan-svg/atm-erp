@@ -1,15 +1,15 @@
 {
-  "latest_version": "0.2.3",
-  "published_at": "2026-06-20T15:18:28Z",
-  "release_notes_md": "## v0.2.3 — 升级体验优化 + 修复回滚\n\n### 升级体验\n- **升级过程中只显示倒计时**:去掉冗长的步骤 log,卡片仅保留\"预计剩余 / 即将完成 + 完成后自动刷新\"。\n- **升级期间静默后台请求失败**:后端容器重建时,dashboard/通知等后台轮询会短暂失败;现升级/回滚进行中不再弹\"网络错误/请求失败\"提示、也不会误跳登录(完成后自动刷新)。\n\n### 修复\n- **「回滚到上一版本」实际不生效**:回滚任务此前因 agent 读取 `manifest.docker.image_tag`(回滚 payload 无此键)报错,回到原版却报告\"已回滚\"。现回滚改用目标版本号作镜像 tag,可真正回滚到上一版本。\n  - ⚠️ 该修复在 **erp-updater 镜像**中,而一键升级刻意排除 updater 自身。**已部署实例**需手动更新升级器才生效:`docker compose pull erp-updater && docker compose up -d erp-updater`;**全新安装**自带。\n\n### 说明\n- 应用功能同 v0.2.x(4 服务部署 + 左上角版本徽标/一键升级)。\n- `min_upgradable_from` = `0.2.0`(0.1.x 旧架构请用 `install.sh` 重新部署)。\n\nDocker 一键安装 / 远程升级见 `docs/REMOTE_UPGRADE.md`。",
+  "latest_version": "0.2.4",
+  "published_at": "2026-07-25T13:49:14Z",
+  "release_notes_md": "## 修复\r\n\r\n- BOM Excel 导入改为事务处理，校验失败时完整回滚自动创建的物料。\r\n- 模板必填字段与接口契约统一，仅要求订货编码和数量。\r\n- 自动创建物料时规范化单位和物料类型。\r\n- 修复待询价统计查询参数，并消除预期 4xx 校验失败产生的控制台噪声。\r\n\r\n## 验证\r\n\r\n- GitHub CI：前端、后端、容器三组检查全部通过。\r\n- Django：446 个测试通过，2 个跳过。\r\n- 前端：15 个测试文件、116 项测试通过，类型检查、ESLint 和生产构建通过。\r\n- 使用真实 BOM 文件完成 41 行首次导入和 41 行重复更新，浏览器控制台 0 错误 / 0 警告。\r\n\r\n完整变更见 #23。",
   "min_upgradable_from": "0.2.0",
   "docker": {
     "registry": "ghcr.io",
     "owner": "hongheshan-svg",
-    "image_tag": "0.2.3",
+    "image_tag": "0.2.4",
     "digests": {
-      "app": "sha256:ff0eb8a2f02e12f8a1ae684ef0d9819af3c15ea8aca8ecb3cb6ededc5dfaf5ec",
-      "updater": "sha256:11c6b996355001d20f99e4a886d56c5456d634ad691cfe0c070f510bfaba231e"
+      "app": "sha256:4f1544a8414583042f42f716220eda7fd3ce9a4ca02c6450399a2225f5ce5701",
+      "updater": "sha256:e2f6ce25dece4f135291a664abbf3ff6d21947aacd6c1fb211c56d93c58fd415"
     }
   },
   "native": null
