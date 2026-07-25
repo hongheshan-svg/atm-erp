@@ -1,15 +1,15 @@
 {
-  "latest_version": "0.2.4",
-  "published_at": "2026-07-25T13:49:14Z",
-  "release_notes_md": "## 修复\r\n\r\n- BOM Excel 导入改为事务处理，校验失败时完整回滚自动创建的物料。\r\n- 模板必填字段与接口契约统一，仅要求订货编码和数量。\r\n- 自动创建物料时规范化单位和物料类型。\r\n- 修复待询价统计查询参数，并消除预期 4xx 校验失败产生的控制台噪声。\r\n\r\n## 验证\r\n\r\n- GitHub CI：前端、后端、容器三组检查全部通过。\r\n- Django：446 个测试通过，2 个跳过。\r\n- 前端：15 个测试文件、116 项测试通过，类型检查、ESLint 和生产构建通过。\r\n- 使用真实 BOM 文件完成 41 行首次导入和 41 行重复更新，浏览器控制台 0 错误 / 0 警告。\r\n\r\n完整变更见 #23。",
+  "latest_version": "0.2.5",
+  "published_at": "2026-07-25T15:04:08Z",
+  "release_notes_md": "## 修复\\n\\n- 公共编号生成改为进程内单调纳秒序列，避免同一毫秒批量创建单据时触发唯一约束冲突。\\n- Release Images 工作流升级到 Node.js 24 运行时的官方 Action 主版本，消除 Node.js 20 弃用注记。\\n\\n## 验证\\n\\n- GitHub CI：前端、后端、容器三组检查全部通过。\\n- 后端：447 项测试通过，2 项跳过，DeprecationWarning 按错误处理。\\n- CI 原失败的 OA 维护回填用例独立通过。\\n- Ruff 检查、格式检查与工作流 YAML 校验通过。\\n\\n完整变更见 #24。",
   "min_upgradable_from": "0.2.0",
   "docker": {
     "registry": "ghcr.io",
     "owner": "hongheshan-svg",
-    "image_tag": "0.2.4",
+    "image_tag": "0.2.5",
     "digests": {
-      "app": "sha256:4f1544a8414583042f42f716220eda7fd3ce9a4ca02c6450399a2225f5ce5701",
-      "updater": "sha256:e2f6ce25dece4f135291a664abbf3ff6d21947aacd6c1fb211c56d93c58fd415"
+      "app": "sha256:b06e616ab8868ed98075eea3be3694f886bee42b96557c20a00a551d524c8aba",
+      "updater": "sha256:11ae4c7a5eae4eb55e84d9e85a57ccc3f675c83a7a83fe7a8f6f03cfb44a78e7"
     }
   },
   "native": null
