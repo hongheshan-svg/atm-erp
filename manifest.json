@@ -1,7 +1,7 @@
 {
   "latest_version": "0.2.5",
-  "published_at": "2026-07-25T15:04:08Z",
-  "release_notes_md": "## 修复\\n\\n- 公共编号生成改为进程内单调纳秒序列，避免同一毫秒批量创建单据时触发唯一约束冲突。\\n- Release Images 工作流升级到 Node.js 24 运行时的官方 Action 主版本，消除 Node.js 20 弃用注记。\\n\\n## 验证\\n\\n- GitHub CI：前端、后端、容器三组检查全部通过。\\n- 后端：447 项测试通过，2 项跳过，DeprecationWarning 按错误处理。\\n- CI 原失败的 OA 维护回填用例独立通过。\\n- Ruff 检查、格式检查与工作流 YAML 校验通过。\\n\\n完整变更见 #24。",
+  "published_at": "2026-07-25T15:07:28Z",
+  "release_notes_md": "## 修复\n\n- 公共编号生成改为进程内单调纳秒序列，避免同一毫秒批量创建单据时触发唯一约束冲突。\n- Release Images 工作流升级到 Node.js 24 运行时的官方 Action 主版本，消除 Node.js 20 弃用注记。\n\n## 验证\n\n- GitHub CI：前端、后端、容器三组检查全部通过。\n- 后端：447 项测试通过，2 项跳过，DeprecationWarning 按错误处理。\n- CI 原失败的 OA 维护回填用例独立通过。\n- Ruff 检查、格式检查与工作流 YAML 校验通过。\n\n完整变更见 #24。",
   "min_upgradable_from": "0.2.0",
   "docker": {
     "registry": "ghcr.io",
